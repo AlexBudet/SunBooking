@@ -1,0 +1,231 @@
+<!-- appl/templates/business_info.html -->
+{% extends "settings.html" %}
+
+{% block settings_content %}
+<div class="container page-wide-90">
+<h3>&nbsp;Informazioni Aziendali</h3>
+
+<!-- Messaggi di errore/successo -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<form method="POST" action="{{ url_for('settings.set_business_info') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<!-- Modulo per impostare le informazioni aziendali -->
+<table>
+    <tr>
+      <td><label for="business_name">Nome Azienda:</label></td>
+      <td><input type="text" id="business_name" name="business_name" value="{{ business_info.business_name if business_info else '' }}" required {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="website">Sito internet:</label></td>
+      <td><input type="text" id="website" name="website" value="{{ business_info.website if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="address">Indirizzo:</label></td>
+      <td><input type="text" id="address" name="address" value="{{ business_info.address if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="cap">CAP:</label></td>
+      <td><input type="text" id="cap" name="cap" value="{{ business_info.cap if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="province">Provincia:</label></td>
+      <td><input type="text" id="province" name="province" value="{{ business_info.province if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="city">Città:</label></td>
+      <td><input type="text" id="city" name="city" value="{{ business_info.city if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="vat_code">P.IVA/Codice Fiscale:</label></td>
+      <td><input type="text" id="vat_code" name="vat_code" value="{{ business_info.vat_code if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="pec_code">PEC/Codice Univoco:</label></td>
+      <td><input type="text" id="pec_code" name="pec_code" value="{{ business_info.pec_code if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="phone">Telefono:</label></td>
+      <td><input type="text" id="phone" name="phone" value="{{ business_info.phone if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="mobile">Cellulare:</label></td>
+      <td><input type="text" id="mobile" name="mobile" value="{{ business_info.mobile if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="email">E-mail:</label></td>
+      <td><input type="email" id="email" name="email" value="{{ business_info.email if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="vat_percentage">IVA (%)</label></td>
+      <td><input type="number" step="0.01" min="0" max="100" id="vat_percentage" name="vat_percentage" value="{{ business_info.vat_percentage or 22.0 }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="printer_ip">IP Stampante Fiscale</label></td>
+      <td style="display: flex; align-items: center; gap: 8px;">
+        <input type="text" class="form-control" id="printer_ip" name="printer_ip"
+               value="{{ business_info.printer_ip if business_info and business_info.printer_ip else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
+        <span id="pingPrinterIcon" style="font-size:1.5em; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#ccc;">🔄</span>
+      </td>
+    </tr>
+  </table>
+<br>
+    <!-- Orari di visualizzazione dell'agenda -->
+    <h4>Ore Visualizzate</h4>
+    <label for="opening_time">Da:</label>
+    <input type="time" id="opening_time" name="opening_time" value="{{ business_info.opening_time.strftime('%H:%M') if business_info else '' }}" required {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
+&nbsp;&nbsp;
+    <label for="closing_time">a:</label>
+    <input type="time" id="closing_time" name="closing_time" value="{{ business_info.closing_time.strftime('%H:%M') if business_info else '' }}" required {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
+    <br>
+<br>
+    <!-- Orari di apertura effettiva -->
+    <h4>Ore di Apertura</h4>
+    <label for="active_opening_time">Da:</label>
+    <input type="time" id="active_opening_time" name="active_opening_time" value="{{ business_info.active_opening_time.strftime('%H:%M') if business_info and business_info.active_opening_time else '' }}" required {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
+&nbsp;&nbsp;
+
+    <label for="active_closing_time">a:</label>
+    <input type="time" id="active_closing_time" name="active_closing_time" value="{{ business_info.active_closing_time.strftime('%H:%M') if business_info and business_info.active_closing_time else '' }}" required {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
+    <br>
+<br>
+    <label>Giorni di Chiusura:</label>
+
+    <br>
+
+<input type="checkbox" id="monday" name="closing_days" value="Monday"
+    {% if 'Monday' in business_info.closing_days_list %}checked{% endif %}
+    {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
+<label for="monday">Lunedì</label>
+
+<input type="checkbox" id="tuesday" name="closing_days" value="Tuesday"
+    {% if 'Tuesday' in business_info.closing_days_list %}checked{% endif %}
+    {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
+<label for="tuesday">Martedì</label>
+
+    <input type="checkbox" id="wednesday" name="closing_days" value="Wednesday" 
+        {% if 'Wednesday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
+        <label for="tuesday">Mercoledì</label>
+
+    <input type="checkbox" id="thursday" name="closing_days" value="Thursday" 
+        {% if 'Thursday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
+  <label for="tuesday">Giovedì</label>
+
+    <input type="checkbox" id="friday" name="closing_days" value="Friday" 
+        {% if 'Friday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
+  <label for="tuesday">Venerdì</label>
+
+    <input type="checkbox" id="saturday" name="closing_days" value="Saturday" 
+        {% if 'Saturday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
+  <label for="tuesday">Sabato</label>
+
+    <input type="checkbox" id="sunday" name="closing_days" value="Sunday" 
+        {% if 'Sunday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
+        <label for="tuesday">Domenica</label>
+
+    <button type="submit">Salva Impostazioni</button>
+</form>
+<br>
+<tr>
+  <td><label for="touchUiEnabled">Touch-screen:</label></td>
+  <td>
+    <input type="checkbox" id="touchUiEnabled">
+    <small style="margin-left:8px; color:#666;">Abilita interfaccia touch per i blocchi agenda (salvato nel dispositivo)</small>
+  </td>
+</tr>
+<br><br>
+</div>
+<script>
+  // Inizializza checkbox da localStorage e salva alla modifica
+  (function(){
+    try {
+      const key = 'sun_touch_ui';
+      const el = document.getElementById('touchUiEnabled');
+      if (!el) return;
+      el.checked = (localStorage.getItem(key) === '1');
+      el.addEventListener('change', () => {
+        localStorage.setItem(key, el.checked ? '1' : '0');
+        alert('Impostazione salvata. Ricarica l\'agenda per applicare la modalità touch.');
+      });
+    } catch(e) {}
+  })();
+</script>
+<script>
+function aggiornaSpiaStampante() {
+  const icon = document.getElementById('pingPrinterIcon');
+  const ip = document.getElementById('printer_ip').value.trim();
+  if (!ip) {
+    icon.style.background = '#ccc';
+    icon.textContent = '❓';
+    return;
+  }
+  icon.style.background = '#ccc';
+  icon.textContent = '🔄';
+
+  const token = document
+    .querySelector('meta[name="csrf-token"]')
+    .getAttribute('content');
+
+  fetch('/settings/ping_printer', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': token
+    },
+    body: JSON.stringify({ ip })
+  })
+  .then(res => {
+    if (!res.ok) return {ok: false};
+    return res.json();
+  })
+  .then(data => {
+    if (data.ok) {
+      icon.style.background = '#28a745';
+      icon.textContent = '✔️';
+    } else {
+      icon.textContent = '❌';
+    }
+  })
+  .catch(() => {
+    icon.textContent = '❌';
+  });
+}
+  // Avvia il ping automatico ogni 5 secondi
+  setInterval(aggiornaSpiaStampante, 5000);
+  // Esegui subito al caricamento
+  aggiornaSpiaStampante();
+  
+  // (Opzionale) aggiorna la spia se l'utente cambia l'IP manualmente
+  document.getElementById('printer_ip').addEventListener('change', aggiornaSpiaStampante);
+  </script>
+<style>
+    table {
+      border-collapse: separate;
+      border-spacing: 8px 4px;
+      width: 90%;
+    }
+    td:first-child {
+      width: 20%;
+      min-width: 120px;
+    }
+    td:nth-child(2) {
+      width: 60%;
+    }
+    td:nth-child(2) input[type="text"],
+    td:nth-child(2) input[type="email"] {
+      width: 98%;
+      max-width: 600px;
+      box-sizing: border-box;
+    }
+    label {
+      font-weight: bold;
+    }
+</style>
+{% endblock %}

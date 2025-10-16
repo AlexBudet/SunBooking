@@ -1,0 +1,297 @@
+{% extends "settings.html" %}
+{% block settings_content %}
+
+<div class="container mt-4">
+  <h2>Regole Prenotazioni</h2>
+  <table class="table table-bordered" id="booking-rules-table">
+  <thead>
+    <tr>
+      <th style="width:60px; text-align:center;">Attiva</th>
+      <th style="width:120px;">Tipo</th>
+      <th style="width:130px;">Limite</th>
+      <th>Warning</th>
+      <th>Blocca</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr data-rule="durata">
+      <td>
+        <input type="checkbox" id="active-durata" {% if business_info.booking_max_durata and business_info.booking_max_durata > 0 %}checked{% endif %}>
+      </td>
+      <td>Durata max</td>
+      <td>
+        <select id="durata-max" class="form-select">
+          {% for min in range(15, 241, 15) %}
+            <option value="{{ min }}" {% if business_info.booking_max_durata == min %}selected{% endif %}>{{ min }} min</option>
+          {% endfor %}
+        </select>
+      </td>
+<td>
+  <div class="d-flex align-items-center">
+    <input type="checkbox" id="warning-durata" style="margin-right:8px;"
+      {% if business_info.booking_rule_type_durata == 'warning' and business_info.booking_max_durata %}checked{% endif %}>
+<input type="text" id="warning-msg-durata" class="form-control"
+  style="min-width:180px;" placeholder="Messaggio warning"
+  value="{{ business_info.booking_rule_message_durata or '' }}">
+  </div>
+</td>
+<td>
+  <div class="d-flex align-items-center">
+    <input type="checkbox" id="block-durata" style="margin-right:8px;"
+      {% if business_info.booking_rule_type_durata == 'block' and business_info.booking_max_durata %}checked{% endif %}>
+<input type="text" id="block-msg-durata" class="form-control"
+  style="min-width:180px;" placeholder="Messaggio blocco"
+  value="{{ business_info.booking_rule_message_durata or '' }}">
+  </div>
+</td>
+    </tr>
+    <tr data-rule="prezzo">
+      <td>
+        <input type="checkbox" id="active-prezzo" {% if business_info.booking_max_prezzo and business_info.booking_max_prezzo > 0 %}checked{% endif %}>
+      </td>
+      <td>Prezzo max</td>
+      <td>
+        <select id="prezzo-max" class="form-select">
+          {% for euro in range(10, 501, 1) %}
+            <option value="{{ euro }}" {% if business_info.booking_max_prezzo == euro %}selected{% endif %}>{{ euro }} €</option>
+          {% endfor %}
+        </select>
+      </td>
+<td>
+  <div class="d-flex align-items-center">
+    <input type="checkbox" id="warning-prezzo" style="margin-right:8px;"
+      {% if business_info.booking_rule_type_prezzo == 'warning' and business_info.booking_max_prezzo %}checked{% endif %}>
+<input type="text" id="warning-msg-prezzo" class="form-control"
+  style="min-width:180px;" placeholder="Messaggio warning"
+  value="{{ business_info.booking_rule_message_prezzo or '' }}">
+  </div>
+</td>
+<td>
+  <div class="d-flex align-items-center">
+    <input type="checkbox" id="block-prezzo" style="margin-right:8px;"
+      {% if business_info.booking_rule_type_prezzo == 'block' and business_info.booking_max_prezzo %}checked{% endif %}>
+<input type="text" id="block-msg-prezzo" class="form-control"
+  style="min-width:180px;" placeholder="Messaggio blocco"
+  value="{{ business_info.booking_rule_message_prezzo or '' }}">
+  </div>
+</td>
+    </tr>
+  </tbody>
+</table>
+<button id="save-booking-rules" class="btn btn-primary mt-3">Salva regole</button>
+  <br><br><br>
+  <h2>Operatori selezionabili per servizio</h2>
+  <table class="table sortable" id="booking-table">
+    <thead>
+      <tr>
+        <th>Servizio <span class="sort-icons">▲<br>▼</span></th>
+        <th>Sottocategoria <span class="sort-icons">▲<br>▼</span></th>
+        <th>Visibile online <span class="sort-icons">▲<br>▼</span></th>
+        <th>Operatori associati <span class="sort-icons">▲<br>▼</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for servizio in servizi_tabella %}
+      <tr>
+        <td>{{ servizio.nome }}</td>
+        <td>{{ servizio.sottocategoria }}</td>
+<td>
+  <span style="display:none">{% if servizio.is_visible_online %}1{% else %}0{% endif %}</span>
+  <input type="checkbox" class="toggle-visible-online"
+         data-id="{{ servizio.id }}"
+         {% if servizio.is_visible_online %}checked{% endif %}>
+</td>
+        <td>
+            <button class="btn btn-outline-primary btn-sm operatori-btn"
+                    data-id="{{ servizio.id }}"
+                    data-nome="{{ servizio.nome }}">
+            {{ servizio.operatori_count }}
+            </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal selezione operatori -->
+<div class="modal fade" id="operatorModal" tabindex="-1" aria-labelledby="operatorModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="operator-associate-form">
+        <div class="modal-header">
+          <h5 class="modal-title" id="operatorModalLabel">Associa operatori a <span id="serviceName"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="operator-list">
+          <!-- Qui la lista spunte operatori -->
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+            <button type="button" class="btn btn-outline-secondary" id="copy-operatori">Copia</button>
+            <button type="button" class="btn btn-outline-secondary" id="paste-operatori">Incolla</button>
+            <button type="submit" class="btn btn-primary">Salva</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<style>
+.sort-icons {
+  font-size: 10px;
+  line-height: 10px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 2px;
+  color: #888;
+  user-select: none;
+}
+th {
+  position: relative;
+}
+</style>
+
+<script src="https://unpkg.com/tablesort@5.2.1/dist/tablesort.min.js"></script>
+<meta name="csrf-token" display="none"content="{{ csrf_token() }}">
+
+<script>
+const operatori = {{ operatori|tojson }};
+const serviziOperatori = {
+  {% for servizio in servizi_tabella %}
+    {{ servizio.id }}: {{ servizio.operators|map(attribute="id")|list|tojson }},
+  {% endfor %}
+};
+
+let currentServiceId = null;
+
+document.querySelectorAll('.operatori-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const serviceId = this.dataset.id;
+    currentServiceId = serviceId;
+    const serviceName = this.dataset.nome;
+    document.getElementById('serviceName').textContent = serviceName;
+
+    fetch(`/settings/get_service_operators/${serviceId}`)
+      .then(r => r.json())
+      .then(data => {
+        const selectedOps = data.operator_ids || [];
+        let html = '';
+        operatori.forEach(op => {
+          html += `
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" value="${op.id}" id="op_${op.id}"
+                ${selectedOps.includes(op.id) ? "checked" : ""}>
+              <label class="form-check-label" for="op_${op.id}">
+                ${op.nome} ${op.cognome}
+              </label>
+            </div>`;
+        });
+        document.getElementById('operator-list').innerHTML = html;
+
+        // Pulsante Copia
+        document.getElementById('copy-operatori').onclick = function() {
+        const checked = Array.from(document.querySelectorAll('#operator-list input:checked')).map(i => i.value);
+        localStorage.setItem('operatori_copiati', JSON.stringify(checked));
+        };
+
+        // Pulsante Incolla
+        document.getElementById('paste-operatori').onclick = function() {
+        const copiati = JSON.parse(localStorage.getItem('operatori_copiati') || '[]');
+        document.querySelectorAll('#operator-list input[type="checkbox"]').forEach(chk => {
+            chk.checked = copiati.includes(chk.value);
+        });
+        };
+
+        document.getElementById('operator-associate-form').onsubmit = function(e){
+          e.preventDefault();
+          const checked = Array.from(document.querySelectorAll('#operator-list input:checked')).map(i => i.value);
+          fetch('/settings/update_service_operators', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({service_id: serviceId, operator_ids: checked})
+          }).then(r=>r.json()).then(resp=>{
+            if(resp.success){ location.reload(); }
+          });
+        };
+        new bootstrap.Modal(document.getElementById('operatorModal')).show();
+      });
+  });
+});
+
+// Svuota la clipboard solo quando si lascia la pagina
+window.addEventListener('beforeunload', function() {
+  sessionStorage.removeItem('operatori_copiati');
+});
+
+  // Gestione visibilità online
+  document.querySelectorAll('.toggle-visible-online').forEach(chk => {
+    chk.addEventListener('change', function(){
+      fetch('/settings/update_service_visibility', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify({service_id: this.dataset.id, value: this.checked})
+      });
+    });
+  });
+
+  // Inizializza Tablesort (solo una volta!)
+  new Tablesort(document.getElementById('booking-table'));
+</script>
+<script>
+document.getElementById('save-booking-rules').onclick = function() {
+  const data = {
+  durata: {
+    active: document.getElementById('active-durata').checked,
+    max: document.getElementById('durata-max').value,
+    warning: document.getElementById('warning-durata').checked,
+    block: document.getElementById('block-durata').checked,
+    warning_msg: document.getElementById('warning-msg-durata').value || "",
+    block_msg: document.getElementById('block-msg-durata').value || ""
+  },
+  prezzo: {
+    active: document.getElementById('active-prezzo').checked,
+    max: document.getElementById('prezzo-max').value,
+    warning: document.getElementById('warning-prezzo').checked,
+    block: document.getElementById('block-prezzo').checked,
+    warning_msg: document.getElementById('warning-msg-prezzo').value || "",
+    block_msg: document.getElementById('block-msg-prezzo').value || ""
+  }
+};
+  fetch('/settings/update_booking_rules', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')},
+    body: JSON.stringify(data)
+  }).then(r=>r.json()).then(resp=>{
+    if(resp.success){ alert('Regole salvate!'); location.reload(); }
+    else { alert('Errore salvataggio regole'); }
+  });
+};
+
+// Logica: se si seleziona "Blocca", cancella l'ultimo pseudoblocco e mostra solo il messaggio di blocco
+['block-durata', 'block-prezzo'].forEach(id => {
+  document.getElementById(id).addEventListener('change', function() {
+    if(this.checked){
+      const warningId = id === 'block-durata' ? 'warning-durata' : 'warning-prezzo';
+      document.getElementById(warningId).checked = false;
+    }
+  });
+});
+
+// Warning disattiva blocca
+['warning-durata', 'warning-prezzo'].forEach(id => {
+  document.getElementById(id).addEventListener('change', function() {
+    if(this.checked){
+      const blockId = id === 'warning-durata' ? 'block-durata' : 'block-prezzo';
+      document.getElementById(blockId).checked = false;
+    }
+  });
+});
+</script>
+{% endblock %}

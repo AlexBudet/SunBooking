@@ -1,0 +1,25 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #fff;
+}
+h2 {
+  text-align: center;
+  margin-bottom: 1.5em;
+}
+.agenda-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1.1em;
+}
+.agenda-table th, .agenda-table td {
+  border: 1px solid #bbb;
+  padding: 0.2em 0.3em;
+  text-align: left;
+}
+.agenda-table th {
+  background: #f3f4f7;
+}
+@page {
+  size: A4;
+  margin: 0,5cm;
+}

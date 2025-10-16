@@ -1,0 +1,767 @@
+<!-- appl/templates/clients.html -->
+
+{% extends "settings.html" %}
+
+{% block settings_content %}
+<div class="page-wide-90">
+<h3>&nbsp;Gestione Clienti</h3>
+
+<!-- Form per aggiungere un nuovo cliente -->
+<form id="userForm" method="POST" action="{{ url_for('settings.add_client') }}" class="mb-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row align-items-center mb-2">
+        <!-- Nome -->
+        <div class="col-md-4">
+            <label for="client_name" class="visually-hidden">Nome</label>
+            <input type="text" class="form-control" id="client_name" name="client_name" placeholder="Nome" required>
+        </div>
+        <!-- Cognome -->
+        <div class="col-md-4">
+            <label for="client_surname" class="visually-hidden">Cognome</label>
+            <input type="text" class="form-control" id="client_surname" name="client_surname" placeholder="Cognome" required>
+        </div>
+        <!-- Cellulare -->
+        <div class="col-md-4">
+            <label for="client_phone" class="visually-hidden">Cellulare</label>
+            <input type="text" class="form-control" id="client_phone" name="client_phone" placeholder="Cellulare" required>
+        </div>
+    </div>
+    <div class="row align-items-center mb-2">
+        <!-- Data di nascita -->
+        <div class="col-md-4">
+            <label for="client_birthdate" class="visually-hidden">Data di nascita</label>
+            <input type="date" class="form-control" id="client_birthdate" name="client_birthdate">
+        </div>
+        <!-- Email -->
+        <div class="col-md-4">
+            <label for="client_email" class="visually-hidden">E-mail</label>
+            <input type="email" class="form-control" id="client_email" name="client_email" placeholder="E-mail">
+        </div>
+        <!-- Pulsante Aggiungi Cliente -->
+        <div class="col-md-4">
+            <button type="submit" class="btn btn-primary w-100">Aggiungi Cliente</button>
+        </div>
+    </div>
+</form>
+
+<!-- Cerca Cliente -->
+<div class="row mb-3">
+    <div class="col-md-6">
+      <input type="text" id="clientSearchInput" class="form-control" placeholder="Cerca cliente per nome o cognome...">
+    </div>
+  </div>
+
+<!-- Tabella dei clienti esistenti -->
+<table class="table sortable" id="clientsTable">
+    <thead>
+        <tr>
+<th>Nome <span class="sort-icons">▲<br>▼</span></th>
+<th>Cognome <span class="sort-icons">▲<br>▼</span></th>
+<th>Cellulare <span class="sort-icons">▲<br>▼</span></th>
+<th>E-mail <span class="sort-icons">▲<br>▼</span></th>
+<th>Data Nascita <span class="sort-icons">▲<br>▼</span></th>
+<th>Sesso <span class="sort-icons">▲<br>▼</span></th>
+<th>Creato il <span class="sort-icons">▲<br>▼</span></th>
+<th>Passaggi <span class="sort-icons">▲<br>▼</span></th>
+<th>Ultimo Passaggio <span class="sort-icons">▲<br>▼</span></th>
+<th>Azioni</th>
+        </tr>
+    </thead>
+<tbody id="clientsTableBody">
+    <!-- Le righe verranno aggiunte dinamicamente dal JavaScript -->
+</tbody>
+</table>
+<br><br><br>
+<div id="savedInfo" style="display: none"></div>
+
+<!-- Modal per la modifica delle note -->
+<div class="modal fade" tabindex="-1" id="EditClientNoteModal">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title">Note Cliente</h3>
+        </div>
+        <div class="modal-body">
+          <form id="EditClientNoteForm">
+            <div class="mb-3">
+              <textarea class="form-control" id="clientNote" name="note" maxlength="1000" rows="5"></textarea>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" id="saveClientNoteBtn">OK</button>
+        </div>
+      </div>
+    </div>
+</div>
+</div>
+
+<!-- Modal Storico Appuntamenti Cliente -->
+<div class="modal fade" tabindex="-1" id="ClientHistoryModal">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">Storico Appuntamenti Cliente</h3>
+      </div>
+      <div class="modal-body" id="clientHistoryBody" style="max-height: 600px; overflow-y: auto;">
+        <div class="text-center text-muted">Caricamento...</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.sort-icons {
+  font-size: 10px;
+  line-height: 10px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 2px;
+  color: #888;
+  user-select: none;
+}
+th {
+  position: relative;
+}
+  #ClientHistoryModal {
+    max-height: 390px; /* 3 card da circa 120-130px + margini */
+    overflow-y: auto;
+  }
+  #clientHistoryBody .card {
+    margin-bottom: 10px;
+  }
+</style>
+
+<script>
+    // Funzione per aprire il modal delle note del cliente
+    function openClientNoteModal(clientId, clientNote) {
+        var modalEl = document.getElementById('EditClientNoteModal');
+        if (!modalEl) {
+            console.error("Modal EditClientNoteModal not found!");
+            return;
+        }
+
+        // Recupera nome e cognome del cliente dal pulsante "Note"
+        const noteButton = document.querySelector(`.note[data-client-id="${clientId}"]`);
+        const clientName = noteButton.closest('tr').querySelector('td:first-child').textContent;
+        const clientSurname = noteButton.closest('tr').querySelector('td:nth-child(2)').textContent;
+
+        // Imposta l'ID del cliente come attributo del modal
+        modalEl.setAttribute('data-client-id', clientId);
+
+        // Imposta il titolo del modal
+        var titleEl = modalEl.querySelector('.modal-title');
+        if (titleEl) {
+            titleEl.textContent = `Note Cliente: ${clientName} ${clientSurname}`;
+        } else {
+            console.error("Elemento .modal-title non trovato nel modal");
+        }
+
+        // Precompila il textarea con la nota del cliente
+        var textarea = modalEl.querySelector('#clientNote');
+        if (textarea) {
+            textarea.value = clientNote && clientNote !== "None" ? clientNote : "";
+        } else {
+            console.error("Textarea con id 'clientNote' non trovato nel modal");
+        }
+
+        // Mostra il modal utilizzando Bootstrap
+        var bsModal = new bootstrap.Modal(modalEl);
+        bsModal.show();
+        console.log("Modal shown for client note");
+    }
+
+document.getElementById('userForm').addEventListener('submit', function(event) {
+    event.preventDefault();
+    const form = event.target;
+
+    // Prendi token CSRF dal campo hidden del form (esistente)
+    const csrfInput = form.querySelector('input[name="csrf_token"]');
+    const csrfToken = csrfInput ? csrfInput.value : '';
+
+    const payload = {
+        cliente_nome: (form.client_name.value || "").trim(),
+        cliente_cognome: (form.client_surname.value || "").trim(),
+        cliente_cellulare: (form.client_phone.value || "").trim(),
+        cliente_data_nascita: (form.client_birthdate.value || "").trim() || null,
+        cliente_email: (form.client_email.value || "").trim() || null,
+        cliente_sesso: "" // lasciamo che il backend applichi l'euristica minima
+    };
+
+    // Validazione minima client-side
+    if (!payload.cliente_nome) { alert("Il campo Nome è obbligatorio"); return; }
+    if (!payload.cliente_cognome) { alert("Il campo Cognome è obbligatorio"); return; }
+    if (!payload.cliente_cellulare) { alert("Il campo Cellulare è obbligatorio"); return; }
+
+    fetch(form.action, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+        },
+        body: JSON.stringify(payload),
+        credentials: 'same-origin'
+    })
+    .then(async response => {
+        const text = await response.text();
+        if (!response.ok) {
+            try {
+                const err = JSON.parse(text);
+                throw new Error(err.error || 'Errore durante l\'invio');
+            } catch (e) {
+                throw new Error(text ? text.replace(/<\/?[^>]+(>|$)/g, "").trim() : 'Errore durante l\'invio');
+            }
+        }
+        return text ? JSON.parse(text) : {};
+    })
+    .then(data => {
+        alert('Cliente aggiunto con successo!');
+        setTimeout(() => location.reload(), 800);
+    })
+    .catch(error => {
+        alert(error.message);
+    });
+
+    return false;
+});
+
+        // Aggiunge l'event listener per i pulsanti "Note"
+        var noteButtons = document.querySelectorAll('.note');
+        noteButtons.forEach(function(button) {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                var clientId = button.getAttribute('data-client-id');
+                var clientNote = button.getAttribute('data-note');
+                openClientNoteModal(clientId, clientNote);
+            });
+        });
+
+        // Aggiunge l'event listener per il pulsante "Salva Nota"
+        const saveNoteBtn = document.getElementById('saveClientNoteBtn');
+        if (saveNoteBtn) {
+            saveNoteBtn.addEventListener('click', function() {
+    const noteText = document.getElementById('clientNote').value;
+    const modalEl = document.getElementById('EditClientNoteModal');
+    const clientId = modalEl.getAttribute('data-client-id');
+    console.log('Salva nota - clientId:', clientId, 'noteText:', noteText);
+
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    if (!csrfMeta) {
+        console.error('Meta tag CSRF non trovato');
+        alert('Errore: CSRF token non trovato');
+        return;
+    }
+    const csrfToken = csrfMeta.getAttribute('content');
+
+    fetch(`/settings/clients/${clientId}/update_note`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ note: noteText })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => {
+                throw new Error(err.error || "Errore nel salvataggio della nota");
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Nota salvata:', data);
+        const bsModal = bootstrap.Modal.getInstance(modalEl);
+        if (bsModal) {
+            bsModal.hide();
+        }
+
+        // Aggiorna l'attributo data-note e il tooltip del pulsante "Note" corrispondente
+        const noteButton = document.querySelector(`.note[data-client-id="${clientId}"]`);
+        if (noteButton) {
+            noteButton.setAttribute('data-note', noteText);
+            // aggiorna immediatamente lo stile del pulsante senza aggiungere logica nuova
+            if (typeof updateNoteButtonStyles === 'function') updateNoteButtonStyles();
+
+            var tooltipInstance = bootstrap.Tooltip.getInstance(noteButton);
+            if (tooltipInstance) {
+                tooltipInstance.dispose();
+            }
+
+            new bootstrap.Tooltip(noteButton, {
+                title: noteText || "",
+                placement: 'top'
+            });
+        }
+
+    })
+    .catch(error => {
+        console.error("Errore nel salvataggio della nota:", error);
+        alert(error.message);
+    });
+});
+        }
+
+        // Inizializzazione dei tooltip (con decodifica del titolo)
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            let originalTitle = tooltipTriggerEl.getAttribute('title') || '';
+            return new bootstrap.Tooltip(tooltipTriggerEl, {
+                title: originalTitle
+        });
+});
+</script>
+<script>
+    // Gestione del click sulla cella del sesso
+document.querySelectorAll('.gender-cell').forEach(cell => {
+    cell.addEventListener('click', function() {
+        const clientId = this.dataset.clientId;
+        const currentGender = this.dataset.gender;
+        const genderDisplay = this.querySelector('.gender-display');
+
+        // Determina il nuovo valore del sesso
+        let newGender = '-';
+        if (currentGender === '-') {
+            newGender = 'M';
+        } else if (currentGender === 'M') {
+            newGender = 'F';
+        } else if (currentGender === 'F') {
+            newGender = '-';
+        }
+
+
+        // Aggiorna l'attributo data-gender e il testo visualizzato
+        this.dataset.gender = newGender;
+        genderDisplay.textContent = newGender;
+
+        // Invia la modifica al server
+        const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        if (!csrfMeta) {
+            console.error('Meta tag CSRF non trovato');
+            alert('Errore: CSRF token non trovato');
+            return;
+        }
+        const csrfToken = csrfMeta.getAttribute('content');
+
+        fetch(`/settings/settings/clients/${clientId}/update_gender`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ gender: newGender })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => {
+                    throw new Error(err.error || "Errore nell'aggiornamento del sesso");
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Sesso aggiornato:', data);
+            // Nessun reload necessario, abbiamo già aggiornato l'interfaccia
+        })
+        .catch(error => {
+            console.error("Errore nell'aggiornamento del sesso:", error);
+            alert(error.message);
+            // In caso di errore, ripristina il valore precedente (opzionale)
+            this.dataset.gender = currentGender;
+            genderDisplay.textContent = currentGender;
+        });
+    });
+});
+
+</script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+    // Listener per pulsanti storico
+    document.querySelectorAll('.storico-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const clientId = btn.getAttribute('data-client-id');
+            const modal = new bootstrap.Modal(document.getElementById('ClientHistoryModal'));
+            const body = document.getElementById('clientHistoryBody');
+            body.innerHTML = '<div class="text-center text-muted">Caricamento...</div>';
+
+            fetch(`/settings/api/client_history?q=${clientId}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data || data.length === 0) {
+                        body.innerHTML = '<div class="alert alert-info">Nessun appuntamento pagato trovato per questo cliente.</div>';
+                        return;
+                    }
+body.innerHTML = `
+  <div style="overflow-x:auto;">
+    <table class="table table-striped align-middle">
+      <thead>
+        <tr>
+          <th>DATA</th>
+          <th>ORA</th>
+          <th>SERVIZIO</th>
+          <th>COSTO</th>
+          <th>OPERATORE</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${data.map(item => {
+          // Split data e ora
+let [dataStr, oraStr] = item.ora_inizio.split(' ');
+
+// Nuova funzione per formattare la data
+function formatDateIT(dateStr) {
+    const mesi = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+    const [anno, mese, giorno] = dateStr.split('-');
+    return `${giorno} ${mesi[parseInt(mese, 10) - 1]} ${anno}`;
+}
+
+// Poi usa:
+let dataFormattata = formatDateIT(dataStr);
+
+return `
+  <tr>
+    <td>${dataFormattata}</td>
+    <td>${oraStr}</td>
+    <td>${item.servizio || '-'}</td>
+    <td>${item.costo !== null ? (parseFloat(item.costo).toFixed(2) + ' €') : '-'}</td>
+    <td>${item.operatore || '-'}</td>
+  </tr>
+`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>
+`;
+                })
+                .catch(() => {
+                    body.innerHTML = '<div class="alert alert-danger">Errore nel caricamento dello storico.</div>';
+                });
+
+            modal.show();
+        });
+    });
+});
+    </script>
+<script>
+let originalRows = []; // Non necessario ora, ma lasciato per compatibilità
+
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('clientSearchInput');
+    const tbody = document.getElementById('clientsTableBody'); // Usa l'ID del tbody
+
+    // Al focus sul campo ricerca (click o tab), se vuoto, carica ultimi 10
+    searchInput.addEventListener('focus', function() {
+        if (this.value.trim().length === 0) {
+            loadRecentClients();
+        }
+    });
+
+    // Al input (digitare), gestisci logica
+    searchInput.addEventListener('input', function() {
+        const searchValue = this.value.trim().toLowerCase();
+
+        if (searchValue.length === 0) {
+            // Campo vuoto: svuota la tabella
+            tbody.innerHTML = '';
+        } else if (searchValue.length < 3) {
+            // Prime 2 lettere: mostra ultimi 10
+            loadRecentClients();
+        } else {
+            // Dopo 3 lettere: cerca tutti
+            loadSearchResults(searchValue);
+        }
+    });
+
+    // Funzione per caricare ultimi 10 clienti
+    function loadRecentClients() {
+        fetch('/settings/api/recent-clients')
+            .then(r => r.json())
+            .then(clients => {
+                populateTable(clients);
+            })
+            .catch(() => {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Errore nel caricamento.</td></tr>';
+            });
+    }
+
+    // Funzione per caricare risultati ricerca
+    function loadSearchResults(searchValue) {
+        fetch(`/settings/api/search-clients?q=${encodeURIComponent(searchValue)}`)
+            .then(r => r.json())
+            .then(clients => {
+                populateTable(clients);
+            })
+            .catch(() => {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Errore nella ricerca.</td></tr>';
+            });
+    }
+
+    // Funzione per popolare la tabella in modo sicuro
+    function populateTable(clients) {
+        tbody.innerHTML = '';
+
+        if (clients.length === 0) {
+            const noResultRow = document.createElement('tr');
+            const noResultCell = document.createElement('td');
+            noResultCell.colSpan = 10;
+            noResultCell.className = 'text-center text-muted';
+            noResultCell.textContent = 'Nessun cliente trovato.';
+            noResultRow.appendChild(noResultCell);
+            tbody.appendChild(noResultRow);
+            return;
+        }
+
+        clients.forEach(client => {
+            const row = document.createElement('tr');
+
+            // Nome
+            const nomeCell = document.createElement('td');
+            nomeCell.textContent = client.cliente_nome || '';
+            row.appendChild(nomeCell);
+
+            // Cognome
+            const cognomeCell = document.createElement('td');
+            cognomeCell.textContent = client.cliente_cognome || '';
+            row.appendChild(cognomeCell);
+
+            // Cellulare
+            const cellulareCell = document.createElement('td');
+            cellulareCell.textContent = client.cliente_cellulare || '';
+            row.appendChild(cellulareCell);
+
+            // Email
+            const emailCell = document.createElement('td');
+            emailCell.textContent = client.cliente_email || '';
+            row.appendChild(emailCell);
+
+            // Data Nascita
+            const dataNascitaCell = document.createElement('td');
+            dataNascitaCell.textContent = client.cliente_data_nascita;
+            row.appendChild(dataNascitaCell);
+
+            // Sesso
+            const sessoCell = document.createElement('td');
+            sessoCell.className = 'gender-cell';
+            sessoCell.dataset.clientId = client.id;
+            sessoCell.dataset.gender = client.cliente_sesso;
+            const sessoSpan = document.createElement('span');
+            sessoSpan.className = 'gender-display';
+            sessoSpan.textContent = client.cliente_sesso;
+            sessoCell.appendChild(sessoSpan);
+            row.appendChild(sessoCell);
+
+            // Creato il
+            const creatoCell = document.createElement('td');
+            creatoCell.textContent = client.created_at;
+            row.appendChild(creatoCell);
+
+            // Passaggi
+            const passaggiCell = document.createElement('td');
+            passaggiCell.textContent = client.num_passaggi;
+            row.appendChild(passaggiCell);
+
+            // Ultimo Passaggio
+            const ultimoPassaggioCell = document.createElement('td');
+            ultimoPassaggioCell.textContent = client.ultimo_passaggio;
+            row.appendChild(ultimoPassaggioCell);
+
+            // Azioni
+            const azioniCell = document.createElement('td');
+
+            // Pulsante Modifica
+            const modificaLink = document.createElement('a');
+            modificaLink.href = `/settings/settings/clients/${client.id}/edit`;
+            modificaLink.className = 'btn btn-sm btn-primary';
+            modificaLink.textContent = 'Modifica';
+            azioniCell.appendChild(modificaLink);
+
+            // Form Elimina
+            const eliminaForm = document.createElement('form');
+            eliminaForm.action = `/settings/delete_client/${client.id}`;
+            eliminaForm.method = 'POST';
+            eliminaForm.style.display = 'inline';
+
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = '{{ csrf_token() }}';
+            eliminaForm.appendChild(csrfInput);
+
+            const eliminaBtn = document.createElement('button');
+            eliminaBtn.type = 'submit';
+            eliminaBtn.className = 'btn btn-sm btn-danger';
+            eliminaBtn.textContent = 'Elimina';
+            // Aggiungi popup di conferma
+            eliminaBtn.onclick = function() {
+                return confirm('Sei sicuro di voler eliminare questo cliente?');
+            };
+            eliminaForm.appendChild(eliminaBtn);
+
+            azioniCell.appendChild(eliminaForm);
+
+            // Pulsante Note
+            const noteBtn = document.createElement('button');
+            noteBtn.type = 'button';
+            // usa solo le classi base e la classe "note" (NO btn-info)
+            noteBtn.className = 'btn note btn-sm';
+            noteBtn.dataset.clientId = client.id;
+            noteBtn.dataset.note = client.note || '';
+            noteBtn.textContent = 'Note';
+            // aggiungi classe specifica in base al contenuto della nota
+            if ((client.note || '').trim().length > 0) {
+                noteBtn.classList.add('btn-note-filled');
+            } else {
+                noteBtn.classList.add('btn-note-empty');
+            }
+            azioniCell.appendChild(noteBtn);
+
+            // Pulsante Storico
+            const storicoBtn = document.createElement('button');
+            storicoBtn.type = 'button';
+            storicoBtn.className = 'btn btn-secondary storico-btn';
+            storicoBtn.dataset.clientId = client.id;
+            storicoBtn.textContent = 'Storico';
+            azioniCell.appendChild(storicoBtn);
+
+            row.appendChild(azioniCell);
+
+            tbody.appendChild(row);
+        });
+
+        // Attach event listeners per le nuove righe
+        if (typeof updateNoteButtonStyles === 'function') updateNoteButtonStyles();
+        attachEventListenersToRows(tbody.querySelectorAll('tr'));
+    }
+
+    // Funzione per attachare event listeners (copia dalla risposta precedente)
+    function attachEventListenersToRows(rows) {
+        rows.forEach(row => {
+            // Event listener per sesso
+            const genderCell = row.querySelector('.gender-cell');
+            if (genderCell) {
+                genderCell.addEventListener('click', function() {
+                    const clientId = this.dataset.clientId;
+                    const currentGender = this.dataset.gender;
+                    const genderDisplay = this.querySelector('.gender-display');
+
+                    let newGender = '-';
+                    if (currentGender === '-') {
+                        newGender = 'M';
+                    } else if (currentGender === 'M') {
+                        newGender = 'F';
+                    } else if (currentGender === 'F') {
+                        newGender = '-';
+                    }
+
+                    this.dataset.gender = newGender;
+                    genderDisplay.textContent = newGender;
+
+                    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                    const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+                    fetch(`/settings/clients/${clientId}/update_gender`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify({ gender: newGender })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.json().then(err => {
+                                throw new Error(err.error || "Errore nell'aggiornamento del sesso");
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('Sesso aggiornato:', data);
+                    })
+                    .catch(error => {
+                        console.error("Errore nell'aggiornamento del sesso:", error);
+                        alert(error.message);
+                        this.dataset.gender = currentGender;
+                        genderDisplay.textContent = currentGender;
+                    });
+                });
+            }
+
+            // Event listener per note
+            const noteBtn = row.querySelector('.note');
+            if (noteBtn) {
+                noteBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var clientId = this.dataset.clientId;
+                    var clientNote = this.dataset.note;
+                    openClientNoteModal(clientId, clientNote);
+                });
+            }
+
+            // Event listener per storico
+            const storicoBtn = row.querySelector('.storico-btn');
+            if (storicoBtn) {
+                storicoBtn.addEventListener('click', function() {
+                    const clientId = this.dataset.clientId;
+                    const modal = new bootstrap.Modal(document.getElementById('ClientHistoryModal'));
+                    const body = document.getElementById('clientHistoryBody');
+                    body.innerHTML = '<div class="text-center text-muted">Caricamento...</div>';
+
+                    fetch(`/settings/api/client_history?q=${clientId}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (!data || data.length === 0) {
+                                body.innerHTML = '<div class="alert alert-info">Nessun appuntamento pagato trovato per questo cliente.</div>';
+                                return;
+                            }
+
+                            const tableHtml = `
+                                <div style="overflow-x:auto;">
+                                    <table class="table table-striped align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th>DATA</th>
+                                                <th>ORA</th>
+                                                <th>SERVIZIO</th>
+                                                <th>COSTO</th>
+                                                <th>OPERATORE</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${data.map(item => {
+                                                let [dataStr, oraStr] = item.ora_inizio.split(' ');
+                                                const mesi = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+                                                const [anno, mese, giorno] = dataStr.split('-');
+                                                const dataFormattata = `${giorno} ${mesi[parseInt(mese, 10) - 1]} ${anno}`;
+
+                                                return `
+                                                    <tr>
+                                                        <td>${dataFormattata}</td>
+                                                        <td>${oraStr}</td>
+                                                        <td>${item.servizio || '-'}</td>
+                                                        <td>${item.costo !== null ? (parseFloat(item.costo).toFixed(2) + ' €') : '-'}</td>
+                                                        <td>${item.operatore || '-'}</td>
+                                                    </tr>
+                                                `;
+                                            }).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            `;
+                            body.innerHTML = tableHtml;
+                        })
+                        .catch(() => {
+                            body.innerHTML = '<div class="alert alert-danger">Errore nel caricamento dello storico.</div>';
+                        });
+
+                    modal.show();
+                });
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>Login SunBooking</title>
+  <style>
+  :root { --popup-right-offset: 20px; --popup-max-width: 420px; }
+  * { box-sizing: border-box; }
+  /* BACKGROUND: usa url_for per ottenere la risorsa statica */
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+    padding: 40px;
+    background-color: #f7f7f7; /* fallback color */
+    background-image: url("{{ url_for('static', filename='img/landing-bg.png') }}");
+    background-size: cover;            /* scala e ritaglia mantenendo proporzioni */
+    background-position: center center;/* centro dell'immagine */
+    background-repeat: no-repeat;
+    /* evita che l'immagine fissi il background su mobile (performance) */
+    background-attachment: scroll;
+    min-height: 100vh;                 /* assicurati copra tutta la viewport */
+  }
+
+  /* overlay per miglior contrasto testo (opzionale) */
+  .bg-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.32); /* regola opacità per visibilità */
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* contenuto sopra l'overlay */
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 480px;
+    margin: 0 auto;
+    background: rgba(255,255,255,0.92); /* leggera trasparenza per armonia col bg */
+    padding: 20px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  }
+
+  /* adattamenti per schermi piccoli */
+  @media (max-width: 480px) {
+    body { padding: 16px; }
+    .container { margin: 12px; padding: 16px; }
+  }
+
+    label { display:block; margin-top:8px; font-weight:600; }
+    input[type="text"], input[type="password"] { width:100%; padding:8px; margin-top:6px; }
+    button { margin-top:12px; padding:8px 14px; }
+    .meta { margin-top:12px; font-size:0.9em; color:#444; }
+    .meta strong { color:#000; }
+
+    /* Flash popup (top-right) - fixed and responsive */
+    .flash-popup {
+      position: fixed;
+      top: 20px;
+      right: var(--popup-right-offset);
+      z-index: 99999;
+      display: none;
+      pointer-events: auto;
+      max-width: min(var(--popup-max-width), calc(100% - 40px));
+      width: auto;
+    }
+    .flash-popup .flash-wrapper {
+      position: relative;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+      overflow: visible; /* permit close button to overflow without clipping */
+      padding: 12px 14px 10px 14px;
+      border: 1px solid rgba(0,0,0,0.06);
+      word-break: break-word;
+      white-space: normal;
+    }
+    .flash-popup .flash {
+      margin: 6px 0;
+      padding: 8px;
+      border-radius: 6px;
+    }
+    .flash.danger { background:#fdecea; color:#611a15; border:1px solid #f5c6cb; }
+    .flash.info { background:#e8f4fd; color:#0b4f75; border:1px solid #b8e1ff; }
+
+    .flash-close {
+      position: absolute;
+      top: -10px;
+      right: -10px;
+      background: #222;
+      color: #fff;
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100000;
+    }
+
+    @media (max-width: 480px) {
+      .container { margin:12px; padding:16px; }
+      .flash-popup { right: 12px; top: 12px; max-width: calc(100% - 24px); }
+    }
+  </style>
+</head>
+<body>
+    <div class="bg-overlay" aria-hidden="true"></div>
+  <div class="container">
+    <h1>SUNBOOKING</h1>
+    <h3>Beauty Revolution Begins!</h3><br>
+
+    <form method="POST" autocomplete="off">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="username">Username / Email</label>
+      <input id="username" name="username" type="text" required value="{{ (request.form.username or '')|e }}">
+
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required>
+
+      <button type="submit">Accedi</button>
+    </form>
+
+    <div class="meta">
+      {% if login_attempts %}
+        <div><strong>Tentativi effettuati:</strong> {{ login_attempts }}</div>
+      {% endif %}
+
+      {% if reset_email %}
+        <div style="margin-top:8px;">
+          <strong>Reset credenziali / Assistenza:</strong>
+          <a href="mailto:{{ reset_email|e }}">{{ reset_email|e }}</a>
+        </div>
+      {% endif %}
+    </div>
+
+    <hr>
+    <footer style="font-size:0.85em; color:#666; margin-top:14px;">
+      SUNBOOKING — sviluppato da Alessio Budetta, 2025
+    </footer>
+  </div>
+
+  <!-- Flash popup container -->
+  <div id="flashPopup" class="flash-popup" role="status" aria-live="polite" aria-atomic="true">
+    <div class="flash-wrapper" role="group" aria-label="Messaggi">
+     <button id="flashClose" type="button" class="flash-close" aria-label="Chiudi messaggio">×</button>
+      <div id="flashContent"></div>
+    </div>
+  </div>
+  <script type="application/json" id="flashData">{{ get_flashed_messages(with_categories=true) | default([]) | tojson }}</script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // leggi i messaggi dal nodo JSON (evita interpolazioni Jinja direttamente nel codice JS)
+    let msgs = [];
+    try {
+      const flashEl = document.getElementById('flashData');
+      if (flashEl) msgs = JSON.parse(flashEl.textContent || '[]');
+    } catch (e) {
+      console.error('Errore parsing flashData:', e);
+      msgs = [];
+    }
+
+    const popup = document.getElementById('flashPopup');
+    const content = document.getElementById('flashContent');
+    const closeBtn = document.getElementById('flashClose');
+
+    if (!popup || !content) return; // guardia: evita errori se elementi mancanti
+
+    function hidePopup() { popup.style.display = 'none'; }
+    function showPopup() { popup.style.display = 'block'; }
+
+    if (Array.isArray(msgs) && msgs.length > 0) {
+      content.textContent = '';
+      msgs.forEach(function(item) {
+        const category = (item && item[0]) ? String(item[0]) : 'info';
+        const message = (item && item[1]) ? String(item[1]) : '';
+        const categorySafe = category.replace(/[^a-z0-9\-_]/gi, '').toLowerCase() || 'info';
+
+        const div = document.createElement('div');
+        div.classList.add('flash', categorySafe);
+        div.textContent = message;
+        content.appendChild(div);
+      });
+
+      showPopup();
+
+      requestAnimationFrame(function() {
+        try {
+          const rect = popup.getBoundingClientRect();
+          if (rect.left < 6) popup.style.right = '6px';
+        } catch (e) { /* ignore */ }
+      });
+
+      setTimeout(hidePopup, 8000);
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function() { hidePopup(); });
+    }
+  });
+  </script>
+</body>
+</html>

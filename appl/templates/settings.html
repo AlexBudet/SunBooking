@@ -1,0 +1,57 @@
+<!-- appl/templates/settings.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<div style="width: 90%;">
+<br>
+<br>
+    <!-- ...contenuto... -->
+</div>
+<!-- Pulsanti di navigazione -->
+ <br><br>
+<div class="d-flex flex-wrap gap-2 justify-content-center" style="position: relative; top: 8px;">
+<a href="{{ url_for('settings.operators') }}" class="neo-btn{% if request.endpoint == 'settings.operators' %} active{% endif %}">Operatori</a>
+<a href="{{ url_for('settings.services') }}" class="neo-btn{% if request.endpoint == 'settings.services' %} active{% endif %}">Servizi</a>
+<a href="{{ url_for('settings.clients') }}" class="neo-btn{% if request.endpoint == 'settings.clients' %} active{% endif %}">Clienti</a>
+<a href="{{ url_for('settings.whatsapp') }}" class="neo-btn{% if request.endpoint == 'settings.whatsapp' %} active{% endif %}">WhatsApp</a>
+<a href="{{ url_for('settings.business_info') }}" class="neo-btn{% if request.endpoint == 'settings.business_info' %} active{% endif %}">Info Azienda</a>
+{% if not (current_user and current_user.ruolo.value == 'user') %}
+  <a href="{{ url_for('settings.set_bookings') }}" class="neo-btn{% if request.endpoint == 'settings.set_bookings' %} active{% endif %}">Booking Web</a>
+  <a href="{{ url_for('settings.manage_users') }}" class="neo-btn{% if request.endpoint == 'settings.manage_users' %} active{% endif %}">Utenti</a>
+{% endif %}
+</div>
+<div style="height: 20px;"></div>
+</div>
+</div>
+<style>
+  .neo-btn {
+  border-radius: 10px;
+  padding: 7px 12px;
+  text-transform: uppercase;
+  text-decoration: none;
+  background: #f4f4f4;
+  border: none;
+    transition: background 0.15s, box-shadow 0.15s, color 0.15s;
+    box-shadow:
+      0 -6px 14px #fff,                /* ombra bianca sopra */
+      4px 4px 10px #e0e0e0,              /* ombra scura sotto */
+      -4px -4px 10px #ffffff;            /* effetto rilievo */
+  color: #3f3f3f !important;
+  display: inline-block;
+  outline: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.neo-btn.active {
+  background: #ffffff !important;
+  color: #0e6cc5 !important;
+  font-size: 1.1m;
+}
+.neo-btn:hover {
+  background-color: #ffffff;
+  color: #215586;
+}
+</style>
+<!-- Qui verrà inserito il contenuto delle pagine specifiche -->
+{% block settings_content %}{% endblock %}
+{% endblock %}

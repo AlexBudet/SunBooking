@@ -1,0 +1,69 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+pip-wheel-metadata/
+
+# Virtual env
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Tests/Coverage/Linters
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets / Certs
+.env
+*.env
+**/.env
+.env.*
+dist/.env
+dist_*/.env
+cert.pem
+key.pem
+
+# Build & Distribution
+build/
+dist/
+dist_*/
+*.spec
+*.bak
+*.tmp
+
+# Executables in dist
+dist/**/*.exe
+dist_*/**/*.exe
+
+# Node (se presente)
+node_modules/
+
+# File locali vari non versionati
+waitress-serve
+sviluppo/
+per chiudere eventuali scontrini aperti che bloccano RCH

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Seleziona Negozio - SunBooking Web</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; background-color: #f7f7f7; }
+    .container { max-width: 700px; margin: 0 auto; background: white; padding: 20px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    h1 { text-align: center; }
+    .db-link { display: block; margin: 10px 0; padding: 12px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; text-align: center; }
+    .db-link:hover { background: #0056b3; }
+    .empty { color: #666; text-align: center; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>SUNBOOKING - Seleziona Negozio</h1>
+    <p>Scegli il negozio per accedere:</p>
+    {% if db_links and db_links|length > 0 %}
+      {% for link in db_links %}
+        <a href="{{ link.url }}" class="db-link">{{ link.label }}</a>
+      {% endfor %}
+    {% else %}
+      <p class="empty">Nessun database configurato. Verifica il file .env.</p>
+    {% endif %}
+  </div>
+</body>
+</html>

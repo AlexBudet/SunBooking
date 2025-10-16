@@ -1,0 +1,1682 @@
+<!-- appl/templates/calendar.html -->
+{% extends "base.html" %}
+{% block content %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<script>
+  window.lastClickPosition = null;
+    const selectedDate = "{{ selected_date_str }}"; 
+    const defaultOpeningTime = "{{ active_opening_time.strftime('%H:%M') }}"; 
+    const defaultClosingTime = "{{ active_closing_time.strftime('%H:%M') }}";
+    const closingDays = {{ closing_days|tojson }};
+</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/it.js"></script>
+<!-- Messaggi Flash -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+{% for category, message in messages %}
+<div class="flash {{ category|e }}">
+    {{ message }}
+</div>
+{% endfor %}
+{% endif %}
+{% endwith %}
+<div id="clientHistoryPopup" style="display:none; z-index:99999; background:#fff; border-radius:6px; border: 2px solid #222; padding:8px 12px;"></div>
+                     <div class="d-flex align-items-start mb-3" style="gap: 4px; width: 100%;">
+  <!-- Quarter Navigator -->
+<div id="quarterNavigator"
+     style="position: fixed; top: 15px; right: 21vw; min-width: 120px; display: flex; flex-direction: row; align-items: center; justify-content: center; margin-top: 0; z-index: 13040;">
+  <button type="button"
+          style="background: transparent; border: none; color: #222; font-size: 1.1em; padding: 2px 6px; line-height: 1;"
+          onclick="changeQuarterHeight(-5)">−</button>
+  <span style="font-size: 1em; color: #222; display: flex; align-items: center;">
+      <i class="bi bi-search"
+         id="quarterResetIcon"
+         style="cursor:pointer; transition: box-shadow 0.2s;"></i>
+  </span>
+  <button type="button"
+          style="background: transparent; border: none; color: #222; font-size: 1.1em; padding: 2px 6px; line-height: 1;"
+          onclick="changeQuarterHeight(5)">+</button>
+</div>
+  <!-- Appointment Navigator -->
+  <div id="appointmentNavigator" class="appointmentNavigator">
+    <!-- Campo cerca cliente -->
+    <div style="margin-bottom: 10px; position: relative;">
+      <input 
+        type="text" 
+        id="clientSearchInputNav" 
+        placeholder="Cerca Cliente..." 
+        onkeyup="handleClientSearchNav(this.value)"
+        style="width: 100%; padding: 6px; padding-right: 35px;" 
+        autocomplete="off"
+      />
+      <button 
+        type="button" 
+        class="btn btn-outline-success btn-add-client-square btn-add-client-nav"
+        data-bs-toggle="tooltip"
+        data-bs-placement="top"
+        title="Aggiungi cliente"
+        onclick="openAddClientModal('navigator')"
+      >
+        +
+      </button>
+      <div 
+        id="clientResultsNav" 
+        class="results-dropdown" 
+        style="display: none; position: relative; top: auto; left: auto; width: 100%;"
+      ></div>
+    </div>
+
+    <!-- Campo servizio -->
+    <div style="margin-bottom: 10px; position: relative;">
+      <input
+        type="text"
+        id="serviceInputNav"
+        placeholder="Cerca servizio..."
+        onfocus="loadFrequentServices()"
+        onkeyup="handleServiceSearchNav(this.value)"
+        style="width: 100%; padding: 6px;"
+        autocomplete="off"
+      />
+      <div
+        id="serviceResultsNav"
+        class="results-dropdown"
+        style="display: none; position: relative; top: auto; left: auto; width: 100%;"
+      ></div>
+    </div>
+
+    <!-- Lista servizi selezionati -->
+    <div id="selectedServicesList"
+         style="border: 1px dashed #ccc; padding: 5px; min-height: 40px;">
+    </div>
+    <button id="clearNavigatorBtn" class="clear-navigator-btn" onclick="clearNavigator()">Svuota</button>
+  </div>
+</div>
+<!-- NAVIGAZIONE CALENDARIO -->
+<div class="calendar-navigation sticky-nav">
+    <!-- Freccia sinistra (giorno precedente) -->
+    <a href="{{ url_for('calendar.calendar_home', date=day_before_str) }}" class="arrow-nav">&lt;</a>
+    <!-- Campo data visibile con giorno della settimana -->
+    <div class="calendar-date-container">
+        <input type="text" id="date" name="date" value="{{ selected_date_str }}" class="calendar-date-input">
+        <span id="dayOfWeek"></span>
+    </div>
+    <!-- Freccia destra (giorno successivo) -->
+    <a href="{{ url_for('calendar.calendar_home', date=day_after_str) }}" class="arrow-nav">&gt;</a>
+    <!-- Pulsante per tornare a oggi: visualizza solo se la data corrente non è quella odierna -->
+{% if selected_date_str != today_str %}
+&nbsp;<a href="{{ url_for('calendar.calendar_home', date=today_str) }}" class="btn-today">Vai a OGGI</a>
+{% endif %}
+<!-- Pulsante Web: AGGIUNGI QUI -->
+<button id="btnWebInformatica"
+        class="btn btn-outline-secondary"
+        title="Web"
+        style="margin-left: 12px; font-size: 1.4em; background: #fff; border-radius: 6px; padding: 2px 16px; cursor: pointer;">
+  🌐
+</button>
+</div>
+
+<!-- Tabella dell'agenda giornaliera -->
+<div class="calendar-fullwidth">
+    <table class="calendar-table">
+        <thead>
+  <tr id="headerRow">
+    <th>Ora</th>
+    {% for operator in operators %}
+    <th class="operator-header{% if operator.use_twenty_minutes %} twenty-minutes{% endif %}" data-operator-id="{{ operator.id }}">
+      <a href="#" class="operator-shift-link {% if operator.user_tipo != 'estetista' %}solarium{% endif %}" 
+         data-operator-id="{{ operator.id }}"
+         data-operator-name="{{ operator.user_nome }}"
+         data-date="{{ selected_date_str }}"
+         data-url="{{ url_for('operators.operator_shifts', operator_id=operator.id, _external=True) }}">
+         {{ operator.user_nome }}
+      </a>
+    </th>    
+    {% endfor %}
+    <th>Ora</th>
+  </tr>
+</thead>
+        <tbody>
+            {% for hour in range(opening_time.hour if opening_time else 8, (closing_time.hour if closing_time else 20) + 1) %}
+            {% for quarter in range(4) %}
+            <tr>
+                <!-- Determina lo stile della cella oraria -->
+                <td
+  class="{% if quarter == 0 %}hour-cell{% else %}quarter-cell{% endif %}
+    {% if hour < (active_opening_time.hour if active_opening_time else 24) or (hour == active_opening_time.hour and quarter * 15 < (active_opening_time.minute if active_opening_time else 60)) or hour > (active_closing_time.hour if active_closing_time else 0) or (hour == active_closing_time.hour and quarter * 15 >= (active_closing_time.minute if active_closing_time else 0)) %} calendar-closed{% endif %}
+    {% if selected_date.strftime('%A') in closing_days %} calendar-closed{% endif %}"
+    {% if quarter == 0 %}id="fascia-{{ "%02d" % hour }}"{% endif %}
+  {% if quarter == 0 %}data-hour="{{ hour }}"{% endif %}
+>
+  {{ "%02d:%02d" % (hour, quarter * 15) }}
+</td>
+
+                {% for operator in operators %}
+                <!-- Determina lo stile della cella operatore -->
+                <td id="cell-{{ operator.id }}-{{ hour }}-{{ quarter }}" class="selectable-cell 
+                              {% if hour < (active_opening_time.hour if active_opening_time else 24) or (hour == active_opening_time.hour and quarter * 15 < (active_opening_time.minute if active_opening_time else 60)) or hour > (active_closing_time.hour if active_closing_time else 0) or (hour == active_closing_time.hour and quarter * 15 >= (active_closing_time.minute if active_closing_time else 0)) %} calendar-closed{% endif %}
+                              {% if selected_date.strftime('%A') in closing_days %} calendar-closed{% endif %}"
+                    data-operator-id="{{ operator.id }}" data-hour="{{ hour }}" data-minute="{{ quarter * 15 }}"
+                    data-operator-name="{{ operator.user_nome }} {{ operator.user_cognome }}"
+                    data-date="{{ selected_date_str }}">
+                    <!-- Aggiungi gli appuntamenti solo se la cella è attiva -->
+                    {% for appt in appointments if appt.operator_id == operator.id %}
+                    {% if appt.start_time.hour == hour and (appt.start_time.minute // 15) == quarter %}
+                    <div class="appointment-wrapper">
+                      <div class="appointment-block{% if appt.stato == 2 %} status-2{% endif %}{% if not appt.client or (appt.client.cliente_nome|lower == 'dummy' and appt.client.cliente_cognome|lower == 'dummy') %} note-off{% elif appt.client and appt.client.is_deleted %} disable-popup{% endif %}{% if appt.colore_font|lower in ['#ffffff', '#fff', 'white'] %} dark-bg{% else %} light-bg{% endif %}"
+                      draggable="{% if not appt.client.is_deleted %}true{% else %}false{% endif %}"
+                      data-status="{{ appt.stato.value }}"
+                      data-created-at="{{ appt.created_at.isoformat() if appt.created_at else '' }}"
+                      data-booking_session_id="{{ appt.booking_session_id or '' }}"
+                      data-last-edit="{{ appt.last_edit.isoformat() if appt.last_edit else '' }}"
+                      data-colore="{{ appt.colore }}" 
+                      data-colore_font="{{ appt.colore_font }}" 
+                      data-appointment-id="{{ appt.id }}" 
+                      data-duration="{{ appt.duration }}" 
+                      data-service-id="{{ appt.service.id }}" 
+                      data-client-id="{{ appt.client.id }}" 
+                      data-client-nome="{{ appt.client.cliente_nome }}" 
+                      data-client-cognome="{{ appt.client.cliente_cognome }}" 
+                      data-client-cellulare="{{ appt.client.cliente_cellulare or '' }}"
+                      data-operator-id="{{ operator.id }}" 
+                      data-hour="{{ hour }}" 
+                      data-minute="{{ quarter * 15 }}"
+                      data-source="{{ appt.source.value }}" 
+                      {% if appt.note %} data-note="{{ appt.note|e }}" {% endif %}
+                 >
+                     <div class="popup-buttons">
+<!-- Questi compaiono solo se client NON è eliminato -->
+{% if not appt.client.is_deleted %}
+    <button type="button" class="btn-popup sposta" title="Togli e sposta" data-bs-toggle="tooltip"
+            data-appointment-id="{{ appt.id }}">
+        <i class="bi bi-scissors"></i>
+    </button>
+    <!-- pulsante COPIA -->
+    <button type="button" class="btn-popup copia" title="Copia blocco" data-bs-toggle="tooltip" data-appointment-id="{{ appt.id }}">
+      <i class="bi bi-files"></i>
+    </button>
+    <!-- pulsante COLORE -->
+    <button type="button" class="btn-popup colore" title="Imposta colore" data-bs-toggle="tooltip" data-appointment-id="{{ appt.id }}">
+      <i class="bi bi-palette"></i>
+    </button>
+    <button type="button" class="btn-popup pagamento" title="Porta in cassa" data-bs-toggle="tooltip"
+            data-appointment-id="{{ appt.id }}">
+        <i class="bi bi-currency-euro"></i>
+    </button>
+    <button type="button" class="btn-popup nota" title="Aggiungi nota" data-bs-toggle="tooltip"
+            data-appointment-id="{{ appt.id }}">
+        <i class="bi bi-pencil-square"></i>
+    </button>
+    <button type="button" class="btn-popup aggiungi-servizi" title="Aggiungi Servizi" data-bs-toggle="tooltip"
+            data-appointment-id="{{ appt.id }}">
+        <i class="bi bi-plus"></i>
+    </button>
+{% endif %}
+</div> <!-- /.popup-buttons -->
+
+<div>
+      <!-- pulsante Whatsapp -->
+  {% if appt.client and appt.service and not (appt.client.cliente_nome|lower == 'dummy' and appt.client.cliente_cognome|lower == 'dummy') %}
+<button type="button"
+        class="btn-popup whatsapp-btn"
+        data-appointment-id="{{ appt.id }}"
+        title="Invia WhatsApp"
+        data-bs-toggle="tooltip"
+        data-client-nome="{{ (appt.client.cliente_nome or '')|e }}"
+        data-client-cellulare="{{ (appt.client.cliente_cellulare or '')|e }}"
+        data-date="{{ appt.start_time.strftime('%d/%m/%Y') if appt.start_time else '' }}"
+        data-hour="{{ '%02d' % appt.start_time.hour if appt.start_time else '' }}"
+        data-minute="{{ '%02d' % appt.start_time.minute if appt.start_time else '' }}">
+  <i class="bi bi-whatsapp"></i>
+</button>
+{% endif %}
+</div>
+
+<div class="drag-handle"></div>
+<div class="note-indicator" onclick="openNoteModal(this.closest('.appointment-block'))"><i class="bi bi-pencil-square"></i></div>
+<div class="appointment-content">
+<!-- Un solo paragrafo per il nome/“+” -->
+<p class="client-name">
+{% if appt.client and appt.client.is_deleted %}
+    <a href="javascript:void(0)" title="assegnare nuovo cliente o eliminare">?</a>
+  {% elif appt.client and appt.client.cliente_nome|lower == 'dummy' and appt.client.cliente_cognome|lower == 'dummy' and appt.note %}
+    <span class="off-title">{{ appt.note }}</span>
+  {% else %}
+    {% if appt.client.note %}
+    <a href="javascript:void(0)" class="client-info-link"
+    data-client-nome="{{ appt.client.cliente_nome|e }}"
+    data-client-cognome="{{ appt.client.cliente_cognome|e }}"
+    data-client-cellulare="{{ appt.client.cliente_cellulare|e }}"
+    data-service-nome="{{ appt.service.servizio_tag|e }}"
+    data-service-full_name="{{ appt.service.servizio_nome|e }}"
+    data-client-note="{{ appt.client.note|e }}"
+    data-created-at="{{ appt.created_at.isoformat() if appt.created_at else '' }}"
+    data-last-edit="{{ appt.last_edit.isoformat() if appt.last_edit else '' }}"
+    style="font-style: italic;">
+    {{ appt.client.cliente_nome }} {{ appt.client.cliente_cognome }}
+ </a>
+    {% else %}
+      <a href="javascript:void(0)" class="client-info-link"
+   data-client-nome="{{ appt.client.cliente_nome|e }}"
+   data-client-cognome="{{ appt.client.cliente_cognome|e }}"
+   data-client-cellulare="{{ appt.client.cliente_cellulare|e }}"
+   data-service-nome="{{ appt.service.servizio_tag|e }}"
+   data-service-full_name="{{ appt.service.servizio_nome|e }}">
+         {{ appt.client.cliente_nome }} {{ appt.client.cliente_cognome }}
+      </a>
+    {% endif %}
+  {% endif %}
+</p>
+<p><strong>{{ appt.service.servizio_tag }}</strong></p>
+</div>
+<div class="my-spia"
+     data-bs-toggle="tooltip"
+     title="Segna cliente in istituto"></div>
+<button class="btn-popup no-show-button"
+        data-bs-toggle="tooltip"
+        data-appointment-id="{{ appt.id }}"
+        title="Segna NON ARRIVATO">
+    <i class="bi bi-x"></i>
+</button>
+<div class="resize-handle"></div>
+<button class="btn-chain-blocks"
+        style="position:absolute; bottom:4px; right:4px; display:none;"
+        onclick="chainBlocks()"
+        title="Collega blocchi appuntamento consecutivi">
+    <!-- ...icona... -->
+</button>
+</div>
+</div>
+{% endif %}
+                    {% endfor %}
+                </td>
+                {% endfor %}
+                <td class="{% if quarter == 0 %}hour-cell hour-cell-right{% else %}quarter-cell hour-cell-right{% endif %}
+                {% if hour < (active_opening_time.hour if active_opening_time else 24) or (hour == active_opening_time.hour and quarter * 15 < (active_opening_time.minute if active_opening_time else 60)) or hour > (active_closing_time.hour if active_closing_time else 0) or (hour == active_closing_time.hour and quarter * 15 >= (active_closing_time.minute if active_closing_time else 0)) %} calendar-closed{% endif %}
+                {% if selected_date.strftime('%A') in closing_days %} calendar-closed{% endif %}"
+                style="text-align: left;">
+                {{ "%02d:%02d" % (hour, quarter * 15) }}
+            </td>
+            </tr>
+            {% endfor %}
+            {% endfor %} </tbody>
+    </table>
+    <div id="clientInfoPopup" style="display:none; position:absolute; margin-top:-25px; z-index:9999; background:#000000; border:1px solid #ccc; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); padding:6px 10px; font-size:0.95em; width:auto; text-align:center;"></div>
+    <div id="currentTimeIndicator" style="position: absolute; left: 0; right: 0; height: 1px; background: rgb(255, 0, 136); z-index: 10;"></div>
+</div>
+
+<!-- Modal per i turni operatore (calendar.html) -->
+<div class="modal" id="OperatorShiftsModalCalendar" tabindex="-1" aria-labelledby="ShiftsModalCalendarLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="ShiftsModalCalendarLabel">Turno di <strong><span
+                        id="modalOperatorNameCalendar"></span></strong> per il <span id="modalSelectedDateCalendar"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Impostazioni turno giornaliero -->
+                <div class="mb-3">
+                    <h4>Imposta Turno Giornaliero</h4>
+                    <div class="row">
+                        <div class="col">
+                            <label for="shiftStartTimeCalendar">Ora Inizio:</label>
+                            <input type="time" id="shiftStartTimeCalendar" name="shiftStartTimeCalendar" class="form-control custom-time-input" step="300">
+                        </div>
+                        <div class="col">
+                            <label for="shiftEndTimeCalendar">Ora Fine:</label>
+                            <input type="time" id="shiftEndTimeCalendar">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary mt-2" onclick="saveDailyShiftCalendar()">Salva Turno</button>
+                </div>
+
+                <!-- Imposta come non di turno -->
+                <div class="mb-3">
+                    <h4>Imposta come Non di Turno</h4>
+                    <button class="btn btn-secondary" onclick="setDayOffCalendar()">Imposta come Giorno di
+                        Riposo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+  
+  <div class="modal fade" id="EditAppointmentModal" tabindex="-1" aria-labelledby="EditAppointmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="EditAppointmentModalLabel"></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Il contenuto per la modifica verrà caricato qui via fetch -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- Modal per la modifica delle note -->
+<div class="modal fade" tabindex="-1" id="EditApptNoteModal">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title">Note Appuntamento</h3>
+        </div>
+        <div class="modal-body">
+          <form id="EditApptNoteForm">
+            <div class="mb-3">
+              <label for="apptNote" class="form-label">Scrivi una nota (max 1000 caratteri)</label>
+              <textarea class="form-control" id="apptNote" name="note" maxlength="1000" rows="5"></textarea>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" id="saveNoteBtn">OK</button>
+        </div>
+      </div>
+    </div>
+</div>
+
+<!-- Modal per la selezione del colore -->
+<div class="modal fade" id="ColorPickerModal" tabindex="-1" aria-labelledby="ColorPickerModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="ColorPickerModalLabel">Seleziona Colore Appuntamento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Unico selettore per il colore di sfondo -->
+        <div class="mb-3">
+          <label for="colorPickerInput" class="form-label">Colore Appuntamento</label>
+          <input type="color" id="colorPickerInput" value="#ffffff" style="width: 100%; height: 50px;">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="saveColorBtn">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="AddClientModal" tabindex="-1" aria-labelledby="AddClientModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="AddClientModalLabel">Aggiungi Nuovo Cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="AddClientForm">
+          <div class="mb-3">
+            <input type="text" class="form-control" id="cliente_nome" name="cliente_nome" required required placeholder="Nome">
+          </div>
+          <div class="mb-3">
+            <input type="text" class="form-control" id="cliente_cognome" name="cliente_cognome" required required placeholder="Cognome">
+          </div>
+          <div class="mb-3">
+            <input type="text" class="form-control" id="cliente_cellulare" name="cliente_cellulare" required required placeholder="Cellulare">
+          </div>
+          <button type="submit" class="btn btn-primary">Salva Cliente</button>
+        </form>        
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="CreateAppointmentModal"
+     tabindex="-1"
+     aria-labelledby="CreateAppointmentModalLabel"
+     aria-hidden="true"
+     data-bs-backdrop="static"
+     data-bs-keyboard="false">
+  <div class="modal-dialog modal-lg"> <!-- Usa modal-lg per una larghezza ampia, puoi togliere se vuoi più stretto -->
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="CreateAppointmentModalLabel">Nuovo Appuntamento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body" id="CreateAppointmentModalBody">
+        <!-- Qui verrà inserito il form dinamico -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal per gli appuntamenti via booking online-->
+<div class="modal fade" id="WebAppointmentsModal" tabindex="-1" aria-labelledby="WebAppointmentsModalLabel" aria-hidden="true" style="z-index: 14000;">
+  <div class="modal-dialog" style="max-width:80vw; height:85vh;">
+    <div class="modal-content" style="height:83vh;">
+      <div class="modal-header">
+        <h5 class="modal-title" id="WebAppointmentsModalLabel">Appuntamenti Online</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body" style="overflow:auto;">
+<div class="d-flex align-items-center mb-3" id="webApptDateNav" style="gap: 12px;">
+  <!-- Date navigator -->
+  <button class="btn btn-outline-secondary" id="webApptPrev">&lt;</button>
+  <input type="date" id="webApptDate" class="form-control mx-2" style="width:180px;">
+  <button class="btn btn-outline-secondary" id="webApptNext">&gt;</button>
+  <!-- Campo ricerca -->
+  <input type="text" id="webApptSearch" class="form-control ms-3" style="max-width: 260px;" placeholder="Cerca per nome cliente...">
+</div>
+        <!-- Tabella risultati -->
+       <div class="web-appt-table-container">
+        <table id="webApptTable">
+          <thead>
+            <tr>
+              <th style="text-align:center">DATA RICHIESTA</th>
+              <th>CLIENTE PRENOTATO</th>
+              <th>MATCH CLIENTE</th>
+              <th style="text-align:center">ASSOCIA</th>
+              <th style="text-align:center">DATA APPUNTAMENTO</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Popolato via JS -->
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </div><div class="form-group position-relative"></div>
+  </div>
+</div>
+
+<script id="create-appt-template" type="text/template">
+  <form id="CreateAppointmentForm">
+    <button type="button" id="btnCreateBlockOff" class="btn btn-warning" style="right: 3px; z-index: 999;">
+      Crea blocco OFF
+    </button>
+    <input type="hidden" id="client_id" name="client_id">
+    <input type="hidden" id="service_id" name="service_id">
+    <input type="hidden" name="operator_id" value="{{operator_id}}">
+    <input type="hidden" name="appointment_date" id="appointmentDate" value="{{date}}">
+    <input type="hidden" name="date" value="{{date}}">
+    <input type="hidden" id="start_time" name="start_time" value="{{start_time}}">
+
+    <div>
+      <label>Ora di inizio:</label>
+      <span id="hour-display"><strong>{{start_time}}</strong></span>
+      <span id="operator-display" style="margin-left: 20px;">{{operator_name}}</span>
+    </div>
+    <br>
+    <div id="regularFields">
+      <!-- Sezione Cliente (layout coerente: input + pulsante quadrato esterno) -->
+      <div class="form-group client-search-row" style="display:flex; align-items:center; gap:8px;">
+        <label for="clientSearchInput" style="min-width:110px; margin:0;">Cerca Cliente:</label>
+        <div id="clientSearchInputContainer" style="position:relative; flex:1;">
+          <input type="text" id="clientSearchInput"
+                 class="form-control"
+                 placeholder="Nome, cognome o cellulare..."
+                 autocomplete="off"
+                 onkeyup="handleClientSearch(this.value)"
+                 style="width:100%; padding-right: 10px;">
+          <div id="clientResults" class="results-dropdown"></div>
+        </div>
+        <button type="button" class="btn btn-outline-success btn-add-client-square"
+                title="Aggiungi cliente"
+                onclick="openAddClientModal('CreateAppointmentModal')">+</button>
+      </div>
+      <!-- Sezione Servizi -->
+      <div class="form-group">
+        <label for="serviceSearchInput">Cerca Servizio:</label>
+        <input type="text" id="serviceSearchInput"
+               class="form-control"
+               placeholder="Nome servizio..."
+               autocomplete="off"
+               onfocus="loadServicesForModal()"
+               onkeyup="handleServiceSearchModal(this.value)">
+        <div id="serviceResults" class="results-dropdown"></div>
+      </div>
+    </div>
+    <div class="mb-3" id="divDurata" style="display: none;">
+      <label for="duration" class="form-label">Durata (minuti)</label>
+      <input type="number" class="form-control" id="duration" name="duration" min="15" step="15">
+    </div>
+    <div class="form-group" id="divTitolo" style="display: none;">
+      <label for="titolo">Titolo</label>
+      <input type="text" id="titolo" name="titolo" class="form-control">
+    </div>
+
+    <div id="pseudoBlockContainer" class="pseudo-block-container" style="margin-top: 10px;">
+      <!-- Qui verranno inseriti i pseudo-blocchi -->
+    </div>
+
+    <button type="submit" class="btn btn-primary mt-2">Crea Appuntamento</button>
+  </form>
+
+</script>
+
+
+<script type="text/template" id="edit-appt-client-template">
+  <form id="EditAppointmentClientForm" method="POST" action="/calendar/edit/__APPOINTMENT_ID__">
+    <input type="hidden" id="appointmentId" name="appointmentId" value="__APPOINTMENT_ID__">
+    <input type="hidden" name="csrf_token" value="__CSRF_TOKEN__">
+    <input type="hidden" id="client_id" name="client_id" value="">
+
+    <div class="form-group">
+      <label for="currentClient">Cliente Attuale:</label>
+      <input type="text" id="currentClient" class="form-control" value="__CURRENT_CLIENT__" disabled>
+    </div>
+
+    <div class="form-group">
+      <label for="clientSearchInput">Nuovo cliente:</label>
+<input type="text" id="clientSearchInput"
+       class="form-control"
+       placeholder="Nome, cognome o cellulare..."
+       autocomplete="off">
+<div id="clientResults" class="results-dropdown"></div>
+    </div>
+    
+    <button type="submit" class="btn btn-primary">Assegna a Nuovo Cliente</button>
+  </form>
+</script>
+
+<script>
+  window.whatsappMessageTemplate = {{ whatsapp_message|tojson }};
+</script>
+<script>
+  // Imposta l'endpoint dal url_for del blueprint (assicurati che questa riga sia prima dell'inclusione di calendar.js)
+  window.apiWhatsappSettingUrl = "{{ url_for('settings.api_whatsapp_setting') }}";
+</script>
+<script src="{{ url_for('static', filename='js/calendar.js') }}"></script>
+<script>
+    var calendarHomeUrl = "{{ url_for('calendar.calendar_home') }}";
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  flatpickr("#date", {
+    dateFormat: "Y-m-d",  // Valore input resta yyyy-mm-dd (backend)
+    altFormat: "d M Y",   // Display: gg MMM yyyy (mesi italiani grazie a locale)
+    altInput: true,       // Mostra altFormat nell'input
+    defaultDate: "{{ selected_date_str }}",
+    locale: "it",         // Mesi italiani (GEN, FEB, ecc.)
+    onChange: function(selectedDates, dateStr, instance) {
+      // Reindirizza alla pagina con la nuova data
+      window.location.href = calendarHomeUrl + "?date=" + dateStr;
+    }
+  });
+});
+</script>
+<script>
+  //blocco OFF
+  document.addEventListener('DOMContentLoaded', function() {
+  const btnToggleNote = document.getElementById('btnToggleNote');
+  const noteBlockRow = document.getElementById('noteBlockRow');
+  if (btnToggleNote && noteBlockRow) {
+    btnToggleNote.addEventListener('click', function() {
+      // Se il blocco è nascosto (o non impostato), lo mostra; altrimenti lo nasconde
+      if (!noteBlockRow.style.display || noteBlockRow.style.display === 'none') {
+        noteBlockRow.style.display = 'flex';
+      } else {
+        noteBlockRow.style.display = 'none';
+      }
+    });
+  }
+});
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if ("{{ selected_date_str }}" !== "{{ today_str }}") {
+    const indicator = document.getElementById("currentTimeIndicator");
+    if (indicator) indicator.style.display = 'none';
+    return;
+  }
+
+  function updateCurrentTimeIndicator() {
+    // Usa l'orario di apertura definito in business_info
+    const agendaStart = "{{ business_info.active_opening_time.strftime('%H:%M') if business_info and business_info.active_opening_time else '08:00' }}";
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    // Converte l'orario di apertura in minuti
+    let [startHour, startMinute] = agendaStart.split(':').map(Number);
+    const startAgendaMinutes = startHour * 60 + startMinute;
+
+    // Calcola i minuti trascorsi dall'inizio dell'agenda
+    let minutesSinceStart = currentMinutes - startAgendaMinutes;
+    if (minutesSinceStart < 0) minutesSinceStart = 0;
+
+    // Ottieni dinamicamente l'altezza di una cella quarter dal CSS
+    const quarterCell = document.querySelector('.selectable-cell');
+    if (!quarterCell) return;
+    const computedStyle = getComputedStyle(quarterCell);
+    const quarterHeight = parseFloat(computedStyle.height);
+
+    // Determina se box-sizing è border-box
+    const boxSizing = computedStyle.boxSizing || 'border-box';
+    let totalQuarterHeight = quarterHeight;
+    if (boxSizing === 'content-box') {
+      const borderTop = parseFloat(computedStyle.borderTopWidth) || 1;
+      const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 1;
+      totalQuarterHeight = quarterHeight + borderTop + borderBottom;
+    }
+
+    // Calcola i pixel per minuto (un quarto d'ora = 15 minuti)
+    const pixelsPerMinute = totalQuarterHeight / 15;
+
+    // Ottieni l'offset del contenitore calendar-fullwidth rispetto al documento
+    const calendarContainer = document.querySelector('.calendar-fullwidth');
+    if (!calendarContainer) return;
+    const containerOffset = calendarContainer.getBoundingClientRect().top + window.scrollY;
+
+    // Ottieni l'offset della prima cella hour rispetto al contenitore
+    const firstHourCell = document.querySelector('.hour-cell');
+    let cellOffset = 0;
+    if (firstHourCell) {
+      const cellTop = firstHourCell.getBoundingClientRect().top + window.scrollY;
+      cellOffset = cellTop - containerOffset; // Offset relativo al contenitore
+    } else {
+      cellOffset = 0; // Fallback
+    }
+
+    // Calcola la posizione in pixel dell'indicatore
+    const topPx = cellOffset + (minutesSinceStart * pixelsPerMinute);
+
+    // Aggiorna la posizione dell'indicatore
+    const indicator = document.getElementById("currentTimeIndicator");
+    if (indicator) {
+      indicator.style.top = `${topPx}px`;
+    }
+  }
+
+  // Esegui immediatamente e poi ogni minuto
+  updateCurrentTimeIndicator();
+  setInterval(updateCurrentTimeIndicator, 60000);
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.appointment-block').forEach(function(block) {
+        const noteIndicator = block.querySelector('.note-indicator');
+        const note = block.getAttribute('data-note') || '';
+        if (note.trim().length > 0) {
+            noteIndicator.style.display = 'block';
+        } else {
+            noteIndicator.style.display = 'none';
+        }
+    });
+});
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+      var hiddenOperators = [];
+      // Cicla sugli header che hanno l'attributo data-operator-id
+      document.querySelectorAll('th[data-operator-id]').forEach(function(th) {
+          var operatorId = th.getAttribute('data-operator-id');
+          if (localStorage.getItem('operator_' + operatorId + '_is_visible') === 'hidden') {
+              hiddenOperators.push(operatorId);
+          }
+      });
+      // Per ogni operatore nascosto, nascondi l'header, le celle e i blocchi appuntamento
+      hiddenOperators.forEach(function(operatorId) {
+          // Nascondi l'header
+          document.querySelectorAll('th[data-operator-id="' + operatorId + '"]').forEach(function(th) {
+              th.style.display = 'none';
+          });
+          // Nascondi le celle corrispondenti
+          document.querySelectorAll('td[data-operator-id="' + operatorId + '"]').forEach(function(td) {
+              td.style.display = 'none';
+          });
+          // Nascondi i blocchi appuntamento
+          document.querySelectorAll('.appointment-block[data-operator-id="' + operatorId + '"]').forEach(function(block) {
+              block.style.display = 'none';
+          });
+      });
+  });
+  </script>
+<script>
+function toggleOperatorVisibility(operatorId, isVisible) {
+    localStorage.setItem('operator_' + operatorId + '_is_visible', isVisible ? 'visible' : 'hidden');
+    console.log('Operatore ' + operatorId + ' impostato come ' + (isVisible ? 'visible' : 'hidden'));
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    document.querySelectorAll('input[type=checkbox][id^="operatorVisibility_"]').forEach(function(checkbox) {
+        var operatorId = checkbox.id.split('_')[1];
+        var storedValue = localStorage.getItem('operator_' + operatorId + '_is_visible');
+        checkbox.checked = (storedValue !== 'hidden');
+    });
+});
+</script>
+<script>
+  const DEFAULT_QUARTER_HEIGHT = 60; // Imposta il default a 60
+  const MIN_QUARTER_HEIGHT = 30;
+  const MAX_QUARTER_HEIGHT = 90;
+
+  function applyQuarterHeight(height) {
+  document.documentElement.style.setProperty('--quarter-px', height + 'px');
+  // Celle: height fissa, ma NO maxHeight/minHeight
+  document.querySelectorAll('.selectable-cell, .hour-cell, .quarter-cell').forEach(cell => {
+    cell.style.height = height + 'px';
+    cell.style.minHeight = '';
+    cell.style.maxHeight = '';
+  });
+
+  // Blocchi: height fissa SOLO SE NON IN RESIZE
+  document.querySelectorAll('.appointment-block').forEach(block => {
+    // Se il blocco NON è in resize, aggiorna l'altezza
+    if (!block.classList.contains('resizing')) {
+      const duration = parseInt(block.getAttribute('data-duration'), 10) || 15;
+      const quarters = duration / 15;
+      block.style.height = (quarters * height) + 'px';
+    }
+    // MAI impostare minHeight/maxHeight qui!
+    block.style.minHeight = '';
+    block.style.maxHeight = '';
+  });
+
+  if (height <= 55) {
+  document.body.classList.add('quarter-55');
+} else {
+  document.body.classList.remove('quarter-55');
+}
+  // Allinea il contenuto verticalmente e NASCONDI la scritta servizio se height < 40
+  document.querySelectorAll('.appointment-content').forEach(content => {
+    content.style.lineHeight = height + 'px';
+    // Cerca il <p><strong>...</strong></p> del servizio
+    const serviceTag = content.querySelector('p > strong');
+    if (serviceTag && serviceTag.parentElement.tagName === 'P') {
+      serviceTag.parentElement.style.display = (height < 40) ? 'none' : '';
+    }
+  });
+
+  if (typeof updateCurrentTimeIndicator === 'function') updateCurrentTimeIndicator();
+
+// Scala SOLO la dimensione delle icone, NON il bottone intero (così il tooltip resta grande)
+const baseIconSize = 20; // px, dimensione icona a quarter 60
+const minIconSize = 6;
+const minMySpia = 12;     // grandezza minima my-spia
+const minNoShow = 10;     // grandezza minima no-show
+
+const maxIconSize = 20; // grandezza massima icone
+
+const iconSizeMySpia = Math.max(
+  minMySpia,
+  Math.min(maxIconSize, Math.round(baseIconSize + (height - DEFAULT_QUARTER_HEIGHT) / 2) - 3)
+);
+const iconSizeNoShow = Math.max(
+  minNoShow,
+  Math.min(maxIconSize, Math.round(baseIconSize + (height - DEFAULT_QUARTER_HEIGHT) / 2) - 3)
+);
+
+const dragHandleHeight = Math.max(10, Math.round(height * 0.2)); // 20% dell'altezza del quarter, minimo 10px
+// Calcola la posizione top per my-spia: drag-handle + 1px (default), meno 1px ogni 10px sopra il default
+let spiaTop = dragHandleHeight + 1;
+if (height > DEFAULT_QUARTER_HEIGHT) {
+  spiaTop = Math.max(2, dragHandleHeight + 1 - Math.floor((height - DEFAULT_QUARTER_HEIGHT) / 10));
+}
+
+// Calcola la distanza verticale tra my-spia e no-show (uguale a dragHandleHeight)
+const noShowTop = iconSizeMySpia + dragHandleHeight + 2;
+
+document.querySelectorAll('.appointment-block .my-spia').forEach(el => {
+  const block = el.closest('.appointment-block');
+  let spiaTopValue;
+  if (
+    height === 30 &&
+    block &&
+    Math.abs(block.offsetHeight - height) < 2
+  ) {
+    spiaTopValue = 2;
+  } else if (
+    height === 35 &&
+    block &&
+    Math.abs(block.offsetHeight - height) < 2
+  ) {
+    spiaTopValue = 5;
+  } else {
+    spiaTopValue = spiaTop;
+  }
+  el.style.top = spiaTopValue + 'px';
+  el.style.right = '9px';
+  el.style.left = 'auto';
+  el.style.width = iconSizeMySpia + 'px';
+  el.style.height = iconSizeMySpia + 'px';
+  el.style.transform = '';
+  el.style.transformOrigin = 'center center';
+
+  // Calcola la posizione di no-show: 1px sotto my-spia nei due casi speciali
+  const noShowBtn = el.closest('.appointment-block').querySelector('.btn-popup.no-show-button');
+  if (noShowBtn) {
+    if (
+      (height === 30 || height === 35) &&
+      block &&
+      Math.abs(block.offsetHeight - height) < 2
+    ) {
+      noShowBtn.style.top = (spiaTopValue + iconSizeMySpia + 1) + 'px';
+    } else {
+      noShowBtn.style.top = (iconSizeMySpia + dragHandleHeight + 2) + 'px';
+    }
+    noShowBtn.style.right = '9px';
+    noShowBtn.style.left = 'auto';
+    noShowBtn.style.bottom = '';
+    noShowBtn.style.width = iconSizeNoShow + 'px';
+    noShowBtn.style.height = iconSizeNoShow + 'px';
+    noShowBtn.style.transform = '';
+    noShowBtn.style.transformOrigin = 'center center';
+    const icon = noShowBtn.querySelector('i');
+    if (icon) icon.style.fontSize = iconSizeNoShow + 'px';
+  }
+});
+
+document.querySelectorAll('.appointment-block .btn-popup.delete-appointment-block').forEach(el => {
+  el.style.width = iconSizeMySpia + 'px';
+  el.style.height = iconSizeMySpia + 'px';
+  const icon = el.querySelector('i');
+  if (icon) icon.style.fontSize = iconSizeMySpia + 'px';
+});
+
+    // MOSTRA/NASCONDI la linea oraria solo se quarter == default
+    const indicator = document.getElementById("currentTimeIndicator");
+  if (indicator) {
+    if (height !== DEFAULT_QUARTER_HEIGHT) {
+      indicator.style.display = 'none';
+    } else {
+      indicator.style.display = 'block';
+      if (typeof updateCurrentTimeIndicator === 'function') {
+        updateCurrentTimeIndicator();
+      }
+    }
+  }
+}
+
+function changeQuarterHeight(delta) {
+    let height = parseInt(localStorage.getItem('quarterHeight') || DEFAULT_QUARTER_HEIGHT, 10);
+    height = Math.max(MIN_QUARTER_HEIGHT, Math.min(MAX_QUARTER_HEIGHT, height + delta));
+    localStorage.setItem('quarterHeight', height);
+    applyQuarterHeight(height);
+}
+window.changeQuarterHeight = changeQuarterHeight;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    // Applica SEMPRE il valore di default all'avvio
+    localStorage.setItem('quarterHeight', DEFAULT_QUARTER_HEIGHT);
+    applyQuarterHeight(DEFAULT_QUARTER_HEIGHT);
+  });
+
+  document.addEventListener('DOMContentLoaded', function() {
+  // Nascondi i popup-buttons quando il mouse è sopra my-spia
+  document.querySelectorAll('.appointment-block .my-spia').forEach(spia => {
+    spia.addEventListener('mouseenter', function() {
+      const popupBtns = this.closest('.appointment-block').querySelector('.popup-buttons');
+      if (popupBtns) popupBtns.style.display = 'none';
+    });
+    spia.addEventListener('mouseleave', function() {
+      const popupBtns = this.closest('.appointment-block').querySelector('.popup-buttons');
+      if (popupBtns) popupBtns.style.display = '';
+    });
+  });
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const popup = document.getElementById('clientInfoPopup');
+  if (!popup) return;
+
+  // Helper: costruisce e mostra il tooltip piccolo a partire da un .appointment-block
+  function showClientInfoForBlock(block) {
+    if (!block) return;
+    // Estrai valori dal blocco o dal link interno (fallback)
+const link = block.querySelector('.client-info-link');
+const nome = (link && link.getAttribute('data-client-nome')) || block.getAttribute('data-client-nome') || '';
+const cognome = (link && link.getAttribute('data-client-cognome')) || block.getAttribute('data-client-cognome') || '';
+const cellulare = (link && link.getAttribute('data-client-cellulare')) || block.getAttribute('data-client-cellulare') || '';
+const servizio = (link && link.getAttribute('data-service-full_name')) || block.getAttribute('data-service-name') || '';
+// PRIORITÀ: nota appuntamento (data-note) -> nota cliente (data-client-note)
+const note = block.getAttribute('data-note') || (link && link.getAttribute('data-client-note')) || '';
+
+// Decodifica HTML entities (es. &#39; -> ')
+const decodeHtml = (s) => { const t = document.createElement('textarea'); t.innerHTML = String(s || ''); return t.value; };
+const nomeD = decodeHtml(nome);
+const cognomeD = decodeHtml(cognome);
+const servizioD = decodeHtml(servizio);
+const noteD = decodeHtml(note);
+
+    const createdAt = block.getAttribute('data-created-at') || '';
+    const lastEdit = block.getAttribute('data-last-edit') || '';
+    let createdAtStr = '', lastEditStr = '';
+    if (createdAt) {
+      const d = new Date(createdAt);
+      createdAtStr = d.toLocaleString('it-IT', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit', year:'numeric' });
+    }
+    if (lastEdit) {
+      const d = new Date(lastEdit);
+      lastEditStr = d.toLocaleString('it-IT', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit', year:'numeric' });
+    }
+
+    // Ricostruisci contenuto DOM in modo sicuro
+    popup.innerHTML = '';
+    const meta = document.createElement('div');
+    meta.style.cssText = "font-size:10px; color:#fff; margin-bottom:3px; text-transform:uppercase;";
+    meta.textContent = 'creato: ' + (createdAtStr || '');
+    if (lastEditStr) {
+      const br = document.createElement('br'); meta.appendChild(br);
+      meta.appendChild(document.createTextNode('last edit: ' + lastEditStr));
+    }
+    popup.appendChild(meta);
+
+    const strong = document.createElement('strong');
+    strong.className = 'all-uppercase';
+    strong.style.color = '#fff';
+    strong.textContent = `${nomeD} ${cognomeD}`.trim();
+    popup.appendChild(strong);
+    popup.appendChild(document.createElement('br'));
+
+    if (noteD) {
+      const dnote = document.createElement('div');
+      dnote.style.cssText = "margin-top:0px; text-transform:uppercase; color:#ffff99; max-width:250px; word-break:break-word;";
+      dnote.textContent = noteD;
+      popup.appendChild(dnote);
+    }
+
+    const serv = document.createElement('div');
+    serv.className = 'all-uppercase';
+    serv.style.color = '#ffa5c6';
+    serv.textContent = servizioD || '';
+    popup.appendChild(serv);
+
+    const cellSpan = document.createElement('div');
+    cellSpan.style.color = '#fff';
+    const h5 = document.createElement('h5');
+    h5.style.margin = '6px 0 0 0';
+    h5.textContent = cellulare || '';
+    cellSpan.appendChild(h5);
+    popup.appendChild(cellSpan);
+
+  // Posizionamento: usare position:absolute con coordinate document-relative (rect + scroll)
+  const rect = block.getBoundingClientRect();
+  const scrollY = window.scrollY || window.pageYOffset;
+  const scrollX = window.scrollX || window.pageXOffset;
+
+  // Assicuriamoci che il popup sia figlio del body per coordinate assolute coerenti
+  if (popup.parentNode !== document.body) {
+    document.body.appendChild(popup);
+  }
+
+  popup.style.position = 'absolute';
+  popup.style.zIndex = '11500';
+  popup.style.width = 'auto';
+  popup.style.maxWidth = '320px';
+  popup.style.minWidth = '180px';
+  popup.style.display = 'block';
+
+  // calcola la posizione rispetto al documento
+  const pw = popup.offsetWidth || 220;
+  const ph = popup.offsetHeight || 140;
+
+  // preferisci posizionare a destra del blocco; se non ci sta, posiziona a sinistra
+  let left = rect.right + scrollX + 2;
+  if (left + pw > document.documentElement.clientWidth + scrollX) {
+    left = rect.left + scrollX - pw - 2;
+    if (left < 1) left = 1;
+  }
+
+  // top: allinea all'inizio del blocco (rect.top + scrollY è la coord. nel documento)
+  let top = rect.top + scrollY - 10;
+  if (top + ph > document.documentElement.clientHeight + scrollY) {
+    top = Math.max(1, document.documentElement.clientHeight + scrollY - ph - 1);
+  }
+  if (top < 1) top = 1;
+
+  popup.style.left = Math.round(left) + 'px';
+  popup.style.top = Math.round(top) + 'px';
+  popup.style.display = 'block';
+}
+
+  // BIND desktop: mouseenter/mouseleave solo se NON siamo in touch-ui
+  const IS_TOUCH_UI = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch(_) { return false; } })();
+  if (!IS_TOUCH_UI) {
+    document.querySelectorAll('.client-info-link').forEach(link => {
+      link.addEventListener('mouseenter', function() {
+        const apptBlock = this.closest('.appointment-block');
+        if (!apptBlock) return;
+        showClientInfoForBlock(apptBlock);
+      });
+      link.addEventListener('mouseleave', function() {
+        popup.style.display = 'none';
+      });
+    });
+  } else {
+    // In touch-ui nascondi eventuali mouse-based tooltip residui
+    popup.style.display = 'none';
+  }
+
+  // Espongo la funzione globalmente per essere richiamata in touch click handler
+  window.showClientInfoForBlock = showClientInfoForBlock;
+
+  // Hook: aggiornamento UI dopo salvataggio nota
+  window.onAppointmentNoteSaved = function (appointmentId, noteText) {
+    try {
+      const id = String(appointmentId || '').trim();
+      const block = document.querySelector(`.appointment-block[data-appointment-id="${id}"]`);
+      if (!block) return;
+
+      // Aggiorna attributi usati dal tooltip
+      block.dataset.note = noteText || '';
+      block.setAttribute('data-note', noteText || '');
+
+      // Mostra/nascondi l’indicatore matita
+      const noteInd = block.querySelector('.note-indicator');
+      if (noteInd) noteInd.style.display = (noteText && noteText.trim().length) ? 'block' : 'none';
+
+      // Se il tooltip piccolo è visibile o il blocco è attivo, ricostruiscilo
+      const small = document.getElementById('clientInfoPopup');
+      const isVisible = small && small.style.display && small.style.display !== 'none';
+      if (isVisible || block.classList.contains('active-popup')) {
+        try { showClientInfoForBlock(block); } catch (_) {}
+      }
+    } catch (_) {}
+  };
+
+  // Ricava l’ID appuntamento quando si apre il modal nota
+  document.addEventListener('click', function (e) {
+    const trg = e.target.closest('.btn-popup.nota, .note-indicator');
+    if (!trg) return;
+    const blk = trg.closest('.appointment-block');
+    if (blk) window._lastNoteApptId = blk.getAttribute('data-appointment-id');
+  }, true);
+
+  // Alla pressione del pulsante OK nel modal nota, aggiorna subito UI per stato=2
+  const saveBtn = document.getElementById('saveNoteBtn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', function () {
+      const id = window._lastNoteApptId;
+      if (!id) return;
+      const blk = document.querySelector(`.appointment-block[data-appointment-id="${id}"]`);
+      if (!blk) return;
+      const isStatus2 = String(blk.getAttribute('data-status')) === '2';
+      if (!isStatus2) return; // gli altri stati gestiscono già reload
+
+      // Aggiorna subito UI (ottimistico), il backend salverà in parallelo
+      const noteText = document.getElementById('apptNote')?.value || '';
+      setTimeout(() => { // piccola attesa per lasciare completare il fetch esistente
+        try { window.onAppointmentNoteSaved(id, noteText); } catch (_) {}
+      }, 150);
+    });
+  }
+
+  // Refresh quando si chiude il modal nota per blocchi in stato 2
+  const noteModal = document.getElementById('EditApptNoteModal');
+  if (noteModal) {
+    noteModal.addEventListener('hidden.bs.modal', function () {
+      try {
+        const id = window._lastNoteApptId;
+        if (!id) return;
+        const blk = document.querySelector(`.appointment-block[data-appointment-id="${id}"]`);
+        if (blk && String(blk.getAttribute('data-status')) === '2') {
+          location.reload();
+        }
+      } catch (_) {}
+    });
+  }
+});
+</script>
+   <script>
+                          function getDefaultQuarterHeight() {
+                            return 60;
+                          }
+                          function updateQuarterResetTooltip() {
+                            var icon = document.getElementById('quarterResetIcon');
+                            var current = parseInt(localStorage.getItem('quarterHeight') || getDefaultQuarterHeight(), 10);
+                            var def = getDefaultQuarterHeight();
+                            if (icon._tooltip) {
+                              icon._tooltip.dispose();
+                              icon._tooltip = null;
+                            }
+                            icon.style.opacity = '1';
+                            icon.style.pointerEvents = 'auto';
+                            icon.onclick = function() {
+                              localStorage.setItem('quarterHeight', getDefaultQuarterHeight());
+                              location.reload();
+                            };
+                            setTimeout(function() {
+                              icon._tooltip = new bootstrap.Tooltip(icon, {
+                                offset: [0, -15]
+                              });
+                            }, 0);
+                          }
+                          document.addEventListener('DOMContentLoaded', function () {
+                            updateQuarterResetTooltip();
+                          });
+                      </script>
+<script>
+  function groupAppointmentsByDate(appointments) {
+    const now = new Date();
+    const weekAgo = new Date(now);
+    weekAgo.setDate(now.getDate() - 7);
+    const monthAgo = new Date(now);
+    monthAgo.setMonth(now.getMonth() - 1);
+    const sixMonthsAgo = new Date(now);
+    sixMonthsAgo.setMonth(now.getMonth() - 6);
+
+    const groups = {
+        'ULTIMA SETTIMANA': [],
+        'ULTIMO MESE': [],
+        'ULTIMI 6 MESI': [],
+        'MENO RECENTI': []
+    };
+
+    appointments.forEach(app => {
+        const appDate = new Date(app.date); // Assicurati che app.date sia in formato ISO
+        if (appDate >= weekAgo) {
+            groups['ULTIMA SETTIMANA'].push(app);
+        } else if (appDate >= monthAgo) {
+            groups['ULTIMO MESE'].push(app);
+        } else if (appDate >= sixMonthsAgo) {
+            groups['ULTIMI 6 MESI'].push(app);
+        } else {
+            groups['MENO RECENTI'].push(app);
+        }
+    });
+
+    return groups;
+}
+
+function showClientHistoryPopup(item, popup, position = {}) {
+  if (!item || !popup) return;
+  const clientId = item.dataset.clientId;
+  if (!clientId) return;
+
+// Posizionamento preciso rispetto all'item (viewport coords, no vw)
+const placePopup = () => {
+  // mostra per misurare
+  popup.style.display = 'block';
+  popup.style.position = 'fixed';
+  popup.style.zIndex = '999999';
+  popup.style.right = ''; // reset per evitare conflitti
+  const rect = item.getBoundingClientRect();
+  const gap = 1;
+
+  // calcola width/height reali
+  const pw = popup.offsetWidth || 320;
+  const ph = popup.offsetHeight || 200;
+
+  let top = Math.max(1, rect.top);
+
+  // POSIZIONA SEMPRE A SINISTRA DELL'ITEM
+  let left = Math.max(1, rect.left - pw - gap);
+
+  // clamp verticale se esce in basso
+  if (top + ph > window.innerHeight - 1) {
+    top = Math.max(1, window.innerHeight - ph - 1);
+  }
+
+  popup.style.top = top + 'px';
+  popup.style.left = left + 'px';
+};
+
+  popup.textContent = 'Caricamento dati...';
+  popup.style.maxWidth = '360px';
+  popup.style.minWidth = '220px';
+  placePopup(); // posiziona subito (stato "Caricamento...")
+
+  function escapeHtml(str) {
+    return String(str || '').replace(/[&<>"'`]/g, ch =>
+      ch === '&' ? '&amp;' :
+      ch === '<' ? '&lt;' :
+      ch === '>' ? '&gt;' :
+      ch === '"' ? '&quot;' :
+      ch === "'" ? '&#39;' : '&#96;'
+    );
+  }
+
+  // Fetch anagrafica cliente
+  fetch(`/settings/api/client_info/${clientId}`)
+    .then(r => r.ok ? r.json() : Promise.reject('client_info failed'))
+    .then(cliente => {
+      // costruiamo DOM in modo sicuro
+      const container = document.createElement('div');
+      container.classList.add('client-info-container');
+
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'btn-close';
+      closeBtn.id = 'closeClientHistoryPopupBtn';
+      closeBtn.setAttribute('aria-label', 'Chiudi');
+      closeBtn.style.position = 'absolute';
+      closeBtn.style.top = '10px';
+      closeBtn.style.right = '10px';
+      closeBtn.style.zIndex = '10001';
+      container.appendChild(closeBtn);
+
+      const h2 = document.createElement('h2');
+      h2.style.fontSize = '1.5em';
+      h2.style.marginBottom = '6px';
+      h2.textContent = `${escapeHtml(cliente.cliente_nome || '')} ${escapeHtml(cliente.cliente_cognome || '')}`;
+      container.appendChild(h2);
+
+      // Telefono
+      const phoneDiv = document.createElement('div');
+      phoneDiv.style.display = 'flex';
+      phoneDiv.style.gap = '6px';
+     // LABEL CELL:
+      const cellLabel = document.createElement('span');
+      cellLabel.className = 'ci-label';
+      cellLabel.textContent = 'CELL:';
+      cellLabel.style.fontWeight = '600';
+      cellLabel.style.alignSelf = 'center';
+      cellLabel.style.marginRight = '4px';
+      phoneDiv.appendChild(cellLabel);
+      const phoneInput = document.createElement('input');
+      phoneInput.type = 'text';
+      phoneInput.id = 'clientPhoneInput';
+      phoneInput.value = cliente.cliente_cellulare || '';
+      phoneInput.style.width = '180px';
+      phoneInput.style.padding = '3px 8px';
+      phoneInput.autocomplete = 'off';
+      phoneInput.addEventListener('click', () => { popupHover = true; });
+      const savePhoneBtn = document.createElement('button');
+      savePhoneBtn.id = 'savePhoneBtn';
+      savePhoneBtn.textContent = 'Salva';
+      phoneDiv.appendChild(phoneInput);
+      phoneDiv.appendChild(savePhoneBtn);
+      container.appendChild(phoneDiv);
+
+      // Email
+      const emailDiv = document.createElement('div');
+      emailDiv.style.display = 'flex';
+      emailDiv.style.gap = '6px';
+      // LABEL E-MAIL:
+      const emailLabel = document.createElement('span');
+      cellLabel.className = 'ci-label';
+      emailLabel.className = 'ci-label';
+      emailLabel.textContent = 'E-MAIL:';
+      emailLabel.style.fontWeight = '600';
+      emailLabel.style.alignSelf = 'center';
+      emailLabel.style.marginRight = '4px';
+      emailDiv.appendChild(emailLabel);
+      const emailInput = document.createElement('input');
+      emailInput.type = 'email';
+      emailInput.id = 'clientEmailInput';
+      emailInput.value = cliente.cliente_email || '';
+      emailInput.style.width = '220px';
+      emailInput.style.padding = '3px 8px';
+      emailInput.autocomplete = 'off';
+      emailInput.addEventListener('click', () => { popupHover = true; });
+      const saveEmailBtn = document.createElement('button');
+      saveEmailBtn.id = 'saveEmailBtn';
+      saveEmailBtn.textContent = 'Salva';
+      emailDiv.appendChild(emailInput);
+      emailDiv.appendChild(saveEmailBtn);
+      container.appendChild(emailDiv);
+
+      closeBtn.addEventListener('click', () => {
+        popup.style.display = 'none';
+        popup.style.marginLeft = '0';
+      });
+
+      savePhoneBtn.addEventListener('click', () => {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        fetch(`/settings/api/update_client_phone`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+          body: JSON.stringify({ client_id: clientId, phone: phoneInput.value })
+        })
+        .then(r => r.json())
+        .then(data => {
+          savePhoneBtn.textContent = data.success ? 'Salvato!' : 'Errore!';
+          setTimeout(() => savePhoneBtn.textContent = 'Salva', 1200);
+        }).catch(() => {
+          savePhoneBtn.textContent = 'Errore!';
+          setTimeout(() => savePhoneBtn.textContent = 'Salva', 1200);
+        });
+      });
+
+      saveEmailBtn.addEventListener('click', () => {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        fetch(`/settings/api/update_client_email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken || ''
+          },
+          body: JSON.stringify({ client_id: clientId, email: emailInput.value })
+        })
+        .then(resp => {
+          if (!resp.ok) return resp.text().then(t => Promise.reject({status: resp.status, body: t}));
+          return resp.json();
+        })
+        .then(data => {
+          saveEmailBtn.textContent = data.success ? 'Salvato!' : 'Errore!';
+          setTimeout(() => saveEmailBtn.textContent = 'Salva', 1200);
+        })
+        .catch(err => {
+          console.error('update_client_email error', err);
+          saveEmailBtn.textContent = 'Errore!';
+          setTimeout(() => saveEmailBtn.textContent = 'Salva', 1200);
+        });
+      });
+
+      // Fetch storico e prossimi appuntamenti, costruzione tabella in DOM
+      fetch(`/settings/api/client_history?q=${encodeURIComponent(clientId)}`)
+        .then(r => r.ok ? r.json() : Promise.reject('history failed'))
+        .then(storico => {
+          if (Array.isArray(storico) && storico.length) {
+            const title = document.createElement('b');
+            title.textContent = 'Storico Appuntamenti';
+            container.appendChild(document.createElement('hr'));
+            container.appendChild(title);
+
+            const groups = groupAppointmentsByDate(storico.map(row => {
+              let dateStr = row.ora_inizio;
+              if (dateStr && dateStr.length > 10) dateStr = dateStr.substring(0, 10);
+              return { ...row, date: dateStr };
+            }));
+
+            const order = ['ULTIMA SETTIMANA', 'ULTIMO MESE', 'ULTIMI 6 MESI', 'MENO RECENTI'];
+            order.forEach(label => {
+              const group = groups[label];
+              if (group && group.length) {
+                const block = document.createElement('div');
+                block.style.marginTop = '10px';
+                const toggle = document.createElement('span');
+                toggle.className = 'storico-toggle';
+                toggle.style.cursor = 'pointer';
+                toggle.style.fontWeight = 'bold';
+                toggle.style.color = '#333';
+                toggle.style.userSelect = 'none';
+                const iconSpan = document.createElement('span');
+                iconSpan.className = 'storico-toggle-icon';
+                iconSpan.textContent = (label === 'ULTIMA SETTIMANA') ? '−' : '+';
+
+                // svuota e aggiungi i nodi sicuri
+                toggle.textContent = '';
+                toggle.appendChild(iconSpan);
+                toggle.appendChild(document.createTextNode(' ' + String(label) + ' (' + String(group.length) + ' PASSAGGI)'));
+                block.appendChild(toggle);
+
+                const tableWrapper = document.createElement('div');
+                tableWrapper.className = 'storico-section-content';
+                tableWrapper.style.display = label === 'ULTIMA SETTIMANA' ? '' : 'none';
+
+                const table = document.createElement('table');
+                table.className = 'table table-sm table-bordered mb-0';
+                table.style.fontSize = '0.93em';
+                const thead = document.createElement('thead');
+                // costruisci l'header in modo sicuro
+                const tr = document.createElement('tr');
+                ['Data','Ora','Servizio','Durata','Operatore','Prezzo'].forEach(text => {
+                  const th = document.createElement('th');
+                  th.textContent = text;
+                  tr.appendChild(th);
+                });
+                thead.appendChild(tr);
+                table.appendChild(thead);
+                const tbody = document.createElement('tbody');
+
+                group.forEach(row => {
+                  let dataStr = '';
+                  let oraStr = '';
+                  if (row.ora_inizio) {
+                    const match = String(row.ora_inizio).match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+                    if (match) { dataStr = match[1]; oraStr = match[2]; } else { oraStr = String(row.ora_inizio); }
+                  }
+                  const parts = oraStr ? oraStr.split(':') : ['', ''];
+                  const tr = document.createElement('tr');
+                  tr.className = 'clickable-row';
+                  tr.style.cursor = 'pointer';
+                  tr.setAttribute('data-date', dataStr);
+                  tr.setAttribute('data-hour', parts[0] || '');
+                  tr.setAttribute('data-minute', parts[1] || '');
+                  const tdData = document.createElement('td'); tdData.textContent = dataStr;
+                  const tdOra = document.createElement('td'); tdOra.textContent = oraStr;
+                  const tdServ = document.createElement('td'); tdServ.textContent = row.servizio_tag || '';
+                  const tdDur = document.createElement('td'); tdDur.textContent = row.durata ? (row.durata + ' min') : '';
+                  const tdOp  = document.createElement('td'); tdOp.textContent = row.operatore || '';
+                  const tdCost= document.createElement('td'); tdCost.textContent = row.costo ? ('€' + row.costo) : '';
+                  tr.append(tdData, tdOra, tdServ, tdDur, tdOp, tdCost);
+                  tr.addEventListener('click', function() {
+                    const d = this.getAttribute('data-date');
+                    const h = this.getAttribute('data-hour');
+                    const m = this.getAttribute('data-minute');
+                    if (d && h && m) window.location.href = `/calendar?date=${d}&ora=${h}:${m}`;
+                  });
+                  tbody.appendChild(tr);
+                });
+
+                table.appendChild(tbody);
+                tableWrapper.appendChild(table);
+                block.appendChild(tableWrapper);
+
+                toggle.addEventListener('click', function() {
+                  if (tableWrapper.style.display === 'none') {
+                    tableWrapper.style.display = '';
+                    toggle.querySelector('.storico-toggle-icon').textContent = '−';
+                  } else {
+                    tableWrapper.style.display = 'none';
+                    toggle.querySelector('.storico-toggle-icon').textContent = '+';
+                  }
+                });
+
+                container.appendChild(block);
+              }
+            });
+          } else {
+            const noHist = document.createElement('em');
+            noHist.textContent = 'Nessuna seduta nello storico';
+            container.appendChild(noHist);
+          }
+
+          return fetch(`/calendar/api/next-appointments-for-client/${clientId}`);
+        })
+        .then(r => r.ok ? r.json() : Promise.reject('next appointments failed'))
+        .then(prossimi => {
+          if (Array.isArray(prossimi) && prossimi.length) {
+            const title = document.createElement('b'); title.textContent = 'Prossimi appuntamenti';
+            container.appendChild(document.createElement('hr'));
+            container.appendChild(title);
+
+            const table = document.createElement('table');
+            table.className = 'table table-sm table-bordered mb-0';
+            table.style.fontSize = '0.93em';
+            const thead = document.createElement('thead');
+            const tr = document.createElement('tr');
+            ['Data', 'Ora', 'Servizio', 'Durata', 'Operatore', 'Prezzo'].forEach(text => {
+              const th = document.createElement('th');
+              th.textContent = text;
+              tr.appendChild(th);
+            });
+            thead.appendChild(tr);
+            table.appendChild(thead);
+            const tbody = document.createElement('tbody');
+
+            prossimi.forEach(row => {
+              let dataStr = ''; let oraStr = '';
+              if (row.ora_inizio) {
+                const match = String(row.ora_inizio).match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+                if (match) { dataStr = match[1]; oraStr = match[2]; } else { oraStr = String(row.ora_inizio); }
+              }
+              const parts = oraStr ? oraStr.split(':') : ['', ''];
+              const tr = document.createElement('tr');
+              tr.className = 'clickable-row'; tr.style.cursor = 'pointer';
+              tr.setAttribute('data-date', dataStr); tr.setAttribute('data-hour', parts[0] || ''); tr.setAttribute('data-minute', parts[1] || '');
+              tr.append(
+                (() => { const td = document.createElement('td'); td.textContent = dataStr; return td; })(),
+                (() => { const td = document.createElement('td'); td.textContent = oraStr; return td; })(),
+                (() => { const td = document.createElement('td'); td.textContent = row.servizio_tag || ''; return td; })(),
+                (() => { const td = document.createElement('td'); td.textContent = row.durata ? (row.durata + ' min') : ''; return td; })(),
+                (() => { const td = document.createElement('td'); td.textContent = row.operatore || ''; return td; })(),
+                (() => { const td = document.createElement('td'); td.textContent = row.costo ? ('€' + row.costo) : ''; return td; })()
+              );
+              tr.addEventListener('click', function() {
+                const d = this.getAttribute('data-date'); const h = this.getAttribute('data-hour'); const m = this.getAttribute('data-minute');
+                if (d && h && m) window.location.href = `/calendar?date=${d}&ora=${h}:${m}`;
+              });
+              tbody.appendChild(tr);
+            });
+
+            table.appendChild(tbody);
+            container.appendChild(table);
+          } else {
+            const none = document.createElement('em'); none.textContent = 'Nessuna seduta prenotata'; container.appendChild(none);
+          }
+
+          popup.innerHTML = '';
+          popup.appendChild(container);
+
+  const createModal = document.getElementById('CreateAppointmentModal');
+  const editModal = document.getElementById('EditAppointmentModal');
+  if (createModal && createModal.classList.contains('show')) {
+    const modalContent = createModal.querySelector('.modal-content');
+    if (modalContent && !modalContent.contains(popup)) {
+      modalContent.appendChild(popup);
+    }
+  } else if (editModal && editModal.classList.contains('show')) {
+    const modalContent = editModal.querySelector('.modal-content');
+    if (modalContent && !modalContent.contains(popup)) {
+      modalContent.appendChild(popup);
+    }
+  } else {
+    // Se non siamo in un modal, rimetti il popup nel body
+    if (popup.parentNode !== document.body) {
+      document.body.appendChild(popup);
+    }
+  }
+          placePopup(); // riposiziona ora che abbiamo la dimensione finale
+        })
+        .catch(err => {
+          popup.textContent = '';
+          const em = document.createElement('em');
+          em.textContent = 'Errore caricamento dati cliente';
+          popup.appendChild(em);
+          console.error('showClientHistoryPopup error:', err);
+        });
+    })
+    .catch(err => {
+      popup.textContent = '';
+      const em2 = document.createElement('em');
+      em2.textContent = 'Errore caricamento dati cliente';
+      popup.appendChild(em2);
+      console.error('client_info fetch error:', err);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const popup = document.getElementById('clientHistoryPopup');
+  if (!popup) return;
+
+  popup.style.pointerEvents = 'auto';
+
+  // Mantieni solo l'event listener per nascondere il popup alla chiusura del modal
+  document.getElementById('EditAppointmentModal').addEventListener('hidden.bs.modal', function() {
+    if (popup) {
+      popup.style.display = 'none';
+      popup.style.marginLeft = '0';
+    }
+  });
+});
+</script>
+<script>
+  // Applica classe al body se la modalità touch è abilitata (per CSS)
+  (function(){
+    try {
+      if (localStorage.getItem('sun_touch_ui') === '1') {
+        document.addEventListener('DOMContentLoaded', function(){
+          document.body.classList.add('touch-ui');
+        });
+      }
+    } catch(e) {}
+  })();
+</script>
+<script src="{{ url_for('static', filename='js/touch-ui.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  try {
+    if (localStorage.getItem('sun_touch_ui') !== '1') return;
+  } catch(_) { return; }
+
+  const smallPopup = document.getElementById('clientInfoPopup');
+
+  // 1) Rendi cliccabile tutto il blocco: listener delegato in cattura
+document.addEventListener('click', function(e){
+  const block = e.target.closest('.appointment-block');
+  if (!block) return;
+
+  // lascia lavorare i bottoni popup senza toggle del blocco
+  if (e.target.closest('.btn-popup')) return;
+
+  const clientLink = e.target.closest('.client-info-link');
+  if (clientLink) {
+    // SE il blocco NON è attivo: primo click -> mostra popup + tooltip, BLOCCA il click del link (non aprire modal)
+    if (!block.classList.contains('active-popup')) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      // chiudi altri attivi e apri questo
+      document.querySelectorAll('.appointment-block.active-popup').forEach(b => b.classList.remove('active-popup'));
+      if (typeof window.setActivePopupAndTooltip === 'function') {
+        window.setActivePopupAndTooltip(block);
+      } else {
+        block.classList.add('active-popup');
+      }
+
+      // mostra tooltip piccolo anche per status 2? (adatta se necessario)
+      if (!block.classList.contains('note-off') && typeof window.showClientInfoForBlock === 'function') {
+        try { window.showClientInfoForBlock(block); } catch(_) {}
+      }
+
+      // flag: permetti apertura modal al prossimo click sullo stesso link (timeout per pulire)
+      clientLink.dataset.allowEditOnNextClick = '1';
+      setTimeout(() => { delete clientLink.dataset.allowEditOnNextClick; }, 2500);
+
+      return;
+    }
+
+    // SE il blocco è attivo e la flag è presente -> è il secondo click: permetti il comportamento originale (NON bloccare)
+    if (clientLink.dataset.allowEditOnNextClick === '1') {
+      // rimuovi la flag e lascia proseguire (non fare preventDefault/stopImmediatePropagation)
+      delete clientLink.dataset.allowEditOnNextClick;
+      return;
+    }
+
+    // Altri casi (toggle normale se necessario)
+    if (block.classList.contains('active-popup')) {
+      block.classList.remove('active-popup');
+      const big = document.getElementById('clientHistoryPopup');
+      if (big) big.style.display = 'none';
+      if (smallPopup) smallPopup.style.display = 'none';
+    } else {
+      document.querySelectorAll('.appointment-block.active-popup').forEach(b => b.classList.remove('active-popup'));
+      if (typeof window.setActivePopupAndTooltip === 'function') {
+        window.setActivePopupAndTooltip(block);
+      } else {
+        block.classList.add('active-popup');
+      }
+      if (!block.classList.contains('note-off') && typeof window.showClientInfoForBlock === 'function') {
+        try { window.showClientInfoForBlock(block); } catch(_) {}
+      }
+    }
+
+    return;
+  }
+
+  // Click in QUALSIASI altra zona del blocco → comportamento touch standard
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (block.classList.contains('active-popup')) {
+    block.classList.remove('active-popup');
+    const big = document.getElementById('clientHistoryPopup');
+    if (big) big.style.display = 'none';
+    if (smallPopup) smallPopup.style.display = 'none';
+  } else {
+    document.querySelectorAll('.appointment-block.active-popup').forEach(b => b.classList.remove('active-popup'));
+    if (typeof window.setActivePopupAndTooltip === 'function') {
+      window.setActivePopupAndTooltip(block);
+    } else {
+      block.classList.add('active-popup');
+    }
+    if (!block.classList.contains('note-off') && typeof window.showClientInfoForBlock === 'function') {
+      try { window.showClientInfoForBlock(block); } catch(_) {}
+    }
+  }
+}, true);
+
+  // 2) Rimuovi eventuali onclick inline dal link cliente SOLO in touch-ui
+  document.querySelectorAll('.client-info-link[onclick]').forEach(a => a.removeAttribute('onclick'));
+});
+</script>
+{% endblock %}

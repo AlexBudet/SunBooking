@@ -1,0 +1,1035 @@
+{% extends "base.html" %}
+
+{% block content %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<br><br><br>
+<div class="page-wide-90">
+<h3>&nbsp;&nbsp;CASSA</h3>
+<div style="float:right; display:flex; flex-direction:column; gap:8px; margin-top: -20px;">
+  <a href="{{ url_for('cassa.registro_scontrini') }}" class="btn neumorphic-btn">Registro Scontrini</a>
+  <a href="#" id="btnRegistroDGFE" class="btn neumorphic-btn">Registro DGFE</a>
+  <a href="#" id="btnChiusuraGiornaliera" class="btn neumorphic-btn">Chiusura Giornaliera</a>
+  <a href="#" id="btnAnnullaScontrino" class="btn neumorphic-btn">Annulla Scontrino</a>
+</div>
+<div class="service-bar" style="display: flex; align-items: center; gap: 0.7em; padding-left: 25px !important; padding-right: 25px !important; flex-wrap: wrap; max-width: 96%;">
+    <input type="text" id="searchServiceInput" name="searchServiceInput" class="form-control"
+    placeholder="Cerca servizio..." autocomplete="off"
+    style="min-width: 180px; flex: 1 1 220px; max-width: 350px;">
+<div id="serviceDropdown" class="dropdown-menu w-100"></div>
+    <button class="service-bar-btn" id="btnFrequenti">Frequenti</button>
+    <button class="service-bar-btn" id="btnUltimi">Ultimi</button>
+    <button class="service-bar-btn" id="btnSolarium">Solarium</button>
+    <button class="service-bar-btn" id="btnEstetica">Estetica</button>
+    <button class="service-bar-btn" id="btnProdotti">Prodotti</button>
+  </div>
+<br>
+  <!-- Sezione pulsanti servizi -->
+  <div style="margin-top: 1em; padding-left: 25px; padding-right: 25px;">
+    <div id="serviceButtonsContainer" style="display: flex; flex-wrap: wrap; gap: 0.5em;"></div>
+  </div>
+<br>
+
+<div class="d-flex flex-row align-items-start flex-wrap" style="min-height: 400px; gap: 16px; padding: 1em;">
+  <!-- Sezione pseudoscontrino -->
+  <div style="flex: 1 1 450px; min-width: 420px; max-width: 730px;">
+    <div class="card neumorphic-card h-100">
+      <div class="card-body">
+        <!-- Operatore -->
+<div class="mb-2 d-flex gap-2 align-items-center">
+  <div class="dropdown-anchor" style="width:230px; max-width:230px; position:relative;">
+    <input type="text" id="operatorSelectInput" name="operatorSelectInput"
+           class="form-control" placeholder="Salone" readonly
+           style="cursor:pointer; width:100%;">
+    <div id="operatorDropdown" class="dropdown-menu" style="width:100%;"></div>
+  </div>
+
+  <div class="dropdown-anchor" style="width:230px; max-width:230px; position:relative;">
+    <input type="text" id="clientSearchInputCassa" name="clientSearchInputCassa"
+           class="form-control" placeholder="Cliente generico" autocomplete="off"
+           style="width:100%;">
+    <div id="clientDropdownCassa" class="dropdown-menu" style="width:100%;"></div>
+  </div>
+</div>
+        <br>
+        <!-- Container righe servizi selezionati -->
+        <div id="scontrinoRowsContainer"></div>
+        <div id="scontrino-container"></div>
+        <!-- Icona dischetto per salvare modifiche (visibile solo se pseudoscontrino popolato da blocchi calendar) -->
+<div id="saveModificheContainer" style="display: none; margin-top: 10px; text-align: center;">
+  <button id="btnSaveModifiche" class="btn btn-outline-primary" title="Salva modifiche pseudoscontrino">
+    <i class="bi bi-floppy"></i> Salva Modifiche
+  </button>
+  <button id="btnResetModifiche" class="btn btn-outline-warning" title="Ripristina valori originali" style="display: none; margin-left: 10px;">
+    <i class="bi bi-arrow-counterclockwise"></i> Reset
+  </button>
+</div>
+        <!-- Opzioni pagamento -->
+        <div class="d-flex justify-content-between align-items-center mt-3">
+          <div>
+            <br>
+            <button class="btn btn-outline-success me-1" id="payCashBtn"><i class="bi bi-cash"></i> Cash</button>
+            <button class="btn btn-outline-primary me-1" id="payPosBtn"><i class="bi bi-calculator"></i> POS</button>
+            <button class="btn btn-outline-info" id="payBankBtn"><i class="bi bi-bank"></i> Bank</button>
+          </div>
+          <br>
+          <div>
+            <span id="totalAmount" class="fw-bold fs-5">Scontrino: € 0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;
+            <span id="totalAmountAll" style="color: #444; font-size: 1rem;">Totale: € 0.00</span>
+            <br><br>
+            <button class="btn btn-success ms-2" id="confermaBtn">CONFERMA</button>
+            <button id="reset-scontrino" class="btn btn-outline-danger">SVUOTA</button>
+            <!-- Subtotali pagamenti, nascosto di default -->
+            <div id="subtotaliPagamenti" class="mt-2" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- Pulsante stampa scontrino allineato in alto -->
+<div class="d-flex flex-column justify-content-start align-items-center" style="flex: 0 0 auto;">
+  <div id="btnStampaScontrino" class="neumorphic-card neumorphic-btn-stampa d-flex justify-content-center align-items-center position-relative"
+       style="width:60px; height:60px; cursor:pointer; position:relative;">
+    <span style="font-size:2em; color:#1976d2; display:block; line-height:1;">
+      <i class="bi bi-printer"></i>
+    </span>
+    <span id="stampaLabel" class="d-none stampa-label-abs">STAMPA</span>
+  </div>
+
+  <!-- Pulsante LOTTERIA: nascosto finché non si preme “CONFERMA” -->
+  <button type="button" id="btnLotteria"
+          class="btn btn-primary mt-2 d-none">
+    LOTTERIA
+  </button>
+</div>
+
+<!-- Lotteria degli scontrini -->
+<!-- Modal Lotteria -->
+<div class="modal fade" id="modalLotteria" tabindex="-1" aria-labelledby="modalLotteriaLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalLotteriaLabel">Lotteria Scontrini</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <label for="lotteria_codice" class="form-label">Inserisci codice</label>
+        <input type="text" id="lotteria_codice"
+               class="form-control mb-3"
+               maxlength="18" minlength="18" pattern="[A-Za-z0-9]{18}">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="lotteria_invia">Stampa scontrino</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- Container appuntamenti my-spia -->
+  <div style="flex: 1 1 510px; min-width: 360px; max-width: 510px;">
+    <div id="containerAppuntamentiMySpia" class="card neumorphic-card h-100"
+         style="min-height: 220px; margin-left: 60px;">
+      <div class="card-body">
+        <h6 class="mb-3" id="mySpiaToggle" style="cursor:pointer; user-select:none;">
+          Clienti in istituto
+          <span id="mySpiaBlink" style="display:none; position:relative; margin-left:10px; vertical-align: top;">
+            <span class="myspia-luce"></span>
+          </span>
+        </h6>
+        <div id="mySpiaListContainer">
+          <div id="mySpiaList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal Registro DGFE -->
+<div class="modal fade" id="modalRegistroDGFE" tabindex="-1" aria-labelledby="modalRegistroDGFELabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalRegistroDGFELabel">Registro DGFE (Memoria Fiscale)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="dgfeDate" class="form-label">Data</label>
+          <input type="date" id="dgfeDate" class="form-control" value="{{ giorno.strftime('%Y-%m-%d') if giorno is defined else '' }}">
+        </div>
+        <div class="mb-3">
+          <label for="dgfePrinterIp" class="form-label">IP Stampante</label>
+          <input type="text" id="dgfePrinterIp" class="form-control" value="{{ businessinfo.printer_ip if businessinfo is defined else '' }}">
+        </div>
+        <button class="btn btn-primary mb-3" id="btnCaricaDGFE">Carica Registro</button>
+        <div id="dgfeResult"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .modal-body {
+    max-height: 70vh;      /* Limita l'altezza al 70% della viewport */
+    overflow-y: auto !important; /* Scroll verticale se il contenuto è troppo lungo */
+}
+
+#modalRegistroDGFE .modal-body {
+  max-height: 70vh;
+  overflow-y: auto !important;
+}
+
+.neumorphic-btn-stampa {
+  box-shadow:  8px 8px 24px #d1d9e6, -8px -8px 24px #ffffff;
+  border-radius: 14px;
+  background: #ffffff;
+  transition: box-shadow 0.2s;
+  user-select: none;
+}
+.neumorphic-btn-stampa:active {
+  box-shadow:  2px 2px 8px #d1d9e6, -2px -2px 8px #ffffff;
+}
+
+.d-flex[style*="gap"] > * {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+#btnStampaScontrino {
+  width: 140px !important;
+  height: 140px !important;
+  min-width: 60px !important;
+  min-height: 60px !important;
+  max-width: 140px !important;
+  max-height: 140px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#btnStampaScontrino.attivo {
+  opacity: 1;
+  pointer-events: auto;
+  background-color: hsl(51, 100%, 71%);
+}
+
+.neumorphic-btn-stampa:hover,
+#btnStampaScontrino:hover {
+  box-shadow:  2px 2px 8px #d1d9e6, -2px -2px 8px #ffffff, 0 0 0 2px #ffd60055;
+  cursor: pointer;
+}
+
+.card.neumorphic-card:hover,
+.myspia-blocco:hover {
+  box-shadow:  4px 4px 16px #d1d9e6, -4px -4px 16px #ffffff, 0 0 0 2px #ffd60033;
+  cursor: pointer;
+}
+
+.stampa-label-abs {
+  position: absolute;
+  left: 50%;
+  bottom: 11px;
+  transform: translateX(-50%);
+  font-size: 1.25em;
+  color: #1976d2;
+  font-weight: 500;
+  pointer-events: none;
+  background: transparent;
+  line-height: 1;
+}
+
+.pseudoscontrino-bloccato {
+  pointer-events: none;
+  filter: grayscale(0.2);
+}
+
+.pseudoscontrino-bloccato .scontrino-row {
+  min-height: 44px;
+  padding-top: 5px;
+}
+
+.pseudoscontrino-bloccato input,
+.pseudoscontrino-bloccato select,
+.pseudoscontrino-bloccato textarea,
+.pseudoscontrino-bloccato .form-control,
+.pseudoscontrino-bloccato .form-select,
+.pseudoscontrino-bloccato .border {
+  border: transparent !important;
+  box-shadow: none !important;
+}
+
+.dropdown-anchor { position: relative; }
+.dropdown-anchor .dropdown-menu {
+  position: absolute;
+  top: -80px;
+  left: 0;
+  right: 0;
+  z-index: 1050;         /* sopra la card */
+  max-height: 260px;
+  overflow-y: auto;
+  display: none;         /* viene gestito da JS con style.display */
+}
+</style>
+
+<script src="{{ url_for('static', filename='js/cassa.js') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const servizi = {{ servizi | default([]) | tojson | safe }};
+    const clientName = {{ client_name | default('', true) | tojson }};
+    const operatorName = "{{ operator_name | default('', true) }}";
+    const operatorId = "{{ operator_id | default('', true) }}";
+    const clientId = "{{ client_id | default('', true) }}";
+
+    window.SERVIZI_PRECOMPILATI = servizi;
+
+    if (operatorName) {
+      const operatorInput = document.getElementById('operatorSelectInput');
+      operatorInput.value = operatorName;
+      if (operatorId) {
+        operatorInput.dataset.selectedOperator = operatorId;
+      }
+      // Forza trigger evento change per listener modifiche
+      operatorInput.dispatchEvent(new Event('change'));
+    }
+
+    if (clientName) {
+      const input = document.getElementById('clientSearchInputCassa');
+      window.settingClientProgrammatically = true;  // Flag per evitare fetch dropdown
+      input.value = clientName;
+      if (clientId) {
+        input.dataset.selectedClient = clientId;
+      }
+      // Forza trigger evento input per listener modifiche (ma senza fetch)
+      input.dispatchEvent(new Event('input'));
+    }
+
+    addInitialServizi(servizi);
+
+async function addInitialServizi(list) {
+  if (!Array.isArray(list) || !list.length) return;
+  const calApptIds = [];
+  for (const s0 of list) {
+    const s = { ...s0 };
+    // Normalizza l’appointment_id per provenienza da calendar o altri alias
+    s.appointment_id = s.appointment_id || s.appointmentId || s.appId || s.app_id || null;
+    if (s.appointment_id) calApptIds.push(String(s.appointment_id));
+
+    const sid = s?.id ?? s?.servizio_id ?? s?.service_id;
+    if (sid && (!s.nome || s.prezzo === undefined || s.prezzo === null)) {
+      try {
+        const res = await fetch(`/cassa/api/services?id=${encodeURIComponent(sid)}`);
+        const data = await res.json();
+        const d = Array.isArray(data) ? data[0] : data;
+        if (d) {
+          aggiungiRigaServizio({
+            id: d.id,
+            nome: d.nome,
+            prezzo: d.prezzo,
+            tag: d.tag,
+            sottocategoria: d.sottocategoria,
+            appointment_id: s.appointment_id
+          }, false);
+          continue;
+        }
+      } catch(_) {}
+    }
+    aggiungiRigaServizio(s, false);
+  }
+  // Fallback usato da “Salva Modifiche” anche se le righe non hanno dataset.appointmentId
+  window.lastPseudoscontrinoAppointmentIds = Array.from(new Set(calApptIds)).filter(Boolean);
+  setTimeout(() => ripristinaModifichePseudoscontrino(), 100);
+}
+  });
+</script>
+<script>
+document.getElementById('btnChiusuraGiornaliera').addEventListener('click', function(e) {
+  e.preventDefault();
+  if (!confirm("Vuoi davvero stampare la chiusura giornaliera?")) return;
+
+  const btn = this;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Invio...';
+
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+  fetch('/cassa/chiusura-giornaliera', {
+    method: 'POST',
+    headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
+  })
+  .then(async res => {
+    let raw = '';
+    try { raw = await res.text(); } catch(_) {}
+
+    // Prova a parse JSON ma senza mai bloccare UX
+    let data = {};
+    try { data = JSON.parse(raw); } catch(_) {}
+
+    console.log('[CHIUSURA GIORNALIERA] HTTP:', res.status, 'RAW:', raw);
+    console.log('[CHIUSURA GIORNALIERA] Parsed:', data);
+
+    // Mostra sempre successo (nessun popup errore)
+    alert("Chiusura giornaliera inviata! Controlla gli scontrini stampati.");
+  })
+  .catch(err => {
+    console.warn('[CHIUSURA GIORNALIERA] Errore rete (ignorato per policy):', err);
+    alert("Chiusura giornaliera inviata! Controlla gli scontrini stampati.");
+  })
+  .finally(() => {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  });
+});
+</script>
+
+<script>
+  document.getElementById('btnRegistroDGFE').addEventListener('click', function(e) {
+  e.preventDefault();
+  const modal = new bootstrap.Modal(document.getElementById('modalRegistroDGFE'));
+  modal.show();
+});
+
+document.getElementById('btnCaricaDGFE').addEventListener('click', function() {
+  const ip = document.getElementById('dgfePrinterIp').value.trim();
+  const date = document.getElementById('dgfeDate').value;
+  if (!ip || !date) {
+    alert('Inserisci IP stampante e data.');
+    return;
+  }
+const dgfeResult = document.getElementById('dgfeResult');
+if (dgfeResult) dgfeResult.textContent = 'Caricamento in corso...';
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+fetch('/cassa/api/dgfe', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-CSRFToken': csrfToken
+  },
+  body: JSON.stringify({ip, date})
+})
+.then(res => res.json())
+.then(data => {
+  const dgfeResult = document.getElementById('dgfeResult');
+  dgfeResult.innerHTML = '';
+  if (data.error) {
+    const span = document.createElement('span');
+    span.className = 'text-danger';
+    span.textContent = `Errore: ${data.error}`;
+    dgfeResult.appendChild(span);
+  } else {
+    const pre = document.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.fontSize = '0.95em';
+    pre.textContent = data.dgfe_text || '';
+    dgfeResult.appendChild(pre);
+  }
+})
+.catch(err => {
+  const dgfeResult = document.getElementById('dgfeResult');
+  dgfeResult.innerHTML = '';
+  const span = document.createElement('span');
+  span.className = 'text-danger';
+  span.textContent = `Errore: ${err}`;
+  dgfeResult.appendChild(span);
+});
+});
+  </script>
+  <script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Stato EDIT per appuntamenti (persistenza locale)
+  function getEditedSet() {
+    try {
+      const arr = JSON.parse(localStorage.getItem('cassa_edited_appt_ids') || '[]');
+      return new Set(arr.map(String));
+    } catch (_) {
+      return new Set();
+    }
+  }
+  function saveEditedSet(set) {
+    try {
+      localStorage.setItem('cassa_edited_appt_ids', JSON.stringify(Array.from(set)));
+    } catch (_) {}
+  }
+  function markEditedIds(ids) {
+    const set = getEditedSet();
+    (ids || []).forEach(id => { if (id != null) set.add(String(id)); });
+    saveEditedSet(set);
+  }
+  
+ function unmarkEditedIds(ids) {
+   const set = getEditedSet();
+   (ids || []).forEach(id => { if (id != null) set.delete(String(id)); });
+   saveEditedSet(set);
+ }
+ window.unmarkEditedIds = unmarkEditedIds;
+
+  function isGruppoEdited(gruppo) {
+    const set = getEditedSet();
+    const ids = (Array.isArray(gruppo?.ids) && gruppo.ids.length)
+      ? gruppo.ids
+      : ((Array.isArray(gruppo?.appuntamenti) ? gruppo.appuntamenti : [])
+          .map(s => s.appointment_id || s.id)
+          .filter(Boolean));
+    return ids.some(id => set.has(String(id)));
+  }
+  // Carica appuntamenti my-spia (stato 1) dal backend
+  function caricaAppuntamentiMySpia() {
+    fetch('/cassa/api/myspia')
+      .then(res => res.json())
+      .then(data => {
+        renderMySpiaList(data);
+      });
+  }
+
+  // Renderizza i gruppi per cliente
+function renderMySpiaList(gruppi) {
+  const list = document.getElementById('mySpiaList');
+  const blink = document.getElementById('mySpiaBlink');
+  const container = document.getElementById('mySpiaListContainer');
+  list.innerHTML = '';
+
+  // Luce blink se ci sono appuntamenti
+  blink.style.display = (Array.isArray(gruppi) && gruppi.length > 0) ? '' : 'none';
+
+  // Mostra gli appuntamenti solo se il container è open
+  if (!container.classList.contains('open')) return;
+
+  if (!Array.isArray(gruppi) || gruppi.length === 0) {
+    const info = document.createElement('div');
+    info.className = 'text-muted';
+    info.textContent = 'Nessun appuntamento my-spia attivo.';
+    list.appendChild(info);
+    return;
+  }
+
+  gruppi.forEach(gruppo => {
+    // Wrapper per blocco + pulsanti esterni (con spazio a destra per i pulsanti)
+    const item = document.createElement('div');
+    item.className = 'myspia-item';
+
+    // Blocco appuntamento
+    const blocco = document.createElement('div');
+    blocco.className = 'myspia-blocco';
+    blocco.setAttribute('data-client-id', gruppo.cliente_id);
+
+    const firstServizio = (gruppo.appuntamenti || [])[0] || {};
+    blocco.style.backgroundColor = firstServizio.bg_color || '#fff';
+    blocco.style.color = firstServizio.font_color || '#000';
+
+    const infoDiv = document.createElement('div');
+    infoDiv.style.color = 'inherit';
+
+    const spanNome = document.createElement('span');
+    spanNome.style.fontWeight = 'bold';
+    spanNome.style.textTransform = 'uppercase';
+    spanNome.textContent = `${gruppo.cliente_nome} ${gruppo.cliente_cognome}`;
+    infoDiv.appendChild(spanNome);
+
+    const oraInizio = firstServizio.start_time ? firstServizio.start_time.slice(0,5) : '';
+    if (oraInizio) {
+      infoDiv.appendChild(document.createTextNode(' - '));
+      const spanOra = document.createElement('span');
+      spanOra.style.fontWeight = 'bold';
+      spanOra.textContent = oraInizio;
+      infoDiv.appendChild(spanOra);
+    }
+
+    const ul = document.createElement('ul');
+    ul.style.margin = '8px 0 0 0';
+    ul.style.paddingLeft = '18px';
+    (gruppo.appuntamenti || []).forEach(servizio => {
+      const li = document.createElement('li');
+      li.textContent = `${servizio.servizio_nome || servizio.tag || ''} (${servizio.start_time ? servizio.start_time.slice(0,5) : ''})`;
+      ul.appendChild(li);
+    });
+
+    blocco.appendChild(infoDiv);
+    blocco.appendChild(ul);
+
+    // Icona 'modificato' se il gruppo è stato salvato in cassa
+    try {
+      if (isGruppoEdited(gruppo)) {
+        const badge = document.createElement('span');
+        badge.className = 'myspia-edited-badge';
+        badge.title = 'Modificato in cassa';
+        badge.innerHTML = '<i class="bi bi-pencil-fill" aria-hidden="true"></i>';
+        blocco.appendChild(badge);
+        blocco.classList.add('myspia-blocco-edited');
+      }
+    } catch(_) {}
+
+    // Pulsanti esterni, assoluti a destra (verticali)
+    const actions = document.createElement('div');
+    actions.className = 'myspia-actions';
+
+    const btnCassa = document.createElement('button');
+    btnCassa.type = 'button';
+    btnCassa.className = 'btn-popup porta-in-cassa';
+    btnCassa.setAttribute('data-bs-toggle', 'tooltip');
+    btnCassa.setAttribute('data-bs-placement', 'right');
+    btnCassa.setAttribute('data-bs-custom-class', 'tooltip-dark');
+    btnCassa.setAttribute('title', 'porta in cassa');
+    btnCassa.innerHTML = '<i class="euro-icon">€</i>';
+    btnCassa.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const ids = (Array.isArray(gruppo.ids) && gruppo.ids.length)
+        ? gruppo.ids
+        : ((gruppo.appuntamenti || []).map(s => s.appointment_id || s.id).filter(Boolean));
+      if (ids.length && typeof window.creaPseudoscontrinoMySpia === 'function') {
+        window.creaPseudoscontrinoMySpia(ids.join(','));
+      } else {
+        alert('Nessun appuntamento da inviare in cassa.');
+      }
+    });
+
+    const btnCal = document.createElement('button');
+    btnCal.type = 'button';
+    btnCal.className = 'btn-popup vedi-in-calendario';
+    btnCal.setAttribute('data-bs-toggle', 'tooltip');
+    btnCal.setAttribute('data-bs-placement', 'right');
+    btnCal.setAttribute('data-bs-custom-class', 'tooltip-dark');
+    btnCal.setAttribute('title', 'vedi in calendario');
+    btnCal.innerHTML = '<i class="bi bi-calendar2-week"></i>';
+    btnCal.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const first = (gruppo.appuntamenti || [])[0];
+      const clientId = gruppo.cliente_id;
+      if (clientId && first && first.start_time && first.data) {
+        const dateStr = first.data;
+        const oraStr = first.start_time.slice(0,5);
+        sessionStorage.setItem('scrollFromCassa', '1');
+        const [hour, minute] = oraStr.split(':');
+        sessionStorage.setItem('scrollToHour', hour);
+        sessionStorage.setItem('scrollToMinute', minute);
+        sessionStorage.setItem('scrollFromCassa_ts', String(Date.now()));
+        window.location.href = `/calendar/?date=${dateStr}&client_id=${clientId}&ora=${oraStr}`;
+      }
+    });
+
+    actions.appendChild(btnCassa);
+    actions.appendChild(btnCal);
+
+    // Tooltips neri a destra
+    setTimeout(() => {
+      if (window.bootstrap && bootstrap.Tooltip) {
+        [btnCassa, btnCal].forEach(el => {
+          bootstrap.Tooltip.getOrCreateInstance(el, {
+            placement: 'right',
+            container: 'body',
+            boundary: 'window',
+            customClass: 'tooltip-dark',
+            trigger: 'hover focus'
+          });
+        });
+      }
+    }, 0);
+
+    item.appendChild(blocco);
+    item.appendChild(actions);
+    list.appendChild(item);
+  });
+}
+
+// Gestione apertura/collasso
+  document.getElementById('mySpiaToggle').addEventListener('click', function() {
+    const container = document.getElementById('mySpiaListContainer');
+    if (!container.classList.contains('open')) {
+      container.classList.add('open');
+      caricaAppuntamentiMySpia();
+    } else {
+      container.classList.remove('open');
+    }
+  });
+
+  // All'avvio: container chiuso
+  document.getElementById('mySpiaListContainer').classList.remove('open');
+  caricaAppuntamentiMySpia();
+
+  // Crea pseudoscontrino per i blocchi selezionati
+  window.creaPseudoscontrinoMySpia = function(ids) {
+    fetch('/cassa/api/myspia/dettagli', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
+      body: JSON.stringify({ ids: ids.split(',') })
+    })
+    .then(res => res.json())
+    .then(async data => {
+      if (data.success && data.appuntamenti) {
+        // RESET set ids originali per questo gruppo (nuovo gruppo = nuova chiave di persistenza)
+        window.originalAppointmentIds = new Set();
+
+        // Svuota e repopola
+        document.getElementById('scontrinoRowsContainer').innerHTML = '';
+        const apptIds = [];
+        data.appuntamenti.forEach(servizio => {
+          const apptId =
+            servizio.appointment_id ||
+            servizio.appointmentId ||
+            servizio.app_id ||
+            servizio.appId ||
+            servizio.appIdStr ||
+            servizio.appt_id ||
+            null;
+          if (apptId) apptIds.push(String(apptId));
+          aggiungiRigaServizio({
+            id: servizio.id,
+            nome: servizio.nome,
+            prezzo: servizio.prezzo,
+            tag: servizio.tag,
+            sottocategoria: servizio.sottocategoria,
+            appointment_id: apptId
+          }, false);
+        });
+        window.lastPseudoscontrinoAppointmentIds = apptIds.filter(Boolean);
+
+        // Setta cliente e operatore
+        if (data.cliente_nome) {
+          const input = document.getElementById('clientSearchInputCassa');
+          window.settingClientProgrammatically = true;
+          input.value = data.cliente_nome + ' ' + (data.cliente_cognome || '');
+          input.dataset.selectedClient = data.cliente_id;
+        }
+        if (data.operatore_nome) {
+          const op = document.getElementById('operatorSelectInput');
+          op.value = data.operatore_nome;
+          op.dataset.selectedOperator = data.operatore_id;
+        }
+
+        // APPLICA MODIFICHE SALVATE per questo gruppo (se presenti)
+        // Usa un piccolo delay per assicurare che il DOM sia pronto
+        setTimeout(() => {
+          if (typeof ripristinaModifichePseudoscontrino === 'function') {
+            ripristinaModifichePseudoscontrino();
+          }
+        }, 50);
+      } else {
+        alert('Errore nel recupero dati appuntamenti');
+      }
+    });
+  };
+  
+  // Elimina (resetta stato a 0) i blocchi selezionati
+  window.eliminaMySpia = function(ids) {
+    if (!confirm('Vuoi togliere questi appuntamenti dalla cassa?')) return;
+    fetch('/cassa/api/myspia/elimina', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
+      body: JSON.stringify({ ids: ids.split(',') })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        caricaAppuntamentiMySpia();
+      } else {
+        alert('Errore: ' + (data.error || 'Impossibile eliminare.'));
+      }
+    });
+  };
+
+  // Al salvataggio pseudoscontrino: marca gli appointment_id e aggiorna i my-spia visibili
+  const saveBtn = document.getElementById('btnSaveModifiche');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', function() {
+      try {
+        let ids = Array.from(document.querySelectorAll('.scontrino-row'))
+          .map(r => r.dataset.appointmentId)
+          .filter(Boolean);
+        if (!ids.length && Array.isArray(window.lastPseudoscontrinoAppointmentIds)) {
+          ids = window.lastPseudoscontrinoAppointmentIds.slice();
+        }
+        if (ids.length) {
+          // dedup
+          ids = Array.from(new Set(ids.map(String)));
+          markEditedIds(ids);
+          const container = document.getElementById('mySpiaListContainer');
+          if (container && container.classList.contains('open')) {
+            caricaAppuntamentiMySpia();
+          }
+        }
+      } catch(_) {}
+    });
+  }
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+document.getElementById('confermaBtn').addEventListener('click', function(e) {
+  e.preventDefault();
+  const btnLotteria = document.getElementById('btnLotteria');
+  // Controlla i metodi di pagamento delle voci dello pseudoscontrino
+  const rows = document.querySelectorAll('.scontrino-row');
+  const pagamentiDigitali = Array.from(rows).some(row => {
+    const select = row.querySelector('select');
+    return select && (select.value === 'pos' || select.value === 'bank');
+  });
+  if (btnLotteria) {
+    if (pagamentiDigitali) {
+      btnLotteria.classList.remove('d-none');
+      btnLotteria.focus();
+    } else {
+      btnLotteria.classList.add('d-none');
+    }
+  }
+});
+
+// handler con priorità massima: viene eseguito prima, blocca gli altri e apre la modale
+document.getElementById('btnLotteria').addEventListener('click', function (e) {
+  e.preventDefault();              // evita azioni di default (form, ecc.)
+  e.stopPropagation();             // ferma il bubbling
+  e.stopImmediatePropagation();    // ***ferma anche gli altri listener sullo stesso nodo***
+
+  // mostra la modale (getOrCreate evita doppioni)
+  const modalEl = document.getElementById('modalLotteria');
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}, true);                           
+
+  document.getElementById('lotteria_invia').addEventListener('click', function() {
+    const lotteria = document.getElementById('lotteria_codice').value.trim();
+    // Prepara il payload come già fai per lo scontrino
+// Trova le righe dei servizi attuali
+const rows = document.querySelectorAll('.scontrino-row');
+if (rows.length === 0) {
+  alert('Aggiungi almeno un servizio prima di generare lo scontrino!');
+  return;
+}
+const voci = [];
+rows.forEach(row => {
+  const nome = row.querySelector('.flex-grow-1')?.textContent.trim() || '';
+  const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
+  const sconto_riga = parseInt(row.querySelector('.scontrino-row-sconto')?.value || '0');
+  const metodo = row.querySelector('select')?.value || 'cash';
+  const servizio_id = row.dataset.servizioId || null;
+  const appointment_id = row.dataset.appointmentId || null;
+
+          if (!isFinite(prezzo) || isNaN(prezzo)) {
+          alert('Prezzo non valido in una riga. Correggi prima di inviare.');
+          return;
+        }
+        if (prezzo < 0) {
+          alert('Prezzi negativi non sono consentiti. Correggi il prezzo e riprova.');
+          return;
+        }
+        
+  const voce = {
+    servizio_id,
+    nome,
+    prezzo,
+    sconto_riga,
+    tipo: 'service',
+    metodo_pagamento: metodo,
+    is_fiscale: true
+  };
+  if (appointment_id) voce.appointment_id = appointment_id;
+  voci.push(voce);
+});
+const cliente_id = document.getElementById('clientSearchInputCassa').dataset.selectedClient || null;
+const operatore_id = document.getElementById('operatorSelectInput').dataset.selectedOperator || null;
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+const payload = {
+  voci,
+  cliente_id,
+  operatore_id,
+  is_fiscale: true,
+  lotteria: lotteria
+};
+
+fetch('/cassa/send-to-rch', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+  },
+  body: JSON.stringify(payload)
+})
+.then(r => r.json())
+.then(data => {
+  location.reload();
+});
+  });
+});
+</script>
+<script>
+document.getElementById('btnAnnullaScontrino').addEventListener('click', function(e) {
+  e.preventDefault();
+  if (!confirm("Vuoi davvero annullare l'ultimo scontrino fiscale?")) return;
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+  fetch('/cassa/annulla-ultimo-scontrino', {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': csrfToken
+    }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.error) {
+      alert("Errore: " + data.error);
+    } else {
+      // Mostra solo il messaggio semplice
+      alert("Scontrino annullato!");
+      location.reload();
+    }
+  })
+  .catch(err => {
+    alert("Errore di rete: " + err);
+  });
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  try {
+    if (localStorage.getItem('sun_touch_ui') === '1') {
+      document.body.classList.add('touch-ui');
+      const bind = (root = document) => {
+        (root.querySelectorAll('#mySpiaList .myspia-item') || []).forEach(item => {
+          if (item._touchBound) return;
+          item._touchBound = true;
+          item.addEventListener('click', (e) => {
+            if (e.target.closest('.myspia-actions')) return; // lascia i bottoni attivi
+            const wasOpen = item.classList.contains('myspia-open');
+            document.querySelectorAll('#mySpiaList .myspia-item.myspia-open')
+              .forEach(i => i.classList.remove('myspia-open'));
+            if (!wasOpen) item.classList.add('myspia-open');
+          });
+        });
+      };
+      bind();
+      new MutationObserver(muts => {
+        muts.forEach(m => (m.addedNodes || []).forEach(n => {
+          if (n.nodeType !== 1) return;
+          if (n.classList && n.classList.contains('myspia-item')) bind(n.parentNode || n);
+          n.querySelectorAll && n.querySelectorAll('.myspia-item').forEach(() => bind(n));
+        }));
+      }).observe(document.getElementById('mySpiaList') || document.body, { childList: true, subtree: true });
+    }
+  } catch (_) {}
+});
+</script>
+<style>
+  /* Riga contenitore con spazio riservato a destra per i pulsanti */
+  .myspia-item {
+    position: relative;
+    margin-bottom: 12px;
+    padding-right: 44px;     /* spazio per 2 pulsanti 28px + margini */
+  }
+
+.myspia-blocco {
+  border: 1px solid #ffd966;
+  border-radius: 8px;
+  padding: 10px 12px 8px 12px;
+  background: #fff;
+  position: relative;
+}
+
+.myspia-blocco-edited {
+  box-shadow: inset 0 0 0 2px #1976d244;
+}
+.myspia-edited-badge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #1976d2;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: 0 0 0 2px #ffffff;
+  pointer-events: none;
+}
+
+/* Pulsanti assoluti a destra (verticali) */
+.myspia-actions {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 2000;
+}
+
+/* Desktop: mantieni hover; Touch: disabilita hover e usa solo click */
+.myspia-item:hover .myspia-actions,
+.myspia-item:focus-within .myspia-actions {
+  display: inline-flex;
+}
+body.touch-ui #mySpiaList .myspia-item:hover .myspia-actions,
+body.touch-ui #mySpiaList .myspia-item:focus-within .myspia-actions {
+  display: none !important;
+}
+body.touch-ui #mySpiaList .myspia-item.myspia-open .myspia-actions {
+  display: inline-flex !important;
+}
+
+  /* Pulsanti neri come calendar */
+  .btn-popup {
+    background: #000;
+    color: #fff;
+    border: none;
+    padding: 5px;
+    border-radius: 3px;
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transform-origin: 50% 50% !important;   /* scala dal centro */
+    transition: transform 0.12s ease-out, color 0.1s, background-color 0.1s; /* transizione uniforme */
+    will-change: transform;
+  }
+  .btn-popup:hover {
+    transform: scale(1.2);
+  }
+
+/* Tooltip scuro (testo bianco) a destra: font come calendar */
+.tooltip-dark .tooltip-inner {
+  background-color: #000 !important;
+  color: #fff !important;
+  font-weight: 500;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: .875rem;
+  line-height: 1.2;
+  border-radius: .375rem;
+}
+
+  /* Luce spia */
+  .myspia-luce {
+    margin-top: -44px;
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ffbf00;
+    box-shadow: 0 0 4px 2px #ffd600;
+    animation: myspia-blink 1s infinite alternate;
+  }
+  @keyframes myspia-blink {
+    0% { opacity: 1; }
+    100% { opacity: 0.2; }
+  }
+
+  /* Container aperto: niente clipping dei pulsanti */
+  #mySpiaListContainer {
+    max-height: 0;
+    overflow: hidden;
+    padding: 0;
+  }
+  #mySpiaListContainer.open {
+    max-height: 1000px;
+    padding-top: 4px;
+    overflow: visible;     /* consente ai pulsanti di stare “fuori” dal blocco */
+  }
+</style>
+{% endblock %}

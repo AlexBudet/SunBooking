@@ -1,0 +1,198 @@
+{% extends "settings.html" %}
+
+{% block settings_content %}
+<div class="container mt-4" style="max-width:600px;">
+    <h3>Messaggio WhatsApp manuale</h3>
+    <form method="post" action="{{ url_for('settings.whatsapp') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+            <label for="whatsapp_message" class="form-label">Da inviare manualmente tramite pulsante da calendario</label>
+            <textarea class="form-control" id="whatsapp_message" name="whatsapp_message" rows="5" required>{{ whatsapp_message or "Buongiorno {{nome}}, ecco un memo per il tuo appuntamento del {{data}} alle ore {{ora}}. Ci vediamo presto! Sun Booking" }}</textarea>
+            <div class="form-text">
+                Puoi usare le variabili:<br>
+                <code>{{"{{nome}}"}}</code> = nome cliente,
+                <code>{{"{{data}}"}}</code> = data appuntamento,
+                <code>{{"{{ora}}"}}</code> = orario appuntamento
+                <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
+            </div>
+        </div>
+        <button type="submit" class="btn btn-success">Salva messaggio</button>
+    </form>
+</div>
+
+<br>
+<hr>
+<div class="container mt-4" style="max-width:600px;">
+    <h3>WhatsApp automatico alla conferma dell'appuntamento</h3>
+<div class="container mt-3" style="max-width:600px;">
+  <!-- Toggle senza pulsante Salva: la modifica viene salvata immediatamente via JS -->
+  <div class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" role="switch" id="whatsapp_modal_disable"
+           {% if business_info and business_info.whatsapp_modal_disable %}checked{% endif %}>
+    <label class="form-check-label" for="whatsapp_modal_disable">
+      Non mostrare la richiesta di invio WhatsApp all'interno del modal di creazione appuntamento
+    </label>
+  </div>
+</div>
+
+<script>
+(function() {
+  const cb = document.getElementById('whatsapp_modal_disable');
+  if (!cb) return;
+
+  cb.addEventListener('change', function () {
+    const disabled = !!cb.checked;
+    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+  const endpoint = "{{ url_for('settings.api_whatsapp_setting') }}";
+  fetch(endpoint, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': token
+    },
+    body: JSON.stringify({ whatsapp_modal_disable: disabled })
+  })
+  .then(resp => resp.ok ? resp.json() : Promise.reject(resp))
+  .then(json => {
+    console.log('whatsapp_modal_disable saved:', json);
+    try { window._whatsappModalDisabledCache = null; } catch (e) {}
+    try { if (typeof _whatsappModalDisabledCache !== 'undefined') _whatsappModalDisabledCache = null; } catch(e){}
+  })
+  .catch(err => {
+    console.error('Errore salvataggio impostazione WhatsApp', err);
+    cb.checked = !disabled;
+  });
+  });
+})();
+</script>
+    <form method="post" action="{{ url_for('settings.whatsapp') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+            <label for="whatsapp_message_auto" class="form-label">Testo messaggio automatico</label>
+            <textarea class="form-control" id="whatsapp_message_auto" name="whatsapp_message_auto" rows="5" required>{{ whatsapp_message_auto or "Ciao {{nome}}, la tua prenotazione per il {{data}} alle ore {{ora}} è stata registrata! Grazie da Sun Booking." }}</textarea>
+            <div class="form-text">
+                Questo messaggio verrà inviato automaticamente via WhatsApp ogni volta che viene creato un appuntamento in calendario.<br>
+                Puoi usare le variabili:<br>
+                <code>{{"{{nome}}"}}</code> = nome cliente,
+                <code>{{"{{data}}"}}</code> = data appuntamento,
+                <code>{{"{{ora}}"}}</code> = orario appuntamento,
+                <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
+            </div>
+        </div>
+        <button type="submit" class="btn btn-success">Salva messaggio automatico</button>
+    </form>
+</div>
+
+<br>
+<hr>
+
+<div class="container mt-4" style="max-width:600px;">
+    <br>
+    <h3>WhatsApp reminder giornaliero</h3>
+    <form id="morningReminderForm" method="post" action="{{ url_for('settings.whatsapp') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <!--Aggiungi i nuovi controlli -->
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="whatsapp_morning_reminder_enabled" name="whatsapp_morning_reminder_enabled" {% if business_info and business_info.whatsapp_morning_reminder_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="whatsapp_morning_reminder_enabled">Attiva invio automatico reminder</label>
+        </div>
+        <div class="mb-3">
+            <label for="whatsapp_morning_reminder_time" class="form-label">Orario di invio giornaliero</label>
+            <input type="time" class="form-control" id="whatsapp_morning_reminder_time" name="whatsapp_morning_reminder_time" value="{{ business_info.whatsapp_morning_reminder_time.strftime('%H:%M') if business_info and business_info.whatsapp_morning_reminder_time else '08:00' }}">
+        </div>
+        <div class="mb-3">
+            <label for="whatsapp_message_morning" class="form-label">Testo messaggio reminder</label>
+            <textarea class="form-control" id="whatsapp_message_morning" name="whatsapp_message_morning" rows="5" required>{{ whatsapp_message_morning or "Ciao {{nome}}, la tua prenotazione per il {{data}} alle ore {{ora}} è stata registrata! Grazie da Sun Booking." }}</textarea>
+            <div class="form-text">
+                Questo messaggio verrà inviato automaticamente via WhatsApp secondo le impostazioni.<br>
+                Puoi usare le variabili:<br>
+                <code>{{"{{nome}}"}}</code> = nome cliente,
+                <code>{{"{{data}}"}}</code> = data appuntamento,
+                <code>{{"{{ora}}"}}</code> = orario appuntamento,
+                <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
+            </div>
+        </div>
+        <button type="submit" class="btn btn-success">Salva messaggio automatico</button>
+    </form>
+</div>
+
+<br>
+<br>
+<br>
+<br>
+<script>
+(function () {
+  const cb = document.getElementById('whatsapp_morning_reminder_enabled');
+  const timeInput = document.getElementById('whatsapp_morning_reminder_time');
+  const msgTextarea = document.getElementById('whatsapp_message_morning');
+  if (!cb) return;
+
+  function saveReminder(enabled) {
+    const tokenInput = document.querySelector('input[name="csrf_token"]');
+    const csrf = tokenInput ? tokenInput.value : '';
+    const params = new URLSearchParams();
+    params.set('csrf_token', csrf);
+    params.set('whatsapp_message_morning', msgTextarea ? (msgTextarea.value || '') : '');
+    if (timeInput && timeInput.value) {
+      params.set('whatsapp_morning_reminder_time', timeInput.value);
+    }
+    if (enabled) {
+      params.set('whatsapp_morning_reminder_enabled', 'on');
+    }
+    return fetch("{{ url_for('settings.whatsapp') }}", {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    })
+    .then(resp => {
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      alert(enabled ? 'Invio automatico attivato' : 'Invio automatico disattivato');
+    })
+    .catch(err => {
+      console.error('Errore salvataggio reminder', err);
+      cb.checked = !enabled;
+      alert('Errore durante il salvataggio');
+    });
+  }
+
+  // Salva immediatamente toggle e orario
+  cb.addEventListener('change', () => saveReminder(cb.checked));
+  if (timeInput) timeInput.addEventListener('change', () => saveReminder(cb.checked));
+
+  // Intercetta "Salva messaggio automatico" per inviare SOLO il testo
+  const form = document.getElementById('morningReminderForm');
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const btn = form.querySelector('button[type="submit"]');
+      if (btn) btn.disabled = true;
+
+      const csrf = form.querySelector('input[name="csrf_token"]')?.value || '';
+      const message = msgTextarea ? (msgTextarea.value || '') : '';
+      const params = new URLSearchParams();
+      params.set('csrf_token', csrf);
+      params.set('whatsapp_message_morning', message);
+
+      fetch("{{ url_for('settings.whatsapp') }}", {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString()
+      })
+      .then(resp => {
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        alert('Messaggio automatico salvato');
+      })
+      .catch(err => {
+        console.error('Errore salvataggio messaggio automatico', err);
+        alert('Errore durante il salvataggio');
+      })
+      .finally(() => { if (btn) btn.disabled = false; });
+    });
+  }
+})();
+</script>
+{% endblock %}

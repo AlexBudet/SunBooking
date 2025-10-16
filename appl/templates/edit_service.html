@@ -1,0 +1,47 @@
+<!-- appl/templates/edit_service.html -->
+
+{% extends "settings.html" %}
+
+{% block settings_content %}
+<div class="container">
+    <h2>Modifica Servizio</h2>
+    <form method="POST" action="{{ url_for('settings.edit_service', service_id=service.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label for="service_name">Nome del Servizio</label>
+            <input type="text" class="form-control" id="service_name" name="service_name" value="{{ service.servizio_nome }}" required>
+        </div>
+        <div class="form-group">
+            <label for="service_tag">Abbreviazione (Tag)</label>
+            <input type="text" class="form-control" id="service_tag" name="service_tag"
+                   value="{{ service.servizio_tag }}" placeholder="Abbreviazione (Tag)">
+        </div>
+        <div class="form-group">
+            <label for="service_duration">Durata (minuti)</label>
+            <input type="number" class="form-control" id="service_duration" name="service_duration" value="{{ service.servizio_durata }}" required>
+        </div>
+        <div class="form-group">
+            <label for="service_price">Prezzo (€)</label>
+            <input type="number" step="0.01" class="form-control" id="service_price" name="service_price" value="{{ service.servizio_prezzo }}" required>
+        </div>
+        <div class="form-group">
+            <label for="service_category">Categoria</label>
+            <select class="form-control" id="service_category" name="service_category" required>
+                <option value="Solarium" {% if service.servizio_categoria and service.servizio_categoria.value == 'Solarium' %}selected{% endif %}>Solarium</option>
+                <option value="Estetica" {% if service.servizio_categoria and service.servizio_categoria.value == 'Estetica' %}selected{% endif %}>Estetica</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="service_subcategory">Sottocategoria</label>
+            <select class="form-control" id="service_subcategory" name="service_subcategory">
+                <option value="" disabled {% if not service.servizio_sottocategoria_id %}selected{% endif %}>Seleziona</option>
+                {% for subcategory in subcategories %}
+                    <option value="{{ subcategory.id }}" {% if service.servizio_sottocategoria_id == subcategory.id %}selected{% endif %}>{{ subcategory.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Salva Modifiche</button>
+        <a href="{{ url_for('settings.services') }}" class="btn btn-secondary">Annulla</a>
+    </form>
+</div>
+{% endblock %}
