@@ -39,6 +39,33 @@ def db_label(uri):
     except Exception:
         return "DB"
 
+def wbiztool_creds_for(idx: int):
+    s = str(idx)
+    return {
+        "WBIZTOOL_API_KEY": os.getenv(f"WBIZTOOL_API_KEY{s}") or os.getenv("WBIZTOOL_API_KEY") or "",
+        "WBIZTOOL_CLIENT_ID": os.getenv(f"WBIZTOOL_CLIENT_ID{s}") or os.getenv("WBIZTOOL_CLIENT_ID") or "",
+        "WBIZTOOL_WHATSAPP_CLIENT_ID": os.getenv(f"WBIZTOOL_WHATSAPP_CLIENT_ID{s}") or os.getenv("WBIZTOOL_WHATSAPP_CLIENT_ID") or "",
+    }
+
+def with_request_env(app, per_request_env: dict):
+    def wrapper(environ, start_response):
+        keys = list(per_request_env.keys())
+        old = {k: os.environ.get(k) for k in keys}
+        try:
+            for k, v in per_request_env.items():
+                if v is None or v == "":
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = str(v)
+            return app(environ, start_response)
+        finally:
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+    return wrapper
+
 pool = collect_db_pool()
 secret = os.getenv('SECRET_KEY') or os.urandom(24)
 use_https = os.getenv('USE_HTTPS', 'false').lower() in ('1', 'true', 'yes')
@@ -86,22 +113,25 @@ def select_db(idx):
     resp.headers.add('Set-Cookie', cookie)
     return resp
 
-def with_db_cookie(app, idx, secure=False):
-    def wrapper(environ, start_response):
-        def sr(status, headers, exc_info=None):
-            cookie = "dbidx=" + str(idx) + "; Path=/; SameSite=Lax"
-            if secure:
-                cookie += "; Secure"
-            headers.append(('Set-Cookie', cookie))
-            return start_response(status, headers, exc_info)
-        return app(environ, sr)
-    return wrapper
-
 mounts = {}
 for idx, uri in pool.items():
     child = create_app(uri)
     child.secret_key = secret
-    mounts[f"/s/{idx}"] = with_db_cookie(child, idx, secure=use_https)
+    creds = wbiztool_creds_for(idx)
+    # Imposta anche un cookie dbidx su ogni risposta del child
+    def with_db_cookie(app, idx_local, secure=False):
+        def _wrap(environ, start_response):
+            def sr(status, headers, exc_info=None):
+                cookie = "dbidx=" + str(idx_local) + "; Path=/; SameSite=Lax"
+                if secure:
+                    cookie += "; Secure"
+                headers.append(('Set-Cookie', cookie))
+                return start_response(status, headers, exc_info)
+            return app(environ, sr)
+        return _wrap
+    wrapped = with_request_env(child, creds)
+    wrapped = with_db_cookie(wrapped, idx, secure=use_https)
+    mounts[f"/s/{idx}"] = wrapped
 
 application = DispatcherMiddleware(root_app, mounts)
 app = application
