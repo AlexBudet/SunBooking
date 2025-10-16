@@ -1,4 +1,4 @@
-name: Build and deploy Python app to Azure Web App - WebSunBooking
+name: Build and deploy Python app to Azure Web App - GestSunBooking
 on:
   push:
     branches:
@@ -46,5 +46,6 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'WebSunBooking'
+          app-name: 'GestSunBooking'
           slot-name: 'Production'
+
