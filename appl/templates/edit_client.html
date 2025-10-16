@@ -1,0 +1,62 @@
+<!-- appl/templates/edit_client.html -->
+{% extends "base.html" %} 
+{% block content %}
+<br><br><br>
+<div class="container">
+    <h2>Modifica Cliente</h2>
+    <form method="POST" action="{{ url_for('settings.edit_client', client_id=client.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="form-group">
+    <label for="client_name">Nome</label>
+    <input type="text" id="client_name" name="client_name" value="{{ client.cliente_nome }}" required>
+</div>
+<div class="form-group">
+    <label for="client_surname">Cognome</label>
+    <input type="text" id="client_surname" name="client_surname" value="{{ client.cliente_cognome }}" required>
+</div>
+<div class="form-group">
+    <label for="client_phone">Telefono</label>
+    <input type="text" id="client_phone" name="client_phone" value="{{ client.cliente_cellulare }}" required>
+</div>
+<div class="form-group">
+    <label for="client_date_of_birth">Data di nascita</label>
+    <input type="date" id="client_date_of_birth" name="client_date_of_birth" value="{{ client.cliente_data_nascita }}">
+</div>
+<div class="form-group">
+    <label for="client_email">E-mail</label>
+    <input type="text" id="client_email" name="client_email" placeholder="E-mail" value="{{ client.cliente_email if client else '' }}">
+</div>
+        <button type="submit" class="btn btn-primary">Salva Modifiche</button>
+        <a href="{{ url_for('settings.settings_home') }}" class="btn btn-secondary">Annulla</a>
+    </form>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const emailInput = document.getElementById('client_email');
+    if (emailInput) {
+        emailInput.addEventListener('input', function() {
+            const value = this.value.trim();
+            const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+            if (value && value !== "None" && !emailRegex.test(value)) {
+                this.setCustomValidity("Formato email non valido. Usa un formato valido o 'None'.");
+            } else {
+                this.setCustomValidity("");
+            }
+        });
+
+        // Aggiungi validazione al submit per bloccare invio se invalido
+        const form = emailInput.closest('form');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                const value = emailInput.value.trim();
+                if (value && value !== "None" && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)) {
+                    e.preventDefault();
+                    alert("Formato email non valido. Usa un formato valido o 'None'.");
+                    emailInput.focus();
+                }
+            });
+        }
+    }
+});
+</script>
+{% endblock %}

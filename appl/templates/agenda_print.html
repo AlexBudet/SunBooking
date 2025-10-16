@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Agenda del {{ date }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/print_agenda.css') }}">
+</head>
+<body>
+  <h2>Agenda del {{ date }}</h2>
+  <table class="agenda-table">
+    <thead>
+      <tr>
+        <th>Ora</th>
+        <th>Cliente</th>
+        <th>Servizio</th>
+        <th>Operatore</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for appt in appointments %}
+      <tr>
+        <td>{{ appt.start_time.strftime('%H:%M') }}</td>
+        <td>{{ appt.client.cliente_nome }} {{ appt.client.cliente_cognome }}</td>
+        <td>{{ appt.service.servizio_nome }}</td>
+        <td>{{ appt.operator.user_nome }} {{ appt.operator.user_cognome }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

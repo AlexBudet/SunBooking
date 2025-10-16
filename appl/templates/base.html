@@ -1,0 +1,391 @@
+<!-- appl/templates/base.html -->
+<!DOCTYPE html>
+<html lang="it">
+    <head>
+        <style>
+#quarterResetIcon:hover,
+.d-flex.align-items-center > button:hover {
+  color: lightseagreen !important;
+}
+          </style>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SunBooking</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-datepicker@1.10.0/dist/css/bootstrap-datepicker.min.css">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+        <meta name="csrf-token" content="{{ csrf_token() }}">
+    </head>    
+<body>
+    <header>
+        <div style="width:100%">
+            <nav class="navbar navbar-expand-lg navbar-light bg-light">
+<ul class="navbar-nav mx-auto">
+    <li class="nav-item"><a class="nav-link" href="{{ url_for('calendar.calendar_home') }}">Calendario</a></li>
+    <li class="nav-item"><a class="nav-link" href="{{ url_for('cassa.cassa') }}">Cassa</a></li>
+    <li class="nav-item"><a class="nav-link" href="{{ url_for('report.report') }}">Report</a></li>
+    <li class="nav-item"><a class="nav-link" href="{{ url_for('settings.settings_home') }}">Impostazioni</a></li>
+<li class="nav-item">
+    <a class="nav-link text-dark" href="{{ url_for('logout') }}" id="logout-link">
+        <i class="bi bi-box-arrow-right" tooltip="esci"></i>
+    </a>
+</li>
+</ul>
+            </nav>
+        </div>
+    </header>
+<main>
+      <div id="flash-container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }}" role="alert">
+                        {{ message }}
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    {% block content %}
+    {% endblock %}
+</main>
+    <footer class="bg-light py-3 text-center">
+        <p>&copy; 2025 SunBooking</p>
+    </footer>
+
+<!-- Modal OFFLINE globale -->
+<div class="modal fade" id="offlineModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="offlineModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border:2px solid #dc3545">
+      <div class="modal-header">
+        <h5 class="modal-title" id="offlineModalLabel">Connessione assente</h5>
+      </div>
+      <div class="modal-body">
+        <p>Sembri offline. Le operazioni verso il server sono temporaneamente non disponibili. Prova ad aggiornare la pagina, se il problema persiste controlla la connessione a internet.</p>
+        <hr>
+  <div class="d-grid gap-2">
+    <button id="btnSaveNextAppointmentsXlsx"  type="button" class="btn btn-outline-success">Scarica file Excel prossimi appuntamenti</button>
+    <button id="btnSaveNextAppointmentsPdf"   type="button" class="btn btn-outline-primary">Scarica PDF prossimi appuntamenti</button>
+  </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.0/jspdf.plugin.autotable.min.js"></script>
+
+<script>
+  // ---- Solo logica modal offline (nessuna altra logica toccata) ----
+document.addEventListener('DOMContentLoaded', function () {
+  // Conferma logout
+  const logoutLink = document.querySelector('a[href="{{ url_for("logout") }}"]');
+  if (logoutLink) {
+    logoutLink.addEventListener('click', function (e) {
+      if (!confirm("Vuoi veramente terminare la sessione?")) {
+        e.preventDefault();
+      }
+    });
+  }
+
+  // Logica modal offline
+  const offlineModalEl = document.getElementById('offlineModal');
+  const offlineModal = offlineModalEl ? new bootstrap.Modal(offlineModalEl) : null;
+  const NEXT_APPTS_URL = "/calendar/api/next_appointments";
+  const CHECK_MS = 20000;
+
+  window._offlineOrDbDown = false;
+
+  function applyOfflineState() {
+    if (window._offlineOrDbDown) {
+      if (offlineModal) { offlineModal.show(); }
+    } else {
+      try { if (offlineModal) { offlineModal.hide(); } } catch (_) {}
+    }
+  }
+
+  function fetchWithTimeout(url, ms) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { cache: 'no-store', signal: ctrl.signal })
+      .finally(() => clearTimeout(t));
+  }
+
+  async function probeConnectivity() {
+    // Prima controlla navigator.onLine (info diretta dal browser/sistema)
+    if (navigator.onLine === false) {
+      window._offlineOrDbDown = true;
+      applyOfflineState();
+      return;
+    }
+    // Poi prova a raggiungere il server locale per confermare
+    try {
+      const resp = await fetchWithTimeout(NEXT_APPTS_URL, 60000);
+      window._offlineOrDbDown = !(resp && resp.ok);
+    } catch (_) {
+      window._offlineOrDbDown = true;
+    }
+    applyOfflineState();
+  }
+
+  // Ascolta eventi online/offline del browser
+  window.addEventListener('online', probeConnectivity);
+  window.addEventListener('offline', probeConnectivity);
+
+  // Controllo iniziale e periodico
+  probeConnectivity();
+  setInterval(probeConnectivity, CHECK_MS);
+
+  // Prefetch dati (solo se online)
+  const PREFETCH_TTL_MS = 10 * 60 * 1000;
+  const PREFETCH_INTERVAL_MS = 5 * 60 * 1000;
+
+  async function prefetchNextAppointments(force = false) {
+    try {
+      if (navigator.onLine === false || window._offlineOrDbDown) return;
+      const now = Date.now();
+      const lastTs = parseInt(localStorage.getItem('report_next_appointments_ts') || '0', 10);
+      if (!force && (now - lastTs) < PREFETCH_TTL_MS) return;
+      const resp = await fetchWithTimeout(NEXT_APPTS_URL, 5000);
+      if (!resp.ok) return;
+      const data = await resp.json().catch(() => null);
+      if (Array.isArray(data)) {
+        localStorage.setItem('report_next_appointments', JSON.stringify(data));
+        localStorage.setItem('report_next_appointments_ts', String(now));
+      }
+    } catch (e) {}
+  }
+
+  prefetchNextAppointments(true);
+  setInterval(() => prefetchNextAppointments(false), PREFETCH_INTERVAL_MS);
+  window.addEventListener('online', () => prefetchNextAppointments(false));
+});
+
+// === EXPORT "Prossimi appuntamenti" (XLSX / PDF) ===
+
+// 1) Legge la cache popolata
+function getNextAppointmentsCached() {
+  try {
+    const data = JSON.parse(localStorage.getItem('report_next_appointments') || '[]');
+    return Array.isArray(data) ? data : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+// 2) Normalizza le righe: "Nota" SOLO se blocco OFF
+function normalizeRow(x) {
+  const isOff = !!x.is_off;
+  return {
+    start_time: x.start_time || "",
+    client: isOff ? "OFF" : (x.client || ""),
+    service: isOff ? ""    : (x.service || ""),
+    operator: x.operator || "",
+    note: isOff ? (x.note || "") : "",
+    duration: isOff ? (x.duration || "") : "",   // <--- durata solo per OFF
+    shift_start: x.shift_start || "",
+    shift_end: x.shift_end || ""
+  };
+}
+
+// 3) Export XLSX (SheetJS)
+function exportXLSX(rows) {
+  if (typeof XLSX === "undefined") {
+    alert("Libreria XLSX non presente. Aggiungi lo script di SheetJS.");
+    return;
+  }
+
+  // Intestazione con data corrente
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2, '0');
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const yyyy = today.getFullYear();
+  const dataIt = `${dd}/${mm}/${yyyy}`;
+  const dataFile = `${dd}-${mm}-${yyyy}`;
+
+  // Tabella principale (senza colonna Data, con Durata solo per OFF)
+  const data = rows.map(r => ({
+    "Operatore": r.operator,
+    "Ora": r.start_time,
+    "Cliente": r.client,
+    "Servizio": r.service,
+    "Nota": r.note,
+    "Durata": r.duration || ""
+  }));
+  const header = ["Operatore","Ora","Cliente","Servizio","Nota","Durata"];
+
+  const ws = XLSX.utils.json_to_sheet(data, { header });
+
+  // Riga titolo "Agenda di [data]" (sopra la tabella)
+  XLSX.utils.sheet_add_aoa(ws, [[`Agenda di ${dataIt}`]], { origin: "A1" });
+
+  // Sposta la tabella di 2 righe in basso (titolo + riga vuota)
+  // Calcola range della tabella attuale
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const offset = 2; // righe da spostare
+  const newRange = { s: { r: range.s.r + offset, c: range.s.c }, e: { r: range.e.r + offset, c: range.e.c } };
+  ws['!ref'] = XLSX.utils.encode_range(newRange);
+
+  // --- Aggiungi TURNI dopo la tabella ---
+  // Costruisci mappa operatore -> (start,end) prendendo la prima coppia valida
+  const turns = {};
+  for (const r of rows) {
+    if (!turns[r.operator]) {
+      turns[r.operator] = { start: r.shift_start || "", end: r.shift_end || "" };
+    } else {
+      if (!turns[r.operator].start && r.shift_start) turns[r.operator].start = r.shift_start;
+      if (!turns[r.operator].end && r.shift_end) turns[r.operator].end = r.shift_end;
+    }
+  }
+
+  // Individua la prima riga libera dopo la tabella
+  const finalRange = XLSX.utils.decode_range(ws['!ref']);
+  const startRow = finalRange.e.r + 2; // una riga vuota tra tabella e turni
+
+  const turnRows = [[""], ["Turni del giorno"], [""]]; // spaziatura
+  Object.entries(turns).sort(([a],[b]) => a.localeCompare(b)).forEach(([op, v]) => {
+    const line = `${op.toUpperCase()} - turno inizio ${v.start || ""} - turno fine ${v.end || ""}`;
+    turnRows.push([line]);
+  });
+
+  XLSX.utils.sheet_add_aoa(ws, turnRows, { origin: { r: startRow, c: 0 } });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `Agenda del ${dataFile}`);
+  XLSX.writeFile(wb, `Appuntamenti del ${dataFile}.xlsx`);
+}
+
+// 4) Export PDF (jsPDF + autoTable)
+function exportPDF(rows) {
+  const jspdfNS = window.jspdf;
+  if (!jspdfNS || typeof jspdfNS.jsPDF !== "function") {
+    alert("jsPDF non è caricato.");
+    return;
+  }
+  const { jsPDF } = jspdfNS;
+
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2, '0');
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const yyyy = today.getFullYear();
+  const dataIt = `${dd}/${mm}/${yyyy}`;
+  const dataFile = `${dd}-${mm}-${yyyy}`;
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+
+  // Titolo
+  doc.setFontSize(12);
+  doc.text(`Agenda del ${dataIt}`, 40, 40);
+
+  // Tabella senza colonna "Data", con colonna "Durata" (solo OFF)
+  const head = [["Operatore","Ora","Cliente","Servizio","Nota","Durata"]];
+  const body = rows.map(r => [r.operator, r.start_time, r.client, r.service, r.note, r.duration || ""]);
+
+  doc.autoTable({
+    head,
+    body,
+    startY: 60,
+    styles: { fontSize: 9, halign: 'center', valign: 'middle', cellPadding: 2, lineWidth: 0.45, lineColor: [0,0,0] },
+    headStyles: { fillColor: [220,220,220], textColor: [0,0,0], fontStyle: 'bold' },
+    bodyStyles: { halign: 'center', valign: 'middle' },
+    alternateRowStyles: { fillColor: [245,245,245] },
+    tableLineColor: [0,0,0],
+    tableLineWidth: 0.45,
+    pageBreak: 'auto',
+    margin: { top: 10 }
+  });
+
+  // Turni per operatore, in fondo
+  const turns = {};
+  for (const r of rows) {
+    if (!turns[r.operator]) {
+      turns[r.operator] = { start: r.shift_start || "", end: r.shift_end || "" };
+    } else {
+      if (!turns[r.operator].start && r.shift_start) turns[r.operator].start = r.shift_start;
+      if (!turns[r.operator].end && r.shift_end) turns[r.operator].end = r.shift_end;
+    }
+  }
+
+  let y = doc.lastAutoTable.finalY + 40;
+  doc.setFontSize(10);
+  doc.text(`Turni del ${dataFile}`, 40, y);
+  y += 14;
+
+  const pageH = doc.internal.pageSize.getHeight();
+  Object.entries(turns).sort(([a],[b]) => a.localeCompare(b)).forEach(([op, v]) => {
+    const line = `${op.toUpperCase()} - turno inizio ${v.start || ""} - turno fine ${v.end || ""}`;
+    if (y > pageH - 40) { doc.addPage(); y = 40; }
+    doc.text(line, 40, y);
+    y += 14;
+  });
+
+  doc.save(`Appuntamenti del ${dataFile}.pdf`);
+}
+
+// 5) Hook ai bottoni del modal (registrati SEMPRE, anche offline)
+const btnXLSX = document.getElementById('btnSaveNextAppointmentsXlsx');
+if (btnXLSX) {
+  btnXLSX.addEventListener('click', function () {
+    const rows = getNextAppointmentsCached().map(normalizeRow);
+    if (!rows.length) { alert("Nessun dato in cache."); return; }
+    exportXLSX(rows);
+  });
+}
+
+const btnPDF = document.getElementById('btnSaveNextAppointmentsPdf');
+if (btnPDF) {
+  btnPDF.addEventListener('click', function () {
+    const rows = getNextAppointmentsCached().map(normalizeRow);
+    if (!rows.length) { alert("Nessun dato in cache."); return; }
+    exportPDF(rows);
+  });
+}
+</script>
+<script>
+  // Aggiungi questo al tuo file JS
+document.addEventListener('DOMContentLoaded', function() {
+    const flashContainer = document.getElementById('flash-container');
+    if (flashContainer) {
+        const alerts = flashContainer.querySelectorAll('.alert');
+        alerts.forEach(function(alert) {
+            setTimeout(function() {
+                // Aggiungi una classe per l'animazione di fade-out se vuoi
+                alert.style.transition = 'opacity 0.5s ease';
+                alert.style.opacity = '0';
+                alert.style.marginTop = '100px';
+                alert.style.zIndex = '49000';
+                // Rimuovi l'elemento dopo la transizione
+                setTimeout(() => alert.remove(), 5000);
+            }, ); //
+        });
+    }
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const flashContainer = document.getElementById('flash-container');
+    if (flashContainer) {
+        const alerts = flashContainer.querySelectorAll('.alert');
+        alerts.forEach(function(alert) {
+            setTimeout(function() {
+                // Aggiungi una classe per l'animazione di fade-out se vuoi
+                alert.style.transition = 'opacity 0.5s ease';
+                alert.style.opacity = '0';
+                alert.style.marginTop = '100px';
+                alert.style.zIndex = '49000';
+                // Rimuovi l'elemento dopo la transizione
+                setTimeout(() => alert.remove(), 5000);
+            }, ); //
+        });
+    }
+});
+</script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

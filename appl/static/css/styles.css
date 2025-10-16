@@ -1,0 +1,1996 @@
+/* appl/static/styles.css */
+
+/* Messaggi flash in base.html */
+#flash-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050; /* Assicura che sia sopra gli altri elementi */
+    width: 350px;
+}
+
+#flash-container .alert {
+    margin-bottom: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    opacity: 0;
+    animation: fadeIn 0.5s forwards;
+}
+
+@keyframes fadeIn {
+    to {
+        opacity: 1;
+    }
+}
+
+/* Generale */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+    user-select: none; /* Disabilita la selezione del testo */
+}
+
+header {
+    background-color: #ffffff;
+    height: 60px;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 10999;
+    text-align: center;
+}
+
+header h1, header nav {
+    margin: 0;
+    line-height: 70px;
+}
+
+nav ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+nav ul li {
+    display: inline;
+    margin: 0 10px;
+}
+
+nav ul li a {
+    color: #fff;
+    text-decoration: none;
+}
+
+.navbar {
+    min-height: 45px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+main {
+    padding: 0px;
+}
+
+footer {
+display: none
+}
+
+.tooltip {
+    z-index: 12500 !important;
+    opacity: 1;
+}
+
+.modal-backdrop {
+    z-index: 12400; /* Sfondo del modal */
+}
+
+.modal {
+    z-index: 12500; /* Priorità al modal rispetto allo sfondo */
+    overflow: visible !important;
+}
+
+.modal-dialog {
+    max-width: 700px; /* Regola la larghezza massima */
+    margin: 1.75rem auto; /* Centra il modal */
+    z-index: 12510;
+}
+
+.modal-content {
+    border-radius: 8px; /* Bordo arrotondato per estetica */
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5); /* Ombreggiatura */
+    overflow: visible !important;
+    z-index: 12520;
+}
+
+.modal-body {    
+    overflow: visible !important;
+    max-height: 70vh; /* Limita altezza massima a 70% della viewport */
+    padding: 1rem;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Flash Messages */
+.flash {
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+}
+.flash.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+.flash.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* Form Styles */
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+/* Button Styles */
+.btn {
+    display: inline-block;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    border-radius: 4px;
+    border: none;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #0069d9;
+}
+
+.btn-close {
+    background-color: #f5f5f5;
+    border: none;
+    color: #000;
+}
+
+/* Table and Cells */
+.table {
+    width: 100%;
+    border-collapse: collapse; /* o lascia separate se preferisci, ma non forzare “fixed” */
+  }
+
+td {
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+.calendar-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+    margin-bottom: 20px;
+    color: inherit;
+}
+
+.calendar-table thead th {
+    position: sticky;
+    top: 72px; /* o più alto se l’header è maggiore */
+    z-index: 10000;
+    background: #f8f8f8;
+    text-align: center;
+}
+
+.calendar-table thead th a {
+    color: #87647c; /* Imposta il colore del testo */
+    font-family: Helvetica, sans-serif; /* Imposta la famiglia del font */
+    font-size: 19px; /* Imposta la dimensione del font */
+    font-weight: bold; /* Imposta il font in bold */
+    text-transform: uppercase; /* Converte il testo in tutte maiuscole */
+    text-shadow: 0.5px 0.5px 0.5px rgba(139, 139, 139, 0.4); /* Aggiunge ombra nera con opacità 0.4 */
+}
+
+.calendar-table thead th a.solarium {
+    color: rgb(83, 132, 175) !important;  /* Mantieni il colore blu se desiderato */
+}
+
+.calendar-table thead th:first-child {
+    width: 80px; /* o il valore desiderato */
+}
+
+/* Definizione della variabile CSS per l'altezza di un quarto d'ora */
+:root {
+    --quarter-px: 60px; /* Imposta il valore desiderato, ad esempio 60px per 15 minuti */
+    --result-action-width: 26px;
+}
+
+.selectable-cell {
+    height: var(--quarter-px);
+    overflow: visible !important;
+    position: relative !important;
+}
+
+.selectable-cell.highlight.selectable-cell.highlight {
+    background-color: rgba(0, 123, 255, 0.2);
+}
+
+.calendar-table th:first-child,
+.calendar-table th:last-child,
+.calendar-table td:first-child,
+.calendar-table td:last-child {
+    width: 56px;
+    min-width: 56px;
+    max-width: 56px;
+}
+
+.hour-cell {
+    background-color: #f5f5f5;
+    font-weight: bold;
+    position: relative;
+    text-align: right;
+    padding-right: 4px;
+    vertical-align: top;
+}
+
+.hour-cell ~ td:not(.calendar-closed) {
+    background-color: #f5f5f5;
+  }
+
+.quarter-cell {
+    background-color: #ffffff;
+    border-top: 1px dashed #ddd;
+    font-size: 12px !important;
+    position: relative;
+    text-align: right;
+    padding-right: 5px;
+    vertical-align: top;
+}
+
+.quarter-cell ~ td:not(.calendar-closed) {
+    background-color: #ffffff;
+  }
+
+/* Appointments */
+.appointment-block {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Posiziona la drag-handle in alto e la resize-handle in fondo */
+    z-index: 1;
+    width: 100%;
+    box-sizing: border-box;
+    left: 0;
+    top: 0;
+    overflow: visible;
+    white-space: nowrap;
+    color: #fff;
+    font-size: 15px;
+    text-align: center;
+    text-overflow: ellipsis;
+    padding: 0px;
+    border-radius: 8px;
+    background-color: rgba(66, 133, 244, 0.9);
+}
+
+/* Variabili e layout della barra popup sopra al blocco */
+.appointment-block {
+  position: relative;           /* necessario per top assoluto */
+  --pb-cols: 6;
+  --pb-gap: 3px;
+  --pb-item-w: calc((100% - (var(--pb-gap) * (var(--pb-cols) - 1))) / var(--pb-cols));
+  --pb-fs: clamp(10px, calc(var(--pb-item-w) * 0.26), 18px);   /* testo */
+  --pb-icon: clamp(14px, calc(var(--pb-item-w) * 0.42), 26px); /* icone */
+}
+
+/* La barra dei popup occupa tutta la larghezza del blocco e sta sopra ad esso */
+.appointment-block .popup-buttons {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  display: none;                /* visibili solo su hover/active */
+  grid-template-columns: repeat(var(--pb-cols), minmax(0, 1fr));
+  gap: var(--pb-gap);
+  padding: 0;
+  top: auto !important;                     /* annulla top (anche inline) */
+  bottom: calc(100% + 1px) !important;  
+}
+
+
+/* Ogni pulsante: quadrato, centrato, leggibile */
+.appointment-block .popup-buttons .btn-popup {
+  box-sizing: border-box;
+  width: 100% !important;       /* 1 colonna della griglia */
+  aspect-ratio: 1 / 0.8 !important; /* altezza = larghezza */
+  height: auto !important;      /* determinata da aspect-ratio */
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center;
+  line-height: 1.1;
+  border-radius: 6px;
+  /* migliora leggibilità del testo/icona */
+  font-size: var(--pb-fs) !important;
+  padding: 0;                   /* niente padding che sballa l’aspect-ratio */
+  background-color: #000000; /* default */
+  color: #fff;
+  box-shadow: 0 0 0 0.8px hsla(0, 0%, 96%, 0.76) !important; /* anello uniforme da 2px */
+}
+
+/* Icone dentro i pulsanti: dimensione proporzionale */
+.appointment-block .popup-buttons .btn-popup i,
+.appointment-block .popup-buttons .btn-popup svg {
+  font-size: var(--pb-icon) !important;
+  line-height: 1 !important;
+}
+
+/* Evita scale al hover che rompono l’allineamento */
+.appointment-block .popup-buttons .btn-popup:hover {
+  transform: none !important;
+}
+
+/* Pulsante WhatsApp: scala in proporzione ma resta ancorato in basso a destra */
+.appointment-block .btn-popup.whatsapp-btn {
+  left: auto !important;
+  right: calc(100% + 1px) !important;
+  position: absolute !important;
+  bottom: 1px !important;
+  box-sizing: border-box;
+  width: calc(var(--pb-item-w) * 0.9) !important;
+  aspect-ratio: 1 / 1 !important;
+  height: auto !important;
+  box-shadow: 0 0 0 0.8px hsla(0, 0%, 96%, 0.76) !important; /* anello uniforme da 2px */
+}
+
+.appointment-block .btn-popup.whatsapp-btn i,
+.appointment-block .btn-popup.whatsapp-btn svg {
+  font-size: clamp(20px, 4.8vw, 40px);
+  line-height: 1;
+}
+
+/* SVG e IMG dentro ai popup: dimensione proporzionale al bottone */
+.appointment-block .popup-buttons .btn-popup svg,
+.appointment-block .popup-buttons .btn-popup img {
+  width: calc(var(--pb-item-w) * 0.54) !important;
+  height: calc(var(--pb-item-w) * 0.54) !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+}
+
+/* WhatsApp: stessa proporzione per l’icona */
+.appointment-block .btn-popup.whatsapp-btn i,
+.appointment-block .btn-popup.whatsapp-btn svg {
+  font-size: var(--pb-icon) !important;
+  line-height: 1 !important;
+}
+
+/* Mantieni visibilità come da logica esistente */
+.appointment-block:hover:not(.disable-popup) .popup-buttons,
+.appointment-block.active-popup .popup-buttons,
+.appointment-block .popup-buttons:hover {
+  display: grid !important;
+}
+
+.appointment-block.dragging .popup-buttons {
+    display: none !important;
+}
+
+/* Mostra i popup se il blocco è in hover (solo se non disabilitato) o se è attivo, oppure se il mouse è sopra i pulsanti */
+.appointment-block:hover:not(.disable-popup) .popup-buttons,
+.appointment-block.active-popup .popup-buttons,
+.appointment-block .popup-buttons:hover {
+    display: flex;
+}
+
+.appointment-block:hover .popup-buttons,
+.appointment-block.active-popup .popup-buttons,
+.appointment-block .popup-buttons:hover {
+    display: flex;
+}
+
+/* Aggiunta di una classe per il contenuto centrale non cliccabile */
+.appointment-content {
+    flex-grow: 1;
+    line-height: normal; /* Ripristina una gestione normale dell'altezza della linea */
+    margin-top: 4px;     /* Spazio tra la drag-handle e il contenuto */
+    display: flex;
+    flex-direction: column; /* Posiziona le righe una sotto l'altra */
+    justify-content: top; /* Centra verticalmente le righe */
+    gap: 2px; /* Aggiunge uno spazio tra le righe di cliente e servizio */
+    pointer-events: auto;
+    color: white;
+    text-decoration: none;
+}
+
+.appointment-content a {
+    pointer-events: auto;
+    color: inherit !important;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+
+.appointment-content p {
+    margin: 0;           /* Elimina i margini esterni */
+    line-height: 1.2;    /* Aumenta leggermente l'altezza delle righe per evitare sovrapposizioni */
+    overflow: hidden;    /* Evita che il testo esca fuori dai limiti */
+    text-overflow: ellipsis; /* Taglia il testo se troppo lungo */
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.action-buttons button {
+    padding: 5px 10px;
+    border: none;
+    cursor: pointer;
+}
+
+.action-buttons button.edit {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.action-buttons button.delete {
+    background-color: #f44336;
+    color: white;
+}
+
+/* Utility Classes */
+.readonly {
+    background-color: #f0f0f0;
+    cursor: not-allowed;
+}
+
+.visible {
+    display: block;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Nasconde i giorni non spuntati */
+.day-checkbox:not(:checked) + label {
+    display: none;
+}
+
+/* Aggiornamento per fare in modo che i puntini coprano tutta la barra */
+.drag-handle {
+    width: 99%;
+    margin: 0;
+    height: 12px;
+    background: radial-gradient(circle, currentColor 1px, transparent 1px);
+    background-size: 4px 4px;
+    cursor: grab;
+    user-select: none;
+    pointer-events: auto;
+    opacity: 0.3;
+}
+
+.drag-handle:active {
+    /* Quando tengo premuto (clic) sulla drag-handle: cursore uguale ma 1px più piccolo per lato */
+    cursor: grabbing;
+}
+
+.resize-handle {
+    align-self: center;
+    width: 98%;
+    height: 8px;
+    background-image: 
+        linear-gradient(to right, currentColor, currentColor),
+        linear-gradient(to right, currentColor, currentColor),
+        linear-gradient(to right, currentColor, currentColor);
+    background-size: 100% 1px;
+    background-position: top center, center center, bottom center;
+    background-repeat: no-repeat;
+    opacity: 0.2;
+    cursor: ns-resize;
+    user-select: none;
+    pointer-events: auto;
+}
+
+.results-dropdown {
+    position: absolute;
+    background-color: #fff;
+    width: calc(100% - 2px);
+    max-height: 440px; /* Limita l'altezza del dropdown */
+    overflow-y: auto; /* Aggiunge uno scrollbar per i risultati */
+    box-sizing: border-box;
+    z-index: 1055;
+    border-radius: 5px; /* Arrotonda gli angoli */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Aggiunge un'ombra per distinguere meglio */
+}
+
+.results-dropdown .dropdown-item {
+    padding: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    border-bottom: 1px solid #f0f0f0; /* Linea separatrice */
+    display: flex; /* Permette layout flessibile */
+    justify-content: space-between; /* Spaziatura tra testo e pulsante */
+    align-items: center; /* Allineamento verticale */
+}
+
+.results-dropdown .dropdown-item:last-child {
+    border-bottom: none; /* Rimuove la linea dall'ultimo elemento */
+}
+
+.results-dropdown .dropdown-item:hover {
+    background-color: #f9f9f9; /* Evidenziazione al passaggio */
+}
+
+.results-dropdown .dropdown-item button {
+    padding: 5px 10px;
+    border: none;
+    cursor: pointer;
+    background-color: #e74c3c;
+    color: white;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.dropdown-item {
+    white-space: nowrap; /* Evita che i testi si spezzino */
+    overflow: hidden;
+    text-overflow: ellipsis; /* Testo tagliato con "..." */
+}
+
+.sticky-nav {
+    position: sticky;
+    top: 1px;  /* regola in base all'altezza dell'header fisso */
+    left: 15px;
+    z-index: 999;
+    background: #fff;
+    padding: 8px;
+  }
+
+.calendar-closed {
+    background-color: #f4f4f4;
+    background-image: repeating-linear-gradient(
+        150deg,
+        #dadada 0px,
+        #dadada 5px,
+        #eeeeee 5px,
+        #eeeeee 10px
+    );
+    border: 1px solid #dadada; /* stesso colore della trama */
+    box-sizing: border-box;
+}
+
+.calendar-closed.operator-off {
+    pointer-events: auto !important;
+    cursor: default !important;
+}
+
+.calendar-navigation {
+    display: inline-flex;
+    align-items: center;  /* allinea verticalmente */
+    gap: 6px;            /* distanza orizzontale tra i controlli */
+    position: fixed;
+    top: 60;
+    left: 0;
+    z-index: 11999;
+  }
+
+  /* Posiziona il pulsante "Crea blocco OFF" in basso a destra del modal, a 6px dal fondo */
+#createBlockOff,
+#btnCreateBlockOff,
+.create-block-off-btn {
+    position: absolute;
+    right: 24px;
+    bottom: 0px;      /* distanza dal margine basso */
+    min-width: 160px;
+}
+
+.appointment-block.off .popup-buttons {
+    display: none !important;
+}
+
+/* Assicurati che il contenitore del modal abbia position: relative */
+#CreateAppointmentModal .modal-content,
+.modal-content {
+    position: relative !important;
+}
+
+#CreateAppointmentForm {
+    position: relative;
+}
+  
+#dayOfWeek,
+#reportDayOfWeek {
+    display: inline-block;
+    width: 55px;
+    min-width: 38px;
+    text-align: center;
+    font-size: 1.2em;
+    font-weight: 600;
+    color: #1976d2;
+    margin-left: 8px;
+    text-transform: uppercase;
+}
+  /* Le frecce avanti/indietro */
+  .calendar-navigation .arrow-nav {
+    font-size: 1.5rem;       /* più grandi del normale */
+    color: #777;             /* grigio scuro */
+    text-decoration: none;   /* rimuove sottolineatura */
+    padding: 0 6px;          /* un po' di spazio orizzontale */
+  }
+  
+  .calendar-date-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.calendar-navigation .calendar-date-input,
+.calendar-date-input {
+    width: auto !important;
+    padding: 1px;
+    color: #000 !important;
+    background-color: #fff !important;
+    border: 1px solid #ccc;
+}
+
+/* Overlay per mostrare la data formattata, allineato a sinistra */
+#formattedDate {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none; /* Permette di cliccare sull'input sottostante */
+    display: inline-block;
+    text-align: left;
+    color: black;
+    font-size: 14px;
+    padding: 0px;  /* Personalizza il padding per ottenere l'altezza e la spaziatura desiderata */
+    /* La larghezza verrà determinata dal contenuto (testo + eventuale icona) */
+}
+
+  /* Pulsante “Vai a OGGI”: sfondo bianco, testo grigio scuro */
+  .calendar-navigation .btn-today {
+    display: inline-block;
+    background-color: #fff;
+    color: #333;            /* grigio scuro per il testo */
+    font-size: 0.9rem;      /* leggermente più piccolo di 1rem */
+    border: 1px solid #ccc; /* contorno grigio chiaro */
+    padding: 5px 5px;       /* dimensioni compatte */
+    text-decoration: none;  /* niente sottolineatura */
+    border-radius: 4px;     /* bordi leggermente arrotondati */
+  }
+  .calendar-navigation .btn-today:hover {
+    background-color: #fcf1f7; /* leggera evidenziazione al hover */
+  }  
+
+  .calendar-fullwidth {
+    position: relative;
+    width: 100vw;               /* L’intera larghezza del viewport */
+    left: 50%;                  /* Trucchetto per uscire dal container */
+    margin-left: -50vw;  
+}
+
+@media (max-width: 768px) {
+    .modal-dialog {
+        max-width: 95%; /* Usa il 95% dello schermo */
+    }
+
+    .modal-body {
+        max-height: 60vh; /* Limita altezza per viewport più piccole */
+    }
+}
+/* Aggiunta popup buttons per appointment block */
+.popup-buttons {
+    display: none;
+    z-index: 2000;
+    pointer-events: auto !important;
+}
+
+.btn-popup.whatsapp-btn {
+  position: absolute;
+  left: -30px !important; /* distanza dal bordo sinistro, regola se serve */
+  bottom: 0 !important;   /* attaccato in basso */
+  background: #111;
+  color: #25D366;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transition: background 0.2s;
+}
+.btn-popup.whatsapp-btn:hover {
+  background: #222;
+  color: #25D366;
+}
+.btn-popup.whatsapp-btn i.bi-whatsapp {
+  font-size: 1.4em;
+}
+
+.appointment-block.off .btn-popup.whatsapp-btn {
+    display: none !important;
+}
+
+.tooltip-whatsapp {
+  z-index: 12000 !important;
+}
+
+/* NON nascondiamo TUTTA la sezione popup-buttons, ma solo i pulsanti “extra” */
+.appointment-block.disable-popup .popup-buttons .sposta,
+.appointment-block.disable-popup .popup-buttons .pagamento,
+.appointment-block.disable-popup .popup-buttons .nota,
+.appointment-block.disable-popup .popup-buttons .aggiungi-servizi {
+    display: flex !important;
+}
+
+.btn-popup {
+    background: rgba(0, 0, 0, 1);
+    color: #fff;
+    border: none;
+    padding: 5px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    z-index: 2000;
+    transform-origin: bottom;
+}
+
+.btn-popup:hover {
+    transform: scale(1.2); /* ingrandisce di circa 2px su un'icona da 20px */
+    color: #ff9100 !important; /* colore di sfondo più chiaro */
+    transition: transform 0.1s, background-color 0.1s;
+  }
+
+  .appointment-block .btn-popup.whatsapp-btn {
+  display: none;
+}
+
+.appointment-block:hover:not(.disable-popup) .btn-popup.whatsapp-btn,
+.appointment-block.active-popup .btn-popup.whatsapp-btn {
+  display: inline-flex !important; /* visibile solo su hover/active */
+}
+  
+.note-popup {
+    display: none;
+    background-color: #6e6e6e;
+    color: #ffa5c6;
+    border-radius: 4px;
+    font-size: 15px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    max-height: 600px;
+    overflow-y: auto;
+    z-index: 2100;
+}
+
+.note-content {
+    padding: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Stili per il pulsante "Note" */
+.btn-note-empty {
+    background-color: #6c757d !important; /* grigio per note vuote */
+    color: #ffffff !important;             /* forza testo bianco anche se inline */
+    border-color: #6c757d !important;
+    box-shadow: none !important;
+}
+
+.btn-note-filled {
+    background-color: #ffc107 !important; /* giallo per note piene */
+    color: #212529 !important;            /* testo scuro leggibile */
+    border-color: #ffc107 !important;
+    box-shadow: none !important;
+}
+
+.appointment-block.note-off {
+    background-color: #d2d2d2 !important;
+    background-image: radial-gradient(circle, #ffffff 0.5px, transparent 1px);
+    background-size: 10px 10px;
+  }
+
+  .appointment-block.note-off .my-spia,
+  .appointment-block.note-off .no-show-button,
+  .appointment-block.note-off .chain-button,
+  .appointment-block.note-off .note-indicator {
+    display: none !important;
+  }
+
+  /* Fai apparire i popup buttons solo quando il mouse è sopra */
+.appointment-block.note-off .popup-buttons {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  
+  /* Per i blocchi OFF, nascondi il contenuto esistente */
+.appointment-block.note-off .appointment-content p {
+    display: none;
+  }
+
+  /* Nascondi i pulsanti copia e elimina nei blocchi OFF di default */
+.appointment-block.note-off .btn-popup.copy-off-block,
+.appointment-block.note-off .btn-popup.delete-off-block {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* Al mouseover sul blocco OFF, mostra i pulsanti */
+.appointment-block.note-off:hover .btn-popup.copy-off-block,
+.appointment-block.note-off:hover .btn-popup.delete-off-block {
+  opacity: 1;
+}
+
+  .my-spia,
+  .no-show-button {
+    position: absolute;
+    top: 13px;
+    background-color: rgba(255, 255, 255, 0.3); /* Bianco al 30% */
+    border: 1px solid rgba(0, 0, 0, 0.4); /* Bordo nero al 40% */
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 2100;
+    pointer-events: auto;
+    opacity: 0;
+    transition: opacity 0.1s ease;
+}
+
+/* Posizionamento specifico per ciascun pulsante */
+.my-spia {
+    right: 9px; /* aggiungi questa riga */
+    left: auto; /* aggiungi questa riga */
+    background-color: rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(0, 0, 0, 0.4);
+}
+
+.no-show-button {
+    top: auto;
+    bottom: 1px;   /* <--- Cambia qui da 10px a 1px */
+    right: 9px;
+    color: rgb(79, 79, 79);
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Posiziona my-spia in alto a 1px dal bordo del blocco */
+.appointment-block .my-spia {
+    position: absolute;
+    top: 1px;
+    right: 6px;
+    left: auto;
+    z-index: 2101;
+}
+
+/* Posiziona no-show in basso a 1px dal fondo del blocco */
+.appointment-block .btn-popup.no-show-button {
+    position: absolute;
+    bottom: 1px;
+    right: 6px;
+    left: auto;
+    z-index: 2101;
+}
+
+/* La spia diventa visibile al passaggio del mouse sul blocco appuntamento */
+.appointment-block:hover .my-spia,
+.appointment-block:hover .no-show-button {
+    opacity: 1;
+}
+
+/* La spia deve essere sempre visibile se è attiva o lampeggiante */
+.my-spia.active, 
+.my-spia.blink,
+.no-show-button[data-status="3"] {
+    opacity: 1 !important; /* !important per sovrascrivere altri stili */
+}
+
+.my-spia.active,
+.no-show-button[data-status="3"] {
+    display: flex !important; /* Solo per no-show-button */
+}
+
+@keyframes blinkYellow {
+    0% { background-color: rgba(255, 255, 0, 0.837); }
+    50% { background-color: transparent; }
+    100% { background-color: rgb(255, 255, 0); }
+}
+
+.my-spia.active {
+    background-color: rgba(255, 234, 0, 0.905);
+    animation: blinkYellow 1s infinite; /* Applica l'animazione gialla */
+}
+
+.my-spia.blink{
+    animation: blinkRed 1s infinite;
+}
+
+/* Aggiungi lo sfondo a strisce diagonali al blocco appuntamento quando la spia è attiva o lampeggiante */
+.appointment-block:has(.my-spia.active),
+.appointment-block:has(.my-spia.blink) {
+    background-image: repeating-linear-gradient(
+        135deg, 
+        rgba(255, 255, 255, 0.09) 0px,
+        rgba(255, 255, 255, 0.09) 10px,
+        rgba(0, 0, 0, 0.18) 10px,
+        rgba(0, 0, 0, 0.18) 20px
+    );
+    background-blend-mode: overlay !important;
+}
+
+@keyframes blinkRed {
+    0% { background-color: red; }
+    50% { background-color: transparent; }
+    100% { background-color: red; }
+}
+
+.appointmentNavigator {
+    position: fixed;
+    top: 0px;
+    right: 5px;
+    width: 23vw;           /* proporzionale alla larghezza della pagina */
+    max-width: 400px;      /* limite massimo per schermi grandi */
+    min-width: 220px;      /* limite minimo per schermi piccoli */
+    padding: 10px;
+    background-color: #fff;
+    z-index: 10999;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.clear-navigator-btn {
+    display: none;
+}
+
+.appointmentNavigator.open .clear-navigator-btn {
+    display: inline-block;
+}
+
+/* Imposta il container dei pseudo-blocchi per sfruttare l'intera larghezza del navigator */
+#pseudoBlockContainer {
+    width: 100%; /* usa tutta la larghezza del container genitore */
+    white-space: nowrap;
+    overflow-x: auto;
+    border: 1px solid #b8b8b8;
+    padding: 5px;
+}
+
+.pseudo-block {
+    border: 1px solid #ccc;
+    margin-bottom: 5px; /* opzionale, per separare i blocchi */
+    padding: 5px; /* se necessario */
+    color: black;
+    background-color: #f5f5f5;
+}
+
+/* Aggiungi questo codice al tuo file styles.css */
+.pseudo-block button {
+    color: red;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+
+  /* Stile per evidenziare il pseudoblocco selezionato */
+.pseudo-block.selected {
+    border: 2px solid #007bff; /* Bordino blu */
+    background-color: rgba(0, 123, 255, 0.1); /* Sfondo leggermente blu */
+}
+
+  .appointment-block .note-indicator {
+    position: absolute;
+    bottom: 10px; /* 1px sotto la drag-handle (che è alta 12px) */
+    left: 11px;
+    width: 15px;
+    height: 15px;
+    display: none; /* Invisibile di default */
+    text-align: center;
+    line-height: 16px;color: rgba(57, 57, 57, 0.4);
+    color: rgb(255, 255, 0);
+}
+
+.appointment-block .note-indicator i {
+    font-size: 16px;
+}
+
+  /* Mostra il bottone quando si passa sopra al blocco */
+  .appointment-block:hover .no-show-button {
+    opacity: 0.8;
+    display: flex;
+  }
+  
+/* Stile per l'appuntamento "non arrivato" - regola più specifica */
+.appointment-block[data-status="3"] {
+    background-color: #000 !important;
+    background-image: radial-gradient(#1e1e1e 1px, transparent 1px) !important;
+    background-size: 5px 5px !important; /* Pattern a pois */
+    color: white !important;
+  }
+  
+  /* Priorità massima per evitare interferenze con altri stati */
+  .appointment-block[data-status="3"],
+  .appointment-block[data-status="3"] * {
+    color: white !important;
+  }
+  
+  /* Importante: previene l'applicazione degli stili dello status 1 quando è attivo lo status 3 */
+  .appointment-block[data-status="3"].cliente-in-istituto {
+    background-image: radial-gradient(#555 1px, transparent 1px) !important;
+    background-color: #000 !important;
+  }
+
+  /* Nascondi i popup-buttons quando il tooltip del no-show è visibile */
+.no-show-button:hover ~ .popup-buttons,
+.no-show-button:hover + .popup-buttons,
+.no-show-button:hover .popup-buttons,
+.appointment-block:has(.no-show-button:hover) .popup-buttons {
+  display: none !important;
+}
+
+/* Correzione per il popup note che non appare */
+.no-show-button:hover ~ .note-popup,
+.no-show-button:hover + .note-popup,
+.appointment-block:has(.no-show-button:hover) .note-popup {
+  display: block !important; /* Forza la visualizzazione del popup note anche durante hover su no-show-button */
+}
+
+/* Assicurati che il popup note si attivi normalmente con l'hover */
+.appointment-block:hover .note-popup {
+  display: block !important;
+}
+
+/* Nascondi sempre il pulsante "catena" */
+.appointment-block .chain-button {
+    display: none !important; /* Impedisce la visualizzazione in qualsiasi caso */
+    pointer-events: none; /* Disabilita qualsiasi interazione */
+}
+
+/* Uniforma font-size e font-family tra input, dropdown e navigator */
+#serviceSearchInput,
+#clientSearchInput,
+#serviceInputNav,
+#clientSearchInputNav,
+.results-dropdown .dropdown-item,
+#serviceResults .dropdown-item,
+#clientResults .dropdown-item,
+#serviceResultsNav .dropdown-item,
+#clientResultsNav .dropdown-item,
+#selectedServicesList .pseudo-block {
+    font-size: 1em;      /* oppure scegli la dimensione che preferisci */
+    font-family: Arial, Helvetica, sans-serif;    /* eredita dal campo input */
+    line-height: 1em;
+}
+
+/* Rendi anche i pulsanti X coerenti */
+#selectedServicesList .pseudo-block button,
+#selectedServicesList .pseudo-block .delete-btn {
+    font-size: 1em;
+}
+
+.client-info-btn {
+  /* colore di sfondo del quadrato "i" */
+  background-color: #fdd90d !important;    /* usa background-color e !important per sicurezza */
+  background-image: none !important;       /* rimuove eventuali immagini di sfondo sovrapposte */
+  color: #000 !important;                  /* testo scuro per contrasto */
+  border: none;
+  border-radius: 6px;
+  width: var(--result-action-width);
+  height: var(--result-action-width);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* hover */
+.client-info-btn:hover {
+  background-color: #fff280 !important;
+}
+
+/* Regola più specifica nel caso Bootstrap usi selector più potenti */
+button.client-info-btn {
+  background-color: #fdd90d !important;
+  background-image: none !important;
+  color: #000 !important;
+}
+
+#AddClientModal {
+    z-index: 16000 !important;
+}
+#AddClientModal .modal-dialog {
+    z-index: 16001 !important;
+}
+#AddClientModal .modal-content {
+    z-index: 16002 !important;
+}
+
+#ClientInfoModal .modal-dialog {
+  max-width: 960px;
+  margin: 1.5rem auto;
+}
+#ClientInfoModal {
+  z-index: 21500; /* sicurezza: davanti ad altri overlay */
+}
+#ClientInfoModal .modal-content {
+  box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+}
+/* assicurati che il close-button sia visibile a destra */
+#ClientInfoModal .modal-header .btn-close {
+  margin-left: auto;
+}
+
+body.quarter-55 .appointment-block .note-indicator {
+    display: none !important;
+  }
+
+.appointment-block .client-name {
+  position: relative;
+  display: block;
+  width: 80%;
+  left: 10%;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 1;
+}
+
+#currentTimeIndicator {
+    pointer-events: none !important;
+    z-index: 0 !important;
+}
+
+.arrow-nav {
+    font-size: 2em;    /* aumenta la dimensione della freccia */
+    font-weight: bold;    /* opzionale: la rende più spessa */
+    padding: 0 12px;      /* opzionale: più spazio ai lati */
+    line-height: 1;       /* allinea meglio verticalmente */
+  }
+
+  .arrow-nav:hover {
+    color:#2c2c2c;
+    font-size: 1.5em;
+    box-shadow:#ff288ce6 0px 0px 5px;
+}
+
+  #dayOfWeek {
+    display: inline-block;
+    width: 55px;      /* scegli la larghezza che preferisci */
+    text-align: center;
+    font-size: 1.2em;
+  }
+
+  .calendar-date-input::-webkit-calendar-picker-indicator {
+    opacity: 0; /* Nasconde l’icona nativa */
+  }
+  
+  .calendar-date-input {
+    max-width: 130px;
+    min-width: 120px;
+    width: 125px;
+    padding-left: 5px !important;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='black' class='bi bi-calendar' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1zm1-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2z'/%3E%3C/svg%3E") no-repeat right 8px center;
+    background-size: 16px 16px; 
+  }
+
+  /* Da aggiungere nel tuo file CSS */
+.appointment-block .appointment-content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .hour-cell-right {
+    text-align: left !important;
+}
+
+.calendar-table td.hour-cell.calendar-closed,
+.calendar-table td.quarter-cell.calendar-closed {
+    background-color: #f5f5f5 !important;
+    color: inherit !important;
+    border: 1px solid #ddd !important;
+    opacity: 1 !important;
+    background-image: none !important;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+/* Font più grande nei blocchi appuntamento se quarter >= default */
+body:not(.quarter-55) .appointment-block {
+    font-size: 17px;
+}
+
+.all-uppercase {
+    text-transform: uppercase;
+    letter-spacing: 0,5px;
+}
+
+.calendar-table th a {
+    text-decoration: none;
+}
+
+.highlight-side {
+    background: rgba(0, 123, 255, 0.08) !important; /* colore blu chiaro, più opaco */
+    transition: background 0.15s;
+  }
+
+  .page-wide-90 {
+    width: 90vw;
+    max-width: 90vw;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.appointment-block.status-2 {
+    background: #e0e0e0 !important;
+    background-image: radial-gradient(#fff 1.5px, transparent 2.5px);
+    background-size: 12px 12px;
+    color: #888 !important;
+}
+
+.appointment-block.status-2 .popup-buttons .btn-popup:not(.copia):not(.nota) {
+    display: none !important;
+}
+
+/* Modifica il selettore esistente aggiungendo :not(.status-2) per escludere i blocchi in stato 2 */
+.appointment-block:hover:not(.disable-popup):not(.status-2) .btn-popup.whatsapp-btn,
+.appointment-block.active-popup:not(.status-2) .btn-popup.whatsapp-btn {
+  display: inline-flex !important;
+}
+
+.appointment-block.status-2:hover .btn-popup.whatsapp-btn,
+.appointment-block.status-2.active-popup .btn-popup.whatsapp-btn,
+.appointment-block.status-2 .btn-popup.whatsapp-btn {
+  display: none !important;
+}
+
+#clientHistoryPopup {
+  min-width: 500px !important;
+  min-height: 363px !important;
+  /* Adatta questi valori alle dimensioni del tuo modal */
+  overflow-y: auto;
+  overflow-x: visible;
+}
+
+#clientHistoryPopup table {
+  background: #fff;
+  min-width: 420px; /* aumenta la larghezza minima della tabella */
+  width: 100%;
+}
+#clientHistoryPopup th, #clientHistoryPopup td {
+  padding: 2px 8px;
+  font-size: 0.9em;
+}
+#clientHistoryPopup th:nth-child(1), 
+#clientHistoryPopup td:nth-child(1) {
+  min-width: 80px;   /* colonna Data più larga */
+  width: 90px;
+}
+
+#clientHistoryPopup .client-info-container .ci-label {
+  color: #333 !important;
+  font-weight: 600;
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* fallback: se il popup è #clientInfoPopup (altro id usato in repo) applica uguale regola */
+#clientInfoPopup .client-info-container .ci-label {
+  color: #333 !important;
+}
+
+#CreateAppointmentModal .modal-dialog {
+  width: 34vw !important;
+  max-width: 34vw;
+}
+
+#EditAppointmentModal .modal-dialog {
+  width: 34vw !important;
+  max-width: 34vw;
+}
+
+#EditAppointmentModal .results-dropdown {
+  width: 97% !important;
+  max-width: 100% !important;
+}
+
+  #CreateAppointmentModal .results-dropdown {
+    position: absolute;
+    left: 0;
+    right: 0;
+    width: 100% !important; 
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+  /* Dropdown nel Navigator: anch’essa contenuta nel box (il parent ha position:relative) */
+  #appointmentNavigator .results-dropdown {
+    position: absolute;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+
+#appointmentNavigator .client-search-wrapper,
+#appointmentNavigator .client-search-row,
+#appointmentNavigator > div {
+  position: relative;
+}
+
+/* Riduci larghezza dell'input nel pseudo-block navigator
+   così lascia spazio per il pulsante + esterno */
+#appointmentNavigator input#clientSearchInputNav,
+#appointmentNavigator input#clientSearchInput {
+  width: calc(100% - 40px) !important; /* lascia ~40px per il pulsante */
+  box-sizing: border-box;
+  padding-right: 10px !important; /* evita testo sotto il + */
+  display: inline-block;
+}
+
+.btn-add-client-nav {
+  position: absolute !important;
+  right: -6px !important;           /* negativo per "esterno" rispetto al wrapper */
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  padding: 0 !important;
+  }
+
+  .btn-add-client-square,
+  .btn-add-client-nav {
+  width: 34px;
+  height: 34px;
+  min-width: 26px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #28a745 !important;
+  color: #fff !important;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+
+  #WebAppointmentsModal .modal-body { 
+  /* lascia che sia il contenitore della tabella a scrollare */
+  overflow: visible !important;
+}
+
+/* wrapper che contiene la table (presente in calendar.html) */
+#WebAppointmentsModal .web-appt-table-container {
+  /* usa l'altezza del modal-content come riferimento (modal-content inline: height:83vh) */
+  max-height: calc(83vh - 140px); /* regola 140px se header/controls occupano più/meno spazio */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* assicurati che la table non imposti max-height */
+#WebAppointmentsModal .web-appt-table-container table#webApptTable {
+  width: 100%;
+  border-collapse: collapse;
+  max-height: none !important;
+}
+
+/* sticky header dentro il contenitore scrollabile */
+#WebAppointmentsModal .web-appt-table-container thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #222; /* stesso stile dell'header */
+  color: #fff;
+}
+
+/* adattamento per schermi piccoli */
+@media (max-width: 768px) {
+  #WebAppointmentsModal .web-appt-table-container {
+    max-height: calc(70vh - 120px);
+  }
+}
+
+#webApptTable td, #webApptTable th {
+  height: 20px !important;
+  padding-top: 1px;
+  padding-bottom: 1px;
+  vertical-align: middle;
+  font-size: 0.95em;
+}
+
+#webApptTable tr {
+  height: 20px !important;
+}
+
+#webApptTable {
+  border-collapse: collapse;
+  border: 0;
+  width: 100%;
+  font-size: 1em;
+  background: #fff;
+}
+
+#webApptTable thead th {
+  background: #222;
+  color: #fff;
+}
+
+#webApptTable tbody tr:nth-child(odd) {
+  background: #fff;
+}
+
+#webApptTable tbody tr:nth-child(even) {
+  background: #f4f4f4;
+}
+
+#webApptTable .btn-associa {
+  padding: 0 !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 16px !important;
+  width: 16px !important;
+  line-height: 1 !important;
+  vertical-align: middle !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#webApptTable .btn-associa span {
+  line-height: 1 !important;
+  display: inline-block;
+  vertical-align: middle;
+}
+/* ********STILI DI CASSA.HTML********* */
+.service-bar-btn {
+  min-width: 120px;
+  min-height: 34px;
+  font-size: 1.15em;
+  padding: 10px 12px;
+  border-radius: 18px;
+    box-shadow:
+    0 -4px 12px 0 #fff,                /* ombra bianca sopra */
+    4px 4px 12px #e0e0e0,              /* ombra scura sotto */
+    -4px -4px 12px #ffffff;  
+  background: #f7f9f9;
+  border: none;
+  margin: 0;
+  transition: box-shadow 0.15s, background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+  .service-bar-btn:hover, .service-bar-btn:focus {
+    background: #ffffff;
+  }
+
+.service-bar-btn:active,
+.service-bar-btn:focus {
+  box-shadow: inset 2px 2px 8px #e0e0e0, inset -2px -2px 8px #ffffff;
+  background: #ededed;
+}
+
+.service-bar {
+  gap: 0.35em !important;
+}
+
+.service-btn-custom {
+    width: 10vw;
+    height: 7.5vh;
+    min-width: 120px;
+    min-height: 54px;
+    max-width: 200px;
+    max-height: 90px;
+    margin: 0.08em 0.08em 0.08em 0;
+    padding: 16px 18px;
+    border-radius: 8px;
+    font-size: 1.15em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.15s, box-shadow 0.15s, color 0.15s;
+    box-shadow:
+      0 -6px 12px 0 #fff,                /* ombra bianca sopra */
+      4px 4px 12px #e0e0e0,              /* ombra scura sotto */
+      -4px -4px 12px #ffffff;            /* effetto rilievo */
+    background: #f7f7f7;
+    outline: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+}
+
+.service-btn-custom:hover, .service-btn-custom:focus {
+    background: #ecece0;
+}
+
+.service-btn-custom:active,
+.service-btn-custom:focus {
+    box-shadow:
+      0 -6px 12px 0 #fff,
+      inset 2px 2px 8px #e0e0e0,
+      inset -2px -2px 8px #ffffff;
+    background: #ededed;
+}
+
+  .tooltip-parent {
+    position: relative;
+  }
+  
+  .custom-tooltip {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%);
+    background: #323232;
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.95em;
+    white-space: nowrap;
+    z-index: 10;
+    transition: opacity 0.1s; /* velocissimo */
+    margin-top: 4px;
+  }
+  
+  .tooltip-parent:hover .custom-tooltip,
+  .tooltip-parent:focus .custom-tooltip {
+    visibility: visible;
+    opacity: 1;
+    transition-delay: 1s; /* nessun ritardo */
+  }
+
+.service-btn-solarium {
+    background: #fff4f4 !important;   /* rosa chiaro */
+    color: #4d0c2c !important;
+    border: 1px solid #ff8a8a !important; /* rosa */
+}
+
+.service-btn-solarium:hover, .btn.service-btn-solarium:hover {
+    background: #ffd2d2 !important;
+    color: #842626 !important;
+    border: 1px solid #ff4f4f !important; /* rosa più acceso */
+}
+
+.service-btn-estetica {
+    background: #f0f7ff !important;   /* grigio */
+    color: #071536 !important;
+    border: 1px solid #6198ea !important; /* blu */
+}
+
+.service-btn-estetica:hover {
+    background: #c7e1ff !important;   /* grigio */
+    color: #314b87 !important;
+    border: 1px solid #1a5bb8 !important; /* blu più scuro */
+}
+
+button.service-btn-prodotti,
+.service-btn-custom.service-btn-prodotti,
+.service-bar-btn.service-btn-prodotti {
+    color: #ca6199 !important;
+    font-weight: bold !important;
+}
+
+.scontrino-row {
+    font-size: 1.25rem; /* oppure scegli la dimensione che preferisci */
+  }
+
+  #operatorSelectInput, #clientSearchInputCassa {
+    width: 50%;
+  }
+
+  #clientDropdownCassa {
+    position: absolute;
+    left: 15;
+    margin-top: 124px !important;
+    z-index: 2000;
+    width: 100%;
+    max-width: 300px;
+    min-width: 0;
+  }
+
+  .neumorphic-btn {
+  background: #bcb7b7;
+  border: none;
+  border-radius: 16px;
+  box-shadow:
+    4px 4px 12px #e0e0e0,
+    -4px -4px 12px #ffffff,
+    0 -4px 12px 0 #fff;
+  color: #fffff8 !important;
+  font-weight: bold;
+  font-size: 1.08em;
+  padding: 10px 12px;
+  margin: 0;
+  transition: box-shadow 0.15s, background 0.15s, color 0.15s;
+  display: inline-block;
+}
+
+.neumorphic-btn:hover, .neumorphic-btn:focus {
+  background: #ededed;
+  color: #222 !important;
+  box-shadow:
+    2px 2px 8px #e0e0e0,
+    -2px -2px 8px #ffffff,
+    0 -2px 8px 0 #fff;
+}
+
+.card.neumorphic-card {
+  border: 0px solid #e0e0e0;
+  box-shadow:
+    -8px -8px 24px #ffffff,   /* ombra bianca più ampia in alto a sinistra */
+    4px 4px 12px #d1d9e6;     /* ombra scura in basso a destra */
+  background: #ffffff;
+  border-radius: 12px;
+}
+
+/* ---- Modalità offline: sola lettura ---- */
+body.offline input,
+body.offline select,
+body.offline textarea {
+  pointer-events: none !important;
+  background-color: #f0f0f0 !important;
+}
+
+body.offline button[type="submit"],
+body.offline .btn[data-online-only="1"] {
+  pointer-events: none !important;
+  opacity: 0.5 !important;
+}
+
+body.offline .popup-buttons,
+body.offline .btn-popup,
+body.offline .btn.note,
+body.offline .btn.aggiungi-servizi,
+body.offline .btn.pagamento {
+  display: none !important;
+}
+
+
+
+/* ===================== TOUCH UI (STILI PER TOUCHSCREEN quando attivati) ===================== */
+body.touch-ui .appointment-block .drag-handle,
+body.touch-ui .appointment-block .resize-handle {
+  pointer-events: none !important;  /* disabilita drag e resize */
+  cursor: default !important;
+  opacity: 0.25;
+}
+
+/* my-spia non cliccabile, resta visiva */
+body.touch-ui .appointment-block .my-spia {
+  pointer-events: none !important;
+}
+
+/* nascondi elementi non usabili su touch */
+body.touch-ui .appointment-block .no-show-button,
+body.touch-ui .appointment-block .btn-popup.whatsapp-btn:not(.touch-bottom-wa),       /* solo icona laterale */
+body.touch-ui .appointment-block .btn-popup.delete-appointment-block:not(.touch-top-delete) {
+  display: none !important;
+}
+
+body.touch-ui .appointment-block:hover:not(.disable-popup) .btn-popup.whatsapp-btn:not(.touch-bottom-wa),
+body.touch-ui .appointment-block.active-popup .btn-popup.whatsapp-btn:not(.touch-bottom-wa) {
+  display: none !important;
+}
+
+/* TOUCH: correggi stile e posizione del WA in basso (grid, non assoluto) */
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.touch-bottom-wa {
+  position: static !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 100% !important;
+  aspect-ratio: 1 / 0.8 !important;
+  border-radius: 6px !important;
+}
+
+/* TOUCH: dimensioni icona del WA in basso coerenti con gli altri */
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.touch-bottom-wa i,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.touch-bottom-wa svg {
+  font-size: var(--pb-icon, 18px) !important;
+  line-height: 1 !important;
+}
+
+/* sposta il bottone "nota" SOLO in basso: nascondi quello superiore */
+body.touch-ui .appointment-block .popup-buttons .btn-popup.nota {
+  display: none !important;
+}
+
+body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup.nota {
+  display: inline-flex !important;
+}
+
+/* barra popup inferiore (6 pulsanti) */
+.appointment-block .popup-buttons-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  display: none;  /* mostra solo su hover/active */
+  grid-template-columns: repeat(var(--pb-cols, 6), minmax(0, 1fr));
+  gap: var(--pb-gap, 3px);
+  padding: 0;
+  top: calc(100% + 1px); /* sotto al blocco */
+  z-index: 2100;
+}
+
+/* stile pulsanti in basso (coerente con quelli sopra) */
+.appointment-block .popup-buttons-bottom .btn-popup {
+  box-sizing: border-box;
+  width: 100% !important;
+  aspect-ratio: 1 / 0.8 !important;
+  height: auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center;
+  line-height: 1.1;
+  border-radius: 6px;
+  font-size: var(--pb-fs, 13px) !important;
+  padding: 0;
+  background-color: #000000;
+  color: #fff;
+  box-shadow: 0 0 0 0.8px hsla(0, 0%, 96%, 0.76) !important;
+}
+.appointment-block .popup-buttons-bottom .btn-popup i,
+.appointment-block .popup-buttons-bottom .btn-popup svg {
+  font-size: var(--pb-icon, 18px) !important;
+  line-height: 1 !important;
+}
+
+/* mostra entrambe le barre su hover/active */
+.appointment-block:hover:not(.disable-popup) .popup-buttons-bottom,
+.appointment-block.active-popup .popup-buttons-bottom,
+.appointment-block .popup-buttons-bottom:hover {
+  display: grid !important;
+}
+
+/* status-2: nessun pulsante in basso (resta solo "copia" in alto) */
+.appointment-block.status-2 .popup-buttons-bottom {
+  display: none !important;
+}
+
+/* WhatsApp mai visibile su status-2 (ridondanza di sicurezza) */
+.appointment-block.status-2:hover .btn-popup.whatsapp-btn,
+.appointment-block.status-2.active-popup .btn-popup.whatsapp-btn,
+.appointment-block.status-2 .btn-popup.whatsapp-btn {
+  display: none !important;
+}
+
+/* ===================== TOUCH UI OVERRIDES ===================== */
+/* Apri popup SOLO a click (classe .active-popup), non su hover */
+body.touch-ui .appointment-block:hover:not(.disable-popup):not(.active-popup) .popup-buttons,
+body.touch-ui .appointment-block:hover:not(.disable-popup):not(.active-popup) .popup-buttons-bottom {
+  display: none !important;
+}
+body.touch-ui .appointment-block.active-popup .popup-buttons {
+  display: flex !important; /* coerente con la barra superiore esistente */
+}
+body.touch-ui .appointment-block.active-popup .popup-buttons-bottom {
+  display: grid !important; /* barra inferiore */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--pb-gap, 3px);
+}
+
+/* NEW: in touch, se il blocco è già active-popup, non nascondere su hover (fix mouseleave) */
+body.touch-ui .appointment-block:hover.active-popup .popup-buttons {
+  display: flex !important;
+}
+body.touch-ui .appointment-block:hover.active-popup .popup-buttons-bottom {
+  display: grid !important;
+}
+
+/* FIX: mantieni dimensioni fisse dei pulsanti barra inferiore su hover */
+body.touch-ui .popup-buttons-bottom .btn-popup {
+  width: 100%; /* occupa tutto lo spazio disponibile nella griglia */
+  height: auto; /* altezza automatica basata sul contenuto */
+  box-sizing: border-box; /* include padding e border nella larghezza/altezza */
+}
+body.touch-ui .popup-buttons-bottom .btn-popup:hover {
+  width: 100% !important; /* forza larghezza fissa su hover */
+  height: auto !important; /* mantiene altezza */
+  transform: none !important; /* evita scalature o traslazioni */
+  padding: inherit !important; /* mantiene padding originale */
+  margin: inherit !important; /* mantiene margini */
+}
+
+/* Barra inferiore: sizing dei pulsanti coerente con quelli in alto */
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup {
+  width: 100% !important;
+  aspect-ratio: 1 / 0.8 !important;
+  border-radius: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Nascondi WhatsApp laterale in touch; mostra solo quello in basso (marcato) */
+body.touch-ui .appointment-block .btn-popup.whatsapp-btn:not(.touch-bottom-wa) {
+  display: none !important;
+}
+body.touch-ui .appointment-block:hover:not(.disable-popup) .btn-popup.whatsapp-btn:not(.touch-bottom-wa),
+body.touch-ui .appointment-block.active-popup .btn-popup.whatsapp-btn:not(.touch-bottom-wa) {
+  display: none !important;
+}
+
+/* Normalizza dimensioni icona del WA in basso */
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.touch-bottom-wa i,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.touch-bottom-wa svg {
+  font-size: var(--pb-icon, 18px) !important;
+  line-height: 1 !important;
+}
+
+/* Status-2: nessun WA anche in touch */
+body.touch-ui .appointment-block.status-2 .popup-buttons-bottom .btn-popup.whatsapp-btn.touch-bottom-wa {
+  display: none !important;
+}
+
+/* Disabilita drag/resize, my-spia non cliccabile, nascondi no-show e cestino non-popup */
+body.touch-ui .appointment-block .drag-handle,
+body.touch-ui .appointment-block .resize-handle {
+  pointer-events: none !important;
+  cursor: default !important;
+  opacity: 0.25;
+}
+body.touch-ui .appointment-block .my-spia {
+  pointer-events: none !important;
+}
+body.touch-ui .appointment-block .no-show-button,
+body.touch-ui .appointment-block .icon-trash,
+body.touch-ui .appointment-block .delete-icon {
+  display: none !important;
+}
+
+/* TOUCH-UI: cursore “mano” su tutto il blocco */
+body.touch-ui .appointment-block {
+  cursor: pointer !important;
+}
+
+/* Mantieni i bottoni con il loro cursore “pointer” (ridondanza sicura) */
+body.touch-ui .appointment-block .btn-popup,
+body.touch-ui .appointment-block .client-info-link {
+  cursor: pointer !important;
+}
+
+/* TOUCH-UI: evidenzia il link nome cliente quando il blocco è attivo */
+body.touch-ui .appointment-block.active-popup .client-info-link {
+  display: inline-block;
+  text-decoration: underline; /* sottolineatura per rafforzare la cliccabilità */
+  box-shadow: none;
+  font-size: 0.95em;
+}
+
+body.touch-ui .appointment-block.status-2 .popup-buttons .btn-popup.copia {
+  width: 100% !important;   /* 1/6 perché occupa 1 colonna della griglia */
+  margin-left: 0 !important;
+}
+
+/* Patch da incollarci sopra */
+/* TOUCH: mostra top bar SOLO su click (active-popup) anche per status-2 */
+body.touch-ui .appointment-block.status-2 .popup-buttons { display: none !important; }
+body.touch-ui .appointment-block.status-2.active-popup .popup-buttons {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: var(--pb-gap, 3px) !important;
+}
+body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup {
+  width: 100% !important;
+}
+
+/* TOUCH: OFF -> top bar solo su click, con opacity visibile */
+body.touch-ui .appointment-block.note-off .popup-buttons {
+  display: none !important;
+  opacity: 0 !important;
+}
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
+  display: flex !important;
+  opacity: 1 !important;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* TOUCH: consenti bottone Nota in alto sugli OFF (override del nascondi globale) */
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.nota.touch-top-note {
+  display: inline-flex !important;
+}
+
+/* TOUCH: nascondi SEMPRE per default; mostra solo su .active-popup */
+body.touch-ui .appointment-block:not(.active-popup) .popup-buttons,
+body.touch-ui .appointment-block:not(.active-popup) .popup-buttons-bottom {
+  display: none !important;
+}
+body.touch-ui .appointment-block.active-popup .popup-buttons {
+  display: flex !important;
+}
+body.touch-ui .appointment-block.active-popup .popup-buttons-bottom {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--pb-gap, 3px);
+}
+
+/* Stato=2: consenti copia e nota, nascondi il resto (6 colonne uguali già impostate sopra) */
+body.touch-ui .appointment-block[data-status="2"] .popup-buttons .btn-popup:not(.copia):not(.nota) {
+  display: none !important;
+}
+
+/* OFF: consenti “nota” in alto solo quando active (override al nascondi globale della nota top) */
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.nota.touch-top-note {
+  display: inline-flex !important;
+}
+
+/* TOUCH-UI: blocchi OFF (note-off/off) -> mostra solo delete, copia (OFF), nota */
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup,
+body.touch-ui .appointment-block.off.active-popup .popup-buttons .btn-popup {
+  display: none !important;
+}
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.delete-appointment-block.touch-top-delete,
+body.touch-ui .appointment-block.off.active-popup .popup-buttons .btn-popup.delete-appointment-block.touch-top-delete,
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.copia.touch-top-copy,
+body.touch-ui .appointment-block.off.active-popup .popup-buttons .btn-popup.copia.touch-top-copy,
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.nota.touch-top-note,
+body.touch-ui .appointment-block.off.active-popup .popup-buttons .btn-popup.nota.touch-top-note {
+  display: inline-flex !important;
+}
+
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons,
+body.touch-ui .appointment-block.off.active-popup .popup-buttons {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--pb-gap, 3px);
+}
+
+/* Touch-UI: allinea i popup info cliente al livello dei popup-buttons */
+body.touch-ui #clientHistoryPopup,
+body.touch-ui #clientInfoPopup,
+body.touch-ui #clientHistoryPopup.tooltip,
+body.touch-ui #clientInfoPopup.tooltip {
+  z-index: 2000 !important; /* stesso livello dei .popup-buttons */
+}
+
+/* Touch-UI: rimuovi qualsiasi ombra/loutline dal nome cliente quando cliccato */
+body.touch-ui .appointment-block.active-popup .client-info-link,
+body.touch-ui .appointment-block.active-popup .client-info-link:focus,
+body.touch-ui .appointment-block.active-popup .client-info-link:hover {
+  box-shadow: none !important;
+  outline: none !important;
+}

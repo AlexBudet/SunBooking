@@ -1,0 +1,321 @@
+<!-- appl/templates/services.html -->
+
+{% extends "settings.html" %}
+{% block settings_content %}
+<div class="page-wide-90">
+<h3>&nbsp;Gestione Servizi</h3>
+
+<!-- Form per aggiungere un nuovo servizio -->
+<form method="POST" action="{{ url_for('settings.add_service') }}" class="mb-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <!-- Prima riga: Nome Servizio, Abbreviazione, Durata, Prezzo -->
+    <div class="row align-items-center mb-2">
+        <!-- Campo Nome Servizio -->
+        <div class="col-md-6">
+            <input type="text" class="form-control" id="service_name" name="service_name" placeholder="Nome Servizio" required>
+        </div>
+        <!-- Campo Abbreviazione -->
+        <div class="col-md-2">
+            <input type="text" class="form-control" id="service_tag" name="service_tag" placeholder="Abbreviazione (Tag)">
+        </div>
+        <!-- Campo Durata -->
+<div class="col-md-2">
+    <select class="form-control" id="service_duration" name="service_duration">
+        <option value="" disabled selected>Durata</option>
+        <option value="0" id="durataProdottiOption">nessuna durata</option>
+        {% for duration in range(5, 121, 5) %}
+            <option value="{{ duration }}">{{ duration }} minuti</option>
+        {% endfor %}
+    </select>
+</div>
+        <!-- Campo Prezzo -->
+        <div class="col-md-2">
+            <input type="number" step="0.01" class="form-control" id="service_price" name="service_price" placeholder="Prezzo (€)" required>
+        </div>
+    </div>
+    
+    <!-- Seconda riga: Categoria, Sottocategoria, Pulsante Aggiungi -->
+    <div class="row align-items-center">
+        <!-- Campo Categoria -->
+        <div class="col-md-4">
+            <select class="form-control" id="service_category" name="service_category" required onchange="updateSubcategories()">
+                <option value="" disabled selected>Categoria</option>
+                <option value="Solarium">Solarium</option>
+                <option value="Estetica">Estetica</option>
+            </select>
+        </div>
+        <!-- Campo Sottocategoria -->
+        <div class="col-md-4">
+            <select class="form-control" id="service_subcategory" name="service_subcategory" required>
+                <option value="" disabled selected>Sottocategoria</option>
+                {% for subcategory in subcategories %}
+                    <option value="{{ subcategory.id }}">{{ subcategory.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>        
+        <!-- Pulsante Aggiungi -->
+        <div class="col-md-4">
+            <button type="submit" class="btn btn-primary btn-block">Aggiungi Servizio</button>
+        </div>
+    </div>
+</form>
+
+<!-- Cerca Servizio -->
+<div class="row mb-3">
+    <div class="col-md-6">
+      <input type="text" id="serviceSearchInput" class="form-control" placeholder="Cerca servizio per nome o tag...">
+    </div>
+  </div>
+
+<!-- Tabella dei servizi esistenti -->
+<table class="table sortable" id="servicesTable">
+    <thead>
+        <tr>
+<th>Nome <span class="sort-icons">▲<br>▼</span></th>
+<th>Abbreviazione <span class="sort-icons">▲<br>▼</span></th>
+<th>Categoria <span class="sort-icons">▲<br>▼</span></th>
+<th>Sotto-categoria <span class="sort-icons">▲<br>▼</span></th>
+<th>Durata (min) <span class="sort-icons">▲<br>▼</span></th>
+<th>Prezzo (€) <span class="sort-icons">▲<br>▼</span></th>
+<th>Azioni</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for service in services %}
+        <tr>
+            <td>{{ service.servizio_nome }}</td>
+            <td>{{ service.servizio_tag }}</td>
+            <td>{{ service.servizio_categoria.value }}</td>
+            <td>{{ service.servizio_sottocategoria.nome if service.servizio_sottocategoria else '-' }}</td>
+            <td>{{ service.servizio_durata }}</td>
+            <td>{{ "%.0f"|format(service.servizio_prezzo) if service.servizio_prezzo == service.servizio_prezzo|int else "%.2f"|format(service.servizio_prezzo) }}</td>
+<td>
+    {% if current_user.ruolo.value == 'user' %}
+        <button type="button" class="btn btn-sm btn-primary" onclick="showNoRightsPopup()">Modifica</button>
+        <button type="button" class="btn btn-sm btn-danger" onclick="showNoRightsPopup()">Elimina</button>
+    {% else %}
+        <a href="{{ url_for('settings.edit_service', service_id=service.id) }}" class="btn btn-sm btn-primary">Modifica</a>
+        <form action="{{ url_for('settings.delete_service', service_id=service.id) }}" method="POST" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"> 
+            <button type="submit" class="btn btn-sm btn-danger">Elimina</button>
+        </form>
+    {% endif %}
+</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Sezione gestione sottocategorie -->
+<button class="btn btn-secondary mb-3" onclick="toggleSubcategoriesTable()">Gestione Sottocategorie</button>
+<div id="subcategoriesSection" class="hidden">
+    <form method="POST" action="{{ url_for('settings.subcategories') }}" class="mb-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row align-items-center">
+            <div class="col-auto">
+                <input type="text" class="form-control" name="nome" placeholder="Nome Sottocategoria" required>
+            </div>
+            <div class="col-auto">
+                <select class="form-control" name="categoria" required>
+                    <option value="" disabled selected>Categoria</option>
+                    <option value="Solarium">Solarium</option>
+                    <option value="Estetica">Estetica</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-primary">Aggiungi Sottocategoria</button>
+            </div>
+        </div>
+    </form>
+
+    <!-- Tabella delle sottocategorie -->
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Categoria</th>
+                <th>Azioni</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for subcategory in subcategories %}
+            <tr>
+                <td>{{ subcategory.nome }}</td>
+                <td>{{ subcategory.categoria.value }}</td>
+                <td>
+                    <form action="{{ url_for('settings.delete_subcategory', subcategory_id=subcategory.id) }}" method="POST" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"> 
+                        <button type="submit" class="btn btn-sm btn-danger">Elimina</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <br><br><br>
+</div>
+</div>
+
+<!-- Popup per utenti user -->
+<div class="modal fade" id="noRightsModal" tabindex="-1" aria-labelledby="noRightsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="noRightsModalLabel">Ops!</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        Ops! Prova a suggerire agli admin eventuali modifiche.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function showNoRightsPopup() {
+    var modal = new bootstrap.Modal(document.getElementById('noRightsModal'));
+    modal.show();
+}
+</script>
+
+<script>
+    function toggleSubcategoriesTable() {
+        const section = document.getElementById('subcategoriesSection');
+        section.classList.toggle('hidden');
+        section.classList.toggle('visible');
+    }
+</script>
+
+<script>
+    function updateSubcategories() {
+        const categorySelect = document.getElementById('service_category');
+        const subcategorySelect = document.getElementById('service_subcategory');
+        const selectedCategory = categorySelect.value;
+
+        // Esegui una richiesta per ottenere le sottocategorie
+        fetch(`/settings/api/subcategories/${selectedCategory}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Errore nel recupero delle sottocategorie.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Pulisce il menu a tendina delle sottocategorie
+                subcategorySelect.innerHTML = '<option value="" disabled selected>Sottocategoria</option>';
+
+                // Aggiunge le opzioni basate sulla risposta
+                data.forEach(subcategory => {
+                    const option = document.createElement('option');
+                    option.value = subcategory.id;
+                    option.textContent = subcategory.name;
+                    subcategorySelect.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Errore:', error);
+                alert('Impossibile aggiornare le sottocategorie.');
+            });
+    }
+</script>
+<script>
+    document.getElementById('serviceSearchInput').addEventListener('input', function() {
+        const searchValue = this.value.trim().toLowerCase();
+        const rows = document.querySelectorAll('#servicesTable tbody tr');
+        if (searchValue.length < 3) {
+            // Mostra tutte le righe se meno di 3 caratteri
+            rows.forEach(row => row.style.display = '');
+            return;
+        }
+        rows.forEach(row => {
+            const nome = row.children[0].textContent.toLowerCase();
+            const tag = row.children[1].textContent.toLowerCase();
+            if (nome.includes(searchValue) || tag.includes(searchValue)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    });
+    </script>
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+  const subcatSelect = document.getElementById('service_subcategory');
+  const durataInput = document.getElementById('service_duration');
+  const durataProdottiOption = document.getElementById('durataProdottiOption');
+  if (!subcatSelect || !durataInput || !durataProdottiOption) return;
+
+  subcatSelect.addEventListener('change', function() {
+    const selected = subcatSelect.options[subcatSelect.selectedIndex].text.toLowerCase();
+    if (selected === 'prodotti') {
+      durataProdottiOption.style.display = '';
+      durataInput.value = "0";
+      durataInput.readOnly = true;
+      durataInput.classList.add('bg-secondary', 'text-white');
+    } else {
+      durataProdottiOption.style.display = 'none';
+      durataInput.readOnly = false;
+      durataInput.classList.remove('bg-secondary', 'text-white');
+      if (parseInt(durataInput.value) === 0) durataInput.value = '';
+    }
+  });
+});
+        </script>
+<style>
+.sort-icons {
+  font-size: 10px;
+  line-height: 10px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 2px;
+  color: #888;
+  user-select: none;
+}
+th {
+  position: relative;
+}
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('#servicesTable.sortable thead th').forEach(function(header, i) {
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', function() {
+      const table = header.closest('table');
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      // Toggle asc/desc sulla stessa colonna
+      table._sortState = table._sortState || { col: null, asc: true };
+      if (table._sortState.col === i) {
+        table._sortState.asc = !table._sortState.asc;
+      } else {
+        table._sortState.col = i;
+        table._sortState.asc = true;
+      }
+      const asc = table._sortState.asc;
+
+      // Ordinamento numerico per durata e prezzo
+      const colName = header.textContent.trim().toLowerCase();
+      let sortFn;
+      if (colName.includes('prezzo') || colName.includes('durata')) {
+        sortFn = (a, b) => {
+          const valA = parseFloat(a.children[i].textContent.replace(',', '.')) || 0;
+          const valB = parseFloat(b.children[i].textContent.replace(',', '.')) || 0;
+          return asc ? valA - valB : valB - valA;
+        };
+      } else {
+        // Ordinamento alfabetico
+        sortFn = (a, b) => {
+          const cellA = a.children[i].textContent.trim().toLowerCase();
+          const cellB = b.children[i].textContent.trim().toLowerCase();
+          return asc ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+        };
+      }
+      rows.sort(sortFn);
+      rows.forEach(row => tbody.appendChild(row));
+    });
+  });
+});
+</script>
+{% endblock %}

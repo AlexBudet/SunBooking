@@ -1,0 +1,22 @@
+[
+  {
+    "nome": "Bordeaux profondo",
+    "hex": "#5A0B1E",
+    "descrizione": "Un rosso vino intenso, sofisticato e caldo."
+  },
+  {
+    "nome": "Terracotta scuro",
+    "hex": "#A34726",
+    "descrizione": "Terracotta bruciata con accenti ramati."
+  },
+  {
+    "nome": "Prugna fumé",
+    "hex": "#4B2C39",
+    "descrizione": "Viola-prugna scuro con sottotoni caldi."
+  },
+  {
+    "nome": "Blu notte profondo",
+    "hex": "#0B1D3A",
+    "descrizione": "Blu quasi nero, elegante e profondo."
+  }
+]

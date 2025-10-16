@@ -1,0 +1,131 @@
+WEB APP:
+- cercare un modo di dividere i login per i vari tenant
+- verificare sicurezza globale del codice
+- predisporre per caricamento su Azure
+
+VERSIONE MOBILE:
+- per mobile utilizzare solo la versione per touch screen e mostrare solo i tabs Calendar e Report
+- creare app per mobile
+
+- SETTINGS: inserire in database il campo cellulare per ogni operatore, poi scrivere codice per inviare whatsapp automatico la sera prima ad ogni operatrice con gli appuntamenti per il giorno dopo
+
+DATABASE... occhio ai backup! (FARE TUTTO DOPO le 20:00 POSSIBILMENTE SABATO SERA E DOMENICA)
+- inserire "descrizione" al modello per la classe servizi, e "cellulare" al modello per la classe operatore, oltre a tutte le aggiunte per pacchetti, solarium e magazzino
+- Cercare il modo di DISATTIVARE IL CLIENT per i centri clienti del gestionale fuori abbonamento, attraverso un record da database che "spegne" il programma on-premise, verificare qual è la best practice
+
+WEB BOOKING:
+- opzionale: offrire la possibilità di PAGARE ONLINE gli appuntamenti
+- opzionale: mostrare descrizione per ogni servizio
+
+CORRETTI, DA VERIFICARE:
+- eliminare colonna TEST per utenti "user" in report riassunto giornaliero
+- definire modalità di storno, se solo ultimo o se possibile stornare da "registro scontrini", se si elimina uno scontrino is_fiscale (lo può fare solo admin!) deve inviare richiesta storno per QUELLO scontrino a rch, e deve risultare dal totale corrispettivi
+- non svuotare pseudoscontrino in cassa quando si salva con modifiche
+- oltre al pulsante "copia" mostrare anche pulsante "note" per blocco in stato 2
+- controllare fetch ricerca in cassa quando si digita nome servizi
+- filtrare nomi apostrofo in web booking table
+- opzioni "vai al pagamento" o "vedi in calendario" per blocchi in istituto in cassa.html, con icona floppy per blocchi editati
+- quando attivo o disattivo invio messaggio wapp la mattina, deve scrivere subito in database e mostrare popup di conferma
+- quando deseleziono "Visibile in Agenda" da settings/operators per un operatore, non salva l'impostazione e dà errore
+- CHIUSURA GIORNALIERA
+- blocchi creati da "aggiungi servizi" da altro blocco non prendono il colore del blocco originario
+- creazione blocchi multipli con singoli click su pseudoblocco
+- elimina da touch-ui mode non lascia il tooltip info aperto (fa reload)
+- normalizzate le date di web-booking
+- "sottocategoria" obbligatoria quando inseriamo un nuovo servizio
+- in celle non attive in calendario il click non deve aprire modal
+- con modal crea appt aperto il click su calendario deve mostrare warning
+- web-booking: offrire al cliente un modo per CANCELLARE l'appuntamento preso
+- modalità touch: settare click su blocco per blocchi off (mostrare solo note e copia) e blocchi in stato 2 (pagato)
+- creazione in report per corrispettivi, ecc dove calcoliamo i prodotti
+- modalità touch screen
+- verificare invio mattutino whatsapp di promemoria
+- dopo che si clicca "conferma" su pseudoscontrino in cassa, il tasto "conferma" si deve trasformare in "indietro" e tornare all'editing dello pseudoscontrino
+- date navigator in report al cambio data
+- quando nei modal di calendar seleziono cliente, serviceSearch dovrebbe mostrare prima della fetch alla 3a lettera i SERVIZI PIU UTILIZZATI DA QUEL CLIENTE in ordine di frequenza!
+- mostra "nota cliente" editabile in edit appt modal
+- sostituire titolo del pulsante "procedi al pagamento" in Calendar con "porta in cassa"
+- all'apertura modal edit appt per blocco source=web tiene in clipboard il cellulare
+- non abbina piu automaticamente il sesso alla creazione cliente
+- problema visualizzazione nomi apostrofati al click per aprire edit appt modal
+- implementare la possibilità di inserire i servizi prenotati nei memo whatsapp
+- formato nomi e cognomi per messaggi di conferma whatsapp
+- uniformare formato data da modal info cliente ("i")
+- salvare modifiche a pseudoscontrino per blocchi portati in cassa da calendar
+- salvare e-mail al momento dell'associazione match di appuntamenti da booking online
+- multi-turno operatori da settings: copia-incolla e popup di conferma, verificare
+- filtro nomi nelle varie parti del progetto (per es. uniformare in top clients in report)
+- se aggiungo servizio, e lo posiziono a 15 min di distanza dal blocco originario, prende correttamente lo stato (stato 1 per es) ma POI NON LO PORTA IN CASSA... impostato gap massimo di 30 min per pseudoblocchi
+- se porto un pagamento in cassa e una volta in cassa cambio il servizio dal container pseudoscontrino, fa il pagamento ma il blocco appuntamento in cassa rimane in stato 0 ... invece deve andare in stato 1 come pagato !!! (magari aggiornando anche il/i servizio/i)
+- errore cassa dopo chiusura giornaliera
+- settings/web booking -> se deseleziono "visualizza in booking" mostra - ancora comunque il servizio!
+- filtrare blocchi in istituto visibili in cassa, solo quelli della GIORNATA CORRENTE ... oppure FARE IN MODO CHE A FINE GIORNATA I BLOCCHI RIMASTI IN STATI 1 TORNINO IN STATO 0 (o stato 2)
+
+comando per creare eseguibile da VSC:cd "C:\Program Files\SunBooking":
+
+pyinstaller --onefile `
+  --windowed `
+  --paths . `
+  --add-data "appl\templates;appl\templates" `
+  --add-data "appl\static;appl\static" `
+  --hidden-import=sqlalchemy `
+  --hidden-import=flask `
+  --hidden-import=psycopg2 `
+  --hidden-import=dotenv `
+  --hidden-import=werkzeug `
+  --hidden-import=jinja2 `
+  --hidden-import=flask_wtf `
+  --hidden-import=flask_sqlalchemy `
+  --hidden-import=requests `
+  --hidden-import=pandas `
+  --hidden-import=openpyxl `
+  --hidden-import=waitress `
+  --hidden-import=multiprocessing `
+  --hidden-import=gender_guesser `
+  --hidden-import=wtforms `
+  --hidden-import=flask_login `
+  --hidden-import=blinker `
+start.py
+
+   # Flask secret key (genera una nuova se necessario)
+   SECRET_KEY=7jtGUeZejGItfvRMMgFFF0kFep71FA6hdgHU19iN1Q0
+
+git remote add origin https://github.com/AlexBudet/booking.git
+---------------------------------------------------------
+- VERSIONE DARK AD ALTO CONTRASTO
+
+AI (GEMINI KEY = AIzaSyBKhUZcOJ6r7_U1yaab2qLBzqY6kVjn8us) -> alternativa più economica con Azure? - implementare query ai in report
+Prompt per richieste ad AI (per esempio: trovami la prima disponibilità in pausa pranzo settimana prossima con Erika per un massaggio di un'ora -> va alla pagina e blinka le celle adatte)
+
+- in Report nel tile "Riassunto Giornaliero" per user sostituire colonne FISCALE-TEST-TOTALE con SERVIZI-PRODOTTI-TOTALE
+- Implementare logging di errori gratis ma professionale e funzionante
+- Verificare funzionamento LOTTERIA degli scontrini -> dà errore, verificare route
+- Mostra un simbolo di attesa tra click su tasto stampa scontrino e popup successivo°
+- predisporre SmartPos per nuova normativa, scontrinazione automatica al pagamento pos
+
+REPORT: creare una sezione REPORT con le stats e una sezione HOME con tiles interattivi (meteo, oroscopo, news estetica, andamento del mercato, video del giorno, console comandi piu usati)
+
+CALENDAR... controllare:
+- Molto codice globale → rischio collisioni e listener duplicati.
+- Backend privo di transazioni/timezone-safe su operazioni sensibili: verificare
+
+( ... IN FUTURO UNDO e REDO )
+( ... IN FUTURO CELLE DA 1/3 di QUARTER per APP di 20 MIN )
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+MODULI AGGIUNTIVI:
+
+DASHBOARD
+- con news, sponsor (?), video, suggerimenti, oroscopo, meteo ecc ecc
+
+SOLARIUM
+- integrazione SunBooking x monitor e ricaricabili solarium
+
+PROMO e PACCHETTI
+- gift card (paghi in anticipo tot, hai gift card con +20%)
+- pacchetti (ogni 5 seduta 1 omaggio, ecc) -> rateizzabili -> pagamento cassa integrato
+- ricaricabili (come solarium, paghi 100 carichi 125 ecc)
+- sistema rate (come usiamo in negozio)
+
+...Proporre prezzi IVA INCLUSA!

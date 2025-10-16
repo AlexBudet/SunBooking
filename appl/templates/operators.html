@@ -1,0 +1,826 @@
+<!-- appl/templates/operators.html -->
+{% extends "settings.html" %}
+
+{% block settings_content %}
+<div class="page-wide-90">
+<h3>&nbsp;Gestione Operatori</h3>
+
+<!-- Form per aggiungere un nuovo operatore -->
+<form method="POST" action="{{ url_for('settings.add_operator') }}" class="mb-4">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="row align-items-center mb-1">
+      <!-- Campo Tipo -->
+      <div class="col-md-3">
+          <select class="form-control" id="user_tipo" name="user_tipo" required onchange="toggleCognomeField()" style="padding: 0.5rem;">
+              <option value="estetista">Estetista</option>
+              <option value="macchinario">Solarium</option>
+          </select>
+      </div>
+      <!-- Campo Nome -->
+      <div class="col-md-3">
+          <input type="text" class="form-control" id="user_nome" name="user_nome" placeholder="Nome" required style="padding: 0.5rem;">
+      </div>
+      <!-- Campo Cognome (visibile solo per estetista) -->
+      <div class="col-md-3" id="cognomeField">
+          <input type="text" class="form-control" id="user_cognome" name="user_cognome" placeholder="Cognome" style="padding: 0.5rem;">
+      </div>
+      <!-- Pulsante Aggiungi -->
+      <div class="col-md-3">
+          <button type="submit" class="btn btn-primary">Aggiungi Operatore</button>
+      </div>
+  </div>
+</form>
+
+<!-- Tabella degli operatori esistenti -->
+<table class="table">
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Cognome</th>
+            <th>Tipo</th>
+            <th>Visibile in Agenda</th>
+            <th>Azioni</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for operator in operators %}
+          {% set has_appointments = appointments_by_operator[operator.id]|length > 0 %}
+          <tr data-operator-id="{{ operator.id }}" data-order="{{ operator.order }}" data-visible="{{ operator.is_visible }}">
+            <td>{{ operator.user_nome }}</td>
+            <td>{{ operator.user_cognome }}</td>
+            <td>{{ operator.user_tipo }}</td>
+            <td>
+              <input type="checkbox" onchange="toggleOperatorVisibility({{ operator.id }}, this.checked)" id="operatorVisibility_{{ operator.id }}" {% if operator.is_visible %}checked{% endif %}>
+            </td>
+<td>
+  {% if current_user and current_user.ruolo.value == 'user' %}
+    <button type="button" class="btn btn-sm btn-primary" onclick="showNoRightsPopup()">Modifica</button>
+    <button type="button" class="btn btn-sm btn-danger" onclick="showNoRightsPopup()">Elimina</button>
+  {% else %}
+    <a href="{{ url_for('settings.edit_operator', operator_id=operator.id) }}" class="btn btn-sm btn-primary">Modifica</a>
+    <form action="{{ url_for('settings.delete_operator', operator_id=operator.id) }}" method="POST" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-sm btn-danger">Elimina</button>
+    </form>
+  {% endif %}
+  <a href="#" 
+     class="btn btn-sm btn-warning operator-shift-link-settings"
+     data-operator-id="{{ operator.id }}"
+     data-operator-name="{{ operator.user_nome }} {{ operator.user_cognome }}"
+     data-url="{{ url_for('operators.operator_shifts', operator_id=operator.id) }}">
+     Turni
+  </a>
+</td>       
+          </tr>
+        {% endfor %}
+      </tbody>
+</table>
+<br><br><br>
+</div>
+<!-- Popup per utenti user -->
+<div class="modal fade" id="noRightsModal" tabindex="-1" aria-labelledby="noRightsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="noRightsModalLabel">Ops!</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        Ops! Prova a suggerire agli admin eventuali modifiche.
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function showNoRightsPopup() {
+    var modal = new bootstrap.Modal(document.getElementById('noRightsModal'));
+    modal.show();
+}
+</script>
+<!-- Script JavaScript per gestire il campo Cognome -->
+<script>
+    function toggleCognomeField() {
+        const tipoSelect = document.getElementById('user_tipo');
+        const cognomeField = document.getElementById('cognomeField');
+        const cognomeInput = document.getElementById('user_cognome');
+
+        if (tipoSelect.value === 'macchinario') {
+            // Nascondi o disabilita il campo Cognome per il macchinario
+            cognomeField.style.display = 'none';  // Nasconde il campo
+            cognomeInput.value = '';  // Resetta il valore del campo
+            cognomeInput.removeAttribute('required');  // Rimuove l'attributo required
+        } else {
+            // Mostra il campo Cognome per l'estetista
+            cognomeField.style.display = 'block';  // Mostra il campo
+            cognomeInput.setAttribute('required', 'required');  // Aggiunge l'attributo required
+        }
+    }
+
+    // Esegui la funzione all'avvio per impostare lo stato iniziale
+    document.addEventListener('DOMContentLoaded', toggleCognomeField);
+</script>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+    const links = document.querySelectorAll('.operator-shift-link-settings');
+    console.log("DEBUG: Trovati", links.length, "operator-shift-link-settings");
+
+    links.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const url = link.getAttribute('data-url');
+            const operatorId = link.getAttribute('data-operator-id');
+            const operatorName = link.getAttribute('data-operator-name');
+            console.log("DEBUG: Clic su link Turni (settings), url=", url, "operatorId=", operatorId, "operatorName=", operatorName);
+
+            fetch(url)
+                .then(resp => resp.text())
+                .then(html => {
+
+                    // Mostra il modal
+                    const modalEl = document.getElementById('OperatorShiftsModalSettings');
+                    const bsModal = new bootstrap.Modal(modalEl);
+
+                    // Aggiungi un event listener per l'evento 'shown.bs.modal'
+                    modalEl.addEventListener('shown.bs.modal', function () {
+                        // Imposta il nome dell'operatore DOPO che il modal è stato mostrato
+                        document.getElementById('modalOperatorNameSettings').textContent = operatorName;
+                    });
+
+                    bsModal.show();
+                })
+                .catch(err => console.error('Errore fetch Turni Operatore:', err));
+        });
+    });
+});
+    </script>
+<!-- Modal per la gestione dei turni per operatore dalla pagina settings -->
+<div class="modal" id="OperatorShiftsModalSettings" data-operator-id="" data-date="" tabindex="-1" aria-labelledby="ShiftsModalSettingsLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl custom-modal-width">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="ShiftsModalSettingsLabel">Gestione Turni per&nbsp&nbsp&nbsp&nbsp&nbsp</h5><H2><span id="modalOperatorNameSettings"></span></H2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+   
+          <!-- Impostazioni turno su più giorni -->
+          <div class="mb-3">
+            <!-- Data Inizio e Fine -->
+            <div class="row mb-3">
+              <div class="col-2" style="min-width: 140px; max-width: 20%;">
+                <label for="shiftStartDateSettings">Data Inizio:</label>
+                <input type="date" id="shiftStartDateSettings" class="form-control">
+              </div>
+              <div class="col-2" style="min-width: 140px; max-width: 20%;">
+                <label for="shiftEndDateSettings">Data Fine:</label>
+                <input type="date" id="shiftEndDateSettings" class="form-control">
+              </div>
+            </div>
+  <!-- Tabella pianificazione settimanale turni -->
+<table class="table table-bordered text-center align-middle" style="table-layout: fixed; width: 100%; margin-bottom: 0;">
+    <colgroup>
+      <col style="width:16.66%">
+      <col style="width:16.66%">
+      <col style="width:16.66%">
+      <col style="width:16.66%">
+      <col style="width:16.66%">
+      <col style="width:16.66%">
+    </colgroup>
+    <thead class="table-light">
+      <tr>
+        <th>Giorno</th>
+        <th>ORA INIZIO TURNO</th>
+        <th>ORA FINE TURNO</th>
+        <th>ORA PAUSA</th>
+        <th>DURATA PAUSA</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Lunedì</strong></td>
+        <td><input type="time" id="mondayStart" class="form-control" placeholder="Ora Inizio"></td>
+        <td><input type="time" id="mondayEnd" class="form-control" placeholder="Ora Fine"></td>
+        <td><input type="time" id="mondayBreakStart" class="form-control" placeholder="Inizio Pausa"></td>
+        <td><input type="number" id="mondayBreakDuration" class="form-control" placeholder="Durata Pausa"></td>
+        <td class="text-center">
+          <input type="checkbox" id="mondayOff" onchange="toggleDayOff('monday')">
+          <label for="mondayOff" class="ms-1">Non di turno</label>
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Martedì</strong></td>
+        <td><input type="time" id="tuesdayStart" class="form-control" placeholder="Ora Inizio"></td>
+        <td><input type="time" id="tuesdayEnd" class="form-control" placeholder="Ora Fine"></td>
+        <td><input type="time" id="tuesdayBreakStart" class="form-control" placeholder="Inizio Pausa"></td>
+        <td><input type="number" id="tuesdayBreakDuration" class="form-control" placeholder="Durata Pausa"></td>
+        <td class="text-center">
+          <input type="checkbox" id="tuesdayOff" onchange="toggleDayOff('tuesday')">
+          <label for="tuesdayOff" class="ms-1">Non di turno</label>
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Mercoledì</strong></td>
+        <td><input type="time" id="wednesdayStart" class="form-control" placeholder="Ora Inizio"></td>
+        <td><input type="time" id="wednesdayEnd" class="form-control" placeholder="Ora Fine"></td>
+        <td><input type="time" id="wednesdayBreakStart" class="form-control" placeholder="Inizio Pausa"></td>
+        <td><input type="number" id="wednesdayBreakDuration" class="form-control" placeholder="Durata Pausa"></td>
+        <td class="text-center">
+          <input type="checkbox" id="wednesdayOff" onchange="toggleDayOff('wednesday')">
+          <label for="wednesdayOff" class="ms-1">Non di turno</label>
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Giovedì</strong></td>
+        <td><input type="time" id="thursdayStart" class="form-control" placeholder="Ora Inizio"></td>
+        <td><input type="time" id="thursdayEnd" class="form-control" placeholder="Ora Fine"></td>
+        <td><input type="time" id="thursdayBreakStart" class="form-control" placeholder="Inizio Pausa"></td>
+        <td><input type="number" id="thursdayBreakDuration" class="form-control" placeholder="Durata Pausa"></td>
+        <td class="text-center">
+          <input type="checkbox" id="thursdayOff" onchange="toggleDayOff('thursday')">
+          <label for="thursdayOff" class="ms-1">Non di turno</label>
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Venerdì</strong></td>
+        <td><input type="time" id="fridayStart" class="form-control" placeholder="Ora Inizio"></td>
+        <td><input type="time" id="fridayEnd" class="form-control" placeholder="Ora Fine"></td>
+        <td><input type="time" id="fridayBreakStart" class="form-control" placeholder="Inizio Pausa"></td>
+        <td><input type="number" id="fridayBreakDuration" class="form-control" placeholder="Durata Pausa"></td>
+        <td class="text-center">
+          <input type="checkbox" id="fridayOff" onchange="toggleDayOff('friday')">
+          <label for="fridayOff" class="ms-1">Non di turno</label>
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Sabato</strong></td>
+        <td><input type="time" id="saturdayStart" class="form-control" placeholder="Ora Inizio"></td>
+        <td><input type="time" id="saturdayEnd" class="form-control" placeholder="Ora Fine"></td>
+        <td><input type="time" id="saturdayBreakStart" class="form-control" placeholder="Inizio Pausa"></td>
+        <td><input type="number" id="saturdayBreakDuration" class="form-control" placeholder="Durata Pausa"></td>
+        <td class="text-center">
+          <input type="checkbox" id="saturdayOff" onchange="toggleDayOff('saturday')">
+          <label for="saturdayOff" class="ms-1">Non di turno</label>
+        </td>
+      </tr>
+      <tr>
+        <td><strong>Domenica</strong></td>
+        <td><input type="time" id="sundayStart" class="form-control" placeholder="Ora Inizio"></td>
+        <td><input type="time" id="sundayEnd" class="form-control" placeholder="Ora Fine"></td>
+        <td><input type="time" id="sundayBreakStart" class="form-control" placeholder="Inizio Pausa"></td>
+        <td><input type="number" id="sundayBreakDuration" class="form-control" placeholder="Durata Pausa"></td>
+        <td class="text-center">
+          <input type="checkbox" id="sundayOff" onchange="toggleDayOff('sunday')">
+          <label for="sundayOff" class="ms-1">Non di turno</label>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <button class="btn btn-primary mt-2" onclick="saveMultiDayShiftSettings()">Salva Turno Multi</button>
+  <button id="copyMultiDayShiftSettingsBtn" class="btn btn-secondary mt-2" style="display:none;" onclick="copyMultiDayShiftSettings()">Copia Turno</button>
+  <button id="pasteMultiDayShiftSettingsBtn" class="btn btn-secondary mt-2" style="display:none;" onclick="pasteMultiDayShiftSettings()">Incolla Turno</button>
+</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+    //predispone il modal
+    function openShiftsModalSettings(operatorId, operatorName, date) {
+    console.log("Apro modal settings per operatore:", operatorId, operatorName, date);
+    document.getElementById('copyMultiDayShiftSettingsBtn').style.display = 'none';
+
+    // Ripristina stato copia da localStorage se presente e sincronizza la variabile locale
+    try {
+      const raw = localStorage.getItem('copiedMultiShiftSettings');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        window.copiedMultiShiftSettings = parsed;
+        copiedMultiShiftSettings = parsed; // sincronizza la variabile che usa pasteMultiDayShiftSettings
+      } else {
+        // se non c'è nulla in localStorage, mantieni eventuale valore già in window
+        if (window.copiedMultiShiftSettings) copiedMultiShiftSettings = window.copiedMultiShiftSettings;
+      }
+    } catch (e) {
+      // garantisci fallback sicuro
+      copiedMultiShiftSettings = copiedMultiShiftSettings || window.copiedMultiShiftSettings || null;
+    }
+
+    // Imposta visibilità del pulsante "Incolla" in base allo stato effettivo
+    const pasteBtn = document.getElementById('pasteMultiDayShiftSettingsBtn');
+    if (pasteBtn) pasteBtn.style.display = copiedMultiShiftSettings ? '' : 'none';
+
+    document.getElementById('modalOperatorNameSettings').textContent = operatorName;
+    const modalEl = document.getElementById('OperatorShiftsModalSettings');
+    modalEl.setAttribute('data-operator-id', operatorId);
+    modalEl.setAttribute('data-date', date);
+
+    // Resetta i campi del form
+    document.getElementById('shiftStartDateSettings').value = '';
+    document.getElementById('shiftEndDateSettings').value = '';
+
+    // Svuota tutti i campi del planning settimanale
+    const days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+    days.forEach(day => {
+        document.getElementById(day + 'Start').value = '';
+        document.getElementById(day + 'End').value = '';
+        document.getElementById(day + 'BreakStart').value = '';
+        document.getElementById(day + 'BreakDuration').value = '';
+        document.getElementById(day + 'Off').checked = false;
+        toggleDayOff(day); 
+        // Riabilita i campi e resetta lo stile
+        document.getElementById(day + 'Start').disabled = false;
+        document.getElementById(day + 'End').disabled = false;
+        document.getElementById(day + 'BreakStart').disabled = false;
+        document.getElementById(day + 'BreakDuration').disabled = false;
+        document.getElementById(day + 'Start').style.backgroundColor = '';
+        document.getElementById(day + 'End').style.backgroundColor = '';
+        document.getElementById(day + 'BreakStart').style.backgroundColor = '';
+        document.getElementById(day + 'BreakDuration').style.backgroundColor = '';
+    });
+
+    const bsModal = new bootstrap.Modal(modalEl);
+    bsModal.show();
+}
+
+    //imposta i click per aprire il modal
+    document.addEventListener('DOMContentLoaded', function() {
+    const links = document.querySelectorAll('.operator-shift-link-settings');
+    console.log("DEBUG: Trovati", links.length, "operator-shift-link-settings");
+    links.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const operatorId = link.getAttribute('data-operator-id');
+            const operatorName = link.getAttribute('data-operator-name');
+            // Imposta una data di default (es. la data odierna)
+            const date = new Date().toISOString().split('T')[0];
+            console.log("DEBUG: Clic su link Turni (settings), operatorId=", operatorId, "operatorName=", operatorName, "date=", date);
+            openShiftsModalSettings(operatorId, operatorName, date);
+        });
+    });
+});
+
+    //funzione per salvare i turni giornalieri
+    function saveDailyShiftSettings() {
+    const operatorId = document.getElementById('OperatorShiftsModalSettings').getAttribute('data-operator-id');
+    const date = document.getElementById('OperatorShiftsModalSettings').getAttribute('data-date');
+    const startTime = document.getElementById('shiftStartTimeSettings').value;
+    const endTime = document.getElementById('shiftEndTimeSettings').value;
+    if (!startTime || !endTime) {
+        alert('Inserisci ora di inizio e fine.');
+        return;
+    }
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    fetch(`/calendar/api/operators/${operatorId}/shifts`, {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({
+            date: date,
+            startTime: startTime,
+            endTime: endTime
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw new Error(err.error || "Errore nel salvataggio"); });
+        }
+        return response.json();
+    })
+    .then(data => {
+    console.log('Turno multi-giorno salvato:', data);
+    const modalEl = document.getElementById('OperatorShiftsModalSettings');
+    const bsModal = bootstrap.Modal.getInstance(modalEl);
+
+const startDate = document.getElementById('shiftStartDateSettings').value;
+const endDate = document.getElementById('shiftEndDateSettings').value;
+let start = new Date(startDate);
+let end = new Date(endDate);
+for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    let dayName = d.toLocaleString('en-us', { weekday: 'long' }).toLowerCase();
+    if (document.getElementById(dayName + "Off").checked) {
+        let formattedDate = d.toISOString().split('T')[0];
+        document.querySelectorAll(`td[data-date="${formattedDate}"]`).forEach(td => {
+            td.classList.add("calendar", "closed");
+        });
+    }
+}
+
+        fetchCalendarData();
+    })
+    .catch(error => {
+        console.error('Errore:', error);
+        alert(error.message);
+    });
+}
+
+function saveMultiDayShiftSettings() {
+    const operatorId = document.getElementById('OperatorShiftsModalSettings').getAttribute('data-operator-id');
+    const startDate = document.getElementById('shiftStartDateSettings').value;
+    const endDate = document.getElementById('shiftEndDateSettings').value;
+
+    // Raccoglie i dati per ciascun giorno
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const shifts = {};
+    days.forEach(day => {
+        const isOff = document.getElementById(day + 'Off').checked;
+        if (isOff) {
+    shifts[day] = {
+        start: "00:00",   // oppure "NO", a seconda della logica del backend
+        end: "00:00",     // oppure "NO"
+        breakStart: "",
+        breakDuration: ""
+    };
+} else {
+    shifts[day] = {
+        start: document.getElementById(day + 'Start').value,
+        end: document.getElementById(day + 'End').value,
+        breakStart: document.getElementById(day + 'BreakStart').value,
+        breakDuration: document.getElementById(day + 'BreakDuration').value
+    };
+}
+    });
+
+    if (!startDate || !endDate) {
+        alert('Inserisci le date di inizio e fine.');
+        return;
+    }
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    // Qui viene chiamato l'endpoint multi-turno, come nella funzione setDayOffCalendar
+    fetch(`/calendar/api/operators/${operatorId}/shifts/multi`, {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({
+            startDate: startDate,
+            endDate: endDate,
+            shifts: shifts
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { 
+                throw new Error(err.error || "Errore nel salvataggio del turno multi-giorno");
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+    alert('Turni salvati in calendario');
+    const modalEl = document.getElementById('OperatorShiftsModalSettings');
+    
+    // Raccogli lo stato dei checkbox per i giorni off
+    const daysOff = {
+        monday: document.getElementById('mondayOff').checked,
+        tuesday: document.getElementById('tuesdayOff').checked,
+        wednesday: document.getElementById('wednesdayOff').checked,
+        thursday: document.getElementById('thursdayOff').checked,
+        friday: document.getElementById('fridayOff').checked,
+        saturday: document.getElementById('saturdayOff').checked,
+        sunday: document.getElementById('sundayOff').checked,
+    };
+    
+    // Converte le date da stringa a oggetto Date
+    const startDateStr = document.getElementById('shiftStartDateSettings').value;
+    const endDateStr = document.getElementById('shiftEndDateSettings').value;
+    let currentDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr);
+    
+    // Per ogni data nell'intervallo, se il giorno è OFF, aggiungi la classe ai td corrispondenti
+    while (currentDate <= endDate) {
+        // Ottieni il nome del giorno in inglese (in minuscolo)
+        let dayName = currentDate.toLocaleString('en-US', { weekday: 'long' }).toLowerCase();
+        if (daysOff[dayName]) {
+            // Formatta la data in "YYYY-MM-DD"
+            let formattedDate = currentDate.toISOString().split('T')[0];
+            document.querySelectorAll(`td[data-date="${formattedDate}"]`).forEach(td => {
+                td.classList.add("calendar", "closed");
+            });
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    fetchCalendarData();
+})
+
+    .catch(error => {
+        console.error('Errore:', error);
+        alert(error.message);
+    });
+}
+
+let copiedMultiShiftSettings = null;
+
+function copyMultiDayShiftSettings() {
+    // Copia solo i campi dei giorni della settimana, NON le date in alto!
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    copiedMultiShiftSettings = {};
+    
+    days.forEach(day => {
+        copiedMultiShiftSettings[day] = {
+            start: document.getElementById(day + 'Start').value,
+            end: document.getElementById(day + 'End').value,
+            breakStart: document.getElementById(day + 'BreakStart').value,
+            breakDuration: document.getElementById(day + 'BreakDuration').value,
+            off: document.getElementById(day + 'Off').checked
+        };
+    });
+  try {
+    const serialized = JSON.stringify(copiedMultiShiftSettings);
+    localStorage.setItem('copiedMultiShiftSettings', serialized);
+    // mantieni copia anche su window in modo che venga letta dai modali ricreati
+    window.copiedMultiShiftSettings = copiedMultiShiftSettings;
+  } catch (e) { /* ignore */ }
+  document.getElementById('pasteMultiDayShiftSettingsBtn').style.display = '';
+}
+
+function pasteMultiDayShiftSettings() {
+    // Incolla solo i campi dei giorni della settimana, NON le date in alto!
+    if (!copiedMultiShiftSettings) {
+        alert('Nessun turno copiato.');
+        return;
+    }
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    days.forEach(day => {
+        document.getElementById(day + 'Start').value = copiedMultiShiftSettings[day].start;
+        document.getElementById(day + 'End').value = copiedMultiShiftSettings[day].end;
+        document.getElementById(day + 'BreakStart').value = copiedMultiShiftSettings[day].breakStart;
+        document.getElementById(day + 'BreakDuration').value = copiedMultiShiftSettings[day].breakDuration;
+        document.getElementById(day + 'Off').checked = copiedMultiShiftSettings[day].off;
+        toggleDayOff(day);
+    });
+}
+
+function printShiftsSettings() {
+    // Recupera il contenuto del calendario dei turni dal modal settings
+    const printContents = document.getElementById('calendarSettings').innerHTML;
+    // Salva il contenuto originale della pagina
+    const originalContents = document.body.innerHTML;
+    // Sostituisci il contenuto della pagina con quello del calendario
+    document.body.innerHTML = printContents;
+    window.print();
+    // Ripristina il contenuto originale e ricarica la pagina per ripristinare gli script
+    document.body.innerHTML = originalContents;
+    location.reload();
+}
+
+function fetchCalendarData() {
+    // Esegui una fetch per aggiornare i dati del calendario o aggiorna dinamicamente una sezione della pagina
+    console.log('fetchCalendarData chiamata');
+    // Ad esempio: fetch('/api/shifts').then(...).then(data => { /* aggiorna il DOM */ });
+}
+</script>  
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const copyBtn = document.getElementById('copyMultiDayShiftSettingsBtn');
+        const days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+        days.forEach(day => {
+            ['Start','End','BreakStart','BreakDuration','Off'].forEach(suffix => {
+                const el = document.getElementById(day + suffix);
+                if (el) {
+                    el.addEventListener('input', () => { copyBtn.style.display = ''; });
+                    el.addEventListener('change', () => { copyBtn.style.display = ''; });
+                }
+            });
+        });
+    });
+    </script>
+<script>
+function toggleDayOff(day) {
+    const startEl = document.getElementById(day + 'Start');
+    const endEl = document.getElementById(day + 'End');
+    const breakStartEl = document.getElementById(day + 'BreakStart');
+    const breakDurationEl = document.getElementById(day + 'BreakDuration');
+    const isOff = document.getElementById(day + 'Off').checked;
+
+    // Disabilita o abilita i campi in base allo stato
+    startEl.disabled = isOff;
+    endEl.disabled = isOff;
+    breakStartEl.disabled = isOff;
+    breakDurationEl.disabled = isOff;
+
+    if (isOff) {
+        // Applica uno stile per evidenziare il giorno "non di turno"
+        startEl.style.backgroundColor = "#e9ecef";
+        endEl.style.backgroundColor = "#e9ecef";
+        breakStartEl.style.backgroundColor = "#e9ecef";
+        breakDurationEl.style.backgroundColor = "#e9ecef";
+    } else {
+        // Rimuove lo stile per i giorni attivi
+        startEl.style.backgroundColor = "";
+        endEl.style.backgroundColor = "";
+        breakStartEl.style.backgroundColor = "";
+        breakDurationEl.style.backgroundColor = "";
+    }
+}
+</script>
+<script>
+function toggleOperatorVisibility(operatorId, isVisible) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    console.log('Operatore ' + operatorId + ' impostato come ' + (isVisible ? 'visible' : 'hidden'));
+
+    // Invia la richiesta per aggiornare il flag is_visible nel database
+    fetch(`/settings/operators/${operatorId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({
+            is_visible: isVisible
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            console.error('Errore durante l\'aggiornamento della visibilità dell\'operatore');
+        } else {
+            console.log('Visibilità dell\'operatore aggiornata con successo nel database');
+            // Sposta la riga in base al nuovo stato
+            let row = document.querySelector("tr[data-operator-id='" + operatorId + "']");
+            if (row) {
+                const tbody = row.parentNode;
+                if (isVisible) {
+                    // Se visible, sposta in cima
+                    tbody.insertBefore(row, tbody.firstChild);
+                } else {
+                    // Se non visible, sposta in fondo
+                    tbody.appendChild(row);
+                }
+                updateOperatorOrderFromDOM();
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Errore durante l\'invio della richiesta:', error);
+    });
+}
+
+function updateOperatorOrderFromDOM() {
+    const tbody = document.querySelector("table.table tbody");
+    if (tbody) {
+        var newOrder = [];
+        // Aggiorna data-order in base alla posizione corrente nel DOM
+        tbody.querySelectorAll("tr[data-operator-id]").forEach(function(tr, index) {
+            tr.setAttribute("data-order", index);
+            newOrder.push(tr.getAttribute("data-operator-id"));
+        });
+        console.log("Nuovo ordine operatori aggiornato dal DOM:", newOrder);
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        // Invia il nuovo ordine al server per salvarlo nel database
+        fetch('/operators/order', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({ order: newOrder })
+        })
+        .then(response => {
+            if (!response.ok) {
+                console.error('Failed to save operator order');
+            } else {
+                console.log('Operator order saved successfully');
+            }
+        })
+        .catch(error => {
+            console.error('Error saving operator order:', error);
+        });
+    }
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+<script>
+  // Definisci compareRows come funzione globale FUORI da qualsiasi altra funzione
+  function compareRows(a, b) {
+      const aVisible = a.querySelector('input[type="checkbox"]').checked;
+      const bVisible = b.querySelector('input[type="checkbox"]').checked;
+  
+      if (aVisible !== bVisible) {
+          return aVisible ? -1 : 1; // visibili sempre prima dei non visibili
+      }
+  
+      const aTipo = a.querySelector("td:nth-child(3)").textContent.trim().toLowerCase();
+      const bTipo = b.querySelector("td:nth-child(3)").textContent.trim().toLowerCase();
+  
+      if (aTipo !== bTipo) {
+          return aTipo === "macchinario" ? -1 : 1; // macchinari sopra estetiste
+      }
+  
+      const aDrag = a.getAttribute("data-drag-order");
+      const bDrag = b.getAttribute("data-drag-order");
+      if (aDrag !== null && bDrag !== null) {
+          return parseInt(aDrag, 10) - parseInt(bDrag, 10);
+      }
+  
+      return parseInt(a.getAttribute("data-order"), 10) - parseInt(b.getAttribute("data-order"), 10);
+  }
+  
+  document.addEventListener("DOMContentLoaded", function() {
+      var tbody = document.querySelector("table.table tbody");
+      if (!tbody) return;
+  
+      // Funzione per riordinare la tabella
+      function sortOperators() {
+          var rows = Array.from(tbody.querySelectorAll("tr[data-operator-id]"));
+  
+          // Usa compareRows che ora è definita globalmente
+          rows.sort(compareRows);
+  
+          // Appendi le righe ordinate al tbody
+          rows.forEach(function(row, index) {
+              tbody.appendChild(row);
+              row.setAttribute("data-order", index); // Aggiorna data-order
+          });
+      }
+  
+     // Modifica solo la callback onEnd di Sortable.create
+     Sortable.create(tbody, {
+      animation: 150,
+      onEnd: function(evt) {
+          // Aggiorna per ogni riga l'ordine di drag in base alla posizione corrente nel DOM
+          var rows = Array.from(tbody.querySelectorAll("tr[data-operator-id]"));
+          rows.forEach(function(row, index) {
+              row.setAttribute("data-drag-order", index);
+          });
+          
+          // Ora riordina le righe usando la funzione di comparazione aggiornata
+          sortOperators();
+          
+          var newOrder = [];
+          tbody.querySelectorAll("tr[data-operator-id]").forEach(function(tr, index) {
+              // Aggiorna anche data-order (opzionale se vuoi persistere l'ordine finale)
+              tr.setAttribute("data-order", index);
+              newOrder.push(tr.getAttribute("data-operator-id"));
+          });
+          console.log("Nuovo ordine operatori:", newOrder);
+      
+          const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+          fetch('/operators/order', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': csrfToken
+              },
+              body: JSON.stringify({ order: newOrder })
+          })
+          .then(response => {
+              if (!response.ok) {
+                  console.error('Failed to save operator order');
+              } else {
+                  console.log('Operator order saved successfully');
+              }
+          })
+          .catch(error => {
+              console.error('Error saving operator order:', error);
+          });
+      }
+  });
+      // Ordina la tabella all'avvio
+      sortOperators();
+  });
+  </script>
+  <script>
+document.addEventListener("DOMContentLoaded", function() {
+    var tbody = document.querySelector("table.table tbody");
+    if (tbody) {
+        var rows = Array.from(tbody.querySelectorAll("tr[data-operator-id]"));
+        rows.sort(compareRows);  // usa direttamente la funzione aggiornata
+
+        rows.forEach(function(row, index) {
+            tbody.appendChild(row);
+            row.setAttribute("data-order", index);
+        });
+
+        console.log("Ordine operatori ripristinato secondo le regole");
+    }
+});
+    </script>    
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+    const modalEl = document.getElementById('OperatorShiftsModalSettings');
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', function () {
+            // Rimuove eventuali backdrop rimaste
+            document.body.classList.remove('modal-open');
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+        });
+    }
+});
+</script>
+<style>
+    .custom-modal-width {
+        max-width: 70% !important;
+    }
+    </style>
+{% endblock %}

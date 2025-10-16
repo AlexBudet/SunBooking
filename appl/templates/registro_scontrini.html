@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+{% block content %}
+<br><br><br>
+<h2>Registro Giornaliero Scontrini</h2>
+<br>
+<div class="d-flex align-items-center mb-3" style="gap: 1em;">&nbsp;&nbsp;
+  <input type="date" id="giornoPicker" class="form-control" style="width: 180px;"
+         value="{{ giorno.strftime('%Y-%m-%d') }}">
+  <span>Data visualizzata: <strong id="giornoVisualizzato">{{ giorno.strftime('%d/%m/%Y') }}</strong></span>
+</div>
+
+<script>
+document.getElementById('giornoPicker').addEventListener('change', function() {
+  const data = this.value;
+  window.location = "{{ url_for('cassa.registro_scontrini') }}?data=" + data;
+});
+</script>
+
+<div style="max-height: 80vh; overflow-y: auto; width: 94%; margin: 0 auto;">
+  <table class="table table-bordered table-sm mb-0" style="width:100%;">
+    <thead class="sticky-thead">
+    <tr>
+      <th>Data</th>
+      <th>Ora</th>
+      <th>ID</th>
+      <th>Progressivo</th>
+      <th>Operatore</th>
+      <th>Cliente</th>
+      <th>Importo (€)</th>
+      <th>Metodo Pagamento</th>
+      <th>Azioni</th>
+    </tr>
+  </thead>
+<tbody>
+  {% for s in scontrini %}
+  {% set bg = "#e5e5e5" if not s.is_fiscale else "#fff" %}
+  <tr data-id="{{ s.id }}" {% if s.total_amount < 0 %}style="background-color:#ffeaea; font-weight:bold;" title="Storno"{% endif %}>
+    <td style="background-color: {{ bg }};">{{ s.created_at.strftime('%d/%m/%Y') }}</td>
+    <td style="background-color: {{ bg }};">{{ s.created_at.strftime('%H:%M:%S') }}</td>
+    <td style="background-color: {{ bg }};">{{ s.id }}</td>
+    <td style="background-color: {{ bg }};">{{ s.numero_progressivo }}</td>
+    <td style="background-color: {{ bg }};">
+      {% if s.operatore %}
+        {{ s.operatore.user_nome }} {{ s.operatore.user_cognome }}
+      {% else %}
+        -
+      {% endif %}
+    </td>
+    <td style="background-color: {{ bg }};">
+      {% if s.cliente %}
+        {{ s.cliente.cliente_nome }} {{ s.cliente.cliente_cognome }}
+      {% else %}
+        Generico
+      {% endif %}
+    </td>
+    <td style="background-color: {{ bg }};">
+  {% if s.total_amount < 0 %}
+    <span style="color:red;">{{ "%.2f"|format(s.total_amount) }}</span>
+  {% else %}
+    {{ "%.2f"|format(s.total_amount) }}
+  {% endif %}
+</td>
+    <td style="background-color: {{ bg }};">
+      {% set pagamenti = s.voci | map(attribute='metodo_pagamento') | list %}
+      {% set pagamenti_unici = pagamenti | unique | list %}
+      {% if pagamenti|length == 1 %}
+        {{ pagamenti[0]|upper }}
+      {% elif pagamenti|length > 1 and pagamenti_unici|length == 1 %}
+        {{ pagamenti[0]|upper }}
+      {% else %}
+        MIX
+      {% endif %}
+    </td>
+<td style="background-color: {{ bg }};">
+  <button type="button" class="btn btn-sm btn-info btn-visualizza-scontrino me-2">Visualizza</button>
+{% if user_role in ['admin', 'owner'] and (giorno == date_today or not s.is_fiscale) %}
+<button type="button" class="btn btn-sm btn-danger btn-elimina-scontrino">Elimina</button>
+{% endif %}
+</td>
+  </tr>
+  {% endfor %}
+  <tr style="background:#e9ecef; font-weight:bold;">
+    <td colspan="6" style="text-align:right;">Totale</td>
+    <td>
+      {{ "%.2f"|format(scontrini|map(attribute='total_amount')|sum) }}
+    </td>
+    <td colspan="2"></td>
+  </tr>
+</tbody>
+</table>
+</div>
+<style>
+.sticky-thead th {
+  position: sticky;
+  top: 0;
+  background: #f8f9fa;
+  z-index: 2;
+  border-top: 2px solid #dee2e6;
+}
+.table thead th, .table td {
+  text-align: center;
+  vertical-align: middle;
+}
+.table tbody td {
+  padding: 0.15em 1.1em !important;
+}
+.tab-btns > button {
+  margin-right: 0.5em;
+}
+.tab-btns > button:last-child {
+  margin-right: 0;
+}
+</style>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    document.querySelector('table').addEventListener('click', function(e) {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+
+      const tr = btn.closest('tr');
+      const id = tr ? tr.dataset.id : null;
+      if (!id) return;
+
+      // === VISUALIZZA SCONTRINO ===
+      if (btn.classList.contains('btn-visualizza-scontrino')) {
+        fetch(`/cassa/api/receipt/${id}`, {
+          headers: {
+            'X-CSRFToken': csrfToken
+          }
+        })
+          .then(res => {
+            if (!res.ok) throw new Error('Errore nella risposta del server');
+            return res.json();
+          })
+
+
+.then(data => {
+  const isFiscale = !!data.is_fiscale;
+
+  const modalBody = document.getElementById('dettaglioScontrinoBody');
+  const modalElement = document.getElementById('dettaglioScontrinoModal');
+  const modalFooter = document.getElementById('dettaglioScontrinoFooter');
+
+  if (!modalBody || !modalElement || !modalFooter) {
+    console.error('Elemento del modal non trovato');
+    alert('Errore tecnico: impossibile visualizzare i dettagli.');
+    return;
+  }
+
+  // Pulisci contenitori
+  modalBody.innerHTML = '';
+  modalFooter.innerHTML = '';
+
+  // Header dettagli (usiamo textContent per evitare HTML injection)
+  const infoData = document.createElement('div');
+  const infoOp = document.createElement('div');
+  const infoCliente = document.createElement('div');
+
+  const strong1 = document.createElement('strong');
+  strong1.textContent = 'Data/Ora: ';
+  infoData.appendChild(strong1);
+  infoData.append(document.createTextNode(String(data.created_at || '—')));
+
+  const strong2 = document.createElement('strong');
+  strong2.textContent = 'Operatore: ';
+  infoOp.appendChild(strong2);
+  infoOp.append(document.createTextNode(String(data.operatore || '—')));
+
+  const strong3 = document.createElement('strong');
+  strong3.textContent = 'Cliente: ';
+  infoCliente.appendChild(strong3);
+  infoCliente.append(document.createTextNode(String(data.cliente || '—')));
+
+  // HR
+  const hr = document.createElement('hr');
+
+  // Tabella voci
+  const table = document.createElement('table');
+  table.className = 'table table-bordered';
+
+  const thead = document.createElement('thead');
+  const trh = document.createElement('tr');
+  ['Servizio', 'Prezzo (€)', 'Metodo Pagamento'].forEach(h => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    trh.appendChild(th);
+  });
+  thead.appendChild(trh);
+
+  const tbody = document.createElement('tbody');
+
+  // Array metodi (per POST)
+  const metodiModificati = [];
+
+  (data.voci || []).forEach((v, idx) => {
+    const tr = document.createElement('tr');
+
+    const tdNome = document.createElement('td');
+    tdNome.textContent = String(v.nome || '');
+
+    const tdPrezzo = document.createElement('td');
+    tdPrezzo.textContent = String(v.prezzo ?? '');
+
+    const tdMetodo = document.createElement('td');
+
+    if (isFiscale) {
+      tdMetodo.classList.add('editable-metodo');
+      tdMetodo.dataset.index = String(idx);
+      const iniziale = (v.metodo_pagamento ? String(v.metodo_pagamento).toLowerCase() : 'cash');
+      tdMetodo.textContent = iniziale.toUpperCase();
+      metodiModificati[idx] = iniziale;
+    } else {
+      // NON fiscale: bloccato su CASH
+      tdMetodo.classList.add('blocked-metodo');
+      tdMetodo.setAttribute('aria-disabled', 'true');
+      tdMetodo.style.background = '#e5e5e5';
+      tdMetodo.style.cursor = 'not-allowed';
+      tdMetodo.textContent = 'CASH';
+      metodiModificati[idx] = 'cash';
+    }
+
+    tr.appendChild(tdNome);
+    tr.appendChild(tdPrezzo);
+    tr.appendChild(tdMetodo);
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(thead);
+  table.appendChild(tbody);
+
+  // Totali
+  const totPagato = document.createElement('div');
+  totPagato.className = 'mt-3';
+  const s1 = document.createElement('strong');
+  s1.textContent = 'Totale pagato: ';
+  totPagato.appendChild(s1);
+  totPagato.append(document.createTextNode(`€${(parseFloat(data.totale) || 0).toFixed(2)}`));
+
+  const totScontrinato = document.createElement('div');
+  const s2 = document.createElement('strong');
+  s2.textContent = 'Totale scontrinato: ';
+  totScontrinato.appendChild(s2);
+  totScontrinato.append(document.createTextNode(`€${(parseFloat(data.totale_scontrinato) || 0).toFixed(2)}`));
+
+  // Monta tutto nel body
+  modalBody.appendChild(infoData);
+  modalBody.appendChild(infoOp);
+  modalBody.appendChild(infoCliente);
+  modalBody.appendChild(hr);
+  modalBody.appendChild(table);
+  modalBody.appendChild(totPagato);
+  modalBody.appendChild(totScontrinato);
+
+  let modificato = false;
+  let confermaBtn = null;
+
+  if (isFiscale) {
+    // Botttone conferma SOLO per fiscali
+    confermaBtn = document.createElement('button');
+    confermaBtn.textContent = 'Conferma modifiche';
+    confermaBtn.className = 'btn btn-success';
+    confermaBtn.style.display = 'none';
+    modalFooter.appendChild(confermaBtn);
+
+    // Click per ciclare metodi
+    modalBody.querySelectorAll('.editable-metodo').forEach(cell => {
+      cell.addEventListener('click', function () {
+        const metodi = ['cash', 'pos', 'bank'];
+        const index = parseInt(this.dataset.index);
+        let current = String(this.textContent || '').trim().toLowerCase();
+        if (!metodi.includes(current)) current = 'cash';
+        const next = metodi[(metodi.indexOf(current) + 1) % metodi.length];
+        this.textContent = next.toUpperCase();
+        metodiModificati[index] = next;
+        confermaBtn.style.display = 'inline-block';
+        modificato = true;
+      });
+    });
+
+    // POST aggiornamento
+    confermaBtn.onclick = function () {
+      fetch(`/cassa/api/receipt/${data.id}/update-metodo`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ metodi: metodiModificati })
+      })
+      .then(res => {
+        if (!res.ok) throw new Error('Errore aggiornamento metodi pagamento');
+        bootstrap.Modal.getInstance(modalElement).hide();
+        window.location.reload();
+      })
+      .catch(() => alert('Errore durante l\'aggiornamento dei metodi di pagamento.'));
+    };
+  } else {
+    // Non fiscale: nota informativa
+    const note = document.createElement('span');
+    note.className = 'text-muted';
+    note.textContent = 'Scontrino non fiscale: metodi pagamento bloccati su CASH.';
+    modalFooter.appendChild(note);
+  }
+
+  const bsModal = new bootstrap.Modal(modalElement);
+  bsModal.show();
+
+  modalElement.addEventListener('hidden.bs.modal', function () {
+    if (confermaBtn) confermaBtn.remove();
+    if (modificato) window.location.reload();
+  });
+})
+
+.catch(err => {
+  console.error(err);
+  alert('Errore nel caricamento dettagli scontrino');
+});
+      }
+
+      // === ELIMINA SCONTRINO ===
+      if (btn.classList.contains('btn-elimina-scontrino')) {
+        if (confirm('Sei sicuro di voler eliminare questo scontrino?')) {
+          // Crea e mostra popup bloccante
+          const loadingModal = document.createElement('div');
+          loadingModal.id = 'loadingModal';
+          loadingModal.innerHTML = `
+            <div class="modal fade show" style="display: block; background: rgba(0,0,0,0.5);" tabindex="-1">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-body text-center">
+                    <h5>Attendi conferma storno scontrino...</h5>
+                    <div class="spinner-border text-primary mt-3" role="status">
+                      <span class="visually-hidden">Caricamento...</span>
+                    </div>
+                    <p class="mt-3">Non chiudere la pagina.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+          document.body.appendChild(loadingModal);
+
+          fetch(`/cassa/api/receipt/${id}`, {
+            method: 'DELETE',
+            headers: {
+              'X-CSRFToken': csrfToken
+            }
+          })
+            .then(res => {
+              document.body.removeChild(loadingModal);
+              if (res.ok) {
+                tr.remove();
+              } else {
+                return res.json().then(data => {
+                  alert('Errore durante l\'eliminazione: ' + (data.error || 'Errore sconosciuto'));
+                });
+              }
+            })
+            .catch(err => {
+              document.body.removeChild(loadingModal);
+              alert('Errore di rete durante l\'eliminazione: ' + err.message);
+            });
+        }
+      }
+    });
+  });
+</script>
+
+<!-- Modal Dettaglio Scontrino -->
+<div class="modal fade" id="dettaglioScontrinoModal" tabindex="-1" aria-labelledby="dettaglioScontrinoLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="dettaglioScontrinoLabel">Dettaglio Scontrino</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body" id="dettaglioScontrinoBody">
+        <!-- Qui verranno caricati i dettagli via JS -->
+      </div>
+      <div class="modal-footer" id="dettaglioScontrinoFooter"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
