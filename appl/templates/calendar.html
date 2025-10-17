@@ -96,14 +96,14 @@
 <!-- NAVIGAZIONE CALENDARIO -->
 <div class="calendar-navigation sticky-nav">
     <!-- Freccia sinistra (giorno precedente) -->
-    <a href="{{ url_for('calendar.calendar_home', date=day_before_str) }}" class="arrow-nav">&lt;</a>
+    <a href="{{ url_for('calendar.calendar_home', date=day_before_str) }}" class="arrow-nav arrow-left">&lt;</a>
     <!-- Campo data visibile con giorno della settimana -->
     <div class="calendar-date-container">
         <input type="text" id="date" name="date" value="{{ selected_date_str }}" class="calendar-date-input">
         <span id="dayOfWeek"></span>
     </div>
     <!-- Freccia destra (giorno successivo) -->
-    <a href="{{ url_for('calendar.calendar_home', date=day_after_str) }}" class="arrow-nav">&gt;</a>
+    <a href="{{ url_for('calendar.calendar_home', date=day_after_str) }}" class="arrow-nav arrow-right">&gt;</a>
     <!-- Pulsante per tornare a oggi: visualizza solo se la data corrente non è quella odierna -->
 {% if selected_date_str != today_str %}
 &nbsp;<a href="{{ url_for('calendar.calendar_home', date=today_str) }}" class="btn-today">Vai a OGGI</a>
