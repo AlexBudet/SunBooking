@@ -77,30 +77,12 @@ def block_paths(app, blocked_prefixes: tuple[str, ...]):
         return app(environ, start_response)
     return _wrap
 
-def fix_calendar_method_middleware(app):
+def fix_delete_method_middleware(app):
     def wrapper(environ, start_response):
         path = environ.get('PATH_INFO', '')
         method = environ.get('REQUEST_METHOD', '')
-        # Route di editing che devono essere POST se sono GET
-        editing_routes = [
-            '/calendar/delete/',
-            '/calendar/add',
-            '/calendar/update/',
-            '/calendar/block_off',
-            '/calendar/delete_block_off/',
-            '/calendar/adjust-duration/',
-            '/calendar/update_note/',
-            '/calendar/update_color/',
-            '/calendar/update_layout/',
-            '/calendar/add-client',
-            '/calendar/no-show',
-            '/calendar/update_status/',
-            '/calendar/api/appointment_status',
-            '/calendar/api/associa-cliente-booking',
-            '/calendar/send-whatsapp-auto',
-            '/calendar/api/operators/'
-        ]
-        if method == 'GET' and any(path.startswith(route) for route in editing_routes):
+        # Se è GET su /calendar/delete/, cambia a POST
+        if path.startswith('/calendar/delete/') and method == 'GET':
             environ['REQUEST_METHOD'] = 'POST'
         return app(environ, start_response)
     return wrapper
@@ -155,7 +137,7 @@ for idx, uri in pool.items():
     wrapped = with_request_env(child, creds)
     wrapped = with_db_cookie(wrapped, idx, secure=use_https)
     wrapped = block_paths(wrapped, ("/cassa", "/cassa.html"))
-    wrapped = fix_calendar_method_middleware(wrapped)
+    wrapped = fix_delete_method_middleware(wrapped)
     mounts[f"/s/{idx}"] = wrapped
     children[idx] = child
 
