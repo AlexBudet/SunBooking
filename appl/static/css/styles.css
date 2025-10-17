@@ -197,20 +197,30 @@ td {
 }
 
 .calendar-table {
+    /* permette scrolling orizzontale se il contenuto eccede la viewport */
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch; /* scroll fluido su mobile */
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    table-layout: fixed;
-    margin-bottom: 20px;
-    color: inherit;
+    box-sizing: border-box;
+    /* lascia che le colonne usino min-width come vincolo */
+    table-layout: auto !important;
+}
+
+/* Garantisce larghezza minima per ogni colonna (th/td) */
+.calendar-table th,
+.calendar-table td {
+    min-width: 100px !important;
+    box-sizing: border-box;
+    white-space: nowrap; /* opzionale: evita word-wrap che riduce larghezza effettiva delle colonne */
 }
 
 .calendar-table thead th {
     position: sticky;
-    top: 72px; /* o più alto se l’header è maggiore */
+    top: 72px; /* mantiene il valore già usato; adattalo se necessario */
     z-index: 10000;
-    background: #f8f8f8;
-    text-align: center;
+    background: #F0F0F0 !important;   /* evita ereditarietà trasparente */
+    text-align: center !important;    /* centra contenuto dell'header */
+    vertical-align: middle !important;
 }
 
 .calendar-table thead th a {
@@ -1993,4 +2003,438 @@ body.touch-ui .appointment-block.active-popup .client-info-link:focus,
 body.touch-ui .appointment-block.active-popup .client-info-link:hover {
   box-shadow: none !important;
   outline: none !important;
+}
+
+
+
+
+
+
+/* ===================== IMPOSTAZIONI SCHERMI PICCOLI ===================== */
+@media (max-width: 1100px) {
+    :root {
+        --mobile-header-height: 56px;            /* già presente, mantiene coerenza */
+        --calendar-navigation-height: 44px;     /* regola se la tua .calendar-navigation è più alta */
+        --calendar-nav-margin-bottom: 0px;      /* se imposterai margin-bottom cambialo qui */
+    }
+
+.calendar-navigation .arrow-left { order: 1 !important; }
+.calendar-navigation .calendar-date-container { order: 2 !important; }
+#dayOfWeek, .day-of-week { order: 3 !important; }
+.calendar-navigation .arrow-right { order: 4 !important; }
+.calendar-navigation .btn-today { order: 5 !important; }
+
+    /* Header mobile: adattivo, padding ridotto, nessun line-height eccessivo */
+    header {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        z-index: 12000 !important;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        height: auto;
+        min-height: var(--mobile-header-height);
+        padding: 4px 8px !important;
+        row-gap: 0 !important;
+        background: #ffffff;
+        box-sizing: border-box;
+        margin: 0;
+    }
+
+    /* Rimuove line-height che forzava overflow verticale */
+    header h1,
+    header nav {
+        margin: 0;
+        line-height: normal !important;
+        display: flex;
+        align-items: center;
+    }
+
+    /* Navbar compatto su mobile */
+    .navbar, .navbar-nav {
+        margin: 0 !important;
+        padding: 0 !important;
+        min-height: 0 !important;
+        box-sizing: border-box;
+    }
+
+    .navbar-nav {
+        gap: 6px;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+    }
+
+    .navbar-nav .nav-item { margin: 0 !important; flex: 1 0 auto; display: flex; justify-content: center; }
+
+    .navbar-nav .menu-link {
+        width: 44px !important;
+        height: 44px !important;
+        padding: 4px !important;
+        border-radius: 8px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    .navbar-nav .menu-icon { font-size: 1.05rem !important; }
+    .navbar-nav .menu-label { display: none !important; }
+
+    #mainMenu { width: 100%; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+
+    main { margin-top: 0; }
+
+    /* Calendar navigator: attaccato subito sotto l'header, nessun margine residuo.
+       Forziamo ordinamento esplicito degli elementi per ottenere:
+       arrow-left | date-field | day(3 letters) | arrow-right | today-button */
+    .calendar-navigation {
+        height: var(--calendar-navigation-height) !important;
+        margin-bottom: var(--calendar-nav-margin-bottom) !important;
+        position: fixed !important;
+        top: calc(var(--mobile-header-height)) !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: flex-start !important; /* gruppo allineato a sinistra */
+        gap: 6px !important;                      /* spazio minimo tra elementi */
+        flex-wrap: nowrap !important;
+        margin: 0 !important;
+        padding: 6px 12px !important;            /* padding-left controlla distanza dal bordo */
+        background: #ffffff !important;
+        z-index: 11990 !important;
+        box-sizing: border-box !important;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+    }
+
+    /* Se la .calendar-table è il contenitore con overflow-x: auto (scroll orizzontale),
+       assicuriamoci che sia posizionata correttamente per far funzionare sticky-left */
+    .calendar-table {
+        margin-top: calc(
+            var(--mobile-header-height)
+            + var(--calendar-navigation-height)
+            + var(--calendar-nav-margin-bottom)
+        ) !important;
+        /* mantiene il comportamento di scroll orizzontale */
+        position: relative !important;
+    }
+
+.calendar-table th,
+.calendar-table td {
+    min-width: 160px !important;
+    box-sizing: border-box;
+    white-space: nowrap; /* evita word-wrap che riduce larghezza effettiva delle colonne */
+}
+
+    /* Prima colonna (ore) sticky a sinistra durante lo scroll orizzontale */
+    .calendar-table th:first-child,
+    .calendar-table td:first-child {
+        position: sticky !important;
+        left: 0 !important;
+        z-index: 890 !important; /* sotto calendar-navigation (11960) ma sopra le celle normali */
+        background: #fff !important; /* evita trasparenze quando si sovrappone */
+        box-shadow: 2px 0 4px rgba(0,0,0,0.04) !important; /* separazione visiva */
+        /* Mantieni larghezza fissa già definita (56px) */
+        min-width: 56px !important;
+        max-width: 56px !important;
+        width: 56px !important;
+        box-sizing: border-box !important;
+    }
+
+   .calendar-table thead th {
+        position: sticky !important;
+        top: calc(
+            var(--mobile-header-height)
+            + var(--calendar-navigation-height)
+            + var(--calendar-nav-margin-bottom)
+        ) !important;
+        z-index: 11970 !important; /* sopra le celle ma sotto eventuali overlay */
+        background: #fff !important; /* evita trasparenze quando sticky */
+    }
+
+    /* Titoli header (nomi operatori) più piccoli e centrati su schermi piccoli */
+    .calendar-table thead th,
+    .calendar-table thead th a {
+        font-size: clamp(12px, 1.8vw, 15px) !important;
+        padding: 6px 8px !important;
+        line-height: 1.1 !important;
+        text-overflow: ellipsis !important;
+        overflow: hidden !important;
+        white-space: nowrap !important;
+        box-sizing: border-box !important;
+        text-align: center !important;
+    }
+
+    .calendar-table thead th a {
+        display: block !important;
+        width: 100% !important;
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+    }
+
+    /* Se hai un thead con celle separate (es. first-child) mantieni coerenza */
+    .calendar-table thead th:first-child {
+        position: sticky !important;
+        top: calc(
+            var(--mobile-header-height)
+            + var(--calendar-navigation-height)
+            + var(--calendar-nav-margin-bottom)
+        ) !important; /* stesso offset degli altri header sticky */
+        left: 0 !important;
+        z-index: 11980 !important; /* più alto delle altre celle sticky (adatta se serve) */
+        background: #fff !important;
+        box-shadow: 2px 0 6px rgba(0,0,0,0.06) !important;
+        /* assicura dimensioni coerenti */
+        min-width: 56px !important;
+        max-width: 56px !important;
+        width: 56px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Se esiste una cella nella prima riga del body (tbody) che deve comportarsi
+       allo stesso modo visivamente (es. etichetta "ora"), forziamo la stessa priorità */
+    .calendar-table tbody tr:first-child td:first-child,
+    .calendar-table td:first-child {
+        position: sticky !important; /* mantiene left stickiness */
+        left: 0 !important;
+        z-index: 11979 !important; /* leggermente sotto l'intestazione ma sopra le altre celle */
+        background: #fff !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Nascondi l'ultima colonna su mobile (th/td) per liberare spazio */
+    .calendar-table th:last-child,
+    .calendar-table td:last-child {
+        display: none !important;
+        visibility: collapse !important;
+        padding: 0 !important;
+        border: 0 !important;
+        min-width: 0 !important;
+        max-width: 0 !important;
+        width: 0 !important;
+    }
+
+    /* Contenitore "gruppo sinistro" virtuale: forza comportamento degli elementi
+       (usiamo order e flex per raggruppare senza cambiare markup) */
+    .calendar-navigation .arrow-nav {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex: 0 0 auto !important; /* non cresce */
+        padding: 0 6px !important;
+        margin: 0 !important;
+        line-height: 1 !important;
+    }
+
+    /* Prima freccia (sinistra) */
+    .calendar-navigation .arrow-nav:first-of-type {
+        order: 1 !important;
+        margin-right: 4px !important;
+    }
+
+    /* Campo data: rimane a fianco della freccia, larghezza limitata */
+    .calendar-navigation .calendar-date-container {
+        order: 2 !important;
+        flex: 0 0 auto !important; /* non espande: mantiene gruppo compatto */
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .calendar-navigation .calendar-date-container .calendar-date-input,
+    .calendar-navigation .calendar-date-container input.calendar-date-input {
+        max-width: 140px !important;
+        min-width: 110px !important;
+        width: 125px !important;
+    }
+
+    /* Giorno in tre lettere subito dopo il campo data */
+    #dayOfWeek,
+    .day-of-week {
+        order: 3 !important;
+        flex: 0 0 auto !important;
+        margin: 0 6px 0 6px !important;
+        padding: 0 !important;
+        min-width: 48px !important;
+        text-align: center !important;
+        font-weight: 600 !important;
+    }
+
+    /* Seconda freccia (destra), subito dopo il giorno */
+    .calendar-navigation .arrow-nav:last-of-type {
+        order: 4 !important;
+        margin-left: 4px !important;
+    }
+
+    /* Bottone OGGI: sempre dopo il gruppo, non spinge gli altri (non ha flex-grow) */
+    .calendar-navigation .btn-today {
+        order: 5 !important;
+        flex: 0 0 auto !important;
+        margin-left: 8px !important; /* distanza dalla destra della freccia */
+        padding: 4px 6px !important;
+        white-space: nowrap !important;
+    }
+
+    /* Formattazione della data overlay se usata */
+    #formattedDate {
+        position: absolute;
+        pointer-events: none;
+        text-align: center;
+        font-size: 14px;
+        padding: 0 !important;
+    }
+
+    /* Nascondi il contenitore che crea spazio verticale residuo (se presente) */
+    div.d-flex.align-items-start.mb-3[style*="width: 100%"] {
+        display: none !important;
+        visibility: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+
+    /* Sicurezza: nasconde navigator/quarter e appointment navigator */
+    #quarterNavigator,
+    #quarterNavigator *,
+    #appointmentNavigator,
+    .appointmentNavigator {
+        display: none !important;
+        visibility: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+
+    /* Azzeramento spazio riservato dalla lista servizi selezionati */
+    #selectedServicesList {
+        min-height: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        margin: 0 !important;
+        height: auto !important;
+        overflow: visible !important;
+        border-width: 1px !important;
+    }
+
+    /* Pseudo-block container: rimuove spazio residuo */
+    #pseudoBlockContainer,
+    .pseudo-block-container {
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        height: auto !important;
+        overflow: hidden !important;
+    }
+
+    /* Nascondi controlli di zoom/quarter web-specifici */
+    .quarter-controls,
+    .quarter-control,
+    [data-quarter-control],
+    [data-quarter-action],
+    .zoom-quarter-buttons,
+    .zoom-quarter,
+    #btnWebInformatica {
+        display: none !important;
+    }
+
+    /* Forza popup-buttons in touch-ui a grid 2x3 sopra e sotto il blocco */
+    body.touch-ui .appointment-block .popup-buttons,
+    body.touch-ui .appointment-block .popup-buttons-top {
+        display: grid !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        grid-template-rows: repeat(2, auto) !important;
+        grid-auto-flow: row !important;
+        gap: var(--pb-gap, 3px) !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        padding: 0 !important;
+
+        /* posizione sopra il blocco */
+        position: absolute !important;
+        bottom: calc(100% + 6px) !important;
+        top: auto !important;
+        left: 0 !important;
+        right: 0 !important;
+        justify-items: stretch !important;
+        align-items: center !important;
+        pointer-events: auto !important;
+        z-index: 2200 !important;
+    }
+
+    body.touch-ui .appointment-block .popup-buttons-bottom {
+        display: grid !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        grid-template-rows: repeat(2, auto) !important;
+        grid-auto-flow: row !important;
+        gap: var(--pb-gap, 3px) !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        padding: 0 !important;
+
+        /* posizione sotto il blocco */
+        position: absolute !important;
+        top: calc(100% + 6px) !important;
+        bottom: auto !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 2100 !important;
+    }
+
+    /* Assicura che ogni pulsante riempia la cella della griglia */
+    body.touch-ui .appointment-block .popup-buttons .btn-popup,
+    body.touch-ui .appointment-block .popup-buttons-top .btn-popup,
+    body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup {
+        width: 100% !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
+        padding: 6px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        aspect-ratio: 1 / 0.9 !important;
+    }
+
+    /* Override finale per annullare regole display:flex in touch-ui */
+    body.touch-ui .appointment-block:hover .popup-buttons,
+    body.touch-ui .appointment-block.active-popup .popup-buttons,
+    body.touch-ui .appointment-block:hover .popup-buttons-top,
+    body.touch-ui .appointment-block.active-popup .popup-buttons-top {
+        display: grid !important;
+    }
+
+    /* Uniforma WhatsApp agli altri pulsanti nella griglia bottom su mobile */
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.touch-bottom-wa {
+    position: static !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+    aspect-ratio: 1 / 0.9 !important;
+    border-radius: 6px !important;
+    background: #000 !important;
+    color: #25D366 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 0 0 0 0.8px hsla(0, 0%, 96%, 0.76) !important;
+    padding: 6px !important;
+    margin: 0 !important;
+    height: auto !important;
+    font-size: var(--pb-fs, 15px) !important;
+}
+
+    /* Nascondi WhatsApp laterale su mobile per evitare duplicati */
+    .appointment-block .btn-popup.whatsapp-btn:not(.touch-bottom-wa) {
+        display: none !important;
+    }
 }

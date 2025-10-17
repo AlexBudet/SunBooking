@@ -21,18 +21,39 @@
     <header>
         <div style="width:100%">
             <nav class="navbar navbar-expand-lg navbar-light bg-light">
-<ul class="navbar-nav mx-auto">
-    <li class="nav-item"><a class="nav-link" href="{{ url_for('calendar.calendar_home') }}">Calendario</a></li>
+<ul class="navbar-nav mx-auto" id="mainMenu">
+    <li class="nav-item">
+        <a class="nav-link menu-link" href="{{ url_for('calendar.calendar_home') }}">
+            <i class="bi bi-calendar4-week menu-icon"></i>
+            <span class="menu-label">Calendario</span>
+        </a>
+    </li>
     {% if not config.get('HIDE_CASSA') %}
-    <li class="nav-item"><a class="nav-link" href="{{ url_for('cassa.cassa') }}">Cassa</a></li>
+    <li class="nav-item">
+        <a class="nav-link menu-link" href="{{ url_for('cassa.cassa') }}">
+            <i class="bi bi-cash-coin menu-icon"></i>
+            <span class="menu-label">Cassa</span>
+        </a>
+    </li>
     {% endif %}
-    <li class="nav-item"><a class="nav-link" href="{{ url_for('report.report') }}">Report</a></li>
-    <li class="nav-item"><a class="nav-link" href="{{ url_for('settings.settings_home') }}">Impostazioni</a></li>
-<li class="nav-item">
-    <a class="nav-link text-dark" href="{{ url_for('logout') }}" id="logout-link">
-        <i class="bi bi-box-arrow-right" tooltip="esci"></i>
-    </a>
-</li>
+    <li class="nav-item">
+        <a class="nav-link menu-link" href="{{ url_for('report.report') }}">
+            <i class="bi bi-graph-up menu-icon"></i>
+            <span class="menu-label">Report</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link menu-link" href="{{ url_for('settings.settings_home') }}">
+            <i class="bi bi-gear menu-icon"></i>
+            <span class="menu-label">Impostazioni</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link menu-link text-dark" href="{{ url_for('logout') }}" id="logout-link">
+            <i class="bi bi-box-arrow-right menu-icon"></i>
+            <span class="menu-label">Esci</span>
+        </a>
+    </li>
 </ul>
             </nav>
         </div>

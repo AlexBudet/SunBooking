@@ -1,3 +1,84 @@
+(function(){
+    const MOBILE_BP = 1100;
+    const S_KEY = 'sun_touch_ui';
+    const S_FORCED_FLAG = 'sun_touch_ui_forced';
+    const S_PREV = 'sun_touch_ui_prev';
+
+    // applica la classe e localStorage senza perdere il valore precedente
+    function forceTouchOn() {
+        try {
+            // salva precedente solo la prima volta che forziamo
+            if (!sessionStorage.getItem(S_FORCED_FLAG)) {
+                sessionStorage.setItem(S_PREV, localStorage.getItem(S_KEY) ?? '');
+            }
+            sessionStorage.setItem(S_FORCED_FLAG, '1');
+            localStorage.setItem(S_KEY, '1');        // mantiene compatibilità con codice esistente
+            document.body.classList.add('touch-ui'); // immediato
+            window.dispatchEvent(new CustomEvent('touchModeForced', { detail: { forced: true } }));
+        } catch (e) { console.warn('forceTouchOn error', e); }
+    }
+
+    // rimuove il forcing e ripristina il valore salvato (lettura business)
+    function restoreTouchSetting() {
+        try {
+            const prev = sessionStorage.getItem(S_PREV);
+            // se prev === '1' o '0' / non vuoto, ripristina; altrimenti rimuovi key
+            if (prev === '1') {
+                localStorage.setItem(S_KEY, '1');
+                document.body.classList.add('touch-ui');
+            } else if (prev === '0') {
+                localStorage.setItem(S_KEY, '0');
+                document.body.classList.remove('touch-ui');
+            } else {
+                localStorage.removeItem(S_KEY);
+                document.body.classList.toggle('touch-ui', false);
+            }
+            sessionStorage.removeItem(S_FORCED_FLAG);
+            sessionStorage.removeItem(S_PREV);
+            window.dispatchEvent(new CustomEvent('touchModeForced', { detail: { forced: false } }));
+            // segnala al resto dell'app che deve rileggere l'impostazione business
+            window.dispatchEvent(new Event('checkBusinessTouchSetting'));
+        } catch (e) { console.warn('restoreTouchSetting error', e); }
+    }
+
+    function evaluate() {
+        const w = window.innerWidth || document.documentElement.clientWidth;
+        if (w < MOBILE_BP) forceTouchOn();
+        else {
+            // se era forzato, ripristina; altrimenti non intervenire (lascia business setting)
+            if (sessionStorage.getItem(S_FORCED_FLAG)) restoreTouchSetting();
+            // se non forzato, emit event so existing code re-reads business setting if needed
+            else window.dispatchEvent(new Event('checkBusinessTouchSetting'));
+        }
+    }
+
+    // debounce resize
+    let t = null;
+    function onResize() {
+        clearTimeout(t);
+        t = setTimeout(evaluate, 120);
+    }
+
+    // run as early as possible
+    try {
+        evaluate();
+    } catch(e){ console.warn('responsive touch init failed', e); }
+
+    window.addEventListener('resize', onResize, { passive: true });
+    window.addEventListener('orientationchange', onResize);
+    // also ensure after DOM ready (some code runs immediately relying on class)
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', evaluate, { once: true });
+    } else {
+        evaluate();
+    }
+
+    // expose helpers for debugging
+    window.__forceTouchForViewport = evaluate;
+    window.__forceTouchOn = forceTouchOn;
+    window.__restoreTouchSetting = restoreTouchSetting;
+})();
+
 // appl/static/js/Calendar.js
 (function() {
 console.log("calendar.js caricato correttamente!"); // INSERIRE NELLA PRIMA RIGA DI calendar.js
@@ -8635,3 +8716,4 @@ window.onAppointmentNoteSaved = function (appointmentId, noteText) {
     }
   } catch (_) {}
 };
+
