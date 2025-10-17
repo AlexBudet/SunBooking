@@ -77,6 +77,16 @@ def block_paths(app, blocked_prefixes: tuple[str, ...]):
         return app(environ, start_response)
     return _wrap
 
+def fix_delete_method_middleware(app):
+    def wrapper(environ, start_response):
+        path = environ.get('PATH_INFO', '')
+        method = environ.get('REQUEST_METHOD', '')
+        # Se è GET su /calendar/delete/, cambia a POST
+        if path.startswith('/calendar/delete/') and method == 'GET':
+            environ['REQUEST_METHOD'] = 'POST'
+        return app(environ, start_response)
+    return wrapper
+
 pool = collect_db_pool()
 secret = os.getenv('SECRET_KEY') or os.urandom(24)
 use_https = os.getenv('USE_HTTPS', 'false').lower() in ('1', 'true', 'yes')
@@ -108,8 +118,9 @@ children = {}
 for idx, uri in pool.items():
     child = create_app(uri)
     child.secret_key = secret
+    child.config["HIDE_PRINTER_IP"] = True
+    child.config["HIDE_CASSA"] = True
     creds = wbiztool_creds_for(idx)
-    # flag per i template, se supportato
     creds["HIDE_CASSA"] = "1"
 
     def with_db_cookie(app, idx_local, secure=False):
@@ -126,6 +137,7 @@ for idx, uri in pool.items():
     wrapped = with_request_env(child, creds)
     wrapped = with_db_cookie(wrapped, idx, secure=use_https)
     wrapped = block_paths(wrapped, ("/cassa", "/cassa.html"))
+    wrapped = fix_delete_method_middleware(wrapped)
     mounts[f"/s/{idx}"] = wrapped
     children[idx] = child
 

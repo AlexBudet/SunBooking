@@ -23,7 +23,9 @@
             <nav class="navbar navbar-expand-lg navbar-light bg-light">
 <ul class="navbar-nav mx-auto">
     <li class="nav-item"><a class="nav-link" href="{{ url_for('calendar.calendar_home') }}">Calendario</a></li>
+    {% if not config.get('HIDE_CASSA') %}
     <li class="nav-item"><a class="nav-link" href="{{ url_for('cassa.cassa') }}">Cassa</a></li>
+    {% endif %}
     <li class="nav-item"><a class="nav-link" href="{{ url_for('report.report') }}">Report</a></li>
     <li class="nav-item"><a class="nav-link" href="{{ url_for('settings.settings_home') }}">Impostazioni</a></li>
 <li class="nav-item">
