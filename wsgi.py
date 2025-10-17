@@ -67,6 +67,16 @@ def with_request_env(app, per_request_env: dict):
                     os.environ[k] = v
     return wrapper
 
+def block_paths(app, blocked_prefixes: tuple[str, ...]):
+    def _wrap(environ, start_response):
+        path = (environ.get("PATH_INFO") or "").lower()
+        # Nel child PATH_INFO è relativo al mount (/s/<idx> è in SCRIPT_NAME)
+        if any(path == p or path.startswith(p.rstrip("/") + "/") for p in blocked_prefixes):
+            start_response("404 Not Found", [("Content-Type", "text/html; charset=utf-8")])
+            return [b"<!doctype html><title>Not Found</title><h1>404 Not Found</h1>"]
+        return app(environ, start_response)
+    return _wrap
+
 pool = collect_db_pool()
 secret = os.getenv('SECRET_KEY') or os.urandom(24)
 use_https = os.getenv('USE_HTTPS', 'false').lower() in ('1', 'true', 'yes')
@@ -99,6 +109,8 @@ for idx, uri in pool.items():
     child = create_app(uri)
     child.secret_key = secret
     creds = wbiztool_creds_for(idx)
+    # flag per i template, se supportato
+    creds["HIDE_CASSA"] = "1"
 
     def with_db_cookie(app, idx_local, secure=False):
         def _wrap(environ, start_response):
@@ -113,6 +125,7 @@ for idx, uri in pool.items():
 
     wrapped = with_request_env(child, creds)
     wrapped = with_db_cookie(wrapped, idx, secure=use_https)
+    wrapped = block_paths(wrapped, ("/cassa", "/cassa.html"))
     mounts[f"/s/{idx}"] = wrapped
     children[idx] = child
 
@@ -138,7 +151,7 @@ def landing_web():
             "label": label,
             "url": f"/select-db/{idx}"
         })
-    return render_template('landing_web.html', db_links=links)
+    return render_template('landing_web.html', db_links=links, hide_cassa=True)
 
 @root_app.route('/select-db/<idx>')
 def select_db(idx):
