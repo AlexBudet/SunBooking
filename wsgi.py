@@ -6,6 +6,7 @@ from flask import Flask, render_template, redirect, url_for, request
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from waitress import serve
 from appl import create_app
+from appl.models import BusinessInfo
 
 base_dir = os.path.dirname(__file__)
 env_candidates = [
@@ -91,13 +92,50 @@ def root_redirect_to_selected_db():
 def root():
     return redirect(url_for('landing_web'))
 
+# Costruzione mounts e cache dei child
+mounts = {}
+children = {}
+for idx, uri in pool.items():
+    child = create_app(uri)
+    child.secret_key = secret
+    creds = wbiztool_creds_for(idx)
+
+    def with_db_cookie(app, idx_local, secure=False):
+        def _wrap(environ, start_response):
+            def sr(status, headers, exc_info=None):
+                cookie = "dbidx=" + str(idx_local) + "; Path=/; SameSite=Lax"
+                if secure:
+                    cookie += "; Secure"
+                headers.append(('Set-Cookie', cookie))
+                return start_response(status, headers, exc_info)
+            return app(environ, sr)
+        return _wrap
+
+    wrapped = with_request_env(child, creds)
+    wrapped = with_db_cookie(wrapped, idx, secure=use_https)
+    mounts[f"/s/{idx}"] = wrapped
+    children[idx] = child
+
+application = DispatcherMiddleware(root_app, mounts)
+app = application
+
 @root_app.route('/landing-web')
 def landing_web():
     links = []
     for idx, uri in pool.items():
+        label = db_label(uri)
+        child = children.get(idx)
+        if child:
+            try:
+                with child.app_context():
+                    info = BusinessInfo.query.first()
+                    if info and getattr(info, 'business_name', None):
+                        label = info.business_name
+            except Exception:
+                pass
         links.append({
             "id": str(idx),
-            "label": db_label(uri),
+            "label": label,
             "url": f"/select-db/{idx}"
         })
     return render_template('landing_web.html', db_links=links)
@@ -112,29 +150,6 @@ def select_db(idx):
         cookie += "; Secure"
     resp.headers.add('Set-Cookie', cookie)
     return resp
-
-mounts = {}
-for idx, uri in pool.items():
-    child = create_app(uri)
-    child.secret_key = secret
-    creds = wbiztool_creds_for(idx)
-    # Imposta anche un cookie dbidx su ogni risposta del child
-    def with_db_cookie(app, idx_local, secure=False):
-        def _wrap(environ, start_response):
-            def sr(status, headers, exc_info=None):
-                cookie = "dbidx=" + str(idx_local) + "; Path=/; SameSite=Lax"
-                if secure:
-                    cookie += "; Secure"
-                headers.append(('Set-Cookie', cookie))
-                return start_response(status, headers, exc_info)
-            return app(environ, sr)
-        return _wrap
-    wrapped = with_request_env(child, creds)
-    wrapped = with_db_cookie(wrapped, idx, secure=use_https)
-    mounts[f"/s/{idx}"] = wrapped
-
-application = DispatcherMiddleware(root_app, mounts)
-app = application
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5050"))
