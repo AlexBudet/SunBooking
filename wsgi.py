@@ -103,9 +103,10 @@ def root_redirect_to_selected_db():
     dbidx = request.cookies.get('dbidx', '').strip()
     if dbidx and dbidx.isdigit():
         q = request.query_string.decode('utf-8')
+        target = f"/s/{dbidx}{path}"
         if q:
-            return redirect(f"/s/{dbidx}{path}?{q}", code=302)
-        return redirect(f"/s/{dbidx}{path}", code=302)
+            target = f"{target}?{q}"
+        return redirect(target, code=307)  # preserva POST/PUT/DELETE
     return None
 
 @root_app.route('/')
