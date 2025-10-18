@@ -1814,7 +1814,7 @@ body.touch-ui .appointment-block:hover:not(.disable-popup):not(.active-popup) .p
   display: none !important;
 }
 body.touch-ui .appointment-block.active-popup .popup-buttons {
-  display: flex; /* coerente con la barra superiore esistente */
+  display: flex !important; /* coerente con la barra superiore esistente */
 }
 body.touch-ui .appointment-block.active-popup .popup-buttons-bottom {
   display: grid !important; /* barra inferiore */
@@ -2241,8 +2241,9 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
         order: 2 !important;
         flex: 0 0 auto !important; /* non espande: mantiene gruppo compatto */
         display: flex !important;
-        justify-content: flex-start !important;
-        gap: 1px !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
         margin: 0 !important;
         padding: 0 !important;
     }
@@ -2251,10 +2252,6 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
         max-width: 140px !important;
         min-width: 110px !important;
         width: 125px !important;
-        padding-right: 50px !important;
-        background-position: right 12px center !important; /* Sposta l'icona più a destra */
-        text-align: left !important; /* Allinea il testo a sinistra */
-        font-size: 80% !important;
     }
 
     /* Giorno in tre lettere subito dopo il campo data */
@@ -2286,13 +2283,11 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
 
     /* Formattazione della data overlay se usata */
     #formattedDate {
-      left: 5px !important;
-      max-width: calc(100% - 50px) !important; /* Lascia spazio all'icona */
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-      white-space: nowrap !important;
-      text-align: left !important;
-      font-size: 80% !important;
+        position: absolute;
+        pointer-events: none;
+        text-align: center;
+        font-size: 14px;
+        padding: 0 !important;
     }
 
     /* Nascondi il contenitore che crea spazio verticale residuo (se presente) */
@@ -2487,13 +2482,5 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
   #ClientInfoModal .modal-body {
     overflow-y: auto !important;
     max-height: calc(95vh - 120px) !important; /* Lascia spazio per header/footer */
-  }
-
-  body.touch-ui .appointment-block.active-popup .popup-buttons {
-    display: grid !important;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    grid-template-rows: repeat(2, auto) !important;
-    grid-auto-flow: row !important;
-    gap: var(--pb-gap, 3px) !important;
   }
 }

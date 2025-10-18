@@ -8717,41 +8717,21 @@ window.onAppointmentNoteSaved = function (appointmentId, noteText) {
   } catch (_) {}
 };
 
-// Script per applicare stili mobili se larghezza schermo < 1100px
-function applyMobileStyles() {
+function switchDateNavForMobile() {
   const isMobile = window.innerWidth < 1100;
-
+  document.getElementById('dateNavDesktop').style.display = isMobile ? 'none' : '';
+  document.getElementById('dateNavMobile').style.display = isMobile ? '' : 'none';
   if (isMobile) {
-    // Stili per modal info cliente
-    const containers = document.querySelectorAll('#ClientInfoModal .modal-body div[style*="display: flex"]');
-    containers.forEach(div => {
-      div.style.display = 'block !important';
-      div.style.flexDirection = '';
-      div.style.alignItems = '';
-      div.style.gap = '';
-    });
-
-    // Stili per campo data
-    const dateContainer = document.querySelector('.calendar-navigation .calendar-date-container');
-    if (dateContainer) {
-      dateContainer.style.display = 'block !important';
-      dateContainer.style.textAlign = 'left !important';
-      dateContainer.style.justifyContent = 'flex-start !important';
-    }
-
-    // Stili per popup buttons
-    const popupButtons = document.querySelectorAll('.appointment-block .popup-buttons');
-    popupButtons.forEach(pb => {
-      pb.style.display = 'grid !important';
-      pb.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr)) !important';
-      pb.style.gridTemplateRows = 'repeat(2, auto) !important';
-      pb.style.gridAutoFlow = 'row !important';
-      pb.style.gap = '3px !important';
-    });
+    // Copia logica da desktop a mobile
+    const dateInput = document.getElementById('date');
+    const dayOfWeek = document.getElementById('dayOfWeek');
+    const dateMobile = document.getElementById('dateMobile');
+    const dayOfWeekMobile = document.getElementById('dayOfWeekMobile');
+    if (dateInput && dateMobile) dateMobile.value = dateInput.value;
+    if (dayOfWeek && dayOfWeekMobile) dayOfWeekMobile.textContent = dayOfWeek.textContent;
+    // Sincronizza cambiamenti
+    dateMobile.addEventListener('change', () => { dateInput.value = dateMobile.value; updateDayOfWeek(); });
   }
 }
-
-// Applica al caricamento e al resize
-window.addEventListener('load', applyMobileStyles);
-window.addEventListener('resize', applyMobileStyles);
-
+window.addEventListener('load', switchDateNavForMobile);
+window.addEventListener('resize', switchDateNavForMobile);
