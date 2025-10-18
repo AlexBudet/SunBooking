@@ -2243,7 +2243,7 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        gap: 6px !important;
+        gap: 1px !important;
         margin: 0 !important;
         padding: 0 !important;
     }
@@ -2255,6 +2255,7 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
         padding-right: 50px !important;
         background-position: right 12px center !important; /* Sposta l'icona più a destra */
         text-align: left !important; /* Allinea il testo a sinistra */
+        font-size: 80% !important;
     }
 
     /* Giorno in tre lettere subito dopo il campo data */
@@ -2292,6 +2293,7 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
       text-overflow: ellipsis !important;
       white-space: nowrap !important;
       text-align: left !important;
+      font-size: 80% !important;
     }
 
     /* Nascondi il contenitore che crea spazio verticale residuo (se presente) */
