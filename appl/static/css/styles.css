@@ -2437,4 +2437,13 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
     .appointment-block .btn-popup.whatsapp-btn:not(.touch-bottom-wa) {
         display: none !important;
     }
+
+  .calendar-navigation .calendar-date-container input.calendar-date-input {
+    padding-right: 30px !important;
+  }
+
+  /* Sposta leggermente a destra il testo formattato per evitare sovrapposizione */
+  #formattedDate {
+    left: 5px !important;
+  }
 }
