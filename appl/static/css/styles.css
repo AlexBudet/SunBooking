@@ -1814,7 +1814,7 @@ body.touch-ui .appointment-block:hover:not(.disable-popup):not(.active-popup) .p
   display: none !important;
 }
 body.touch-ui .appointment-block.active-popup .popup-buttons {
-  display: flex !important; /* coerente con la barra superiore esistente */
+  display: flex; /* coerente con la barra superiore esistente */
 }
 body.touch-ui .appointment-block.active-popup .popup-buttons-bottom {
   display: grid !important; /* barra inferiore */
@@ -2240,7 +2240,8 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
     .calendar-navigation .calendar-date-container {
         order: 2 !important;
         flex: 0 0 auto !important; /* non espande: mantiene gruppo compatto */
-        display: flex !important;
+        display: block !important;
+        text-align: left !important;
         justify-content: flex-start !important;
         gap: 1px !important;
         margin: 0 !important;
@@ -2495,5 +2496,27 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
     grid-template-rows: repeat(2, auto) !important;
     grid-auto-flow: row !important;
     gap: var(--pb-gap, 3px) !important;
+  }
+
+  .client-info-container div {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 4px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .client-info-container input {
+    width: 100% !important;
+    max-width: 300px !important;
+  }
+
+  .client-info-container button {
+    align-self: flex-end !important;
+    margin-top: 4px !important;
+  }
+
+  .client-info-container .ci-label {
+    margin-bottom: 2px !important;
   }
 }
