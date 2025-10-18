@@ -2252,6 +2252,9 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
         max-width: 140px !important;
         min-width: 110px !important;
         width: 125px !important;
+        padding-right: 50px !important;
+        background-position: right 12px center !important; /* Sposta l'icona più a destra */
+        text-align: left !important; /* Allinea il testo a sinistra */
     }
 
     /* Giorno in tre lettere subito dopo il campo data */
@@ -2283,11 +2286,12 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
 
     /* Formattazione della data overlay se usata */
     #formattedDate {
-        position: absolute;
-        pointer-events: none;
-        text-align: center;
-        font-size: 14px;
-        padding: 0 !important;
+      left: 5px !important;
+      max-width: calc(100% - 50px) !important; /* Lascia spazio all'icona */
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      white-space: nowrap !important;
+      text-align: left !important;
     }
 
     /* Nascondi il contenitore che crea spazio verticale residuo (se presente) */
