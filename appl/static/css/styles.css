@@ -2455,4 +2455,32 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
   #currentTimeIndicator {
       display: none !important;
   }
+
+  /* Forza i modal di calendar a occupare il 95% dello schermo su mobile */
+  #CreateAppointmentModal .modal-dialog,
+  #EditAppointmentModal .modal-dialog,
+  #AddClientModal .modal-dialog,
+  #ClientInfoModal .modal-dialog {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    height: 95vh !important;
+    max-height: 95vh !important;
+    margin: 2.5vh 2.5vw !important; /* Margine sinistro/destro 2.5vw per centrare e occupare 95% width */
+  }
+
+  #CreateAppointmentModal .modal-content,
+  #EditAppointmentModal .modal-content,
+  #AddClientModal .modal-content,
+  #ClientInfoModal .modal-content {
+    height: 100% !important;
+    max-height: 100% !important;
+  }
+
+  #CreateAppointmentModal .modal-body,
+  #EditAppointmentModal .modal-body,
+  #AddClientModal .modal-body,
+  #ClientInfoModal .modal-body {
+    overflow-y: auto !important;
+    max-height: calc(95vh - 120px) !important; /* Lascia spazio per header/footer */
+  }
 }
