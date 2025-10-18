@@ -2,10 +2,10 @@ import os
 import re
 from urllib.parse import urlparse
 from dotenv import load_dotenv
-from flask import Flask, render_template, redirect, url_for, request
+from flask import Flask, jsonify, render_template, redirect, url_for, request
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from waitress import serve
-from appl import create_app
+from appl import create_app, db
 from appl.models import BusinessInfo
 
 base_dir = os.path.dirname(__file__)
@@ -123,6 +123,21 @@ for idx, uri in pool.items():
     child.config["HIDE_CASSA"] = True
     creds = wbiztool_creds_for(idx)
     creds["HIDE_CASSA"] = "1"
+
+    # Aggiungi la route mancante per client_info ai child
+    @child.route('/settings/api/client_info/<int:client_id>')
+    def client_info_wsgi(client_id):
+        from appl.models import Client
+        client = db.session.get(Client, client_id)
+        if not client:
+            return jsonify({})
+        return jsonify({
+            'cliente_nome': client.cliente_nome,
+            'cliente_cognome': client.cliente_cognome,
+            'cliente_cellulare': client.cliente_cellulare,
+            'cliente_email': client.cliente_email,
+            'note': client.note
+        })
 
     def with_db_cookie(app, idx_local, secure=False):
         def _wrap(environ, start_response):
