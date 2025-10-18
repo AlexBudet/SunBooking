@@ -2438,12 +2438,21 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
         display: none !important;
     }
 
+  /* Aumenta padding-right per dare più spazio all'icona */
   .calendar-navigation .calendar-date-container input.calendar-date-input {
-    padding-right: 30px !important;
+    padding-right: 40px !important;
   }
 
-  /* Sposta leggermente a destra il testo formattato per evitare sovrapposizione */
+  /* Sposta il testo formattato più a destra e limita la larghezza per evitare sovrapposizione */
   #formattedDate {
-    left: 5px !important;
+    left: 10px !important;
+    max-width: calc(100% - 50px) !important; /* Lascia spazio all'icona */
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  #currentTimeIndicator {
+      display: none !important;
   }
 }
