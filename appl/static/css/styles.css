@@ -2241,8 +2241,7 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
         order: 2 !important;
         flex: 0 0 auto !important; /* non espande: mantiene gruppo compatto */
         display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
+        justify-content: flex-start !important;
         gap: 1px !important;
         margin: 0 !important;
         padding: 0 !important;
@@ -2488,5 +2487,13 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
   #ClientInfoModal .modal-body {
     overflow-y: auto !important;
     max-height: calc(95vh - 120px) !important; /* Lascia spazio per header/footer */
+  }
+
+  body.touch-ui .appointment-block.active-popup .popup-buttons {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-rows: repeat(2, auto) !important;
+    grid-auto-flow: row !important;
+    gap: var(--pb-gap, 3px) !important;
   }
 }
