@@ -66,7 +66,7 @@
 
 <!-- Modifica i pulsanti modali per NON aprire più i modali direttamente -->
  
-<div class="d-flex gap-1 mb-4 position-relative">
+<div class="d-flex gap-1 mb-4 position-relative report-top-buttons">
   <!-- Pulsanti visibili solo a owner/admin -->
   <button class="btn-neumorphic btn-blue" id="btnCorrispettivi">Corrispettivi</button>
   {% if current_user.ruolo|string != 'RuoloUtente.user' %}
@@ -75,6 +75,8 @@
   <button class="btn-neumorphic btn-red" id="btnClienti">Clienti</button>
   <button class="btn-neumorphic btn-purple" id="btnOperatori">Operatori</button>
 {% endif %}
+</div>
+<div>
   <button class="btn-neumorphic"
           id="btnSettings"
           title="Settaggi"
@@ -1100,12 +1102,22 @@
   vertical-align: middle !important;
 }
 
-/* Allarga le colonne della tabella riassunto giornaliero */
+#tabella-riassunto {
+  width: 100%;
+  table-layout: fixed;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow-wrap: anywhere;
+}
+
 #tabella-riassunto th,
 #tabella-riassunto td {
   margin-top: 10px;
-  min-width: 120px;
-  font-size: 1.1em;
+  min-width: 0 !important;
+  font-size: 1.05em;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 #oroscopo-content {
