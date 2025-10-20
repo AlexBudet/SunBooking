@@ -670,11 +670,16 @@ td {
 
 .calendar-navigation .calendar-date-input,
 .calendar-date-input {
+    text-align: left !important;
     width: auto !important;
     padding: 1px;
     color: #000 !important;
     background-color: #fff !important;
     border: 1px solid #ccc;
+    direction: ltr !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
 }
 
 /* Overlay per mostrare la data formattata, allineato a sinistra */
@@ -1213,7 +1218,6 @@ body.quarter-55 .appointment-block .note-indicator {
     max-width: 130px;
     min-width: 120px;
     width: 125px;
-    padding-left: 5px !important;
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='black' class='bi bi-calendar' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1zm1-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2z'/%3E%3C/svg%3E") no-repeat right 8px center;
     background-size: 16px 16px; 
   }
@@ -2274,11 +2278,11 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
 
     /* Bottone OGGI: sempre dopo il gruppo, non spinge gli altri (non ha flex-grow) */
     .calendar-navigation .btn-today {
-        order: 5 !important;
-        flex: 0 0 auto !important;
-        margin-left: 8px !important; /* distanza dalla destra della freccia */
-        padding: 4px 6px !important;
-        white-space: nowrap !important;
+        position: absolute !important;
+        right: 12px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        order: unset !important; /* Rimuovi order per evitare conflitti */
     }
 
     /* Formattazione della data overlay se usata */
@@ -2482,5 +2486,16 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
   #ClientInfoModal .modal-body {
     overflow-y: auto !important;
     max-height: calc(95vh - 120px) !important; /* Lascia spazio per header/footer */
+  }
+
+  .calendar-date-input {
+    text-align: left !important;
+    padding-left: 8px !important;
+    direction: ltr !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    /* Rimuovi eventuali padding automatici del browser */
+    padding-right: 30px !important; /* Lascia spazio per l'icona calendario */
   }
 }

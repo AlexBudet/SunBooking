@@ -8716,22 +8716,3 @@ window.onAppointmentNoteSaved = function (appointmentId, noteText) {
     }
   } catch (_) {}
 };
-
-function switchDateNavForMobile() {
-  const isMobile = window.innerWidth < 1100;
-  document.getElementById('dateNavDesktop').style.display = isMobile ? 'none' : '';
-  document.getElementById('dateNavMobile').style.display = isMobile ? '' : 'none';
-  if (isMobile) {
-    // Copia logica da desktop a mobile
-    const dateInput = document.getElementById('date');
-    const dayOfWeek = document.getElementById('dayOfWeek');
-    const dateMobile = document.getElementById('dateMobile');
-    const dayOfWeekMobile = document.getElementById('dayOfWeekMobile');
-    if (dateInput && dateMobile) dateMobile.value = dateInput.value;
-    if (dayOfWeek && dayOfWeekMobile) dayOfWeekMobile.textContent = dayOfWeek.textContent;
-    // Sincronizza cambiamenti
-    dateMobile.addEventListener('change', () => { dateInput.value = dateMobile.value; updateDayOfWeek(); });
-  }
-}
-window.addEventListener('load', switchDateNavForMobile);
-window.addEventListener('resize', switchDateNavForMobile);
