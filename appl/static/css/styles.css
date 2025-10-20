@@ -95,22 +95,41 @@ display: none
 }
 
 .modal-dialog {
-    max-width: 700px; /* Regola la larghezza massima */
-    margin: 1.75rem auto; /* Centra il modal */
-    z-index: 12510;
+  max-width: 90vw !important;
+  margin: 5vw auto !important;
+  box-sizing: border-box !important;
 }
 
 .modal-content {
+    max-height: calc(100vh - 40px) !important;
+    display: flex !important;
+    flex-direction: column !important;
     border-radius: 8px; /* Bordo arrotondato per estetica */
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5); /* Ombreggiatura */
     overflow: visible !important;
     z-index: 12520;
 }
 
-.modal-body {    
-    overflow: visible !important;
-    max-height: 70vh; /* Limita altezza massima a 70% della viewport */
-    padding: 1rem;
+.modal-header,
+.modal-footer {
+  flex: 0 0 auto !important;
+}
+
+.modal-body {
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  flex: 1 1 auto !important;
+  max-height: calc(100vh - 160px) !important; /* leaves space for header/footer */
+  box-sizing: border-box !important;
+}
+
+/* Specific tweak for settings modal if needed */
+#modalSettingsTiles .modal-dialog {
+  max-width: 95vw !important;
+}
+
+#modalSettingsTiles .modal-content {
+  max-height: calc(100vh - 48px) !important;
 }
 
 .close {
@@ -2455,7 +2474,6 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
       max-width: 130px !important;
       font-size: 0.80rem !important;
     }
-  }
 
   #currentTimeIndicator {
       display: none !important;
@@ -2498,5 +2516,40 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
     appearance: none !important;
     /* Rimuovi eventuali padding automatici del browser */
     padding-right: 30px !important; /* Lascia spazio per l'icona calendario */
+  }
+
+  .report-top-buttons {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* rendi il pulsante settings sempre visibile e fuori dal flusso (fixed) */
+  #btnSettings {
+    display: flex !important;
+    position: static !important;
+    top: calc(var(--mobile-header-height, 56px) + var(--calendar-navigation-height, 44px) + 4px) !important;
+    right: 10px !important;
+    z-index: 12000 !important;
+    width: 30px !important;
+    height: 14px !important;
+    font-size: 0.8rem !important;
+    border-radius: 6px !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  #btnSettings i {
+    font-size: 0.9em !important;
+    line-height: 1 !important;
+  }
+
+  #tabella-riassunto th,
+  #tabella-riassunto td {
+    font-size: 0.92em !important;
+    padding: 4px 6px !important;
   }
 }
