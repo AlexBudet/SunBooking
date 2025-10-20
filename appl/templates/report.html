@@ -5,18 +5,22 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/it.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.0/jspdf.plugin.autotable.min.js"></script>
-<div class="d-flex align-items-center mb-3 calendar-navigation sticky-nav" style="z-index: 11030;">
-  <!-- Freccia sinistra (giorno precedente) -->
-  <a href="#" id="reportPrevDay" class="arrow-nav">&lt;</a>
-  <!-- Campo data visibile con giorno della settimana -->
-  <div class="calendar-date-container">
-      <input type="text" id="reportDate" class="calendar-date-input">
-      <span id="reportDayOfWeek"></span>
-  </div>
-  <!-- Freccia destra (giorno successivo) -->
-  <a href="#" id="reportNextDay" class="arrow-nav">&gt;</a>
-  <!-- Pulsante per tornare a oggi -->
-  <a href="#" id="reportBtnToday" class="btn-today" style="display:none;">Vai a OGGI</a>
+<!-- NAVIGAZIONE CALENDARIO -->
+<div class="calendar-navigation sticky-nav">
+    <!-- Freccia sinistra (giorno precedente) -->
+    <a href="#" id="reportPrevDay" class="arrow-nav">&lt;</a>
+    <!-- Campo data visibile con giorno della settimana -->
+    <div class="calendar-date-container">
+        <input type="text" id="reportDate" class="calendar-date-input">
+        <span id="reportDayOfWeek"></span>
+    </div>
+    <!-- Freccia destra (giorno successivo) -->
+    <a href="#" id="reportNextDay" class="arrow-nav">&gt;</a>
+    <!-- Pulsante per tornare a oggi: visualizza solo se la data corrente non è quella odierna -->
+    <div class="nav-today">
+        <a href="#" id="reportBtnToday" class="btn-today" style="display:none;">Vai a OGGI</a>
+    </div>
+</div>
 </div>
 <div class="page-wide-90 mt-4">
 <br><br>
