@@ -2552,4 +2552,24 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
     font-size: 0.92em !important;
     padding: 4px 6px !important;
   }
+
+  /* make oroscopo tile content scrollable on mobile without overflowing the tile */
+  #tile-oroscopo {
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+  }
+  #oroscopo-content {
+    max-height: 36vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    box-sizing: border-box !important;
+    padding-right: 8px !important;
+    width: 100% !important;
+  }
+  #oroscopo-content * {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    word-break: break-word !important;
+  }
 }

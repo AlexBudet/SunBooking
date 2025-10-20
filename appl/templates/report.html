@@ -1201,6 +1201,80 @@ padding: 15px !important;
 }
 .next-app-date-today { font-weight: bold; }
 
+/* Minimali e mirate: impedire overflow dei tile specifici e della tabella riassunto */
+#tile-riassunto-giornaliero,
+.riassunto-giornaliero,
+.summary-tile,
+.daily-summary,
+#tile-oroscopo,
+#tile-palette-stagionale {
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  max-width: 100% !important;
+}
+
+/* Forza i figli a non eccedere il contenitore e a spezzare le parole se necessario */
+#tile-riassunto-giornaliero *,
+.riassunto-giornaliero *,
+#tile-oroscopo *,
+#tile-palette-stagionale * {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+}
+
+/* Mirata a #tabella-riassunto dentro modal: nessun min-width, layout fisso e contenuto adattivo */
+.modal-body #tabella-riassunto {
+  min-width: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+  box-sizing: border-box !important;
+}
+
+/* Celle della tabella devono andare a capo invece di espandere */
+.modal-body #tabella-riassunto th,
+.modal-body #tabella-riassunto td {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  box-sizing: border-box !important;
+  padding: 6px 8px !important;
+}
+
+/* Se necessario, permetti scroll orizzontale interno al tile solo per la tabella */
+.modal-body .table-responsive.mt-2 {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+#oroscopo-content > div {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  gap: 8px !important;
+  white-space: normal !important;
+  box-sizing: border-box !important;
+}
+#oroscopo-content > div > strong {
+  min-width: 86px !important;
+  flex: 0 0 auto !important;
+  display: inline-block !important;
+  font-weight: 700 !important;
+}
+#oroscopo-content > div > span,
+#oroscopo-content > div > i,
+#oroscopo-content > div > em,
+#oroscopo-content > div > b {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
 </style>
 
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
