@@ -1719,6 +1719,19 @@ body.offline .btn.pagamento {
   display: none !important;
 }
 
+/* classe per gestire la visibilità dei popup senza inline style */
+.popup-visible {
+  display: grid !important;
+  grid-template-columns: repeat(var(--pb-cols), minmax(0, 1fr)) !important;
+  grid-auto-rows: auto !important;
+  gap: var(--pb-gap, 3px) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  position: absolute !important;
+  z-index: 2200 !important;
+}
 
 
 /* ===================== TOUCH UI (STILI PER TOUCHSCREEN quando attivati) ===================== */
@@ -2057,7 +2070,7 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
         --calendar-navigation-height: 44px;     /* regola se la tua .calendar-navigation è più alta */
         --calendar-nav-margin-bottom: 0px;      /* se imposterai margin-bottom cambialo qui */
     }
-
+    
 .calendar-navigation .arrow-left { order: 1 !important; }
 .calendar-navigation .calendar-date-container { order: 2 !important; }
 #dayOfWeek, .day-of-week { order: 3 !important; }
@@ -2477,6 +2490,28 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
     .appointment-block .btn-popup.whatsapp-btn:not(.touch-bottom-wa) {
         display: none !important;
     }
+
+    body.touch-ui .appointment-block .popup-buttons.popup-visible,
+  .appointment-block .popup-buttons.popup-visible {
+    --pb-cols: 3 !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-rows: repeat(2, auto) !important;
+    grid-auto-flow: row !important;
+  }
+
+  /* Nasconde se non attivo */
+  body.touch-ui .appointment-block:not(.active-popup) .popup-buttons,
+  .appointment-block:not(.active-popup) .popup-buttons {
+    display: none !important;
+  }
+
+  /* Forza dimensioni pulsanti */
+  .appointment-block .popup-buttons .btn-popup {
+    width: 100% !important;
+    aspect-ratio: 1 / 0.9 !important;
+    padding: 6px !important;
+    box-sizing: border-box !important;
+  }
 
   /* Aumenta padding-right per dare più spazio all'icona */
   .calendar-navigation .calendar-date-container input.calendar-date-input {

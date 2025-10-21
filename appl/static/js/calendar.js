@@ -3586,22 +3586,22 @@ document.addEventListener('DOMContentLoaded', function() {
     return; // gestito da touch-ui.js via click (.active-popup)
   }
 
-  // Desktop: hover apre/chiude i popup
-  document.querySelectorAll('.appointment-block').forEach(block => {
-    block.addEventListener('mouseenter', function() {
-      if (block.hidePopupTimeout) {
-        clearTimeout(block.hidePopupTimeout);
-        block.hidePopupTimeout = null;
-      }
-      block.classList.add('active-popup');
-    });
-    block.addEventListener('mouseleave', function() {
-      block.hidePopupTimeout = setTimeout(() => {
-        block.classList.remove('active-popup');
-        block.hidePopupTimeout = null;
-      }, 200);
-    });
+document.querySelectorAll('.appointment-block').forEach(block => {
+  block.addEventListener('mouseenter', function() {
+    const popup = this.querySelector('.popup-buttons');
+    if (popup) {
+      popup.classList.add('popup-visible');
+      // Rimuovi inline
+      popup.style.removeProperty('display');
+    }
   });
+  block.addEventListener('mouseleave', function() {
+    const popup = this.querySelector('.popup-buttons');
+    if (popup) {
+      popup.classList.remove('popup-visible');
+    }
+  });
+});
 
   document.querySelectorAll('.popup-buttons').forEach(popup => {
     popup.addEventListener('mouseenter', function() {
@@ -8716,3 +8716,68 @@ window.onAppointmentNoteSaved = function (appointmentId, noteText) {
     }
   } catch (_) {}
 };
+
+// Minimal normalization: rimuove inline display residui su popup-buttons quando viewport <= 1100px
+(function(){
+  const MOBILE_BP = 1100;
+  function normalizePopupInline() {
+    try {
+      const w = window.innerWidth || document.documentElement.clientWidth;
+      if (w <= MOBILE_BP) {
+        document.querySelectorAll('.appointment-block .popup-buttons, .appointment-block .popup-buttons-bottom').forEach(el=>{
+          // rimuove solo la proprietà display impostata inline, lascia altre proprietà se necessarie
+          if (el && el.style && el.style.display) {
+            el.style.removeProperty('display');
+          }
+          // rimuove eventuali grid-template-columns/rows impostati inline che possono rompere il 3x2
+          if (el && el.style) {
+            el.style.removeProperty('grid-template-columns');
+            el.style.removeProperty('grid-template-rows');
+            el.style.removeProperty('grid-auto-rows');
+          }
+        });
+      }
+    } catch(e){ console.warn('normalizePopupInline error', e); }
+  }
+
+  // rimuovi inline display subito al load e al resize (debounce)
+  let _t;
+  function onResizeDeb() { clearTimeout(_t); _t = setTimeout(normalizePopupInline, 120); }
+  window.addEventListener('resize', onResizeDeb, { passive: true });
+  document.addEventListener('DOMContentLoaded', normalizePopupInline);
+
+  // assicurati che al mouseenter/mouseleave si tolga l'inline display (delegato)
+  document.addEventListener('mouseover', function(e){
+    if ((window.innerWidth || document.documentElement.clientWidth) <= MOBILE_BP) {
+      const block = e.target.closest && e.target.closest('.appointment-block');
+      if (block) {
+        const pop = block.querySelectorAll('.popup-buttons, .popup-buttons-bottom');
+        pop.forEach(p=> p && p.style && p.style.removeProperty('display'));
+      }
+    }
+  }, true);
+  document.addEventListener('mouseout', function(e){
+    if ((window.innerWidth || document.documentElement.clientWidth) <= MOBILE_BP) {
+      const block = e.target.closest && e.target.closest('.appointment-block');
+      if (block) {
+        const pop = block.querySelectorAll('.popup-buttons, .popup-buttons-bottom');
+        pop.forEach(p=> p && p.style && p.style.removeProperty('display'));
+      }
+    }
+  }, true);
+
+  // MutationObserver: se qualche script applica inline 'display' di nuovo, rimuovilo quando siamo su mobile
+  const obs = new MutationObserver(muts=>{
+    if ((window.innerWidth || document.documentElement.clientWidth) > MOBILE_BP) return;
+    muts.forEach(m=>{
+      if (m.type === 'attributes' && m.attributeName === 'style' && m.target && (m.target.classList.contains('popup-buttons') || m.target.classList.contains('popup-buttons-bottom'))) {
+        try { m.target.style.removeProperty('display'); } catch(_) {}
+      }
+    });
+  });
+  // osserva body (dovrebbero esserci poche modifiche)
+  document.addEventListener('DOMContentLoaded', function(){
+    const body = document.body;
+    if (body) obs.observe(body, { subtree: true, attributes: true, attributeFilter: ['style'] });
+  });
+})();
