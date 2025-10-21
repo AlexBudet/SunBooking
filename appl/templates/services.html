@@ -5,6 +5,20 @@
 <div class="page-wide-90">
 <h3>&nbsp;Gestione Servizi</h3>
 
+<style>
+@media (max-width: 1100px) {
+  /* nasconde Abbreviazione (col 2), Categoria (col 3) e Sotto-categoria (col 4) nella tabella servizi */
+  #servicesTable th:nth-child(2),
+  #servicesTable td:nth-child(2),
+  #servicesTable th:nth-child(3),
+  #servicesTable td:nth-child(3),
+  #servicesTable th:nth-child(4),
+  #servicesTable td:nth-child(4) {
+    display: none !important;
+  }
+}
+</style>
+
 <!-- Form per aggiungere un nuovo servizio -->
 <form method="POST" action="{{ url_for('settings.add_service') }}" class="mb-4">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

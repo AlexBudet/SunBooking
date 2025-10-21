@@ -1,7 +1,13 @@
 {% extends "settings.html" %}
 {% block settings_content %}
 
-<div class="container mt-4">
+<style>
+@media (max-width: 1100px){
+  #booking-rules-section { display: none !important; }
+}
+</style>
+
+<div id="booking-rules-section" class="container mt-4">
   <h2>Regole Prenotazioni</h2>
   <table class="table table-bordered" id="booking-rules-table">
   <thead>
@@ -79,6 +85,7 @@
   </tbody>
 </table>
 <button id="save-booking-rules" class="btn btn-primary mt-3">Salva regole</button>
+</div>
   <br><br><br>
   <h2>Operatori selezionabili per servizio</h2>
   <table class="table sortable" id="booking-table">

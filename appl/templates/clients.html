@@ -6,6 +6,70 @@
 <div class="page-wide-90">
 <h3>&nbsp;Gestione Clienti</h3>
 
+<style>
+@media (max-width: 1100px) {
+  /* mostra solo Nome(1), Cognome(2), Cellulare(3) e Azioni(10) */
+  #clientsTable th,
+  #clientsTable td { white-space: nowrap; }
+
+  /* nascondi colonne 4..9 */
+  #clientsTable th:nth-child(4),
+  #clientsTable td:nth-child(4),
+  #clientsTable th:nth-child(5),
+  #clientsTable td:nth-child(5),
+  #clientsTable th:nth-child(6),
+  #clientsTable td:nth-child(6),
+  #clientsTable th:nth-child(7),
+  #clientsTable td:nth-child(7),
+  #clientsTable th:nth-child(8),
+  #clientsTable td:nth-child(8),
+  #clientsTable th:nth-child(9),
+  #clientsTable td:nth-child(9) {
+    display: none !important;
+  }
+
+  /* assicurati che le colonne visibili restino tabulari */
+  #clientsTable th:nth-child(1),
+  #clientsTable td:nth-child(1),
+  #clientsTable th:nth-child(2),
+  #clientsTable td:nth-child(2),
+  #clientsTable th:nth-child(3),
+  #clientsTable td:nth-child(3),
+  #clientsTable th:nth-child(10),
+  #clientsTable td:nth-child(10) {
+    display: table-cell !important;
+  }
+
+  /* nasconde i pulsanti extra nella colonna Azioni (restano Modifica e Elimina) */
+  #clientsTable .note,
+  #clientsTable .storico-btn {
+    display: none !important;
+  }
+
+    #clientsTable,
+  #clientsTable thead,
+  #clientsTable tbody,
+  #clientsTable tr,
+  #clientsTable th,
+  #clientsTable td {
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+  }
+
+  /* Mantieni la tabella orizzontalmente scrollabile se necessario */
+  #clientsTable {
+    width: 100% !important;
+    table-layout: fixed !important;
+    overflow-x: auto !important;
+    display: table !important;
+  }
+}
+</style>
+
 <!-- Form per aggiungere un nuovo cliente -->
 <form id="userForm" method="POST" action="{{ url_for('settings.add_client') }}" class="mb-4">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
