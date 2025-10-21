@@ -5,6 +5,33 @@
 <div class="page-wide-90">
 <h3>&nbsp;Gestione Operatori</h3>
 
+<style>
+/* mostra solo Nome, Cognome, Azioni su schermi stretti */
+@media (max-width: 1100px) {
+  .operators-table th,
+  .operators-table td { white-space: nowrap; }
+  .operators-table th:nth-child(3),
+  .operators-table td:nth-child(3),
+  .operators-table th:nth-child(4),
+  .operators-table td:nth-child(4) {
+    display: none !important;
+  }
+  .operators-table th:nth-child(1),
+  .operators-table td:nth-child(1),
+  .operators-table th:nth-child(2),
+  .operators-table td:nth-child(2),
+  .operators-table th:nth-child(5),
+  .operators-table td:nth-child(5) {
+    display: table-cell !important;
+  }
+
+  /* nasconde i pulsanti "Turni" nella colonna Azioni su schermi stretti */
+  .operators-table .operator-shift-link-settings {
+    display: none !important;
+  }
+}
+</style>
+
 <!-- Form per aggiungere un nuovo operatore -->
 <form method="POST" action="{{ url_for('settings.add_operator') }}" class="mb-4">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -32,7 +59,7 @@
 </form>
 
 <!-- Tabella degli operatori esistenti -->
-<table class="table">
+<table class="table operators-table">
     <thead>
         <tr>
             <th>Nome</th>

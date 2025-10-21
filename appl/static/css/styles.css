@@ -237,7 +237,7 @@ td {
     position: sticky;
     top: 72px; /* mantiene il valore già usato; adattalo se necessario */
     z-index: 10000;
-    background: #F0F0F0 !important;   /* evita ereditarietà trasparente */
+    background: #fcfcfc !important;   /* evita ereditarietà trasparente */
     text-align: center !important;    /* centra contenuto dell'header */
     vertical-align: middle !important;
 }
@@ -1829,6 +1829,23 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup
 .appointment-block.status-2 .btn-popup.whatsapp-btn {
   display: none !important;
 }
+
+
+
+@media (min-width: 1101px) {
+  /* Forza layout a colonne fisse su desktop per mantenere larghezze stabili */
+  .calendar-table {
+    table-layout: fixed !important;
+  }
+
+  /* Valore minimo per colonne non-header (adatta 120px se preferisci) */
+  .calendar-table thead th,
+  .calendar-table tbody td {
+    min-width: 120px !important;
+  }
+}
+
+
 
 /* ===================== TOUCH UI OVERRIDES ===================== */
 /* Apri popup SOLO a click (classe .active-popup), non su hover */
