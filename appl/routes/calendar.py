@@ -1225,7 +1225,61 @@ def online_appointments_by_booking_date():
     )
 
     if search and len(search) >= 3:
-        appointments = query.order_by(Appointment.created_at.desc()).all()
+        pattern = f"%{search.lower()}%"
+        raw_appointments = (
+            query.join(Client, isouter=True)
+            .filter(
+                or_(
+                    func.lower(Client.cliente_nome).like(pattern),
+                    func.lower(Client.cliente_cognome).like(pattern),
+                    func.lower(Appointment.note).like(pattern),
+                    func.lower(Appointment.source).like(pattern)
+                )
+            )
+            .order_by(Appointment.created_at.desc())
+            .all()
+        )
+
+        # Post-filter: manteniamo solo gli appuntamenti in cui la query
+        # corrisponde al nome o al cognome (sia dal record Client sia estratto dalla nota).
+        appointments = []
+        s = search.strip().lower()
+        for appt in raw_appointments:
+            try:
+                matched = False
+                # 1) se esiste client collegato, controlla nome/cognome DB
+                if appt.client:
+                    if s in (appt.client.cliente_nome or '').lower() or s in (appt.client.cliente_cognome or '').lower():
+                        matched = True
+
+                # 2) estrai nome/cognome dalla nota strutturata e controlla
+                if not matched:
+                    nome, cognome, _ = estrai_nome_cognome_cellulare(appt.note)
+                    if nome and s in nome.strip().lower():
+                        matched = True
+                    elif cognome and s in cognome.strip().lower():
+                        matched = True
+
+                # 3) fallback molto conservativo: se la nota comincia con il pattern "Nome:" o "Cognome:"
+                # e contiene il termine cercato, accettala (copre formati leggermente diversi)
+                if not matched and appt.note:
+                    note_l = (appt.note or '').lower()
+                    if ('nome:' in note_l or 'cognome:' in note_l) and s in note_l:
+                        # ma assicuriamoci che la corrispondenza non sia solo in email/telefono:
+                        # accettiamo solo se s appare vicino a "nome" o "cognome"
+                        # (semplice check: substring in finestra di 40 caratteri intorno)
+                        idx = note_l.find(s)
+                        if idx >= 0:
+                            start = max(0, idx - 40)
+                            ctx = note_l[start: idx + len(s) + 40]
+                            if 'nome' in ctx or 'cognome' in ctx:
+                                matched = True
+
+                if matched:
+                    appointments.append(appt)
+            except Exception:
+                # In caso di errori non blocchiamo tutto: ignora la riga
+                continue
     elif date_str:
         try:
             booking_date = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -1233,8 +1287,11 @@ def online_appointments_by_booking_date():
             return jsonify({"error": "Formato data non valido"}), 400
         start_dt = datetime.combine(booking_date, datetime.min.time())
         end_dt = datetime.combine(booking_date, datetime.max.time())
-        appointments = query.filter(Appointment.created_at >= start_dt, Appointment.created_at <= end_dt)\
-                            .order_by(Appointment.created_at.desc()).all()
+        appointments = (
+            query.filter(Appointment.created_at >= start_dt, Appointment.created_at <= end_dt)
+            .order_by(Appointment.created_at.desc())
+            .all()
+        )
     else:
         appointments = query.order_by(Appointment.created_at.desc()).all()
 
@@ -1323,13 +1380,6 @@ def online_appointments_by_booking_date():
             "ids": session["ids"],
             "placeholder_exists": session["placeholder_exists"],
         })
-
-    if search and len(search) >= 3:
-        s = search.lower()
-        result = [sess for sess in result if s in (sess["nome"] or "").lower()
-                  or s in (sess["cognome"] or "").lower()
-                  or s in (sess["cellulare"] or "").lower()
-                  or s in (sess["note"] or "").lower()]
 
     return jsonify(result)
 

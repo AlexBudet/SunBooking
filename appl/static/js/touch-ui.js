@@ -420,17 +420,12 @@ function initTouchOnBlock(block){
 
   // Reset: mai lasciare display inline, lascia che decida il CSS (.active-popup)
   const tb = block.querySelector('.popup-buttons');
-  if (tb) {
-    tb.classList.remove('popup-visible'); // inizia nascosto
-    // Rimuovi eventuali inline style
-    tb.style.removeProperty('display');
-    tb.style.removeProperty('grid-template-columns');
-  }
+  if (tb) tb.style.display = '';
   const bb = block.querySelector('.popup-buttons-bottom');
   if (bb) {
-    bb.classList.remove('popup-visible');
-    bb.style.removeProperty('display');
-    bb.style.removeProperty('grid-template-columns');
+    bb.style.display = '';
+    // stato=2: nessuna bottom bar
+    if (block.getAttribute('data-status') === '2') bb.style.display = 'none';
   }
 
   // Toggle apertura/chiusura su click (solo se non si clicca un bottone)

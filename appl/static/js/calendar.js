@@ -1,5 +1,5 @@
 (function(){
-    const MOBILE_BP = 1100;
+    const MOBILE_BP = 1200;
     const S_KEY = 'sun_touch_ui';
     const S_FORCED_FLAG = 'sun_touch_ui_forced';
     const S_PREV = 'sun_touch_ui_prev';
@@ -3586,22 +3586,22 @@ document.addEventListener('DOMContentLoaded', function() {
     return; // gestito da touch-ui.js via click (.active-popup)
   }
 
-document.querySelectorAll('.appointment-block').forEach(block => {
-  block.addEventListener('mouseenter', function() {
-    const popup = this.querySelector('.popup-buttons');
-    if (popup) {
-      popup.classList.add('popup-visible');
-      // Rimuovi inline
-      popup.style.removeProperty('display');
-    }
+  // Desktop: hover apre/chiude i popup
+  document.querySelectorAll('.appointment-block').forEach(block => {
+    block.addEventListener('mouseenter', function() {
+      if (block.hidePopupTimeout) {
+        clearTimeout(block.hidePopupTimeout);
+        block.hidePopupTimeout = null;
+      }
+      block.classList.add('active-popup');
+    });
+    block.addEventListener('mouseleave', function() {
+      block.hidePopupTimeout = setTimeout(() => {
+        block.classList.remove('active-popup');
+        block.hidePopupTimeout = null;
+      }, 200);
+    });
   });
-  block.addEventListener('mouseleave', function() {
-    const popup = this.querySelector('.popup-buttons');
-    if (popup) {
-      popup.classList.remove('popup-visible');
-    }
-  });
-});
 
   document.querySelectorAll('.popup-buttons').forEach(popup => {
     popup.addEventListener('mouseenter', function() {
@@ -7344,13 +7344,25 @@ if (window.pseudoBlocks && Array.isArray(window.pseudoBlocks)) {
 document.addEventListener('DOMContentLoaded', function() {
   // Per ogni blocco OFF, aggiungi l'elemento titolo se non esiste già
   document.querySelectorAll('.appointment-block.note-off').forEach(block => {
-    if (!block.querySelector('.off-block-title')) {
-      const titleEl = document.createElement('span');
-      titleEl.className = 'off-block-title';
-      // Usa il contenuto dell'attributo data-note, oppure un default
-      titleEl.textContent = block.getAttribute('data-note') || 'BLOCCO OFF';
-      
-      // Stili inline per centrare l'elemento
+    try {
+      const fullText = String(block.getAttribute('data-note') || block.getAttribute('data-titolo') || 'BLOCCO OFF');
+      const MAX_CHARS = 12;
+      const displayText = fullText.length > MAX_CHARS ? (fullText.slice(0, MAX_CHARS) + '...') : fullText;
+
+      let titleEl = block.querySelector('.off-block-title');
+      if (!titleEl) {
+        titleEl = document.createElement('span');
+        titleEl.className = 'off-block-title';
+        block.appendChild(titleEl);
+      }
+
+      // Testo visualizzato (troncato)
+      titleEl.textContent = displayText;
+      // Conserva il testo completo per modal/tooltip/debug
+      titleEl.setAttribute('data-full-note', fullText);
+      titleEl.setAttribute('title', fullText);
+
+      // Stili per forzare ellipsis e centro, compatibili con layout esistente
       titleEl.style.position = 'absolute';
       titleEl.style.top = '50%';
       titleEl.style.left = '50%';
@@ -7362,16 +7374,30 @@ document.addEventListener('DOMContentLoaded', function() {
       titleEl.style.textShadow = '1px 1px 2px rgba(17,16,16,0.2)';
       titleEl.style.cursor = 'pointer';
       titleEl.style.zIndex = '1000';
-      // Assicurati che l'elemento riceva i click
       titleEl.style.pointerEvents = 'auto';
 
-      block.appendChild(titleEl);
+      // IMPORTANT: constraints per evitare overflow del testo oltre i bordi del blocco
+      titleEl.style.whiteSpace = 'nowrap';
+      titleEl.style.overflow = 'hidden';
+      titleEl.style.textOverflow = 'ellipsis';
+      // lascia un piccolo padding interno e limita la larghezza al contenitore
+      titleEl.style.maxWidth = 'calc(100% - 12px)';
+      titleEl.style.display = 'inline-block';
+      titleEl.style.boxSizing = 'border-box';
+      titleEl.style.padding = '0 2px';
 
-      // Al click sull'elemento, apri il modal per la nota
-      titleEl.addEventListener('click', function(e) {
+      // Click sul titolo -> apre il modal con la nota completa
+      // rimuovo listener duplicati prima di aggiungerne uno nuovo
+      titleEl.removeEventListener('click', titleEl._offClickHandler);
+      titleEl._offClickHandler = function (e) {
         e.stopPropagation();
         openNoteModal(block);
-      });
+      };
+      titleEl.addEventListener('click', titleEl._offClickHandler, true);
+
+    } catch (err) {
+      // Non bloccare l'esecuzione in caso di errore su un singolo blocco
+      console.warn('init off-block-title failed for block', block, err);
     }
   });
 });
@@ -8077,48 +8103,94 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
   
-  // Date navigator
-  document.getElementById('webApptPrev').onclick = function() {
-    const d = new Date(document.getElementById('webApptDate').value);
-    d.setDate(d.getDate() - 1);
-    document.getElementById('webApptDate').value = d.toISOString().slice(0,10);
-    loadWebAppointments(document.getElementById('webApptDate').value, document.getElementById('webApptSearch').value);
-  };
-  document.getElementById('webApptNext').onclick = function() {
-    const d = new Date(document.getElementById('webApptDate').value);
-    d.setDate(d.getDate() + 1);
-    document.getElementById('webApptDate').value = d.toISOString().slice(0,10);
-    loadWebAppointments(document.getElementById('webApptDate').value, document.getElementById('webApptSearch').value);
-  };
-  document.getElementById('webApptDate').onchange = function() {
-    loadWebAppointments(this.value, document.getElementById('webApptSearch').value);
-  };
-  document.getElementById('webApptSearch').oninput = function() {
-    const dateEl = document.getElementById('webApptDate');
-    const v = (this.value || '').toString();
-    // se raggiunge la terza lettera, svuota e disabilita il campo data (aspetto grigio)
-    if (v.trim().length >= 3) {
-      if (dateEl && !dateEl.dataset._storedDate) dateEl.dataset._storedDate = dateEl.value || '';
-      if (dateEl) {
-        dateEl.value = '';
-        dateEl.disabled = true;
-        dateEl.style.background = '#efefef';
-        dateEl.style.color = '#666';
-      }
-    } else {
-      // ripristina se scende sotto soglia
-      if (dateEl) {
-        if (dateEl.dataset._storedDate !== undefined) {
-          dateEl.value = dateEl.dataset._storedDate || '';
-          delete dateEl.dataset._storedDate;
-        }
-        dateEl.disabled = false;
-        dateEl.style.background = '';
-        dateEl.style.color = '';
-      }
+  // Date navigator — SAFE handlers (non sovrascrivono risultati di ricerca)
+  (function(){
+    const prevBtn = document.getElementById('webApptPrev');
+    const nextBtn = document.getElementById('webApptNext');
+    const dateInput = document.getElementById('webApptDate');
+    const searchInput = document.getElementById('webApptSearch');
+
+    function getISODateNoTZ(raw) {
+      const r = raw ? raw : new Date().toISOString().slice(0,10);
+      return new Date(r + 'T12:00:00');
     }
-    loadWebAppointments(dateEl?.value || '', v);
-  };
+
+    if (prevBtn) {
+      prevBtn.onclick = function() {
+        if (searchInput && searchInput.value.trim().length > 0) return;
+        const raw = (dateInput && dateInput.value) ? dateInput.value : new Date().toISOString().slice(0,10);
+        const d = getISODateNoTZ(raw);
+        d.setDate(d.getDate() - 1);
+        if (dateInput) dateInput.value = d.toISOString().slice(0,10);
+        if (!(searchInput && searchInput.value.trim().length > 0)) loadWebAppointments(dateInput.value, '');
+      };
+    }
+
+    if (nextBtn) {
+      nextBtn.onclick = function() {
+        if (searchInput && searchInput.value.trim().length > 0) return;
+        const raw = (dateInput && dateInput.value) ? dateInput.value : new Date().toISOString().slice(0,10);
+        const d = getISODateNoTZ(raw);
+        d.setDate(d.getDate() + 1);
+        if (dateInput) dateInput.value = d.toISOString().slice(0,10);
+        if (!(searchInput && searchInput.value.trim().length > 0)) loadWebAppointments(dateInput.value, '');
+      };
+    }
+
+    if (dateInput) {
+      dateInput.onchange = function() {
+        if (searchInput && searchInput.value.trim().length > 0) return;
+        loadWebAppointments(this.value, '');
+      };
+    }
+
+    // Single controlled oninput for search (debounced). If >=3 chars -> search fetch only.
+    if (searchInput) {
+      if (!window._webApptSearchDebounce) window._webApptSearchDebounce = null;
+      searchInput.oninput = function() {
+        const v = (this.value || '').toString();
+        const dateEl = dateInput;
+
+        // visual behaviour: store and disable date when >=3
+        if (v.trim().length >= 3) {
+          if (dateEl && dateEl.dataset._storedDate === undefined) dateEl.dataset._storedDate = dateEl.value || '';
+          if (dateEl) {
+            dateEl.value = '';
+            dateEl.disabled = true;
+            dateEl.style.background = '#efefef';
+            dateEl.style.color = '#666';
+          }
+        } else {
+          if (dateEl) {
+            if (dateEl.dataset._storedDate !== undefined) {
+              dateEl.value = dateEl.dataset._storedDate || '';
+              delete dateEl.dataset._storedDate;
+            }
+            dateEl.disabled = false;
+            dateEl.style.background = '';
+            dateEl.style.color = '';
+          }
+        }
+
+        // debounce fetches
+        if (window._webApptSearchDebounce) clearTimeout(window._webApptSearchDebounce);
+        window._webApptSearchDebounce = setTimeout(function() {
+          // if user typed >=3 chars -> perform search fetch (search only)
+          if (v.trim().length >= 3) {
+            loadWebAppointments('', v.trim());
+            return;
+          }
+          // if field emptied -> fetch by date
+          if (!v.trim()) {
+            const dateVal = (dateEl && dateEl.value) ? dateEl.value : new Date().toISOString().slice(0,10);
+            loadWebAppointments(dateVal, '');
+            return;
+          }
+          // 1-2 chars -> do nothing (avoid accidental overwrite)
+        }, 220);
+      };
+    }
+  }());
 });
 
 // =============================================================
@@ -8716,68 +8788,3 @@ window.onAppointmentNoteSaved = function (appointmentId, noteText) {
     }
   } catch (_) {}
 };
-
-// Minimal normalization: rimuove inline display residui su popup-buttons quando viewport <= 1100px
-(function(){
-  const MOBILE_BP = 1100;
-  function normalizePopupInline() {
-    try {
-      const w = window.innerWidth || document.documentElement.clientWidth;
-      if (w <= MOBILE_BP) {
-        document.querySelectorAll('.appointment-block .popup-buttons, .appointment-block .popup-buttons-bottom').forEach(el=>{
-          // rimuove solo la proprietà display impostata inline, lascia altre proprietà se necessarie
-          if (el && el.style && el.style.display) {
-            el.style.removeProperty('display');
-          }
-          // rimuove eventuali grid-template-columns/rows impostati inline che possono rompere il 3x2
-          if (el && el.style) {
-            el.style.removeProperty('grid-template-columns');
-            el.style.removeProperty('grid-template-rows');
-            el.style.removeProperty('grid-auto-rows');
-          }
-        });
-      }
-    } catch(e){ console.warn('normalizePopupInline error', e); }
-  }
-
-  // rimuovi inline display subito al load e al resize (debounce)
-  let _t;
-  function onResizeDeb() { clearTimeout(_t); _t = setTimeout(normalizePopupInline, 120); }
-  window.addEventListener('resize', onResizeDeb, { passive: true });
-  document.addEventListener('DOMContentLoaded', normalizePopupInline);
-
-  // assicurati che al mouseenter/mouseleave si tolga l'inline display (delegato)
-  document.addEventListener('mouseover', function(e){
-    if ((window.innerWidth || document.documentElement.clientWidth) <= MOBILE_BP) {
-      const block = e.target.closest && e.target.closest('.appointment-block');
-      if (block) {
-        const pop = block.querySelectorAll('.popup-buttons, .popup-buttons-bottom');
-        pop.forEach(p=> p && p.style && p.style.removeProperty('display'));
-      }
-    }
-  }, true);
-  document.addEventListener('mouseout', function(e){
-    if ((window.innerWidth || document.documentElement.clientWidth) <= MOBILE_BP) {
-      const block = e.target.closest && e.target.closest('.appointment-block');
-      if (block) {
-        const pop = block.querySelectorAll('.popup-buttons, .popup-buttons-bottom');
-        pop.forEach(p=> p && p.style && p.style.removeProperty('display'));
-      }
-    }
-  }, true);
-
-  // MutationObserver: se qualche script applica inline 'display' di nuovo, rimuovilo quando siamo su mobile
-  const obs = new MutationObserver(muts=>{
-    if ((window.innerWidth || document.documentElement.clientWidth) > MOBILE_BP) return;
-    muts.forEach(m=>{
-      if (m.type === 'attributes' && m.attributeName === 'style' && m.target && (m.target.classList.contains('popup-buttons') || m.target.classList.contains('popup-buttons-bottom'))) {
-        try { m.target.style.removeProperty('display'); } catch(_) {}
-      }
-    });
-  });
-  // osserva body (dovrebbero esserci poche modifiche)
-  document.addEventListener('DOMContentLoaded', function(){
-    const body = document.body;
-    if (body) obs.observe(body, { subtree: true, attributes: true, attributeFilter: ['style'] });
-  });
-})();

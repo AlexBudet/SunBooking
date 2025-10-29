@@ -67,20 +67,20 @@
 <!-- Modifica i pulsanti modali per NON aprire più i modali direttamente -->
  
 <div class="d-flex gap-1 mb-4 position-relative report-top-buttons">
-  <!-- Pulsanti visibili solo a owner/admin -->
-  <button class="btn-neumorphic btn-blue" id="btnCorrispettivi">Corrispettivi</button>
-  {% if current_user.ruolo|string != 'RuoloUtente.user' %}
-  <button class="btn-neumorphic btn-green" id="btnIncassoCategoria">Incasso per categoria</button>
-  <button class="btn-neumorphic btn-orange" id="btnPassaggiCassa">Passaggi cassa</button>
-  <button class="btn-neumorphic btn-red" id="btnClienti">Clienti</button>
-  <button class="btn-neumorphic btn-purple" id="btnOperatori">Operatori</button>
-{% endif %}
-</div>
-<div>
-  <button class="btn-neumorphic"
+  <div class="report-actions d-flex gap-1">
+    <button class="btn-neumorphic btn-blue" id="btnCorrispettivi">Corrispettivi</button>
+    {% if current_user.ruolo|string != 'RuoloUtente.user' %}
+    <button class="btn-neumorphic btn-green" id="btnIncassoCategoria">Incasso per categoria</button>
+    <button class="btn-neumorphic btn-orange" id="btnPassaggiCassa">Passaggi cassa</button>
+    <button class="btn-neumorphic btn-red" id="btnClienti">Clienti</button>
+    <button class="btn-neumorphic btn-purple" id="btnOperatori">Operatori</button>
+    {% endif %}
+  </div>
+
+  <button class="btn-neumorphic btn-settings"
           id="btnSettings"
           title="Settaggi"
-          style="position: absolute; top: -10px; right: 20px;">
+          style="position: absolute; top: -5px; right: 20px; z-index: 13000;">
     <i class="bi bi-gear" style="font-size: 1.5em;"></i>
   </button>
 </div>
@@ -1274,6 +1274,18 @@ padding: 15px !important;
   min-width: 0 !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
+.report-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+  #btnSettings {
+    display: block !important;
+    position: absolute !important;
+    top: 80px !important;
+    right: 20px !important;
+    z-index: 18000 !important;
+  }
 }
 </style>
 

@@ -215,7 +215,11 @@ serviceInput.addEventListener('input', function () {
   });
 
   // Listener per il pulsante neumorfico stampa scontrino
-  document.getElementById('btnStampaScontrino').addEventListener('click', async () => {
+let stampaLock = false;
+document.getElementById('btnStampaScontrino').addEventListener('click', async () => {
+  if (stampaLock) return;
+  stampaLock = true;
+  setTimeout(() => { stampaLock = false; }, 5000);
       if (!confermaAttiva) {
     alert('Devi prima confermare lo scontrino!');
     return;
@@ -283,35 +287,42 @@ if (confirm("ATTENZIONE: Stampante fiscale non risponde!\nPremi ANNULLA per usci
         }, 5000);
       });
 
-      const payload = {
-        voci: voci_fiscali,
-        cliente_id,
-        operatore_id,
-        is_fiscale: true
-      };
-      const fetchPromise = fetch('/cassa/send-to-rch', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-        },
-        body: JSON.stringify(payload)
-      }).then(async res => {
-        fetchTerminata = true;
-        let data, text;
-        try {
-          text = await res.text();
-          data = JSON.parse(text);
-        } catch (e) {
-          if (!popupMostrato) alert('Errore di comunicazione con il server:\n' + (text || e));
-          throw e;
-        }
-        if (!res.ok) {
-          if (!popupMostrato) alert((data && data.error) || 'Errore durante la stampa dello scontrino!');
-          throw new Error(data && data.error);
-        }
-        return data;
-      });
+function generaIdempotencyKey() {
+  return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+    (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+  );
+}
+const idempotencyKey = generaIdempotencyKey();
+const payload = {
+  voci: voci_fiscali,
+  cliente_id,
+  operatore_id,
+  is_fiscale: true,
+  idempotency_key: idempotencyKey
+};
+const fetchPromise = fetch('/cassa/send-to-rch', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+  },
+  body: JSON.stringify(payload)
+}).then(async res => {
+  fetchTerminata = true;
+  let data, text;
+  try {
+    text = await res.text();
+    data = JSON.parse(text);
+  } catch (e) {
+    if (!popupMostrato) alert('Errore di comunicazione con il server:\n' + (text || e));
+    throw e;
+  }
+  if (!res.ok) {
+    if (!popupMostrato) alert((data && data.error) || 'Errore durante la stampa dello scontrino!');
+    throw new Error(data && data.error);
+  }
+  return data;
+});
 
 try {
   const result = await Promise.race([fetchPromise, timeoutPromise]);

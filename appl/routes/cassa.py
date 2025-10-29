@@ -225,10 +225,34 @@ def api_clients():
         for c in clients
     ])
 
+IDEMPOTENCY_STORE = {}
+
 @cassa_bp.route('/cassa/send-to-rch', methods=['POST'])
 def send_to_rch():
     data = request.get_json(force=True)
     voci = data.get("voci", [])
+
+    def _is_fiscale(v):
+        if not isinstance(v, dict):
+            return True
+        if "is_fiscale" in v:
+            return bool(v.get("is_fiscale"))
+        if "is_non_fiscale" in v:
+            return not bool(v.get("is_non_fiscale"))
+        return True
+
+    voci_fiscali = [v for v in voci if _is_fiscale(v)]
+    voci_non_fiscali = [v for v in voci if not _is_fiscale(v)]
+
+    if voci_fiscali:
+        idempotency_key = data.get("idempotency_key")
+        if not idempotency_key:
+            return jsonify({"error": "Missing idempotency_key for fiscal payments"}), 400
+        if idempotency_key in IDEMPOTENCY_STORE:
+            return jsonify(IDEMPOTENCY_STORE[idempotency_key])
+    else:
+        idempotency_key = None
+
     cliente_id = data.get("cliente_id")
     operatore_id = data.get("operatore_id")
 
@@ -251,8 +275,18 @@ def send_to_rch():
         # normalizza il prezzo nella voce (2 decimali)
         v["prezzo"] = round(prezzo_val, 2)
 
-    voci_fiscali = [v for v in voci if v.get("is_fiscale", True)]
-    voci_non_fiscali = [v for v in voci if not v.get("is_fiscale", True)]
+    # >>> FIX: robust flag handling (supporta is_fiscale OR is_non_fiscale per compatibilità)
+    def _is_fiscale(v):
+        if not isinstance(v, dict):
+            return True
+        if "is_fiscale" in v:
+            return bool(v.get("is_fiscale"))
+        if "is_non_fiscale" in v:
+            return not bool(v.get("is_non_fiscale"))
+        return True
+
+    voci_fiscali = [v for v in voci if _is_fiscale(v)]
+    voci_non_fiscali = [v for v in voci if not _is_fiscale(v)]
     results = []
     oggi = datetime.now().date()
 
@@ -432,7 +466,11 @@ def send_to_rch():
             "is_fiscale": False
         })
 
-    return jsonify({"results": results, "reset_voci": True})
+    response = {"results": results, "reset_voci": True}
+    # Salva idempotency solo se non ci sono errori nei risultati (per evitare loop su retry fiscali falliti)
+    if idempotency_key and not any("error" in str(r).lower() for r in results):
+        IDEMPOTENCY_STORE[idempotency_key] = response
+    return jsonify(response)
 
 @cassa_bp.route('/cassa/registro-scontrini')
 def registro_scontrini():
@@ -471,9 +509,44 @@ def registro_scontrini():
         if s.voci is None:
             s.voci = []
 
+    # --- NEW: Calcola display_numero_progressivo per mostrare STORNO <orig> sui reverse receipts ---
+    # assumiamo scontrini ordinati asc per created_at come arriba
+    # pre-imposta display al numero reale
+    for s in scontrini:
+        try:
+            s.display_numero_progressivo = s.numero_progressivo
+        except Exception:
+            s.display_numero_progressivo = s.numero_progressivo
+
+    # per ogni scontrino negativo (storno), trova il positivo antecedente che corrisponde
+    negativos = [r for r in scontrini if (r.total_amount is not None and float(r.total_amount) < 0) and r.is_fiscale]
+    positivos = [r for r in scontrini if (r.total_amount is not None and float(r.total_amount) > 0) and r.is_fiscale]
+
+    for neg in negativos:
+        try:
+            # criteri: stesso operatore e cliente (se presenti), importo opposto e creato prima dello storno
+            cand = [
+                p for p in positivos
+                if (
+                    (p.operatore_id == neg.operatore_id)
+                    and (p.cliente_id == neg.cliente_id)
+                    and (abs(float(p.total_amount) - abs(float(neg.total_amount))) < 0.001)
+                    and (p.created_at < neg.created_at)
+                )
+            ]
+            if cand:
+                # prendi l'originale più recente prima dello storno
+                orig = max(cand, key=lambda x: x.created_at)
+                neg.display_numero_progressivo = f"STORNO {orig.numero_progressivo}"
+            else:
+                # fallback: mostra STORNO e il progressivo registrato sullo storno (se disponibile)
+                neg.display_numero_progressivo = f"STORNO {neg.numero_progressivo}"
+        except Exception:
+            neg.display_numero_progressivo = f"STORNO {neg.numero_progressivo}"
+
     # Passa il ruolo al template
     user_role = user.ruolo.value if user else None
-    
+
     return render_template('registro_scontrini.html', scontrini=scontrini, giorno=giorno, user_role=user_role, date_today=date.today())
 
 @cassa_bp.route('/cassa/api/receipt/<int:receipt_id>')
@@ -540,12 +613,16 @@ def api_receipt_delete(id):
             if data_scontrino != oggi:
                 return jsonify({"error": "Eliminazione possibile solo per scontrini fiscali del giorno corrente"}), 400
             
-            # Storna fiscalmente prima
+            # Storna fiscalmente prima (aggiunge la voce negativa)
             storno_result = stornare_scontrino_specifico(scontrino)
             if "error" in storno_result:
                 return jsonify({"error": f"Storno fallito: {storno_result['error']}"}), 400
+
+            # NON eliminare lo scontrino originale!
+            # Semplicemente termina qui: la voce negativa è già stata aggiunta da stornare_scontrino_specifico
+            return '', 204
         
-        # Elimina dal DB
+        # Per non fiscali, puoi continuare a eliminare
         db.session.delete(scontrino)
         db.session.commit()
         return '', 204
@@ -956,7 +1033,7 @@ def stornare_scontrino_specifico(scontrino):
             voci             = voci_storno,
             cliente_id       = scontrino.cliente_id,
             operatore_id     = scontrino.operatore_id,
-            numero_progressivo = progressivo_completo
+            numero_progressivo = progressivo_completo  # Sequenziale come DGFE
         )
         db.session.add(nuovo_receipt)
         db.session.commit()
