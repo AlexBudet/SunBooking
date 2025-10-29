@@ -34,11 +34,19 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
 <tbody>
   {% for s in scontrini %}
   {% set bg = "#e5e5e5" if not s.is_fiscale else "#fff" %}
-  <tr data-id="{{ s.id }}" {% if s.total_amount < 0 %}style="background-color:#ffeaea; font-weight:bold;" title="Storno"{% endif %}>
+    {% set annullato = s.is_fiscale and s.total_amount > 0 and (scontrini | selectattr('is_fiscale') | selectattr('total_amount', 'equalto', -s.total_amount) | selectattr('operatore_id', 'equalto', s.operatore_id) | selectattr('cliente_id', 'equalto', s.cliente_id) | selectattr('created_at', 'greaterthan', s.created_at) | list | length > 0) %}
+<tr data-id="{{ s.id }}"
+  {% if s.total_amount < 0 %}
+    style="background-color:#ffeaea; font-weight:bold;"
+  {% endif %}
+  >
     <td style="background-color: {{ bg }};">{{ s.created_at.strftime('%d/%m/%Y') }}</td>
     <td style="background-color: {{ bg }};">{{ s.created_at.strftime('%H:%M:%S') }}</td>
     <td style="background-color: {{ bg }};">{{ s.id }}</td>
-    <td style="background-color: {{ bg }};">{{ s.numero_progressivo }}</td>
+    <td style="background-color: {{ bg }};">
+      {{ s.display_numero_progressivo if s.display_numero_progressivo is defined else s.numero_progressivo }}
+      {% if s.total_amount < 0 %} {# mantiene eventualmente l'etichetta (STORNO) ma non necessaria se display già contiene STORNO #}{% endif %}
+    </td>
     <td style="background-color: {{ bg }};">
       {% if s.operatore %}
         {{ s.operatore.user_nome }} {{ s.operatore.user_cognome }}
@@ -73,9 +81,11 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
     </td>
 <td style="background-color: {{ bg }};">
   <button type="button" class="btn btn-sm btn-info btn-visualizza-scontrino me-2">Visualizza</button>
-{% if user_role in ['admin', 'owner'] and (giorno == date_today or not s.is_fiscale) %}
-<button type="button" class="btn btn-sm btn-danger btn-elimina-scontrino">Elimina</button>
-{% endif %}
+  {% if annullato %}
+    <button type="button" class="btn btn-sm btn-secondary" style="background:#bcbcbc; border-color:#bcbcbc; color:#fff; pointer-events:none; cursor:not-allowed;" disabled>STORNATO</button>
+  {% elif s.total_amount >= 0 and user_role in ['admin', 'owner'] and (giorno == date_today or not s.is_fiscale) %}
+    <button type="button" class="btn btn-sm btn-danger btn-elimina-scontrino">Elimina</button>
+  {% endif %}
 </td>
   </tr>
   {% endfor %}
@@ -109,6 +119,10 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
 }
 .tab-btns > button:last-child {
   margin-right: 0;
+}
+
+.btn[disabled], .btn:disabled {
+  opacity: 1 !important;
 }
 </style>
 {% endblock %}
@@ -353,7 +367,18 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
             .then(res => {
               document.body.removeChild(loadingModal);
               if (res.ok) {
-                tr.remove();
+                // NON rimuovere la riga: cambia il pulsante a "STORNATO"
+                const eliminaBtn = tr.querySelector('.btn-elimina-scontrino');
+                if (eliminaBtn) {
+                  eliminaBtn.textContent = 'STORNATO';
+                  eliminaBtn.className = 'btn btn-sm btn-secondary';
+                  eliminaBtn.style.background = '#bcbcbc';
+                  eliminaBtn.style.borderColor = '#bcbcbc';
+                  eliminaBtn.style.color = '#fff';
+                  eliminaBtn.style.pointerEvents = 'none';
+                  eliminaBtn.style.cursor = 'not-allowed';
+                  eliminaBtn.disabled = true;
+                }
               } else {
                 return res.json().then(data => {
                   alert('Errore durante l\'eliminazione: ' + (data.error || 'Errore sconosciuto'));

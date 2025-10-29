@@ -96,27 +96,36 @@
 <!-- NAVIGAZIONE CALENDARIO -->
 <div class="calendar-navigation sticky-nav">
     <!-- Freccia sinistra (giorno precedente) -->
-    <a href="{{ url_for('calendar.calendar_home', date=day_before_str) }}" class="arrow-nav">&lt;</a>
+    <a href="{{ url_for('calendar.calendar_home', date=day_before_str) }}" class="arrow-nav arrow-left">&lt;</a>
     <!-- Campo data visibile con giorno della settimana -->
     <div class="calendar-date-container">
-        <input type="text" id="date" name="date" value="{{ selected_date_str }}" class="calendar-date-input">
-        <span id="dayOfWeek"></span>
+        <!-- DESKTOP VERSION -->
+        <div id="dateNavDesktop">
+            <input type="text" id="date" name="date" value="{{ selected_date_str }}" class="calendar-date-input">
+            <span id="dayOfWeek"></span>
+        </div>
+        <!-- MOBILE VERSION -->
+        <div id="dateNavMobile" style="display:none;">
+            <div style="display:flex; flex-direction:column; align-items:flex-start;">
+                <input type="text" id="dateMobile" name="date" value="{{ selected_date_str }}" class="calendar-date-input" style="width:94vw; font-size:18px;">
+                <span id="dayOfWeekMobile" style="font-size:16px; margin-top:2px;"></span>
+            </div>
+        </div>
     </div>
     <!-- Freccia destra (giorno successivo) -->
-    <a href="{{ url_for('calendar.calendar_home', date=day_after_str) }}" class="arrow-nav">&gt;</a>
+    <a href="{{ url_for('calendar.calendar_home', date=day_after_str) }}" class="arrow-nav arrow-right">&gt;</a>
     <!-- Pulsante per tornare a oggi: visualizza solo se la data corrente non è quella odierna -->
     {% if selected_date_str != today_str %}
-    <div class="nav-today">
-        <a href="{{ url_for('calendar.calendar_home', date=today_str) }}" class="btn-today">Vai a OGGI</a>
-    </div>
+    &nbsp;<a href="{{ url_for('calendar.calendar_home', date=today_str) }}" class="btn-today">Vai a OGGI</a>
     {% endif %}
-<!-- Pulsante Web: AGGIUNGI QUI -->
+  <!-- Pulsante Web: AGGIUNGI QUI -->
 <button id="btnWebInformatica"
         class="btn btn-outline-secondary"
         title="Web"
         style="margin-left: 12px; font-size: 1.4em; background: #fff; border-radius: 6px; padding: 2px 16px; cursor: pointer;">
   🌐
 </button>
+</div>
 </div>
 
 <!-- Tabella dell'agenda giornaliera -->

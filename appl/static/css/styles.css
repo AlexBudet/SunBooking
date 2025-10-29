@@ -95,41 +95,22 @@ display: none
 }
 
 .modal-dialog {
-  max-width: 90vw !important;
-  margin: 5vw auto !important;
-  box-sizing: border-box !important;
+    max-width: 700px; /* Regola la larghezza massima */
+    margin: 1.75rem auto; /* Centra il modal */
+    z-index: 12510;
 }
 
 .modal-content {
-    max-height: calc(100vh - 40px) !important;
-    display: flex !important;
-    flex-direction: column !important;
     border-radius: 8px; /* Bordo arrotondato per estetica */
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5); /* Ombreggiatura */
     overflow: visible !important;
     z-index: 12520;
 }
 
-.modal-header,
-.modal-footer {
-  flex: 0 0 auto !important;
-}
-
-.modal-body {
-  overflow-y: auto !important;
-  -webkit-overflow-scrolling: touch !important;
-  flex: 1 1 auto !important;
-  max-height: calc(100vh - 160px) !important; /* leaves space for header/footer */
-  box-sizing: border-box !important;
-}
-
-/* Specific tweak for settings modal if needed */
-#modalSettingsTiles .modal-dialog {
-  max-width: 95vw !important;
-}
-
-#modalSettingsTiles .modal-content {
-  max-height: calc(100vh - 48px) !important;
+.modal-body {    
+    overflow: visible !important;
+    max-height: 70vh; /* Limita altezza massima a 70% della viewport */
+    padding: 1rem;
 }
 
 .close {
@@ -237,7 +218,7 @@ td {
     position: sticky;
     top: 72px; /* mantiene il valore già usato; adattalo se necessario */
     z-index: 10000;
-    background: #fcfcfc !important;   /* evita ereditarietà trasparente */
+    background: #F0F0F0 !important;   /* evita ereditarietà trasparente */
     text-align: center !important;    /* centra contenuto dell'header */
     vertical-align: middle !important;
 }
@@ -685,20 +666,23 @@ td {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    flex-wrap: nowrap !important;
+}
+
+.calendar-date-container input.calendar-date-input,
+.calendar-date-container #dayOfWeek {
+    display: inline-block !important;
+    vertical-align: middle !important;
+    white-space: nowrap !important;
 }
 
 .calendar-navigation .calendar-date-input,
 .calendar-date-input {
-    text-align: left !important;
     width: auto !important;
     padding: 1px;
     color: #000 !important;
     background-color: #fff !important;
     border: 1px solid #ccc;
-    direction: ltr !important;
-    -webkit-appearance: none !important;
-    -moz-appearance: none !important;
-    appearance: none !important;
 }
 
 /* Overlay per mostrare la data formattata, allineato a sinistra */
@@ -1229,6 +1213,15 @@ body.quarter-55 .appointment-block .note-indicator {
     font-size: 1.2em;
   }
 
+.calendar-table th:first-child,
+.calendar-table {
+    background: #f8f8f8 !important; /* colore di sfondo diverso per la prima colonna */
+}
+
+.calendar-table th.operator-header {
+    background: #f8f8f8 !important; /* o il colore che preferisci */
+}
+
   .calendar-date-input::-webkit-calendar-picker-indicator {
     opacity: 0; /* Nasconde l’icona nativa */
   }
@@ -1237,8 +1230,11 @@ body.quarter-55 .appointment-block .note-indicator {
     max-width: 130px;
     min-width: 120px;
     width: 125px;
+    padding-left: 5px !important;
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='black' class='bi bi-calendar' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1zm1-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2z'/%3E%3C/svg%3E") no-repeat right 8px center;
     background-size: 16px 16px; 
+    font-size: 0.9em;
+    line-height: 1.2em;
   }
 
   /* Da aggiungere nel tuo file CSS */
@@ -1719,19 +1715,6 @@ body.offline .btn.pagamento {
   display: none !important;
 }
 
-/* classe per gestire la visibilità dei popup senza inline style */
-.popup-visible {
-  display: grid !important;
-  grid-template-columns: repeat(var(--pb-cols), minmax(0, 1fr)) !important;
-  grid-auto-rows: auto !important;
-  gap: var(--pb-gap, 3px) !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box !important;
-  padding: 0 !important;
-  position: absolute !important;
-  z-index: 2200 !important;
-}
 
 
 /* ===================== TOUCH UI (STILI PER TOUCHSCREEN quando attivati) ===================== */
@@ -1842,23 +1825,6 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup
 .appointment-block.status-2 .btn-popup.whatsapp-btn {
   display: none !important;
 }
-
-
-
-@media (min-width: 1101px) {
-  /* Forza layout a colonne fisse su desktop per mantenere larghezze stabili */
-  .calendar-table {
-    table-layout: fixed !important;
-  }
-
-  /* Valore minimo per colonne non-header (adatta 120px se preferisci) */
-  .calendar-table thead th,
-  .calendar-table tbody td {
-    min-width: 120px !important;
-  }
-}
-
-
 
 /* ===================== TOUCH UI OVERRIDES ===================== */
 /* Apri popup SOLO a click (classe .active-popup), non su hover */
@@ -2058,19 +2024,46 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
   outline: none !important;
 }
 
+/* Desktop: larghezza > 1200px => colonne fisse, tutte uguali e proporzionali allo schermo */
+@media (min-width: 1201px) {
+  table.calendar-table,
+  table#calendarTable,
+  table#calendar {
+    table-layout: fixed !important;
+    width: 100% !important;
+  }
 
+  /* imposta il numero di colonne con la variabile; fallback 6 */
+  :root { --calendar-cols-default: 6; }
 
+  table.calendar-table {
+    /* permette override dinamico: es. <table style="--calendar-cols: 8"> */
+    --calendar-cols: var(--calendar-cols, var(--calendar-cols-default));
+  }
 
-
+  table.calendar-table th,
+  table.calendar-table td,
+  table#calendarTable th,
+  table#calendarTable td {
+    box-sizing: border-box;
+    min-width: 0 !important; /* evita eredità min-width */
+    max-width: none !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* tutte le colonne uguali: calcola larghezza in percentuale */
+    width: calc(100% / var(--calendar-cols));
+  }
+  }
 
 /* ===================== IMPOSTAZIONI SCHERMI PICCOLI ===================== */
-@media (max-width: 1100px) {
+@media (max-width: 1200px) {
     :root {
         --mobile-header-height: 56px;            /* già presente, mantiene coerenza */
         --calendar-navigation-height: 44px;     /* regola se la tua .calendar-navigation è più alta */
         --calendar-nav-margin-bottom: 0px;      /* se imposterai margin-bottom cambialo qui */
     }
-    
+
 .calendar-navigation .arrow-left { order: 1 !important; }
 .calendar-navigation .calendar-date-container { order: 2 !important; }
 #dayOfWeek, .day-of-week { order: 3 !important; }
@@ -2327,11 +2320,11 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
 
     /* Bottone OGGI: sempre dopo il gruppo, non spinge gli altri (non ha flex-grow) */
     .calendar-navigation .btn-today {
-        position: absolute !important;
-        right: 12px !important;
-        top: 50% !important;
-        transform: translateY(-50%) !important;
-        order: unset !important; /* Rimuovi order per evitare conflitti */
+        order: 5 !important;
+        flex: 0 0 auto !important;
+        margin-left: 8px !important; /* distanza dalla destra della freccia */
+        padding: 4px 6px !important;
+        white-space: nowrap !important;
     }
 
     /* Formattazione della data overlay se usata */
@@ -2491,41 +2484,19 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
         display: none !important;
     }
 
-    body.touch-ui .appointment-block .popup-buttons.popup-visible,
-  .appointment-block .popup-buttons.popup-visible {
-    --pb-cols: 3 !important;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    grid-template-rows: repeat(2, auto) !important;
-    grid-auto-flow: row !important;
-  }
-
-  /* Nasconde se non attivo */
-  body.touch-ui .appointment-block:not(.active-popup) .popup-buttons,
-  .appointment-block:not(.active-popup) .popup-buttons {
-    display: none !important;
-  }
-
-  /* Forza dimensioni pulsanti */
-  .appointment-block .popup-buttons .btn-popup {
-    width: 100% !important;
-    aspect-ratio: 1 / 0.9 !important;
-    padding: 6px !important;
-    box-sizing: border-box !important;
-  }
-
   /* Aumenta padding-right per dare più spazio all'icona */
   .calendar-navigation .calendar-date-container input.calendar-date-input {
     padding-right: 40px !important;
   }
 
   /* Sposta il testo formattato più a destra e limita la larghezza per evitare sovrapposizione */
-    .calendar-navigation .calendar-date-container .flatpickr-input,
-    .calendar-navigation .calendar-date-container .flatpickr-alt-input,
-    .calendar-navigation .calendar-date-container input.calendar-date-input,
-    .calendar-navigation #formattedDate {
-      max-width: 130px !important;
-      font-size: 0.80rem !important;
-    }
+  #formattedDate {
+    left: 10px !important;
+    max-width: calc(100% - 50px) !important; /* Lascia spazio all'icona */
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
 
   #currentTimeIndicator {
       display: none !important;
@@ -2559,69 +2530,26 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.whatsapp-btn.t
     max-height: calc(95vh - 120px) !important; /* Lascia spazio per header/footer */
   }
 
-  .calendar-date-input {
-    text-align: left !important;
-    padding-left: 8px !important;
-    direction: ltr !important;
-    -webkit-appearance: none !important;
-    -moz-appearance: none !important;
-    appearance: none !important;
-    /* Rimuovi eventuali padding automatici del browser */
-    padding-right: 30px !important; /* Lascia spazio per l'icona calendario */
-  }
-
-  .report-top-buttons {
+  /* nasconde tutti i pulsanti nel gruppo delle azioni */
+  .report-top-buttons .report-actions .btn-neumorphic {
     display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
   }
 
-  /* rendi il pulsante settings sempre visibile e fuori dal flusso (fixed) */
-  #btnSettings {
-    display: flex !important;
-    position: static !important;
-    top: calc(var(--mobile-header-height, 56px) + var(--calendar-navigation-height, 44px) + 4px) !important;
-    right: 10px !important;
-    z-index: 12000 !important;
-    width: 30px !important;
-    height: 14px !important;
-    font-size: 0.8rem !important;
-    border-radius: 6px !important;
-    align-items: center !important;
-    justify-content: center !important;
+  /* mostra e rende più piccolo il pulsante settings */
+  .report-top-buttons .btn-settings {
+    display: inline-flex !important;
+    position: absolute;
+    top: -24px !important;
+    right: 12px;
+    z-index: 13000;
+    width: 20px !important;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8px;
+    font-size: 0.6rem;
   }
 
-  #btnSettings i {
-    font-size: 0.9em !important;
-    line-height: 1 !important;
-  }
-
-  #tabella-riassunto th,
-  #tabella-riassunto td {
-    font-size: 0.92em !important;
-    padding: 4px 6px !important;
-  }
-
-  /* make oroscopo tile content scrollable on mobile without overflowing the tile */
-  #tile-oroscopo {
-    display: flex !important;
-    flex-direction: column !important;
-    box-sizing: border-box !important;
-  }
-  #oroscopo-content {
-    max-height: 36vh !important;
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    box-sizing: border-box !important;
-    padding-right: 8px !important;
-    width: 100% !important;
-  }
-  #oroscopo-content * {
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-    word-break: break-word !important;
+  .report-top-buttons .btn-settings i {
+    font-size: 0.8rem;
   }
 }
