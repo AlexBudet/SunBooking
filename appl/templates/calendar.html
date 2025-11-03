@@ -522,6 +522,51 @@
   </div>
 </div>
 
+<!-- Modal Info Cliente (solo mobile) -->
+<div class="modal fade" id="ClientInfoMobileModal" tabindex="-1" aria-labelledby="ClientInfoMobileModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="ClientInfoMobileModalLabel">Info Cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <div class="ci-section">
+          <div class="ci-title">NOME</div>
+          <input type="text" class="form-control" id="ciNome" autocomplete="off">
+          <button type="button" class="btn btn-primary ci-save" data-field="nome">Salva</button>
+        </div>
+
+        <div class="ci-section">
+          <div class="ci-title">COGNOME</div>
+          <input type="text" class="form-control" id="ciCognome" autocomplete="off">
+          <button type="button" class="btn btn-primary ci-save" data-field="cognome">Salva</button>
+        </div>
+
+        <div class="ci-section">
+          <div class="ci-title">CELL</div>
+          <input type="text" class="form-control" id="ciCell" autocomplete="off" inputmode="tel">
+          <button type="button" class="btn btn-primary ci-save" data-field="cellulare">Salva</button>
+        </div>
+
+        <div class="ci-section">
+          <div class="ci-title">E-MAIL</div>
+          <input type="email" class="form-control" id="ciEmail" autocomplete="off" inputmode="email">
+          <button type="button" class="btn btn-primary ci-save" data-field="email">Salva</button>
+        </div>
+
+        <hr class="ci-sep">
+        <div class="ci-heading">PROX APPUNTAMENTI</div>
+        <div id="ciNextAppts" class="ci-list"></div>
+
+        <hr class="ci-sep">
+        <div class="ci-heading">STORICO APPUNTAMENTI</div>
+        <div id="ciHistoryAppts" class="ci-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal per gli appuntamenti via booking online-->
 <div class="modal fade" id="WebAppointmentsModal" tabindex="-1" aria-labelledby="WebAppointmentsModalLabel" aria-hidden="true" style="z-index: 14000;">
   <div class="modal-dialog" style="max-width:80vw; height:85vh;">
@@ -2055,5 +2100,205 @@ document.addEventListener('pointerdown', function(e) {
     }
   }
 });
+</script>
+<script>
+(function () {
+  const isSmall = () => window.matchMedia('(max-width: 1199.98px)').matches;
+
+  // Trigger robusti, inclusa .client-info-link (nome cliente)
+  const INFO_TRIGGERS = [
+    '.client-info-link',
+    '.btn-popup.info-client',
+    '.btn-popup.client-info',
+    '.btn-info-client',
+    '.open-client-info',
+    '[data-action="client-info"]',
+    '[data-open="client-info"]',
+    'button[title*="Info"]',
+    'a[title*="Info"]'
+  ].join(',');
+
+  function findInfoTrigger(target) {
+    const btn = target.closest(INFO_TRIGGERS);
+    if (btn) return btn;
+    const any = target.closest('.btn-popup, button, a');
+    if (any && any.querySelector('.bi-info, .bi-info-circle')) return any;
+    return null;
+  }
+
+  function showModal(el) {
+    const m = new bootstrap.Modal(el, { focus: true });
+    m.show();
+    return m;
+  }
+
+  async function fetchJson(url) {
+    const r = await fetch(url, { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+
+  // Apre e popola il modal mobile a partire da un blocco agenda
+  async function openClientInfoMobileModalByBlock(block) {
+    const modal = document.getElementById('ClientInfoMobileModal');
+    if (!modal || !block) return;
+
+    const clientId = block.getAttribute('data-client-id') || '';
+    if (!clientId) return;
+    modal.dataset.clientId = clientId;
+
+    const $ = (sel) => modal.querySelector(sel);
+    const inNome  = $('#ciNome');
+    const inCogn  = $('#ciCognome');
+    const inCell  = $('#ciCell');
+    const inEmail = $('#ciEmail');
+    const nextBox = $('#ciNextAppts');
+    const histBox = $('#ciHistoryAppts');
+
+    // Prefill da data-* del blocco
+    inNome.value  = block.getAttribute('data-client-nome')      || '';
+    inCogn.value  = block.getAttribute('data-client-cognome')   || '';
+    inCell.value  = block.getAttribute('data-client-cellulare') || '';
+    inEmail.value = block.getAttribute('data-client-email')     || '';
+
+    nextBox.textContent = 'Caricamento...';
+    histBox.textContent = 'Caricamento...';
+
+    // Dettagli cliente
+    try {
+      const info = await fetchJson(`/settings/api/client_info/${clientId}`);
+      inNome.value  = info?.cliente_nome      ?? inNome.value;
+      inCogn.value  = info?.cliente_cognome   ?? inCogn.value;
+      inCell.value  = info?.cliente_cellulare ?? inCell.value;
+      inEmail.value = info?.cliente_email     ?? inEmail.value;
+    } catch (_) {}
+
+    // Prossimi appuntamenti
+    try {
+      const next = await fetchJson(`/calendar/api/next-appointments-for-client/${clientId}`);
+      nextBox.innerHTML = '';
+      if (Array.isArray(next) && next.length) {
+        const ul = document.createElement('ul');
+        ul.className = 'ci-ul';
+        next.forEach(r => {
+          const li = document.createElement('li');
+          const m = String(r.ora_inizio || '').match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+          const d = m ? m[1] : ''; const t = m ? m[2] : '';
+          li.textContent = `${d} ${t} — ${r.servizio_tag || ''} (${r.operatore || ''})`;
+          ul.appendChild(li);
+        });
+        nextBox.appendChild(ul);
+      } else {
+        nextBox.textContent = 'Nessun appuntamento futuro';
+      }
+    } catch (_) { nextBox.textContent = 'Errore caricamento'; }
+
+    // Storico appuntamenti
+    try {
+      const hist = await fetchJson(`/settings/api/client_history?q=${encodeURIComponent(clientId)}`);
+      histBox.innerHTML = '';
+      if (Array.isArray(hist) && hist.length) {
+        const ul = document.createElement('ul');
+        ul.className = 'ci-ul';
+        hist.forEach(r => {
+          const li = document.createElement('li');
+          const m = String(r.ora_inizio || '').match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+          const d = m ? m[1] : ''; const t = m ? m[2] : '';
+          li.textContent = `${d} ${t} — ${r.servizio_tag || ''} (${r.operatore || ''})`;
+          ul.appendChild(li);
+        });
+        histBox.appendChild(ul);
+      } else {
+        histBox.textContent = 'Nessuna seduta nello storico';
+      }
+    } catch (_) { histBox.textContent = 'Errore caricamento'; }
+
+    // Bind dei pulsanti "Salva" (una sola volta)
+    if (!modal._saveBound) {
+      modal.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.ci-save');
+        if (!btn) return;
+        const field = btn.getAttribute('data-field');
+        const cid = modal.dataset.clientId || '';
+        if (!cid) return;
+
+        const map = {
+          nome: inNome.value,
+          cognome: inCogn.value,
+          cellulare: inCell.value,
+          email: inEmail.value
+        };
+        let url = '', body = {};
+        if (field === 'nome')      { url = '/settings/api/update_client_name';    body = { client_id: cid, nome: map.nome }; }
+        if (field === 'cognome')   { url = '/settings/api/update_client_surname'; body = { client_id: cid, cognome: map.cognome }; }
+        if (field === 'cellulare') { url = '/settings/api/update_client_phone';   body = { client_id: cid, phone: map.cellulare }; }
+        if (field === 'email')     { url = '/settings/api/update_client_email';   body = { client_id: cid, email: map.email }; }
+        if (!url) return;
+
+        try {
+          const CSRF = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+          const r = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(CSRF ? { 'X-CSRFToken': CSRF } : {}) },
+            credentials: 'same-origin',
+            body: JSON.stringify(body)
+          });
+          const old = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = r.ok ? 'Salvato!' : 'Errore!';
+          setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 1000);
+        } catch (_) {}
+      });
+      modal._saveBound = true;
+    }
+
+    showModal(modal);
+  }
+
+  // Esporta globalmente (utile per override)
+  window.openClientInfoMobileModal = openClientInfoMobileModalByBlock;
+
+  // Override soft: se qualche codice chiama il modal desktop, reindirizza al mobile su schermi piccoli
+  (function overrideDesktopOpener() {
+    const orig = window.showClientInfoModal;
+    window.showClientInfoModal = function (clientId) {
+      if (isSmall()) {
+        const blk = document.querySelector(`.appointment-block[data-client-id="${clientId}"]`);
+        if (blk) return openClientInfoMobileModalByBlock(blk);
+      }
+      if (typeof orig === 'function') return orig.apply(this, arguments);
+    };
+  })();
+
+  // Intercettazione dei click sulla “i” e sul nome cliente SOLO in mobile
+  function interceptClientInfo(e) {
+    if (!isSmall()) return;
+    const trg = findInfoTrigger(e.target);
+    if (!trg) return;
+
+    // Evita navigate su <a href="#"> e blocca il modal desktop
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    const block = trg.closest('.appointment-block');
+    if (block) {
+      openClientInfoMobileModalByBlock(block);
+      return;
+    }
+
+    // Fallback: se siamo nel modal di modifica e abbiamo il clientId
+    const cid =
+      trg.getAttribute('data-client-id') ||
+      document.querySelector('#EditAppointmentModal input#currentClient')?.getAttribute('data-client-id') ||
+      '';
+    if (cid) {
+      const blk = document.querySelector(`.appointment-block[data-client-id="${cid}"]`);
+      if (blk) openClientInfoMobileModalByBlock(blk);
+    }
+  }
+
+  document.addEventListener('pointerdown', interceptClientInfo, true);
+  document.addEventListener('click', interceptClientInfo, true);
+})();
 </script>
 {% endblock %}

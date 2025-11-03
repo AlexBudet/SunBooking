@@ -2585,3 +2585,42 @@ body.touch-ui .appointment-block.status-2 .popup-buttons-bottom {
 body.touch-ui .appointment-block.status-2.active-popup .popup-buttons-bottom {
   display: none !important;
 }
+
+@media (max-width: 1199.98px) {
+  /* Modal mobile a colonna e contenuti che vanno a capo */
+  #ClientInfoMobileModal .modal-dialog {
+    max-width: 95vw !important;
+    width: 95vw !important;
+    margin: 2.5vh auto !important;
+  }
+  #ClientInfoMobileModal .modal-content { max-height: 95vh !important; }
+  #ClientInfoMobileModal .modal-body {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    overflow-y: auto !important;
+  }
+  #ClientInfoMobileModal .ci-section {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+  #ClientInfoMobileModal .ci-title {
+    font-weight: 800; text-transform: uppercase; letter-spacing: .02em;
+    width: 95%; margin: 0 auto; text-align: left;
+  }
+  #ClientInfoMobileModal .form-control,
+  #ClientInfoMobileModal .ci-save.btn {
+    width: 95% !important;
+    max-width: 95% !important;
+    display: block !important;
+    margin: 0 auto !important;
+    box-sizing: border-box !important;
+  }
+  #ClientInfoMobileModal .ci-heading { font-weight: 800; text-align: center; text-transform: uppercase; margin: 6px 0 2px 0; }
+  #ClientInfoMobileModal .ci-sep { margin: 8px 0; }
+  #ClientInfoMobileModal .ci-list { width: 95%; margin: 0 auto; }
+  #ClientInfoMobileModal .ci-ul { padding-left: 16px; margin: 4px 0 8px 0; }
+}
