@@ -196,35 +196,69 @@
                       data-source="{{ appt.source.value }}" 
                       {% if appt.note %} data-note="{{ appt.note|e }}" {% endif %}
                  >
-                     <div class="popup-buttons">
-<!-- Questi compaiono solo se client NON è eliminato -->
-{% if not appt.client.is_deleted %}
+ <div class="popup-buttons">
+  {% if not appt.client.is_deleted %}
+    <button type="button"
+            class="btn-popup delete-appointment-block"
+            title="Elimina appuntamento"
+            data-appointment-id="{{ appt.id }}"
+            onclick="if(window.deleteAppointment) window.deleteAppointment('{{ appt.id }}')">
+      <i class="bi bi-trash"></i>
+    </button>
     <button type="button" class="btn-popup sposta" title="Togli e sposta" data-bs-toggle="tooltip"
             data-appointment-id="{{ appt.id }}">
-        <i class="bi bi-scissors"></i>
+      <i class="bi bi-scissors"></i>
     </button>
-    <!-- pulsante COPIA -->
-    <button type="button" class="btn-popup copia" title="Copia blocco" data-bs-toggle="tooltip" data-appointment-id="{{ appt.id }}">
+    <button type="button" class="btn-popup copia" title="Copia blocco" data-bs-toggle="tooltip"
+            data-appointment-id="{{ appt.id }}">
       <i class="bi bi-files"></i>
     </button>
-    <!-- pulsante COLORE -->
-    <button type="button" class="btn-popup colore" title="Imposta colore" data-bs-toggle="tooltip" data-appointment-id="{{ appt.id }}">
+    <button type="button" class="btn-popup colore" title="Imposta colore" data-bs-toggle="tooltip"
+            data-appointment-id="{{ appt.id }}">
       <i class="bi bi-palette"></i>
     </button>
     <button type="button" class="btn-popup pagamento" title="Porta in cassa" data-bs-toggle="tooltip"
             data-appointment-id="{{ appt.id }}">
-        <i class="bi bi-currency-euro"></i>
-    </button>
-    <button type="button" class="btn-popup nota" title="Aggiungi nota" data-bs-toggle="tooltip"
-            data-appointment-id="{{ appt.id }}">
-        <i class="bi bi-pencil-square"></i>
+      <i class="bi bi-currency-euro"></i>
     </button>
     <button type="button" class="btn-popup aggiungi-servizi" title="Aggiungi Servizi" data-bs-toggle="tooltip"
             data-appointment-id="{{ appt.id }}">
-        <i class="bi bi-plus"></i>
+      <i class="bi bi-plus"></i>
     </button>
-{% endif %}
-</div> <!-- /.popup-buttons -->
+  {% endif %}
+</div>
+
+<!-- BOTTOM BAR (6 pulsanti) -->
+<div class="popup-buttons-bottom">
+  {% if not appt.client.is_deleted %}
+    <button type="button" class="btn-popup touch-resize-down" title="Allunga di 15 min"
+            onclick="(function(btn){var b=btn.closest('.appointment-block');if(!b)return;var id=b.getAttribute('data-appointment-id');if(!id)return;var d=(parseInt(b.getAttribute('data-duration')||'15',10)||15)+15;fetch('/calendar/edit/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','X-Requested-With':'XMLHttpRequest','X-CSRFToken':(document.querySelector('meta[name=&quot;csrf-token&quot;]')&&document.querySelector('meta[name=&quot;csrf-token&quot;]').getAttribute('content'))||''},credentials:'same-origin',body:JSON.stringify({duration:d})}).then(function(){b.setAttribute('data-duration',String(d));if(window.updateAppointmentBlockStyles)window.updateAppointmentBlockStyles(b)}).catch(function(){})})(this)">
+      <i class="bi bi-arrow-down"></i>
+    </button>
+    <button type="button" class="btn-popup touch-spia-in" title="Segna cliente in istituto"
+            onclick="(function(btn){var b=btn.closest('.appointment-block');var el=b&&b.querySelector('.my-spia');if(el) el.click()})(this)">
+      <i class="bi bi-person-check"></i>
+    </button>
+    <button type="button" class="btn-popup touch-no-show" title="Segna NON ARRIVATO"
+            onclick="(function(btn){var b=btn.closest('.appointment-block');var el=b&&b.querySelector('.btn-popup.no-show-button');if(el) el.click()})(this)">
+      <i class="bi bi-x"></i>
+    </button>
+    {% if appt.client and appt.service and not (appt.client.cliente_nome|lower == 'dummy' and appt.client.cliente_cognome|lower == 'dummy') %}
+    <button type="button" class="btn-popup whatsapp-bottom" title="Invia WhatsApp"
+            onclick="(function(btn){var b=btn.closest('.appointment-block');var el=b&&b.querySelector('.btn-popup.whatsapp-btn');if(el) el.click()})(this)">
+      <i class="bi bi-whatsapp"></i>
+    </button>
+    {% endif %}
+    <button type="button" class="btn-popup nota" title="Aggiungi nota"
+            onclick="(function(btn){var b=btn.closest('.appointment-block');if(window.openNoteModal) window.openNoteModal(b)})(this)">
+      <i class="bi bi-pencil-square"></i>
+    </button>
+    <button type="button" class="btn-popup touch-resize-up" title="Accorcia di 15 min"
+            onclick="(function(btn){var b=btn.closest('.appointment-block');if(!b)return;var id=b.getAttribute('data-appointment-id');if(!id)return;var cur=(parseInt(b.getAttribute('data-duration')||'15',10)||15);var d=Math.max(15,cur-15);fetch('/calendar/edit/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','X-Requested-With':'XMLHttpRequest','X-CSRFToken':(document.querySelector('meta[name=&quot;csrf-token&quot;]')&&document.querySelector('meta[name=&quot;csrf-token&quot;]').getAttribute('content'))||''},credentials:'same-origin',body:JSON.stringify({duration:d})}).then(function(){b.setAttribute('data-duration',String(d));if(window.updateAppointmentBlockStyles)window.updateAppointmentBlockStyles(b)}).catch(function(){})})(this)">
+      <i class="bi bi-arrow-up"></i>
+    </button>
+  {% endif %}
+</div>
 
 <div>
       <!-- pulsante Whatsapp -->
@@ -452,6 +486,37 @@
       </div>
       <div class="modal-body" id="CreateAppointmentModalBody">
         <!-- Qui verrà inserito il form dinamico -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MOBILE POPUP BUTTONS <1200 px -->
+<div class="modal fade" id="MobilePopupButtonsModal" tabindex="-1" aria-labelledby="MobilePopupButtonsModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="MobilePopupButtonsModalLabel">Azioni appuntamento</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <br>
+          <div id="mobile-appt-info" style="color: #333; font-size: 1em;"></div>
+          <br>
+        <table style="width:100%; border:none;">
+          <tr>
+            <td><button class="btn mobile-popup-btn" data-action="elimina" style="width:100%;">ELIMINA</button></td>
+            <td><button class="btn mobile-popup-btn" data-action="sposta" style="width:100%;">SPOSTA</button></td>
+          </tr>
+          <tr>
+            <td><button class="btn mobile-popup-btn" data-action="cliente" style="width:100%;">CLIENTE</button></td>
+            <td><button class="btn mobile-popup-btn" data-action="note" style="width:100%;">NOTE</button></td>
+          </tr>
+          <tr>
+            <td><button class="btn mobile-popup-btn" data-action="allunga" style="width:100%;">ALLUNGA ↓</button></td>
+            <td><button class="btn mobile-popup-btn" data-action="accorcia" style="width:100%;">ACCORCIA ↑</button></td>
+          </tr>
+        </table>
       </div>
     </div>
   </div>
@@ -1688,6 +1753,307 @@ document.addEventListener('click', function(e){
 
   // 2) Rimuovi eventuali onclick inline dal link cliente SOLO in touch-ui
   document.querySelectorAll('.client-info-link[onclick]').forEach(a => a.removeAttribute('onclick'));
+});
+</script>
+<script>
+let lastScrollTop = 0;
+let lastScrollLeft = 0;
+
+document.addEventListener('DOMContentLoaded', function() {
+  // Flag mobile basato su media query (vivo anche su resize)
+  function setMobileFlag() {
+    const isMobile = window.matchMedia('(max-width: 1199.98px)').matches;
+    window.__MOBILE_MODAL_ENABLED = !!isMobile;
+    try {
+      if (isMobile) localStorage.setItem('sun_mobile_modal', '1');
+      else localStorage.removeItem('sun_mobile_modal');
+    } catch (_) {}
+  }
+  setMobileFlag();
+  window.addEventListener('resize', setMobileFlag, { passive: true });
+
+  // Crea box informazioni in cima al modal se assente
+function ensureMobileInfoContainer(modal) {
+  let info = modal.querySelector('#mobile-appt-info');
+  if (!info) {
+    const body = modal.querySelector('.modal-body') || modal;
+    info = document.createElement('div');
+    info.id = 'mobile-appt-info';
+    info.className = 'mobile-appt-info';
+    info.setAttribute('aria-live', 'polite');
+    body.insertBefore(info, body.firstChild);
+  }
+  return info;
+}
+
+function val(v) {
+  const s = (v || '').toString().trim();
+  return s ? s : '-';
+}
+
+function makeInfoRow(labelText, valueText) {
+  const row = document.createElement('div');
+  row.className = 'info-row';
+
+  const label = document.createElement('span');
+  label.className = 'info-label';
+  label.textContent = labelText;
+
+  const value = document.createElement('span');
+  value.className = 'info-value';
+  value.textContent = valueText;
+
+  row.appendChild(label);
+  row.appendChild(value);
+  return row;
+}
+
+// Popola i dati nel box in alto al modal in modo SICURO (senza innerHTML)
+function fillMobileApptInfo(modal, block) {
+  if (!modal || !block) return;
+
+  const link = block.querySelector('.client-info-link');
+
+  const nome = (link && link.getAttribute('data-client-nome')) || block.getAttribute('data-client-nome') || '';
+  const cognome = (link && link.getAttribute('data-client-cognome')) || block.getAttribute('data-client-cognome') || '';
+  const fullName = [nome, cognome].filter(Boolean).join(' ').trim();
+
+  const cell = (link && link.getAttribute('data-client-cellulare')) || block.getAttribute('data-client-cellulare') || '';
+  const notaCliente = (link && link.getAttribute('data-client-note')) || block.getAttribute('data-client-note') || '';
+
+  // Accetta entrambi i naming degli attributi (dash e underscore)
+  const servizio =
+    (link && link.getAttribute('data-service-full_name')) ||
+    block.getAttribute('data-service-full_name') ||
+    block.getAttribute('data-service-name') ||
+    block.getAttribute('data-service-tag') ||
+    '';
+
+  const notaApp = block.getAttribute('data-note') || '';
+
+  const infoBox = ensureMobileInfoContainer(modal);
+  while (infoBox.firstChild) infoBox.removeChild(infoBox.firstChild);
+
+  infoBox.appendChild(makeInfoRow('NOME CLIENTE:', val(fullName)));
+  infoBox.appendChild(makeInfoRow('CELLULARE:', val(cell)));
+  infoBox.appendChild(makeInfoRow('NOTA CLIENTE:', val(notaCliente)));
+
+  infoBox.appendChild(makeInfoRow('SERVIZIO:', val(servizio)));
+
+  infoBox.appendChild(makeInfoRow('NOTA APP:', val(notaApp)));
+}
+
+  // Evita doppio binding
+  if (document._mobileModalHandlersBound) return;
+  document._mobileModalHandlersBound = true;
+
+  // Neutralizza link cliente su mobile (evita tooltip e click)
+  function disableClientLinksOnMobile() {
+    if (!window.__MOBILE_MODAL_ENABLED) return;
+    document.querySelectorAll('.appointment-block .client-info-link[onclick]').forEach(a => a.removeAttribute('onclick'));
+    document.querySelectorAll('.appointment-block .client-info-link').forEach(a => {
+      if (a._mobileBlocked) return;
+      a.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); }, true);
+      a._mobileBlocked = true;
+    });
+  }
+  disableClientLinksOnMobile();
+
+  // Salva scroll (SOLO mobile)
+  document.addEventListener('click', function(e) {
+    if (!window.__MOBILE_MODAL_ENABLED) return;
+    if (e.target.closest('#MobilePopupButtonsModal')) return; // non interferire nel modal
+    const block = e.target.closest('.appointment-block');
+    if (!block) return;
+    lastScrollTop = window.scrollY || document.documentElement.scrollTop;
+    lastScrollLeft = window.scrollX || document.documentElement.scrollLeft;
+  }, true);
+
+  let suppressNextClickTs = 0;
+
+  function restoreScrollAfterModal(modal) {
+  // Fallback: usa lo scroll salvato prima di aprire il modal
+  const beforeTop = parseInt(modal.dataset.scrollTopBefore || String(lastScrollTop || 0), 10) || 0;
+  const beforeLeft = parseInt(modal.dataset.scrollLeftBefore || String(lastScrollLeft || 0), 10) || 0;
+
+  // Attendi che Bootstrap rimuova le classi/modal-open e ripristini lo scroll della pagina
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      const apptId = modal.dataset.appointmentId || '';
+      const block = apptId ? document.querySelector('.appointment-block[data-appointment-id="' + apptId + '"]') : null;
+      if (block) {
+        // Offset leggero per non incollare il blocco al bordo superiore
+        const headerOffset = 60;
+        const rect = block.getBoundingClientRect();
+        const targetTop = Math.max(0, rect.top + window.scrollY - headerOffset);
+        window.scrollTo({ top: targetTop, left: beforeLeft });
+      } else {
+        window.scrollTo({ top: beforeTop, left: beforeLeft });
+      }
+    }, 20);
+  });
+}
+
+  // Apre il modal su pointerdown (SOLO mobile, e mai dentro il modal)
+document.addEventListener('pointerdown', function(e) {
+  if (!window.__MOBILE_MODAL_ENABLED) return;
+  if (e.target.closest('#MobilePopupButtonsModal')) return;
+  const block = e.target.closest('.appointment-block');
+  if (!block) return;
+  if (e.target.closest('.btn-popup')) return;
+
+  e.preventDefault();
+  e.stopImmediatePropagation();
+
+  const modal = document.getElementById('MobilePopupButtonsModal');
+  if (!modal) return;
+
+  // Salva ID appuntamento e posizione scroll PRIMA di aprire il modal
+  modal.dataset.appointmentId = block.getAttribute('data-appointment-id') || '';
+  modal.dataset.scrollTopBefore = String(window.scrollY || document.documentElement.scrollTop || 0);
+  modal.dataset.scrollLeftBefore = String(window.scrollX || document.documentElement.scrollLeft || 0);
+
+  // Popola info
+  fillMobileApptInfo(modal, block);
+
+  const bsModal = new bootstrap.Modal(modal, { focus: false });
+  bsModal.show();
+
+  suppressNextClickTs = Date.now();
+
+  function onHidden() {
+    restoreScrollAfterModal(modal);
+    modal.removeEventListener('hidden.bs.modal', onHidden);
+  }
+  modal.addEventListener('hidden.bs.modal', onHidden);
+}, true);
+
+  // Fallback click + soppressione (SOLO mobile, ignora click nel modal)
+  document.addEventListener('click', function(e) {
+    if (!window.__MOBILE_MODAL_ENABLED) return;
+    if (e.target.closest('#MobilePopupButtonsModal')) return; // lascia passare i click dentro al modal
+
+    if (Date.now() - suppressNextClickTs < 400) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+
+    const block = e.target.closest('.appointment-block');
+    if (!block) return;
+    if (e.target.closest('.btn-popup')) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    const modal = document.getElementById('MobilePopupButtonsModal');
+    if (!modal) return;
+    modal.dataset.appointmentId = block.getAttribute('data-appointment-id');
+
+    // Popola info anche nel fallback
+    fillMobileApptInfo(modal, block);
+
+    const bsModal = new bootstrap.Modal(modal, { focus: false });
+    bsModal.show();
+
+    modal.addEventListener('hidden.bs.modal', function restoreScroll() {
+      window.scrollTo({ top: lastScrollTop, left: lastScrollLeft });
+      modal.removeEventListener('hidden.bs.modal', restoreScroll);
+    });
+  }, true);
+
+  // Garantisce il popolamento delle info anche quando Bootstrap emette l'evento show
+  document.addEventListener('show.bs.modal', function(e) {
+    if (!window.__MOBILE_MODAL_ENABLED) return;
+    const modal = e.target;
+    if (modal && modal.id === 'MobilePopupButtonsModal') {
+      const apptId = modal.dataset.appointmentId || '';
+      const block = apptId ? document.querySelector('.appointment-block[data-appointment-id="' + apptId + '"]') : null;
+      if (block) fillMobileApptInfo(modal, block);
+    }
+  });
+
+  // Delega eventi: click su pulsanti del modal (SOLO dentro il modal)
+  (function bindModalButtons() {
+    const modal = document.getElementById('MobilePopupButtonsModal');
+    if (!modal || modal._buttonsBound) return;
+    modal._buttonsBound = true;
+
+    modal.addEventListener('click', function(e) {
+      const btn = e.target.closest('.mobile-popup-btn');
+      if (!btn) return;
+
+      // Lascia lavorare i click del modal (non farli bloccare dal document listener)
+      e.stopPropagation();
+
+      const action = btn.getAttribute('data-action');
+      const apptId = modal.dataset.appointmentId || '';
+      const block = apptId ? document.querySelector('.appointment-block[data-appointment-id="' + apptId + '"]') : null;
+      if (!block) return;
+
+      const inst = bootstrap.Modal.getInstance(modal);
+      if (inst) inst.hide();
+
+      switch (action) {
+        case 'elimina':
+          if (window.deleteAppointment) window.deleteAppointment(apptId);
+          break;
+        case 'sposta':
+          const spostaBtn = block.querySelector('.btn-popup.sposta');
+          if (spostaBtn) spostaBtn.click();
+          break;
+        case 'note':
+          if (window.openNoteModal) window.openNoteModal(block);
+          break;
+        case 'cliente':
+          if (window.openModifyPopup) window.openModifyPopup(apptId);
+          break;
+        case 'allunga':
+          setAppointmentDurationMobile(block, +((parseInt(block.getAttribute('data-duration'), 10) || 15) + 15));
+          break;
+        case 'accorcia':
+          setAppointmentDurationMobile(block, Math.max(15, (parseInt(block.getAttribute('data-duration'), 10) || 15) - 15));
+          break;
+      }
+    });
+  })();
+
+  // Aggiorna durata appuntamento (endpoint /calendar/edit/<id>)
+  const CSRF = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+  async function setAppointmentDurationMobile(block, newDuration) {
+    try {
+      newDuration = Math.max(15, Math.round(newDuration / 15) * 15);
+      const id = block.getAttribute('data-appointment-id');
+      if (!id) return;
+
+      const res = await fetch('/calendar/edit/' + encodeURIComponent(id), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          ...(CSRF ? { 'X-CSRFToken': CSRF } : {})
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ duration: newDuration })
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.error('setAppointmentDurationMobile error', res.status, txt);
+        return;
+      }
+
+      block.setAttribute('data-duration', String(newDuration));
+      if (typeof window.updateAppointmentBlockStyles === 'function') {
+        window.updateAppointmentBlockStyles(block);
+      } else if (typeof window.getQuarterPx === 'function') {
+        const q = window.getQuarterPx();
+        block.style.height = (newDuration / 15) * q + 'px';
+      }
+    } catch (err) {
+      console.error('setAppointmentDurationMobile exception', err);
+    }
+  }
 });
 </script>
 {% endblock %}
