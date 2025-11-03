@@ -2566,3 +2566,22 @@ body.touch-ui .appointment-block .popup-buttons-bottom:hover {
 body.touch-ui .appointment-block .popup-buttons .btn-popup.nota {
   display: none !important;
 }
+
+/* Touch‑UI: stato=2 → mai mostrare la bottom bar, anche su click */
+body.touch-ui .appointment-block[data-status="2"] .popup-buttons-bottom {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+body.touch-ui .appointment-block[data-status="2"].active-popup .popup-buttons-bottom {
+  display: none !important;
+}
+
+/* Ridondanza per chi usa anche la classe status-2 */
+body.touch-ui .appointment-block.status-2 .popup-buttons-bottom {
+  display: none !important;
+}
+body.touch-ui .appointment-block.status-2.active-popup .popup-buttons-bottom {
+  display: none !important;
+}
