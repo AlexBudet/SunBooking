@@ -121,6 +121,11 @@ for idx, uri in pool.items():
     child.secret_key = secret
     child.config["HIDE_PRINTER_IP"] = True
     child.config["HIDE_CASSA"] = True
+
+    @child.context_processor
+    def inject_hide_cassa():
+        return {'hide_cassa': True}
+
     creds = wbiztool_creds_for(idx)
     creds["HIDE_CASSA"] = "1"
 

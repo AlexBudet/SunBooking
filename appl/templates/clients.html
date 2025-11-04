@@ -138,6 +138,16 @@
 <br><br><br>
 <div id="savedInfo" style="display: none"></div>
 
+<!-- Pulsante esportazione Excel -->
+{% if current_user.ruolo.value in ['owner', 'admin'] %}
+<!-- Pulsante esportazione Excel -->
+<div class="mt-4 text-center">
+  <button id="btnExportClientsExcel" class="btn btn-success">
+    <i class="bi bi-file-earmark-excel"></i> Esporta Anagrafica Clienti Completa
+  </button>
+</div>
+{% endif %}
+
 <!-- Modal per la modifica delle note -->
 <div class="modal fade" tabindex="-1" id="EditClientNoteModal">
     <div class="modal-dialog">
@@ -826,6 +836,51 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('btnExportClientsExcel').addEventListener('click', async function() {
+    try {
+      const CSRF = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+      const response = await fetch('/settings/api/export_clients', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(CSRF ? { 'X-CSRFToken': CSRF } : {})
+        },
+        credentials: 'same-origin'
+      });
+      if (!response.ok) throw new Error('Errore caricamento dati');
+      const data = await response.json();
+
+      if (!data.clients || data.clients.length === 0) {
+        alert('Nessun cliente da esportare.');
+        return;
+      }
+
+      // Prepara dati per Excel
+      const wsData = [
+        ['ID Cliente', 'Nome', 'Cognome', 'Cellulare'],  // Header
+        ...data.clients.map(c => [c.id, c.nome, c.cognome, c.cellulare])
+      ];
+
+      // Crea workbook
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Anagrafica Clienti');
+
+      // Nome file
+      const businessName = data.business_name || 'Azienda';
+      const fileName = `Anagrafica_Clienti_${businessName}.xlsx`;
+
+      // Scarica
+      XLSX.writeFile(wb, fileName);
+    } catch (error) {
+      console.error('Errore esportazione:', error);
+      alert('Errore durante l\'esportazione. Riprova.');
+    }
+  });
 });
 </script>
 {% endblock %}

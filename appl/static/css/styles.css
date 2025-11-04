@@ -2441,9 +2441,7 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
     overflow-y: auto !important;
     max-height: calc(95vh - 120px) !important; /* Lascia spazio per header/footer */
   }
-}
 
-@media (max-width: 1200px) {
   body:not(.force-popup-buttons) .appointment-block:hover .popup-buttons,
   body:not(.force-popup-buttons) .appointment-block.active-popup .popup-buttons,
   body:not(.force-popup-buttons) .appointment-block .popup-buttons:hover,
@@ -2487,10 +2485,7 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
   border: none !important;
   outline: none !important;
 }
-}
 
-/* Disattiva tooltip e link cliente su mobile per non rubare il primo click */
-@media (max-width: 1199.98px) {
   #clientInfoPopup,
   #clientHistoryPopup {
     display: none !important;
@@ -2498,7 +2493,6 @@ body.touch-ui .appointment-block.active-popup .client-info-link:hover {
   .appointment-block .client-info-link {
     pointer-events: none !important;
   }
-}
 
 /* --- OVERRIDE: in touch-ui non nascondere il bottone "nota" nella top bar --- */
 body.touch-ui .appointment-block .popup-buttons .btn-popup.nota {
@@ -2539,8 +2533,6 @@ body.touch-ui .appointment-block .popup-buttons .btn-popup.nota {
   white-space: pre-wrap;       /* mantiene eventuali a capo nelle note */
   word-break: break-word;
 }
-
-/* === PATCH: visualizzazione corretta a schermo grande === */
 
 /* Non-touch (desktop normale): mai mostrare la bottom bar */
 body:not(.touch-ui) .appointment-block .popup-buttons-bottom {
@@ -2586,8 +2578,6 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons-bottom {
   display: none !important;
 }
 
-@media (max-width: 1199.98px) {
-  /* Modal mobile a colonna e contenuti che vanno a capo */
   #ClientInfoMobileModal .modal-dialog {
     max-width: 95vw !important;
     width: 95vw !important;
@@ -2623,4 +2613,21 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons-bottom {
   #ClientInfoMobileModal .ci-sep { margin: 8px 0; }
   #ClientInfoMobileModal .ci-list { width: 95%; margin: 0 auto; }
   #ClientInfoMobileModal .ci-ul { padding-left: 16px; margin: 4px 0 8px 0; }
-}
+
+    .btn-neumorphic:not(.btn-settings) {
+      display: none !important;
+    }
+
+      .btn-neumorphic.btn-settings {
+      display: inline-flex !important;
+      top: -15px !important;
+      width: 30px;
+      height: 30px;
+      min-width: 30px;
+      min-height: 30px;
+      padding: 0;
+      border-radius: 12px;
+      align-items: center;
+      justify-content: center;
+    }
+  }

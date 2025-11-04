@@ -2147,6 +2147,31 @@ document.addEventListener('pointerdown', function(e) {
     if (!clientId) return;
     modal.dataset.clientId = clientId;
 
+    // Salva visuale corrente (solo mobile)
+    if (isSmall()) {
+      modal.dataset.scrollY = String(window.scrollY || document.documentElement.scrollTop || 0);
+      modal.dataset.scrollX = String(window.scrollX || document.documentElement.scrollLeft || 0);
+      // Bind cleanup/restore una sola volta
+      if (!modal._ciBound) {
+        modal.addEventListener('hidden.bs.modal', function () {
+          // Ripulisci eventuali backdrop residui e stato body
+          try {
+            document.querySelectorAll('.modal-backdrop, .offcanvas-backdrop').forEach(el => el.remove());
+            if (!document.querySelector('.modal.show')) {
+              document.body.classList.remove('modal-open');
+              document.body.style.removeProperty('overflow');
+              document.body.style.removeProperty('paddingRight');
+            }
+          } catch (_) {}
+          // Ripristina esattamente la visuale precedente
+          const sy = parseInt(modal.dataset.scrollY || '0', 10) || 0;
+          const sx = parseInt(modal.dataset.scrollX || '0', 10) || 0;
+          requestAnimationFrame(() => window.scrollTo({ top: sy, left: sx }));
+        }, true);
+        modal._ciBound = true;
+      }
+    }
+
     const $ = (sel) => modal.querySelector(sel);
     const inNome  = $('#ciNome');
     const inCogn  = $('#ciCognome');
@@ -2301,4 +2326,19 @@ document.addEventListener('pointerdown', function(e) {
   document.addEventListener('click', interceptClientInfo, true);
 })();
 </script>
+{% if hide_cassa %}
+<style>
+  /* Nascondi popup button € solo in wsgi */
+  .appointment-block .btn-popup.pagamento,
+  .appointment-block .btn-popup.cassa,
+  .appointment-block [data-action="cassa"],
+  .appointment-block [data-action="to-cash"],
+  .appointment-block .to-cash,
+  .appointment-block .go-cash,
+  .popup-buttons-bottom .btn-popup.pagamento,
+  .popup-buttons-bottom .btn-popup.cassa {
+    display: none !important;
+  }
+</style>
+{% endif %}
 {% endblock %}
