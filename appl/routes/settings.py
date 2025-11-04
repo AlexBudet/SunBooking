@@ -1440,3 +1440,43 @@ def update_booking_rules():
 
     db.session.commit()
     return jsonify({"success": True})
+
+@settings_bp.route('/api/export_clients', methods=['GET'])
+def export_clients():
+    try:
+        # Ottieni business_name
+        business_info = BusinessInfo.query.first()
+        business_name = (business_info.business_name or "").strip() if business_info else ""
+        # Sostituisci spazi e caratteri speciali per nome file sicuro
+        safe_business_name = re.sub(r'[^\w\s-]', '', business_name).replace(' ', '_')
+
+        # Query clienti: non eliminati, escludendo dummy/booking
+        clients = Client.query.filter(
+            Client.is_deleted == False,
+            ~(
+                or_(
+                    and_(func.lower(Client.cliente_nome) == "dummy", func.lower(Client.cliente_cognome) == "dummy"),
+                    and_(func.lower(Client.cliente_nome) == "cliente", func.lower(Client.cliente_cognome) == "booking"),
+                    and_(func.lower(Client.cliente_nome) == "booking", func.lower(Client.cliente_cognome) == "online")
+                )
+            )
+        ).order_by(Client.cliente_nome, Client.cliente_cognome).all()
+
+        clients_data = [
+            {
+                "id": c.id,
+                "nome": c.cliente_nome or "",
+                "cognome": c.cliente_cognome or "",
+                "cellulare": c.cliente_cellulare or ""
+            }
+            for c in clients
+        ]
+
+        return jsonify({
+            "business_name": safe_business_name,
+            "clients": clients_data
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Errore in export_clients: {e}")
+        return jsonify({"error": "Errore interno del server"}), 500

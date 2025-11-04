@@ -20,7 +20,7 @@
 </style>
 
 <!-- Form per aggiungere un nuovo servizio -->
-<form method="POST" action="{{ url_for('settings.add_service') }}" class="mb-4">
+<form method="POST" action="{{ url_for('settings.add_service') }}" class="mb-4" id="add-service-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <!-- Prima riga: Nome Servizio, Abbreviazione, Durata, Prezzo -->
     <div class="row align-items-center mb-2">
@@ -330,6 +330,36 @@ document.addEventListener('DOMContentLoaded', function() {
       rows.forEach(row => tbody.appendChild(row));
     });
   });
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const serviceForm = document.getElementById('add-service-form');
+    if (serviceForm) {
+        serviceForm.addEventListener('submit', function(event) {
+            const nameField = document.getElementById('service_name');
+            const tagField = document.getElementById('service_tag');
+
+            if (!nameField || !tagField) return;
+
+            const name = nameField.value.trim();
+            const tag = tagField.value.trim();
+
+            if (name.length > 30) {
+                alert('ATTENZIONE! indicare un nome servizio più corto di 30 caratteri (spazi compresi)');
+                event.preventDefault();
+                nameField.focus();
+                return;
+            }
+
+            if (tag.length > 12) {
+                alert('ATTENZIONE! indicare un tag servizio più corto di 12 caratteri (spazi compresi)');
+                event.preventDefault();
+                tagField.focus();
+                return;
+            }
+        });
+    }
 });
 </script>
 {% endblock %}
