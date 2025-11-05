@@ -1807,10 +1807,10 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup
   line-height: 1 !important;
 }
 
-/* mostra entrambe le barre su hover/active */
-.appointment-block:hover:not(.disable-popup) .popup-buttons-bottom,
-.appointment-block.active-popup .popup-buttons-bottom,
-.appointment-block .popup-buttons-bottom:hover {
+/* mostra entrambe le barre su hover/active SOLO in touch-ui */
+body.touch-ui .appointment-block:hover:not(.disable-popup) .popup-buttons-bottom,
+body.touch-ui .appointment-block.active-popup .popup-buttons-bottom,
+body.touch-ui .appointment-block .popup-buttons-bottom:hover {
   display: grid !important;
 }
 
@@ -2022,6 +2022,17 @@ body.touch-ui .appointment-block.active-popup .client-info-link:focus,
 body.touch-ui .appointment-block.active-popup .client-info-link:hover {
   box-shadow: none !important;
   outline: none !important;
+}
+
+/* TOUCH-UI: stato=2 → mai mostrare la bottom bar, anche su click (rafforzato per override) */
+body.touch-ui .appointment-block.status-2 .popup-buttons-bottom,
+body.touch-ui .appointment-block[data-status="2"] .popup-buttons-bottom,
+body.touch-ui .appointment-block.status-2.active-popup .popup-buttons-bottom,
+body.touch-ui .appointment-block[data-status="2"].active-popup .popup-buttons-bottom {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
 }
 
 /* Desktop: larghezza > 1200px => colonne fisse, tutte uguali e proporzionali allo schermo */
@@ -2631,3 +2642,91 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons-bottom {
       justify-content: center;
     }
   }
+
+  /* TOUCH-UI: icona CESTINO sempre bianca nei popup (top/bottom), anche su hover */
+body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block,
+body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block i,
+body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block svg,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block i,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block svg {
+  color: #ffffff !important;
+  fill: #ffffff !important;   /* sicurezza se in futuro si usa SVG */
+  stroke: #ffffff !important; /* sicurezza se in futuro si usa SVG */
+}
+
+/* Blocca l’override arancione dell’hover globale per il cestino in touch-ui */
+body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block:hover,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block:hover {
+  color: #ffffff !important;
+}
+
+@media (min-width: 1201px) {
+  /* Desktop large: nascondi il CESTINO nella top bar dei popup */
+  body:not(.touch-ui) .appointment-block .popup-buttons .btn-popup.delete-appointment-block {
+    display: none !important;
+  }
+
+  /* Desktop large: mostra il bottone NOTA in top bar */
+  body:not(.touch-ui) .appointment-block .popup-buttons .btn-popup.nota {
+    display: inline-flex !important;
+  }
+
+  /* OFF: mantieni solo il vecchio cestino OFF; nascondi qualsiasi 'delete-appointment-block' */
+  body:not(.touch-ui) .appointment-block.note-off .btn-popup.delete-appointment-block,
+  body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup.delete-appointment-block {
+    display: none !important;
+  }
+
+  /* CESTINO inline: base stile (posizione), ma nascosto di default */
+  body:not(.touch-ui) .appointment-block .icon-trash,
+  body:not(.touch-ui) .appointment-block .delete-icon {
+    position: absolute !important;
+    top: 13px !important;      /* 5px più in basso */
+    left: 6px !important;
+    display: none !important;  /* nascosto di default */
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 2102;
+    color: inherit !important;
+    text-shadow: none;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Mostra il cestino inline SOLO al mouse-over sui blocchi normali (non OFF) */
+  body:not(.touch-ui) .appointment-block:hover:not(.note-off) .icon-trash,
+  body:not(.touch-ui) .appointment-block:hover:not(.note-off) .delete-icon {
+    display: inline-flex !important;
+  }
+
+  /* Mai mostrare il nuovo cestino sui blocchi OFF */
+  body:not(.touch-ui) .appointment-block.note-off .icon-trash,
+  body:not(.touch-ui) .appointment-block.note-off .delete-icon {
+    display: none !important;
+  }
+
+  /* Dimensioni icona */
+  body:not(.touch-ui) .appointment-block .icon-trash i,
+  body:not(.touch-ui) .appointment-block .icon-trash svg,
+  body:not(.touch-ui) .appointment-block .delete-icon i,
+  body:not(.touch-ui) .appointment-block .delete-icon svg {
+    font-size: 1.1em;
+    line-height: 1;
+    color: inherit !important;
+    fill: currentColor !important;
+    stroke: currentColor !important;
+  }
+
+  /* No zoom on hover (stile pulito) */
+  body:not(.touch-ui) .appointment-block .icon-trash:hover,
+  body:not(.touch-ui) .appointment-block .delete-icon:hover {
+    transform: none !important;
+    color: inherit !important;
+  }
+}

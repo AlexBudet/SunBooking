@@ -1,14 +1,12 @@
 WEB APP:
-- riscrivere modal info client per mobile
-- risolvere problemi di layout popup buttons superiori
+- sistemare modal appuntamento per blocchi off e blocchi in stato 2
 - verificare sicurezza globale codice
 - creare app per mobile
 
 CALENDAR:
-- dopo TAGLIA di piu blocchi e incolla, a volte memo whatsapp prende orario del 2° appuntamento
 - quando si clicca qualsiasi POPUP-BUTTON deve SCOMPARIRE IL TOOLTIP INFO APPUNTAMENTO (in modalità touch-ui?)
 - indicare NUOVO CLIENTE (cioè cliente che ha il PRIMO appuntamento prenotato)
-- creare black-list (cioè clienti con TOT non-arrivato nello storico)
+- creare black-list (cioè clienti con TOT non-arrivato nello storico) con opzione in Clients.html per attivarla
 
 TOUCH-UI:
 - aggiungere taglia per blocchi OFF
@@ -19,12 +17,15 @@ TOUCH-UI:
 DATABASE... occhio ai backup! (FARE TUTTO DOPO le 20:00 POSSIBILMENTE SABATO SERA E DOMENICA)
 - inserire "descrizione" al modello per la classe servizi, e "cellulare" al modello per la classe operatore, oltre a tutte le aggiunte per pacchetti, solarium e magazzino
 - Cercare il modo di DISATTIVARE IL CLIENT per i centri clienti del gestionale fuori abbonamento, attraverso un record da database che "spegne" il programma on-premise, verificare qual è la best practice
+- in CALENDAR visualizzare in web appointments table ANCHE GLI APPUNTAMENTI CANCELLATI DAL CLIENTE DA E-MAIL, dobbiamo utilizzare un soft delete aggiungendo al modello alla classe appointment il campo: "is_cancelled_by_client = db.Column(db.Boolean, default=False)"
 
 WEB BOOKING:
 - opzionale: offrire la possibilità di PAGARE ONLINE gli appuntamenti
 - opzionale: mostrare descrizione per ogni servizio
 
 CORRETTI, DA VERIFICARE:
+- IMPORTANTE!!! dopo TAGLIA di piu blocchi e incolla, a volte memo whatsapp prende orario del 2° appuntamento
+- pulsante per esportare ANAGRAFICA completa dal database
 - visualizzare titolo di BLOCCHI OFF fino a un max di 12 caratteri
 - occhio alla ricerca da web appointments table per nome
 - eliminare colonna TEST per utenti "user" in report riassunto giornaliero

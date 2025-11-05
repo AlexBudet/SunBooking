@@ -196,7 +196,7 @@
                       data-source="{{ appt.source.value }}" 
                       {% if appt.note %} data-note="{{ appt.note|e }}" {% endif %}
                  >
- <div class="popup-buttons">
+<div class="popup-buttons">
   {% if not appt.client.is_deleted %}
     <button type="button"
             class="btn-popup delete-appointment-block"
@@ -224,6 +224,11 @@
     <button type="button" class="btn-popup aggiungi-servizi" title="Aggiungi Servizi" data-bs-toggle="tooltip"
             data-appointment-id="{{ appt.id }}">
       <i class="bi bi-plus"></i>
+    </button>
+    <button type="button" class="btn-popup nota" title="Nota appuntamento" data-bs-toggle="tooltip"
+            data-appointment-id="{{ appt.id }}"
+            onclick="event.stopPropagation();(function(btn){var b=btn.closest('.appointment-block');if(window.openNoteModal) window.openNoteModal(b)})(this)">
+      <i class="bi bi-pencil-square"></i>
     </button>
   {% endif %}
 </div>
@@ -277,7 +282,13 @@
 </button>
 {% endif %}
 </div>
-
+  <button type="button"
+          class="delete-icon"
+          title="Elimina appuntamento"
+          data-appointment-id="{{ appt.id }}"
+          onclick="event.stopPropagation(); if(window.deleteAppointment) window.deleteAppointment('{{ appt.id }}')">
+    <i class="bi bi-trash"></i>
+  </button>
 <div class="drag-handle"></div>
 <div class="note-indicator" onclick="openNoteModal(this.closest('.appointment-block'))"><i class="bi bi-pencil-square"></i></div>
 <div class="appointment-content">
@@ -1042,20 +1053,25 @@ document.addEventListener('DOMContentLoaded', function() {
   function showClientInfoForBlock(block) {
     if (!block) return;
     // Estrai valori dal blocco o dal link interno (fallback)
-const link = block.querySelector('.client-info-link');
-const nome = (link && link.getAttribute('data-client-nome')) || block.getAttribute('data-client-nome') || '';
-const cognome = (link && link.getAttribute('data-client-cognome')) || block.getAttribute('data-client-cognome') || '';
-const cellulare = (link && link.getAttribute('data-client-cellulare')) || block.getAttribute('data-client-cellulare') || '';
-const servizio = (link && link.getAttribute('data-service-full_name')) || block.getAttribute('data-service-name') || '';
-// PRIORITÀ: nota appuntamento (data-note) -> nota cliente (data-client-note)
-const note = block.getAttribute('data-note') || (link && link.getAttribute('data-client-note')) || '';
+    const link = block.querySelector('.client-info-link');
+    const nome = (link && link.getAttribute('data-client-nome')) || block.getAttribute('data-client-nome') || '';
+    const cognome = (link && link.getAttribute('data-client-cognome')) || block.getAttribute('data-client-cognome') || '';
+    const cellulare = (link && link.getAttribute('data-client-cellulare')) || block.getAttribute('data-client-cellulare') || '';
+    const servizio = (link && link.getAttribute('data-service-full_name')) || block.getAttribute('data-service-name') || '';
 
-// Decodifica HTML entities (es. &#39; -> ')
-const decodeHtml = (s) => { const t = document.createElement('textarea'); t.innerHTML = String(s || ''); return t.value; };
-const nomeD = decodeHtml(nome);
-const cognomeD = decodeHtml(cognome);
-const servizioD = decodeHtml(servizio);
-const noteD = decodeHtml(note);
+    // Mostra ENTRAMBE le note separatamente:
+    // - NOTA CLIENTE (dal link o dal block): subito sotto il nome
+    // - NOTA APPUNTAMENTO (data-note del block): più in fondo
+    const notaCliente = (link && link.getAttribute('data-client-note')) || block.getAttribute('data-client-note') || '';
+    const notaApp = block.getAttribute('data-note') || '';
+
+    // Decodifica HTML entities (es. &#39; -> ')
+    const decodeHtml = (s) => { const t = document.createElement('textarea'); t.innerHTML = String(s || ''); return t.value; };
+    const nomeD = decodeHtml(nome);
+    const cognomeD = decodeHtml(cognome);
+    const servizioD = decodeHtml(servizio);
+    const notaClienteD = decodeHtml(notaCliente);
+    const notaAppD = decodeHtml(notaApp);
 
     const createdAt = block.getAttribute('data-created-at') || '';
     const lastEdit = block.getAttribute('data-last-edit') || '';
@@ -1071,6 +1087,8 @@ const noteD = decodeHtml(note);
 
     // Ricostruisci contenuto DOM in modo sicuro
     popup.innerHTML = '';
+
+    // Meta
     const meta = document.createElement('div');
     meta.style.cssText = "font-size:10px; color:#fff; margin-bottom:3px; text-transform:uppercase;";
     meta.textContent = 'creato: ' + (createdAtStr || '');
@@ -1080,26 +1098,35 @@ const noteD = decodeHtml(note);
     }
     popup.appendChild(meta);
 
+    // Nome
     const strong = document.createElement('strong');
     strong.className = 'all-uppercase';
     strong.style.color = '#fff';
     strong.textContent = `${nomeD} ${cognomeD}`.trim();
     popup.appendChild(strong);
-    popup.appendChild(document.createElement('br'));
 
-    if (noteD) {
-      const dnote = document.createElement('div');
-      dnote.style.cssText = "margin-top:0px; text-transform:uppercase; color:#ffff99; max-width:250px; word-break:break-word;";
-      dnote.textContent = noteD;
-      popup.appendChild(dnote);
+    // NOTA CLIENTE (subito sotto il nome)
+    if (notaClienteD) {
+      const ncLabel = document.createElement('div');
+      ncLabel.style.cssText = "margin-top:4px; color:#ccc; font-size:11px; text-transform:uppercase;";
+      ncLabel.textContent = 'NOTA CLIENTE';
+      popup.appendChild(ncLabel);
+
+      const nc = document.createElement('div');
+      nc.style.cssText = "margin-top:1px; color:#ffff99; max-width:260px; word-break:break-word;";
+      nc.textContent = notaClienteD;
+      popup.appendChild(nc);
     }
 
+    // Servizio
     const serv = document.createElement('div');
     serv.className = 'all-uppercase';
     serv.style.color = '#ffa5c6';
+    serv.style.marginTop = '6px';
     serv.textContent = servizioD || '';
     popup.appendChild(serv);
 
+    // Cellulare
     const cellSpan = document.createElement('div');
     cellSpan.style.color = '#fff';
     const h5 = document.createElement('h5');
@@ -1108,45 +1135,54 @@ const noteD = decodeHtml(note);
     cellSpan.appendChild(h5);
     popup.appendChild(cellSpan);
 
-  // Posizionamento: usare position:absolute con coordinate document-relative (rect + scroll)
-  const rect = block.getBoundingClientRect();
-  const scrollY = window.scrollY || window.pageYOffset;
-  const scrollX = window.scrollX || window.pageXOffset;
+    // NOTA APPUNTAMENTO (più in fondo)
+    if (notaAppD) {
+      const naLabel = document.createElement('div');
+      naLabel.style.cssText = "margin-top:8px; color:#ccc; font-size:11px; text-transform:uppercase;";
+      naLabel.textContent = 'NOTA APPUNTAMENTO';
+      popup.appendChild(naLabel);
 
-  // Assicuriamoci che il popup sia figlio del body per coordinate assolute coerenti
-  if (popup.parentNode !== document.body) {
-    document.body.appendChild(popup);
+      const na = document.createElement('div');
+      na.style.cssText = "margin-top:1px; color:#ffd27f; max-width:260px; word-break:break-word;";
+      na.textContent = notaAppD;
+      popup.appendChild(na);
+    }
+
+    // Posizionamento
+    const rect = block.getBoundingClientRect();
+    const scrollY = window.scrollY || window.pageYOffset;
+    const scrollX = window.scrollX || window.pageXOffset;
+
+    if (popup.parentNode !== document.body) {
+      document.body.appendChild(popup);
+    }
+
+    popup.style.position = 'absolute';
+    popup.style.zIndex = '11500';
+    popup.style.width = 'auto';
+    popup.style.maxWidth = '320px';
+    popup.style.minWidth = '180px';
+    popup.style.display = 'block';
+
+    const pw = popup.offsetWidth || 220;
+    const ph = popup.offsetHeight || 140;
+
+    let left = rect.right + scrollX + 2;
+    if (left + pw > document.documentElement.clientWidth + scrollX) {
+      left = rect.left + scrollX - pw - 2;
+      if (left < 1) left = 1;
+    }
+
+    let top = rect.top + scrollY - 10;
+    if (top + ph > document.documentElement.clientHeight + scrollY) {
+      top = Math.max(1, document.documentElement.clientHeight + scrollY - ph - 1);
+    }
+    if (top < 1) top = 1;
+
+    popup.style.left = Math.round(left) + 'px';
+    popup.style.top = Math.round(top) + 'px';
+    popup.style.display = 'block';
   }
-
-  popup.style.position = 'absolute';
-  popup.style.zIndex = '11500';
-  popup.style.width = 'auto';
-  popup.style.maxWidth = '320px';
-  popup.style.minWidth = '180px';
-  popup.style.display = 'block';
-
-  // calcola la posizione rispetto al documento
-  const pw = popup.offsetWidth || 220;
-  const ph = popup.offsetHeight || 140;
-
-  // preferisci posizionare a destra del blocco; se non ci sta, posiziona a sinistra
-  let left = rect.right + scrollX + 2;
-  if (left + pw > document.documentElement.clientWidth + scrollX) {
-    left = rect.left + scrollX - pw - 2;
-    if (left < 1) left = 1;
-  }
-
-  // top: allinea all'inizio del blocco (rect.top + scrollY è la coord. nel documento)
-  let top = rect.top + scrollY - 10;
-  if (top + ph > document.documentElement.clientHeight + scrollY) {
-    top = Math.max(1, document.documentElement.clientHeight + scrollY - ph - 1);
-  }
-  if (top < 1) top = 1;
-
-  popup.style.left = Math.round(left) + 'px';
-  popup.style.top = Math.round(top) + 'px';
-  popup.style.display = 'block';
-}
 
   // BIND desktop: mouseenter/mouseleave solo se NON siamo in touch-ui
   const IS_TOUCH_UI = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch(_) { return false; } })();
@@ -1162,29 +1198,24 @@ const noteD = decodeHtml(note);
       });
     });
   } else {
-    // In touch-ui nascondi eventuali mouse-based tooltip residui
     popup.style.display = 'none';
   }
 
-  // Espongo la funzione globalmente per essere richiamata in touch click handler
   window.showClientInfoForBlock = showClientInfoForBlock;
 
-  // Hook: aggiornamento UI dopo salvataggio nota
   window.onAppointmentNoteSaved = function (appointmentId, noteText) {
     try {
       const id = String(appointmentId || '').trim();
       const block = document.querySelector(`.appointment-block[data-appointment-id="${id}"]`);
       if (!block) return;
 
-      // Aggiorna attributi usati dal tooltip
+      // Aggiorna attributo nota appuntamento
       block.dataset.note = noteText || '';
       block.setAttribute('data-note', noteText || '');
 
-      // Mostra/nascondi l’indicatore matita
       const noteInd = block.querySelector('.note-indicator');
       if (noteInd) noteInd.style.display = (noteText && noteText.trim().length) ? 'block' : 'none';
 
-      // Se il tooltip piccolo è visibile o il blocco è attivo, ricostruiscilo
       const small = document.getElementById('clientInfoPopup');
       const isVisible = small && small.style.display && small.style.display !== 'none';
       if (isVisible || block.classList.contains('active-popup')) {
@@ -1193,7 +1224,6 @@ const noteD = decodeHtml(note);
     } catch (_) {}
   };
 
-  // Ricava l’ID appuntamento quando si apre il modal nota
   document.addEventListener('click', function (e) {
     const trg = e.target.closest('.btn-popup.nota, .note-indicator');
     if (!trg) return;
@@ -1201,7 +1231,6 @@ const noteD = decodeHtml(note);
     if (blk) window._lastNoteApptId = blk.getAttribute('data-appointment-id');
   }, true);
 
-  // Alla pressione del pulsante OK nel modal nota, aggiorna subito UI per stato=2
   const saveBtn = document.getElementById('saveNoteBtn');
   if (saveBtn) {
     saveBtn.addEventListener('click', function () {
@@ -1210,17 +1239,15 @@ const noteD = decodeHtml(note);
       const blk = document.querySelector(`.appointment-block[data-appointment-id="${id}"]`);
       if (!blk) return;
       const isStatus2 = String(blk.getAttribute('data-status')) === '2';
-      if (!isStatus2) return; // gli altri stati gestiscono già reload
+      if (!isStatus2) return;
 
-      // Aggiorna subito UI (ottimistico), il backend salverà in parallelo
       const noteText = document.getElementById('apptNote')?.value || '';
-      setTimeout(() => { // piccola attesa per lasciare completare il fetch esistente
+      setTimeout(() => {
         try { window.onAppointmentNoteSaved(id, noteText); } catch (_) {}
       }, 150);
     });
   }
 
-  // Refresh quando si chiude il modal nota per blocchi in stato 2
   const noteModal = document.getElementById('EditApptNoteModal');
   if (noteModal) {
     noteModal.addEventListener('hidden.bs.modal', function () {
@@ -1805,7 +1832,7 @@ let lastScrollTop = 0;
 let lastScrollLeft = 0;
 
 document.addEventListener('DOMContentLoaded', function() {
-  // Flag mobile basato su media query (vivo anche su resize)
+  // 1) Flag mobile basato su media query (vivo anche su resize) — vale SEMPRE (default e touch)
   function setMobileFlag() {
     const isMobile = window.matchMedia('(max-width: 1199.98px)').matches;
     window.__MOBILE_MODAL_ENABLED = !!isMobile;
@@ -1817,82 +1844,114 @@ document.addEventListener('DOMContentLoaded', function() {
   setMobileFlag();
   window.addEventListener('resize', setMobileFlag, { passive: true });
 
-  // Crea box informazioni in cima al modal se assente
-function ensureMobileInfoContainer(modal) {
-  let info = modal.querySelector('#mobile-appt-info');
-  if (!info) {
-    const body = modal.querySelector('.modal-body') || modal;
-    info = document.createElement('div');
-    info.id = 'mobile-appt-info';
-    info.className = 'mobile-appt-info';
-    info.setAttribute('aria-live', 'polite');
-    body.insertBefore(info, body.firstChild);
+  // 2) Utilità per box info in alto al modal
+  function ensureMobileInfoContainer(modal) {
+    let info = modal.querySelector('#mobile-appt-info');
+    if (!info) {
+      const body = modal.querySelector('.modal-body') || modal;
+      info = document.createElement('div');
+      info.id = 'mobile-appt-info';
+      info.className = 'mobile-appt-info';
+      info.setAttribute('aria-live', 'polite');
+      body.insertBefore(info, body.firstChild);
+    }
+    return info;
   }
-  return info;
-}
+  function val(v) { const s = (v || '').toString().trim(); return s ? s : '-'; }
+  function makeInfoRow(labelText, valueText) {
+    const row = document.createElement('div');
+    row.className = 'info-row';
+    const label = document.createElement('span'); label.className = 'info-label'; label.textContent = labelText;
+    const value = document.createElement('span'); value.className = 'info-value'; value.textContent = valueText;
+    row.append(label, value); return row;
+  }
+  function fillMobileApptInfo(modal, block) {
+    if (!modal || !block) return;
+    const link = block.querySelector('.client-info-link');
 
-function val(v) {
-  const s = (v || '').toString().trim();
-  return s ? s : '-';
-}
+    const nome = (link && link.getAttribute('data-client-nome')) || block.getAttribute('data-client-nome') || '';
+    const cognome = (link && link.getAttribute('data-client-cognome')) || block.getAttribute('data-client-cognome') || '';
+    const fullName = [nome, cognome].filter(Boolean).join(' ').trim();
 
-function makeInfoRow(labelText, valueText) {
-  const row = document.createElement('div');
-  row.className = 'info-row';
+    const cell = (link && link.getAttribute('data-client-cellulare')) || block.getAttribute('data-client-cellulare') || '';
+    const notaCliente = (link && link.getAttribute('data-client-note')) || block.getAttribute('data-client-note') || '';
 
-  const label = document.createElement('span');
-  label.className = 'info-label';
-  label.textContent = labelText;
+    const servizio =
+      (link && link.getAttribute('data-service-full_name')) ||
+      block.getAttribute('data-service_full_name') ||
+      block.getAttribute('data-service_full_name') ||
+      block.getAttribute('data-service-name') ||
+      block.getAttribute('data-service-tag') ||
+      '';
 
-  const value = document.createElement('span');
-  value.className = 'info-value';
-  value.textContent = valueText;
+    const notaApp = block.getAttribute('data-note') || '';
 
-  row.appendChild(label);
-  row.appendChild(value);
-  return row;
-}
+    const infoBox = ensureMobileInfoContainer(modal);
+    while (infoBox.firstChild) infoBox.removeChild(infoBox.firstChild);
 
-// Popola i dati nel box in alto al modal in modo SICURO (senza innerHTML)
-function fillMobileApptInfo(modal, block) {
-  if (!modal || !block) return;
+    infoBox.appendChild(makeInfoRow('NOME CLIENTE:', val(fullName)));
+    infoBox.appendChild(makeInfoRow('CELLULARE:', val(cell)));
+    infoBox.appendChild(makeInfoRow('NOTA CLIENTE:', val(notaCliente)));
+    infoBox.appendChild(makeInfoRow('SERVIZIO:', val(servizio)));
+    infoBox.appendChild(makeInfoRow('NOTA APP:', val(notaApp)));
+  }
 
-  const link = block.querySelector('.client-info-link');
+  // 3) FILTRO PULSANTI MODAL <1200px
+  function configureMobileModalButtons(modal, block) {
+    if (!modal || !block) return;
 
-  const nome = (link && link.getAttribute('data-client-nome')) || block.getAttribute('data-client-nome') || '';
-  const cognome = (link && link.getAttribute('data-client-cognome')) || block.getAttribute('data-client-cognome') || '';
-  const fullName = [nome, cognome].filter(Boolean).join(' ').trim();
+    // Riferimenti ai bottoni del modal
+    const btnBy = (act) => modal.querySelector(`.mobile-popup-btn[data-action="${act}"]`);
+    const btnElimina  = btnBy('elimina');
+    const btnSposta   = btnBy('sposta');
+    const btnCliente  = btnBy('cliente');
+    const btnNote     = btnBy('note');
+    const btnAllunga  = btnBy('allunga');
+    const btnAccorcia = btnBy('accorcia');
 
-  const cell = (link && link.getAttribute('data-client-cellulare')) || block.getAttribute('data-client-cellulare') || '';
-  const notaCliente = (link && link.getAttribute('data-client-note')) || block.getAttribute('data-client-note') || '';
+    // Reset label/azione dei due pulsanti che cambieremo al bisogno
+    if (btnCliente) { btnCliente.textContent = 'CLIENTE'; btnCliente.setAttribute('data-action', 'cliente'); }
+    if (btnNote)    { btnNote.textContent    = 'NOTE';    btnNote.setAttribute('data-action', 'note'); }
 
-  // Accetta entrambi i naming degli attributi (dash e underscore)
-  const servizio =
-    (link && link.getAttribute('data-service-full_name')) ||
-    block.getAttribute('data-service-full_name') ||
-    block.getAttribute('data-service-name') ||
-    block.getAttribute('data-service-tag') ||
-    '';
+    // Regole riconoscimento:
+    const isOff = block.classList.contains('note-off') || block.classList.contains('off');
+    const isStatus2 = String(block.getAttribute('data-status') || '') === '2';
 
-  const notaApp = block.getAttribute('data-note') || '';
+    // Helper show/hide
+    const show = (el, on) => { if (!el) return; el.style.display = on ? '' : 'none'; };
 
-  const infoBox = ensureMobileInfoContainer(modal);
-  while (infoBox.firstChild) infoBox.removeChild(infoBox.firstChild);
+    if (isOff) {
+      // BLOCCO OFF: ELIMINA, TITOLO(=NOTE), ALLUNGA, ACCORCIA
+      show(btnElimina,  true);
+      show(btnSposta,   false);
+      show(btnCliente,  false);
+      show(btnAllunga,  true);
+      show(btnAccorcia, true);
+      show(btnNote,     true);
+      if (btnNote) { btnNote.textContent = 'TITOLO'; btnNote.setAttribute('data-action', 'note'); }
+    } else if (isStatus2) {
+      // STATO=2: SOLO COPIA, NOTE → trasformo CLIENTE -> COPIA
+      show(btnElimina,  false);
+      show(btnSposta,   false);
+      show(btnAllunga,  false);
+      show(btnAccorcia, false);
+      show(btnNote,     true);
+      if (btnCliente) {
+        btnCliente.textContent = 'COPIA';
+        btnCliente.setAttribute('data-action', 'copia');
+        show(btnCliente, true);
+      }
+    } else {
+      // Altri casi: 6 tasti standard
+      [btnElimina, btnSposta, btnCliente, btnNote, btnAllunga, btnAccorcia].forEach(b => show(b, true));
+    }
+  }
 
-  infoBox.appendChild(makeInfoRow('NOME CLIENTE:', val(fullName)));
-  infoBox.appendChild(makeInfoRow('CELLULARE:', val(cell)));
-  infoBox.appendChild(makeInfoRow('NOTA CLIENTE:', val(notaCliente)));
-
-  infoBox.appendChild(makeInfoRow('SERVIZIO:', val(servizio)));
-
-  infoBox.appendChild(makeInfoRow('NOTA APP:', val(notaApp)));
-}
-
-  // Evita doppio binding
+  // 4) Evita doppio binding
   if (document._mobileModalHandlersBound) return;
   document._mobileModalHandlersBound = true;
 
-  // Neutralizza link cliente su mobile (evita tooltip e click)
+  // 5) Disabilita link cliente su mobile
   function disableClientLinksOnMobile() {
     if (!window.__MOBILE_MODAL_ENABLED) return;
     document.querySelectorAll('.appointment-block .client-info-link[onclick]').forEach(a => a.removeAttribute('onclick'));
@@ -1904,10 +1963,10 @@ function fillMobileApptInfo(modal, block) {
   }
   disableClientLinksOnMobile();
 
-  // Salva scroll (SOLO mobile)
+  // 6) Salva scroll prima di aprire il modal (solo mobile)
   document.addEventListener('click', function(e) {
     if (!window.__MOBILE_MODAL_ENABLED) return;
-    if (e.target.closest('#MobilePopupButtonsModal')) return; // non interferire nel modal
+    if (e.target.closest('#MobilePopupButtonsModal')) return;
     const block = e.target.closest('.appointment-block');
     if (!block) return;
     lastScrollTop = window.scrollY || document.documentElement.scrollTop;
@@ -1917,66 +1976,62 @@ function fillMobileApptInfo(modal, block) {
   let suppressNextClickTs = 0;
 
   function restoreScrollAfterModal(modal) {
-  // Fallback: usa lo scroll salvato prima di aprire il modal
-  const beforeTop = parseInt(modal.dataset.scrollTopBefore || String(lastScrollTop || 0), 10) || 0;
-  const beforeLeft = parseInt(modal.dataset.scrollLeftBefore || String(lastScrollLeft || 0), 10) || 0;
-
-  // Attendi che Bootstrap rimuova le classi/modal-open e ripristini lo scroll della pagina
-  requestAnimationFrame(() => {
-    setTimeout(() => {
-      const apptId = modal.dataset.appointmentId || '';
-      const block = apptId ? document.querySelector('.appointment-block[data-appointment-id="' + apptId + '"]') : null;
-      if (block) {
-        // Offset leggero per non incollare il blocco al bordo superiore
-        const headerOffset = 60;
-        const rect = block.getBoundingClientRect();
-        const targetTop = Math.max(0, rect.top + window.scrollY - headerOffset);
-        window.scrollTo({ top: targetTop, left: beforeLeft });
-      } else {
-        window.scrollTo({ top: beforeTop, left: beforeLeft });
-      }
-    }, 20);
-  });
-}
-
-  // Apre il modal su pointerdown (SOLO mobile, e mai dentro il modal)
-document.addEventListener('pointerdown', function(e) {
-  if (!window.__MOBILE_MODAL_ENABLED) return;
-  if (e.target.closest('#MobilePopupButtonsModal')) return;
-  const block = e.target.closest('.appointment-block');
-  if (!block) return;
-  if (e.target.closest('.btn-popup')) return;
-
-  e.preventDefault();
-  e.stopImmediatePropagation();
-
-  const modal = document.getElementById('MobilePopupButtonsModal');
-  if (!modal) return;
-
-  // Salva ID appuntamento e posizione scroll PRIMA di aprire il modal
-  modal.dataset.appointmentId = block.getAttribute('data-appointment-id') || '';
-  modal.dataset.scrollTopBefore = String(window.scrollY || document.documentElement.scrollTop || 0);
-  modal.dataset.scrollLeftBefore = String(window.scrollX || document.documentElement.scrollLeft || 0);
-
-  // Popola info
-  fillMobileApptInfo(modal, block);
-
-  const bsModal = new bootstrap.Modal(modal, { focus: false });
-  bsModal.show();
-
-  suppressNextClickTs = Date.now();
-
-  function onHidden() {
-    restoreScrollAfterModal(modal);
-    modal.removeEventListener('hidden.bs.modal', onHidden);
+    const beforeTop = parseInt(modal.dataset.scrollTopBefore || String(lastScrollTop || 0), 10) || 0;
+    const beforeLeft = parseInt(modal.dataset.scrollLeftBefore || String(lastScrollLeft || 0), 10) || 0;
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const apptId = modal.dataset.appointmentId || '';
+        const block = apptId ? document.querySelector('.appointment-block[data-appointment-id="' + apptId + '"]') : null;
+        if (block) {
+          const headerOffset = 60;
+          const rect = block.getBoundingClientRect();
+          const targetTop = Math.max(0, rect.top + window.scrollY - headerOffset);
+          window.scrollTo({ top: targetTop, left: beforeLeft });
+        } else {
+          window.scrollTo({ top: beforeTop, left: beforeLeft });
+        }
+      }, 20);
+    });
   }
-  modal.addEventListener('hidden.bs.modal', onHidden);
-}, true);
 
-  // Fallback click + soppressione (SOLO mobile, ignora click nel modal)
+  // 7) Apertura modal su pointerdown (mobile)
+  document.addEventListener('pointerdown', function(e) {
+    if (!window.__MOBILE_MODAL_ENABLED) return;
+    if (e.target.closest('#MobilePopupButtonsModal')) return;
+    const block = e.target.closest('.appointment-block');
+    if (!block) return;
+    if (e.target.closest('.btn-popup')) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    const modal = document.getElementById('MobilePopupButtonsModal');
+    if (!modal) return;
+
+    modal.dataset.appointmentId = block.getAttribute('data-appointment-id') || '';
+    modal.dataset.scrollTopBefore = String(window.scrollY || document.documentElement.scrollTop || 0);
+    modal.dataset.scrollLeftBefore = String(window.scrollX || document.documentElement.scrollLeft || 0);
+
+    // Popola info + FILTRO pulsanti
+    fillMobileApptInfo(modal, block);
+    configureMobileModalButtons(modal, block);
+
+    const bsModal = new bootstrap.Modal(modal, { focus: false });
+    bsModal.show();
+
+    suppressNextClickTs = Date.now();
+
+    function onHidden() {
+      restoreScrollAfterModal(modal);
+      modal.removeEventListener('hidden.bs.modal', onHidden);
+    }
+    modal.addEventListener('hidden.bs.modal', onHidden);
+  }, true);
+
+  // 8) Fallback su click (mobile)
   document.addEventListener('click', function(e) {
     if (!window.__MOBILE_MODAL_ENABLED) return;
-    if (e.target.closest('#MobilePopupButtonsModal')) return; // lascia passare i click dentro al modal
+    if (e.target.closest('#MobilePopupButtonsModal')) return;
 
     if (Date.now() - suppressNextClickTs < 400) {
       e.preventDefault();
@@ -1993,10 +2048,11 @@ document.addEventListener('pointerdown', function(e) {
 
     const modal = document.getElementById('MobilePopupButtonsModal');
     if (!modal) return;
-    modal.dataset.appointmentId = block.getAttribute('data-appointment-id');
+    modal.dataset.appointmentId = block.getAttribute('data-appointment-id') || '';
 
-    // Popola info anche nel fallback
+    // Popola info + FILTRO pulsanti
     fillMobileApptInfo(modal, block);
+    configureMobileModalButtons(modal, block);
 
     const bsModal = new bootstrap.Modal(modal, { focus: false });
     bsModal.show();
@@ -2007,18 +2063,21 @@ document.addEventListener('pointerdown', function(e) {
     });
   }, true);
 
-  // Garantisce il popolamento delle info anche quando Bootstrap emette l'evento show
+  // 9) Garantisce info + filtro anche su evento show Bootstrap
   document.addEventListener('show.bs.modal', function(e) {
     if (!window.__MOBILE_MODAL_ENABLED) return;
     const modal = e.target;
     if (modal && modal.id === 'MobilePopupButtonsModal') {
       const apptId = modal.dataset.appointmentId || '';
       const block = apptId ? document.querySelector('.appointment-block[data-appointment-id="' + apptId + '"]') : null;
-      if (block) fillMobileApptInfo(modal, block);
+      if (block) {
+        fillMobileApptInfo(modal, block);
+        configureMobileModalButtons(modal, block);
+      }
     }
   });
 
-  // Delega eventi: click su pulsanti del modal (SOLO dentro il modal)
+  // 10) Click dei pulsanti nel modal (aggiunta azione COPIA)
   (function bindModalButtons() {
     const modal = document.getElementById('MobilePopupButtonsModal');
     if (!modal || modal._buttonsBound) return;
@@ -2028,7 +2087,6 @@ document.addEventListener('pointerdown', function(e) {
       const btn = e.target.closest('.mobile-popup-btn');
       if (!btn) return;
 
-      // Lascia lavorare i click del modal (non farli bloccare dal document listener)
       e.stopPropagation();
 
       const action = btn.getAttribute('data-action');
@@ -2044,14 +2102,16 @@ document.addEventListener('pointerdown', function(e) {
           if (window.deleteAppointment) window.deleteAppointment(apptId);
           break;
         case 'sposta':
-          const spostaBtn = block.querySelector('.btn-popup.sposta');
-          if (spostaBtn) spostaBtn.click();
+          (block.querySelector('.btn-popup.sposta') || { click(){} }).click();
           break;
         case 'note':
           if (window.openNoteModal) window.openNoteModal(block);
           break;
         case 'cliente':
           if (window.openModifyPopup) window.openModifyPopup(apptId);
+          break;
+        case 'copia': // NUOVO
+          (block.querySelector('.btn-popup.copia') || { click(){} }).click();
           break;
         case 'allunga':
           setAppointmentDurationMobile(block, +((parseInt(block.getAttribute('data-duration'), 10) || 15) + 15));
@@ -2063,7 +2123,7 @@ document.addEventListener('pointerdown', function(e) {
     });
   })();
 
-  // Aggiorna durata appuntamento (endpoint /calendar/edit/<id>)
+  // 11) Aggiorna durata appuntamento via API
   const CSRF = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
   async function setAppointmentDurationMobile(block, newDuration) {
     try {
