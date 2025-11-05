@@ -3369,16 +3369,8 @@ async function inviaWhatsappAutoSeRichiesto(appointment, data, csrfToken) {
     data: (data && data.data) || (appointment && appointment.appointment_date) || (data && (data.appointment_date || data.date)) || "",
     ora: (data && data.ora) || (appointment && appointment.start_time) || (data && data.start_time) || ""
   };
-
-  // NEW: appointment_id singolo (oltre agli appointment_ids)
-  if (data && data.appointment_id) {
-    payload.appointment_id = data.appointment_id;
-  }
-  // NEW: passa appointment_ids al backend (che costruisce {{servizi}})
-  if (data && Array.isArray(data.appointment_ids) && data.appointment_ids.length > 0) {
-    payload.appointment_ids = data.appointment_ids;
-  }
-  // Passa 'servizi' SOLO se presente e non vuoto (evita conflitti col backend)
+  if (data && data.appointment_id) payload.appointment_id = data.appointment_id;
+  if (data && Array.isArray(data.appointment_ids) && data.appointment_ids.length > 0) payload.appointment_ids = data.appointment_ids;
   if (data && ((Array.isArray(data.servizi) && data.servizi.length > 0) || (typeof data.servizi === 'string' && data.servizi.trim()))) {
     payload.servizi = data.servizi;
   }
@@ -3391,24 +3383,27 @@ async function inviaWhatsappAutoSeRichiesto(appointment, data, csrfToken) {
         'X-CSRFToken': csrfToken
       },
       credentials: 'same-origin',
-      redirect: 'follow',
+      keepalive: true, // evita "Failed to fetch" su reload/unload
       body: JSON.stringify(payload)
     });
 
-    const ct = resp.headers.get('content-type') || '';
-    if (!ct.includes('application/json')) {
-      const t = await resp.text();
-      throw new Error(`Unexpected response (${resp.status} ${resp.statusText}): ${t.slice(0,200)}`);
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => '');
+      console.warn('send-whatsapp-auto non OK:', resp.status, t);
+      return;
     }
 
-    const resJson = await resp.json();
-    console.log("Risposta invio WhatsApp:", resJson);
-    if (resJson.error) {
-      alert("Errore invio WhatsApp: " + (resJson.error || "sconosciuto"));
+    const ct = (resp.headers.get('content-type') || '').toLowerCase();
+    if (ct.includes('application/json')) {
+      const resJson = await resp.json().catch(() => ({}));
+      if (resJson && resJson.error) {
+        console.warn('Errore invio WhatsApp (JSON):', resJson.error);
+      }
     }
+    // Se non JSON (204/empty/text/html) lo consideriamo OK
   } catch (err) {
-    console.error("Errore fetch WhatsApp:", err);
-    alert("Errore fetch WhatsApp: " + err.message);
+    // Tipico se la pagina ricarica: non mostrare alert all’utente
+    console.warn('send-whatsapp-auto fetch error (ignoro):', err);
   }
 }
 
@@ -3452,42 +3447,79 @@ document.addEventListener('DOMContentLoaded', function() {
 });
   
 // SPOSTA/TAGLIA
-  document.querySelectorAll('.appointment-block .popup-buttons .btn-popup.sposta')
-  .forEach(button => {
-    button.addEventListener('click', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      // Rimuovi eventuali elementi tooltip visibili nel DOM
-      const tooltipEl = document.querySelector('.tooltip');
-      if (tooltipEl) {
-        tooltipEl.remove();
+(function bindCutMoveButtons() {
+  function isTouchUI() {
+    try { return localStorage.getItem('sun_touch_ui') === '1' || document.body.classList.contains('touch-ui'); }
+    catch (_) { return document.body.classList.contains('touch-ui'); }
+  }
+
+  function hideAppointmentTooltipsAndPopups() {
+    // Nascondi immediatamente i tooltip info (small e big)
+    const small = document.getElementById('clientInfoPopup');
+    if (small) { small.style.display = 'none'; }
+    const big = document.getElementById('clientHistoryPopup');
+    if (big) { big.style.display = 'none'; }
+
+    // Chiudi eventuali popup Bootstrap residui
+    document.querySelectorAll('.tooltip').forEach(t => { t.parentNode && t.parentNode.removeChild(t); });
+
+    // Chiudi le barre popup e rimuovi active-popup (se disponibile la funzione globale di touch-ui)
+    try { if (typeof window.closeAllPopups === 'function') window.closeAllPopups(); } catch (_) {}
+  }
+
+  function onCutClick(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    // In touch‑ui, chiudi subito qualsiasi tooltip/popup info
+    if (isTouchUI()) hideAppointmentTooltipsAndPopups();
+
+    // Rimuovi eventuale tooltip Bootstrap attaccato al pulsante
+    const inst = (window.bootstrap && window.bootstrap.Tooltip) ? bootstrap.Tooltip.getInstance(this) : null;
+    if (inst) { try { inst.dispose(); } catch(_) {} }
+    this.removeAttribute('data-bs-original-title');
+    this.removeAttribute('aria-describedby');
+
+    // Rimuovi anche elementi tooltip residui dal DOM
+    document.querySelectorAll('.tooltip').forEach(t => { t.parentNode && t.parentNode.removeChild(t); });
+
+    // Recupera il blocco
+    const block = this.closest('.appointment-block');
+    if (!block) return;
+
+    // Escludi blocchi OFF (senza client/service) come da logica esistente
+    const isOff = !block.getAttribute('data-client-id') || !block.getAttribute('data-service-id');
+    if (isOff) return;
+
+    // Limite Navigator (15)
+    window.pseudoBlocks = window.pseudoBlocks || [];
+    if (window.pseudoBlocks.length >= 15) {
+      alert('Hai già 15 elementi nel Navigator. Incolla o svuota prima di continuare.');
+      return;
+    }
+
+    // Esegui operazione di taglio
+    cutAsNewPseudoBlock(block);
+  }
+
+  // Bind diretto ai bottoni già presenti (.sposta e .taglia, se presente)
+  document.querySelectorAll('.appointment-block .popup-buttons .btn-popup.sposta, .appointment-block .popup-buttons .btn-popup.taglia')
+    .forEach(btn => {
+      if (!btn._cutBound) {
+        btn.addEventListener('click', onCutClick);
+        btn._cutBound = true;
       }
-      // Rimuovi gli attributi che attivano il tooltip
-      this.removeAttribute('data-bs-original-title');
-      this.removeAttribute('aria-describedby');
-
-      // DOPO: solo blocco singolo, no contiguous
-      const block = this.closest('.appointment-block');
-      if (!block) return;
-
-      // Escludi blocchi OFF
-      const isOff = !block.getAttribute('data-client-id') || !block.getAttribute('data-service-id');
-      if (isOff) {
-        alert("Non puoi tagliare un blocco OFF nel Navigator.");
-        return;
-      }
-
-      // Limite 15 elementi nel Navigator
-      window.pseudoBlocks = window.pseudoBlocks || [];
-      if (window.pseudoBlocks.length >= 15) {
-        alert("Limite massimo di 15 elementi nel Navigator raggiunto.");
-        return;
-      }
-
-      cutAsNewPseudoBlock(block);
     });
-  });
+
+  // Delegato di sicurezza per elementi aggiunti dinamicamente
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.appointment-block .popup-buttons .btn-popup.sposta, .appointment-block .popup-buttons .btn-popup.taglia');
+    if (!btn || btn._cutBoundDelegated) return;
+    btn._cutBoundDelegated = true;
+    onCutClick.call(btn, e);
+  }, true);
+})();
 
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.btn-popup.pagamento').forEach(button => {
@@ -7592,7 +7624,6 @@ document.addEventListener('DOMContentLoaded', function() {
       if (appointmentId) {
         deleteAppointment(appointmentId);
       }
-      block.remove();
     };
   });
 });
@@ -8788,3 +8819,32 @@ window.onAppointmentNoteSaved = function (appointmentId, noteText) {
     }
   } catch (_) {}
 };
+
+// Listener delegato per eliminazione: desktop large (no touch-ui)
+document.addEventListener('click', function(e) {
+  const delBtn = e.target.closest('.appointment-block .delete-icon, .appointment-block .icon-trash, .appointment-block .popup-buttons .btn-popup.delete-appointment-block');
+  if (!delBtn) return;
+
+  // Esci in touch-ui
+  try {
+    if (localStorage.getItem('sun_touch_ui') === '1' || document.body.classList.contains('touch-ui')) return;
+  } catch(_) {
+    if (document.body.classList.contains('touch-ui')) return;
+  }
+
+  // Solo schermi larghi
+  if (!window.matchMedia || !window.matchMedia('(min-width: 1201px)').matches) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+
+  const block = delBtn.closest('.appointment-block');
+  const id = delBtn.getAttribute('data-appointment-id') || (block && block.getAttribute('data-appointment-id'));
+  if (!id) return;
+
+  if (typeof window.deleteAppointment === 'function') {
+    window.deleteAppointment(id);
+  }
+}, true);
+

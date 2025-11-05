@@ -493,5 +493,5 @@ document.addEventListener('click', function (e) {
   }, 10);
 }, true);
 // --- END: global handler ---
-
 })();
+
