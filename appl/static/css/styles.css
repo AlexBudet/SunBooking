@@ -664,7 +664,6 @@ td {
   
   .calendar-date-container {
     display: inline-flex;
-    align-items: center;
     gap: 6px;
     flex-wrap: nowrap !important;
 }
@@ -2298,7 +2297,6 @@ body.touch-ui .appointment-block[data-status="2"].active-popup .popup-buttons-bo
         order: 2 !important;
         flex: 0 0 auto !important; /* non espande: mantiene gruppo compatto */
         display: flex !important;
-        align-items: center !important;
         justify-content: center !important;
         gap: 6px !important;
         margin: 0 !important;
@@ -2342,7 +2340,7 @@ body.touch-ui .appointment-block[data-status="2"].active-popup .popup-buttons-bo
     #formattedDate {
         position: absolute;
         pointer-events: none;
-        text-align: center;
+        text-align: left !important;
         font-size: 14px;
         padding: 0 !important;
     }
@@ -2414,7 +2412,6 @@ body.touch-ui .appointment-block[data-status="2"].active-popup .popup-buttons-bo
 
   /* Sposta il testo formattato più a destra e limita la larghezza per evitare sovrapposizione */
   #formattedDate {
-    left: 10px !important;
     max-width: calc(100% - 50px) !important; /* Lascia spazio all'icona */
     overflow: hidden !important;
     text-overflow: ellipsis !important;
