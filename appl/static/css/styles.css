@@ -2776,6 +2776,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     color: #111;
     width: auto !important;             /* lascia crescere in base allo spazio */
     max-width: 100% !important;
+    text-align: center;
   }
   .mobile-date-nav .cell-cal {
     width: 36px;
@@ -2785,11 +2786,12 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     font-weight: 600;
     color: #1976d2;
     text-transform: uppercase;
-    padding: 0 4px !important;  
+    text-align: center;
   }
 
   .mobile-date-nav .cell-today {
-    width: 110px;
+    text-align: right !important;
+    padding-right: 12px !important;
   }
 
   .mobile-date-nav .cell-date span,

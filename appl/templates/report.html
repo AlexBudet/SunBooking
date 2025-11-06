@@ -42,14 +42,14 @@
         <a href="#" id="mobileCalIconReport" class="cal-btn" aria-label="Apri calendario">📅</a>
       </td>
 
-      <!-- 4: DAY OF WEEK -->
-      <td class="cell-dow">
-        <span id="mobileDayOfWeekReport">---</span>
-      </td>
-
-      <!-- 5: DOMANI -->
+      <!-- 4: DOMANI -->
       <td class="cell-arrow">
         <a href="#" id="mNextDayReport" class="arrow-nav" aria-label="Giorno successivo">&gt;</a>
+      </td>
+
+      <!-- 5: DAY OF WEEK -->
+      <td class="cell-dow">
+        <span id="mobileDayOfWeekReport">---</span>
       </td>
 
       <!-- 6: VAI A OGGI -->
@@ -751,12 +751,26 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 /* Responsive */
-@media (max-width: 768px) {
+@media (max-width: 1200px) {
+  :root {
+    --mobile-header-height: 56px;      /* altezza header base.html (mobile) */
+    --mobile-date-nav-height: 44px;    /* altezza riga date-nav mobile */
+  }
+  /* Spingi il contenuto sotto header fisso + date-nav mobile */
+  .mobile-date-nav + .page-wide-90,
+  .page-wide-90 {
+    margin-top: calc(var(--mobile-header-height) + var(--mobile-date-nav-height)) !important;
+  }
+  /* Il titolo "REPORT" non deve aggiungere altro spazio (override inline +5px) */
+  .page-wide-90 .d-flex.align-items-center.mb-3 {
+    margin-top: 0 !important;
+  }
+
   .kpi-cards-container {
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;
   }
-  
+
   .kpi-card {
     padding: 16px;
     min-height: 80px;

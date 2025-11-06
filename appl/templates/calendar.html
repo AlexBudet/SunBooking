@@ -151,14 +151,14 @@
            title="Apri calendario">📅</a>
       </td>
 
-      <!-- 4: DAY OF WEEK -->
-      <td class="cell-dow">
-        <span id="mobileDayOfWeekCalendar">---</span>
-      </td>
-
-      <!-- 5: DOMANI -->
+      <!-- 4: DOMANI -->
       <td class="cell-arrow">
         <a class="arrow-nav" href="{{ url_for('calendar.calendar_home', date=day_after_str) }}" aria-label="Giorno successivo">&gt;</a>
+      </td>
+
+      <!-- 5: DAY OF WEEK -->
+      <td class="cell-dow">
+        <span id="mobileDayOfWeekCalendar">---</span>
       </td>
 
       <!-- 6: VAI A OGGI -->
