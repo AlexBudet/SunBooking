@@ -727,29 +727,28 @@ document.addEventListener("DOMContentLoaded", function() {
     defaultDate: "{{ selected_date_str }}",
     locale: "it",
     onReady: function(selectedDates, dateStr, instance) {
-      // Assicura che l'altInput sia sempre a sinistra (Chrome/Safari mobile)
       var alt = instance && instance.altInput;
       if (alt) {
-        // eredita gli stili del campo data esistente
         alt.classList.add('calendar-date-input');
-        // forza l’allineamento a sinistra (fallback extra per Safari)
-        alt.style.textAlign = 'left';
+        alt.style.textAlign = 'left !important';
       }
     },
     onOpen: function(selectedDates, dateStr, instance) {
-      // rinforzo per eventuali temi flatpickr che rimettono il center
       var alt = instance && instance.altInput;
-      if (alt) alt.style.textAlign = 'left';
+      if (alt) alt.style.textAlign = 'left !important';
+    },
+    onValueUpdate: function(selectedDates, dateStr, instance) {
+      var alt = instance && instance.altInput;
+      if (alt) alt.style.textAlign = 'left !important';
     },
     onChange: function(selectedDates, dateStr) {
       window.location.href = calendarHomeUrl + "?date=" + dateStr;
     }
   });
 
-  // Fallback: se l'istanza è stata creata prima, riallinea comunque
   setTimeout(function() {
     var alt = document.querySelector('.calendar-date-container .flatpickr-input');
-    if (alt) alt.style.textAlign = 'left';
+    if (alt) alt.style.textAlign = 'left !important';
   }, 0);
 });
 </script>
