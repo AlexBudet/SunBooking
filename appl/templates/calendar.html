@@ -721,16 +721,36 @@
 <script>
 document.addEventListener("DOMContentLoaded", function() {
   flatpickr("#date", {
-    dateFormat: "Y-m-d",  // Valore input resta yyyy-mm-dd (backend)
-    altFormat: "d M Y",   // Display: gg MMM yyyy (mesi italiani grazie a locale)
-    altInput: true,       // Mostra altFormat nell'input
+    dateFormat: "Y-m-d",
+    altFormat: "d M Y",
+    altInput: true,
     defaultDate: "{{ selected_date_str }}",
-    locale: "it",         // Mesi italiani (GEN, FEB, ecc.)
-    onChange: function(selectedDates, dateStr, instance) {
-      // Reindirizza alla pagina con la nuova data
+    locale: "it",
+    onReady: function(selectedDates, dateStr, instance) {
+      // Assicura che l'altInput sia sempre a sinistra (Chrome/Safari mobile)
+      var alt = instance && instance.altInput;
+      if (alt) {
+        // eredita gli stili del campo data esistente
+        alt.classList.add('calendar-date-input');
+        // forza l’allineamento a sinistra (fallback extra per Safari)
+        alt.style.textAlign = 'left';
+      }
+    },
+    onOpen: function(selectedDates, dateStr, instance) {
+      // rinforzo per eventuali temi flatpickr che rimettono il center
+      var alt = instance && instance.altInput;
+      if (alt) alt.style.textAlign = 'left';
+    },
+    onChange: function(selectedDates, dateStr) {
       window.location.href = calendarHomeUrl + "?date=" + dateStr;
     }
   });
+
+  // Fallback: se l'istanza è stata creata prima, riallinea comunque
+  setTimeout(function() {
+    var alt = document.querySelector('.calendar-date-container .flatpickr-input');
+    if (alt) alt.style.textAlign = 'left';
+  }, 0);
 });
 </script>
 <script>
