@@ -2761,32 +2761,45 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     table-layout: fixed;
   }
   .mobile-date-nav td {
-    height: var(--mobile-date-nav-height);
-    padding: 6px 8px;
-    text-align: center;
-    vertical-align: middle;
-    white-space: nowrap;
+    padding: 4px 6px !important;
+    overflow: hidden !important;           /* taglia contenuti che debordano */
+    text-overflow: ellipsis !important;    /* “…” quando serve */
+    white-space: nowrap !important;
   }
 
   /* colonne: 6 celle totali */
   .mobile-date-nav .cell-arrow {
-    width: 44px;
+    width: 36px;
   }
   .mobile-date-nav .cell-date {
-    font-weight: 700;
+    font-weight: 400;
     color: #111;
+    width: auto !important;             /* lascia crescere in base allo spazio */
+    max-width: 100% !important;
   }
   .mobile-date-nav .cell-cal {
-    width: 44px;
+    width: 36px;
   }
   .mobile-date-nav .cell-dow {
-    min-width: 52px;
+    min-width: 42px;
     font-weight: 600;
     color: #1976d2;
     text-transform: uppercase;
+    padding: 0 4px !important;  
   }
+
   .mobile-date-nav .cell-today {
-    width: 120px;
+    width: 110px;
+  }
+
+  .mobile-date-nav .cell-date span,
+  .mobile-date-nav .cell-date #mobileDateFormattedCalendar,
+  .mobile-date-nav .cell-date #mobileDateFormattedReport {
+    display: block !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    max-width: 100% !important;
   }
 
   /* icona calendario */
@@ -2794,7 +2807,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px; height: 32px;
+    width: 28px; height: 28px;
     border-radius: 6px;
     border: 1px solid #ccc;
     background: #fff;
@@ -2807,7 +2820,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 32px;
+    height: 30px;
     padding: 0 8px;
     background: #fff;
     color: #333;
@@ -2826,8 +2839,8 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px; height: 32px;
-    font-size: 1.2rem;
+    width: 28px; height: 28px;
+    font-size: 1.1rem;
     color: #777;
     text-decoration: none;
     border-radius: 6px;
