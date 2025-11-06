@@ -244,7 +244,6 @@ td {
 :root {
     --quarter-px: 60px; /* Imposta il valore desiderato, ad esempio 60px per 15 minuti */
     --result-action-width: 26px;
-    --nav-ctl-h: 34px;
 }
 
 .selectable-cell {
@@ -614,10 +613,8 @@ td {
     align-items: center;  /* allinea verticalmente */
     gap: 6px;            /* distanza orizzontale tra i controlli */
     position: fixed;
-    top: 60px;           /* FIX: px */
+    top: 60;
     left: 0;
-    right: 0;            /* AGGIUNGI */
-    width: 100%;         /* AGGIUNGI */
     z-index: 11999;
   }
 
@@ -647,6 +644,7 @@ td {
   
 #dayOfWeek,
 #reportDayOfWeek {
+    display: inline-block;
     width: 55px;
     min-width: 38px;
     text-align: center;
@@ -655,9 +653,6 @@ td {
     color: #1976d2;
     margin-left: 8px;
     text-transform: uppercase;
-    height: var(--nav-ctl-h) !important;
-    display: inline-flex !important;
-    align-items: center !important;
 }
   /* Le frecce avanti/indietro */
   .calendar-navigation .arrow-nav {
@@ -677,21 +672,17 @@ td {
 .calendar-date-container input.calendar-date-input,
 .calendar-date-container #dayOfWeek {
     display: inline-block !important;
+    vertical-align: middle !important;
     white-space: nowrap !important;
 }
 
 .calendar-navigation .calendar-date-input,
 .calendar-date-input {
+    width: auto !important;
+    padding: 1px;
     color: #000 !important;
     background-color: #fff !important;
     border: 1px solid #ccc;
-    width: 150px !important;
-    height: var(--nav-ctl-h) !important;
-    line-height: calc(var(--nav-ctl-h) - 2px) !important;
-    padding: 4px 32px 4px 10px !important;
-    text-align: left !important;
-    -webkit-appearance: none !important;
-    appearance: none !important;
 }
 
 /* Overlay per mostrare la data formattata, allineato a sinistra */
@@ -709,52 +700,19 @@ td {
 }
 
   /* Pulsante “Vai a OGGI”: sfondo bianco, testo grigio scuro */
-.calendar-navigation .btn-today {
-    height: var(--nav-ctl-h) !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    padding: 0 1px !important;
-    line-height: 1 !important;
-}
-
-.calendar-navigation a.btn-today,
-.calendar-navigation .btn-today {
-    height: var(--nav-ctl-h) !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    padding: 0 4px !important;
-    line-height: 1 !important;
-    margin-left: auto !important;
-    margin-right: 14px !important;
-}
-
-.calendar-navigation a.btn-today:hover,
-.calendar-navigation a.btn-today:focus,
-.calendar-navigation a.btn-today:active {
-  text-decoration: none !important;
-  border-color: #ccc !important;
-  background-color: #fcf1f7 !important;
-  outline: none !important;
-  box-shadow: none !important;
-}
-.calendar-navigation a.btn-today,
-.calendar-navigation .btn-today {
-  text-decoration: none !important;
-  border: 1px solid #ccc !important;
-  border-radius: 4px !important;
-  color: #333 !important;
-  background-color: #fff !important;
-}
-
-.calendar-navigation a.btn-today:hover,
-.calendar-navigation a.btn-today:focus,
-.calendar-navigation a.btn-today:active {
-  text-decoration: none !important;
-  border-color: #ccc !important;
-  background-color: #fcf1f7 !important;
-  outline: none !important;
-  box-shadow: none !important;
-}
+  .calendar-navigation .btn-today {
+    display: inline-block;
+    background-color: #fff;
+    color: #333;            /* grigio scuro per il testo */
+    font-size: 0.9rem;      /* leggermente più piccolo di 1rem */
+    border: 1px solid #ccc; /* contorno grigio chiaro */
+    padding: 5px 5px;       /* dimensioni compatte */
+    text-decoration: none;  /* niente sottolineatura */
+    border-radius: 4px;     /* bordi leggermente arrotondati */
+  }
+  .calendar-navigation .btn-today:hover {
+    background-color: #fcf1f7; /* leggera evidenziazione al hover */
+  }  
 
   .calendar-fullwidth {
     position: relative;
@@ -1268,12 +1226,16 @@ body.quarter-55 .appointment-block .note-indicator {
     opacity: 0; /* Nasconde l’icona nativa */
   }
   
-.calendar-date-input {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='black' class='bi bi-calendar' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1zm1-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
-    background-size: 14px 14px;
-}
+  .calendar-date-input {
+    max-width: 130px;
+    min-width: 120px;
+    width: 125px;
+    padding-left: 5px !important;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='black' class='bi bi-calendar' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1zm1-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2z'/%3E%3C/svg%3E") no-repeat right 8px center;
+    background-size: 16px 16px; 
+    font-size: 0.9em;
+    line-height: 1.2em;
+  }
 
   /* Da aggiungere nel tuo file CSS */
 .appointment-block .appointment-content {
@@ -2105,94 +2067,6 @@ body.touch-ui .appointment-block[data-status="2"].active-popup .popup-buttons-bo
   }
   }
 
-    /* TOUCH-UI: icona CESTINO sempre bianca nei popup (top/bottom), anche su hover */
-body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block,
-body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block,
-body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block i,
-body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block svg,
-body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block i,
-body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block svg {
-  color: #ffffff !important;
-  fill: #ffffff !important;   /* sicurezza se in futuro si usa SVG */
-  stroke: #ffffff !important; /* sicurezza se in futuro si usa SVG */
-}
-
-/* Blocca l’override arancione dell’hover globale per il cestino in touch-ui */
-body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block:hover,
-body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block:hover {
-  color: #ffffff !important;
-}
-
-@media (min-width: 1201px) {
-  /* Desktop large: nascondi il CESTINO nella top bar dei popup */
-  body:not(.touch-ui) .appointment-block .popup-buttons .btn-popup.delete-appointment-block {
-    display: none !important;
-  }
-
-  /* Desktop large: mostra il bottone NOTA in top bar */
-  body:not(.touch-ui) .appointment-block .popup-buttons .btn-popup.nota {
-    display: inline-flex !important;
-  }
-
-  /* OFF: mantieni solo il vecchio cestino OFF; nascondi qualsiasi 'delete-appointment-block' */
-  body:not(.touch-ui) .appointment-block.note-off .btn-popup.delete-appointment-block,
-  body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup.delete-appointment-block {
-    display: none !important;
-  }
-
-  /* CESTINO inline: base stile (posizione), ma nascosto di default */
-  body:not(.touch-ui) .appointment-block .icon-trash,
-  body:not(.touch-ui) .appointment-block .delete-icon {
-    position: absolute !important;
-    top: 13px !important;      /* 5px più in basso */
-    left: 6px !important;
-    display: none !important;  /* nascosto di default */
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    line-height: 1;
-    cursor: pointer;
-    z-index: 2102;
-    color: inherit !important;
-    text-shadow: none;
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
-  }
-
-  /* Mostra il cestino inline SOLO al mouse-over sui blocchi normali (non OFF) */
-  body:not(.touch-ui) .appointment-block:hover:not(.note-off) .icon-trash,
-  body:not(.touch-ui) .appointment-block:hover:not(.note-off) .delete-icon {
-    display: inline-flex !important;
-  }
-
-  /* Mai mostrare il nuovo cestino sui blocchi OFF */
-  body:not(.touch-ui) .appointment-block.note-off .icon-trash,
-  body:not(.touch-ui) .appointment-block.note-off .delete-icon {
-    display: none !important;
-  }
-
-  /* Dimensioni icona */
-  body:not(.touch-ui) .appointment-block .icon-trash i,
-  body:not(.touch-ui) .appointment-block .icon-trash svg,
-  body:not(.touch-ui) .appointment-block .delete-icon i,
-  body:not(.touch-ui) .appointment-block .delete-icon svg {
-    font-size: 1.1em;
-    line-height: 1;
-    color: inherit !important;
-    fill: currentColor !important;
-    stroke: currentColor !important;
-  }
-
-  /* No zoom on hover (stile pulito) */
-  body:not(.touch-ui) .appointment-block .icon-trash:hover,
-  body:not(.touch-ui) .appointment-block .delete-icon:hover {
-    transform: none !important;
-    color: inherit !important;
-  }
-}
-
 /* ===================== IMPOSTAZIONI SCHERMI PICCOLI ===================== */
 @media (max-width: 1200px) {
     :root {
@@ -2282,11 +2156,12 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         width: 100% !important;
         display: flex !important;
         flex-direction: row !important;
+        align-items: center !important;
         justify-content: flex-start !important; /* gruppo allineato a sinistra */
-        gap: 2px !important;                      /* spazio minimo tra elementi */
+        gap: 6px !important;                      /* spazio minimo tra elementi */
         flex-wrap: nowrap !important;
         margin: 0 !important;
-        padding: 2px 6px !important;            /* padding-left controlla distanza dal bordo */
+        padding: 6px 12px !important;            /* padding-left controlla distanza dal bordo */
         background: #ffffff !important;
         z-index: 11990 !important;
         box-sizing: border-box !important;
@@ -2423,10 +2298,17 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         order: 2 !important;
         flex: 0 0 auto !important; /* non espande: mantiene gruppo compatto */
         display: flex !important;
+        align-items: center !important;
         justify-content: center !important;
-        gap: 2px !important;
+        gap: 6px !important;
         margin: 0 !important;
         padding: 0 !important;
+    }
+    .calendar-navigation .calendar-date-container .calendar-date-input,
+    .calendar-navigation .calendar-date-container input.calendar-date-input {
+        max-width: 140px !important;
+        min-width: 110px !important;
+        width: 125px !important;
     }
 
     /* Giorno in tre lettere subito dopo il campo data */
@@ -2524,6 +2406,11 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     .appointment-block .btn-popup.whatsapp-btn:not(.touch-bottom-wa) {
         display: none !important;
     }
+
+  /* Aumenta padding-right per dare più spazio all'icona */
+  .calendar-navigation .calendar-date-container input.calendar-date-input {
+    padding-right: 40px !important;
+  }
 
   /* Sposta il testo formattato più a destra e limita la larghezza per evitare sovrapposizione */
   #formattedDate {
@@ -2756,3 +2643,90 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons-bottom {
     }
   }
 
+  /* TOUCH-UI: icona CESTINO sempre bianca nei popup (top/bottom), anche su hover */
+body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block,
+body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block i,
+body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block svg,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block i,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block svg {
+  color: #ffffff !important;
+  fill: #ffffff !important;   /* sicurezza se in futuro si usa SVG */
+  stroke: #ffffff !important; /* sicurezza se in futuro si usa SVG */
+}
+
+/* Blocca l’override arancione dell’hover globale per il cestino in touch-ui */
+body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block:hover,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block:hover {
+  color: #ffffff !important;
+}
+
+@media (min-width: 1201px) {
+  /* Desktop large: nascondi il CESTINO nella top bar dei popup */
+  body:not(.touch-ui) .appointment-block .popup-buttons .btn-popup.delete-appointment-block {
+    display: none !important;
+  }
+
+  /* Desktop large: mostra il bottone NOTA in top bar */
+  body:not(.touch-ui) .appointment-block .popup-buttons .btn-popup.nota {
+    display: inline-flex !important;
+  }
+
+  /* OFF: mantieni solo il vecchio cestino OFF; nascondi qualsiasi 'delete-appointment-block' */
+  body:not(.touch-ui) .appointment-block.note-off .btn-popup.delete-appointment-block,
+  body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup.delete-appointment-block {
+    display: none !important;
+  }
+
+  /* CESTINO inline: base stile (posizione), ma nascosto di default */
+  body:not(.touch-ui) .appointment-block .icon-trash,
+  body:not(.touch-ui) .appointment-block .delete-icon {
+    position: absolute !important;
+    top: 13px !important;      /* 5px più in basso */
+    left: 6px !important;
+    display: none !important;  /* nascosto di default */
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 2102;
+    color: inherit !important;
+    text-shadow: none;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Mostra il cestino inline SOLO al mouse-over sui blocchi normali (non OFF) */
+  body:not(.touch-ui) .appointment-block:hover:not(.note-off) .icon-trash,
+  body:not(.touch-ui) .appointment-block:hover:not(.note-off) .delete-icon {
+    display: inline-flex !important;
+  }
+
+  /* Mai mostrare il nuovo cestino sui blocchi OFF */
+  body:not(.touch-ui) .appointment-block.note-off .icon-trash,
+  body:not(.touch-ui) .appointment-block.note-off .delete-icon {
+    display: none !important;
+  }
+
+  /* Dimensioni icona */
+  body:not(.touch-ui) .appointment-block .icon-trash i,
+  body:not(.touch-ui) .appointment-block .icon-trash svg,
+  body:not(.touch-ui) .appointment-block .delete-icon i,
+  body:not(.touch-ui) .appointment-block .delete-icon svg {
+    font-size: 1.1em;
+    line-height: 1;
+    color: inherit !important;
+    fill: currentColor !important;
+    stroke: currentColor !important;
+  }
+
+  /* No zoom on hover (stile pulito) */
+  body:not(.touch-ui) .appointment-block .icon-trash:hover,
+  body:not(.touch-ui) .appointment-block .delete-icon:hover {
+    transform: none !important;
+    color: inherit !important;
+  }
+}
