@@ -721,18 +721,13 @@
 <script>
 document.addEventListener("DOMContentLoaded", function() {
   flatpickr("#date", {
-    dateFormat: "Y-m-d",
-    altFormat: "d M Y",
-    altInput: true,
+    dateFormat: "Y-m-d",  // Valore input resta yyyy-mm-dd (backend)
+    altFormat: "d M Y",   // Display: gg MMM yyyy (mesi italiani grazie a locale)
+    altInput: true,       // Mostra altFormat nell'input
     defaultDate: "{{ selected_date_str }}",
-    locale: "it",
-    onReady: function(selectedDates, dateStr, instance) {
-      // AGGIUNGI: applica la stessa classe al campo visuale creato da flatpickr
-      if (instance && instance.altInput) {
-        instance.altInput.classList.add('calendar-date-input');
-      }
-    },
+    locale: "it",         // Mesi italiani (GEN, FEB, ecc.)
     onChange: function(selectedDates, dateStr, instance) {
+      // Reindirizza alla pagina con la nuova data
       window.location.href = calendarHomeUrl + "?date=" + dateStr;
     }
   });
