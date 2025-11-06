@@ -244,6 +244,7 @@ td {
 :root {
     --quarter-px: 60px; /* Imposta il valore desiderato, ad esempio 60px per 15 minuti */
     --result-action-width: 26px;
+    --nav-ctl-h: 34px;
 }
 
 .selectable-cell {
@@ -613,8 +614,10 @@ td {
     align-items: center;  /* allinea verticalmente */
     gap: 6px;            /* distanza orizzontale tra i controlli */
     position: fixed;
-    top: 60;
+    top: 60px;           /* FIX: px */
     left: 0;
+    right: 0;            /* AGGIUNGI */
+    width: 100%;         /* AGGIUNGI */
     z-index: 11999;
   }
 
@@ -644,7 +647,6 @@ td {
   
 #dayOfWeek,
 #reportDayOfWeek {
-    display: inline-block;
     width: 55px;
     min-width: 38px;
     text-align: center;
@@ -653,6 +655,9 @@ td {
     color: #1976d2;
     margin-left: 8px;
     text-transform: uppercase;
+    height: var(--nav-ctl-h) !important;
+    display: inline-flex !important;
+    align-items: center !important;
 }
   /* Le frecce avanti/indietro */
   .calendar-navigation .arrow-nav {
@@ -681,6 +686,12 @@ td {
     background-color: #fff !important;
     border: 1px solid #ccc;
     width: 150px !important;
+    height: var(--nav-ctl-h) !important;
+    line-height: calc(var(--nav-ctl-h) - 2px) !important;
+    padding: 4px 32px 4px 10px !important;
+    text-align: left !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
 }
 
 /* Overlay per mostrare la data formattata, allineato a sinistra */
@@ -698,19 +709,52 @@ td {
 }
 
   /* Pulsante “Vai a OGGI”: sfondo bianco, testo grigio scuro */
-  .calendar-navigation .btn-today {
-    display: inline-block;
-    background-color: #fff;
-    color: #333;            /* grigio scuro per il testo */
-    font-size: 0.9rem;      /* leggermente più piccolo di 1rem */
-    border: 1px solid #ccc; /* contorno grigio chiaro */
-    padding: 5px 5px;       /* dimensioni compatte */
-    text-decoration: none;  /* niente sottolineatura */
-    border-radius: 4px;     /* bordi leggermente arrotondati */
-  }
-  .calendar-navigation .btn-today:hover {
-    background-color: #fcf1f7; /* leggera evidenziazione al hover */
-  }  
+.calendar-navigation .btn-today {
+    height: var(--nav-ctl-h) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 0 1px !important;
+    line-height: 1 !important;
+}
+
+.calendar-navigation a.btn-today,
+.calendar-navigation .btn-today {
+    height: var(--nav-ctl-h) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 0 4px !important;
+    line-height: 1 !important;
+    margin-left: auto !important;
+    margin-right: 14px !important;
+}
+
+.calendar-navigation a.btn-today:hover,
+.calendar-navigation a.btn-today:focus,
+.calendar-navigation a.btn-today:active {
+  text-decoration: none !important;
+  border-color: #ccc !important;
+  background-color: #fcf1f7 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.calendar-navigation a.btn-today,
+.calendar-navigation .btn-today {
+  text-decoration: none !important;
+  border: 1px solid #ccc !important;
+  border-radius: 4px !important;
+  color: #333 !important;
+  background-color: #fff !important;
+}
+
+.calendar-navigation a.btn-today:hover,
+.calendar-navigation a.btn-today:focus,
+.calendar-navigation a.btn-today:active {
+  text-decoration: none !important;
+  border-color: #ccc !important;
+  background-color: #fcf1f7 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
 
   .calendar-fullwidth {
     position: relative;
@@ -1224,9 +1268,12 @@ body.quarter-55 .appointment-block .note-indicator {
     opacity: 0; /* Nasconde l’icona nativa */
   }
   
-  .calendar-date-input {
-    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='black' class='bi bi-calendar' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1zm1-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2z'/%3E%3C/svg%3E") no-repeat right 8px center;
-  }
+.calendar-date-input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='black' class='bi bi-calendar' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1zm1-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 14px 14px;
+}
 
   /* Da aggiungere nel tuo file CSS */
 .appointment-block .appointment-content {
@@ -2235,12 +2282,11 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         width: 100% !important;
         display: flex !important;
         flex-direction: row !important;
-        align-items: center !important;
         justify-content: flex-start !important; /* gruppo allineato a sinistra */
-        gap: 6px !important;                      /* spazio minimo tra elementi */
+        gap: 2px !important;                      /* spazio minimo tra elementi */
         flex-wrap: nowrap !important;
         margin: 0 !important;
-        padding: 6px 12px !important;            /* padding-left controlla distanza dal bordo */
+        padding: 2px 6px !important;            /* padding-left controlla distanza dal bordo */
         background: #ffffff !important;
         z-index: 11990 !important;
         box-sizing: border-box !important;
