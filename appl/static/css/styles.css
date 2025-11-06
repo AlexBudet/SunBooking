@@ -2731,7 +2731,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
 /* ==== MOBILE DATE NAV: disattiva vecchia barra e mostra tabella nuova (<1200px) ==== */
 @media (max-width: 1200px) {
   :root {
-    --mobile-date-nav-height: 44px; /* altezza della nuova riga tabella */
+    --mobile-date-nav-height: 47px; /* altezza della nuova riga tabella */
   }
 
   /* Nascondi completamente la vecchia date-nav su mobile */
@@ -2791,7 +2791,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
 
   .mobile-date-nav .cell-today {
     text-align: right !important;
-    padding-right: 12px !important;
+    padding-right: 16px !important;
   }
 
   .mobile-date-nav .cell-date span,
@@ -2852,7 +2852,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
 
   /* Spazio sotto la riga fissa su calendar */
   .calendar-fullwidth .calendar-table {
-    margin-top: calc(var(--mobile-header-height, 56px) + var(--mobile-date-nav-height, 44px)) !important;
+    margin-top: calc(var(--mobile-header-height, 56px) + var(--mobile-date-nav-height, 47px)) !important;
   }
 
     /* MOBILE DATE NAV: rimuovi qualsiasi bordo della tabella/celle */
@@ -2866,10 +2866,18 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     outline: none !important;
   }
 
+  .mobile-date-nav td { height: var(--mobile-date-nav-height) !important; }
+
   .mobile-date-nav table {
     border-collapse: separate !important; /* evita unione bordi */
     border-spacing: 0 !important;
     background-color: #fff !important;    /* su sfondo bianco i bordi bianchi spariscono */
+  }
+
+    /* header sticky della tabella allineato alla nuova barra */
+  .calendar-fullwidth .calendar-table thead th,
+  .calendar-fullwidth .calendar-table thead th:first-child {
+    top: calc(var(--mobile-header-height, 56px) + var(--mobile-date-nav-height, 47px)) !important;
   }
 }
 
