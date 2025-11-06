@@ -669,28 +669,19 @@ td {
     flex-wrap: nowrap !important;
 }
 
-/* ========== ENFORCER FINALE: testo data sempre a SINISTRA (Chrome/Safari mobile) ========== */
-.calendar-navigation .calendar-date-container input.flatpickr-input,
-.calendar-navigation .calendar-date-container input.calendar-date-input,
-#date.flatpickr-input,
-#dateMobile.flatpickr-input,
-#dateNavDesktop input.flatpickr-input,
-#dateNavMobile input.flatpickr-input,
-input.flatpickr-input[readonly] {
-  text-align: left !important;
-  text-indent: 0 !important;
-  direction: ltr !important;
-  -webkit-text-fill-color: currentColor !important; /* niente blu su iOS */
-  /* non tocchiamo color: eredita dal tuo .calendar-date-input (nero) */
+.calendar-date-container input.calendar-date-input,
+.calendar-date-container #dayOfWeek {
+    display: inline-block !important;
+    white-space: nowrap !important;
 }
 
-/* Placeholder allineato a sinistra (Safari/Chrome mobile) */
-.calendar-navigation .calendar-date-container input.flatpickr-input::placeholder { text-align: left !important; }
-.calendar-navigation .calendar-date-container input.flatpickr-input::-webkit-input-placeholder { text-align: left !important; }
-
-/* Su schermi piccoli disabilita overlay formattato che può “simulare” una centratura */
-@media (max-width: 1200px) {
-  #formattedDate { display: none !important; }
+.calendar-navigation .calendar-date-input,
+.calendar-date-input {
+    width: auto !important;
+    padding: 1px;
+    color: #000 !important;
+    background-color: #fff !important;
+    border: 1px solid #ccc;
 }
 
 /* Overlay per mostrare la data formattata, allineato a sinistra */
@@ -2177,10 +2168,6 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
 .calendar-navigation .arrow-right { order: 4 !important; }
 .calendar-navigation .btn-today { order: 5 !important; }
 
-  .calendar-navigation .calendar-date-container {
-      justify-content: flex-start !important; /* PRIMA era center */
-  }
-
     /* Header mobile: adattivo, padding ridotto, nessun line-height eccessivo */
     header {
         position: fixed !important;
@@ -2393,6 +2380,17 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         margin-right: 4px !important;
     }
 
+    /* Campo data: rimane a fianco della freccia, larghezza limitata */
+    .calendar-navigation .calendar-date-container {
+        order: 2 !important;
+        flex: 0 0 auto !important; /* non espande: mantiene gruppo compatto */
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
     .calendar-navigation .calendar-date-container .calendar-date-input,
     .calendar-navigation .calendar-date-container input.calendar-date-input {
         max-width: 140px !important;
@@ -2730,32 +2728,5 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons-bottom {
       align-items: center;
       justify-content: center;
     }
-
-  /* Forza SEMPRE il testo dell'input data a sinistra (altInput flatpickr incluso) */
-  .calendar-navigation .calendar-date-container input.calendar-date-input,
-  .calendar-navigation .calendar-date-container input.flatpickr-input,
-  #date.flatpickr-input,
-  #dateMobile.flatpickr-input,
-  #dateNavDesktop input.calendar-date-input,
-  #dateNavMobile input.calendar-date-input {
-      text-align: left !important;
-      -webkit-appearance: none;
-      appearance: none;
-      -webkit-text-fill-color: inherit !important; /* evita “blu” su Safari, usa il colore già definito */
   }
-
-  /* Placeholder allineato a sinistra (Safari/Chrome mobile) */
-  .calendar-navigation .calendar-date-container input.flatpickr-input::placeholder { text-align: left !important; }
-  .calendar-navigation .calendar-date-container input.flatpickr-input::-webkit-input-placeholder { text-align: left !important; }
-
-  /* Evita che qualche ancestor imposti centering */
-  .calendar-navigation .calendar-date-container,
-  #dateNavDesktop,
-  #dateNavMobile {
-      text-align: left !important;
-  }
-
-  /* Se presente, l’overlay non deve interferire su mobile */
-  #formattedDate { display: none !important; }
-}
 
