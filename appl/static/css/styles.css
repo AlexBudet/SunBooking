@@ -669,20 +669,28 @@ td {
     flex-wrap: nowrap !important;
 }
 
-.calendar-date-container input.calendar-date-input,
-.calendar-date-container #dayOfWeek {
-    display: inline-block !important;
-    vertical-align: middle !important;
-    white-space: nowrap !important;
+/* ========== ENFORCER FINALE: testo data sempre a SINISTRA (Chrome/Safari mobile) ========== */
+.calendar-navigation .calendar-date-container input.flatpickr-input,
+.calendar-navigation .calendar-date-container input.calendar-date-input,
+#date.flatpickr-input,
+#dateMobile.flatpickr-input,
+#dateNavDesktop input.flatpickr-input,
+#dateNavMobile input.flatpickr-input,
+input.flatpickr-input[readonly] {
+  text-align: left !important;
+  text-indent: 0 !important;
+  direction: ltr !important;
+  -webkit-text-fill-color: currentColor !important; /* niente blu su iOS */
+  /* non tocchiamo color: eredita dal tuo .calendar-date-input (nero) */
 }
 
-.calendar-navigation .calendar-date-input,
-.calendar-date-input {
-    width: auto !important;
-    padding: 1px;
-    color: #000 !important;
-    background-color: #fff !important;
-    border: 1px solid #ccc;
+/* Placeholder allineato a sinistra (Safari/Chrome mobile) */
+.calendar-navigation .calendar-date-container input.flatpickr-input::placeholder { text-align: left !important; }
+.calendar-navigation .calendar-date-container input.flatpickr-input::-webkit-input-placeholder { text-align: left !important; }
+
+/* Su schermi piccoli disabilita overlay formattato che può “simulare” una centratura */
+@media (max-width: 1200px) {
+  #formattedDate { display: none !important; }
 }
 
 /* Overlay per mostrare la data formattata, allineato a sinistra */

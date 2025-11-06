@@ -719,37 +719,69 @@
     var calendarHomeUrl = "{{ url_for('calendar.calendar_home') }}";
 </script>
 <script>
-document.addEventListener("DOMContentLoaded", function() {
-  flatpickr("#date", {
+document.addEventListener("DOMContentLoaded", function () {
+  function enforceLeft(input) {
+    if (!input) return;
+    try {
+      input.classList.add('calendar-date-input');
+      // Allineamento a sinistra con priorità
+      input.style.setProperty('text-align', 'left', 'important');
+      input.style.setProperty('text-indent', '0', 'important');
+      input.style.setProperty('direction', 'ltr', 'important');
+      // Evita testo blu su Safari iOS nei campi readonly
+      input.style.setProperty('-webkit-text-fill-color', 'currentColor', 'important');
+      // Non cambiamo il tuo colore: eredita da CSS (già #000)
+      input.style.removeProperty('color');
+    } catch (_) {}
+  }
+
+  function observeLeft(input) {
+    if (!input || input._leftObserver) return;
+    const obs = new MutationObserver(() => enforceLeft(input));
+    obs.observe(input, { attributes: true, attributeFilter: ['style', 'class'] });
+    input._leftObserver = obs;
+  }
+
+  const fp = flatpickr("#date", {
     dateFormat: "Y-m-d",
     altFormat: "d M Y",
     altInput: true,
     defaultDate: "{{ selected_date_str }}",
     locale: "it",
-    onReady: function(selectedDates, dateStr, instance) {
-      var alt = instance && instance.altInput;
-      if (alt) {
-        alt.classList.add('calendar-date-input');
-        alt.style.textAlign = 'left !important';
-      }
+    onReady: function (selectedDates, dateStr, instance) {
+      const alt = instance && instance.altInput;
+      enforceLeft(alt);
+      observeLeft(alt);
+      // doppio tick per eventuali sovrascrittori tardivi
+      setTimeout(() => { enforceLeft(alt); }, 0);
+      setTimeout(() => { enforceLeft(alt); }, 50);
     },
-    onOpen: function(selectedDates, dateStr, instance) {
-      var alt = instance && instance.altInput;
-      if (alt) alt.style.textAlign = 'left !important';
+    onOpen: function (sel, str, instance) {
+      enforceLeft(instance && instance.altInput);
     },
-    onValueUpdate: function(selectedDates, dateStr, instance) {
-      var alt = instance && instance.altInput;
-      if (alt) alt.style.textAlign = 'left !important';
+    onValueUpdate: function (sel, str, instance) {
+      enforceLeft(instance && instance.altInput);
     },
-    onChange: function(selectedDates, dateStr) {
+    onClose: function (sel, str, instance) {
+      enforceLeft(instance && instance.altInput);
+    },
+    onChange: function (selectedDates, dateStr) {
       window.location.href = calendarHomeUrl + "?date=" + dateStr;
     }
   });
 
-  setTimeout(function() {
-    var alt = document.querySelector('.calendar-date-container .flatpickr-input');
-    if (alt) alt.style.textAlign = 'left !important';
+  // Fallback per #dateMobile (se usi un secondo input su mobile)
+  setTimeout(function () {
+    const altDesktop = document.querySelector('#dateNavDesktop .flatpickr-input');
+    const altMobile  = document.querySelector('#dateNavMobile .flatpickr-input, #dateMobile.flatpickr-input');
+    enforceLeft(altDesktop); observeLeft(altDesktop);
+    enforceLeft(altMobile);  observeLeft(altMobile);
   }, 0);
+
+  // Rinforzo su resize (alcuni temi ricalcolano stile)
+  window.addEventListener('resize', function () {
+    document.querySelectorAll('.calendar-date-container .flatpickr-input').forEach(enforceLeft);
+  }, { passive: true });
 });
 </script>
 <script>
