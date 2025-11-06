@@ -128,6 +128,47 @@
 </div>
 </div>
 
+<!-- NUOVA TABELLA MOBILE DATE-NAV (<1200px): visibile solo su mobile -->
+<div class="mobile-date-nav" id="mobileDateNavCalendar" style="display:none;">
+  <table aria-label="Navigazione data (mobile)">
+    <tr>
+      <!-- 1: IERI -->
+      <td class="cell-arrow">
+        <a class="arrow-nav" href="{{ url_for('calendar.calendar_home', date=day_before_str) }}" aria-label="Giorno precedente">&lt;</a>
+      </td>
+
+      <!-- 2: DATA FORMATTATA -->
+      <td class="cell-date">
+        <span id="mobileDateFormattedCalendar">-- --- ----</span>
+      </td>
+
+      <!-- 3: ICONA CALENDARIO -->
+      <td class="cell-cal">
+        <a href="#"
+           id="mobileCalIconCalendar"
+           class="cal-btn"
+           aria-label="Apri calendario"
+           title="Apri calendario">📅</a>
+      </td>
+
+      <!-- 4: DAY OF WEEK -->
+      <td class="cell-dow">
+        <span id="mobileDayOfWeekCalendar">---</span>
+      </td>
+
+      <!-- 5: DOMANI -->
+      <td class="cell-arrow">
+        <a class="arrow-nav" href="{{ url_for('calendar.calendar_home', date=day_after_str) }}" aria-label="Giorno successivo">&gt;</a>
+      </td>
+
+      <!-- 6: VAI A OGGI -->
+      <td class="cell-today">
+        <a class="btn-today" href="{{ url_for('calendar.calendar_home', date=today_str) }}" id="btnTodayCalendar">Vai a OGGI</a>
+      </td>
+    </tr>
+  </table>
+</div>
+
 <!-- Tabella dell'agenda giornaliera -->
 <div class="calendar-fullwidth">
     <table class="calendar-table">
@@ -2400,5 +2441,54 @@ document.addEventListener('DOMContentLoaded', function() {
     display: none !important;
   }
 </style>
+<script>
+// Inizializza contenuti della tabella mobile (calendar)
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    const fmtSpan = document.getElementById('mobileDateFormattedCalendar');
+    const dowSpan = document.getElementById('mobileDayOfWeekCalendar');
+    const calBtn  = document.getElementById('mobileCalIconCalendar');
+    const inDate  = document.getElementById('date'); // input già presente nella nav desktop
+
+    // formatter "06 Nov 2025"
+    const mesiShort = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    function formatDateYMD(yyyy_mm_dd) {
+      const [y,m,d] = (yyyy_mm_dd || '').split('-').map(x => parseInt(x,10));
+      if (!y || !m || !d) return '-- --- ----';
+      const dd = String(d).padStart(2,'0');
+      const M = mesiShort[m-1] || '---';
+      return `${dd} ${M} ${y}`;
+    }
+    function formatDOW(yyyy_mm_dd) {
+      const giorni = ['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
+      const dt = new Date(yyyy_mm_dd);
+      return isNaN(dt) ? '---' : giorni[dt.getDay()];
+    }
+
+    function refreshMobileFields() {
+      const v = inDate ? inDate.value : '{{ selected_date_str }}';
+      if (fmtSpan) fmtSpan.textContent = formatDateYMD(v);
+      if (dowSpan) dowSpan.textContent = formatDOW(v);
+    }
+    refreshMobileFields();
+
+    // Se c'è flatpickr, aggiorna live anche la tabella al cambio data
+    if (inDate && inDate._flatpickr) {
+      inDate._flatpickr.config.onChange.push(() => refreshMobileFields());
+    } else if (inDate) {
+      inDate.addEventListener('change', refreshMobileFields);
+    }
+
+    // Icona calendario: apri flatpickr dell'input desktop
+    if (calBtn) {
+      calBtn.addEventListener('click', function(e){
+        e.preventDefault();
+        if (inDate && inDate._flatpickr) inDate._flatpickr.open();
+        else if (inDate) inDate.focus();
+      });
+    }
+  } catch(_) {}
+});
+</script>
 {% endif %}
 {% endblock %}
