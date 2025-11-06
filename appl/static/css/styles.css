@@ -676,27 +676,30 @@ td {
     white-space: nowrap !important;
 }
 
-.calendar-navigation .calendar-date-input,
-.calendar-date-input {
-    width: auto !important;
-    padding: 1px;
-    color: #000 !important;
-    background-color: #fff !important;
-    border: 1px solid #ccc;
+/* Forza SEMPRE l’allineamento a sinistra per l’input flatpickr (Chrome/Safari mobile inclusi) */
+.calendar-navigation .calendar-date-container input.flatpickr-input,
+.calendar-date-container input.flatpickr-input,
+input.flatpickr-input,
+input.flatpickr-input[readonly] {
+  text-align: left !important;
 }
 
-/* Overlay per mostrare la data formattata, allineato a sinistra */
-#formattedDate {
-    position: absolute;
-    top: 0;
-    left: 0;
-    pointer-events: none; /* Permette di cliccare sull'input sottostante */
-    display: inline-block;
-    text-align: left;
-    color: black;
-    font-size: 14px;
-    padding: 0px;  /* Personalizza il padding per ottenere l'altezza e la spaziatura desiderata */
-    /* La larghezza verrà determinata dal contenuto (testo + eventuale icona) */
+/* Allinea a sinistra anche il placeholder, utile su Safari iOS */
+input.flatpickr-input::placeholder { text-align: left; opacity: 1; }
+input.flatpickr-input::-webkit-input-placeholder { text-align: left; }
+input.flatpickr-input::-moz-placeholder { text-align: left; }
+input.flatpickr-input:-ms-input-placeholder { text-align: left; }
+
+/* Estendi lo stile del campo data anche all’altInput */
+.calendar-navigation .calendar-date-container input.flatpickr-input.calendar-date-input {
+  background: #fff !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='black' class='bi bi-calendar' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1zm1-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  background-size: 16px 16px !important;
+  padding-left: 6px !important;  /* spazio a sinistra per il testo */
+  padding-right: 28px !important; /* spazio per l’icona calendario */
+  border: 1px solid #ccc !important;
 }
 
   /* Pulsante “Vai a OGGI”: sfondo bianco, testo grigio scuro */
@@ -2641,6 +2644,10 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons-bottom {
       align-items: center;
       justify-content: center;
     }
+
+    #formattedDate {
+    display: none !important;
+  }  
   }
 
   /* TOUCH-UI: icona CESTINO sempre bianca nei popup (top/bottom), anche su hover */
