@@ -22,6 +22,114 @@
     </div>
 </div>
 </div>
+
+<!-- NUOVA TABELLA MOBILE DATE-NAV (<1200px): visibile solo su mobile -->
+<div class="mobile-date-nav" id="mobileDateNavReport" style="display:none;">
+  <table aria-label="Navigazione data (mobile)">
+    <tr>
+      <!-- 1: IERI -->
+      <td class="cell-arrow">
+        <a href="#" id="mPrevDayReport" class="arrow-nav" aria-label="Giorno precedente">&lt;</a>
+      </td>
+
+      <!-- 2: DATA FORMATTATA -->
+      <td class="cell-date">
+        <span id="mobileDateFormattedReport">-- --- ----</span>
+      </td>
+
+      <!-- 3: ICONA CALENDARIO -->
+      <td class="cell-cal">
+        <a href="#" id="mobileCalIconReport" class="cal-btn" aria-label="Apri calendario">📅</a>
+      </td>
+
+      <!-- 4: DAY OF WEEK -->
+      <td class="cell-dow">
+        <span id="mobileDayOfWeekReport">---</span>
+      </td>
+
+      <!-- 5: DOMANI -->
+      <td class="cell-arrow">
+        <a href="#" id="mNextDayReport" class="arrow-nav" aria-label="Giorno successivo">&gt;</a>
+      </td>
+
+      <!-- 6: VAI A OGGI -->
+      <td class="cell-today">
+        <a href="#" id="mBtnTodayReport" class="btn-today">Vai a OGGI</a>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<script>
+// Inizializza tabella mobile (report)
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    const inDate = document.getElementById('reportDate'); // input usato da flatpickr
+    const fp = inDate ? inDate._flatpickr : null;
+
+    const fmtSpan = document.getElementById('mobileDateFormattedReport');
+    const dowSpan = document.getElementById('mobileDayOfWeekReport');
+    const prevBtn = document.getElementById('mPrevDayReport');
+    const nextBtn = document.getElementById('mNextDayReport');
+    const todayBtn= document.getElementById('mBtnTodayReport');
+    const calBtn  = document.getElementById('mobileCalIconReport');
+
+    const mesiShort = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    function formatDateYMD(yyyy_mm_dd) {
+      const [y,m,d] = (yyyy_mm_dd || '').split('-').map(x => parseInt(x,10));
+      if (!y || !m || !d) return '-- --- ----';
+      const dd = String(d).padStart(2,'0');
+      const M = mesiShort[m-1] || '---';
+      return `${dd} ${M} ${y}`;
+    }
+    function formatDOW(yyyy_mm_dd) {
+      const giorni = ['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
+      const dt = new Date(yyyy_mm_dd);
+      return isNaN(dt) ? '---' : giorni[dt.getDay()];
+    }
+    function getVal() {
+      return inDate ? (inDate.value || new Date().toISOString().slice(0,10)) : new Date().toISOString().slice(0,10);
+    }
+    function setVal(d) {
+      if (fp) fp.setDate(d, true);
+      else if (inDate) { inDate.value = d; inDate.dispatchEvent(new Event('change')); }
+    }
+    function addDays(baseStr, delta) {
+      const d = new Date(baseStr);
+      d.setDate(d.getDate() + delta);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+    function refresh() {
+      const v = getVal();
+      if (fmtSpan) fmtSpan.textContent = formatDateYMD(v);
+      if (dowSpan) dowSpan.textContent = formatDOW(v);
+    }
+    refresh();
+
+    if (fp) fp.config.onChange.push(refresh);
+    else if (inDate) inDate.addEventListener('change', refresh);
+
+    if (prevBtn) prevBtn.addEventListener('click', e => { e.preventDefault(); setVal(addDays(getVal(), -1)); });
+    if (nextBtn) nextBtn.addEventListener('click', e => { e.preventDefault(); setVal(addDays(getVal(), +1)); });
+    if (todayBtn) todayBtn.addEventListener('click', e => {
+      e.preventDefault();
+      const t = new Date();
+      const yyyy = t.getFullYear();
+      const mm = String(t.getMonth()+1).padStart(2,'0');
+      const dd = String(t.getDate()).padStart(2,'0');
+      setVal(`${yyyy}-${mm}-${dd}`);
+    });
+    if (calBtn) calBtn.addEventListener('click', e => {
+      e.preventDefault();
+      if (fp) fp.open(); else if (inDate) inDate.focus();
+    });
+  } catch(_) {}
+});
+</script>
+
 <div class="page-wide-90 mt-4">
 <br><br>
 <!-- Barra superiore filtri -->
