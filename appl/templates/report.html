@@ -52,10 +52,10 @@
         <span id="mobileDayOfWeekReport">---</span>
       </td>
 
-      <!-- 6: VAI A OGGI -->
-      <td class="cell-today">
-        <a href="#" id="mBtnTodayReport" class="btn-today">Vai a OGGI</a>
-      </td>
+<!-- 6: VAI A OGGI -->
+<td class="cell-today">
+  <a href="#" id="mBtnTodayReport" class="btn-today">Vai a OGGI</a>
+</td>
     </tr>
   </table>
 </div>
@@ -65,7 +65,19 @@
 document.addEventListener('DOMContentLoaded', function() {
   try {
     const inDate = document.getElementById('reportDate'); // input usato da flatpickr
-    const fp = inDate ? inDate._flatpickr : null;
+
+    // AGGIUNGI: helper locale e fp dinamico
+    function todayYMDLocal() {
+      const t = new Date();
+      const y = t.getFullYear();
+      const m = String(t.getMonth()+1).padStart(2,'0');
+      const d = String(t.getDate()).padStart(2,'0');
+      return `${y}-${m}-${d}`;
+    }
+    const getFp = () => {
+      const el = document.getElementById('reportDate');
+      return el && el._flatpickr ? el._flatpickr : null;
+    };
 
     const fmtSpan = document.getElementById('mobileDateFormattedReport');
     const dowSpan = document.getElementById('mobileDayOfWeekReport');
@@ -87,10 +99,13 @@ document.addEventListener('DOMContentLoaded', function() {
       const dt = new Date(yyyy_mm_dd);
       return isNaN(dt) ? '---' : giorni[dt.getDay()];
     }
+
+    // SOSTITUISCI: niente toISOString in fallback
     function getVal() {
-      return inDate ? (inDate.value || new Date().toISOString().slice(0,10)) : new Date().toISOString().slice(0,10);
+      return inDate ? (inDate.value || todayYMDLocal()) : todayYMDLocal();
     }
     function setVal(d) {
+      const fp = getFp();
       if (fp) fp.setDate(d, true);
       else if (inDate) { inDate.value = d; inDate.dispatchEvent(new Event('change')); }
     }
@@ -109,21 +124,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     refresh();
 
-    if (fp) fp.config.onChange.push(refresh);
-    else if (inDate) inDate.addEventListener('change', refresh);
+    // AGGIUNGI: ascolta sempre il change dell’input per refresh + toggle bottone
+    if (inDate) inDate.addEventListener('change', function() {
+      refresh();
+      if (typeof aggiornaBtnOggi === 'function') aggiornaBtnOggi();
+    });
 
-    if (prevBtn) prevBtn.addEventListener('click', e => { e.preventDefault(); setVal(addDays(getVal(), -1)); });
-    if (nextBtn) nextBtn.addEventListener('click', e => { e.preventDefault(); setVal(addDays(getVal(), +1)); });
+    if (prevBtn) prevBtn.addEventListener('click', e => { e.preventDefault(); setVal(addDays(getVal(), -1)); if (typeof aggiornaBtnOggi==='function') aggiornaBtnOggi(); });
+    if (nextBtn) nextBtn.addEventListener('click', e => { e.preventDefault(); setVal(addDays(getVal(), +1)); if (typeof aggiornaBtnOggi==='function') aggiornaBtnOggi(); });
     if (todayBtn) todayBtn.addEventListener('click', e => {
       e.preventDefault();
-      const t = new Date();
-      const yyyy = t.getFullYear();
-      const mm = String(t.getMonth()+1).padStart(2,'0');
-      const dd = String(t.getDate()).padStart(2,'0');
-      setVal(`${yyyy}-${mm}-${dd}`);
+      setVal(todayYMDLocal());
+      if (typeof aggiornaBtnOggi === 'function') aggiornaBtnOggi();
     });
     if (calBtn) calBtn.addEventListener('click', e => {
       e.preventDefault();
+      const fp = getFp();
       if (fp) fp.open(); else if (inDate) inDate.focus();
     });
   } catch(_) {}
@@ -1702,10 +1718,22 @@ function triggerReportReload() {
 
 function aggiornaBtnOggi() {
   const dateInput = document.getElementById('reportDate');
-  const btnOggi = document.getElementById('reportBtnToday');
-  if (!dateInput || !btnOggi) return;
-  const oggiStr = new Date().toISOString().slice(0, 10);
-  btnOggi.style.display = (dateInput.value !== oggiStr) ? '' : 'none';
+  const desktopBtn = document.getElementById('reportBtnToday');
+  const mobileBtn  = document.getElementById('mBtnTodayReport');
+  if (!dateInput) return;
+
+  // Oggi in locale (yyyy-mm-dd)
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const todayLocal = `${yyyy}-${mm}-${dd}`;
+
+  const current = (dateInput.value || '').trim();
+  const isToday = current === todayLocal;
+
+  if (desktopBtn) desktopBtn.style.display = isToday ? 'none' : '';
+  if (mobileBtn)  mobileBtn.style.display  = isToday ? 'none' : '';
 }
 
 function aggiornaGiornoSettimana() {
@@ -1730,7 +1758,10 @@ document.addEventListener('DOMContentLoaded', function() {
   triggerReportReload();
   aggiornaBtnOggi();
   aggiornaGiornoSettimana();
-  document.getElementById('reportDate').addEventListener('change', triggerReportReload);
+    document.getElementById('reportDate').addEventListener('change', function () {
+    triggerReportReload();
+    aggiornaBtnOggi();
+  });
   document.getElementById('reportPrevDay').addEventListener('click', function(e) {
     e.preventDefault();
     const dateInput = document.getElementById('reportDate');
