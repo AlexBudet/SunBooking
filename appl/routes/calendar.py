@@ -19,6 +19,29 @@ from wbiztool_client import WbizToolClient
 
 cache = Cache(app, config={'CACHE_TYPE': 'simple'}) 
 
+NEW_CLIENT_MARKER = " ***NUOVO CLIENTE*** "
+
+def is_first_appointment_for_client(client_id):
+    """
+    Ritorna True se il cliente non ha ancora NESSUN appuntamento salvato.
+    """
+    if not client_id:
+        return False
+    count = Appointment.query.filter(Appointment.client_id == client_id).count()
+    return count == 0
+
+def append_new_client_marker(note_text):
+    """
+    Appende il marker se non già presente.
+    """
+    base = note_text or ""
+    if NEW_CLIENT_MARKER.strip() in base:
+        return base
+    # Mantiene eventuale testo esistente e aggiunge il marker in fondo
+    if base.strip():
+        return f"{base.rstrip()} {NEW_CLIENT_MARKER}".strip()
+    return NEW_CLIENT_MARKER.strip()
+
 def estrai_nome_cognome_cellulare(note):
     nome = cognome = cellulare = ""
     if note:
@@ -303,15 +326,13 @@ def list_clients():
 @calendar_bp.route('/create', methods=['GET', 'POST'])
 def create_appointment():
     if request.method == 'GET':
-        # [Codice GET invariato]
         operator_id = request.args.get('operator_id', type=int)
         hour = request.args.get('hour', type=int)
         minute = request.args.get('minute', type=int)
         date = request.args.get('date')
-        note = request.args.get('note')
         try:
             selected_date = datetime.strptime(date, '%Y-%m-%d')
-        except ValueError:
+        except (TypeError, ValueError):
             return jsonify({"error": "Formato data non valido"}), 400
         return render_template(
             'CreateNewAppt.html',
@@ -320,137 +341,179 @@ def create_appointment():
             minute=minute,
             date=selected_date.strftime('%Y-%m-%d')
         )
-    elif request.method == 'POST':
-        try:
-            data = request.get_json()
-            client_id = data.get('client_id')
-            service_id = data.get('service_id')
-            operator_id = data.get('operator_id')
-            start_time_str = data.get('start_time')  # es. "HH:MM"
-            appointment_date = data.get('appointment_date')  # es. "YYYY-MM-DD"
-            duration = data.get('duration')
-            note = data.get('note')
 
-            # Normalizza i valori
-            if client_id in ["dummy", "0", 0, None, "null"]:
-                client_id = None
-            if service_id in ["dummy", "0", 0, None, "null"]:
-                service_id = None
+    # POST
+    try:
+        data = request.get_json(silent=True) or {}
 
-            if note:
-                note = json.dumps(note, ensure_ascii=False)[1:-1]
-
-            colore = data.get('colore')
-            if not colore:
-                colore = random_color()
-
-            colore_font = compute_font_color(colore)
-
-            is_off_block = (client_id is None) and (service_id is None)
-
-            if not all([operator_id, start_time_str, appointment_date, duration]):
-                return jsonify({"error": "Parametri mancanti"}), 400
-
-            if not is_off_block and not (client_id or service_id):
-                return jsonify({"error": "Seleziona almeno un cliente o un servizio"}), 400
-
+        # --- helpers ---
+        def _norm_id(v):
+            if v in (None, "", "null", "dummy", "Dummy", "DUMMY", 0, "0"):
+                return None
             try:
-                datetime_str = f"{appointment_date} {start_time_str}"
-                start_time = datetime.strptime(datetime_str, '%Y-%m-%d %H:%M')
-            except ValueError:
-                return jsonify({"error": "Formato data/ora non valido"}), 400
+                vi = int(v)
+                return vi if vi > 0 else None
+            except Exception:
+                return None
 
-            # Se vengono inviati pseudoblocchi, crea un appuntamento per ciascuno
-            pseudoblocks = data.get('pseudoblocks')
-            created_appts = []
-            if pseudoblocks and isinstance(pseudoblocks, list) and len(pseudoblocks) > 0:
-                current_start = start_time  # Iniziamo dal tempo specificato nel form
-                for pb in pseudoblocks:
-                    print(f"DEBUG: pb_status = {pb.get('status')}")
-                    print(f"DEBUG: pb full = {pb}")
-                    # Usa il colore salvato nel pseudoblocco, altrimenti il default
-                    pb_color = pb.get('colore', colore)
+        def _norm_note(s):
+            if s is None:
+                return None
+            # preserva i caratteri unicode senza escape
+            try:
+                return json.dumps(s, ensure_ascii=False)[1:-1]
+            except Exception:
+                return str(s)
+
+        # --- payload base ---
+        raw_client_id = data.get('client_id')
+        client_id = _norm_id(raw_client_id)
+        service_id = _norm_id(data.get('service_id'))
+        operator_id = _norm_id(data.get('operator_id'))
+        start_time_str = (data.get('start_time') or '').strip()           # "HH:MM"
+        appointment_date = (data.get('appointment_date') or '').strip()   # "YYYY-MM-DD"
+        duration = data.get('duration')
+        try:
+            duration = int(duration) if duration is not None else None
+        except Exception:
+            duration = None
+        note = _norm_note(data.get('note'))
+
+        # Colori
+        colore = (data.get('colore') or '').strip() or random_color()
+        colore_font = compute_font_color(colore)
+
+        # Validazioni minime
+        if not all([operator_id, start_time_str, appointment_date, duration is not None]):
+            return jsonify({"error": "Parametri mancanti"}), 400
+
+        # OFF block quando sia client che service sono None
+        is_off_block = (client_id is None) and (service_id is None)
+        if not is_off_block and not (client_id or service_id):
+            return jsonify({"error": "Seleziona almeno un cliente o un servizio"}), 400
+
+        # Parse datetime inizio
+        try:
+            start_time = datetime.strptime(f"{appointment_date} {start_time_str}", '%Y-%m-%d %H:%M')
+        except ValueError:
+            return jsonify({"error": "Formato data/ora non valido"}), 400
+
+        # Verifica “nuovo cliente” PRIMA di creare (solo se client_id reale)
+        is_new_client = is_first_appointment_for_client(client_id) if client_id else False
+
+        # --- PSEUDOBLOCCHI ---
+        pseudoblocks = data.get('pseudoblocks')
+        created_appts = []
+        if isinstance(pseudoblocks, list) and len(pseudoblocks) > 0:
+            current_start = start_time
+            first_created = None
+
+            for pb in pseudoblocks:
+                pb_color = (pb.get('colore') or colore) if isinstance(pb, dict) else colore
+                try:
                     pb_duration = int(pb.get('duration', duration))
-                    pb_service_id = pb.get('serviceId') or pb.get('service_id') or service_id
-                    if pb_service_id in ["dummy", "0", 0, None]:
-                        pb_service_id = None
-                    pb_client_id = client_id
-                    if pb_client_id in ["dummy", "0", 0, None]:
-                        pb_client_id = None
-                    # FIX: Usa lo status specifico del pseudoblocco, non quello globale
-                    pb_status = pb.get('status')
-                    if pb_status is not None and isinstance(pb_status, int) and pb_status in [e.value for e in AppointmentStatus]:
-                        inherited_status = AppointmentStatus(pb_status)
-                    else:
-                        inherited_status = AppointmentStatus.DEFAULT
-                    new_appt = Appointment(
-                        client_id=client_id,
-                        operator_id=operator_id,
-                        service_id=pb_service_id,
-                        start_time=current_start,
-                        _duration=int(pb_duration),
-                        colore=pb_color,
-                        colore_font=colore_font,
-                        note=note,
-                        stato=inherited_status  # Usa inherited_status
-                    )
-                    if client_id in ["dummy", "0"]:
-                        new_appt.note = data.get('titolo', '')
-                    db.session.add(new_appt)
-                    created_appts.append(new_appt)
-                    # Aggiorna l'orario per il prossimo blocco
-                    current_start = current_start + timedelta(minutes=pb_duration)
-                db.session.commit()
-                return jsonify({
-                    "message": "Appuntamenti creati con successo!",
-                    "appointments": [
-                        {
-                            "id": appt.id,
-                            "client_name": f"{appt.client.cliente_nome} {appt.client.cliente_cognome}" if appt.client else "OFF",
-                            "service_name": appt.service.servizio_nome if appt.service else "OFF",
-                            "start_time": appt.start_time.strftime('%H:%M'),
-                            "duration": appt.duration,
-                            "operator_id": appt.operator_id,
-                            "status": appt.stato.value
-                        }
-                        for appt in created_appts
-                    ]
-                }), 201
-            else:
-                # Caso singolo, logica esistente
-                # FIX: Leggi lo status dal payload inviato dal frontend
-                status_value = data.get('status', AppointmentStatus.DEFAULT.value)
-                if not isinstance(status_value, int) or status_value not in [e.value for e in AppointmentStatus]:
-                    status_value = AppointmentStatus.DEFAULT.value
+                except Exception:
+                    pb_duration = duration
+
+                pb_service_id = _norm_id(pb.get('serviceId') if isinstance(pb, dict) else None) \
+                                or _norm_id(pb.get('service_id') if isinstance(pb, dict) else None) \
+                                or service_id
+
+                # Stato per blocco
+                pb_status_raw = pb.get('status') if isinstance(pb, dict) else None
+                if isinstance(pb_status_raw, int) and pb_status_raw in [e.value for e in AppointmentStatus]:
+                    inherited_status = AppointmentStatus(pb_status_raw)
+                else:
+                    inherited_status = AppointmentStatus.DEFAULT
+
                 new_appt = Appointment(
                     client_id=client_id,
                     operator_id=operator_id,
-                    service_id=service_id,
-                    start_time=start_time,
-                    _duration=int(duration),
-                    colore=colore,
+                    service_id=pb_service_id,
+                    start_time=current_start,
+                    _duration=int(pb_duration),
+                    colore=pb_color,
                     colore_font=colore_font,
                     note=note,
-                    stato=AppointmentStatus(status_value)  # Usa status_value
+                    stato=inherited_status
                 )
-                if client_id in ["dummy", "0"]:
-                    new_appt.note = data.get('titolo', '')
-                db.session.add(new_appt)
-                db.session.commit()
-                return jsonify({
-                    "id": new_appt.id,
-                    "client_name": f"{new_appt.client.cliente_nome} {new_appt.client.cliente_cognome}" if new_appt.client else "OFF",
-                    "service_name": new_appt.service.servizio_nome if new_appt.service else "OFF",
-                    "start_time": start_time.strftime('%H:%M'),
-                    "duration": duration,
-                    "operator_id": operator_id,
-                    "note": note,
-                    "status": new_appt.stato.value
-                }), 201
+                if first_created is None:
+                    first_created = new_appt
 
-        except Exception as e:
-            app.logger.error("Errore durante la creazione dell'appuntamento: %s", str(e))
-            return jsonify({"error": "Si è verificato un errore interno durante la creazione."}), 500
+                # Se il client “dummy/0” (placeholder) è stato richiesto nel payload originale
+                if raw_client_id in ("dummy", "0"):
+                    new_appt.note = (data.get('titolo') or '').strip()
+
+                db.session.add(new_appt)
+                created_appts.append(new_appt)
+
+                # prossimo blocco
+                current_start = current_start + timedelta(minutes=pb_duration)
+
+            # Marker “NUOVO CLIENTE” solo sul primo blocco creato
+            if is_new_client and first_created:
+                first_created.note = append_new_client_marker(first_created.note)
+
+            db.session.commit()
+            return jsonify({
+                "message": "Appuntamenti creati con successo!",
+                "appointments": [
+                    {
+                        "id": appt.id,
+                        "client_name": f"{appt.client.cliente_nome} {appt.client.cliente_cognome}" if appt.client else "OFF",
+                        "service_name": appt.service.servizio_nome if appt.service else "OFF",
+                        "start_time": appt.start_time.strftime('%H:%M'),
+                        "duration": appt.duration,
+                        "operator_id": appt.operator_id,
+                        "status": appt.stato.value if hasattr(appt.stato, "value") else appt.stato
+                    }
+                    for appt in created_appts
+                ]
+            }), 201
+
+        # --- CASO SINGOLO ---
+        status_value = data.get('status', AppointmentStatus.DEFAULT.value)
+        if not isinstance(status_value, int) or status_value not in [e.value for e in AppointmentStatus]:
+            status_value = AppointmentStatus.DEFAULT.value
+
+        new_appt = Appointment(
+            client_id=client_id,
+            operator_id=operator_id,
+            service_id=service_id,
+            start_time=start_time,
+            _duration=int(duration),
+            colore=colore,
+            colore_font=colore_font,
+            note=note,
+            stato=AppointmentStatus(status_value)
+        )
+
+        # titolo personalizzato per client dummy
+        if raw_client_id in ("dummy", "0"):
+            new_appt.note = (data.get('titolo') or '').strip()
+
+        # Marker “NUOVO CLIENTE” se è il primo appuntamento storico
+        if is_new_client:
+            new_appt.note = append_new_client_marker(new_appt.note)
+
+        db.session.add(new_appt)
+        db.session.commit()
+
+        return jsonify({
+            "id": new_appt.id,
+            "client_name": f"{new_appt.client.cliente_nome} {new_appt.client.cliente_cognome}" if new_appt.client else "OFF",
+            "service_name": new_appt.service.servizio_nome if new_appt.service else "OFF",
+            "start_time": start_time.strftime('%H:%M'),
+            "duration": new_appt.duration,
+            "operator_id": new_appt.operator_id,
+            "note": new_appt.note,
+            "status": new_appt.stato.value if hasattr(new_appt.stato, "value") else new_appt.stato
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("Errore durante la creazione dell'appuntamento: %s", str(e))
+        return jsonify({"error": "Si è verificato un errore interno durante la creazione."}), 500
 
 @calendar_bp.route('/edit/<int:appt_id>', methods=['GET', 'POST'])
 def edit_appointment(appt_id):
@@ -459,27 +522,46 @@ def edit_appointment(appt_id):
         abort(404)
 
     if request.method == 'GET':
-        # Restituisce il form per modificare l'appuntamento
         return render_template('EditApptClient.html', appointment=appt)
 
     elif request.method == 'POST':
         try:
-            data = request.json
+            data = request.json or {}
             if not data:
                 return jsonify({"error": "Nessun dato fornito"}), 400
 
-        # Salva i valori originali
+            # Valori originali
             original_client_id = appt.client_id
             original_operator_id = appt.operator_id
             original_start_time = appt.start_time
             original_duration = appt.duration
 
-        # Aggiorna i campi
+            # Determina nuovo client_id (se cambiato) e verifica se va marcato come "nuovo cliente"
+            new_client_id = original_client_id
             if 'client_id' in data:
-                appt.client_id = int(data['client_id'])
+                try:
+                    new_client_id = int(data['client_id']) if data['client_id'] not in (None, "", "null") else None
+                except Exception:
+                    new_client_id = None
+
+            will_mark_new_client = False
+            if new_client_id is not None and new_client_id != original_client_id:
+                # Conta appuntamenti pre-esistenti per il nuovo cliente, escludendo questo appt
+                prev_count = Appointment.query.filter(
+                    Appointment.client_id == new_client_id,
+                    Appointment.id != appt.id
+                ).count()
+                will_mark_new_client = (prev_count == 0)
+
+            # Aggiornamenti campi
+            if 'client_id' in data:
+                appt.client_id = new_client_id
 
             if 'operator_id' in data:
-                appt.operator_id = int(data['operator_id'])
+                try:
+                    appt.operator_id = int(data['operator_id'])
+                except Exception:
+                    pass
 
             if 'start_time' in data:
                 existing_date = appt.start_time.date()
@@ -487,15 +569,33 @@ def edit_appointment(appt_id):
                 appt.start_time = datetime.combine(existing_date, new_time)
 
             if 'duration' in data:
-                appt.duration = int(data['duration'])
+                try:
+                    appt.duration = int(data['duration'])
+                except Exception:
+                    pass
 
             if 'colore' in data:
                 appt.colore = data['colore']
+            if 'colore_font' in data:
+                appt.colore_font = data['colore_font']
 
             if 'service_id' in data:
-                appt.service_id = int(data['service_id'])
+                try:
+                    appt.service_id = int(data['service_id'])
+                except Exception:
+                    pass
 
-        # Aggiorna last_edit solo se almeno uno dei 4 campi è cambiato
+            if 'note' in data and data['note'] is not None:
+                try:
+                    appt.note = json.dumps(data['note'], ensure_ascii=False)[1:-1]
+                except Exception:
+                    appt.note = str(data['note'])
+
+            # Applica marker se riassegnato a cliente senza storico
+            if will_mark_new_client:
+                appt.note = append_new_client_marker(appt.note)
+
+            # Aggiorna last_edit se uno dei campi principali è cambiato
             if (
                 appt.client_id != original_client_id or
                 appt.operator_id != original_operator_id or
@@ -511,17 +611,20 @@ def edit_appointment(appt_id):
                 "appointment": {
                     "id": appt.id,
                     "client_id": appt.client_id,
-                    "client_name": f"{appt.client.cliente_nome} {appt.client.cliente_cognome}",
+                    "client_name": f"{appt.client.cliente_nome} {appt.client.cliente_cognome}" if appt.client else "",
                     "service_id": appt.service_id,
-                    "service_name": appt.service.servizio_nome,
+                    "service_name": appt.service.servizio_nome if appt.service else "",
                     "start_time": appt.start_time.strftime('%Y-%m-%d %H:%M'),
-                    "end_time": appt.end_time.strftime('%Y-%m-%d %H:%M'),
+                    "end_time": appt.end_time.strftime('%Y-%m-%d %H:%M') if appt.end_time else "",
                     "duration": appt.duration,
-                    "colore": appt.colore or "#FFFFFF"
+                    "colore": appt.colore or "#FFFFFF",
+                    "colore_font": appt.colore_font or "#000000",
+                    "note": appt.note or ""
                 }
             }), 200
 
         except Exception as e:
+            db.session.rollback()
             app.logger.error(f"Errore durante la modifica dell'appuntamento {appt_id}: {e}")
             return jsonify({"error": "Si è verificato un errore interno durante l'aggiornamento."}), 500
         
