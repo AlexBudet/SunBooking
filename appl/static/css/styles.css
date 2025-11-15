@@ -2572,6 +2572,25 @@ body.touch-ui .appointment-block .popup-buttons .btn-popup.nota {
   word-break: break-word;
 }
 
+  #MobilePopupButtonsModal .modal-body table{
+    table-layout: fixed;
+    width:100%;
+    border-collapse: collapse;
+    margin:0;
+  }
+  #MobilePopupButtonsModal .modal-body tr{ margin:0; padding:0; }
+  #MobilePopupButtonsModal .modal-body td{
+    padding:4px;
+    vertical-align: top;
+    width:50%;
+  }
+  #MobilePopupButtonsModal .mobile-popup-btn{
+    display:block;
+    width:100%;
+    margin:0;
+    border-radius:0;
+  }
+
 /* Non-touch (desktop normale): mai mostrare la bottom bar */
 body:not(.touch-ui) .appointment-block .popup-buttons-bottom {
   display: none !important;
