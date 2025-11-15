@@ -110,12 +110,17 @@ window.CONTIGUOUS_BLOCK_MAX_GAP_MINUTES = window.CONTIGUOUS_BLOCK_MAX_GAP_MINUTE
 function enableCreateApptModalLock(modalEl) {
   if (!modalEl || modalEl._createApptLockActive) return;
   const handler = (e) => {
-    if (!modalEl.contains(e.target)) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      showCreateApptOutsideClickWarning(modalEl);
-    }
+    const t = e.target;
+    // dentro il modal corrente → ok
+    if (modalEl.contains(t)) return;
+    // NUOVO: non bloccare i click dentro altri modal Bootstrap (es. AddClientModal)
+    const otherModal = t.closest('.modal.show');
+    if (otherModal && otherModal !== modalEl) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    showCreateApptOutsideClickWarning(modalEl);
   };
   ['click','mousedown','touchstart'].forEach(evt =>
     document.addEventListener(evt, handler, true)
@@ -287,13 +292,47 @@ function openAddClientModal(callerId) {
       console.error("Elemento '#AddClientModal' non trovato nel DOM.");
       return;
     }
+
+    const isNarrowViewport = window.matchMedia('(max-width: 1199.98px)').matches;
+    if (isNarrowViewport) {
+      const suspended = [];
+      document.querySelectorAll('.modal.show').forEach(modalEl => {
+        if (modalEl !== modalElement) {
+          const instance = bootstrap.Modal.getInstance(modalEl);
+          if (instance) {
+            suspended.push(modalEl.id || '');
+            instance.hide();
+          }
+        }
+      });
+      if (suspended.length) {
+        modalElement.dataset.suspendedModals = suspended.join(',');
+        if (!modalElement.dataset.resumeListenerAttachedMobile) {
+          modalElement.addEventListener('hidden.bs.modal', function resumeSuspended(ev) {
+            const current = ev.currentTarget;
+            const ids = (current.dataset.suspendedModals || '').split(',').filter(Boolean);
+            delete current.dataset.suspendedModals;
+            ids.forEach(id => {
+              const el = document.getElementById(id);
+              if (!el) return;
+              const inst = bootstrap.Modal.getOrCreateInstance(el, { focus: true });
+              inst.show();
+            });
+          });
+          modalElement.dataset.resumeListenerAttachedMobile = '1';
+        }
+      }
+    } else {
+      delete modalElement.dataset.suspendedModals;
+    }
   
-    const modal = new bootstrap.Modal(modalElement);
+    const modal = isNarrowViewport
+      ? bootstrap.Modal.getOrCreateInstance(modalElement, { focus: true })
+      : new bootstrap.Modal(modalElement);
     const addClientForm = document.getElementById('AddClientForm');
     
     modalElement.dataset.caller = callerId;
 
-        // Clear caller-specific client search input so previous typed letters are removed
     try {
       if (callerId === 'CreateAppointmentModal') {
         const input = document.getElementById('clientSearchInput');
@@ -303,7 +342,10 @@ function openAddClientModal(callerId) {
           input.dispatchEvent(new Event('input', { bubbles: true }));
           input.dispatchEvent(new Event('change', { bubbles: true }));
         }
-        if (results) { results.innerHTML = ''; results.style.display = 'none'; }
+        if (results) {
+          results.innerHTML = '';
+          results.style.display = 'none';
+        }
       } else if (callerId === 'navigator' || callerId === 'appointmentNavigator') {
         const inputNav = document.getElementById('clientSearchInputNav');
         const resultsNav = document.getElementById('clientResultsNav');
@@ -312,13 +354,15 @@ function openAddClientModal(callerId) {
           inputNav.dispatchEvent(new Event('input', { bubbles: true }));
           inputNav.dispatchEvent(new Event('change', { bubbles: true }));
         }
-        if (resultsNav) { resultsNav.innerHTML = ''; resultsNav.style.display = 'none'; }
+        if (resultsNav) {
+          resultsNav.innerHTML = '';
+          resultsNav.style.display = 'none';
+        }
       }
     } catch (clearErr) {
       console.warn('openAddClientModal: clearing caller input failed', clearErr);
     }
   
-    // Nascondi sempre il pulsante "Crea blocco OFF"
     const btnCreateBlockOff = document.getElementById('btnCreateBlockOff');
     if (btnCreateBlockOff) {
         btnCreateBlockOff.style.display = 'none';
@@ -334,10 +378,10 @@ function openAddClientModal(callerId) {
         event.preventDefault();
         const formData = new FormData(newForm);
     
-        let cliente_nome = formData.get('cliente_nome') || "";
-        let cliente_cognome = formData.get('cliente_cognome') || "";
-        let cliente_cellulare = formData.get('cliente_cellulare') || "";
-        let cliente_sesso = formData.get('client_gender') || formData.get('cliente_sesso') || "";
+        let cliente_nome = formData.get('cliente_nome') || '';
+        let cliente_cognome = formData.get('cliente_cognome') || '';
+        let cliente_cellulare = formData.get('cliente_cellulare') || '';
+        let cliente_sesso = formData.get('client_gender') || formData.get('cliente_sesso') || '';
     
         cliente_nome = cliente_nome.trim();
     
@@ -350,7 +394,6 @@ function openAddClientModal(callerId) {
             return;
         }
     
-        // Logica per determinare il genere (copiata da clients.html)
         if (!cliente_sesso) {
             console.log("Genere non specificato, utilizzo la logica di fallback");
             let nome_minuscolo = cliente_nome.toLowerCase();
@@ -400,32 +443,30 @@ function openAddClientModal(callerId) {
                 const clientSearchInput = document.getElementById('clientSearchInput');
                 const clientIdInput = document.getElementById('client_id');
                 if (clientSearchInput && clientIdInput) {
+                    const fullName = `${client.cliente_nome || ''} ${client.cliente_cognome || ''}`.trim();
                     clientSearchInput.value = capitalizeName(fullName);
                     clientIdInput.value = client.cliente_id;
-                                //notifica i listener e ricarica servizi modal
-            clientSearchInput.dispatchEvent(new Event('input', { bubbles: true }));
-            clientSearchInput.dispatchEvent(new Event('change', { bubbles: true }));
-            clientIdInput.dispatchEvent(new Event('input', { bubbles: true }));
-            clientIdInput.dispatchEvent(new Event('change', { bubbles: true }));
-            if (typeof loadServicesForModal === 'function') {
-              try { loadServicesForModal(); } catch(e){ /* ignore */ }
-            }
+                    clientSearchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    clientSearchInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    clientIdInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    clientIdInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    if (typeof loadServicesForModal === 'function') {
+                      try { loadServicesForModal(); } catch(e){}
+                    }
                 }
             } else if (caller === 'navigator') {
                 const clientSearchInputNav = document.getElementById('clientSearchInputNav');
                 if (clientSearchInputNav) {
-                    clientSearchInputNav.value = client.cliente_nome + " " + client.cliente_cognome;
+                    const fullName = `${client.cliente_nome || ''} ${client.cliente_cognome || ''}`.trim();
+                    clientSearchInputNav.value = fullName;
                     window.selectedClientIdNav = client.cliente_id;
-                    window.selectedClientNameNav = client.cliente_nome + " " + client.cliente_cognome;
-        
-            // notifica i listener navigator e salva stato
-            clientSearchInputNav.dispatchEvent(new Event('input', { bubbles: true }));
-            clientSearchInputNav.dispatchEvent(new Event('change', { bubbles: true }));
-            if (typeof saveNavigatorState === 'function') {
-              try { saveNavigatorState(); } catch(e){ /* ignore */ }
-            }
+                    window.selectedClientNameNav = fullName;
+                    clientSearchInputNav.dispatchEvent(new Event('input', { bubbles: true }));
+                    clientSearchInputNav.dispatchEvent(new Event('change', { bubbles: true }));
+                    if (typeof saveNavigatorState === 'function') {
+                      try { saveNavigatorState(); } catch(e){}
+                    }
                 }
-                // "Apri" lo stato del navigator
                 const serviceInputNav = document.getElementById('serviceInputNav');
                 const selectedServicesList = document.getElementById('selectedServicesList');
                 if (serviceInputNav) {
@@ -450,10 +491,9 @@ function openAddClientModal(callerId) {
                 if (editModalBody) {
                     const clientSearchInput = editModalBody.querySelector('#clientSearchInput');
                     const clientIdInput = editModalBody.querySelector('#client_id');
-                    if (clientSearchInput) clientSearchInput.value = `${client.cliente_nome || ''} ${client.cliente_cognome || ''}`.trim();
+                    const fullName = `${client.cliente_nome || ''} ${client.cliente_cognome || ''}`.trim();
+                    if (clientSearchInput) clientSearchInput.value = fullName;
                     if (clientIdInput && (client.cliente_id ?? client.id) != null) clientIdInput.value = (client.cliente_id ?? client.id);
-
-                    // dispatch per assignModal (notifica listener)
                     if (clientSearchInput) {
                       clientSearchInput.dispatchEvent(new Event('input', { bubbles: true }));
                       clientSearchInput.dispatchEvent(new Event('change', { bubbles: true }));
@@ -462,8 +502,6 @@ function openAddClientModal(callerId) {
                       clientIdInput.dispatchEvent(new Event('input', { bubbles: true }));
                       clientIdInput.dispatchEvent(new Event('change', { bubbles: true }));
                     }
-
-                    // AUTO-SUBMIT: se esiste il form di riassegnazione, invialo per applicare la modifica
                     try {
                       const editForm = editModalBody.querySelector('#EditAppointmentClientForm');
                       if (editForm) {
