@@ -1940,54 +1940,84 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // 3) FILTRO PULSANTI MODAL <1200px
-  function configureMobileModalButtons(modal, block) {
-    if (!modal || !block) return;
+function configureMobileModalButtons(modal, block) {
+  if (!modal || !block) return;
 
-    // Riferimenti ai bottoni del modal
-    const btnBy = (act) => modal.querySelector(`.mobile-popup-btn[data-action="${act}"]`);
-    const btnElimina  = btnBy('elimina');
-    const btnSposta   = btnBy('sposta');
-    const btnCliente  = btnBy('cliente');
-    const btnNote     = btnBy('note');
-    const btnAllunga  = btnBy('allunga');
-    const btnAccorcia = btnBy('accorcia');
+  // Solo mobile e solo il modal mobile
+  const isMobile = window.matchMedia('(max-width: 1199.98px)').matches;
+  if (!isMobile || modal.id !== 'MobilePopupButtonsModal') return;
 
-    // Reset label/azione dei due pulsanti che cambieremo al bisogno
-    if (btnCliente) { btnCliente.textContent = 'CLIENTE'; btnCliente.setAttribute('data-action', 'cliente'); }
-    if (btnNote)    { btnNote.textContent    = 'NOTE';    btnNote.setAttribute('data-action', 'note'); }
+  const table = modal.querySelector('table');
+  if (!table) return;
 
-    // Regole riconoscimento:
-    const isOff = block.classList.contains('note-off') || block.classList.contains('off');
-    const isStatus2 = String(block.getAttribute('data-status') || '') === '2';
+  // Salva l'HTML originale una sola volta per poter ripristinare
+  if (!table.dataset.originalHtml) {
+    table.dataset.originalHtml = table.innerHTML;
+  }
 
-    // Helper show/hide
-    const show = (el, on) => { if (!el) return; el.style.display = on ? '' : 'none'; };
+  // Riconoscimento blocco OFF
+  const isOff = block.classList.contains('note-off') || block.classList.contains('off');
 
-    if (isOff) {
-      // BLOCCO OFF: ELIMINA, TITOLO(=NOTE), ALLUNGA, ACCORCIA
-      show(btnElimina,  true);
-      show(btnSposta,   false);
-      show(btnCliente,  false);
-      show(btnAllunga,  true);
-      show(btnAccorcia, true);
-      show(btnNote,     true);
-      if (btnNote) { btnNote.textContent = 'TITOLO'; btnNote.setAttribute('data-action', 'note'); }
-    } else if (isStatus2) {
-      // STATO=2: SOLO COPIA, NOTE → trasformo CLIENTE -> COPIA
-      show(btnElimina,  false);
-      show(btnSposta,   false);
-      show(btnAllunga,  false);
-      show(btnAccorcia, false);
-      show(btnNote,     true);
-      if (btnCliente) {
-        btnCliente.textContent = 'COPIA';
-        btnCliente.setAttribute('data-action', 'copia');
-        show(btnCliente, true);
-      }
-    } else {
-      // Altri casi: 6 tasti standard
-      [btnElimina, btnSposta, btnCliente, btnNote, btnAllunga, btnAccorcia].forEach(b => show(b, true));
+  // Se NON è OFF: ripristina sempre l'HTML originale e termina
+  if (!isOff) {
+    if (table.dataset.originalHtml) {
+      table.innerHTML = table.dataset.originalHtml;
     }
+    return;
+  }
+
+  // Da qui in poi SOLO per blocchi OFF: costruisci layout 2x2 compatto con 4 pulsanti
+  const byAct = (act) => modal.querySelector(`.mobile-popup-btn[data-action="${act}"]`);
+  const proto = {
+    elimina:  byAct('elimina'),
+    sposta:   byAct('sposta'),
+    cliente:  byAct('cliente'),
+    note:     byAct('note'),
+    allunga:  byAct('allunga'),
+    accorcia: byAct('accorcia')
+  };
+
+  // Azioni desiderate per OFF (NOTE rinominato in TITOLO)
+  const acts = ['elimina', 'note', 'allunga', 'accorcia'];
+
+  // Crea cloni indipendenti
+  const clones = acts.map(act => {
+    const src = proto[act];
+    if (!src) return null;
+    const c = src.cloneNode(true);
+    c.style.display = '';
+    c.classList.add('mobile-popup-btn');
+    if (act === 'note') {
+      c.textContent = 'TITOLO';
+      c.setAttribute('data-action', 'note');
+    } else {
+      c.setAttribute('data-action', act);
+    }
+    return c;
+  }).filter(Boolean);
+
+  // Ricostruisci tabella 2x2 compatta (no spazi)
+  table.innerHTML = '';
+  for (let i = 0; i < clones.length; i += 2) {
+    const tr = document.createElement('tr');
+
+    const td1 = document.createElement('td');
+    td1.style.width = '50%';
+    td1.style.padding = '4px';
+    td1.appendChild(clones[i]);
+    tr.appendChild(td1);
+
+    if (i + 1 < clones.length) {
+      const td2 = document.createElement('td');
+      td2.style.width = '50%';
+      td2.style.padding = '4px';
+      td2.appendChild(clones[i + 1]);
+      tr.appendChild(td2);
+    } else {
+      td1.colSpan = 2;
+    }
+    table.appendChild(tr);
+  }
   }
 
   // 4) Evita doppio binding
