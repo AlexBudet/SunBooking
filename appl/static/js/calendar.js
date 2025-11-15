@@ -7055,8 +7055,6 @@ function copyAsNewPseudoBlock(block) {
   if (fullServiceText && fullServiceText.includes(' - ')) {
     serviceTag = fullServiceText.split(' - ')[0].trim();
   }
-  
-  // RIMOSSO: controllo duplicati su clientId/serviceId/duration
 
   // Crea SEMPRE il nuovo pseudo-blocco (consenti duplicati)
   const newPseudoBlock = {
@@ -7072,6 +7070,13 @@ function copyAsNewPseudoBlock(block) {
   };
   window.pseudoBlocks.unshift(newPseudoBlock);
   window.commonPseudoBlockColor = color;
+
+  // SELEZIONA il cliente nel Navigator (necessario per aggiungere nuovi servizi)
+  try {
+    window.selectedClientIdNav = clientId || null;
+    window.selectedClientNameNav = clientName || "";
+  } catch(_) {}
+
   renderPseudoBlocksList();
   saveNavigatorState();
 
@@ -7087,18 +7092,86 @@ function copyAsNewPseudoBlock(block) {
   if (clientSearchInput) clientSearchInput.value = clientName.trim();
 }
 
-// ...existing code...
+function addCutSourceHighlight(cell) {
+  if (!cell || !cell.classList) return;
+  cell.classList.add('cut-source');
+  window.__cutSourceCellsSet = window.__cutSourceCellsSet || new Set();
+  window.__cutSourceCellsSet.add(cell);
+}
+function clearCutSourceHighlights() {
+  try {
+    document.querySelectorAll('.selectable-cell.cut-source').forEach(c => c.classList.remove('cut-source'));
+    if (window.__cutSourceCellsSet && typeof window.__cutSourceCellsSet.clear === 'function') {
+      window.__cutSourceCellsSet.clear();
+    }
+  } catch (_) {}
+}
+window.addCutSourceHighlight = addCutSourceHighlight;
+window.clearCutSourceHighlights = clearCutSourceHighlights;
+
+// NEW: evidenzia tutte le celle coperte dal blocco (durata > 15 min)
+function addCutSourceHighlightRange(block) {
+  if (!block) return;
+  const opId = block.getAttribute('data-operator-id');
+  const date = block.getAttribute('data-date') || window.selectedAppointmentDate || selectedDate;
+  const startHour = parseInt(block.getAttribute('data-hour'), 10);
+  const startMinute = parseInt(block.getAttribute('data-minute'), 10);
+  const duration = parseInt(block.getAttribute('data-duration') || '15', 10);
+  if (isNaN(startHour) || isNaN(startMinute) || isNaN(duration)) return;
+
+  const startTotal = startHour * 60 + startMinute;
+  const endTotal = startTotal + duration;
+
+  const cells = document.querySelectorAll(`.selectable-cell[data-operator-id="${opId}"][data-date="${date}"]`);
+  cells.forEach(cell => {
+    const ch = parseInt(cell.getAttribute('data-hour'), 10);
+    const cm = parseInt(cell.getAttribute('data-minute'), 10);
+    if (isNaN(ch) || isNaN(cm)) return;
+    const cellStart = ch * 60 + cm;
+    // ogni cella rappresenta un quarter [cellStart, cellStart+15)
+    if (cellStart >= startTotal && cellStart < endTotal) {
+      addCutSourceHighlight(cell);
+      // Se il blocco è dimezzato (width 50%) replica la larghezza sull’highlight
+      const w = block.getAttribute('data-width') || block.style.width || '100%';
+      const l = block.getAttribute('data-left') || block.style.left || '0%';
+      if (w && w !== '100%') {
+        cell.style.position = 'relative';
+        if (!cell.querySelector('.cut-source-overlay')) {
+          const ov = document.createElement('div');
+          ov.className = 'cut-source-overlay';
+          ov.style.position = 'absolute';
+          ov.style.inset = '0 0 0 0';
+          ov.style.pointerEvents = 'none';
+          ov.style.boxSizing = 'border-box';
+          ov.style.width = w;
+          ov.style.left = l;
+          ov.style.right = 'auto';
+          ov.style.zIndex = '0';      // sotto al puntatore
+          ov.style.border = 'none';   // rimuove bordo arancione
+          cell.appendChild(ov);
+        } else {
+          const ov = cell.querySelector('.cut-source-overlay');
+          ov.style.width = w;
+          ov.style.left = l;
+          ov.style.zIndex = '0';
+          ov.style.border = 'none';
+        }
+      }
+    }
+  });
+}
+
 function cutAsNewPseudoBlock(block) {
   if (!block) return;
-  
-  // Estrai l'id prima (usato anche per il backup)
   const appointmentId = block.getAttribute('data-appointment-id');
   if (!appointmentId) {
     console.error("ID appuntamento mancante");
     return;
   }
 
-  // Costruisci un backup minimale del blocco (campi essenziali per il restore)
+  // Evidenzia tutte le celle coperte dal blocco
+  try { addCutSourceHighlightRange(block); } catch (_) {}
+
   const backup = {
     appointment_id: String(appointmentId),
     client_id: block.getAttribute('data-client-id') || null,
@@ -7116,32 +7189,24 @@ function cutAsNewPseudoBlock(block) {
     status: parseInt(block.getAttribute('data-status') || '0', 10)
   };
 
-  // Prima copiamo il blocco come pseudo-blocco
   copyAsNewPseudoBlock(block);
 
-  // Associa il backup al pseudoblocco appena creato (minimo impatto sul flusso)
   try {
     if (!Array.isArray(window.pseudoBlocks)) window.pseudoBlocks = [];
-    // l'ultimo elemento inserito da copyAsNewPseudoBlock è tipicamente all'inizio (unshift),
-    // qui tentiamo di trovare il pseudoblocco corrispondente e aggiungergli metadati
     if (window.pseudoBlocks.length > 0) {
-      // preferiamo l'elemento appena aggiunto in testa
       const pseudo = window.pseudoBlocks[0];
       pseudo._origin_appointment_id = String(appointmentId);
       pseudo._origin_backup = backup;
-      // persisti lo stato completo (incluso il backup) nel navigator
-      try { saveNavigatorState(); } catch (e) { /* ignore */ }
+      try { saveNavigatorState(); } catch (e) {}
     }
   } catch (e) {
     console.warn('cutAsNewPseudoBlock: non è stato possibile marcare il pseudoblocco con origin_backup', e);
   }
 
-  // Salva il backup su localStorage per restore in caso di svuota/refresh
   try {
     if (typeof saveCutBlockBackup === 'function') {
       saveCutBlockBackup(backup);
     } else {
-      // fallback minimale: append su cutBlocks
       const arr = JSON.parse(localStorage.getItem('cutBlocks') || '[]');
       arr.push(backup);
       localStorage.setItem('cutBlocks', JSON.stringify(arr));
@@ -7149,10 +7214,8 @@ function cutAsNewPseudoBlock(block) {
   } catch (e) {
     console.warn('cutAsNewPseudoBlock: failed to persist backup', e);
   }
-  
-  // Poi eliminiamo l'appuntamento originale (comportamento invariato)
+
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-  
   fetch(`/calendar/delete/${appointmentId}`, {
     method: 'POST',
     headers: { 
@@ -7162,27 +7225,14 @@ function cutAsNewPseudoBlock(block) {
   })
   .then(response => {
     if (response.ok) {
-      // Rimuovi il tooltip se presente
       block.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(elem => {
         const tooltipInstance = bootstrap.Tooltip.getInstance(elem);
-        if (tooltipInstance) {
-          tooltipInstance.dispose();
-        }
+        if (tooltipInstance) tooltipInstance.dispose();
       });
-      
-      // Rimuovi la nota (se presente)
       const notePopup = document.querySelector(`.note-popup[data-appointment-id="${appointmentId}"]`);
-      if (notePopup) {
-        notePopup.remove();
-      }
-      
-      // Rimuovi il blocco appuntamento
+      if (notePopup) notePopup.remove();
       block.remove();
-      
-      // Aggiorna l'arrangiamento dei blocchi nella cella
       arrangeBlocksInCell(block.parentNode);
-      
-      // Salva lo stato del navigator nel localStorage dopo aver aggiunto il pseudoblocco
       saveNavigatorState();
     } else {
       return response.text().then(text => { 
