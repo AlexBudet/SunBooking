@@ -2698,14 +2698,20 @@ if (apptDate === oggiStr) {
 });
 </script>
 <script>
-  function exportPDF(rows) {
+function exportAgendaPDF(rows, dateISO) {
+  console.log('exportAgendaPDF chiamata con dateISO:', dateISO);
   const { jsPDF } = window.jspdf;
-  const today = new Date();
-  const dd = String(today.getDate()).padStart(2, '0');
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const yyyy = today.getFullYear();
+  // Usa la data passata invece di oggi
+  if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) {
+    console.log('dateISO non valido, uso oggi');
+    alert('Data non valida per export PDF agenda.');
+    return;
+  }
+  const [yyyy, mm, dd] = dateISO.split('-');
+  console.log('yyyy:', yyyy, 'mm:', mm, 'dd:', dd);
   const dataIt = `${dd}/${mm}/${yyyy}`;
   const dataFile = `${dd}-${mm}-${yyyy}`;
+  console.log('dataIt:', dataIt, 'dataFile:', dataFile);
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
 
   doc.setFontSize(12);
@@ -2730,29 +2736,33 @@ if (apptDate === oggiStr) {
 
   doc.save(`agenda_${dataFile}.pdf`);
 }
-
-  document.addEventListener('DOMContentLoaded', function() {
-  const agendaTitle = document.getElementById('agenda-title');
-  const dateInput = document.getElementById('reportDate');
-  const prevDay = document.getElementById('reportPrevDay');
-  const nextDay = document.getElementById('reportNextDay');
-});
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const btnViewAgenda = document.getElementById('btnViewAgenda');
   if (!btnViewAgenda) return;
 
-document.getElementById('btnViewAgenda').addEventListener('click', async function() {
-  const date = document.getElementById('reportDate').value;
-  const resp = await fetch(`/api/agenda_data?date=${date}`);
-  const rows = await resp.json();
-  if (!rows.length) {
-    alert("Nessun appuntamento per questa data.");
-    return;
-  }
-  exportPDF(rows); // Usa la funzione jsPDF come in base.html
-});
+  document.getElementById('btnViewAgenda').addEventListener('click', async function() {
+    const el = document.getElementById('reportDate');
+    const fp = el && el._flatpickr ? el._flatpickr : null;
+    const dateISO = fp && fp.selectedDates.length
+      ? fp.formatDate(fp.selectedDates[0], 'Y-m-d')
+      : (el.value || '').trim();  // Fallback al valore dell'input se flatpickr non disponibile
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) {
+      alert('Seleziona una data valida nel navigator.');
+      return;
+    }
+
+    const resp = await fetch(`/api/agenda_data?date=${encodeURIComponent(dateISO)}`);
+    const rows = await resp.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      alert("Nessun appuntamento per questa data.");
+      return;
+    }
+    console.log('dateISO selezionata per PDF:', dateISO);
+    exportAgendaPDF(rows, dateISO);  // Usa la funzione rinominata
+  });
 });
 </script>
 <script>
