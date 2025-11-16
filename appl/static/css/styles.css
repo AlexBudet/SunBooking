@@ -2816,6 +2816,9 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     background: #ffffff !important;
     border-bottom: 1px solid rgba(0,0,0,0.08) !important;
     box-sizing: border-box !important;
+    transform-origin: 0 0 !important;
+    -webkit-transform-origin: 0 0 !important;
+    will-change: transform, width, left, top !important;
   }
 
   .mobile-date-nav table {
@@ -2948,3 +2951,4 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
 @media (min-width: 1201px) {
   .mobile-date-nav { display: none !important; }
 }
+
