@@ -2861,7 +2861,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     justify-content: flex-end !important;
     align-items: center !important;
     gap: 4px !important;
-    padding-right: var(--today-right-gap, 4px) !important;
+    padding-right: 4px !important;
     box-sizing: border-box !important;
 }
 
