@@ -130,7 +130,7 @@
 
 <!-- NUOVA TABELLA MOBILE DATE-NAV (<1200px): visibile solo su mobile -->
 <div class="mobile-date-nav" id="mobileDateNavCalendar" style="display:none;">
-  <table aria-label="Navigazione data (mobile)" style="margin:0 6px !important; width: calc(100% - 12px) !important;">
+  <table aria-label="Navigazione data (mobile)">
     <tr>
       <!-- 1: IERI -->
       <td class="cell-arrow">
@@ -162,11 +162,11 @@
       </td>
 
       <!-- 6: VAI A OGGI -->
-<td class="cell-today">
-{% if selected_date_str != today_str %}
-  <a class="btn-today" href="{{ url_for('calendar.calendar_home', date=today_str) }}" id="btnTodayCalendar">Vai a OGGI</a><span class="today-spacer" aria-hidden="true">&nbsp;</span>
-{% endif %}
-</td>
+      <td class="cell-today">
+      {% if selected_date_str != today_str %}
+        <a class="btn-today" href="{{ url_for('calendar.calendar_home', date=today_str) }}" id="btnTodayCalendar">Vai a OGGI</a>
+      {% endif %}
+      </td>
     </tr>
   </table>
 </div>
@@ -2567,90 +2567,6 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
   } catch(_) {}
-});
-</script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  const SMALL = '(max-width: 1199.98px)';
-  const mql = window.matchMedia(SMALL);
-
-  function getMobileHeaderHeight() {
-    // Legge la var CSS impostata in styles.css, fallback 56
-    const css = getComputedStyle(document.documentElement).getPropertyValue('--mobile-header-height');
-    const v = parseFloat(css || '56');
-    return isNaN(v) ? 56 : v;
-  }
-
-  function resetBar(el) {
-    if (!el) return;
-    el.style.transform = '';
-    el.style.width = '';
-    el.style.left = '';
-    el.style.top = '';
-  }
-
-  function applyCounterScale(el, extraTopPx) {
-    if (!el) return;
-    const vv = window.visualViewport || null;
-    const scale = vv && vv.scale ? Number(vv.scale) : 1;
-    if (scale === 1) { resetBar(el); return; }
-
-    // larghezza del layout (non visual width)
-    const visualW = vv && vv.width ? Number(vv.width) : window.innerWidth;
-    const layoutW = visualW * scale;
-
-    const offL = vv && vv.offsetLeft ? Number(vv.offsetLeft) : 0;
-    const offT = vv && vv.offsetTop ? Number(vv.offsetTop) : 0;
-
-    el.style.transformOrigin = '0 0';
-    el.style.transform = 'scale(' + (1 / scale) + ')';
-    el.style.width = Math.round(layoutW) + 'px';
-    el.style.left = Math.round(offL) + 'px';
-    el.style.top = Math.round(offT + (extraTopPx || 0)) + 'px';
-  }
-
-  function update() {
-    const bar = document.getElementById('mobileDateNavCalendar') || document.querySelector('.mobile-date-nav');
-    if (!bar) return;
-    const cellToday = bar.querySelector('.cell-today');
-
-    if (!mql.matches) {
-      resetBar(bar);
-      document.documentElement.style.removeProperty('--today-right-gap');
-      return;
-    }
-
-    const vv = window.visualViewport || null;
-    const scale = vv && vv.scale ? Number(vv.scale) : 1;
-
-if (scale === 1) {
-  resetBar(bar);
-  document.documentElement.style.setProperty('--today-right-gap', '4px');
-  return;
-}
-
-    const headerH = getMobileHeaderHeight();
-    applyCounterScale(bar, headerH);
-
-    // Compensazione: vogliamo SEMPRE vedere ~16px visivi
-const desired = 4;
-const applied = Math.round(desired * scale);
-document.documentElement.style.setProperty('--today-right-gap', applied + 'px');
-
-    // Safety: se per qualche motivo il padding non si applica, forza inline sull’elemento
-    if (cellToday) {
-      cellToday.style.setProperty('padding-right', 'var(--today-right-gap)', 'important');
-    }
-}
-
-  if (window.visualViewport) {
-    visualViewport.addEventListener('resize', update);
-    visualViewport.addEventListener('scroll', update);
-  }
-  window.addEventListener('resize', update, { passive: true });
-  mql.addEventListener('change', update);
-
-  update();
 });
 </script>
 {% endif %}
