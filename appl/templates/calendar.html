@@ -164,7 +164,7 @@
       <!-- 6: VAI A OGGI -->
 <td class="cell-today">
 {% if selected_date_str != today_str %}
-  <a class="btn-today" href="{{ url_for('calendar.calendar_home', date=today_str) }}" id="btnTodayCalendar">Vai a OGGI</a><span class="today-spacer" aria-hidden="true"></span>
+  <a class="btn-today" href="{{ url_for('calendar.calendar_home', date=today_str) }}" id="btnTodayCalendar">Vai a OGGI</a><span class="today-spacer" aria-hidden="true">&nbsp;</span>
 {% endif %}
 </td>
     </tr>
@@ -2612,16 +2612,37 @@ document.addEventListener('DOMContentLoaded', function () {
   function update() {
     const bar = document.getElementById('mobileDateNavCalendar') || document.querySelector('.mobile-date-nav');
     if (!bar) return;
+    const cellToday = bar.querySelector('.cell-today');
 
-    if (!mql.matches) { resetBar(bar); return; } // solo <1200px
+    if (!mql.matches) {
+      resetBar(bar);
+      document.documentElement.style.removeProperty('--today-right-gap');
+      return;
+    }
 
     const vv = window.visualViewport || null;
     const scale = vv && vv.scale ? Number(vv.scale) : 1;
-    if (scale === 1) { resetBar(bar); return; }
 
-    const headerH = getMobileHeaderHeight(); // px “logici” (non scalati)
+    if (scale === 1) {
+      resetBar(bar);
+      // gap “normale” non scalato
+      document.documentElement.style.setProperty('--today-right-gap', '16px');
+      return;
+    }
+
+    const headerH = getMobileHeaderHeight();
     applyCounterScale(bar, headerH);
-  }
+
+    // Compensazione: vogliamo SEMPRE vedere ~16px visivi
+    const desired = 16;
+    const applied = Math.round(desired * scale); // più grande perché verrà contro‑scalato
+    document.documentElement.style.setProperty('--today-right-gap', applied + 'px');
+
+    // Safety: se per qualche motivo il padding non si applica, forza inline sull’elemento
+    if (cellToday) {
+      cellToday.style.setProperty('padding-right', 'var(--today-right-gap)', 'important');
+    }
+}
 
   if (window.visualViewport) {
     visualViewport.addEventListener('resize', update);

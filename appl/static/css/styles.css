@@ -2855,10 +2855,21 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     text-align: center;
   }
 
-  .mobile-date-nav .cell-today {
+.mobile-date-nav .cell-today {
     text-align: right !important;
-    padding-right: 16px !important;
-  }
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 4px !important;
+    /* gap destro compensato via variabile aggiornata da JS */
+    padding-right: var(--today-right-gap, 16px) !important;
+    box-sizing: border-box !important;
+}
+.mobile-date-nav .btn-today {
+    box-sizing: border-box !important;
+    /* niente margin-right: gestiamo tutto col padding della cella */
+    margin: 0 !important;
+}
 
   .mobile-date-nav .cell-date span,
   .mobile-date-nav .cell-date #mobileDateFormattedCalendar,
