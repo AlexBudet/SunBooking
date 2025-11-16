@@ -2948,12 +2948,3 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
 @media (min-width: 1201px) {
   .mobile-date-nav { display: none !important; }
 }
-
-@media (max-width: 1199.98px) {
-  header,
-  .mobile-date-nav {
-    transform-origin: 0 0 !important;
-    -webkit-transform-origin: 0 0 !important;
-    will-change: transform, width, left, top !important;
-  }
-}
