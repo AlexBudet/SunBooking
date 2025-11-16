@@ -1943,22 +1943,57 @@ document.addEventListener('DOMContentLoaded', function() {
 function configureMobileModalButtons(modal, block) {
   if (!modal || !block) return;
 
-  // Solo mobile e solo il modal mobile
   const isMobile = window.matchMedia('(max-width: 1199.98px)').matches;
   if (!isMobile || modal.id !== 'MobilePopupButtonsModal') return;
 
   const table = modal.querySelector('table');
   if (!table) return;
 
-  // Salva l'HTML originale una sola volta per poter ripristinare
   if (!table.dataset.originalHtml) {
     table.dataset.originalHtml = table.innerHTML;
   }
 
-  // Riconoscimento blocco OFF
+  function getProtoFromOriginal(act) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = table.dataset.originalHtml;
+    const root = tpl.content || tpl;
+    return root.querySelector(`.mobile-popup-btn[data-action="${act}"]`);
+  }
+
+  const status = block.getAttribute('data-status');
+  const isPaid = status === '2';
   const isOff = block.classList.contains('note-off') || block.classList.contains('off');
 
-  // Se NON è OFF: ripristina sempre l'HTML originale e termina
+  if (isPaid) {
+    const protoNote = getProtoFromOriginal('note');
+    const protoCopia = getProtoFromOriginal('copia');
+
+    let btnNote = protoNote ? protoNote.cloneNode(true) : document.createElement('button');
+    btnNote.classList.add('btn','mobile-popup-btn');
+    btnNote.setAttribute('data-action','note');
+    btnNote.style.display = '';
+    btnNote.textContent = 'NOTE';
+
+    let btnCopia = protoCopia ? protoCopia.cloneNode(true) : document.createElement('button');
+    btnCopia.classList.add('btn','mobile-popup-btn');
+    btnCopia.setAttribute('data-action','copia');
+    btnCopia.style.display = '';
+    btnCopia.textContent = 'COPIA';
+
+    table.innerHTML = '';
+    const tr = document.createElement('tr');
+    const td1 = document.createElement('td');
+    td1.style.width = '50%'; td1.style.padding = '4px';
+    td1.appendChild(btnNote);
+    const td2 = document.createElement('td');
+    td2.style.width = '50%'; td2.style.padding = '4px';
+    td2.appendChild(btnCopia);
+    tr.appendChild(td1);
+    tr.appendChild(td2);
+    table.appendChild(tr);
+    return;
+  }
+
   if (!isOff) {
     if (table.dataset.originalHtml) {
       table.innerHTML = table.dataset.originalHtml;
@@ -1966,37 +2001,32 @@ function configureMobileModalButtons(modal, block) {
     return;
   }
 
-  // Da qui in poi SOLO per blocchi OFF: costruisci layout 2x2 compatto con 4 pulsanti
-  const byAct = (act) => modal.querySelector(`.mobile-popup-btn[data-action="${act}"]`);
   const proto = {
-    elimina:  byAct('elimina'),
-    sposta:   byAct('sposta'),
-    cliente:  byAct('cliente'),
-    note:     byAct('note'),
-    allunga:  byAct('allunga'),
-    accorcia: byAct('accorcia')
+    elimina:  getProtoFromOriginal('elimina'),
+    sposta:   getProtoFromOriginal('sposta'),
+    cliente:  getProtoFromOriginal('cliente'),
+    note:     getProtoFromOriginal('note'),
+    allunga:  getProtoFromOriginal('allunga'),
+    accorcia: getProtoFromOriginal('accorcia')
   };
 
-  // Azioni desiderate per OFF (NOTE rinominato in TITOLO)
   const acts = ['elimina', 'note', 'allunga', 'accorcia'];
 
-  // Crea cloni indipendenti
   const clones = acts.map(act => {
     const src = proto[act];
-    if (!src) return null;
-    const c = src.cloneNode(true);
+    const c = src ? src.cloneNode(true) : document.createElement('button');
+    c.classList.add('btn','mobile-popup-btn');
     c.style.display = '';
-    c.classList.add('mobile-popup-btn');
     if (act === 'note') {
       c.textContent = 'TITOLO';
-      c.setAttribute('data-action', 'note');
+      c.setAttribute('data-action','note');
     } else {
       c.setAttribute('data-action', act);
+      if (!src) c.textContent = act.toUpperCase();
     }
     return c;
-  }).filter(Boolean);
+  });
 
-  // Ricostruisci tabella 2x2 compatta (no spazi)
   table.innerHTML = '';
   for (let i = 0; i < clones.length; i += 2) {
     const tr = document.createElement('tr');
@@ -2018,7 +2048,7 @@ function configureMobileModalButtons(modal, block) {
     }
     table.appendChild(tr);
   }
-  }
+}
 
   // 4) Evita doppio binding
   if (document._mobileModalHandlersBound) return;
@@ -2049,21 +2079,39 @@ function configureMobileModalButtons(modal, block) {
   let suppressNextClickTs = 0;
 
   function restoreScrollAfterModal(modal) {
-    const beforeTop = parseInt(modal.dataset.scrollTopBefore || String(lastScrollTop || 0), 10) || 0;
-    const beforeLeft = parseInt(modal.dataset.scrollLeftBefore || String(lastScrollLeft || 0), 10) || 0;
+    const baseY = parseInt(modal.dataset.scrollTopBefore || String(lastScrollTop || 0), 10) || 0;
+    const baseX = parseInt(modal.dataset.scrollLeftBefore || String(lastScrollLeft || 0), 10) || 0;
+    const apptId = modal.dataset.appointmentId || '';
+    const ratio = parseFloat(modal.dataset.blockOffsetRatio || '0');
+    const absTopStored = parseFloat(modal.dataset.blockAbsTop || '0');
+    window.scrollTo(baseX, baseY);
     requestAnimationFrame(() => {
-      setTimeout(() => {
-        const apptId = modal.dataset.appointmentId || '';
-        const block = apptId ? document.querySelector('.appointment-block[data-appointment-id="' + apptId + '"]') : null;
-        if (block) {
-          const headerOffset = 60;
-          const rect = block.getBoundingClientRect();
-          const targetTop = Math.max(0, rect.top + window.scrollY - headerOffset);
-          window.scrollTo({ top: targetTop, left: beforeLeft });
+      const block = apptId ? document.querySelector(`.appointment-block[data-appointment-id="${apptId}"]`) : null;
+      if (!block) return;
+      const vh = window.innerHeight || 1;
+      let rect = block.getBoundingClientRect();
+      const targetViewportTop = ratio * vh;
+      let delta = rect.top - targetViewportTop;
+      window.scrollTo(window.scrollX, window.scrollY + delta);
+      requestAnimationFrame(() => {
+        rect = block.getBoundingClientRect();
+        delta = rect.top - targetViewportTop;
+        if (Math.abs(delta) > 2) {
+          window.scrollTo(window.scrollX, window.scrollY + delta);
         } else {
-          window.scrollTo({ top: beforeTop, left: beforeLeft });
+          const diffAbs = Math.abs((rect.top + window.scrollY) - absTopStored);
+          if (diffAbs > 60) {
+            window.scrollTo(window.scrollX, Math.max(0, absTopStored - 60));
+          }
         }
-      }, 20);
+        requestAnimationFrame(() => {
+          rect = block.getBoundingClientRect();
+          delta = rect.top - targetViewportTop;
+          if (Math.abs(delta) > 2) {
+            window.scrollTo(window.scrollX, window.scrollY + delta);
+          }
+        });
+      });
     });
   }
 
@@ -2080,20 +2128,17 @@ function configureMobileModalButtons(modal, block) {
 
     const modal = document.getElementById('MobilePopupButtonsModal');
     if (!modal) return;
-
+    const rect = block.getBoundingClientRect();
     modal.dataset.appointmentId = block.getAttribute('data-appointment-id') || '';
     modal.dataset.scrollTopBefore = String(window.scrollY || document.documentElement.scrollTop || 0);
     modal.dataset.scrollLeftBefore = String(window.scrollX || document.documentElement.scrollLeft || 0);
-
-    // Popola info + FILTRO pulsanti
+    modal.dataset.blockOffsetRatio = (rect.top / (window.innerHeight || rect.height || 1)).toFixed(6);
+    modal.dataset.blockAbsTop = String(rect.top + window.scrollY);
     fillMobileApptInfo(modal, block);
     configureMobileModalButtons(modal, block);
-
     const bsModal = new bootstrap.Modal(modal, { focus: false });
     bsModal.show();
-
     suppressNextClickTs = Date.now();
-
     function onHidden() {
       restoreScrollAfterModal(modal);
       modal.removeEventListener('hidden.bs.modal', onHidden);
@@ -2121,19 +2166,21 @@ function configureMobileModalButtons(modal, block) {
 
     const modal = document.getElementById('MobilePopupButtonsModal');
     if (!modal) return;
+    const rect = block.getBoundingClientRect();
     modal.dataset.appointmentId = block.getAttribute('data-appointment-id') || '';
+    modal.dataset.blockOffsetRatio = (rect.top / (window.innerHeight || rect.height || 1)).toFixed(6);
+    modal.dataset.blockAbsTop = String(rect.top + window.scrollY);
 
     // Popola info + FILTRO pulsanti
     fillMobileApptInfo(modal, block);
     configureMobileModalButtons(modal, block);
-
     const bsModal = new bootstrap.Modal(modal, { focus: false });
     bsModal.show();
-
-    modal.addEventListener('hidden.bs.modal', function restoreScroll() {
-      window.scrollTo({ top: lastScrollTop, left: lastScrollLeft });
-      modal.removeEventListener('hidden.bs.modal', restoreScroll);
-    });
+    function onHiddenOnce() {
+      restoreScrollAfterModal(modal);
+      modal.removeEventListener('hidden.bs.modal', onHiddenOnce);
+    }
+    modal.addEventListener('hidden.bs.modal', onHiddenOnce);
   }, true);
 
   // 9) Garantisce info + filtro anche su evento show Bootstrap

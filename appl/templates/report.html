@@ -799,6 +799,9 @@ document.addEventListener('DOMContentLoaded', function() {
   .kpi-value {
     font-size: 1.8em;
   }
+
+  .report-tiles-grid .tile-neumorphic { cursor: default !important; }
+  .report-tiles-grid.tiles-draggable .tile-neumorphic { cursor: default !important; }
 }
 
 .report-tiles-grid {
@@ -1420,6 +1423,10 @@ padding: 15px !important;
   #btnSettings {
     display: block !important;
   }
+
+  @media (min-width:1201px){
+  .report-tiles-grid.tiles-draggable .tile-neumorphic { cursor: move; }
+}
 </style>
 
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
@@ -2450,37 +2457,55 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <script>
+// filepath: c:\Program Files\SunBooking\appl\templates\report.html
 document.addEventListener('DOMContentLoaded', function() {
   const grid = document.getElementById('report-tiles-grid');
   const tileSelector = '.tile-neumorphic';
+  if (!grid) return;
 
-  // Funzione per salvare l'ordine
   function salvaOrdine() {
-    const ids = Array.from(grid.querySelectorAll(tileSelector)).map(tile => tile.id);
+    const ids = Array.from(grid.querySelectorAll(tileSelector)).map(t => t.id);
     localStorage.setItem('reportTilesOrder', JSON.stringify(ids));
   }
-
-  // Funzione per ripristinare l'ordine
   function ripristinaOrdine() {
     const saved = localStorage.getItem('reportTilesOrder');
     if (!saved) return;
-    const ids = JSON.parse(saved);
-    ids.forEach(id => {
+    JSON.parse(saved).forEach(id => {
       const tile = document.getElementById(id);
       if (tile) grid.appendChild(tile);
     });
   }
 
-  // Ripristina ordine all'avvio
   ripristinaOrdine();
 
-  // Inizializza Sortable
-  Sortable.create(grid, {
-    animation: 200,
-    ghostClass: 'tile-ghost',
-    chosenClass: 'tile-chosen',
-    onEnd: salvaOrdine
-  });
+  let sortableInstance = null;
+  function enableDrag() {
+    if (sortableInstance) return;
+    sortableInstance = Sortable.create(grid, {
+      animation: 200,
+      ghostClass: 'tile-ghost',
+      chosenClass: 'tile-chosen',
+      onEnd: salvaOrdine
+    });
+    grid.classList.add('tiles-draggable');
+  }
+  function disableDrag() {
+    if (sortableInstance) {
+      sortableInstance.destroy();
+      sortableInstance = null;
+    }
+    grid.classList.remove('tiles-draggable');
+  }
+  function applyMode() {
+    if (window.matchMedia('(min-width: 1201px)').matches) {
+      enableDrag();
+    } else {
+      disableDrag();
+    }
+  }
+
+  applyMode();
+  window.addEventListener('resize', applyMode);
 });
 </script>
 <script>
