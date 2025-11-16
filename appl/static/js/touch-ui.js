@@ -149,7 +149,8 @@ function _filterOffTopBarButtons(topBar) {
   const isAllowed = (btn) =>
     btn.classList.contains('delete-appointment-block') ||
     (btn.classList.contains('nota') && btn.classList.contains('touch-top-note')) ||
-    (btn.classList.contains('copia') && btn.classList.contains('touch-top-copy'));
+    (btn.classList.contains('copia') && btn.classList.contains('touch-top-copy')) ||
+    (btn.classList.contains('taglia') && btn.classList.contains('touch-top-cut'));
 
   // Nascondi tutti i non consentiti
   topBar.querySelectorAll('.btn-popup').forEach(btn => {
@@ -158,7 +159,6 @@ function _filterOffTopBarButtons(topBar) {
 
   // Nascondi in modo esplicito le azioni note richieste
   topBar.querySelectorAll(
-    '.btn-popup.taglia, ' +                 // taglia
     '.btn-popup.colore, .btn-popup.color, ' + // colore
     '.btn-popup.to-cash, .btn-popup.go-cash, .btn-popup.cassa, ' + // porta in cassa
     '.btn-popup.add-services, .btn-popup.aggiungi-servizi, .btn-popup.aggiungi-servizio, .btn-popup.add-service, ' + // aggiungi servizi
@@ -181,7 +181,7 @@ function ensureTopBarForTouch(block) {
     topBar.style.alignItems = 'center';
     topBar.style.gap = '6px';
 
-    // Nascondi tutto, poi mostriamo solo i 3 consentiti
+    // Nascondi tutto, poi mostriamo solo i 4 consentiti (aggiunto taglia)
     topBar.querySelectorAll('.btn-popup').forEach(btn => (btn.style.display = 'none'));
 
     // DELETE (invariato)
@@ -244,6 +244,22 @@ function ensureTopBarForTouch(block) {
     }
     note.style.display = 'inline-block';
 
+    // TAGLIA (nuovo per OFF in touch-ui)
+    let cut = topBar.querySelector('.btn-popup.taglia.touch-top-cut');
+    if (!cut) {
+      cut = document.createElement('button');
+      cut.className = 'btn-popup taglia touch-top-cut';
+      cut.title = 'Taglia blocco OFF';
+      cut.appendChild(biIcon('scissors'));
+      cut.addEventListener('click', (e) => {
+        e.stopPropagation();
+        startOffCut(block);
+        closeAllPopups();
+      });
+      topBar.appendChild(cut);
+    }
+    cut.style.display = 'inline-block';
+
     // Filtra e mantieni nascosti i bottoni non consentiti
     _filterOffTopBarButtons(topBar);
 
@@ -266,6 +282,7 @@ function ensureTopBarForTouch(block) {
     return;
   }
 }
+
   // Calcola nuova durata assoluta e salva via /calendar/edit/<id>
   async function setDuration(block, newDuration) {
     newDuration = Math.max(15, Math.round(newDuration / 15) * 15);
@@ -493,6 +510,5 @@ document.addEventListener('click', function (e) {
   }, 10);
 }, true);
 // --- END: global handler ---
-
 })();
 

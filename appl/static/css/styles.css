@@ -2064,6 +2064,20 @@ body.touch-ui .appointment-block[data-status="2"].active-popup .popup-buttons-bo
   opacity: 0 !important;
 }
 
+/* PATCH hover cestino in touch-ui */
+body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block {
+  transition: transform .12s, background-color .12s, color .12s;
+}
+
+body.touch-ui .appointment-block .popup-buttons .btn-popup.delete-appointment-block:hover,
+body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appointment-block:hover {
+  background-color: #ff3838 !important; /* evidenza sul cestino */
+  color: #ffffff !important;
+  transform: scale(1.15); /* effetto coerente con altri pulsanti */
+  box-shadow: 0 0 0 1px #fff, 0 0 6px rgba(255,56,56,.55);
+}
+
 /* Desktop: larghezza > 1200px => colonne fisse, tutte uguali e proporzionali allo schermo */
 @media (min-width: 1201px) {
   table.calendar-table,
@@ -2933,4 +2947,13 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
 /* Nascondi la tabella mobile sopra 1200px */
 @media (min-width: 1201px) {
   .mobile-date-nav { display: none !important; }
+}
+
+@media (max-width: 1199.98px) {
+  header,
+  .mobile-date-nav {
+    transform-origin: 0 0 !important;
+    -webkit-transform-origin: 0 0 !important;
+    will-change: transform, width, left, top !important;
+  }
 }
