@@ -2954,3 +2954,10 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
   .mobile-date-nav { display: none !important; }
 }
 
+@media (max-width: 1200px) {
+  .mobile-date-nav .today-spacer {
+    display: inline-block !important;
+    width: 10px !important; /* spazio visivo costante dal bordo destro */
+    height: 1px !important;
+  }
+}
