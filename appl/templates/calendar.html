@@ -2609,18 +2609,36 @@ document.addEventListener('DOMContentLoaded', function () {
     el.style.top = Math.round(offT + (extraTopPx || 0)) + 'px';
   }
 
-  function update() {
+function update() {
     const bar = document.getElementById('mobileDateNavCalendar') || document.querySelector('.mobile-date-nav');
     if (!bar) return;
 
-    if (!mql.matches) { resetBar(bar); return; } // solo <1200px
+    const cellToday = bar.querySelector('.cell-today');
+
+    if (!mql.matches) {
+      resetBar(bar);
+      if (cellToday) cellToday.style.removeProperty('padding-right');
+      return;
+    } // solo <1200px
 
     const vv = window.visualViewport || null;
     const scale = vv && vv.scale ? Number(vv.scale) : 1;
-    if (scale === 1) { resetBar(bar); return; }
+
+    if (scale === 1) {
+      resetBar(bar);
+      if (cellToday) cellToday.style.removeProperty('padding-right');
+      return;
+    }
 
     const headerH = getMobileHeaderHeight(); // px “logici” (non scalati)
     applyCounterScale(bar, headerH);
+
+    // Compensa la contro‑scala: mantieni visualmente 16px di spazio a destra
+    if (cellToday) {
+      const desired = 16; // px visivi desiderati
+      const applied = Math.round(desired * scale);
+      cellToday.style.setProperty('padding-right', applied + 'px', 'important');
+    }
   }
 
   if (window.visualViewport) {
