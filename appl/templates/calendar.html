@@ -130,7 +130,7 @@
 
 <!-- NUOVA TABELLA MOBILE DATE-NAV (<1200px): visibile solo su mobile -->
 <div class="mobile-date-nav" id="mobileDateNavCalendar" style="display:none;">
-  <table aria-label="Navigazione data (mobile)">
+  <table aria-label="Navigazione data (mobile)" style="margin:0 6px; width:calc(100% - 12px);">
     <tr>
       <!-- 1: IERI -->
       <td class="cell-arrow">
@@ -164,7 +164,7 @@
       <!-- 6: VAI A OGGI -->
       <td class="cell-today">
       {% if selected_date_str != today_str %}
-        <a class="btn-today" href="{{ url_for('calendar.calendar_home', date=today_str) }}" id="btnTodayCalendar">Vai a OGGI</a>&nbsp;
+        <a class="btn-today" href="{{ url_for('calendar.calendar_home', date=today_str) }}" id="btnTodayCalendar">Vai a OGGI</a>
       {% endif %}
       </td>
     </tr>
