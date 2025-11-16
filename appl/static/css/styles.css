@@ -2900,9 +2900,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     align-items: center;
     justify-content: center;
     height: 30px;
-    margin-right: 16px !important;
-    box-sizing: border-box !important;
-    padding: 0 8px;
+    padding: 0 4px;
     background: #fff;
     color: #333;
     border: 1px solid #ccc;
