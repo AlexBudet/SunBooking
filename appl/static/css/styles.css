@@ -2889,7 +2889,8 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     align-items: center;
     justify-content: center;
     height: 30px;
-    margin-right: 4px !important;
+    margin-right: 16px !important;
+    box-sizing: border-box !important;
     padding: 0 8px;
     background: #fff;
     color: #333;
