@@ -2861,10 +2861,10 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     justify-content: flex-end !important;
     align-items: center !important;
     gap: 4px !important;
-    /* gap destro compensato via variabile aggiornata da JS */
-    padding-right: var(--today-right-gap, 16px) !important;
+    padding-right: var(--today-right-gap, 4px) !important;
     box-sizing: border-box !important;
 }
+
 .mobile-date-nav .btn-today {
     box-sizing: border-box !important;
     /* niente margin-right: gestiamo tutto col padding della cella */
