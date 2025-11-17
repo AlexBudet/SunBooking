@@ -118,6 +118,8 @@ def calendar_home():
 
     for appt in appointments:
         appt.created_at = to_rome(appt.created_at)
+        if appt.last_edit:
+            appt.last_edit = to_rome(appt.last_edit)
 
     # Prepara i dati degli appuntamenti per il rendering
     appointment_data = []
@@ -602,7 +604,7 @@ def edit_appointment(appt_id):
                 appt.start_time != original_start_time or
                 appt.duration != original_duration
             ):
-                appt.last_edit = datetime.now()
+                appt.last_edit = datetime.now(timezone.utc)
 
             db.session.commit()
 
@@ -660,9 +662,9 @@ def update_appointment_position(appt_id):
     appt.operator_id = int(operator_id)
     appt.start_time = new_start_time
 
-    # Aggiorna last_edit solo se operator_id o start_time sono cambiati
+    # update_appointment_position: assegna UTC consapevole
     if appt.operator_id != original_operator_id or appt.start_time != original_start_time:
-        appt.last_edit = datetime.now()
+        appt.last_edit = datetime.now(timezone.utc)
 
     db.session.commit()
     return jsonify({"message": "Posizione aggiornata", "duration": appt.duration}), 200
@@ -726,7 +728,7 @@ def adjust_duration(appointment_id):
 
         # Aggiorna last_edit solo se la durata è cambiata
         if appointment.duration != original_duration:
-            appointment.last_edit = datetime.now()
+            appointment.last_edit = datetime.now(timezone.utc)
 
         db.session.commit()
 
