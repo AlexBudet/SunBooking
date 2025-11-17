@@ -1119,13 +1119,30 @@ document.addEventListener('DOMContentLoaded', function() {
     const createdAt = block.getAttribute('data-created-at') || '';
     const lastEdit = block.getAttribute('data-last-edit') || '';
     let createdAtStr = '', lastEditStr = '';
-    if (createdAt) {
-      const d = new Date(createdAt);
-      createdAtStr = d.toLocaleString('it-IT', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit', year:'numeric' });
+
+    function parseToLocal(iso) {
+      if (!iso) return null;
+      // Se manca il fuso (+ / Z) aggiungi 'Z' per interpretarlo come UTC
+      const needsZ = !/[zZ]|[+\-]\d{2}:?\d{2}$/.test(iso);
+      try {
+        return new Date(needsZ ? (iso + 'Z') : iso);
+      } catch(_) {
+        return null;
+      }
     }
-    if (lastEdit) {
-      const d = new Date(lastEdit);
-      lastEditStr = d.toLocaleString('it-IT', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit', year:'numeric' });
+
+    const dCreated = parseToLocal(createdAt);
+    if (dCreated) {
+      createdAtStr = dCreated.toLocaleString('it-IT', {
+        hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit', year:'numeric'
+      });
+    }
+
+    const dLast = parseToLocal(lastEdit);
+    if (dLast) {
+      lastEditStr = dLast.toLocaleString('it-IT', {
+        hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit', year:'numeric'
+      });
     }
 
     // Ricostruisci contenuto DOM in modo sicuro
