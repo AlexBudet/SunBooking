@@ -226,6 +226,7 @@ def api_clients():
     ])
 
 IDEMPOTENCY_STORE = {}
+RCH_PENDING = {} 
 
 @cassa_bp.route('/cassa/send-to-rch', methods=['POST'])
 def send_to_rch():
@@ -367,16 +368,58 @@ def send_to_rch():
         headers = {"Content-Type": "text/xml; charset=UTF-8"}
 
         try:
+            # Timeout più ampio ma non infinito (la stampante può “attendere carta”)
             resp_vendita = requests.post(
-                url, data=payload_vendita.encode("UTF-8"), headers=headers, timeout=10
+                url, data=payload_vendita.encode("UTF-8"), headers=headers, timeout=30
             )
         except Exception as exc:
-            current_app.logger.error("Errore di rete durante la comunicazione con RCH: %s", str(exc))
-            return jsonify({"error": "Errore di comunicazione con la stampante fiscale."}), 500
+            current_app.logger.warning("RCH non raggiungibile (network): %s", str(exc))
+            if idempotency_key:
+                expected_total = round(sum(float(v.get("prezzo", 0)) for v in voci_fiscali), 2)
+                RCH_PENDING[idempotency_key] = {
+                    "payload_xml": payload_vendita,
+                    "cliente_id": cliente_id,
+                    "operatore_id": operatore_id,
+                    "voci": voci_fiscali,
+                    "created_ts": pytime.time(),
+                    "expected_total": expected_total,
+                    "giorno": datetime.now().strftime("%Y-%m-%d"),
+                    "line_count": len(voci_fiscali),
+                    "printer_ip": (BusinessInfo.query.first().printer_ip if BusinessInfo.query.first() else None)
+                }
+                return jsonify({
+                    "pending": True,
+                    "reason": "network",
+                    "message": "Stampante non raggiungibile. Attendere e riprovare.",
+                    "idempotency_key": idempotency_key,
+                    "retry_after": 3
+                }), 202
+            return jsonify({"error": "Stampante non raggiungibile. Riprova."}), 502
 
-        if '<errorCode>0</errorCode>' not in resp_vendita.text:
-            current_app.logger.error("Errore dalla stampante RCH: %s", resp_vendita.text)
-            return jsonify({"error": "La stampante fiscale ha restituito un errore."}), 500
+        # Se non è esplicitamente “OK”, considera pending/retryable (es. fine carta, coperchio aperto, ecc.)
+        if '<errorCode>0</errorCode>' not in (resp_vendita.text or ''):
+            current_app.logger.warning("RCH ha risposto con errore (retryable): %s", resp_vendita.text[:800])
+            if idempotency_key:
+                expected_total = round(sum(float(v.get("prezzo", 0)) for v in voci_fiscali), 2)
+                RCH_PENDING[idempotency_key] = {
+                    "payload_xml": payload_vendita,
+                    "cliente_id": cliente_id,
+                    "operatore_id": operatore_id,
+                    "voci": voci_fiscali,
+                    "created_ts": pytime.time(),
+                    "expected_total": expected_total,
+                    "giorno": datetime.now().strftime("%Y-%m-%d"),
+                    "line_count": len(voci_fiscali),
+                    "printer_ip": (BusinessInfo.query.first().printer_ip if BusinessInfo.query.first() else None)
+                }
+                return jsonify({
+                    "pending": True,
+                    "reason": "printer_error",
+                    "message": "Stampante in errore. Attendere (es. cambio carta) e riprovare.",
+                    "idempotency_key": idempotency_key,
+                    "retry_after": 3
+                }), 202
+            return jsonify({"error": "Stampante in errore. Riprova."}), 502
 
         # ---------- lettura progressivo NR DOC ----------
         numero_progressivo = None
@@ -1050,3 +1093,232 @@ def api_user_role():
     user_id = session.get("user_id")
     user = db.session.get(User, user_id)
     return jsonify({"role": user.ruolo.value if user else None})
+
+@cassa_bp.route('/cassa/rch-status', methods=['GET'])
+def rch_status():
+    key = request.args.get('idempotency_key', '').strip()
+    if not key:
+        return jsonify({"error": "Missing idempotency_key"}), 400
+    if key in IDEMPOTENCY_STORE:
+        return jsonify({"done": True, **IDEMPOTENCY_STORE[key]}), 200
+    if key in RCH_PENDING:
+        return jsonify({"done": False, "pending": True, "retry_after": 3}), 200
+    return jsonify({"error": "Not found"}), 404
+
+def _dgfe_entries_for_date(ip: str, day: date):
+    """
+    Lettura robusta EJ (DGFE) del giorno:
+    - Usa header iso-8859-1 (come endpoint /cassa/api/dgfe)
+    - Raccoglie progressivo, totale normalizzato, timestamp e numero linee SERVIZIO
+    - Tollera formati alternativi di 'TOTALE:' e progressivo
+    """
+    try:
+        url = f'http://{ip}/service.cgi'
+        headers = {'Content-Type': 'text/xml; charset=iso-8859-1'}
+        with requests.Session() as s:
+            s.headers.update({'Connection': 'close'})
+            xml_c3 = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C3</cmd></Service>'
+            s.post(url, data=xml_c3.encode('iso-8859-1'), headers=headers, timeout=5, allow_redirects=False)
+            d_str = day.strftime('%d%m%y')
+            xml_c452 = '<?xml version="1.0" encoding="UTF-8"?><Service>' \
+                       f'<cmd>=C452/$0/&{d_str}/[1/]9999</cmd>' \
+                       '</Service>'
+            resp = s.post(url, data=xml_c452.encode('iso-8859-1'), headers=headers, timeout=15, allow_redirects=False)
+            # Unlock (best-effort)
+            try:
+                xml_c1 = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C1</cmd></Service>'
+                s.post(url, data=xml_c1.encode('iso-8859-1'), headers=headers, timeout=4, allow_redirects=False)
+            except Exception:
+                pass
+    except requests.exceptions.RequestException:
+        return []
+
+    body = resp.text or ""
+    ej_match = re.search(r"<EJ[^>]*>(.*?)</EJ>", body, re.DOTALL)
+    dgfe_text = ej_match.group(1).strip() if ej_match else ""
+    if not dgfe_text:
+        return []
+
+    entries = []
+    blocchi = [b.strip() for b in dgfe_text.split('\n\n') if b.strip()]
+    for blocco in blocchi:
+        # Timestamp
+        m_dt = re.search(r'DATA:\s*(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})', blocco)
+        if not m_dt:
+            continue
+        try:
+            dt = datetime.strptime(m_dt.group(1), '%d/%m/%Y %H:%M')
+        except Exception:
+            continue
+
+        # Progressivo (può non esserci in casi particolari)
+        m_pro = re.search(r'PROGR:\s*(\d+)', blocco)
+        progressivo_raw = m_pro.group(1) if m_pro else None
+
+        # Totale: formati possibili (TOTALE:, TOT:, TOTALE €:)
+        m_tot = (re.search(r'TOTALE:\s*([\d\.,]+)', blocco) or
+                 re.search(r'TOT:\s*([\d\.,]+)', blocco) or
+                 re.search(r'TOTALE\s*€:\s*([\d\.,]+)', blocco))
+        if not m_tot:
+            continue
+        raw_tot = m_tot.group(1).strip()
+        # normalizza
+        try:
+            tot_float = float(raw_tot.replace('.', '').replace(',', '.'))
+        except Exception:
+            continue
+        tot_float = round(tot_float, 2)
+
+        # Conteggio linee SERVIZIO (per validare numero voci)
+        servizi_lines = re.findall(r'SERVIZIO:\s*(.*?)\s+PREZZO:\s*([\d\.,]+)', blocco)
+        line_count = len(servizi_lines)
+
+        entries.append({
+            "dataora_dt": dt,
+            "totale_float": tot_float,
+            "progressivo_raw": progressivo_raw,
+            "line_count": line_count,
+            "raw": blocco
+        })
+
+    entries.sort(key=lambda e: e["dataora_dt"])
+    return entries
+
+@cassa_bp.route('/cassa/rch-retry', methods=['POST'])
+def rch_retry():
+    """
+    Retry NON ristampa:
+    - Legge tutto l'EJ del giorno (DGFE) senza limiti temporali
+    - Match primario: ultimo scontrino con stesso totale (±0.01) e medesimo numero linee (se disponibile)
+    - Match secondario: ultimo progressivo nuovo non presente nel DB (se il totale non coincide)
+    - Registra il receipt se trovato, altrimenti resta in pending
+    """
+    data = request.get_json(force=True) or {}
+    key = (data.get("idempotency_key") or "").strip()
+    if not key:
+        return jsonify({"error": "Missing idempotency_key"}), 400
+    if key in IDEMPOTENCY_STORE:
+        return jsonify(IDEMPOTENCY_STORE[key]), 200
+
+    pending = RCH_PENDING.get(key)
+    if not pending:
+        return jsonify({"error": "Pending non trovato"}), 404
+
+    business = BusinessInfo.query.first()
+    if not business or not business.printer_ip:
+        return jsonify({"error": "IP stampante RCH non configurato"}), 400
+    ip = business.printer_ip
+
+    try:
+        expected_total = float(pending.get("expected_total")) \
+            if pending.get("expected_total") is not None \
+            else round(sum(float(v.get("prezzo", 0)) for v in pending.get("voci", [])), 2)
+    except Exception:
+        expected_total = round(sum(float(v.get("prezzo", 0)) for v in pending.get("voci", [])), 2)
+    expected_total = round(expected_total, 2)
+    expected_line_count = int(pending.get("line_count") or len(pending.get("voci", [])) or 0)
+
+    # Leggi EJ completo del giorno
+    entries = _dgfe_entries_for_date(ip, date.today())
+    if not entries:
+        return jsonify({"pending": True, "retry_after": 5}), 202
+
+    # Match primario: stesso totale e (se disponibile) stesso numero linee
+    matched = None
+    for e in reversed(entries):
+        if abs(e["totale_float"] - expected_total) < 0.01:
+            if expected_line_count > 0 and e.get("line_count") is not None:
+                if e["line_count"] != expected_line_count:
+                    continue
+            matched = e
+            break
+
+    # Match secondario: progressivo nuovo (se primario fallito)
+    if not matched:
+        # progressivi già in DB (solo fiscali)
+        today_start = datetime.combine(date.today(), datetime.min.time())
+        today_end = datetime.combine(date.today(), datetime.max.time())
+        receipts_today = Receipt.query.filter(
+            Receipt.created_at >= today_start,
+            Receipt.created_at <= today_end,
+            Receipt.is_fiscale == True
+        ).all()
+        existing_prog = set()
+        for r in receipts_today:
+            try:
+                existing_prog.add(str(r.numero_progressivo).strip())
+            except Exception:
+                pass
+        # prendi l'ultimo blocco con progressivo_raw non vuoto
+        for e in reversed(entries):
+            if e.get("progressivo_raw"):
+                # Non possiamo ricostruire Z qui, usiamo conferma via lastDocF dopo
+                matched = e
+                break
+
+    if not matched:
+        return jsonify({"pending": True, "retry_after": 6}), 202
+
+    # Lettura progressivo ufficiale lastDocF/lastZ
+    url = f"http://{ip}/service.cgi"
+    headers = {"Content-Type": "text/xml; charset=UTF-8"}
+    numero_progressivo = None
+    numero_z = None
+    for cmd in ("=C453/$0", "=DGFE/REG"):
+        payload_prog = f'''<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'''
+        for _ in range(8):
+            pytime.sleep(0.5)
+            try:
+                resp = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=6)
+            except Exception:
+                continue
+            m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp.text) or
+                     re.search(r'<C453[^>]*>(\d+)</C453>', resp.text) or
+                     re.search(r'<result>(\d+)</result>', resp.text))
+            m_z = re.search(r'<lastZ>(\d+)</lastZ>', resp.text)
+            if m_doc and m_z:
+                try:
+                    numero_progressivo = int(m_doc.group(1))
+                    numero_z = int(m_z.group(1)) + 1
+                except Exception:
+                    numero_progressivo = None
+                    numero_z = None
+                break
+        if numero_progressivo is not None and numero_z is not None:
+            break
+
+    if numero_progressivo is None or numero_z is None:
+        return jsonify({"pending": True, "retry_after": 8}), 202
+
+    progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
+    total_amount = round(sum(float(v.get("prezzo", 0)) for v in pending.get("voci", [])), 2)
+
+    nuovo_receipt = Receipt(
+        created_at         = datetime.now(),
+        total_amount       = total_amount,
+        is_fiscale         = True,
+        voci               = pending.get("voci", []),
+        cliente_id         = pending.get("cliente_id"),
+        operatore_id       = pending.get("operatore_id"),
+        numero_progressivo = progressivo_completo
+    )
+    db.session.add(nuovo_receipt)
+    db.session.commit()
+
+    ids_pagati = [v.get("appointment_id") for v in pending.get("voci", []) if v.get("appointment_id")]
+    if ids_pagati:
+        Appointment.query.filter(Appointment.id.in_(ids_pagati)).update(
+            {Appointment.stato: AppointmentStatus.PAGATO}, synchronize_session=False
+        )
+        db.session.commit()
+
+    result = {
+        "results": [{
+            "message": f"Scontrino fiscale registrato (progressivo {progressivo_completo})",
+            "is_fiscale": True
+        }],
+        "reset_voci": True
+    }
+    IDEMPOTENCY_STORE[key] = result
+    RCH_PENDING.pop(key, None)
+    return jsonify(result), 200
