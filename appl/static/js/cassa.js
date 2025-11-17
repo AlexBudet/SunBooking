@@ -264,107 +264,234 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
 
     // Se ci sono voci fiscali, invia a RCH e salva Receipt fiscale
     if (voci_fiscali.length > 0) {
-      let popupMostrato = false;
-      let fetchTerminata = false;
-
-      const timeoutPromise = new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (!fetchTerminata) {
-            popupMostrato = true;
-if (confirm("ATTENZIONE: Stampante fiscale non risponde!\nPremi ANNULLA per uscire e riprovare più tardi.\nPremi OK per fare un test di pagamento.")) {
-  // Forza tutte le voci a cash e is_fiscale: false
-  rows.forEach(row => {
-    row.style.background = '#dcdcdc';
-    const selectPay = row.querySelector('select');
-    if (selectPay) selectPay.value = 'cash';
-  });
-  resolve('nofiscale');
-} else {
-  window.location.href = '/cassa';
-  reject('cancel');
-}
-          }
-        }, 5000);
-      });
-
-function generaIdempotencyKey() {
-  return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
-    (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-  );
-}
-const idempotencyKey = generaIdempotencyKey();
-const payload = {
-  voci: voci_fiscali,
-  cliente_id,
-  operatore_id,
-  is_fiscale: true,
-  idempotency_key: idempotencyKey
-};
-const fetchPromise = fetch('/cassa/send-to-rch', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-  },
-  body: JSON.stringify(payload)
-}).then(async res => {
-  fetchTerminata = true;
-  let data, text;
-  try {
-    text = await res.text();
-    data = JSON.parse(text);
-  } catch (e) {
-    if (!popupMostrato) alert('Errore di comunicazione con il server:\n' + (text || e));
-    throw e;
-  }
-  if (!res.ok) {
-    if (!popupMostrato) alert((data && data.error) || 'Errore durante la stampa dello scontrino!');
-    throw new Error(data && data.error);
-  }
-  return data;
-});
-
-try {
-  const result = await Promise.race([fetchPromise, timeoutPromise]);
-  if (result === 'nofiscale') {
-    // Prepara tutte le voci come non fiscali e metodo cash
-    voci_non_fiscali.length = 0;
-    rows.forEach(row => {
-      const nome = row.querySelector('.flex-grow-1')?.textContent.trim() || '';
-      const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
-      const servizio_id = row.dataset.servizioId || null;
-      const appointment_id = row.dataset.appointmentId || null;
-      const voce = {
-        servizio_id,
-        prezzo,
-        tipo: 'service',
-        metodo_pagamento: 'cash',
-        is_fiscale: false
+      function generaIdempotencyKey() {
+        return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+          (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+        );
+      }
+      const idempotencyKey = generaIdempotencyKey();
+      const payloadFiscale = {
+        voci: voci_fiscali,
+        cliente_id,
+        operatore_id,
+        is_fiscale: true,
+        idempotency_key: idempotencyKey
       };
-      if (appointment_id) voce.appointment_id = appointment_id;
-      voci_non_fiscali.push(voce);
-    });
-    const payloadNonFiscale = {
-      voci: voci_non_fiscali,
-      cliente_id,
-      operatore_id,
-      is_fiscale: false
-    };
-    await fetch('/cassa/send-to-rch', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-      },
-      body: JSON.stringify(payloadNonFiscale)
-    });
-    alert('Pagamento test registrato!');
-    resetScontrino();
-    return;
-  }
-} catch (e) {
-  return;
+
+      // Modal attesa/retry
+function showPendingModal(key) {
+  if (document.getElementById('rchPendingModal')) return;
+
+  const wrap = document.createElement('div');
+  wrap.id = 'rchPendingModal';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal fade show';
+  overlay.setAttribute('tabindex', '-1');
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.style.display = 'block';
+  overlay.style.background = 'rgba(0,0,0,0.5)';
+
+  const dialog = document.createElement('div');
+  dialog.className = 'modal-dialog modal-dialog-centered';
+
+  const content = document.createElement('div');
+  content.className = 'modal-content';
+
+  const header = document.createElement('div');
+  header.className = 'modal-header';
+  const h5 = document.createElement('h5');
+  h5.className = 'modal-title';
+  h5.textContent = 'Attesa stampante fiscale';
+  header.appendChild(h5);
+
+  const body = document.createElement('div');
+  body.className = 'modal-body';
+
+  const p = document.createElement('p');
+  p.textContent = 'La stampante è in attesa (es. cambio carta). Sostituire la carta o risolvere l\'errore e poi premi "Riprova".';
+  body.appendChild(p);
+
+  const flex = document.createElement('div');
+  flex.className = 'd-flex align-items-center';
+  flex.style.gap = '10px';
+
+  const spinner = document.createElement('div');
+  spinner.className = 'spinner-border text-primary';
+  spinner.setAttribute('role', 'status');
+  const vis = document.createElement('span');
+  vis.className = 'visually-hidden';
+  vis.textContent = '...';
+  spinner.appendChild(vis);
+
+  const msg = document.createElement('span');
+  msg.id = 'rchPendingMsg';
+  msg.textContent = 'In attesa...';
+
+  flex.appendChild(spinner);
+  flex.appendChild(msg);
+  body.appendChild(flex);
+
+  const footer = document.createElement('div');
+  footer.className = 'modal-footer';
+
+  const btnRetry = document.createElement('button');
+  btnRetry.id = 'rchRetryBtn';
+  btnRetry.type = 'button';
+  btnRetry.className = 'btn btn-primary';
+  btnRetry.textContent = 'Riprova';
+
+  const btnCancel = document.createElement('button');
+  btnCancel.id = 'rchCancelBtn';
+  btnCancel.type = 'button';
+  btnCancel.className = 'btn btn-secondary';
+  btnCancel.textContent = 'Chiudi';
+
+  footer.appendChild(btnRetry);
+  footer.appendChild(btnCancel);
+
+  content.appendChild(header);
+  content.appendChild(body);
+  content.appendChild(footer);
+  dialog.appendChild(content);
+  overlay.appendChild(dialog);
+  wrap.appendChild(overlay);
+  document.body.appendChild(wrap);
+
+  let pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch(`/cassa/rch-status?idempotency_key=${encodeURIComponent(key)}`);
+      const d = await r.json();
+      if (r.ok && d.done) {
+        clearInterval(pollTimer);
+        wrap.remove();
+        fiscaleOkFinalize();
+      }
+    } catch (_) {}
+  }, 3000);
+
+  btnRetry.addEventListener('click', async () => {
+    btnRetry.disabled = true;
+    try {
+      const rr = await fetch('/cassa/rch-retry', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+        },
+        body: JSON.stringify({ idempotency_key: key })
+      });
+      const dd = await rr.json();
+      if (rr.ok && dd.results) {
+        clearInterval(pollTimer);
+        wrap.remove();
+        fiscaleOkFinalize();
+        return;
+      }
+      btnRetry.disabled = false;
+      msg.textContent = 'Ancora in attesa della stampante...';
+    } catch {
+      btnRetry.disabled = false;
+      msg.textContent = 'Errore rete. Riprova.';
+    }
+  });
+
+  btnCancel.addEventListener('click', () => {
+    clearInterval(pollTimer);
+    wrap.remove();
+  });
 }
+      async function fiscaleOkFinalize() {
+        // Non fiscali (grigi) se presenti
+        if (voci_non_fiscali.length > 0) {
+          const payloadNonFiscale = {
+            voci: voci_non_fiscali,
+            cliente_id,
+            operatore_id,
+            is_fiscale: false
+          };
+            await fetch('/cassa/send-to-rch', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+              },
+              body: JSON.stringify(payloadNonFiscale)
+            });
+        }
+
+        alert('Pagamento registrato con successo!');
+
+        // Aggiorna stati appuntamenti
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+        const updatePromises = [];
+        document.querySelectorAll('.scontrino-row').forEach(row => {
+          const appointmentId = row.dataset.appointmentId;
+          if (appointmentId) {
+            updatePromises.push(
+              fetch(`/calendar/update_status/${appointmentId}`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(csrf ? { 'X-CSRFToken': csrf } : {})
+                },
+                body: JSON.stringify({ status: 2 })
+              }).catch(()=>{})
+            );
+          }
+        });
+        if (window.originalAppointmentIds && window.originalAppointmentIds.size > 0) {
+          window.originalAppointmentIds.forEach(appointmentId => {
+            updatePromises.push(
+              fetch(`/calendar/update_status/${appointmentId}`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(csrf ? { 'X-CSRFToken': csrf } : {})
+                },
+                body: JSON.stringify({ status: 2 })
+              }).catch(()=>{})
+            );
+          });
+        }
+        await Promise.allSettled(updatePromises);
+        if (window.originalAppointmentIds && typeof window.originalAppointmentIds.clear === 'function') {
+          window.originalAppointmentIds.clear();
+        }
+        resetScontrino(true);
+        setTimeout(() => { window.location.href = '/cassa'; }, 150);
+      }
+
+      try {
+        const res = await fetch('/cassa/send-to-rch', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+          },
+          body: JSON.stringify(payloadFiscale)
+        });
+        let data = null;
+        try { data = await res.json(); } catch { data = null; }
+
+        if (res.status === 202 && data && data.pending) {
+          // Attesa stampante: mostra modal e interrompi flusso
+          showPendingModal(idempotencyKey);
+          return;
+        }
+        if (!res.ok) {
+          alert((data && data.error) || 'Errore durante la stampa fiscale!');
+          return;
+        }
+
+        // Successo immediato
+        await fiscaleOkFinalize();
+        return;
+      } catch (err) {
+        alert('Errore di rete durante la stampa fiscale.');
+        return;
+      }
     }
 
     // Se ci sono voci non fiscali, salva Receipt non fiscale (NON invia a RCH)
