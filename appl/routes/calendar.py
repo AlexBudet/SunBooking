@@ -120,6 +120,11 @@ def calendar_home():
         appt.created_at = to_rome(appt.created_at)
         if appt.last_edit:
             appt.last_edit = to_rome(appt.last_edit)
+            try:
+                if appt.last_edit < appt.created_at:
+                    appt.last_edit = appt.created_at + timedelta(minutes=1)
+            except Exception:
+                pass
 
     # Prepara i dati degli appuntamenti per il rendering
     appointment_data = []
