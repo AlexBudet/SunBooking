@@ -1131,14 +1131,20 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
 
-    const dCreated = parseToLocal(createdAt);
+    let dCreated = parseToLocal(createdAt);
+    let dLast = parseToLocal(lastEdit);
+
+    // Safety: se last_edit risulta prima di created_at, spostalo a created_at + 1 minuto (solo visualizzazione)
+    if (dCreated && dLast && dLast < dCreated) {
+      dLast = new Date(dCreated.getTime() + 60000);
+    }
+
     if (dCreated) {
       createdAtStr = dCreated.toLocaleString('it-IT', {
         hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit', year:'numeric'
       });
     }
 
-    const dLast = parseToLocal(lastEdit);
     if (dLast) {
       lastEditStr = dLast.toLocaleString('it-IT', {
         hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit', year:'numeric'
