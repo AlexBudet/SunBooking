@@ -3700,64 +3700,74 @@ document.addEventListener('DOMContentLoaded', function() {
 
 document.addEventListener('DOMContentLoaded', function() {
   var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-  tooltipTriggerList.forEach(function(tooltipTriggerEl) {
-      // Tooltip per link con note cliente: in basso
-      if (tooltipTriggerEl.closest('.client-name')) {
-          new bootstrap.Tooltip(tooltipTriggerEl, {
-              placement: 'bottom',
-              container: 'body',
-              boundary: 'window'
-          });
-      }
-      // Tooltip per my-spia e no-show: a destra, fallback a sinistra se serve
-      else if (
-        tooltipTriggerEl.classList.contains('my-spia') ||
-        tooltipTriggerEl.classList.contains('no-show-button')
-      ) {
-          new bootstrap.Tooltip(tooltipTriggerEl, {
-              placement: 'right',
-              fallbackPlacements: ['left'],
-              container: 'body',
-              boundary: 'window'
-          });
-      }
-      // Altri tooltip: default
-else if (tooltipTriggerEl.classList.contains('whatsapp-btn')) {
-  new bootstrap.Tooltip(tooltipTriggerEl, {
-      placement: 'top', // o 'right', 'left', 'bottom' a seconda di dove vuoi il tooltip
-      container: 'body',
-      boundary: 'window',
-      fallbackPlacements: [], // nessun fallback, resta sempre sopra
-      offset: [-46, 14]
-  });
-}
-else if (tooltipTriggerEl.closest('.popup-buttons')) {
-  new bootstrap.Tooltip(tooltipTriggerEl, {
-      container: 'body',
-      offset: [0, +14]
-  });
-} else {
-  new bootstrap.Tooltip(tooltipTriggerEl, { container: 'body' });
-}
-      
-      // Listener per nascondere popup-buttons quando si passa sopra il nome cliente
-  const TOUCH_UI = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch(_) { return false; } })();
-  if (tooltipTriggerEl.closest('.client-name') && !TOUCH_UI) {
-    tooltipTriggerEl.addEventListener('mouseover', function() {
-      const appointmentBlock = this.closest('.appointment-block');
-      if (!appointmentBlock) return;
-      const popupDiv = appointmentBlock.querySelector('.popup-buttons');
-      if (popupDiv) popupDiv.style.display = 'none';
-    });
-    tooltipTriggerEl.addEventListener('mouseout', function() {
-      const appointmentBlock = this.closest('.appointment-block');
-      if (!appointmentBlock) return;
-      const popupDiv = appointmentBlock.querySelector('.popup-buttons');
-      if (popupDiv) popupDiv.style.display = 'block';
-    });
-  }
+  const IS_TOUCH = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch(_) { return false; } })();
+
+  tooltipTriggerList.forEach(function(el) {
+    // 1) Blocca SEMPRE (modalità default) i tooltip dei pulsanti dentro .popup-buttons
+    if (!IS_TOUCH && el.closest('.popup-buttons')) {
+      // Rimuove attributo per prevenire nuova inizializzazione
+      el.removeAttribute('data-bs-toggle');
+      el.setAttribute('data-tooltip-blocked', '1');
+      return; // NON creare il tooltip
+    }
+
+    // 2) Inizializzazioni consentite
+    if (el.closest('.client-name')) {
+      new bootstrap.Tooltip(el, {
+        placement: 'bottom',
+        container: 'body',
+        boundary: 'window'
+      });
+    } else if (el.classList.contains('my-spia') || el.classList.contains('no-show-button')) {
+      new bootstrap.Tooltip(el, {
+        placement: 'right',
+        fallbackPlacements: ['left'],
+        container: 'body',
+        boundary: 'window'
+      });
+    } else if (el.classList.contains('whatsapp-btn')) {
+      new bootstrap.Tooltip(el, {
+        placement: 'top',
+        container: 'body',
+        boundary: 'window',
+        fallbackPlacements: [],
+        offset: [-46, 14]
+      });
+    } else {
+      new bootstrap.Tooltip(el, { container: 'body' });
+    }
+
+    // 3) Logica pre‑esistente per il nome cliente (mantieni)
+    if (el.closest('.client-name') && !IS_TOUCH) {
+      el.addEventListener('mouseover', function() {
+        const block = this.closest('.appointment-block');
+        if (!block) return;
+        const popupDiv = block.querySelector('.popup-buttons');
+        if (popupDiv) popupDiv.style.display = 'none';
+      });
+      el.addEventListener('mouseout', function() {
+        const block = this.closest('.appointment-block');
+        if (!block) return;
+        const popupDiv = block.querySelector('.popup-buttons');
+        if (popupDiv) popupDiv.style.display = 'block';
+      });
+    }
   });
 });
+
+document.addEventListener('show.bs.tooltip', function(ev) {
+  try {
+    const trg = ev.target;
+    const IS_TOUCH = document.body.classList.contains('touch-ui') ||
+                     (localStorage.getItem('sun_touch_ui') === '1');
+    if (!IS_TOUCH && trg.closest('.popup-buttons')) {
+      // Annulla apertura del tooltip della top bar in modalità default
+      ev.preventDefault();
+      const inst = bootstrap.Tooltip.getInstance(trg);
+      if (inst) inst.disable();
+    }
+  } catch(_) {}
+}, true);
 
 function openNoteModal(block) {
   const appointmentId = block.getAttribute('data-appointment-id') || "";
@@ -8935,4 +8945,3 @@ document.addEventListener('click', function(e) {
     window.deleteAppointment(id);
   }
 }, true);
-

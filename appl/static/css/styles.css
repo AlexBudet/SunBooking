@@ -2791,6 +2791,11 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
   }
 }
 
+/* Limita il blocco dei click SOLO ai blocchi OFF in default */
+body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
+  pointer-events: none !important;
+}
+
 /* ==== MOBILE DATE NAV: disattiva vecchia barra e mostra tabella nuova (<1200px) ==== */
 @media (max-width: 1200px) {
   :root {
