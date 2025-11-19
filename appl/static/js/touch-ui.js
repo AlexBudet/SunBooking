@@ -73,24 +73,16 @@ function buildBottomButtons(block) {
 
 function closeAllPopups() {
   document.querySelectorAll('.appointment-block.active-popup')
-    .forEach(b => b.classList.remove('active-popup'));
-  // Assicuriamoci anche di nascondere il tooltip globale se rimasto visibile
+    .forEach(b => {
+      b.classList.remove('active-popup');
+      b.style.zIndex = '100';          // ripristina base
+    });
   const clientPopup = document.getElementById('clientHistoryPopup');
-  if (clientPopup) {
-    clientPopup.style.display = 'none';
-  }
-  // nascondi anche il tooltip piccolo se presente
+  if (clientPopup) clientPopup.style.display = 'none';
   const small = document.getElementById('clientInfoPopup');
   if (small) small.style.display = 'none';
-
-  // Rimuovi eventuali display inline lasciati su popup-buttons
   document.querySelectorAll('.appointment-block .popup-buttons, .appointment-block .popup-buttons-bottom')
-    .forEach(el => {
-      // se c'era uno style inline forzato, lo rimuoviamo per ripristinare il comportamento CSS
-      el.style.display = '';
-    });
-
-  // Chiudi anche i popup dei blocchi in istituto (myspia)
+    .forEach(el => { el.style.zIndex = ''; el.style.display = ''; });
   closeAllMySpiaPopups();
 }
 
@@ -106,6 +98,69 @@ function injectTouchMySpiaCSS() {
   style.id = 'touch-myspia-css';
   style.textContent = css;
   document.head.appendChild(style);
+}
+
+function installInterceptClientNameClicks() {
+  if (window.__touchClientLinkInterceptorInstalled) return;
+
+  const handler = function(e) {
+    // Attivo solo in touch-ui
+    if (!document.body.classList.contains('touch-ui')) return;
+
+    const link = e.target && e.target.closest && e.target.closest('.client-info-link');
+    if (!link) return;
+
+    const block = link.closest('.appointment-block');
+    if (!block) return;
+
+    // Solo quando il blocco è già attivo e in stato 2
+    if (!block.classList.contains('active-popup')) return;
+    if (String(block.getAttribute('data-status')) !== '2') return;
+
+    // Fermiamo qui: non deve diventare un click sul blocco
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    // Apri esplicitamente il modal info cliente
+    const cid = block.getAttribute('data-client-id') || link.getAttribute('data-client-id') || '';
+
+    if (typeof window.openClientInfoMobileModal === 'function') {
+      window.openClientInfoMobileModal(block);
+      return;
+    }
+    if (typeof window.showClientInfoModal === 'function' && cid) {
+      window.showClientInfoModal(cid);
+      return;
+    }
+    if (typeof window.showClientInfoForBlock === 'function') {
+      window.showClientInfoForBlock(block);
+    }
+  };
+
+  // Intercetta in fase di cattura per battere altri listener
+  document.addEventListener('click', handler, true);
+
+  // Backup: bind anche direttamente sui link già presenti (sempre in cattura)
+  document.querySelectorAll('.client-info-link').forEach(a => {
+    try { a.addEventListener('click', handler, true); } catch(_) {}
+  });
+
+  // Inizializza anche dopo il DOM pronto per link caricati più tardi
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.client-info-link').forEach(a => {
+      try { a.addEventListener('click', handler, true); } catch(_) {}
+    });
+  });
+
+  window.__touchClientLinkInterceptorInstalled = true;
+}
+
+// Installa l'intercettore
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', installInterceptClientNameClicks);
+} else {
+  installInterceptClientNameClicks();
 }
 
 // Gestione click-to-open per “Blocchi in istituto” (myspia) in modalità touch
@@ -435,24 +490,74 @@ function initTouchOnBlock(block){
   ensureTopBarForTouch(block);
   ensureBottomBar(block);
 
-  // Reset: mai lasciare display inline, lascia che decida il CSS (.active-popup)
   const tb = block.querySelector('.popup-buttons');
   if (tb) tb.style.display = '';
   const bb = block.querySelector('.popup-buttons-bottom');
   if (bb) {
     bb.style.display = '';
-    // stato=2: nessuna bottom bar
     if (block.getAttribute('data-status') === '2') bb.style.display = 'none';
   }
 
-  // Toggle apertura/chiusura su click (solo se non si clicca un bottone)
+  if (!block.classList.contains('active-popup')) {
+    block.style.zIndex = '100';
+  }
+
   if (!block._touchToggleBound) {
+    // Usa capture per gestire prima i click sul nome cliente
     block.addEventListener('click', (e) => {
+      // Pulsanti popup: lascia la gestione originale
       if (e.target.closest('.btn-popup')) return;
+
+      const isTouchUI = document.body.classList.contains('touch-ui');
+      const isPaid = String(block.getAttribute('data-status')) === '2';
+      const clientLink = e.target.closest?.('.client-info-link') || null;
+
+      // Click sul nome cliente in stato 2 (pagato): apri modal, non chiudere popup
+      if (isTouchUI && isPaid && clientLink) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+
+        // Attiva il blocco se non lo è ancora (mostra eventuali barre top; bottom bar già nascosta per stato 2)
+        if (!block.classList.contains('active-popup')) {
+          closeAllPopups();
+          block.classList.add('active-popup');
+          block.style.zIndex = '11940';
+          const topBar = block.querySelector('.popup-buttons');
+          const bottomBar = block.querySelector('.popup-buttons-bottom');
+          if (topBar) topBar.style.zIndex = '11950';
+          if (bottomBar) bottomBar.style.zIndex = '11950';
+        }
+
+        // Apri modal info cliente robustamente
+        const cid = block.getAttribute('data-client-id') || clientLink.getAttribute('data-client-id') || '';
+        if (typeof window.openClientInfoMobileModal === 'function') {
+          window.openClientInfoMobileModal(block);
+          return;
+        }
+        if (typeof window.showClientInfoModal === 'function' && cid) {
+            window.showClientInfoModal(cid);
+            return;
+        }
+        if (typeof window.showClientInfoForBlock === 'function') {
+          window.showClientInfoForBlock(block);
+        }
+        return;
+      }
+
+      // Click sul resto del blocco: toggle popup
       const wasActive = block.classList.contains('active-popup');
       closeAllPopups();
-      if (!wasActive) block.classList.add('active-popup');
-    });
+      if (!wasActive) {
+        block.classList.add('active-popup');
+        block.style.zIndex = '11940';
+        const topBar = block.querySelector('.popup-buttons');
+        const bottomBar = block.querySelector('.popup-buttons-bottom');
+        if (topBar) topBar.style.zIndex = '11950';
+        if (bottomBar) bottomBar.style.zIndex = '11950';
+      }
+    }, true);
+
     block._touchToggleBound = true;
   }
 }

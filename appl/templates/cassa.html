@@ -169,6 +169,11 @@
   </div>
 </div>
 
+<!-- Overlay spinner per attesa RCH (stile coerente con Report: spinner-border) -->
+<div id="rchSpinnerOverlay" aria-hidden="true" style="display:none; position:fixed; inset:0; background:rgba(255,255,255,0.65); z-index:12480; align-items:center; justify-content:center;">
+  <div class="spinner-border text-primary" role="status" aria-label="Attendere..."></div>
+</div>
+
 <style>
   .modal-body {
     max-height: 70vh;      /* Limita l'altezza al 70% della viewport */
@@ -271,6 +276,79 @@
   display: none;         /* viene gestito da JS con style.display */
 }
 </style>
+
+<script>
+/* Spinner RCH: mostra dopo 5s se /cassa/send-to-rch non ha ancora risposto.
+   Rimane visibile finché non arriva una risposta non-pending, oppure finché
+   non si apre il popup di pending (showPendingModal). */
+(function() {
+  function showRchSpinner() {
+    const el = document.getElementById('rchSpinnerOverlay');
+    if (!el) return;
+    el.style.display = 'flex';
+    window.__rchSpinnerVisible = true;
+  }
+  function hideRchSpinner() {
+    const el = document.getElementById('rchSpinnerOverlay');
+    if (!el) return;
+    el.style.display = 'none';
+    window.__rchSpinnerVisible = false;
+  }
+  window.showRchSpinner = showRchSpinner;
+  window.hideRchSpinner = hideRchSpinner;
+
+  // Wrap fetch solo per /cassa/send-to-rch
+  const origFetch = window.fetch;
+  window.fetch = function(input, init) {
+    const url = (typeof input === 'string') ? input : (input && input.url) || '';
+    const isRch = /\/cassa\/send-to-rch\b/.test(url);
+    if (!isRch) {
+      return origFetch.apply(this, arguments);
+    }
+
+    let timer = setTimeout(() => { showRchSpinner(); }, 5000);
+
+    return origFetch.apply(this, arguments)
+      .then(async (resp) => {
+        clearTimeout(timer);
+        try {
+          const clone = resp.clone();
+          const data = await clone.json().catch(() => null);
+          // Se NON è pending, nascondi subito lo spinner
+          if (!(data && data.pending)) {
+            hideRchSpinner();
+          }
+        } catch (e) {
+          // In caso di parsing fallito, togli lo spinner
+          hideRchSpinner();
+        }
+        return resp;
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        hideRchSpinner();
+        throw err;
+      });
+  };
+
+  // Nascondi lo spinner immediatamente prima di mostrare il modal di pending
+  function wrapPendingModal() {
+    if (window._wrappedShowPendingModal) return;
+    if (typeof window.showPendingModal === 'function') {
+      const orig = window.showPendingModal;
+      window.showPendingModal = function() {
+        try { hideRchSpinner(); } catch(_) {}
+        return orig.apply(this, arguments);
+      };
+      window._wrappedShowPendingModal = true;
+    }
+  }
+  // Prova ora e poi al load (cassa.js potrebbe definire la funzione dopo)
+  wrapPendingModal();
+  window.addEventListener('load', wrapPendingModal);
+  setTimeout(wrapPendingModal, 0);
+})();
+</script>
 
 <script src="{{ url_for('static', filename='js/cassa.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
