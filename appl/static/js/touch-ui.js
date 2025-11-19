@@ -203,7 +203,8 @@ function _filterOffTopBarButtons(topBar) {
     btn.classList.contains('delete-appointment-block') ||
     (btn.classList.contains('nota') && btn.classList.contains('touch-top-note')) ||
     (btn.classList.contains('copia') && btn.classList.contains('touch-top-copy')) ||
-    (btn.classList.contains('taglia') && btn.classList.contains('touch-top-cut'));
+    // Consenti il CUT touch anche senza classe "taglia"
+    btn.classList.contains('touch-top-cut');
 
   // Nascondi tutti i non consentiti
   topBar.querySelectorAll('.btn-popup').forEach(btn => {
@@ -297,21 +298,20 @@ function ensureTopBarForTouch(block) {
     }
     note.style.display = 'inline-block';
 
-    // TAGLIA (nuovo per OFF in touch-ui)
-    let cut = topBar.querySelector('.btn-popup.taglia.touch-top-cut');
-    if (!cut) {
-      cut = document.createElement('button');
-      cut.className = 'btn-popup taglia touch-top-cut';
-      cut.title = 'Taglia blocco OFF';
-      cut.appendChild(biIcon('scissors'));
-      cut.addEventListener('click', (e) => {
-        e.stopPropagation();
-        startOffCut(block);
-        closeAllPopups();
-      });
-      topBar.appendChild(cut);
-    }
-    cut.style.display = 'inline-block';
+// TAGLIA / SPOSTA OFF (modalità touch-ui) — bottone dedicato alla touch-ui (no classe "taglia")
+let cut = topBar.querySelector('.btn-popup.touch-top-cut');
+if (!cut) {
+  cut = document.createElement('button');
+  cut.className = 'btn-popup touch-top-cut';
+  cut.title = 'Sposta blocco OFF';
+  cut.appendChild(biIcon('scissors'));
+  cut.addEventListener('click', (e) => {
+    e.stopPropagation();
+    startOffMove(block);
+  });
+  topBar.appendChild(cut);
+}
+cut.style.display = 'inline-flex';
 
     // Filtra e mantieni nascosti i bottoni non consentiti
     _filterOffTopBarButtons(topBar);
@@ -613,5 +613,140 @@ document.addEventListener('click', function (e) {
   }, 10);
 }, true);
 // --- END: global handler ---
+
+  // ===== SPOSTA BLOCCO OFF (touch-ui) =====
+  let __offMovePayload = null;
+
+  function startOffMove(block) {
+    if (!block || !block.classList.contains('note-off')) return;
+
+    // Evita doppia esecuzione se il bottone viene ri‑cliccato velocemente
+    if (block._offMoveStarted) return;
+    block._offMoveStarted = true;
+
+    // Lock contro chiusura popup immediata / handler globali
+    window._touchPopupOpenLock = true;
+    setTimeout(() => { window._touchPopupOpenLock = false; }, 300);
+
+    const apptId = block.getAttribute('data-appointment-id') || '';
+    const durata = parseInt(block.getAttribute('data-duration') || '15', 10) || 15;
+    const nota = block.getAttribute('data-note') || block.querySelector('.off-title')?.textContent || '';
+    const operatorId = block.getAttribute('data-operator-id') || '';
+    const date = block.getAttribute('data-date') || window.selectedAppointmentDate || window.selectedDate || '';
+
+    __offMovePayload = {
+      oldId: apptId,
+      duration: durata,
+      note: nota,
+      operatorId: operatorId,
+      date: date
+    };
+
+    // Evidenzia range celle (se funzione disponibile)
+    try { if (typeof addCutSourceHighlightRange === 'function') addCutSourceHighlightRange(block); } catch(_) {}
+
+    // Elimina subito il blocco OFF dal backend (idempotenza lato UI)
+    if (apptId) {
+      fetch('/calendar/delete/' + encodeURIComponent(apptId), {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'X-CSRFToken': CSRF },
+        credentials: 'same-origin'
+      }).catch(()=>{});
+    }
+
+    // Rimuovi dal DOM (lascia highlight delle celle)
+    try { block.remove(); } catch(_) {}
+
+    // Feedback visivo: aggiungi banner temporaneo
+    showOffMoveBanner('Seleziona una cella per spostare il blocco OFF (tap per annullare).');
+  }
+
+  function cancelOffMove() {
+    __offMovePayload = null;
+    hideOffMoveBanner();
+    try { if (typeof clearCutSourceHighlights === 'function') clearCutSourceHighlights(); } catch(_) {}
+  }
+
+  function showOffMoveBanner(msg) {
+    let bn = document.getElementById('offMoveBanner');
+    if (!bn) {
+      bn = document.createElement('div');
+      bn.id = 'offMoveBanner';
+      bn.style.position = 'fixed';
+      bn.style.top = '6px';
+      bn.style.left = '50%';
+      bn.style.transform = 'translateX(-50%)';
+      bn.style.background = '#222';
+      bn.style.color = '#ffd400';
+      bn.style.padding = '6px 14px';
+      bn.style.borderRadius = '8px';
+      bn.style.zIndex = '20000';
+      bn.style.fontSize = '14px';
+      bn.style.cursor = 'pointer';
+      bn.title = 'Clic per annullare';
+      bn.addEventListener('click', cancelOffMove);
+      document.body.appendChild(bn);
+    }
+    bn.textContent = msg;
+  }
+
+  function hideOffMoveBanner() {
+    const bn = document.getElementById('offMoveBanner');
+    if (bn) try { bn.remove(); } catch(_) {}
+  }
+
+  // Listener click celle per completare lo spostamento
+  document.addEventListener('click', function(e){
+    if (!__offMovePayload) return;
+    const cell = e.target.closest('.selectable-cell');
+    if (!cell) return;
+    if (cell.classList.contains('calendar-closed')) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const hour = cell.getAttribute('data-hour');
+    const minute = cell.getAttribute('data-minute');
+    const operatorId = cell.getAttribute('data-operator-id');
+    const date = cell.getAttribute('data-date') || __offMovePayload.date;
+
+    // Costruisci start_time HH:MM
+    const h = String(hour).padStart(2,'0');
+    const m = String(minute).padStart(2,'0');
+    const startTime = `${h}:${m}`;
+
+    // Payload creazione OFF (client/service dummy o null)
+    const createBody = {
+      client_id: null,
+      service_id: null,
+      operator_id: operatorId,
+      appointment_date: date,
+      start_time: startTime,
+      duration: __offMovePayload.duration,
+      note: __offMovePayload.note || '',
+      status: 0
+    };
+
+    fetch('/calendar/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type':'application/json',
+        'Accept':'application/json',
+        'X-CSRFToken': CSRF
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(createBody)
+    }).then(r => r.json().catch(()=> ({})))
+      .then(() => {
+        cancelOffMove();
+        // Ricarica per visualizzare il nuovo blocco OFF posizionato
+        location.reload();
+      })
+      .catch(() => {
+        cancelOffMove();
+        alert('Errore creazione blocco OFF spostato');
+      });
+  }, true);
+
 })();
 
