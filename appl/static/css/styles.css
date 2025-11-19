@@ -1754,8 +1754,36 @@ body.touch-ui .appointment-block .resize-handle {
   opacity: 0.25;
 }
 
+body.touch-ui .appointment-block {
+  z-index: 100 !important; /* base per tutti i blocchi */
+  position: relative;
+}
+
+body.touch-ui .appointment-block.active-popup {
+  z-index: 11940 !important; /* sempre sopra gli altri blocchi */
+}
+
+body.touch-ui .appointment-block.active-popup .popup-buttons,
+body.touch-ui .appointment-block.active-popup .popup-buttons-bottom {
+  z-index: 11950 !important; /* barre sopra al blocco attivo e ad ogni icona interna */
+  position: absolute;
+  pointer-events: auto;
+}
+
+body.touch-ui .appointment-block .popup-buttons,
+body.touch-ui .appointment-block .popup-buttons-bottom {
+  pointer-events: auto !important;
+}
+
+/* Sicurezza: nessun elemento appuntamento deve superare le barre */
+body.touch-ui .appointment-block * {
+  position: relative;
+  z-index: auto;
+}
+
 /* my-spia non cliccabile, resta visiva */
 body.touch-ui .appointment-block .my-spia {
+  display: none;
   pointer-events: none !important;
 }
 
@@ -1956,6 +1984,7 @@ body.touch-ui .appointment-block.active-popup .client-info-link {
   text-decoration: underline; /* sottolineatura per rafforzare la cliccabilità */
   box-shadow: none;
   font-size: 0.95em;
+  background-color: black;
 }
 
 body.touch-ui .appointment-block.status-2 .popup-buttons .btn-popup.copia {
