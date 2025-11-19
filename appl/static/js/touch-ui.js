@@ -520,11 +520,11 @@ function initTouchOnBlock(block){
         if (!block.classList.contains('active-popup')) {
           closeAllPopups();
           block.classList.add('active-popup');
-          block.style.zIndex = '11940';
+          block.style.zIndex = '9400';
           const topBar = block.querySelector('.popup-buttons');
           const bottomBar = block.querySelector('.popup-buttons-bottom');
-          if (topBar) topBar.style.zIndex = '11950';
-          if (bottomBar) bottomBar.style.zIndex = '11950';
+          if (topBar) topBar.style.zIndex = '9410';
+          if (bottomBar) bottomBar.style.zIndex = '9410';
         }
 
         // Apri modal info cliente robustamente
