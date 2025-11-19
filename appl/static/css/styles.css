@@ -1747,6 +1747,17 @@ body.offline .btn.pagamento {
 
 
 /* ===================== TOUCH UI (STILI PER TOUCHSCREEN quando attivati) ===================== */
+body.touch-ui .appointment-block .note-indicator {
+  position: absolute !important;
+  bottom: 10px !important;
+  left: 6px !important;
+  display: inline-block !important;
+  line-height: 1 !important;
+  z-index: 1 !important;          /* sotto al link */
+  background: transparent !important;
+  pointer-events: auto;    
+}
+
 body.touch-ui .appointment-block .drag-handle,
 body.touch-ui .appointment-block .resize-handle {
   pointer-events: none !important;  /* disabilita drag e resize */
@@ -1781,10 +1792,24 @@ body.touch-ui .appointment-block * {
   z-index: auto;
 }
 
-/* my-spia non cliccabile, resta visiva */
+/* Ripristina il posizionamento assoluto di my-spia in touch-ui (senza cambiarne la visibilità) */
 body.touch-ui .appointment-block .my-spia {
-  display: none;
-  pointer-events: none !important;
+  position: absolute !important;
+  top: 10px !important;
+  right: 6px !important;
+  left: auto !important;
+}
+
+body.touch-ui .appointment-block .my-spia {
+  /* rimuovi il nascondi forzato */
+  pointer-events: none !important;  /* default: non cliccabile finché non attivo */
+  opacity: 0;                       /* default: invisibile (transizione già in file) */
+}
+
+body.touch-ui .appointment-block.active-popup .my-spia {
+  display: inline-flex !important;  /* visibile in touch quando il blocco è attivo */
+  opacity: 1 !important;
+  pointer-events: auto !important;  /* cliccabile */
 }
 
 /* nascondi elementi non usabili su touch */
@@ -1958,9 +1983,7 @@ body.touch-ui .appointment-block .resize-handle {
   cursor: default !important;
   opacity: 0.25;
 }
-body.touch-ui .appointment-block .my-spia {
-  pointer-events: none !important;
-}
+
 body.touch-ui .appointment-block .no-show-button,
 body.touch-ui .appointment-block .icon-trash,
 body.touch-ui .appointment-block .delete-icon {

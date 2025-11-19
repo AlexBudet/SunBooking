@@ -101,10 +101,9 @@ function injectTouchMySpiaCSS() {
 }
 
 function installInterceptClientNameClicks() {
-  if (window.__touchClientLinkInterceptorInstalled) return;
+  if (window.__touchClientLinkEditInterceptorInstalled) return;
 
-  const handler = function(e) {
-    // Attivo solo in touch-ui
+  const handlerEdit = function(e) {
     if (!document.body.classList.contains('touch-ui')) return;
 
     const link = e.target && e.target.closest && e.target.closest('.client-info-link');
@@ -113,18 +112,22 @@ function installInterceptClientNameClicks() {
     const block = link.closest('.appointment-block');
     if (!block) return;
 
-    // Solo quando il blocco è già attivo e in stato 2
+    // Stato 0 (cambio cliente) solo se blocco già attivo
     if (!block.classList.contains('active-popup')) return;
-    if (String(block.getAttribute('data-status')) !== '2') return;
+    if (String(block.getAttribute('data-status')) !== '0') return;
 
-    // Fermiamo qui: non deve diventare un click sul blocco
     e.preventDefault();
     e.stopPropagation();
-    e.stopImmediatePropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
 
-    // Apri esplicitamente il modal info cliente
+    // Apri modal cambio cliente / info cliente (ordina fallback)
+    const apptId = block.getAttribute('data-appointment-id') || '';
     const cid = block.getAttribute('data-client-id') || link.getAttribute('data-client-id') || '';
 
+    if (apptId && typeof window.openModifyPopup === 'function') {
+      window.openModifyPopup(apptId);
+      return;
+    }
     if (typeof window.openClientInfoMobileModal === 'function') {
       window.openClientInfoMobileModal(block);
       return;
@@ -138,22 +141,17 @@ function installInterceptClientNameClicks() {
     }
   };
 
-  // Intercetta in fase di cattura per battere altri listener
-  document.addEventListener('click', handler, true);
-
-  // Backup: bind anche direttamente sui link già presenti (sempre in cattura)
+  document.addEventListener('click', handlerEdit, true);
   document.querySelectorAll('.client-info-link').forEach(a => {
-    try { a.addEventListener('click', handler, true); } catch(_) {}
+    try { a.addEventListener('click', handlerEdit, true); } catch(_) {}
   });
-
-  // Inizializza anche dopo il DOM pronto per link caricati più tardi
   document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.client-info-link').forEach(a => {
-      try { a.addEventListener('click', handler, true); } catch(_) {}
+      try { a.addEventListener('click', handlerEdit, true); } catch(_) {}
     });
   });
 
-  window.__touchClientLinkInterceptorInstalled = true;
+  window.__touchClientLinkEditInterceptorInstalled = true;
 }
 
 // Installa l'intercettore
