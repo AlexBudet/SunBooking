@@ -1771,12 +1771,12 @@ body.touch-ui .appointment-block {
 }
 
 body.touch-ui .appointment-block.active-popup {
-  z-index: 11940 !important; /* sempre sopra gli altri blocchi */
+  z-index: 9400 !important; /* sotto navigation (11999 / 13040) sopra blocchi normali */
 }
 
 body.touch-ui .appointment-block.active-popup .popup-buttons,
 body.touch-ui .appointment-block.active-popup .popup-buttons-bottom {
-  z-index: 11950 !important; /* barre sopra al blocco attivo e ad ogni icona interna */
+  z-index: 9410 !important; /* barre sopra al blocco attivo e ad ogni icona interna */
   position: absolute;
   pointer-events: auto;
 }
@@ -2073,6 +2073,9 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup
 body.touch-ui .appointment-block.off.active-popup .popup-buttons .btn-popup {
   display: none !important;
 }
+
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.taglia.touch-top-cut,
+body.touch-ui .appointment-block.off.active-popup .popup-buttons .btn-popup.taglia.touch-top-cut,
 body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.delete-appointment-block.touch-top-delete,
 body.touch-ui .appointment-block.off.active-popup .popup-buttons .btn-popup.delete-appointment-block.touch-top-delete,
 body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.copia.touch-top-copy,
@@ -2082,11 +2085,24 @@ body.touch-ui .appointment-block.off.active-popup .popup-buttons .btn-popup.nota
   display: inline-flex !important;
 }
 
+body.touch-ui .appointment-block.note-off .note-indicator,
+body.touch-ui .appointment-block.off .note-indicator {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 body.touch-ui .appointment-block.note-off.active-popup .popup-buttons,
 body.touch-ui .appointment-block.off.active-popup .popup-buttons {
   display: grid !important;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--pb-gap, 3px);
+}
+
+/* Touch-UI: mostra il bottone CUT in top bar per blocchi OFF quando il popup è aperto */
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.touch-top-cut,
+body.touch-ui .appointment-block.off.active-popup .popup-buttons .btn-popup.touch-top-cut {
+  display: inline-flex !important;
 }
 
 /* Touch-UI: allinea i popup info cliente al livello dei popup-buttons */
