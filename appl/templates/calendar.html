@@ -1179,7 +1179,8 @@ document.addEventListener('DOMContentLoaded', function() {
       popup.appendChild(ncLabel);
 
       const nc = document.createElement('div');
-      nc.style.cssText = "margin-top:1px; color:#ffff99; max-width:260px; word-break:break-word;";
+      // Aggiunto margin auto per centrare il blocco che ha max-width
+      nc.style.cssText = "margin-top:1px; color:#ffff99; max-width:260px; word-break:break-word; margin-left:auto; margin-right:auto;";
       nc.textContent = notaClienteD;
       popup.appendChild(nc);
     }
@@ -1209,7 +1210,7 @@ document.addEventListener('DOMContentLoaded', function() {
       popup.appendChild(naLabel);
 
       const na = document.createElement('div');
-      na.style.cssText = "margin-top:1px; color:#ffd27f; max-width:260px; word-break:break-word;";
+      na.style.cssText = "margin-top:1px; color:#ffff99; max-width:260px; word-break:break-word; margin-left:auto; margin-right:auto;";
       na.textContent = notaAppD;
       popup.appendChild(na);
     }
@@ -1647,7 +1648,12 @@ const placePopup = () => {
                     const d = this.getAttribute('data-date');
                     const h = this.getAttribute('data-hour');
                     const m = this.getAttribute('data-minute');
-                    if (d && h && m) window.location.href = `/calendar?date=${d}&ora=${h}:${m}`;
+                    if (!d || !h) return;
+                    try {
+                      sessionStorage.setItem('scrollToHour', h);
+                      sessionStorage.setItem('scrollToMinute', m || '00');
+                    } catch(_) {}
+                    window.location.href = `/calendar?date=${d}&ora=${h}:${m || '00'}`;
                   });
                   tbody.appendChild(tr);
                 });
@@ -1716,10 +1722,17 @@ const placePopup = () => {
                 (() => { const td = document.createElement('td'); td.textContent = row.operatore || ''; return td; })(),
                 (() => { const td = document.createElement('td'); td.textContent = row.costo ? ('€' + row.costo) : ''; return td; })()
               );
-              tr.addEventListener('click', function() {
-                const d = this.getAttribute('data-date'); const h = this.getAttribute('data-hour'); const m = this.getAttribute('data-minute');
-                if (d && h && m) window.location.href = `/calendar?date=${d}&ora=${h}:${m}`;
-              });
+                tr.addEventListener('click', function() {
+                  const d = this.getAttribute('data-date');
+                  const h = parts[0] || '';
+                  const m = parts[1] || '00';
+                  if (!d || !h) return;
+                  try {
+                    sessionStorage.setItem('scrollToHour', h);
+                    sessionStorage.setItem('scrollToMinute', m);
+                  } catch(_) {}
+                  window.location.href = `/calendar?date=${d}&ora=${h}:${m}`;
+                });
               tbody.appendChild(tr);
             });
 
