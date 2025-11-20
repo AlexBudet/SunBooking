@@ -8158,24 +8158,82 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function scrollToHourMinute(hour, minute) {
-  const cell = document.querySelector(`td[data-hour="${parseInt(hour, 10)}"][data-minute="${parseInt(minute, 10)}"]`);
-  if (cell) {
-    setTimeout(function() {
-      cell.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // NON aggiungere/rimuovere highlight!
-    }, 50);
+  const h = parseInt(hour, 10);
+  const m = parseInt(minute, 10);
+  if (isNaN(h) || isNaN(m)) return;
+
+  // 1) Cella precisa (selectable-cell) per quell'ora/minuto
+  let cell = document.querySelector(`.selectable-cell[data-hour="${h}"][data-minute="${m}"]`);
+
+  // 2) Se non trovata e minuto non zero, prova comunque l'ora (hour-cell) per avere un riferimento
+  if (!cell && m !== 0) {
+    cell = document.querySelector(`td.hour-cell[data-hour="${h}"]`);
   }
+
+  // 3) Fallback finale: qualsiasi cella per quell'ora
+  if (!cell) {
+    cell = document.querySelector(`.selectable-cell[data-hour="${h}"]`) ||
+           document.querySelector(`td[data-hour="${h}"]`);
+  }
+
+  if (!cell) return;
+
+  // Centra la cella (retry per layout ancora in stabilizzazione)
+  let attempts = 0;
+  const maxAttempts = 5;
+  function center() {
+    attempts++;
+    const rect = cell.getBoundingClientRect();
+    const targetY = rect.top + window.scrollY - (window.innerHeight / 2) + (rect.height / 2);
+    window.scrollTo({ top: Math.max(0, targetY), behavior: 'auto' });
+
+    // Verifica centratura entro tolleranza
+    const newRect = cell.getBoundingClientRect();
+    const delta = Math.abs((newRect.top + newRect.height / 2) - (window.innerHeight / 2));
+    if (delta > 6 && attempts < maxAttempts) {
+      setTimeout(center, attempts < 3 ? 80 : 160);
+    }
+  }
+  center();
+
+  // Flash visivo leggero
+  try {
+    cell.style.transition = 'background-color 0.5s';
+    const old = cell.style.backgroundColor;
+    cell.style.backgroundColor = '#fff8aa';
+    setTimeout(() => { cell.style.backgroundColor = old; }, 700);
+  } catch(_) {}
 }
 window.scrollToHourMinute = scrollToHourMinute;
 
 document.addEventListener('DOMContentLoaded', function() {
-  const hour = sessionStorage.getItem('scrollToHour');
-  const minute = sessionStorage.getItem('scrollToMinute');
-  console.log("ScrollToHourMinute:", hour, minute);
+  let hour = sessionStorage.getItem('scrollToHour');
+  let minute = sessionStorage.getItem('scrollToMinute');
+
+  // Se non presenti in sessionStorage, prova parametro ?ora=HH:MM
+  if ((hour === null || minute === null) && typeof URLSearchParams === 'function') {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ora = params.get('ora'); // formato HH:MM
+      if (ora && /^\d{1,2}:\d{2}$/.test(ora)) {
+        const parts = ora.split(':');
+        hour = parts[0];
+        minute = parts[1];
+      }
+    } catch(_) {}
+  }
+
   if (hour !== null && minute !== null) {
-    scrollToHourMinute(hour, minute);
-    sessionStorage.removeItem('scrollToHour');
-    sessionStorage.removeItem('scrollToMinute');
+    // Consuma e rimuovi subito (evita doppio scroll)
+    try {
+      sessionStorage.removeItem('scrollToHour');
+      sessionStorage.removeItem('scrollToMinute');
+    } catch(_) {}
+
+    // Posticipa leggermente per assicurare che le altezze dei quarter siano applicate
+    setTimeout(() => {
+      scrollToHourMinute(hour, minute);
+    }, 90);
   }
 });
 

@@ -1751,11 +1751,28 @@ body.touch-ui .appointment-block .note-indicator {
   position: absolute !important;
   bottom: 10px !important;
   left: 6px !important;
+  display: none !important;
+  line-height: 1 !important;
+  z-index: 1 !important;          /* sotto al link */
+  background: transparent !important;
+  pointer-events: auto;    
+}
+
+/* Mostra come inline-block SOLO se c'è una nota (attributo presente e non vuoto) e NON è un blocco OFF */
+body.touch-ui .appointment-block:not(.note-off):not(.off)[data-note]:not([data-note=""]) .note-indicator {
+  position: absolute !important;
+  bottom: 10px !important;
+  left: 6px !important;
   display: inline-block !important;
   line-height: 1 !important;
   z-index: 1 !important;          /* sotto al link */
   background: transparent !important;
   pointer-events: auto;    
+}
+
+/* Mostra come inline-block SOLO se c'è una nota (attributo presente e non vuoto) e NON è un blocco OFF */
+body.touch-ui .appointment-block:not(.note-off):not(.off)[data-note]:not([data-note=""]) .note-indicator {
+  display: inline-block !important;
 }
 
 body.touch-ui .appointment-block .drag-handle,
@@ -2007,7 +2024,8 @@ body.touch-ui .appointment-block.active-popup .client-info-link {
   text-decoration: underline; /* sottolineatura per rafforzare la cliccabilità */
   box-shadow: none;
   font-size: 0.95em;
-  background-color: black;
+  background-color: #000 !important; /* Sfondo nero assicurato */
+  color: #fff !important;            /* Testo SEMPRE bianco */
 }
 
 body.touch-ui .appointment-block.status-2 .popup-buttons .btn-popup.copia {
@@ -2413,6 +2431,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         gap: 6px !important;
         margin: 0 !important;
         padding: 0 !important;
+        z-index: 15000 !important;
     }
     .calendar-navigation .calendar-date-container .calendar-date-input,
     .calendar-navigation .calendar-date-container input.calendar-date-input {
