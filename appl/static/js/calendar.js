@@ -9003,3 +9003,41 @@ document.addEventListener('click', function(e) {
     window.deleteAppointment(id);
   }
 }, true);
+
+document.addEventListener('DOMContentLoaded', function() {
+  const btn = document.getElementById('mobileCalIconCalendar');
+  const dateInput = document.getElementById('date');
+  if (!btn || !dateInput) return;
+
+  // Evita doppio binding
+  if (btn._fpBound) return;
+  btn._fpBound = true;
+
+  function getFP() {
+    if (dateInput._flatpickr) return dateInput._flatpickr;
+    try {
+      return flatpickr(dateInput, {
+        dateFormat: "Y-m-d",
+        altFormat: "d M Y",
+        altInput: true,
+        defaultDate: dateInput.value,
+        locale: "it",
+        onChange: function(sel, dateStr) {
+          window.location.href = (typeof calendarHomeUrl === 'string' ? calendarHomeUrl : '/calendar') + "?date=" + dateStr;
+        }
+      });
+    } catch(_) { return null; }
+  }
+
+  btn.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Rimuove eventuali backdrop sopra
+    document.querySelectorAll('.modal-backdrop').forEach(b => {
+      const z = parseInt(b.style.zIndex || window.getComputedStyle(b).zIndex || '0', 10);
+      if (z >= 14990) b.remove();
+    });
+    const fp = getFP();
+    if (fp) fp.open(); else dateInput.focus();
+  });
+});
