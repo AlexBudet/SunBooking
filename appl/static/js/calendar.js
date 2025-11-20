@@ -9005,22 +9005,24 @@ document.addEventListener('click', function(e) {
 }, true);
 
 document.addEventListener('DOMContentLoaded', function() {
-  const btn = document.getElementById('mobileCalIconCalendar');
-  const dateInput = document.getElementById('date');
-  if (!btn || !dateInput) return;
+  const icon = document.getElementById('mobileCalIconCalendar');
+  if (!icon || icon._boundUnified) return;
+  icon._boundUnified = true;
 
-  // Evita doppio binding
-  if (btn._fpBound) return;
-  btn._fpBound = true;
-
-  function getFP() {
-    if (dateInput._flatpickr) return dateInput._flatpickr;
+  function pickInput() {
+    const m = document.getElementById('dateMobile');
+    if (m && window.getComputedStyle(m).display !== 'none') return m;
+    return document.getElementById('date');
+  }
+  function ensurePicker(i) {
+    if (!i) return null;
+    if (i._flatpickr) return i._flatpickr;
     try {
-      return flatpickr(dateInput, {
+      return flatpickr(i, {
         dateFormat: "Y-m-d",
         altFormat: "d M Y",
         altInput: true,
-        defaultDate: dateInput.value,
+        defaultDate: i.value,
         locale: "it",
         onChange: function(sel, dateStr) {
           window.location.href = (typeof calendarHomeUrl === 'string' ? calendarHomeUrl : '/calendar') + "?date=" + dateStr;
@@ -9029,15 +9031,11 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch(_) { return null; }
   }
 
-  btn.addEventListener('click', function(e) {
+  icon.addEventListener('click', function(e){
     e.preventDefault();
     e.stopPropagation();
-    // Rimuove eventuali backdrop sopra
-    document.querySelectorAll('.modal-backdrop').forEach(b => {
-      const z = parseInt(b.style.zIndex || window.getComputedStyle(b).zIndex || '0', 10);
-      if (z >= 14990) b.remove();
-    });
-    const fp = getFP();
-    if (fp) fp.open(); else dateInput.focus();
+    const input = pickInput();
+    const fp = ensurePicker(input);
+    if (fp) fp.open(); else if (input) input.focus();
   });
 });

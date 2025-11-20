@@ -735,8 +735,7 @@ def appuntamenti_giorno():
 
 @report_bp.route('/api/heatmap_appuntamenti')
 def heatmap_appuntamenti():
-
-    data_rif = request.args.get("data_rif")  # es: "2025-05-23"
+    data_rif = request.args.get("data_rif")
     if data_rif:
         data_rif = datetime.strptime(data_rif, "%Y-%m-%d")
     else:
@@ -744,28 +743,41 @@ def heatmap_appuntamenti():
 
     giorni = [data_rif - timedelta(days=i) for i in reversed(range(10))]
     giorni_label = [g.strftime('%d/%m') for g in giorni]
-    ore = [f"{h:02d}" for h in range(8, 21)]  # es: 08-20
+    ore = [f"{h:02d}" for h in range(8, 21)]
 
-    results = db.session.query(
-        func.date(Appointment.start_time).label('giorno'),
-        func.extract('hour', Appointment.start_time).label('ora'),
-        func.count(Appointment.id).label('count')
-    ).filter(
-        Appointment.start_time >= data_rif - timedelta(days=10),
-        Appointment.start_time <= data_rif
-    ).group_by(
-        func.date(Appointment.start_time),
-        func.extract('hour', Appointment.start_time)
-    ).all()
+    # FILTRA: escludi appuntamenti OFF (client/service null o dummy)
+    results = (
+        db.session.query(
+            func.date(Appointment.start_time).label('giorno'),
+            func.extract('hour', Appointment.start_time).label('ora'),
+            func.count(Appointment.id).label('count')
+        )
+        .join(Client, Appointment.client_id == Client.id)
+        .join(Service, Appointment.service_id == Service.id)
+        .filter(
+            Appointment.start_time >= data_rif - timedelta(days=10),
+            Appointment.start_time <= data_rif,
+            Client.cliente_nome.isnot(None),
+            Client.cliente_cognome.isnot(None),
+            Service.servizio_nome.isnot(None),
+            func.lower(Client.cliente_nome) != 'dummy',
+            func.lower(Client.cliente_cognome) != 'dummy',
+            func.lower(Service.servizio_nome) != 'dummy'
+        )
+        .group_by(
+            func.date(Appointment.start_time),
+            func.extract('hour', Appointment.start_time)
+        )
+        .all()
+    )
 
-    # Costruisci valori da results
     valori = []
     for row in results:
-        y = (data_rif.date() - row.giorno).days  # Calcola indice giorno
-        x = int(row.ora) - 8  # Ore da 8 a 21
-        valori.append({'x': x, 'y': y, 'v': row.count})
+        y = (data_rif.date() - row.giorno).days
+        x = int(row.ora) - 8
+        if 0 <= x < len(ore):
+            valori.append({'x': x, 'y': y, 'v': row.count})
 
-    # Conta operatori visibili e non cancellati
     operatori_totali = Operator.query.filter_by(is_deleted=False, is_visible=True).count()
 
     return jsonify({

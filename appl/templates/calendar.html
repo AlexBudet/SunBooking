@@ -151,24 +151,24 @@
            title="Apri calendario">📅</a>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  const btn = document.getElementById('mobileCalIconCalendar');
-  const dateInput = document.getElementById('date');
-  if (!btn || !dateInput) return;
+  const icon = document.getElementById('mobileCalIconCalendar');
+  if (!icon) return;
 
-  // Ripulisce backdrop che possono coprire l’icona su mobile
-  document.querySelectorAll('.modal-backdrop').forEach(b => {
-    const z = parseInt(b.style.zIndex || window.getComputedStyle(b).zIndex || '0', 10);
-    if (z >= 11995) b.parentNode.removeChild(b);
-  });
+  function pickDateInput() {
+    const mobile = document.getElementById('dateMobile');
+    if (mobile && window.getComputedStyle(mobile).display !== 'none') return mobile;
+    return document.getElementById('date');
+  }
 
-  function ensureFlatpickr() {
-    if (dateInput._flatpickr) return dateInput._flatpickr;
+  function ensurePicker(input) {
+    if (!input) return null;
+    if (input._flatpickr) return input._flatpickr;
     try {
-      return flatpickr(dateInput, {
+      return flatpickr(input, {
         dateFormat: "Y-m-d",
         altFormat: "d M Y",
         altInput: true,
-        defaultDate: dateInput.value,
+        defaultDate: input.value,
         locale: "it",
         onChange: function(selectedDates, dateStr) {
           window.location.href = (typeof calendarHomeUrl === 'string' ? calendarHomeUrl : '/calendar') + "?date=" + dateStr;
@@ -177,16 +177,23 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch(_) { return null; }
   }
 
-  btn.addEventListener('click', function(e) {
+  icon.addEventListener('click', function(e) {
     e.preventDefault();
     e.stopPropagation();
-    const fp = ensureFlatpickr();
-    if (fp) {
-      fp.open();
-    } else {
-      dateInput.focus();
-    }
+    // Rimuovi backdrop sopra l’icona (edge-case)
+    document.querySelectorAll('.modal-backdrop').forEach(b => {
+      const z = parseInt(b.style.zIndex || window.getComputedStyle(b).zIndex || '0', 10);
+      if (z >= 14000) b.remove();
+    });
+    const input = pickDateInput();
+    const fp = ensurePicker(input);
+    if (fp) fp.open();
+    else if (input) input.focus();
   });
+
+  // Forza interattività
+  icon.style.pointerEvents = 'auto';
+  icon.style.zIndex = '15010';
 });
 </script>
       </td>

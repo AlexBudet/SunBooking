@@ -2974,16 +2974,34 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   }
 
   /* icona calendario */
-  .mobile-date-nav .cal-btn {
+  #mobileDateNavCalendar {
+    position: relative;
+    z-index: 14990;
+  }
+  #mobileDateNavCalendar .cell-cal {
+    position: relative;
+    z-index: 15000;
+  }
+  #mobileDateNavCalendar .cal-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px; height: 28px;
+    width: 32px;
+    height: 32px;
     border-radius: 6px;
     border: 1px solid #ccc;
     background: #fff;
-    color: #333;
+    color: #222;
     text-decoration: none;
+    font-size: 20px;
+    position: relative;
+    z-index: 15010;
+    pointer-events: auto !important;
+    touch-action: manipulation;
+  }
+  /* Salvaguardia: overlay modal/backdrop non supera l'icona */
+  .modal-backdrop {
+    z-index: 14000 !important;
   }
 
   /* stile del bottone "Vai a OGGI" (coerente con desktop) */
