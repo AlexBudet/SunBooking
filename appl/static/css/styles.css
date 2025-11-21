@@ -3103,6 +3103,13 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   /* Spazio sotto la riga fissa su calendar */
   .calendar-fullwidth .calendar-table {
     margin-top: calc(var(--mobile-header-height, 56px) + var(--mobile-date-nav-height, 47px)) !important;
+    width: 100% !important;
+    right: 0px !important;
+    left: 0px !important;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
+    transform-origin:top left;
+    transform:scale(1);
   }
 
     /* MOBILE DATE NAV: rimuovi qualsiasi bordo della tabella/celle */
