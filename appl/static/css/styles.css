@@ -2999,37 +2999,10 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     pointer-events: auto !important;
     touch-action: manipulation;
   }
-
   /* Salvaguardia: overlay modal/backdrop non supera l'icona */
   .modal-backdrop {
     z-index: 14000 !important;
   }
-
-    #mobileDateNavCalendar,
-  #mobileDateNavCalendar table,
-  #mobileDateNavCalendar .cell-cal,
-  #mobileCalIconCalendar {
-    position: relative;
-    z-index: 15005;
-    pointer-events: auto !important;
-  }
-
-  #mobileCalIconCalendar {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    font-size: 22px;
-    border: 1px solid #ccc;
-    background:#fff;
-    border-radius:6px;
-    touch-action: manipulation;
-  }
-  
-  /* Evita che blocchi appuntamento o navigator coprano l’icona */
-  .appointment-block { z-index: 4000; }
-  .sticky-nav { z-index: 5000; }
 
   /* stile del bottone "Vai a OGGI" (coerente con desktop) */
   .mobile-date-nav .btn-today {
@@ -3048,6 +3021,41 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   .mobile-date-nav .btn-today:hover {
     background: #fcf1f7;
     text-decoration: none;
+  }
+
+    .cell-cal .cal-btn-wrapper {
+    position: relative;
+    display: inline-block;
+  }
+  #mobileCalIconCalendar {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    font-size: 22px;
+    border: 1px solid #ccc;
+    background: #fff;
+    border-radius: 6px;
+    pointer-events: none; /* il tap passa all'input overlay */
+  }
+  #mobileDatePickerOverlay {
+    position: absolute;
+    inset: 0;
+    width: 38px;
+    height: 38px;
+    opacity: 0;
+    border: none;
+    background: transparent;
+    z-index: 3;
+    cursor: pointer;
+    padding: 0;
+  }
+  #mobileDatePickerOverlay:focus-visible {
+    outline: 2px solid #4a90e2;
+    outline-offset: 2px;
   }
 
   /* Arrows coerenti col resto */

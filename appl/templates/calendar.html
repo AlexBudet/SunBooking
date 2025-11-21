@@ -2615,51 +2615,6 @@ function configureMobileModalButtons(modal, block) {
     display: none !important;
   }
 </style>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  try {
-    // Se esiste già il binding unificato, non ribindare
-    const calBtn = document.getElementById('mobileCalIconCalendar');
-    if (calBtn && calBtn._unifiedBound) return;
-    if (calBtn) calBtn._unifiedBound = true;
-
-    const fmtSpan = document.getElementById('mobileDateFormattedCalendar');
-    const dowSpan = document.getElementById('mobileDayOfWeekCalendar');
-    const desktopInput = document.getElementById('date');
-    const mobileInput  = document.getElementById('dateMobile');
-    const mesiShort = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-
-    function currentInput() {
-      if (mobileInput && window.getComputedStyle(mobileInput).display !== 'none') return mobileInput;
-      return desktopInput;
-    }
-    function formatDateYMD(ymd) {
-      const [y,m,d] = (ymd || '').split('-').map(n => parseInt(n,10));
-      if (!y || !m || !d) return '-- --- ----';
-      return `${String(d).padStart(2,'0')} ${mesiShort[m-1] || '---'} ${y}`;
-    }
-    function formatDOW(ymd) {
-      const giorni = ['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
-      const dt = new Date(ymd);
-      return isNaN(dt) ? '---' : giorni[dt.getDay()];
-    }
-    function refreshMobileFields() {
-      const inp = currentInput();
-      const v = (inp && inp.value) ? inp.value : '{{ selected_date_str }}';
-      if (fmtSpan) fmtSpan.textContent = formatDateYMD(v);
-      if (dowSpan) dowSpan.textContent = formatDOW(v);
-    }
-    refreshMobileFields();
-    [desktopInput, mobileInput].forEach(inp => {
-      if (!inp) return;
-      inp.addEventListener('change', refreshMobileFields);
-      if (inp._flatpickr) inp._flatpickr.config.onChange.push(refreshMobileFields);
-    });
-  } catch(err) {
-    console.warn('mobile date refresh failed', err);
-  }
-});
-</script>
 
 {% endif %}
 {% endblock %}
