@@ -138,26 +138,24 @@
       </td>
 
       <!-- 2: DATA FORMATTATA -->
-      <td class="cell-date">
-        <span id="mobileDateFormattedCalendar">-- --- ----</span>
-      </td>
+<td class="cell-date" style="padding-right:4px;">
+  <span id="mobileDateFormattedCalendar" style="display:inline-block; margin-right:2px;">-- --- ----</span>
+</td>
 
       <!-- 3: ICONA CALENDARIO -->
-<td class="cell-cal">
-  <!-- Manteniamo l'ancora per vecchi script, ma l’utente clicca il nuovo input -->
+<td class="cell-cal" style="padding-left:2px;">
   <a href="#"
      id="mobileCalIconCalendar"
-     class="cal-btn legacy-cal-anchor"
      aria-label="Apri calendario"
      title="Apri calendario"
      style="display:none;">📅</a>
-
-  <!-- Input nativo cliccabile (iOS/Android) -->
   <input type="date"
          id="mobileCalDate"
+         data-mobile-cal="1"
          value="{{ selected_date_str }}"
          aria-label="Seleziona data"
-         title="Seleziona data">
+         title="Seleziona data"
+         style="margin-left:0; width:34px;"/>
 
   <script>
   document.addEventListener('DOMContentLoaded', function() {
