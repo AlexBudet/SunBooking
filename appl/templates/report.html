@@ -11,7 +11,10 @@
     <a href="#" id="reportPrevDay" class="arrow-nav">&lt;</a>
     <!-- Campo data visibile con giorno della settimana -->
     <div class="calendar-date-container">
-        <input type="text" id="reportDate" class="calendar-date-input">
+        <input type="text"
+       id="reportDate"
+       class="calendar-date-input"
+       value="{{ selected_date_str }}">
         <span id="reportDayOfWeek"></span>
     </div>
     <!-- Freccia destra (giorno successivo) -->
@@ -27,122 +30,147 @@
 <div class="mobile-date-nav" id="mobileDateNavReport" style="display:none;">
   <table aria-label="Navigazione data (mobile)">
     <tr>
-      <!-- 1: IERI -->
       <td class="cell-arrow">
         <a href="#" id="mPrevDayReport" class="arrow-nav" aria-label="Giorno precedente">&lt;</a>
       </td>
-
-      <!-- 2: DATA FORMATTATA -->
-      <td class="cell-date">
-        <span id="mobileDateFormattedReport">-- --- ----</span>
+      <td class="cell-date" style="padding-right:4px;">
+        <span id="mobileDateFormattedReport" style="display:inline-block; margin-right:2px;">-- --- ----</span>
       </td>
-
-      <!-- 3: ICONA CALENDARIO -->
-      <td class="cell-cal">
-        <a href="#" id="mobileCalIconReport" class="cal-btn" aria-label="Apri calendario">📅</a>
+      <td class="cell-cal" style="padding-left:2px;">
+        <a href="#"
+           id="mobileCalIconReport"
+           aria-label="Apri calendario"
+           title="Apri calendario"
+           style="display:none;">📅</a>
+        <input type="date"
+               id="mobileCalDate"
+               value="{{ selected_date_str }}"
+               aria-label="Seleziona data"
+               title="Seleziona data"
+               style="margin-left:0; width:34px;"/>
       </td>
-
-      <!-- 4: DOMANI -->
       <td class="cell-arrow">
         <a href="#" id="mNextDayReport" class="arrow-nav" aria-label="Giorno successivo">&gt;</a>
       </td>
-
-      <!-- 5: DAY OF WEEK -->
       <td class="cell-dow">
         <span id="mobileDayOfWeekReport">---</span>
       </td>
-
-<!-- 6: VAI A OGGI -->
-<td class="cell-today">
-  <a href="#" id="mBtnTodayReport" class="btn-today">Vai a OGGI</a>
-</td>
+      <td class="cell-today">
+        <a href="#"
+           id="mBtnTodayReport"
+           class="btn-today"
+           style="display:none;">Vai a OGGI</a>
+      </td>
     </tr>
   </table>
 </div>
 
 <script>
-// Inizializza tabella mobile (report)
+// Mobile date-nav: replica logica calendar (client-side) senza redirect
 document.addEventListener('DOMContentLoaded', function() {
   try {
-    const inDate = document.getElementById('reportDate'); // input usato da flatpickr
-
-    // AGGIUNGI: helper locale e fp dinamico
-    function todayYMDLocal() {
-      const t = new Date();
-      const y = t.getFullYear();
-      const m = String(t.getMonth()+1).padStart(2,'0');
-      const d = String(t.getDate()).padStart(2,'0');
-      return `${y}-${m}-${d}`;
-    }
-    const getFp = () => {
-      const el = document.getElementById('reportDate');
-      return el && el._flatpickr ? el._flatpickr : null;
-    };
-
-    const fmtSpan = document.getElementById('mobileDateFormattedReport');
-    const dowSpan = document.getElementById('mobileDayOfWeekReport');
+    const mobileInput = document.getElementById('mobileCalDate');
+    const desktopInput = document.getElementById('reportDate');
     const prevBtn = document.getElementById('mPrevDayReport');
     const nextBtn = document.getElementById('mNextDayReport');
-    const todayBtn= document.getElementById('mBtnTodayReport');
-    const calBtn  = document.getElementById('mobileCalIconReport');
+    const todayBtn = document.getElementById('mBtnTodayReport');
+    const fmtSpan = document.getElementById('mobileDateFormattedReport');
+    const dowSpan = document.getElementById('mobileDayOfWeekReport');
+    const calAnchor = document.getElementById('mobileCalIconReport');
 
     const mesiShort = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-    function formatDateYMD(yyyy_mm_dd) {
-      const [y,m,d] = (yyyy_mm_dd || '').split('-').map(x => parseInt(x,10));
-      if (!y || !m || !d) return '-- --- ----';
-      const dd = String(d).padStart(2,'0');
-      const M = mesiShort[m-1] || '---';
-      return `${dd} ${M} ${y}`;
+    const giorni = ['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
+
+    function formatDate(v) {
+      const [y,m,d] = (v||'').split('-').map(n => parseInt(n,10));
+      if (!y||!m||!d) return '-- --- ----';
+      return `${String(d).padStart(2,'0')} ${mesiShort[m-1]||'---'} ${y}`;
     }
-    function formatDOW(yyyy_mm_dd) {
-      const giorni = ['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
-      const dt = new Date(yyyy_mm_dd);
+    function formatDOW(v) {
+      const dt = new Date(v);
       return isNaN(dt) ? '---' : giorni[dt.getDay()];
     }
-
-    // SOSTITUISCI: niente toISOString in fallback
-    function getVal() {
-      return inDate ? (inDate.value || todayYMDLocal()) : todayYMDLocal();
+    function todayYMD() {
+      const t = new Date();
+      return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
     }
-    function setVal(d) {
-      const fp = getFp();
-      if (fp) fp.setDate(d, true);
-      else if (inDate) { inDate.value = d; inDate.dispatchEvent(new Event('change')); }
-    }
-    function addDays(baseStr, delta) {
-      const d = new Date(baseStr);
-      d.setDate(d.getDate() + delta);
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth()+1).padStart(2,'0');
-      const dd = String(d.getDate()).padStart(2,'0');
-      return `${yyyy}-${mm}-${dd}`;
-    }
-    function refresh() {
-      const v = getVal();
-      if (fmtSpan) fmtSpan.textContent = formatDateYMD(v);
+    function updateLabels(val) {
+      const v = val || mobileInput.value || todayYMD();
+      if (fmtSpan) fmtSpan.textContent = formatDate(v);
       if (dowSpan) dowSpan.textContent = formatDOW(v);
+      const isToday = v === todayYMD();
+      if (todayBtn) todayBtn.style.display = isToday ? 'none' : '';
     }
-    refresh();
-
-    // AGGIUNGI: ascolta sempre il change dell’input per refresh + toggle bottone
-    if (inDate) inDate.addEventListener('change', function() {
-      refresh();
+    function setDateAll(v) {
+      if (!v) return;
+      // desktop flatpickr
+      if (desktopInput && desktopInput._flatpickr) {
+        desktopInput._flatpickr.setDate(v, true);
+      } else if (desktopInput) {
+        desktopInput.value = v;
+        desktopInput.dispatchEvent(new Event('change'));
+      }
+      if (mobileInput && mobileInput.value !== v) {
+        mobileInput.value = v;
+      }
+      updateLabels(v);
+      if (typeof triggerReportReload === 'function') triggerReportReload();
       if (typeof aggiornaBtnOggi === 'function') aggiornaBtnOggi();
-    });
+      if (typeof aggiornaGiornoSettimana === 'function') aggiornaGiornoSettimana();
+    }
+    function shiftDays(base, delta) {
+      const d = new Date(base);
+      d.setDate(d.getDate()+delta);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
 
-    if (prevBtn) prevBtn.addEventListener('click', e => { e.preventDefault(); setVal(addDays(getVal(), -1)); if (typeof aggiornaBtnOggi==='function') aggiornaBtnOggi(); });
-    if (nextBtn) nextBtn.addEventListener('click', e => { e.preventDefault(); setVal(addDays(getVal(), +1)); if (typeof aggiornaBtnOggi==='function') aggiornaBtnOggi(); });
+    // Init labels
+    updateLabels(desktopInput ? desktopInput.value : mobileInput.value);
+
+    // Sync desktop -> mobile labels when desktop changes
+    if (desktopInput) {
+      desktopInput.addEventListener('change', () => {
+        const v = desktopInput.value || todayYMD();
+        if (mobileInput && mobileInput.value !== v) mobileInput.value = v;
+        updateLabels(v);
+      });
+    }
+
+    // Mobile change
+    if (mobileInput) {
+      mobileInput.addEventListener('change', function() {
+        const v = (this.value||'').trim();
+        if (!v) return;
+        setDateAll(v);
+      });
+      mobileInput.addEventListener('click', function() {
+        if (typeof mobileInput.showPicker === 'function') {
+          try { mobileInput.showPicker(); } catch(_) {}
+        }
+      });
+    }
+
+    // Prev / Next / Today (client-side)
+    if (prevBtn) prevBtn.addEventListener('click', e => {
+      e.preventDefault();
+      const base = (desktopInput && desktopInput.value) || todayYMD();
+      setDateAll(shiftDays(base, -1));
+    });
+    if (nextBtn) nextBtn.addEventListener('click', e => {
+      e.preventDefault();
+      const base = (desktopInput && desktopInput.value) || todayYMD();
+      setDateAll(shiftDays(base, +1));
+    });
     if (todayBtn) todayBtn.addEventListener('click', e => {
       e.preventDefault();
-      setVal(todayYMDLocal());
-      if (typeof aggiornaBtnOggi === 'function') aggiornaBtnOggi();
+      setDateAll(todayYMD());
     });
-    if (calBtn) calBtn.addEventListener('click', e => {
-      e.preventDefault();
-      const fp = getFp();
-      if (fp) fp.open(); else if (inDate) inDate.focus();
-    });
-  } catch(_) {}
+
+    // Nascondi anchor icona (coerenza calendar)
+    if (calAnchor) calAnchor.style.display = 'none';
+  } catch(err) {
+    console.warn('mobile nav report error', err);
+  }
 });
 </script>
 
