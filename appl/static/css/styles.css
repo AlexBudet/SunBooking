@@ -3104,11 +3104,31 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     border: 0px !important;
   }
 
+  .calendar-fullwidth table thead th {
+    position: sticky !important;
+    top: 0 !important;
+  }
+
   .calendar-table th {
   font-size: inherit !important;
   font-weight: 600;
   padding: 4px 3px;
 }
+
+  /* Colonna ORE (prima colonna) sempre scalabile e ancorata */
+  .calendar-fullwidth table td:first-child,
+  .calendar-fullwidth table th:first-child {
+    font-size: inherit !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+  }
+
+  /* Bold interno (strong/b) nella colonna ore scala con la tabella */
+  .calendar-fullwidth table td:first-child strong,
+  .calendar-fullwidth table td:first-child b {
+    font-size: inherit !important;
+    font-weight: 600 !important;
+  }
 
 .calendar-table td {
   font-size: inherit !important;
