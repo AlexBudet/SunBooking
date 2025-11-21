@@ -2943,6 +2943,14 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     margin: 0 !important;
   }
 
+  .calendar-fullwidth table th:first-child,
+  .calendar-fullwidth table td:first-child,
+  .page-wide-90 table th:first-child,
+  .page-wide-90 table td:first-child {
+  position: sticky !important;
+  left: 0 !important;
+  }
+
   .mobile-date-nav td {
     padding: 4px 2px !important;
     overflow: hidden !important;           /* taglia contenuti che debordano */
