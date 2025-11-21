@@ -2904,11 +2904,12 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     left: 0 !important;
     right: 0 !important;              /* allinea a destra */
     width: 100% !important;
+    min-width: 94vw !important;
     z-index: 11995 !important;
     background: #ffffff !important;
     border-bottom: 1px solid rgba(0,0,0,0.08) !important;
     box-sizing: border-box !important;
-    padding: 0 5px !important;        /* margine interno sx/dx richiesto */
+    padding: 0 3px !important;        /* margine interno sx/dx richiesto */
     transform-origin: 0 0 !important;
     -webkit-transform-origin: 0 0 !important;
     will-change: transform, width, left, top !important;
@@ -3002,7 +3003,7 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   }
   /* Salvaguardia: overlay modal/backdrop non supera l'icona */
   .modal-backdrop {
-    z-index: 14000 !important;
+    z-index: 12400 !important;
   }
 
   /* stile del bottone "Vai a OGGI" (coerente con desktop) */
