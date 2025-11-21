@@ -2902,12 +2902,13 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     position: fixed !important;
     top: var(--mobile-header-height, 56px) !important;
     left: 0 !important;
-    right: 0 !important;
+    right: 0 !important;              /* allinea a destra */
     width: 100% !important;
     z-index: 11995 !important;
     background: #ffffff !important;
     border-bottom: 1px solid rgba(0,0,0,0.08) !important;
     box-sizing: border-box !important;
+    padding: 0 5px !important;        /* margine interno sx/dx richiesto */
     transform-origin: 0 0 !important;
     -webkit-transform-origin: 0 0 !important;
     will-change: transform, width, left, top !important;
@@ -2953,7 +2954,7 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     justify-content: flex-end !important;
     align-items: center !important;
     gap: 0px !important;
-    padding-right: 0px !important;
+    padding-right: 1px !important;
     box-sizing: border-box !important;
 }
 
@@ -3036,7 +3037,7 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     position: relative;
     cursor: pointer;
     z-index: 15010;
-    border: 1px solid #c7c7c7;
+    border: 0;
     border-radius: 6px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.10);
     transition: background .15s, box-shadow .15s;
@@ -3044,7 +3045,7 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     -webkit-appearance: none;
     font-size: 2px;    /* piccolo per compatibilità, non 0 */
     color: transparent;
-    vertical-align: middle;
+    vertical-align: middle !important;
     flex-shrink: 0;
   }
   .cell-cal #mobileCalDate:hover {
