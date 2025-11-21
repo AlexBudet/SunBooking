@@ -144,70 +144,33 @@
 
       <!-- 3: ICONA CALENDARIO -->
 <td class="cell-cal">
+  <!-- Manteniamo l'ancora per vecchi script, ma l’utente clicca il nuovo input -->
   <a href="#"
      id="mobileCalIconCalendar"
-     class="cal-btn"
-     role="button"
-     tabindex="0"
+     class="cal-btn legacy-cal-anchor"
      aria-label="Apri calendario"
-     title="Apri calendario">📅</a>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const icon = document.getElementById('mobileCalIconCalendar');
-  if (!icon) return;
+     title="Apri calendario"
+     style="display:none;">📅</a>
 
-  function pickInput() {
-    const m = document.getElementById('dateMobile');
-    if (m && window.getComputedStyle(m).display !== 'none') return m;
-    return document.getElementById('date');
-  }
-  function ensurePicker(inp) {
-    if (!inp) return null;
-    if (inp._flatpickr) return inp._flatpickr;
-    try {
-      return flatpickr(inp, {
-        dateFormat: "Y-m-d",
-        altFormat: "d M Y",
-        altInput: true,
-        defaultDate: inp.value,
-        locale: "it",
-        onChange: function(sel, dateStr) {
-          window.location.href = (typeof calendarHomeUrl === 'string' ? calendarHomeUrl : '/calendar') + "?date=" + dateStr;
-        }
-      });
-    } catch(_) { return null; }
-  }
-  function openPicker() {
-    // Rimuovi backdrop alte che coprono la barra
-    document.querySelectorAll('.modal-backdrop').forEach(b => {
-      const z = parseInt(b.style.zIndex || window.getComputedStyle(b).zIndex || '0', 10);
-      if (z >= 14000) b.remove();
+  <!-- Input nativo cliccabile (iOS/Android) -->
+  <input type="date"
+         id="mobileCalDate"
+         value="{{ selected_date_str }}"
+         aria-label="Seleziona data"
+         title="Seleziona data">
+
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const inp = document.getElementById('mobileCalDate');
+    if (!inp) return;
+    inp.addEventListener('change', function() {
+      const v = (this.value || '').trim();
+      if (!v) return;
+      const base = (typeof calendarHomeUrl === 'string') ? calendarHomeUrl : '/calendar';
+      window.location.href = base + '?date=' + encodeURIComponent(v);
     });
-    const inp = pickInput();
-    const fp = ensurePicker(inp);
-    if (fp) {
-      // iOS fallback: prova altInput click prima di fp.open()
-      try {
-        if (fp.altInput) fp.altInput.click();
-      } catch(_) {}
-      try { fp.open(); } catch(_) {}
-    } else if (inp) {
-      inp.focus();
-      try { inp.click(); } catch(_) {}
-    }
-  }
-  ['pointerdown','click','keydown'].forEach(ev => {
-    icon.addEventListener(ev, function(e) {
-      if (ev === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
-      e.preventDefault();
-      e.stopPropagation();
-      openPicker();
-    }, { passive: false });
   });
-  icon.style.pointerEvents = 'auto';
-  icon.style.zIndex = '15010';
-});
-</script>
+  </script>
 </td>
 
       <!-- 4: DOMANI -->
@@ -2615,6 +2578,55 @@ function configureMobileModalButtons(modal, block) {
     display: none !important;
   }
 </style>
+<script>
+// Inizializza contenuti della tabella mobile (calendar)
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    const fmtSpan = document.getElementById('mobileDateFormattedCalendar');
+    const dowSpan = document.getElementById('mobileDayOfWeekCalendar');
+    const calBtn  = document.getElementById('mobileCalIconCalendar');
+    const inDate  = document.getElementById('date'); // input già presente nella nav desktop
+
+    // formatter "06 Nov 2025"
+    const mesiShort = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    function formatDateYMD(yyyy_mm_dd) {
+      const [y,m,d] = (yyyy_mm_dd || '').split('-').map(x => parseInt(x,10));
+      if (!y || !m || !d) return '-- --- ----';
+      const dd = String(d).padStart(2,'0');
+      const M = mesiShort[m-1] || '---';
+      return `${dd} ${M} ${y}`;
+    }
+    function formatDOW(yyyy_mm_dd) {
+      const giorni = ['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
+      const dt = new Date(yyyy_mm_dd);
+      return isNaN(dt) ? '---' : giorni[dt.getDay()];
+    }
+
+    function refreshMobileFields() {
+      const v = inDate ? inDate.value : '{{ selected_date_str }}';
+      if (fmtSpan) fmtSpan.textContent = formatDateYMD(v);
+      if (dowSpan) dowSpan.textContent = formatDOW(v);
+    }
+    refreshMobileFields();
+
+    // Se c'è flatpickr, aggiorna live anche la tabella al cambio data
+    if (inDate && inDate._flatpickr) {
+      inDate._flatpickr.config.onChange.push(() => refreshMobileFields());
+    } else if (inDate) {
+      inDate.addEventListener('change', refreshMobileFields);
+    }
+
+    // Icona calendario: apri flatpickr dell'input desktop
+    if (calBtn) {
+      calBtn.addEventListener('click', function(e){
+        e.preventDefault();
+        if (inDate && inDate._flatpickr) inDate._flatpickr.open();
+        else if (inDate) inDate.focus();
+      });
+    }
+  } catch(_) {}
+});
+</script>
 
 {% endif %}
 {% endblock %}

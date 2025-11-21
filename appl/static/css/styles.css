@@ -3023,37 +3023,29 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     text-decoration: none;
   }
 
-    .cell-cal .cal-btn-wrapper {
+    .cell-cal #mobileCalDate {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    margin: 0;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 0;              /* nasconde il testo nativo */
     position: relative;
-    display: inline-block;
+    cursor: pointer;
+    z-index: 15010;
   }
-  #mobileCalIconCalendar {
-    position: relative;
-    z-index: 2;
-    display: inline-flex;
+  .cell-cal #mobileCalDate::before {
+    content: "📅";
+    font-size: 24px;
+    display: flex;
+    width: 100%;
+    height: 100%;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 38px;
-    font-size: 22px;
-    border: 1px solid #ccc;
-    background: #fff;
-    border-radius: 6px;
-    pointer-events: none; /* il tap passa all'input overlay */
   }
-  #mobileDatePickerOverlay {
-    position: absolute;
-    inset: 0;
-    width: 38px;
-    height: 38px;
-    opacity: 0;
-    border: none;
-    background: transparent;
-    z-index: 3;
-    cursor: pointer;
-    padding: 0;
-  }
-  #mobileDatePickerOverlay:focus-visible {
+  .cell-cal #mobileCalDate:focus {
     outline: 2px solid #4a90e2;
     outline-offset: 2px;
   }
