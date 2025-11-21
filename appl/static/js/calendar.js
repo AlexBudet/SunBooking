@@ -9005,10 +9005,9 @@ document.addEventListener('click', function(e) {
 }, true);
 
 document.addEventListener('DOMContentLoaded', function() {
-  const overlay = document.getElementById('mobileDatePickerOverlay');
-  if (!overlay) return;
-  // Redirect nativo al cambio data
-  overlay.addEventListener('change', function() {
+  const inp = document.getElementById('mobileCalDate');
+  if (!inp) return;
+  inp.addEventListener('change', function() {
     const v = (this.value || '').trim();
     if (!v) return;
     const base = (typeof calendarHomeUrl === 'string') ? calendarHomeUrl : '/calendar';
