@@ -3028,8 +3028,6 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     height: 44px;
     padding: 0;
     margin: 0;
-    border: 1px solid #ccc;
-    border-radius: 8px;
     background: #fff;
     font-size: 0;              /* nasconde il testo nativo */
     position: relative;
