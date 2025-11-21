@@ -9014,3 +9014,40 @@ document.addEventListener('DOMContentLoaded', function() {
     window.location.href = base + '?date=' + encodeURIComponent(v);
   });
 });
+
+document.addEventListener('DOMContentLoaded', function() {
+  const mobileInput = document.getElementById('mobileCalDate');
+  if (!mobileInput) return;
+
+  function redirectIfValid(val) {
+    if (!val) return;
+    const base = (typeof calendarHomeUrl === 'string') ? calendarHomeUrl : '/calendar';
+    window.location.href = base + '?date=' + encodeURIComponent(val);
+  }
+
+  // Cambia data → redirect
+  mobileInput.addEventListener('change', function() {
+    redirectIfValid(this.value.trim());
+  });
+
+  // Unico handler (click). Niente pointerdown/keydown.
+  mobileInput.addEventListener('click', function() {
+    // Se il browser gestisce nativamente il picker, lascia fare (eviti doppio popup)
+    if (typeof mobileInput.showPicker === 'function') {
+      try { mobileInput.showPicker(); } catch(_) {}
+      return;
+    }
+    // Fallback flatpickr solo se assente showPicker
+    if (typeof flatpickr === 'function' && !mobileInput._flatpickr) {
+      mobileInput._flatpickr = flatpickr(mobileInput, {
+        dateFormat: 'Y-m-d',
+        defaultDate: mobileInput.value || '{{ selected_date_str }}',
+        locale: 'it',
+        onChange: function(_, dateStr){ redirectIfValid(dateStr); }
+      });
+    }
+    if (mobileInput._flatpickr) {
+      try { mobileInput._flatpickr.open(); } catch(_) {}
+    }
+  });
+});

@@ -2919,7 +2919,7 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     table-layout: fixed;
   }
   .mobile-date-nav td {
-    padding: 4px 6px !important;
+    padding: 4px 2px !important;
     overflow: hidden !important;           /* taglia contenuti che debordano */
     text-overflow: ellipsis !important;    /* “…” quando serve */
     white-space: nowrap !important;
@@ -3023,25 +3023,53 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     text-decoration: none;
   }
 
-    .cell-cal #mobileCalDate {
-    width: 44px;
-    height: 44px;
+  .cell-cal {
+    position: relative;
+    min-width: 42px;
+  }
+  .cell-cal #mobileCalDate {
+    width: 34px;
+    height: 34px;
     padding: 0;
-    margin: 0;
+    margin: 0 4px 0 0;
     background: #fff;
-    font-size: 0;              /* nasconde il testo nativo */
     position: relative;
     cursor: pointer;
     z-index: 15010;
+    border: 1px solid #c7c7c7;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+    transition: background .15s, box-shadow .15s;
+    appearance: none;
+    -webkit-appearance: none;
+    font-size: 2px;    /* piccolo per compatibilità, non 0 */
+    color: transparent;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+  .cell-cal #mobileCalDate:hover {
+    background: #f5f5f5;
+  }
+  .cell-cal #mobileCalDate:focus {
+    outline: 2px solid #4a90e2;
+    outline-offset: 2px;
   }
   .cell-cal #mobileCalDate::before {
     content: "📅";
-    font-size: 24px;
+    font-size: 20px;
     display: flex;
     width: 100%;
     height: 100%;
     align-items: center;
     justify-content: center;
+    color: #222;
+    pointer-events: none;
+  }
+  .cell-cal #mobileCalDate::-webkit-calendar-picker-indicator {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
   }
 
   /* Arrows coerenti col resto */
