@@ -9005,44 +9005,13 @@ document.addEventListener('click', function(e) {
 }, true);
 
 document.addEventListener('DOMContentLoaded', function() {
-  const icon = document.getElementById('mobileCalIconCalendar');
-  if (!icon || icon._fallbackBound) return;
-  icon._fallbackBound = true;
-  let hasListener = false;
-  icon.addEventListener('test', () => {});
-  if (!icon._unifiedBound) {
-    function pickInput() {
-      const m = document.getElementById('dateMobile');
-      if (m && window.getComputedStyle(m).display !== 'none') return m;
-      return document.getElementById('date');
-    }
-    function ensurePicker(inp) {
-      if (!inp) return null;
-      if (inp._flatpickr) return inp._flatpickr;
-      try {
-        return flatpickr(inp, {
-          dateFormat:"Y-m-d",
-          altFormat:"d M Y",
-          altInput:true,
-          defaultDate: inp.value,
-          locale:"it",
-          onChange:function(sel,dateStr){
-            window.location.href=(typeof calendarHomeUrl==='string'?calendarHomeUrl:'/calendar')+"?date="+dateStr;
-          }
-        });
-      } catch(_) { return null; }
-    }
-    icon.addEventListener('click', function(e){
-      e.preventDefault();
-      const inp = pickInput();
-      const fp = ensurePicker(inp);
-      if (fp) {
-        try { if (fp.altInput) fp.altInput.click(); } catch(_) {}
-        try { fp.open(); } catch(_) {}
-      } else if (inp) {
-        inp.focus();
-        try { inp.click(); } catch(_) {}
-      }
-    }, { passive:false });
-  }
+  const overlay = document.getElementById('mobileDatePickerOverlay');
+  if (!overlay) return;
+  // Redirect nativo al cambio data
+  overlay.addEventListener('change', function() {
+    const v = (this.value || '').trim();
+    if (!v) return;
+    const base = (typeof calendarHomeUrl === 'string') ? calendarHomeUrl : '/calendar';
+    window.location.href = base + '?date=' + encodeURIComponent(v);
+  });
 });
