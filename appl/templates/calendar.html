@@ -2631,18 +2631,18 @@ document.addEventListener('DOMContentLoaded', function() {
   const table = container ? container.querySelector('table') : null;
   
   if (container && table) {
-    let currentScale = 1;
     let startDist = 0;
-    let initialScale = 1;
+    let initialZoom = 1;
 
     container.addEventListener('touchstart', function(e) {
       if (e.touches.length === 2) {
-        e.preventDefault(); // Previene zoom pagina nativo
+        e.preventDefault();
         startDist = Math.hypot(
           e.touches[0].pageX - e.touches[1].pageX,
           e.touches[0].pageY - e.touches[1].pageY
         );
-        initialScale = currentScale;
+        // Leggi lo zoom attuale (default 1)
+        initialZoom = parseFloat(table.style.zoom) || 1;
       }
     }, { passive: false });
 
@@ -2653,13 +2653,28 @@ document.addEventListener('DOMContentLoaded', function() {
           e.touches[0].pageX - e.touches[1].pageX,
           e.touches[0].pageY - e.touches[1].pageY
         );
+
         if (startDist > 0) {
-          const newScale = initialScale * (dist / startDist);
-          // Limita lo zoom (es. da 0.4x a 2.0x)
-          currentScale = Math.min(Math.max(0.4, newScale), 2.0);
-          table.style.transform = 'scale(' + currentScale + ')';
-          // Opzionale: adatta larghezza container per evitare spazio vuoto eccessivo
-          // table.style.width = (100 / currentScale) + '%'; 
+          // 1. Calcola il nuovo zoom proposto
+          let newZoom = initialZoom * (dist / startDist);
+
+          // 2. Calcola la larghezza "naturale" della tabella (senza zoom)
+          // rect.width è la larghezza renderizzata attuale (già zoomata)
+          const currentRectWidth = table.getBoundingClientRect().width;
+          const currentZoom = parseFloat(table.style.zoom) || 1;
+          const naturalWidth = currentRectWidth / currentZoom;
+
+          // 3. Calcola lo zoom MINIMO affinché la tabella riempia il container
+          // (Evita che il margine destro si stacchi)
+          const minZoomFit = container.clientWidth / naturalWidth;
+
+          // 4. Applica i limiti (minimo = fit dello schermo, massimo = 2.0)
+          // Usiamo Math.max(minZoomFit, 0.1) per sicurezza matematica
+          const finalZoom = Math.min(Math.max(newZoom, minZoomFit), 2.0);
+
+          // 5. Applica 'zoom' (mantiene sticky funzionante) invece di transform
+          table.style.zoom = finalZoom;
+          table.style.transform = 'none'; 
         }
       }
     }, { passive: false });
