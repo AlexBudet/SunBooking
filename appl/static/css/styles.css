@@ -2955,8 +2955,8 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     justify-content: flex-end !important;
     align-items: center !important;
     gap: 0px !important;
-    padding-right: 4px !important;
-    margin-right: 12px !important;
+    padding-right: 1px !important;
+    margin-right: 6px !important;
     box-sizing: border-box !important;
 }
 
