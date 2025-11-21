@@ -143,60 +143,72 @@
       </td>
 
       <!-- 3: ICONA CALENDARIO -->
-      <td class="cell-cal">
-        <a href="#"
-           id="mobileCalIconCalendar"
-           class="cal-btn"
-           aria-label="Apri calendario"
-           title="Apri calendario">📅</a>
+<td class="cell-cal">
+  <a href="#"
+     id="mobileCalIconCalendar"
+     class="cal-btn"
+     role="button"
+     tabindex="0"
+     aria-label="Apri calendario"
+     title="Apri calendario">📅</a>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const icon = document.getElementById('mobileCalIconCalendar');
   if (!icon) return;
 
-  function pickDateInput() {
-    const mobile = document.getElementById('dateMobile');
-    if (mobile && window.getComputedStyle(mobile).display !== 'none') return mobile;
+  function pickInput() {
+    const m = document.getElementById('dateMobile');
+    if (m && window.getComputedStyle(m).display !== 'none') return m;
     return document.getElementById('date');
   }
-
-  function ensurePicker(input) {
-    if (!input) return null;
-    if (input._flatpickr) return input._flatpickr;
+  function ensurePicker(inp) {
+    if (!inp) return null;
+    if (inp._flatpickr) return inp._flatpickr;
     try {
-      return flatpickr(input, {
+      return flatpickr(inp, {
         dateFormat: "Y-m-d",
         altFormat: "d M Y",
         altInput: true,
-        defaultDate: input.value,
+        defaultDate: inp.value,
         locale: "it",
-        onChange: function(selectedDates, dateStr) {
+        onChange: function(sel, dateStr) {
           window.location.href = (typeof calendarHomeUrl === 'string' ? calendarHomeUrl : '/calendar') + "?date=" + dateStr;
         }
       });
     } catch(_) { return null; }
   }
-
-  icon.addEventListener('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    // Rimuovi backdrop sopra l’icona (edge-case)
+  function openPicker() {
+    // Rimuovi backdrop alte che coprono la barra
     document.querySelectorAll('.modal-backdrop').forEach(b => {
       const z = parseInt(b.style.zIndex || window.getComputedStyle(b).zIndex || '0', 10);
       if (z >= 14000) b.remove();
     });
-    const input = pickDateInput();
-    const fp = ensurePicker(input);
-    if (fp) fp.open();
-    else if (input) input.focus();
+    const inp = pickInput();
+    const fp = ensurePicker(inp);
+    if (fp) {
+      // iOS fallback: prova altInput click prima di fp.open()
+      try {
+        if (fp.altInput) fp.altInput.click();
+      } catch(_) {}
+      try { fp.open(); } catch(_) {}
+    } else if (inp) {
+      inp.focus();
+      try { inp.click(); } catch(_) {}
+    }
+  }
+  ['pointerdown','click','keydown'].forEach(ev => {
+    icon.addEventListener(ev, function(e) {
+      if (ev === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      e.stopPropagation();
+      openPicker();
+    }, { passive: false });
   });
-
-  // Forza interattività
   icon.style.pointerEvents = 'auto';
   icon.style.zIndex = '15010';
 });
 </script>
-      </td>
+</td>
 
       <!-- 4: DOMANI -->
       <td class="cell-arrow">
@@ -2606,13 +2618,21 @@ function configureMobileModalButtons(modal, block) {
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   try {
+    // Se esiste già il binding unificato, non ribindare
+    const calBtn = document.getElementById('mobileCalIconCalendar');
+    if (calBtn && calBtn._unifiedBound) return;
+    if (calBtn) calBtn._unifiedBound = true;
+
     const fmtSpan = document.getElementById('mobileDateFormattedCalendar');
     const dowSpan = document.getElementById('mobileDayOfWeekCalendar');
-    const calBtn  = document.getElementById('mobileCalIconCalendar');
     const desktopInput = document.getElementById('date');
     const mobileInput  = document.getElementById('dateMobile');
-
     const mesiShort = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+    function currentInput() {
+      if (mobileInput && window.getComputedStyle(mobileInput).display !== 'none') return mobileInput;
+      return desktopInput;
+    }
     function formatDateYMD(ymd) {
       const [y,m,d] = (ymd || '').split('-').map(n => parseInt(n,10));
       if (!y || !m || !d) return '-- --- ----';
@@ -2623,13 +2643,6 @@ document.addEventListener('DOMContentLoaded', function() {
       const dt = new Date(ymd);
       return isNaN(dt) ? '---' : giorni[dt.getDay()];
     }
-
-    function currentInput() {
-      // Usa l’input mobile se visibile, altrimenti desktop
-      if (mobileInput && window.getComputedStyle(mobileInput).display !== 'none') return mobileInput;
-      return desktopInput;
-    }
-
     function refreshMobileFields() {
       const inp = currentInput();
       const v = (inp && inp.value) ? inp.value : '{{ selected_date_str }}';
@@ -2637,54 +2650,13 @@ document.addEventListener('DOMContentLoaded', function() {
       if (dowSpan) dowSpan.textContent = formatDOW(v);
     }
     refreshMobileFields();
-
-    // Aggiorna testo formattato su change di qualunque input attivo
     [desktopInput, mobileInput].forEach(inp => {
       if (!inp) return;
       inp.addEventListener('change', refreshMobileFields);
-      // Se flatpickr già inizializzato, aggancia onChange
-      if (inp._flatpickr) {
-        inp._flatpickr.config.onChange.push(refreshMobileFields);
-      }
+      if (inp._flatpickr) inp._flatpickr.config.onChange.push(refreshMobileFields);
     });
-
-    function ensurePicker(inp) {
-      if (!inp) return null;
-      if (inp._flatpickr) return inp._flatpickr;
-      try {
-        return flatpickr(inp, {
-          dateFormat: "Y-m-d",
-          altFormat: "d M Y",
-          altInput: true,
-          defaultDate: inp.value || '{{ selected_date_str }}',
-          locale: "it",
-          onChange: function(sel, dateStr) {
-            window.location.href = (typeof calendarHomeUrl === 'string' ? calendarHomeUrl : '/calendar') + "?date=" + dateStr;
-          }
-        });
-      } catch(_) { return null; }
-    }
-
-    if (calBtn) {
-      calBtn.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        // Rimuovi eventuali backdrop che coprono la riga (edge case)
-        document.querySelectorAll('.modal-backdrop').forEach(b => {
-          const z = parseInt(b.style.zIndex || window.getComputedStyle(b).zIndex || '0', 10);
-            if (z >= 14000) b.remove();
-        });
-        const inp = currentInput();
-        const fp = ensurePicker(inp);
-        if (fp) fp.open();
-        else if (inp) inp.focus();
-      });
-      // Sicurezza: garantisci clic
-      calBtn.style.pointerEvents = 'auto';
-      calBtn.style.zIndex = '15010';
-    }
   } catch(err) {
-    console.warn('mobile cal icon init failed', err);
+    console.warn('mobile date refresh failed', err);
   }
 });
 </script>
