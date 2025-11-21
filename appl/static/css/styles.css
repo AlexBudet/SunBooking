@@ -2950,13 +2950,13 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   }
 
 .mobile-date-nav .cell-today {
-    text-align: right !important;
+    text-align: center !important;
     display: flex !important;
     justify-content: flex-end !important;
     align-items: center !important;
     gap: 0px !important;
-    padding-right: 1px !important;
-    margin-right: 6px !important;
+    padding-right: 6px !important;
+    margin-right: 1px !important;
     box-sizing: border-box !important;
 }
 
