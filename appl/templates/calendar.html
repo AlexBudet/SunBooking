@@ -143,33 +143,28 @@
 </td>
 
       <!-- 3: ICONA CALENDARIO -->
-<td class="cell-cal">
-  <a href="#"
-     id="mobileCalIconCalendar"
-     aria-label="Apri calendario"
-     title="Apri calendario"
-     style="display:none;">📅</a>
-  <input type="date"
-         id="mobileCalDate"
-         data-mobile-cal="1"
-         value="{{ selected_date_str }}"
-         aria-label="Seleziona data"
-         title="Seleziona data"
-         style="width:34px;"/>
+      <td class="cell-cal">
+        <i class="bi bi-calendar3"></i>
+        <input type="date"
+               id="mobileCalDate"
+               data-mobile-cal="1"
+               value="{{ selected_date_str }}"
+               aria-label="Seleziona data"
+               title="Seleziona data">
 
-  <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    const inp = document.getElementById('mobileCalDate');
-    if (!inp) return;
-    inp.addEventListener('change', function() {
-      const v = (this.value || '').trim();
-      if (!v) return;
-      const base = (typeof calendarHomeUrl === 'string') ? calendarHomeUrl : '/calendar';
-      window.location.href = base + '?date=' + encodeURIComponent(v);
-    });
-  });
-  </script>
-</td>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+          const inp = document.getElementById('mobileCalDate');
+          if (!inp) return;
+          inp.addEventListener('change', function() {
+            const v = (this.value || '').trim();
+            if (!v) return;
+            const base = (typeof calendarHomeUrl === 'string') ? calendarHomeUrl : '/calendar';
+            window.location.href = base + '?date=' + encodeURIComponent(v);
+          });
+        });
+        </script>
+      </td>
 
       <!-- 4: DOMANI -->
       <td class="cell-arrow">
