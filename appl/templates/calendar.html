@@ -2625,6 +2625,46 @@ document.addEventListener('DOMContentLoaded', function() {
   } catch(_) {}
 });
 </script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const container = document.querySelector('.calendar-fullwidth');
+  const table = container ? container.querySelector('table') : null;
+  
+  if (container && table) {
+    let currentScale = 1;
+    let startDist = 0;
+    let initialScale = 1;
 
+    container.addEventListener('touchstart', function(e) {
+      if (e.touches.length === 2) {
+        e.preventDefault(); // Previene zoom pagina nativo
+        startDist = Math.hypot(
+          e.touches[0].pageX - e.touches[1].pageX,
+          e.touches[0].pageY - e.touches[1].pageY
+        );
+        initialScale = currentScale;
+      }
+    }, { passive: false });
+
+    container.addEventListener('touchmove', function(e) {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const dist = Math.hypot(
+          e.touches[0].pageX - e.touches[1].pageX,
+          e.touches[0].pageY - e.touches[1].pageY
+        );
+        if (startDist > 0) {
+          const newScale = initialScale * (dist / startDist);
+          // Limita lo zoom (es. da 0.4x a 2.0x)
+          currentScale = Math.min(Math.max(0.4, newScale), 2.0);
+          table.style.transform = 'scale(' + currentScale + ')';
+          // Opzionale: adatta larghezza container per evitare spazio vuoto eccessivo
+          // table.style.width = (100 / currentScale) + '%'; 
+        }
+      }
+    }, { passive: false });
+  }
+});
+</script>
 {% endif %}
 {% endblock %}
