@@ -1460,6 +1460,25 @@ body:not(.quarter-55) .appointment-block {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Contenitore principale del calendario: scroll SOLO orizzontale, header sticky gestito via thead */
+.calendar-fullwidth {
+  position: relative;
+  width: 100% !important;
+  max-width: 100% !important;
+  left: 0 !important;
+  margin-left: 0 !important;
+  overflow-x: auto;              /* scroll orizzontale */
+  overflow-y: visible;           /* niente scroll verticale sul contenitore */
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+}
+
+/* La tabella occupa la larghezza completa del contenitore orizzontale */
+.calendar-fullwidth .calendar-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
 /* assicurati che la table non imposti max-height */
 #WebAppointmentsModal .web-appt-table-container table#webApptTable {
   width: 100%;
@@ -2342,6 +2361,15 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         background: #fff !important; /* evita trasparenze quando sticky */
     }
 
+  /* Prima colonna (ORA) sticky a sinistra durante scroll orizzontale */
+  .calendar-fullwidth .calendar-table th:first-child,
+  .calendar-fullwidth .calendar-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 10981;         /* sopra le celle normali ma sotto overlay/modals */
+    background: #f8f8f8 !important;
+  }
+
     /* Titoli header (nomi operatori) più piccoli e centrati su schermi piccoli */
     .calendar-table thead th,
     .calendar-table thead th a {
@@ -2924,25 +2952,6 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     margin: 0 !important;
   }
 
-  /* FRAME TABELLA CALENDAR: Contenitore fisso con scroll interno (o zoom pagina sicuro) */
-  .calendar-fullwidth {
-    display: block !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: auto !important;       /* Abilita scroll/pan */
-    position: relative !important;
-    touch-action: pan-x pan-y;  
-  }
-
-    /* TABELLA CALENDAR: Pronta per essere scalata */
-  .calendar-fullwidth table {
-    transform-origin: 0 0 !important; /* Zoom parte da in alto a sx */
-    width: 100% !important;           /* Base 100%, poi scalata */
-    margin: 0 !important;
-  }
-
   .calendar-fullwidth table th:first-child,
   .calendar-fullwidth table td:first-child,
   .page-wide-90 table th:first-child,
@@ -3182,6 +3191,25 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   .calendar-fullwidth .calendar-table thead th,
   .calendar-fullwidth .calendar-table thead th:first-child {
     top: calc(var(--mobile-header-height, 56px) + var(--mobile-date-nav-height, 47px)) !important;
+  }
+
+  .calendar-fullwidth .calendar-table,
+  .calendar-fullwidth .calendar-table th,
+  .calendar-fullwidth .calendar-table td {
+    font-size: clamp(10px, 1.9vw, 14px);
+  }
+
+  /* Orario in prima/ultima colonna leggermente più piccolo per dare spazio agli operatori */
+  .calendar-fullwidth .calendar-table th:first-child,
+  .calendar-fullwidth .calendar-table td:first-child,
+  .calendar-fullwidth .calendar-table th:last-child,
+  .calendar-fullwidth .calendar-table td:last-child {
+    font-size: clamp(9px, 1.6vw, 12px);
+  }
+
+  /* Testo interno al blocco appuntamento: leggermente più grande, ma sempre proporzionale */
+  .calendar-fullwidth .appointment-block {
+    font-size: clamp(11px, 2.2vw, 15px);
   }
 }
 
