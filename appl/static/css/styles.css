@@ -1460,18 +1460,21 @@ body:not(.quarter-55) .appointment-block {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Contenitore principale del calendario: scroll SOLO orizzontale, header sticky gestito via thead */
-.calendar-fullwidth {
-  position: relative;
-  width: 100% !important;
-  max-width: 100% !important;
-  left: 0 !important;
-  margin-left: 0 !important;
-  overflow-x: auto;              /* scroll orizzontale */
-  overflow-y: visible;           /* niente scroll verticale sul contenitore */
-  -webkit-overflow-scrolling: touch;
-  box-sizing: border-box;
-}
+  /* Contenitore della tabella agenda: sempre ancorato sotto la barra calendario */
+  .calendar-fullwidth {
+    position: fixed;                 /* si ancora al viewport, non scorre verso l'alto */
+    top: var(--calendar-header-offset, 110px); /* calcolato da JS in calendar.html */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0 !important;
+    padding-top: 0 !important;
+    background: #ffffff;
+    overflow-x: auto;                /* scroll solo orizzontale per la tabella */
+    overflow-y: auto;                /* scroll verticale INTERNO alla tabella */
+    -webkit-overflow-scrolling: touch;
+    z-index: 11960;                  /* sotto popup/modali ma sopra il contenuto di pagina */
+  }
 
 /* La tabella occupa la larghezza completa del contenitore orizzontale */
 .calendar-fullwidth .calendar-table {
