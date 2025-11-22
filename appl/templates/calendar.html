@@ -2625,55 +2625,61 @@ document.addEventListener('DOMContentLoaded', function() {
   const container = document.querySelector('.calendar-fullwidth');
   const table = container ? container.querySelector('table') : null;
   
-  if (container && table) {
-    let startDist = 0;
-    let initialZoom = 1;
+  if (!container || !table) return;
 
-    container.addEventListener('touchstart', function(e) {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        startDist = Math.hypot(
-          e.touches[0].pageX - e.touches[1].pageX,
-          e.touches[0].pageY - e.touches[1].pageY
-        );
-        // Leggi lo zoom attuale (default 1)
-        initialZoom = parseFloat(table.style.zoom) || 1;
-      }
-    }, { passive: false });
-
-    container.addEventListener('touchmove', function(e) {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        const dist = Math.hypot(
-          e.touches[0].pageX - e.touches[1].pageX,
-          e.touches[0].pageY - e.touches[1].pageY
-        );
-
-        if (startDist > 0) {
-          // 1. Calcola il nuovo zoom proposto
-          let newZoom = initialZoom * (dist / startDist);
-
-          // 2. Calcola la larghezza "naturale" della tabella (senza zoom)
-          // rect.width è la larghezza renderizzata attuale (già zoomata)
-          const currentRectWidth = table.getBoundingClientRect().width;
-          const currentZoom = parseFloat(table.style.zoom) || 1;
-          const naturalWidth = currentRectWidth / currentZoom;
-
-          // 3. Calcola lo zoom MINIMO affinché la tabella riempia il container
-          // (Evita che il margine destro si stacchi)
-          const minZoomFit = container.clientWidth / naturalWidth;
-
-          // 4. Applica i limiti (minimo = fit dello schermo, massimo = 2.0)
-          // Usiamo Math.max(minZoomFit, 0.1) per sicurezza matematica
-          const finalZoom = Math.min(Math.max(newZoom, minZoomFit), 2.0);
-
-          // 5. Applica 'zoom' (mantiene sticky funzionante) invece di transform
-          table.style.zoom = finalZoom;
-          table.style.transform = 'none'; 
-        }
-      }
-    }, { passive: false });
+  // Attiva lo zoom SOLO se viewport < 1200px
+  function isSmall() {
+    return window.matchMedia('(max-width: 1199.98px)').matches;
   }
+
+  let startDist = 0;
+  let initialScale = 1;
+  let currentScale = 1;
+
+  function getCurrentScale() {
+    const m = table.style.transform.match(/scale\(([^)]+)\)/);
+    return m ? parseFloat(m[1]) || 1 : 1;
+  }
+
+  container.addEventListener('touchstart', function(e) {
+    if (!isSmall()) return;
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      startDist = Math.hypot(
+        e.touches[0].pageX - e.touches[1].pageX,
+        e.touches[0].pageY - e.touches[1].pageY
+      );
+      initialScale = getCurrentScale();
+    }
+  }, { passive: false });
+
+  container.addEventListener('touchmove', function(e) {
+    if (!isSmall()) return;
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const dist = Math.hypot(
+        e.touches[0].pageX - e.touches[1].pageX,
+        e.touches[0].pageY - e.touches[1].pageY
+      );
+
+      if (startDist > 0) {
+        let newScale = initialScale * (dist / startDist);
+
+        // Larghezza naturale (senza scala)
+        const rectW = table.getBoundingClientRect().width;
+        const oldScale = getCurrentScale();
+        const naturalWidth = rectW / (oldScale || 1);
+
+        // Scala minima: tabella larga almeno quanto il container
+        const minScaleFit = container.clientWidth / naturalWidth;
+
+        currentScale = Math.min(Math.max(newScale, minScaleFit), 2.0);
+
+        table.style.transformOrigin = '0 0';
+        table.style.transform = 'scale(' + currentScale + ')';
+      }
+    }
+  }, { passive: false });
 });
 </script>
 {% endif %}

@@ -3193,6 +3193,39 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
 }
 
 @media (max-width: 1200px) {
+  .calendar-fullwidth {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    width: 100% !important;
+    position: relative !important;
+  }
+
+  .calendar-fullwidth table {
+    transform-origin: 0 0 !important;
+    /* nessun font-size qui, scala via transform */
+  }
+
+  .calendar-fullwidth table thead th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 30 !important;
+    background: #ffffff !important;
+  }
+
+  /* Prima colonna header (se hai colonna ore a sinistra) */
+  .calendar-fullwidth table thead th:first-child {
+    left: 0 !important;
+    z-index: 40 !important;
+  }
+
+  .calendar-table,
+  .calendar-table th,
+  .calendar-table td {
+    font-size: inherit !important;
+    line-height: inherit !important;
+    -webkit-text-size-adjust: none !important;
+    text-size-adjust: none !important;
+  }
 
   /* Tutto il testo nei blocchi appuntamento deve ereditare la scala della tabella */
   .appointment-block,
