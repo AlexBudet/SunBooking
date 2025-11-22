@@ -2973,15 +2973,7 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     position: relative !important;
     text-align: center !important;
     width: 36px;
-    padding: 0 !important;
   }
-
-  .mobile-date-nav .cell-cal i.bi-calendar3 {
-    color: #ffffff;
-    line-height: 10;
-    display: inline-block;
-  }
-
   .mobile-date-nav .cell-dow {
     min-width: 42px;
     font-weight: 600;
@@ -3189,55 +3181,5 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     display: inline-block !important;
     width: 10px !important; /* spazio visivo costante dal bordo destro */
     height: 1px !important;
-  }
-}
-
-@media (max-width: 1200px) {
-  .calendar-fullwidth {
-    overflow-x: auto !important;
-    overflow-y: visible !important;
-    width: 100% !important;
-    position: relative !important;
-  }
-
-  .calendar-fullwidth table {
-    transform-origin: 0 0 !important;
-    /* nessun font-size qui, scala via transform */
-  }
-
-  .calendar-fullwidth table thead th {
-    position: sticky !important;
-    top: 0 !important;
-    z-index: 30 !important;
-    background: #ffffff !important;
-  }
-
-  /* Prima colonna header (se hai colonna ore a sinistra) */
-  .calendar-fullwidth table thead th:first-child {
-    left: 0 !important;
-    z-index: 40 !important;
-  }
-
-  .calendar-table,
-  .calendar-table th,
-  .calendar-table td {
-    font-size: inherit !important;
-    line-height: inherit !important;
-    -webkit-text-size-adjust: none !important;
-    text-size-adjust: none !important;
-  }
-
-  /* Tutto il testo nei blocchi appuntamento deve ereditare la scala della tabella */
-  .appointment-block,
-  .appointment-block * {
-    font-size: inherit !important;
-    line-height: inherit !important;
-  }
-
-  /* Titoli OFF / note OFF: niente font fisso su mobile */
-  .appointment-block.note-off p,
-  .off-block-title {
-    font-size: inherit !important;
-    font-weight: inherit !important;
   }
 }
