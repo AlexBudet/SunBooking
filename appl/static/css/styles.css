@@ -2171,7 +2171,6 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
   table#calendar {
     table-layout: fixed !important;
     width: 100% !important;
-    font-size: inherit!
   }
 
   /* imposta il numero di colonne con la variabile; fallback 6 */
@@ -2192,11 +2191,9 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: inherit !important;
     /* tutte le colonne uguali: calcola larghezza in percentuale */
     width: calc(100% / var(--calendar-cols));
   }
-
   }
 
 /* ===================== IMPOSTAZIONI SCHERMI PICCOLI ===================== */
@@ -2333,16 +2330,6 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         width: 56px !important;
         box-sizing: border-box !important;
     }
-
-    .calendar-table td:first-child.quarter-cell {
-        font-weight: normal !important;
-        font-size: inherit !important;
-    }
-
-    td[id^="fascia-"].hour-cell {
-    font-size: inherit !important;
-    line-height: inherit !important;
-  }
 
    .calendar-table thead th {
         position: sticky !important;
@@ -2996,34 +2983,6 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     display: inline-block;
   }
 
-  .mobile-date-nav .cell-cal input[type="date"] {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    opacity: 0 !important;
-    z-index: 100 !important;
-    cursor: pointer !important;
-    border: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    appearance: none !important;
-    -webkit-appearance: none !important;
-  }
-
-    .mobile-date-nav .cell-cal input[type="date"]::-webkit-calendar-picker-indicator {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
-
   .mobile-date-nav .cell-dow {
     min-width: 42px;
     font-weight: 600;
@@ -3231,5 +3190,25 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     display: inline-block !important;
     width: 10px !important; /* spazio visivo costante dal bordo destro */
     height: 1px !important;
+  }
+
+    .calendar-table td:first-child.hour-cell {
+    font-weight: normal !important;
+    font-size: inherit !important;
+    background-color: #fff !important;
+    padding-right: 5px !important;
+    border-top: 1px dashed #ddd !important;
+  }
+  /* Rimuove shading della riga imposto da .hour-cell ~ td */
+  .calendar-table td:first-child.hour-cell ~ td:not(.calendar-closed) {
+    background-color: #fff !important;
+  }
+  /* Quarter nella prima colonna: uniforma font (toglie 12px !important) */
+  .calendar-table td:first-child.quarter-cell {
+    font-weight: normal !important;
+    font-size: inherit !important;
+    background-color: #fff !important;
+    padding-right: 5px !important;
+    border-top: 1px dashed #ddd !important;
   }
 }
