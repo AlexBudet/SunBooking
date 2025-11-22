@@ -2416,12 +2416,6 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         width: 0 !important;
     }
 
-  .calendar-table td.hour-cell,
-  .calendar-table td.hour-cell-right {
-    font-size: inherit !important; /* scala con zoom */
-    line-height: inherit !important;
-  }
-
     /* Contenitore "gruppo sinistro" virtuale: forza comportamento degli elementi
        (usiamo order e flex per raggruppare senza cambiare markup) */
     .calendar-navigation .arrow-nav {
