@@ -2650,8 +2650,9 @@ document.addEventListener('DOMContentLoaded', function() {
       offset += getElementHeight(calendarNav);
     }
 
-    // piccolo margine in più
-    offset += 2;
+    // riduci il margine extra (o mettilo a 0 se vuoi incollare la tabella alla barra)
+    const extraMargin = 0; // prova 0, se vuoi un filo di aria metti 4 o 6
+    offset += extraMargin;
 
     root.style.setProperty('--calendar-header-offset', offset + 'px');
   }

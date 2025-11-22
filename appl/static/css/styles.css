@@ -2222,7 +2222,6 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
 @media (max-width: 1200px) {
     :root {
         --mobile-header-height: 56px;            /* già presente, mantiene coerenza */
-        --calendar-navigation-height: 44px;     /* regola se la tua .calendar-navigation è più alta */
         --calendar-nav-margin-bottom: 0px;      /* se imposterai margin-bottom cambialo qui */
     }
 
@@ -2354,10 +2353,17 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     }
 
   .calendar-table thead th {
+    position: sticky !important;     /* niente sticky */
+    top: 4px !important;
+    z-index: 1 !important;
+    background: #ffffff !important;
+  }
+
+  .calendar-fullwidth .calendar-table thead th,
+  .calendar-fullwidth .calendar-table thead th:first-child {
     position: sticky !important;
-    top: var(--calendar-header-offset) !important;
-    z-index: 11990 !important;         /* sopra le celle e sopra la calendar-table stessa */
-    background: #ffffff !important;    /* copre ciò che sta sotto */
+    top: 0px !important;
+    z-index: 11990 !important;
   }
 
     /* Titoli header (nomi operatori) più piccoli e centrati su schermi piccoli */
@@ -2903,10 +2909,6 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
 
 /* ==== MOBILE DATE NAV: disattiva vecchia barra e mostra tabella nuova (<1200px) ==== */
 @media (max-width: 1200px) {
-  :root {
-    --mobile-date-nav-height: 47px; /* altezza della nuova riga tabella */
-  }
-
   /* Nascondi completamente la vecchia date-nav su mobile */
   .calendar-navigation.sticky-nav,
   .calendar-navigation {
@@ -3147,16 +3149,16 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   }
 
   /* Spazio sotto la riga fissa su calendar */
-  .calendar-fullwidth .calendar-table {
-    margin-top: calc(var(--mobile-header-height, 56px) + var(--mobile-date-nav-height, 47px)) !important;
+.calendar-fullwidth .calendar-table {
+    margin-top: 0 !important;          /* niente spazio aggiuntivo */
     width: 100% !important;
     right: 0px !important;
     left: 0px !important;
     overflow: auto !important;
     -webkit-overflow-scrolling: touch;
-    transform-origin:top left;
-    transform:scale(1);
-  }
+    transform-origin: top left;
+    transform: scale(1);
+}
 
     /* MOBILE DATE NAV: rimuovi qualsiasi bordo della tabella/celle */
   .mobile-date-nav table,
@@ -3175,12 +3177,6 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     border-collapse: separate !important; /* evita unione bordi */
     border-spacing: 0 !important;
     background-color: #fff !important;    /* su sfondo bianco i bordi bianchi spariscono */
-  }
-
-    /* header sticky della tabella allineato alla nuova barra */
-  .calendar-fullwidth .calendar-table thead th,
-  .calendar-fullwidth .calendar-table thead th:first-child {
-    top: var(--calendar-header-offset) !important;
   }
   .calendar-fullwidth .calendar-table th:first-child,
   .calendar-fullwidth .calendar-table td:first-child {
