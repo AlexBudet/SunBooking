@@ -3191,3 +3191,20 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     height: 1px !important;
   }
 }
+
+@media (max-width: 1200px) {
+
+  /* Tutto il testo nei blocchi appuntamento deve ereditare la scala della tabella */
+  .appointment-block,
+  .appointment-block * {
+    font-size: inherit !important;
+    line-height: inherit !important;
+  }
+
+  /* Titoli OFF / note OFF: niente font fisso su mobile */
+  .appointment-block.note-off p,
+  .off-block-title {
+    font-size: inherit !important;
+    font-weight: inherit !important;
+  }
+}
