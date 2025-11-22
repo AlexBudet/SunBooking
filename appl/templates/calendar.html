@@ -2623,13 +2623,49 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const container = document.querySelector('.calendar-fullwidth');
-  const table = container ? container.querySelector('table') : null;
-  
+  const table = container ? container.querySelector('table.calendar-table, table') : null;
+  const root = document.documentElement;
+
+  function getElementHeight(el) {
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    return rect.height || 0;
+  }
+
+  // Calcola quanto spazio è occupato sopra la tabella e aggiorna la variabile CSS
+  function updateCalendarHeaderOffset() {
+    const header = document.querySelector('header');
+    const mobileDateNav = document.querySelector('.mobile-date-nav');
+    const calendarNav = document.querySelector('.calendar-navigation');
+
+    let offset = 0;
+
+    // Header fisso (sempre presente)
+    offset += getElementHeight(header);
+
+    // Su mobile usi la mobile-date-nav, su desktop la calendar-navigation
+    if (window.innerWidth <= 1200 && mobileDateNav && getComputedStyle(mobileDateNav).display !== 'none') {
+      offset += getElementHeight(mobileDateNav);
+    } else if (calendarNav && getComputedStyle(calendarNav).display !== 'none') {
+      offset += getElementHeight(calendarNav);
+    }
+
+    // Piccolo margine di sicurezza per evitare che l'header aderisca al bordo
+    offset += 2;
+
+    root.style.setProperty('--calendar-header-offset', offset + 'px');
+  }
+
+  // Aggiorna subito all’avvio
+  updateCalendarHeaderOffset();
+  // Aggiorna a ogni resize/orientamento
+  window.addEventListener('resize', updateCalendarHeaderOffset);
+  window.addEventListener('orientationchange', updateCalendarHeaderOffset);
+
   if (container && table) {
     let startDist = 0;
     let initialZoom = 1;
 
-    // zoom minimo assoluto per mantenere l'header leggibile e non schiacciato sotto le barre
     const MIN_ZOOM_HEADER_SAFE = 0.85;
     const MAX_ZOOM = 2.0;
 
@@ -2638,7 +2674,10 @@ document.addEventListener('DOMContentLoaded', function() {
       table.style.zoom = clamped;
       table.style.transform = 'none';
       table.dataset.calendarZoom = String(clamped);
-      document.documentElement.style.setProperty('--calendar-zoom', clamped);
+      root.style.setProperty('--calendar-zoom', clamped);
+
+      // Dopo ogni cambio zoom ricalcola l'offset
+      updateCalendarHeaderOffset();
     }
 
     // Imposta zoom iniziale
@@ -2672,7 +2711,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
           const minZoomFit = container.clientWidth / naturalWidth;
 
-          // Limite finale: non meno di MIN_ZOOM_HEADER_SAFE e non meno di minZoomFit
           const applied = Math.max(newZoom, Math.max(minZoomFit, MIN_ZOOM_HEADER_SAFE));
           applyZoomToCalendar(applied);
         }
