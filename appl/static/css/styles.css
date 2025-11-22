@@ -2361,6 +2361,13 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         background: #fff !important; /* evita trasparenze quando sticky */
     }
 
+  .calendar-fullwidth .calendar-table thead th {
+    position: sticky;
+    top: 72px;                 /* somma header base + eventuale margine */
+    z-index: 10980;
+    background: #F0F0F0 !important;
+  }
+
   /* Prima colonna (ORA) sticky a sinistra durante scroll orizzontale */
   .calendar-fullwidth .calendar-table th:first-child,
   .calendar-fullwidth .calendar-table td:first-child {

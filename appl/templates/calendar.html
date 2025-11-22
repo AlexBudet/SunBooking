@@ -2629,6 +2629,21 @@ document.addEventListener('DOMContentLoaded', function() {
     let startDist = 0;
     let initialZoom = 1;
 
+    // zoom minimo assoluto per mantenere l'header leggibile e non schiacciato sotto le barre
+    const MIN_ZOOM_HEADER_SAFE = 0.85;
+    const MAX_ZOOM = 2.0;
+
+    function applyZoomToCalendar(newZoom) {
+      const clamped = Math.min(Math.max(newZoom, MIN_ZOOM_HEADER_SAFE), MAX_ZOOM);
+      table.style.zoom = clamped;
+      table.style.transform = 'none';
+      table.dataset.calendarZoom = String(clamped);
+      document.documentElement.style.setProperty('--calendar-zoom', clamped);
+    }
+
+    // Imposta zoom iniziale
+    applyZoomToCalendar(1);
+
     container.addEventListener('touchstart', function(e) {
       if (e.touches.length === 2) {
         e.preventDefault();
@@ -2636,8 +2651,7 @@ document.addEventListener('DOMContentLoaded', function() {
           e.touches[0].pageX - e.touches[1].pageX,
           e.touches[0].pageY - e.touches[1].pageY
         );
-        // Leggi lo zoom attuale (default 1)
-        initialZoom = parseFloat(table.style.zoom) || 1;
+        initialZoom = parseFloat(table.dataset.calendarZoom || table.style.zoom) || 1;
       }
     }, { passive: false });
 
@@ -2650,26 +2664,17 @@ document.addEventListener('DOMContentLoaded', function() {
         );
 
         if (startDist > 0) {
-          // 1. Calcola il nuovo zoom proposto
           let newZoom = initialZoom * (dist / startDist);
 
-          // 2. Calcola la larghezza "naturale" della tabella (senza zoom)
-          // rect.width è la larghezza renderizzata attuale (già zoomata)
           const currentRectWidth = table.getBoundingClientRect().width;
-          const currentZoom = parseFloat(table.style.zoom) || 1;
+          const currentZoom = parseFloat(table.dataset.calendarZoom || table.style.zoom) || 1;
           const naturalWidth = currentRectWidth / currentZoom;
 
-          // 3. Calcola lo zoom MINIMO affinché la tabella riempia il container
-          // (Evita che il margine destro si stacchi)
           const minZoomFit = container.clientWidth / naturalWidth;
 
-          // 4. Applica i limiti (minimo = fit dello schermo, massimo = 2.0)
-          // Usiamo Math.max(minZoomFit, 0.1) per sicurezza matematica
-          const finalZoom = Math.min(Math.max(newZoom, minZoomFit), 2.0);
-
-          // 5. Applica 'zoom' (mantiene sticky funzionante) invece di transform
-          table.style.zoom = finalZoom;
-          table.style.transform = 'none'; 
+          // Limite finale: non meno di MIN_ZOOM_HEADER_SAFE e non meno di minZoomFit
+          const applied = Math.max(newZoom, Math.max(minZoomFit, MIN_ZOOM_HEADER_SAFE));
+          applyZoomToCalendar(applied);
         }
       }
     }, { passive: false });
