@@ -2972,25 +2972,14 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   .mobile-date-nav .cell-cal {
     position: relative !important;
     text-align: center !important;
-    width: 30px;
+    width: 36px;
     padding: 0 !important;
   }
 
   .mobile-date-nav .cell-cal i.bi-calendar3 {
-    font-size: 1rem;
-    color: #444;
-    line-height: 1;
+    color: #ffffff;
+    line-height: 10;
     display: inline-block;
-  }
-
-    /* Rimuove icona tre puntini se presente nel markup */
-  .mobile-date-nav .cell-cal i.bi-three-dots {
-    display: none !important;
-  }
-
-  /* Rimuove eventuale inserimento tramite pseudo-elemento */
-  .mobile-date-nav .cell-cal::after {
-    content: none !important;
   }
 
   .mobile-date-nav .cell-dow {
@@ -3200,41 +3189,5 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     display: inline-block !important;
     width: 10px !important; /* spazio visivo costante dal bordo destro */
     height: 1px !important;
-  }
-
-  /* TESTO GENERALE BLOCCO APPUNTAMENTO */
-  .appointment-block,
-  .appointment-block .appointment-content,
-  .appointment-block .appointment-content p,
-  .appointment-block .appointment-content p strong,
-  .appointment-block .appointment-content .client-name,
-  .appointment-block .appointment-content .client-name a {
-    font-size: inherit !important;
-    line-height: inherit !important;
- }
-
-    .appointment-block.note-off p,
-  .appointment-block .off-title,
-  .off-block-title {
-    font-size: inherit !important;
-    font-weight: inherit !important;
-    line-height: inherit !important;
-  }
-
-  .appointment-block .btn-popup,
-  .appointment-block .btn-popup i,
-  .appointment-block .delete-appointment-block i,
-  .appointment-block .no-show-button i,
-  .appointment-block .my-spia,
-  .appointment-block .note-indicator i {
-    font-size: inherit !important;
-    line-height: inherit !important;
-  }
-
-  .appointment-block.status-2,
-  .appointment-block[data-status="2"],
-  .appointment-block[data-status="3"] {
-    font-size: inherit !important;
-    line-height: inherit !important;
   }
 }
