@@ -2545,7 +2545,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
   #formattedDate {
     max-width: calc(100% - 50px) !important; /* Lascia spazio all'icona */
     overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    text-overflow: clip !important;
     white-space: nowrap !important;
   }
 
@@ -3004,7 +3004,7 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   .mobile-date-nav .cell-date #mobileDateFormattedReport {
     display: block !important;
     overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    text-overflow: clip !important;
     white-space: nowrap !important;
     max-width: 100% !important;
   }
@@ -3070,53 +3070,67 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     height: 34px;
     padding: 0;
     margin: 0 4px 0 0;
-    background: #fff;
-    position: relative;
+    background: transparent !important;   /* niente sfondo proprio */
+    position: absolute;                   /* si mette sopra l'icona Bootstrap */
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
     cursor: pointer;
     z-index: 15010;
     border: 0px !important;
     border-radius: 6px;
-    box-shadow: 0 1px 4px rgba(241, 227, 227, 0.1);
-    transition: background .15s, box-shadow .15s;
+    box-shadow: none !important;
     appearance: none;
     -webkit-appearance: none;
-    font-size: 2px;    /* piccolo per compatibilità, non 0 */
-    color: transparent;
+    font-size: inherit;                   /* nessuna dimensione fissa */
+    color: transparent;                   /* nasconde il testo data */
     vertical-align: middle !important;
     flex-shrink: 0;
   }
   .cell-cal #mobileCalDate:hover {
-    background: #f5f5f5;
+    background: transparent !important;
     border: 0px !important;
   }
 
   .cell-cal #mobileCalDate:focus,
   .cell-cal #mobileCalDate:focus-visible,
   .cell-cal #mobileCalDate:active {
-    background: #f0f2f5;
+    background: transparent !important;
     border: 0 !important;
     outline: none !important;
     box-shadow: none !important;
   }
   
+  /* RIMUOVI COMPLETAMENTE L'EMOJI "📅" PRECEDENTE */
   .cell-cal #mobileCalDate::before {
-    content: "📅";
-    font-size: 20px;
-    display: flex;
-    width: 100%;
-    height: 100%;
-    align-items: center;
-    justify-content: center;
-    color: #222;
-    pointer-events: none;
-    vertical-align: middle !important;
-    border: 0px !important;
+    content: none !important;
   }
+
+  /* NASCONDI L'ICONA CALENDAR NATIVA DEL BROWSER */
   .cell-cal #mobileCalDate::-webkit-calendar-picker-indicator {
-    opacity: 0;
-    width: 0;
-    height: 0;
-    pointer-events: none;
+    display: none !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    pointer-events: none !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+  }
+
+  .mobile-date-nav input[type="date"] {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    background: transparent !important;
+    color: transparent !important;
+    border: none !important;
+  }
+
+  .mobile-date-nav input[type="date"]::-webkit-calendar-picker-indicator {
+    display: none !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    pointer-events: none !important;
   }
 
   /* Arrows coerenti col resto */
