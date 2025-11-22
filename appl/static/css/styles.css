@@ -2221,7 +2221,6 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         --mobile-header-height: 56px;            /* già presente, mantiene coerenza */
         --calendar-navigation-height: 44px;     /* regola se la tua .calendar-navigation è più alta */
         --calendar-nav-margin-bottom: 0px;      /* se imposterai margin-bottom cambialo qui */
-        --calendar-zoom: 1;
     }
 
 .calendar-navigation .arrow-left { order: 1 !important; }
@@ -2351,20 +2350,11 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         box-sizing: border-box !important;
     }
 
-   .calendar-table thead th {
-        position: sticky !important;
-        top: var(--calendar-header-offset) !important;
-        z-index: 11970 !important;
-        background: #fff !important;
-    }
-
-  /* Prima colonna (ORA) sticky a sinistra durante scroll orizzontale */
-  .calendar-fullwidth .calendar-table th:first-child,
-  .calendar-fullwidth .calendar-table td:first-child {
-    position: sticky;
-    left: 0;
-    z-index: 10981;         /* sopra le celle normali ma sotto overlay/modals */
-    background: #f8f8f8 !important;
+  .calendar-table thead th {
+    position: sticky !important;
+    top: var(--calendar-header-offset) !important;
+    z-index: 11990 !important;         /* sopra le celle e sopra la calendar-table stessa */
+    background: #ffffff !important;    /* copre ciò che sta sotto */
   }
 
     /* Titoli header (nomi operatori) più piccoli e centrati su schermi piccoli */
@@ -3165,23 +3155,6 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     transform:scale(1);
   }
 
-    .calendar-fullwidth .calendar-table,
-  .calendar-fullwidth .calendar-table th,
-  .calendar-fullwidth .calendar-table td {
-    font-size: calc(clamp(10px, 1.9vw, 15px) * var(--calendar-zoom));
-  }
-
-  .calendar-fullwidth .calendar-table th:first-child,
-  .calendar-fullwidth .calendar-table td:first-child,
-  .calendar-fullwidth .calendar-table th:last-child,
-  .calendar-fullwidth .calendar-table td:last-child {
-    font-size: calc(clamp(9px, 1.6vw, 13px) * var(--calendar-zoom));
-  }
-
-  .calendar-fullwidth .appointment-block {
-    font-size: calc(clamp(11px, 2.3vw, 16px) * var(--calendar-zoom));
-  }
-
     /* MOBILE DATE NAV: rimuovi qualsiasi bordo della tabella/celle */
   .mobile-date-nav table,
   .mobile-date-nav tr,
@@ -3205,6 +3178,13 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   .calendar-fullwidth .calendar-table thead th,
   .calendar-fullwidth .calendar-table thead th:first-child {
     top: var(--calendar-header-offset) !important;
+  }
+  .calendar-fullwidth .calendar-table th:first-child,
+  .calendar-fullwidth .calendar-table td:first-child {
+    position: sticky !important;
+    left: 0 !important;
+    z-index: 11995 !important;        /* leggermente sopra gli altri th/td */
+    background: #f8f8f8 !important;
   }
 }
 
