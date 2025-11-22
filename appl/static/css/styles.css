@@ -2338,10 +2338,11 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         font-weight: normal !important;
         font-size: inherit !important;
     }
-    .calendar-table td:first-child.hour-cell {
-        font-weight: 600 !important; /* mantiene bold solo sulle xx:00 */
-        font-size: inherit !important;
-    }
+
+    td[id^="fascia-"].hour-cell {
+    font-size: inherit !important;
+    line-height: inherit !important;
+  }
 
    .calendar-table thead th {
         position: sticky !important;
