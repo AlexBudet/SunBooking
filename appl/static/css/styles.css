@@ -2418,7 +2418,6 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
 
   .calendar-table td.hour-cell,
   .calendar-table td.hour-cell-right {
-    font-weight: 600 !important;
     font-size: inherit !important; /* scala con zoom */
     line-height: inherit !important;
   }
