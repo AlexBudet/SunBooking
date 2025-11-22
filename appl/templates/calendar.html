@@ -143,28 +143,33 @@
 </td>
 
       <!-- 3: ICONA CALENDARIO -->
-      <td class="cell-cal">
-        <i class="bi bi-calendar3"></i>
-        <input type="date"
-               id="mobileCalDate"
-               data-mobile-cal="1"
-               value="{{ selected_date_str }}"
-               aria-label="Seleziona data"
-               title="Seleziona data">
+<td class="cell-cal">
+  <a href="#"
+     id="mobileCalIconCalendar"
+     aria-label="Apri calendario"
+     title="Apri calendario"
+     style="display:none;">📅</a>
+  <input type="date"
+         id="mobileCalDate"
+         data-mobile-cal="1"
+         value="{{ selected_date_str }}"
+         aria-label="Seleziona data"
+         title="Seleziona data"
+         style="width:34px;"/>
 
-        <script>
-        document.addEventListener('DOMContentLoaded', function() {
-          const inp = document.getElementById('mobileCalDate');
-          if (!inp) return;
-          inp.addEventListener('change', function() {
-            const v = (this.value || '').trim();
-            if (!v) return;
-            const base = (typeof calendarHomeUrl === 'string') ? calendarHomeUrl : '/calendar';
-            window.location.href = base + '?date=' + encodeURIComponent(v);
-          });
-        });
-        </script>
-      </td>
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const inp = document.getElementById('mobileCalDate');
+    if (!inp) return;
+    inp.addEventListener('change', function() {
+      const v = (this.value || '').trim();
+      if (!v) return;
+      const base = (typeof calendarHomeUrl === 'string') ? calendarHomeUrl : '/calendar';
+      window.location.href = base + '?date=' + encodeURIComponent(v);
+    });
+  });
+  </script>
+</td>
 
       <!-- 4: DOMANI -->
       <td class="cell-arrow">
@@ -187,7 +192,7 @@
 </div>
 
 <!-- Tabella dell'agenda giornaliera -->
-<div class="calendar-fullwidth" style="width:100% !important; left:0 !important; margin-left:0 !important;">
+<div class="calendar-fullwidth">
     <table class="calendar-table">
         <thead>
   <tr id="headerRow">
@@ -2620,67 +2625,6 @@ document.addEventListener('DOMContentLoaded', function() {
   } catch(_) {}
 });
 </script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const container = document.querySelector('.calendar-fullwidth');
-  const table = container ? container.querySelector('table') : null;
-  
-  if (!container || !table) return;
 
-  // Attiva lo zoom SOLO se viewport < 1200px
-  function isSmall() {
-    return window.matchMedia('(max-width: 1199.98px)').matches;
-  }
-
-  let startDist = 0;
-  let initialScale = 1;
-  let currentScale = 1;
-
-  function getCurrentScale() {
-    const m = table.style.transform.match(/scale\(([^)]+)\)/);
-    return m ? parseFloat(m[1]) || 1 : 1;
-  }
-
-  container.addEventListener('touchstart', function(e) {
-    if (!isSmall()) return;
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      startDist = Math.hypot(
-        e.touches[0].pageX - e.touches[1].pageX,
-        e.touches[0].pageY - e.touches[1].pageY
-      );
-      initialScale = getCurrentScale();
-    }
-  }, { passive: false });
-
-  container.addEventListener('touchmove', function(e) {
-    if (!isSmall()) return;
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      const dist = Math.hypot(
-        e.touches[0].pageX - e.touches[1].pageX,
-        e.touches[0].pageY - e.touches[1].pageY
-      );
-
-      if (startDist > 0) {
-        let newScale = initialScale * (dist / startDist);
-
-        // Larghezza naturale (senza scala)
-        const rectW = table.getBoundingClientRect().width;
-        const oldScale = getCurrentScale();
-        const naturalWidth = rectW / (oldScale || 1);
-
-        // Scala minima: tabella larga almeno quanto il container
-        const minScaleFit = container.clientWidth / naturalWidth;
-
-        currentScale = Math.min(Math.max(newScale, minScaleFit), 2.0);
-
-        table.style.transformOrigin = '0 0';
-        table.style.transform = 'scale(' + currentScale + ')';
-      }
-    }
-  }, { passive: false });
-});
-</script>
 {% endif %}
 {% endblock %}
