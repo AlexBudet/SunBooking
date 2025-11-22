@@ -2171,7 +2171,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
   table#calendar {
     table-layout: fixed !important;
     width: 100% !important;
-    font-size: inherit !important;
+    font-size: inherit!
   }
 
   /* imposta il numero di colonne con la variabile; fallback 6 */
@@ -2196,6 +2196,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     /* tutte le colonne uguali: calcola larghezza in percentuale */
     width: calc(100% / var(--calendar-cols));
   }
+
   }
 
 /* ===================== IMPOSTAZIONI SCHERMI PICCOLI ===================== */
@@ -2333,6 +2334,15 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         box-sizing: border-box !important;
     }
 
+    .calendar-table td:first-child.quarter-cell {
+        font-weight: normal !important;
+        font-size: inherit !important;
+    }
+    .calendar-table td:first-child.hour-cell {
+        font-weight: 600 !important; /* mantiene bold solo sulle xx:00 */
+        font-size: inherit !important;
+    }
+
    .calendar-table thead th {
         position: sticky !important;
         top: calc(
@@ -2405,6 +2415,13 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
         max-width: 0 !important;
         width: 0 !important;
     }
+
+  .calendar-table td.hour-cell,
+  .calendar-table td.hour-cell-right {
+    font-weight: 600 !important;
+    font-size: inherit !important; /* scala con zoom */
+    line-height: inherit !important;
+  }
 
     /* Contenitore "gruppo sinistro" virtuale: forza comportamento degli elementi
        (usiamo order e flex per raggruppare senza cambiare markup) */
@@ -3103,38 +3120,6 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     min-width: 42px;
     border: 0px !important;
   }
-
-  .calendar-fullwidth table thead th {
-    position: sticky !important;
-    top: 0 !important;
-  }
-
-  .calendar-table th {
-  font-size: inherit !important;
-  font-weight: 600;
-  padding: 4px 3px;
-}
-
-  /* Colonna ORE (prima colonna) sempre scalabile e ancorata */
-  .calendar-fullwidth table td:first-child,
-  .calendar-fullwidth table th:first-child {
-    font-size: inherit !important;
-    font-weight: 600 !important;
-    white-space: nowrap !important;
-  }
-
-  /* Bold interno (strong/b) nella colonna ore scala con la tabella */
-  .calendar-fullwidth table td:first-child strong,
-  .calendar-fullwidth table td:first-child b {
-    font-size: inherit !important;
-    font-weight: 600 !important;
-  }
-
-.calendar-table td {
-  font-size: inherit !important;
-  padding: 3px 2px;
-  line-height: 1.2;
-}
   
   .cell-cal #mobileCalDate {
     width: 34px;
