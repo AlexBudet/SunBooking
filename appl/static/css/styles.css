@@ -3175,10 +3175,25 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     width: 10px !important; /* spazio visivo costante dal bordo destro */
     height: 1px !important;
   }
-
-  #MobilePopupButtonsModal + .modal-backdrop,
-.modal-backdrop.show {
+#MobilePopupButtonsModal {
   background: transparent !important;
-  opacity: 0 !important;
+}
+#MobilePopupButtonsModal .modal-dialog {
+  max-width: 95vw !important;
+  width: 95vw !important;
+  margin: 2.5vh auto !important;
+}
+#MobilePopupButtonsModal .modal-header {
+  background: transparent !important;
+}
+#MobilePopupButtonsModal .modal-body {
+  background: transparent !important;
+}
+#MobilePopupButtonsModal .modal-footer {
+  background: transparent !important;
+}
+#MobilePopupButtonsModal ~ .modal-backdrop,
+.modal-backdrop {
+  background: transparent !important;
 }
 }
