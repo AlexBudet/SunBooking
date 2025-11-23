@@ -3175,25 +3175,41 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     width: 10px !important; /* spazio visivo costante dal bordo destro */
     height: 1px !important;
   }
-#MobilePopupButtonsModal {
+
+#MobilePopupButtonsModal,
+#MobilePopupButtonsModal.modal,
+#MobilePopupButtonsModal.fade.show {
   background: transparent !important;
+  box-shadow: none !important;
 }
+
 #MobilePopupButtonsModal .modal-dialog {
-  max-width: 95vw !important;
-  width: 95vw !important;
-  margin: 2.5vh auto !important;
-}
-#MobilePopupButtonsModal .modal-header {
   background: transparent !important;
 }
-#MobilePopupButtonsModal .modal-body {
-  background: transparent !important;
+
+#MobilePopupButtonsModal .modal-content {
+  background: #fff8fc !important;
 }
-#MobilePopupButtonsModal .modal-footer {
+
+.modal-backdrop,
+.modal-backdrop.fade,
+.modal-backdrop.show,
+#MobilePopupButtonsModal + .modal-backdrop {
   background: transparent !important;
+  opacity: 0 !important;
+  display: none !important;
+  pointer-events: none !important;
 }
-#MobilePopupButtonsModal ~ .modal-backdrop,
-.modal-backdrop {
+
+/* Blocca eventuale overlay generico rimasto con z-index simile */
+body > .modal-backdrop {
   background: transparent !important;
+  opacity: 0 !important;
+  display: none !important;
+}
+/* Se il wrapper .modal crea alone per colore ereditato */
+#MobilePopupButtonsModal::before,
+#MobilePopupButtonsModal::after {
+  content: none !important;
 }
 }
