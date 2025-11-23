@@ -3018,10 +3018,6 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     pointer-events: auto !important;
     touch-action: manipulation;
   }
-  /* Salvaguardia: overlay modal/backdrop non supera l'icona */
-  .modal-backdrop {
-    z-index: 12400 !important;
-  }
 
   /* stile del bottone "Vai a OGGI" (coerente con desktop) */
   .mobile-date-nav .btn-today {
@@ -3179,4 +3175,10 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     width: 10px !important; /* spazio visivo costante dal bordo destro */
     height: 1px !important;
   }
+
+  #MobilePopupButtonsModal + .modal-backdrop,
+.modal-backdrop.show {
+  background: transparent !important;
+  opacity: 0 !important;
+}
 }
