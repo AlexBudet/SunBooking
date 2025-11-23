@@ -1904,18 +1904,21 @@ function bindNoteToggle() {
 document.addEventListener('DOMContentLoaded', bindNoteToggle);
 
 window._whatsappModalDisabledCache = null;
+
 function fetchWhatsappModalDisabled() {
-  const endpoint = window.apiWhatsappSettingUrl || '/settings/api/settings/whatsapp'; // window.apiWhatsappSettingUrl viene impostata dal template
+  // MOBILE: forza disabilitato
+  if (window.matchMedia && window.matchMedia('(max-width: 1199.98px)').matches) {
+    window._whatsappModalDisabledCache = true;
+    return Promise.resolve(true);
+  }
+
+  const endpoint = window.apiWhatsappSettingUrl || '/settings/api/settings/whatsapp';
   if (window._whatsappModalDisabledCache !== null) {
-    console.log('fetchWhatsappModalDisabled: cache ->', window._whatsappModalDisabledCache);
     return Promise.resolve(window._whatsappModalDisabledCache);
   }
-  console.log('fetchWhatsappModalDisabled: fetching', endpoint);
   return fetch(endpoint, { method: 'GET', credentials: 'same-origin' })
     .then(resp => {
       if (!resp.ok) {
-        console.warn('fetchWhatsappModalDisabled: response not ok', resp.status);
-        // forza cache a false per evitare chiamate ripetute che falliscono
         window._whatsappModalDisabledCache = false;
         return false;
       }
@@ -1924,173 +1927,122 @@ function fetchWhatsappModalDisabled() {
     .then(json => {
       const disabled = !!(json && json.whatsapp_modal_disable);
       window._whatsappModalDisabledCache = disabled;
-      console.log('fetchWhatsappModalDisabled: value ->', disabled, json);
       return disabled;
     })
-    .catch(err => {
-      console.warn('fetchWhatsappModalDisabled error:', err);
+    .catch(() => {
       window._whatsappModalDisabledCache = false;
       return false;
     });
 }
 
 function chiediInvioWhatsappAuto() {
-  console.log("chiediInvioWhatsappAuto called");
+  // MOBILE: nessuna conferma, sempre false
+  if (window.matchMedia && window.matchMedia('(max-width: 1199.98px)').matches) {
+    return Promise.resolve(false);
+  }
 
   return fetchWhatsappModalDisabled().then(isDisabled => {
-    if (isDisabled) {
-      console.log("WhatsApp modal è disabilitato");
-      return Promise.resolve(false);
-    }
+    if (isDisabled) return false;
 
     return new Promise((resolve) => {
-      const TRY_TIMEOUT = 300; // ms
+      const TRY_TIMEOUT = 300;
       const MAX_TRIES = 10;
       let tries = 0;
 
-    function findModalBody() {
-      // tenta più selettori possibili
-      return document.getElementById('CreateAppointmentModalBody') ||
-             document.querySelector('#CreateAppointmentModal .modal-body') ||
-             document.querySelector('#CreateAppointmentModalBody') ||
-             document.querySelector('#CreateAppointmentModalBody .modal-body') ||
-             null;
-    }
-
-    function waitForBody(cb) {
-      const body = findModalBody();
-      if (body) return cb(body);
-      tries++;
-      if (tries > MAX_TRIES) {
-        console.warn("chiediInvioWhatsappAuto: CreateAppointmentModalBody non trovato");
-        return cb(null);
+      function findModalBody() {
+        return document.getElementById('CreateAppointmentModalBody') ||
+               document.querySelector('#CreateAppointmentModal .modal-body') ||
+               document.querySelector('#CreateAppointmentModalBody') ||
+               document.querySelector('#CreateAppointmentModalBody .modal-body') ||
+               null;
       }
-      setTimeout(() => waitForBody(cb), TRY_TIMEOUT);
-    }
-
-    waitForBody(function(modalBody) {
-      if (!modalBody) {
-        // fallback: risolvi false senza bloccare la creazione
-        return resolve(false);
+      function waitForBody(cb) {
+        const body = findModalBody();
+        if (body) return cb(body);
+        tries++;
+        if (tries > MAX_TRIES) return cb(null);
+        setTimeout(() => waitForBody(cb), TRY_TIMEOUT);
       }
 
-      console.log("chiediInvioWhatsappAuto: modalBody trovato", modalBody);
+      waitForBody(function(modalBody) {
+        if (!modalBody) return resolve(false);
 
-      // rimuovi eventuale pannello precedente
-      const existing = document.getElementById('whatsappInlineConfirm');
-      if (existing) existing.remove();
+        const existing = document.getElementById('whatsappInlineConfirm');
+        if (existing) existing.remove();
 
-      // crea pannello inline
-      const panel = document.createElement('div');
-      panel.id = 'whatsappInlineConfirm';
-      panel.setAttribute('role', 'region');
-      panel.setAttribute('aria-label', 'Conferma invio WhatsApp');
-      // stili minimi inline per garantire visualizzazione dentro modal
-      panel.style.width = '100%';
-      panel.style.boxSizing = 'border-box';
-      panel.style.marginTop = '12px';
-      panel.style.padding = '12px';
-      panel.style.border = '1px solid rgba(0,0,0,0.08)';
-      panel.style.borderRadius = '6px';
-      panel.style.background = '#fff';
-      panel.style.boxShadow = '0 6px 18px rgba(0,0,0,0.06)';
-      panel.style.zIndex = '9999';
-      panel.style.pointerEvents = 'auto';
-      panel.style.fontSize = '14px';
-      panel.style.color = '#222';
+        const panel = document.createElement('div');
+        panel.id = 'whatsappInlineConfirm';
+        panel.setAttribute('role', 'region');
+        panel.style.width = '100%';
+        panel.style.boxSizing = 'border-box';
+        panel.style.marginTop = '12px';
+        panel.style.padding = '12px';
+        panel.style.border = '1px solid rgba(0,0,0,0.08)';
+        panel.style.borderRadius = '6px';
+        panel.style.background = '#fff';
+        panel.style.boxShadow = '0 6px 18px rgba(0,0,0,0.06)';
+        panel.style.zIndex = '9999';
+        panel.style.fontSize = '14px';
+        panel.style.color = '#222';
 
-      const txt = document.createElement('div');
-      txt.style.marginBottom = '10px';
-      txt.textContent = 'Vuoi inviare in automatico una conferma WhatsApp al cliente?';
-      panel.appendChild(txt);
+        const txt = document.createElement('div');
+        txt.style.marginBottom = '10px';
+        txt.textContent = 'Vuoi inviare in automatico una conferma WhatsApp al cliente?';
+        panel.appendChild(txt);
 
-      const btnRow = document.createElement('div');
-      btnRow.style.display = 'flex';
-      btnRow.style.gap = '8px';
-      btnRow.style.justifyContent = 'flex-end';
+        const btnRow = document.createElement('div');
+        btnRow.style.display = 'flex';
+        btnRow.style.gap = '8px';
+        btnRow.style.justifyContent = 'flex-end';
 
-      const back = document.createElement('button');
-      back.type = 'button';
-      back.className = 'btn btn-link';
-      back.textContent = 'INDIETRO';
-      back.setAttribute('aria-label', 'Indietro');
-      back.style.marginRight = 'auto';
-      back.style.color = '#666';
+        const back = document.createElement('button');
+        back.type = 'button';
+        back.className = 'btn btn-link';
+        back.textContent = 'INDIETRO';
+        back.style.marginRight = 'auto';
+        back.style.color = '#666';
 
-      const no = document.createElement('button');
-      no.type = 'button';
-      no.className = 'btn btn-secondary';
-      no.textContent = 'No, crea senza inviare';
-      no.style.flex = '0 0 auto';
+        const no = document.createElement('button');
+        no.type = 'button';
+        no.className = 'btn btn-secondary';
+        no.textContent = 'No, crea senza inviare';
 
-      const yes = document.createElement('button');
-      yes.type = 'button';
-      yes.className = 'btn btn-success';
-      yes.textContent = 'Sì, invia';
-      yes.style.flex = '0 0 auto';
+        const yes = document.createElement('button');
+        yes.type = 'button';
+        yes.className = 'btn btn-success';
+        yes.textContent = 'Sì, invia';
 
-      btnRow.appendChild(back);
-      btnRow.appendChild(no);
-      btnRow.appendChild(yes);
-      panel.appendChild(btnRow);
+        btnRow.appendChild(back);
+        btnRow.appendChild(no);
+        btnRow.appendChild(yes);
+        panel.appendChild(btnRow);
 
-      // Inserisci dopo il form se esiste, altrimenti in fondo al modalBody
-      const formEl = modalBody.querySelector('#CreateAppointmentForm') || modalBody.querySelector('form');
-      if (formEl && formEl.parentNode) {
-        formEl.insertAdjacentElement('afterend', panel);
-      } else {
-        modalBody.appendChild(panel);
-      }
+        const formEl = modalBody.querySelector('#CreateAppointmentForm') || modalBody.querySelector('form');
+        if (formEl && formEl.parentNode) formEl.insertAdjacentElement('afterend', panel);
+        else modalBody.appendChild(panel);
 
-      // focus su yes
-      setTimeout(() => yes.focus(), 50);
+        setTimeout(() => yes.focus(), 50);
 
-      // Gestione cleanup
-      function cleanup() {
-        const p = document.getElementById('whatsappInlineConfirm');
-        if (p && p.parentNode) p.parentNode.removeChild(p);
-        const modalEl = document.getElementById('CreateAppointmentModal');
-        if (modalEl) modalEl.removeEventListener('hidden.bs.modal', onModalHidden);
-        document.removeEventListener('keydown', onKey);
-      }
-
-      function onModalHidden() {
-        cleanup();
-        resolve(false);
-      }
-
-      function onKey(e) {
-        if (e.key === 'Escape') {
-          cleanup();
-          resolve(false);
+        function cleanup() {
+          const p = document.getElementById('whatsappInlineConfirm');
+            if (p && p.parentNode) p.parentNode.removeChild(p);
+          const modalEl = document.getElementById('CreateAppointmentModal');
+          if (modalEl) modalEl.removeEventListener('hidden.bs.modal', onModalHidden);
+          document.removeEventListener('keydown', onKey);
         }
-      }
+        function onModalHidden() { cleanup(); resolve(false); }
+        function onKey(e) { if (e.key === 'Escape') { cleanup(); resolve(false); } }
 
-      const modalEl = document.getElementById('CreateAppointmentModal');
-      if (modalEl) modalEl.addEventListener('hidden.bs.modal', onModalHidden);
-      document.addEventListener('keydown', onKey);
+        const modalEl = document.getElementById('CreateAppointmentModal');
+        if (modalEl) modalEl.addEventListener('hidden.bs.modal', onModalHidden);
+        document.addEventListener('keydown', onKey);
 
-      yes.addEventListener('click', function() {
-        cleanup();
-        resolve(true);
+        yes.addEventListener('click', function() { cleanup(); resolve(true); });
+        no.addEventListener('click', function() { cleanup(); resolve(false); });
+        back.addEventListener('click', function(e) { e.preventDefault(); cleanup(); resolve('back'); });
       });
-      no.addEventListener('click', function() {
-        cleanup();
-        resolve(false);
-      });
-      back.addEventListener('click', function(e) {
-        e.stopPropagation();
-        e.preventDefault();
-        cleanup();
-        // segnala al chiamante di tornare all'editing
-        resolve('back');
-      });
-
-      // log utile per debug
-      console.log("chiediInvioWhatsappAuto: pannello inserito");
     });
   });
- });
 }
 
 document.querySelectorAll('.selectable-cell').forEach(cell => {
@@ -9051,3 +9003,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+/* PATCH: Disabilita auto‑WhatsApp su mobile (<1200px) */
+(function disableAutoWhatsAppOnSmallScreens(){
+  function isSmall() {
+    return window.matchMedia && window.matchMedia('(max-width: 1199.98px)').matches;
+  }
+  if (!isSmall()) return;
+
+  // Forza disabilitazione globale (creazione appuntamento / navigator / spostamento)
+  window.fetchWhatsappModalDisabled = function(){ return Promise.resolve(true); };
+  window.chiediInvioWhatsappAuto = function(){ return Promise.resolve(false); };
+  window.inviaWhatsappAutoSeRichiesto = function(){ return Promise.resolve(); };
+  window.chiediInvioWhatsappNavigator = function(){ return Promise.resolve(false); };
+
+  // Flag di stato (se qualche altra parte del codice vuole sapere)
+  window.__WHATSAPP_AUTO_DISABLED_MOBILE = true;
+})();
