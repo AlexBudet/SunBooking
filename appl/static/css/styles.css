@@ -3212,4 +3212,13 @@ body > .modal-backdrop {
 #MobilePopupButtonsModal::after {
   content: none !important;
 }
+
+  #CreateAppointmentModal .modal-dialog {
+    height: 84vh !important;
+    max-height: 90vh !important;
+  }
+  #CreateAppointmentModal .modal-content {
+    height: 100% !important;
+    max-height: 100% !important;
+  }
 }
