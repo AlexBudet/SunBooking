@@ -2562,8 +2562,8 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
   #ClientInfoModal .modal-dialog {
     width: 95vw !important;
     max-width: 95vw !important;
-    height: 95vh !important;
-    max-height: 95vh !important;
+    height: auto !important;
+    max-height: none !important;
     margin: 2.5vh 2.5vw !important; /* Margine sinistro/destro 2.5vw per centrare e occupare 95% width */
   }
 
@@ -2571,7 +2571,7 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
   #EditAppointmentModal .modal-content,
   #AddClientModal .modal-content,
   #ClientInfoModal .modal-content {
-    height: 100% !important;
+    height: auto !important;
     max-height: 100% !important;
   }
 
