@@ -1,35 +1,49 @@
 WEB APP:
-- sistemare modal appuntamento per blocchi off e blocchi in stato 2
+- correggere e ultimare layout barra calendario su mobile
+- sfondo del modal appuntamento per mobile dev'essere trasparente e non bianco
+- eliminare conferme con invio wapp automatico su mobile
+- CALENDAR: aggiunge nota "***NUOVO CLIENTE***" a quanti blocchi? solo ai primi due? verificare
+- SETTINGS: contenuto di tile-settings straborda dal modal, correggere
+- BOOKING: a volte arrivano 4 PRENOTAZIONI IN UNA VOLTA alla stessa ora per lo stesso appuntamento, come mai???
 - verificare sicurezza globale codice
 - creare app per mobile
 
-CALENDAR:
-- quando si clicca qualsiasi POPUP-BUTTON deve SCOMPARIRE IL TOOLTIP INFO APPUNTAMENTO (in modalità touch-ui?)
-- indicare NUOVO CLIENTE (cioè cliente che ha il PRIMO appuntamento prenotato)
-- creare black-list (cioè clienti con TOT non-arrivato nello storico) con opzione in Clients.html per attivarla
-
-TOUCH-UI:
-- aggiungere taglia per blocchi OFF
-
-- SETTINGS: se inseriamo nomi di servizi piu lunghi di quanto previsto in database (30) o tag (12), deve dare messaggio di errore non generico ma specifico per quella limitazione
-- SETTINGS: inserire in database il campo cellulare per ogni operatore, poi scrivere codice per inviare whatsapp automatico la sera prima ad ogni operatrice con gli appuntamenti per il giorno dopo
+SETTINGS:
+- correggere problema X su ip della RCH ! (solo con start.py)
 
 DATABASE... occhio ai backup! (FARE TUTTO DOPO le 20:00 POSSIBILMENTE SABATO SERA E DOMENICA)
+- CALENDAR: visualizzare in web appointments table ANCHE GLI APPUNTAMENTI CANCELLATI DAL CLIENTE DA E-MAIL, dobbiamo utilizzare un soft delete aggiungendo al modello alla classe appointment il campo: "is_cancelled_by_client = db.Column(db.Boolean, default=False)"
+- SETTINGS: inserire in database il campo cellulare per ogni operatore, poi scrivere codice per inviare whatsapp automatico la sera prima ad ogni operatrice con gli appuntamenti per il giorno dopo
 - inserire "descrizione" al modello per la classe servizi, e "cellulare" al modello per la classe operatore, oltre a tutte le aggiunte per pacchetti, solarium e magazzino
-- Cercare il modo di DISATTIVARE IL CLIENT per i centri clienti del gestionale fuori abbonamento, attraverso un record da database che "spegne" il programma on-premise, verificare qual è la best practice
-- in CALENDAR visualizzare in web appointments table ANCHE GLI APPUNTAMENTI CANCELLATI DAL CLIENTE DA E-MAIL, dobbiamo utilizzare un soft delete aggiungendo al modello alla classe appointment il campo: "is_cancelled_by_client = db.Column(db.Boolean, default=False)"
+- Cercare il modo di DISATTIVARE L'OPERATIVITA' DELL'APP ON-PREMISE per i centri clienti del gestionale fuori abbonamento, attraverso un record da database che "spegne" il programma on-premise, verificare qual è la best practice
 
 WEB BOOKING:
 - opzionale: offrire la possibilità di PAGARE ONLINE gli appuntamenti
 - opzionale: mostrare descrizione per ogni servizio
 
 CORRETTI, DA VERIFICARE:
+- problema z-index bottoni bottom bar in touch-ui quando ci sono due blocchi sulla stessa cella e un altro blocco sotto, a volte i bottom bar di uno dei due rimane coperto da appuntamento sotto
+- cerchio di attesa quando si stampa scontrino in fine carta rch?
+- indicare NUOVO CLIENTE (cioè cliente che ha un appuntamento prenotato PER LA PRIMA VOLTA)
 - IMPORTANTE!!! dopo TAGLIA di piu blocchi e incolla, a volte memo whatsapp prende orario del 2° appuntamento
+- implementare "sposta" per blocco off in modalità touch-ui
+- Heatmap Appuntamenti non deve contare i blocchi OFF 
+- QUANDO PROVO A INSERIRE NUOVO CLIENTE IL MODAL ADD CLIENT RIMANEVA BLOCCATO, non leggeva i click sui cammpi
+- in touch-ui quando si clicca TAGLIA deve SCOMPARIRE IL TOOLTIP INFO APPUNTAMENTO
+- problema click su nome cliente in blocco appuntamento in modalità touch-ui
+- da "prossimi appuntamenti" nel modal client info, quando clicco va sulla pagina della data ma non all'altezza giusta!
+- aggiustare con precisione scroll a chiusura modal appuntamento su schermi mobile
+- disattivare drag and drop per i tile di report su mobile
+- download agenda giornaliera, se cambia giorno da navigator cambia contentuo file, ma tiene sempre la data di oggi nel titolo
+- in SETTINGS se inseriamo nomi di servizi piu lunghi di quanto previsto in database (30) o tag (12), deve dare messaggio di errore non generico ma specifico per quella limitazione
 - pulsante per esportare ANAGRAFICA completa dal database
+- quando faccio TAGLIA e poi cerco di SELEZIONARE UN NUOVO SERVIZIO da mettere al posto (per es. cliente prenota sopracciglia, poi dopo 5 min chiama per cambiare in sopracciglia e baffetto) dà ERRORE di cliente non trovato... CORREGGERE questa funzione, o implementare una modalità di CAMBIO SERVIZIO
 - visualizzare titolo di BLOCCHI OFF fino a un max di 12 caratteri
 - occhio alla ricerca da web appointments table per nome
 - eliminare colonna TEST per utenti "user" in report riassunto giornaliero
 - definire modalità di storno, se solo ultimo o se possibile stornare da "registro scontrini", se si elimina uno scontrino is_fiscale (lo può fare solo admin!) deve inviare richiesta storno per QUELLO scontrino a rch, e deve risultare dal totale corrispettivi
+- centrare testo nel tooltip info appuntamento (note sono sfalsate)
+- in touch-ui quando compare sfondo nero su nome cliente nel blocco, scritta deve essere SEMPRE bianca
 - non svuotare pseudoscontrino in cassa quando si salva con modifiche
 - oltre al pulsante "copia" mostrare anche pulsante "note" per blocco in stato 2
 - controllare fetch ricerca in cassa quando si digita nome servizi
@@ -67,6 +81,7 @@ CORRETTI, DA VERIFICARE:
 - filtro nomi nelle varie parti del progetto (per es. uniformare in top clients in report)
 - se aggiungo servizio, e lo posiziono a 15 min di distanza dal blocco originario, prende correttamente lo stato (stato 1 per es) ma POI NON LO PORTA IN CASSA... impostato gap massimo di 30 min per pseudoblocchi
 - se porto un pagamento in cassa e una volta in cassa cambio il servizio dal container pseudoscontrino, fa il pagamento ma il blocco appuntamento in cassa rimane in stato 0 ... invece deve andare in stato 1 come pagato !!! (magari aggiornando anche il/i servizio/i)
+- risolvere problema di scontrino non emesso a fine carta (aumentare tempo di attesa prima di scriverlo in grigio)
 - errore cassa dopo chiusura giornaliera
 - settings/web booking -> se deseleziono "visualizza in booking" mostra - ancora comunque il servizio!
 - filtrare blocchi in istituto visibili in cassa, solo quelli della GIORNATA CORRENTE ... oppure FARE IN MODO CHE A FINE GIORNATA I BLOCCHI RIMASTI IN STATI 1 TORNINO IN STATO 0 (o stato 2)
@@ -107,6 +122,13 @@ git remote add origin https://github.com/AlexBudet/booking.git
 AI (GEMINI KEY = AIzaSyBKhUZcOJ6r7_U1yaab2qLBzqY6kVjn8us) -> alternativa più economica con Azure? - implementare query ai in report
 Prompt per richieste ad AI (per esempio: trovami la prima disponibilità in pausa pranzo settimana prossima con Erika per un massaggio di un'ora -> va alla pagina e blinka le celle adatte)
 
+CALENDAR:
+- creare black-list (cioè clienti con ALMENO UN TOT di non-arrivato nello storico) con opzione in Clients.html per attivarla
+
+TOUCH-UI:
+- aggiungere taglia per blocchi OFF
+
+ALTRO:
 - Sistemare tile di report e le tabelle nelle pagine di settings per mobile
 - Implementare logging di errori gratis ma professionale e funzionante
 - Verificare funzionamento LOTTERIA degli scontrini -> dà errore, verificare route
@@ -114,6 +136,8 @@ Prompt per richieste ad AI (per esempio: trovami la prima disponibilità in paus
 - predisporre SmartPos per nuova normativa, scontrinazione automatica al pagamento pos
 
 REPORT: creare una sezione REPORT con le stats e una sezione HOME con tiles interattivi (meteo, oroscopo, news estetica, andamento del mercato, video del giorno, console comandi piu usati)
+- al click su alcuni tile (per esempio le heatmap) aprire modal in grande in cui si possano ottenere heatmap in base a filtri personalizzabili
+- click su info cliente da tile top clients
 
 CALENDAR... controllare:
 - Molto codice globale → rischio collisioni e listener duplicati.
@@ -133,7 +157,7 @@ SOLARIUM
 - integrazione SunBooking x monitor e ricaricabili solarium
 
 PROMO e PACCHETTI
-- gift card (paghi in anticipo tot, hai gift card con +20%)
+- gift card (paghi in anticipo tot, hai gift card con +10% o +20%)
 - pacchetti (ogni 5 seduta 1 omaggio, ecc) -> rateizzabili -> pagamento cassa integrato
 - ricaricabili (come solarium, paghi 100 carichi 125 ecc)
 - sistema rate (come usiamo in negozio)
