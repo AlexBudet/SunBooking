@@ -69,75 +69,56 @@ def settings_home():
 # ===================== BUSINESS INFO =====================
 @settings_bp.route('/ping_printer', methods=['POST'])
 def ping_printer():
-    # 1) Recupera IP configurato in DB (non usare valori inviati dal client)
-    business = BusinessInfo.query.first()
-    printer_ip = (getattr(business, 'printer_ip', None) or '').strip()
+    # 1) Recupera IP: prima da payload client (campo "ip"), altrimenti da DB
+    payload = request.get_json(silent=True) or {}
+    ip_from_client = (payload.get('ip') or '').strip()
+
+    if ip_from_client:
+        printer_ip = ip_from_client
+    else:
+        business = BusinessInfo.query.first()
+        printer_ip = (getattr(business, 'printer_ip', None) or '').strip()
+
     if not printer_ip:
         return jsonify({"error": "IP stampante non configurato"}), 400
 
-    # 2) Whitelist CIDR (configurabile via env), default alle private networks
-    allowed_cidrs = os.getenv('PRINTER_WHITELIST_CIDRS',
-                              '192.168.0.0/16,10.0.0.0/8,172.16.0.0/12').split(',')
+    # 2) Validazione IP minima (solo IPv4 non loopback)
     try:
         ip_addr = ipaddress.ip_address(printer_ip)
     except ValueError:
         current_app.logger.warning("ping_printer: printer_ip non è un indirizzo IP valido: %s", printer_ip)
         return jsonify({"error": "IP stampante non valido"}), 400
 
-    # 3) Rifiuta IPv6 e loopback
     if ip_addr.version != 4 or ip_addr.is_loopback:
         current_app.logger.warning("ping_printer: IP non ammesso (IPv6/loopback): %s", printer_ip)
         return jsonify({"error": "IP stampante non ammesso"}), 400
 
-    # 4) Verifica appartenenza a una CIDR consentita
-    allowed = False
-    for c in allowed_cidrs:
-        c = c.strip()
-        if not c:
-            continue
-        try:
-            net = ipaddress.ip_network(c, strict=False)
-            if ip_addr in net:
-                allowed = True
-                break
-        except Exception:
-            current_app.logger.warning("ping_printer: CIDR non valida in configurazione: %s", c)
-            continue
-    if not allowed:
-        current_app.logger.warning("ping_printer: IP fuori whitelist: %s", printer_ip)
-        return jsonify({"error": "IP stampante non autorizzato"}), 403
-
-    # 5) Rate-limit semplice per IP client (per processo, utile come mitigazione)
+    # 3) Unico test: semplice GET HTTP verso la porta configurata, timeout ~20 secondi
     remote = request.remote_addr or 'unknown'
-    now = int(time.time())
-    window = 60  # secondi
-    limit = int(os.getenv('PING_PRINTER_RATE_LIMIT', '6'))  # richieste per window
-    entry = _ping_printer_rl.get(remote, {"ts": now, "count": 0})
-    if now - entry["ts"] > window:
-        entry = {"ts": now, "count": 0}
-    entry["count"] += 1
-    _ping_printer_rl[remote] = entry
-    if entry["count"] > limit:
-        current_app.logger.warning("ping_printer: rate limit superato da %s", remote)
-        return jsonify({"error": "Rate limit superato"}), 429
-
-    # 6) Effettua la richiesta con timeout breve e senza redirect
-    url = f"http://{printer_ip}/service.cgi"
-    timeout = (2, 3)  # connect, read (secondi)
+    port_env = os.getenv('PRINTER_HTTP_PORT', '80')
     try:
-        resp = requests.post(url, data=b'', timeout=timeout, allow_redirects=False)
-        current_app.logger.info("ping_printer: %s -> %s (status %s)", remote, printer_ip, resp.status_code)
+        port_int = int(port_env)
+    except ValueError:
+        port_int = 80
+
+    url = f"http://{printer_ip}:{port_int}/"
+    # timeout totale 20 secondi (connect, read)
+    timeout = (10, 10)
+
+    try:
+        resp = requests.get(url, timeout=timeout, allow_redirects=False)
+        current_app.logger.info("ping_printer: %s -> %s (status %s)", remote, url, resp.status_code)
         return jsonify({
             "ok": True,
             "status_code": resp.status_code,
             "text_snippet": (resp.text[:200] + '...') if isinstance(resp.text, str) else ""
         }), 200
     except requests.exceptions.Timeout:
-        current_app.logger.error("ping_printer: timeout verso %s", printer_ip)
-        return jsonify({"error": "Timeout connessione stampante"}), 504
+        current_app.logger.error("ping_printer: timeout verso %s", url)
+        return jsonify({"error": "Timeout connessione stampante (nessuna risposta entro 20s)"}), 504
     except Exception as exc:
-        current_app.logger.error("ping_printer: errore rete verso %s: %s", printer_ip, str(exc))
-        return jsonify({"error": "Errore comunicazione con la stampante"}), 502
+        current_app.logger.error("ping_printer: errore rete verso %s: %s", url, str(exc))
+        return jsonify({"error": f"Errore comunicazione con la stampante: {str(exc)}"}), 502
 
 @settings_bp.route('/settings/business-info', methods=['GET'])
 def business_info():

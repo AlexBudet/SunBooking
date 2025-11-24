@@ -66,16 +66,17 @@
       <td><label for="vat_percentage">IVA (%)</label></td>
       <td><input type="number" step="0.01" min="0" max="100" id="vat_percentage" name="vat_percentage" value="{{ business_info.vat_percentage or 22.0 }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
     </tr>
-    {% if not config.get('HIDE_PRINTER_IP') %}
+{% if not config.get('HIDE_PRINTER_IP') %}
     <tr>
       <td><label for="printer_ip">IP Stampante Fiscale</label></td>
       <td style="display: flex; align-items: center; gap: 8px;">
         <input type="text" class="form-control" id="printer_ip" name="printer_ip"
                value="{{ business_info.printer_ip if business_info and business_info.printer_ip else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-        <span id="pingPrinterIcon" style="font-size:1.5em; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#ccc;">🔄</span>
+        <button type="button" id="pingPrinterButton">Test Connessione RCH</button>
+        <span id="pingPrinterStatus" style="margin-left:8px; font-size:0.9em; color:#666;"></span>
       </td>
     </tr>
-    {% endif %}
+{% endif %}
   </table>
 <br>
     <!-- Orari di visualizzazione dell'agenda -->
@@ -160,63 +161,67 @@
 </script>
 {% if not config.get('HIDE_PRINTER_IP') %}
 <script>
-function aggiornaSpiaStampante() {
-  const icon = document.getElementById('pingPrinterIcon');
+document.addEventListener('DOMContentLoaded', function() {
+  const btn = document.getElementById('pingPrinterButton');
+  const statusEl = document.getElementById('pingPrinterStatus');
   const ipEl = document.getElementById('printer_ip');
-  if (!icon || !ipEl) return;
+  if (!btn || !statusEl || !ipEl) return;
 
-  const ip = ipEl.value.trim();
-  if (!ip) {
-    icon.style.background = '#ccc';
-    icon.textContent = '❓';
-    return;
-  }
-
-  icon.style.background = '#ccc';
-  icon.textContent = '🔄';
-
-  // Prendi CSRF dal hidden input (non dal meta)
-  const token = (document.querySelector('input[name="csrf_token"]')?.value) || '';
-
-  // URL corretto dentro il child (genera /s/<idx>/settings/ping_printer)
-  const pingUrl = "{{ url_for('settings.ping_printer') }}";
-
-  // Timeout per evitare richieste pendenti
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-  fetch(pingUrl, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': token
-    },
-    body: JSON.stringify({ ip }),
-    signal: controller.signal
-  })
-  .then(res => res.ok ? res.json() : { ok: false })
-  .then(data => {
-    if (data && data.ok) {
-      icon.style.background = '#28a745';
-      icon.textContent = '✔️';
-    } else {
-      icon.style.background = '#dc3545';
-      icon.textContent = '❌';
+  btn.addEventListener('click', function() {
+    const ip = (ipEl.value || '').trim();
+    statusEl.style.color = '#666';
+    if (!ip) {
+      statusEl.textContent = 'Inserisci un IP prima di eseguire il test.';
+      return;
     }
-  })
-  .catch(() => {
-    icon.style.background = '#dc3545';
-    icon.textContent = '❌';
-  })
-  .finally(() => clearTimeout(timeoutId));
-}
 
-// Frequenza più “gentile”
-setInterval(aggiornaSpiaStampante, 10000);
-aggiornaSpiaStampante();
+    statusEl.textContent = 'Verifica in corso...';
 
-document.getElementById('printer_ip')?.addEventListener('change', aggiornaSpiaStampante);
+    const token = (document.querySelector('input[name="csrf_token"]')?.value) || '';
+    const pingUrl = "{{ url_for('settings.ping_printer') }}";
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 21000); // leggermente > 20s backend
+
+    fetch(pingUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': token
+      },
+      body: JSON.stringify({ ip }),
+      signal: controller.signal
+    })
+    .then(res => res.ok ? res.json() : { ok: false })
+    .then(data => {
+      clearTimeout(timeoutId);
+      if (!data) {
+        statusEl.style.color = '#dc3545';
+        statusEl.textContent = 'Risposta non valida dal server.';
+        return;
+      }
+
+      if (data.ok) {
+        statusEl.style.color = '#28a745';
+        let msg = 'Stampante raggiungibile';
+        if (data.status_code) {
+          msg += ' (HTTP ' + data.status_code + ')';
+        }
+        statusEl.textContent = msg + '.';
+      } else {
+        statusEl.style.color = '#dc3545';
+        const msg = data.error || 'Stampante non raggiungibile.';
+        statusEl.textContent = msg;
+      }
+    })
+    .catch(() => {
+      clearTimeout(timeoutId);
+      statusEl.style.color = '#dc3545';
+      statusEl.textContent = 'Errore durante il test di connessione.';
+    });
+  });
+});
 </script>
 {% endif %}
 <style>
