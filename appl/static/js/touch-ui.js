@@ -75,12 +75,13 @@ function closeAllPopups() {
   document.querySelectorAll('.appointment-block.active-popup')
     .forEach(b => {
       b.classList.remove('active-popup');
-      b.style.zIndex = '100';          // ripristina base
+      b.style.zIndex = '100';
     });
   const clientPopup = document.getElementById('clientHistoryPopup');
   if (clientPopup) clientPopup.style.display = 'none';
   const small = document.getElementById('clientInfoPopup');
   if (small) small.style.display = 'none';
+  forceHideClientInfoPopup();
   document.querySelectorAll('.appointment-block .popup-buttons, .appointment-block .popup-buttons-bottom')
     .forEach(el => { el.style.zIndex = ''; el.style.display = ''; });
   closeAllMySpiaPopups();
@@ -96,35 +97,6 @@ function injectTouchMySpiaCSS() {
   `;
   const style = document.createElement('style');
   style.id = 'touch-myspia-css';
-  style.textContent = css;
-  document.head.appendChild(style);
-}
-
-function injectTouchOffNoteCSS() {
-  if (document.getElementById('touch-off-note-css')) return;
-  const css = `
-    body.touch-ui .appointment-block.note-off .off-title {
-      white-space: normal !important;
-      overflow: hidden !important;
-      text-overflow: clip !important;
-      display: block !important;
-      max-height: none !important;
-    }
-    body.touch-ui .appointment-block.note-off.off-note-collapsed .off-title {
-      white-space: nowrap !important;
-      text-overflow: ellipsis !important;
-      overflow: hidden !important;
-      max-height: 1.4em !important;
-    }
-    body.touch-ui .appointment-block.note-off.off-note-expanded .off-title {
-      white-space: normal !important;
-      overflow: visible !important;
-      text-overflow: clip !important;
-      max-height: none !important;
-    }
-  `;
-  const style = document.createElement('style');
-  style.id = 'touch-off-note-css';
   style.textContent = css;
   document.head.appendChild(style);
 }
@@ -514,11 +486,6 @@ function ensureBottomBar(block) {
 }
 
 function initTouchOnBlock(block){
-  // Stato iniziale nota OFF in modalità touch: collassata
-  if (document.body.classList.contains('touch-ui') && block.classList.contains('note-off')) {
-    block.classList.add('off-note-collapsed');
-    block.classList.remove('off-note-expanded');
-  }
   ensureTopBarForTouch(block);
   ensureBottomBar(block);
 
@@ -578,10 +545,8 @@ function initTouchOnBlock(block){
       }
 
       // Click sul resto del blocco: toggle popup
-      // Click sul resto del blocco: toggle popup
       const wasActive = block.classList.contains('active-popup');
       closeAllPopups();
-
       if (!wasActive) {
         block.classList.add('active-popup');
         block.style.zIndex = '11940';
@@ -589,18 +554,6 @@ function initTouchOnBlock(block){
         const bottomBar = block.querySelector('.popup-buttons-bottom');
         if (topBar) topBar.style.zIndex = '11950';
         if (bottomBar) bottomBar.style.zIndex = '11950';
-
-        // SOLO TOUCH-UI + BLOCCO OFF: espandi nota all'interno del blocco
-        if (document.body.classList.contains('touch-ui') && block.classList.contains('note-off')) {
-          block.classList.remove('off-note-collapsed');
-          block.classList.add('off-note-expanded');
-        }
-      } else {
-        // Se il blocco era attivo e viene chiuso, ricollassa la nota OFF
-        if (document.body.classList.contains('touch-ui') && block.classList.contains('note-off')) {
-          block.classList.remove('off-note-expanded');
-          block.classList.add('off-note-collapsed');
-        }
       }
     }, true);
 
@@ -614,9 +567,6 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // Disabilita hover e abilita solo click per my-spia
   injectTouchMySpiaCSS();
-
-  // CSS dedicato alle note dei blocchi OFF in modalità touch
-  injectTouchOffNoteCSS();
   
   document.querySelectorAll('.appointment-block').forEach(initTouchOnBlock);
 
@@ -801,3 +751,29 @@ document.addEventListener('click', function (e) {
 
 })();
 
+function forceHideClientInfoPopup() {
+  const el = document.getElementById('clientInfoPopup');
+  if (!el) return;
+  el.classList.remove('show','open','visible','active');
+  el.style.setProperty('display','none','important');
+  try {
+    const tip = (window.bootstrap?.Tooltip?.getInstance(el)) || (window.bootstrap?.Popover?.getInstance(el));
+    if (tip) tip.hide();
+  } catch(_) {}
+}
+
+document.addEventListener('click', function(e) {
+  const offBlock = e.target.closest && e.target.closest('.appointment-block.note-off');
+  if (!offBlock) return;
+  // chiusura robusta del tooltip piccolo cliente
+  forceHideClientInfoPopup();
+  // ridondanza contro eventuali riaperture da altri handler
+  setTimeout(forceHideClientInfoPopup, 30);
+}, true);
+
+document.addEventListener('click', function(e) {
+  const offBlock = e.target.closest && e.target.closest('.appointment-block.note-off');
+  if (!offBlock) return;
+  forceHideClientInfoPopup();
+  setTimeout(forceHideClientInfoPopup, 30);
+}, true);

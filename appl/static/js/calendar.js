@@ -2852,11 +2852,13 @@ function propBookingBlocks(appointmentId, newClientId, newClientName) {
     ? Array.from(document.querySelectorAll(`.appointment-block[data-booking_session_id="${sessionId}"]`))
     : [modified];
 
-  const baseColor = modified.getAttribute('data-colore') || getRandomColor();
+  const baseColor = getRandomColor();
   const baseFont = computeFontColor(baseColor);
   const parts = newClientName.split(' ');
   const nome = parts.shift() || '';
   const cognome = parts.join(' ') || '';
+
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
   blocks.forEach(b => {
     // DOM
@@ -2883,6 +2885,8 @@ function propBookingBlocks(appointmentId, newClientId, newClientName) {
       colore: baseColor,
       colore_font: baseFont
     };
+      const bId = b.getAttribute('data-appointment-id');
+      if (bId) {
     fetch(`/calendar/edit/${id}`, {
       method: 'POST',
       headers: {
@@ -2891,6 +2895,7 @@ function propBookingBlocks(appointmentId, newClientId, newClientName) {
       },
       body: JSON.stringify(payload)
     }).catch(err => console.error(`Errore update blocco booking ${id}:`, err));
+      }
   });
 }
 
@@ -8039,8 +8044,8 @@ document.addEventListener('DOMContentLoaded', function() {
                       else if (tag) labels.push(tag);
                     }
                   });
-                  const uniq = Array.from(new Set(labels.filter(Boolean)));
-                  if (uniq.length) servizi_text = uniq.map(s => `• ${s}`).join('\n');
+const ordered = labels.filter(Boolean);
+if (ordered.length) servizi_text = ordered.map(s => `• ${s}`).join('\n');
                 } else {
                   console.warn('services_by_ids fetch failed', resp2.status, resp2.statusText);
                 }
