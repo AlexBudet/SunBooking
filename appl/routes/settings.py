@@ -1313,6 +1313,7 @@ def set_bookings():
         func.count(Operator.id)
     ).outerjoin(Service.operators)
      .filter(Service.is_deleted == False)
+     .filter(Operator.is_deleted == False, Operator.is_visible == True)
      .group_by(Service.id)
      .all())
 
@@ -1349,7 +1350,12 @@ def update_service_operators():
     service = db.session.get(Service, data['service_id'])
     if not service:
         return jsonify(success=False)
-    new_ops = db.session.query(Operator).filter(Operator.id.in_(data['operator_ids'])).all()
+    ids = [int(x) for x in (data.get('operator_ids') or [])]
+    new_ops = db.session.query(Operator).filter(
+        Operator.id.in_(ids),
+        Operator.is_visible == True,
+        Operator.is_deleted == False
+    ).all()
     service.operators = new_ops
     db.session.commit()
     return {'success': True}
@@ -1371,7 +1377,7 @@ def get_service_operators(service_id):
     service = db.session.get(Service, service_id)
     if not service:
         return jsonify(operator_ids=[])
-    return jsonify(operator_ids=[op.id for op in service.operators])
+    return jsonify(operator_ids=[op.id for op in service.operators if getattr(op, 'is_visible', False) and not getattr(op, 'is_deleted', False)])
 
 @settings_bp.route('/update_booking_rules', methods=['POST'])
 def update_booking_rules():
