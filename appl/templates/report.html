@@ -24,7 +24,6 @@
         <a href="#" id="reportBtnToday" class="btn-today" style="display:none;">Vai a OGGI</a>
     </div>
 </div>
-</div>
 
 <!-- NUOVA TABELLA MOBILE DATE-NAV (<1200px): visibile solo su mobile -->
 <div class="mobile-date-nav" id="mobileDateNavReport" style="display:none; width: 100%;">
@@ -489,7 +488,7 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
       <div class="modal-body p-3">
         <div id="wrapperTabellaCorrispettivi" style="max-height:80vh; overflow-y:auto; width:100%;">
-          <table class="table table-bordered table-sm mb-0 sticky-thead style="width:100%;">
+          <table class="table table-bordered table-sm mb-0 sticky-thead" style="width:100%;">
             <thead class="table-dark">
               <tr>
                 <th>Data</th>
@@ -979,12 +978,18 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 #tile-top-clienti {
-  min-height: 170px;
-  max-height: 361px;
-  height: 361px;
-  overflow-y: auto;
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+  overflow: hidden;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+#tile-top-clienti ul.list-group {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  width: 100%;
 }
 
 #tile-top-clienti ul.list-group li.list-group-item {
@@ -1439,6 +1444,7 @@ padding: 15px !important;
   min-width: 0 !important;
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
+}
 .report-actions {
   display: flex;
   gap: 0.5rem;
@@ -1679,72 +1685,74 @@ function triggerReportReload() {
       document.getElementById('stat-app-presi-web').innerText = dataApp.presi_web;
     });
 
-  // Aggiorna top clienti
-  fetch(`/api/top_clienti_anno?year=${year}`)
-    .then(r => r.json())
-    .then(clienti => {
-      const ul = document.getElementById('top-clienti-list');
-      ul.innerHTML = ''; // Svuota la lista
-      fetch(`/api/appuntamenti_giorno?date=${selectedDate}`)
-        .then(r => r.json())
-        .then(apps => {
-          // Normalizza: "pier francesco" -> "Pier Francesco", "d'agostini" -> "D’Agostini"
-          const formatPersonName = (s) => {
-            if (s == null) return '';
-            const base = String(s).trim().replace(/\s+/g, ' ').toLocaleLowerCase('it-IT');
-            // Maiuscola a inizio parola e dopo spazio, trattino, apostrofo (’ o ')
-            return base.replace(/(^|[ \-’'])(\p{L})/gu, (_, p1, p2) => p1 + p2.toLocaleUpperCase('it-IT'));
-          };
-          const clientiConApp = new Set(apps.map(a => a.client_id));
-          clienti.slice(0, 10).forEach((c, idx) => {
-            const primoApp = apps.find(a => a.client_id === c.id && a.start_time);
-            
-            // PATCH: Costruzione sicura dell'elemento <li>
-            const li = document.createElement('li');
-            li.className = 'list-group-item d-flex align-items-center gap-3';
+// Aggiorna top clienti
+if (!window.__topClientiReq) window.__topClientiReq = 0;
+const thisReq = ++window.__topClientiReq;
 
-            const nomeSpan = document.createElement('span');
-            const displayNome = formatPersonName(c.nome);
-            const displayCognome = formatPersonName(c.cognome);
+fetch(`/api/top_clienti_anno?year=${year}`)
+  .then(r => r.json())
+  .then(clienti => {
+    return fetch(`/api/appuntamenti_giorno?date=${selectedDate}`)
+      .then(r => r.json())
+      .then(apps => ({ clienti, apps }));
+  })
+  .then(({ clienti, apps }) => {
+    if (thisReq !== window.__topClientiReq) return; // risposta obsoleta, ignora
 
-            if (primoApp && primoApp.start_time) {
-              // Se c'è un appuntamento, crea un link
-              const link = document.createElement('a');
-              link.href = '#'; // O l'URL corretto se ne hai uno
-              link.className = 'top-cliente-link';
-              link.style.cssText = 'color:inherit;text-decoration:underline;cursor:pointer;';
-              
-              const boldSpan = document.createElement('span');
-              boldSpan.className = 'fw-bold';
-              boldSpan.textContent = `${idx + 1}.`;
-              
-              link.appendChild(boldSpan);
-              link.append(` ${displayNome} ${displayCognome}`);
-              nomeSpan.appendChild(link);
-            } else {
-              // Altrimenti, solo testo
-              const boldSpan = document.createElement('span');
-              boldSpan.className = 'fw-bold';
-              boldSpan.textContent = `${idx + 1}.`;
-              nomeSpan.appendChild(boldSpan);
-              nomeSpan.append(` ${displayNome} ${displayCognome}`);
-            }
+    const ul = document.getElementById('top-clienti-list');
+    if (!ul) return;
+    ul.innerHTML = '';
 
-            const appBadge = document.createElement('span');
-            appBadge.className = 'badge bg-primary';
-            appBadge.textContent = `${c.num_app} appuntamenti`;
+    const formatPersonName = (s) => {
+      if (s == null) return '';
+      const base = String(s).trim().replace(/\s+/g, ' ').toLocaleLowerCase('it-IT');
+      return base.replace(/(^|[ \-’'])(\p{L})/gu, (_, p1, p2) => p1 + p2.toLocaleUpperCase('it-IT'));
+    };
 
-            const spesaBadge = document.createElement('span');
-            spesaBadge.className = 'badge bg-info text-dark';
-            spesaBadge.textContent = `€ ${(c.totale_speso ?? 0).toFixed(2)}`;
+    const clientiConApp = new Set(apps.map(a => a.client_id));
+    clienti.slice(0, 10).forEach((c, idx) => {
+      const primoApp = apps.find(a => a.client_id === c.id && a.start_time);
 
-            li.appendChild(nomeSpan);
-            li.appendChild(appBadge);
-            li.appendChild(spesaBadge);
-            ul.appendChild(li);
-          });
-        });
+      const li = document.createElement('li');
+      li.className = 'list-group-item d-flex align-items-center gap-3';
+
+      const nomeSpan = document.createElement('span');
+      const displayNome = formatPersonName(c.nome);
+      const displayCognome = formatPersonName(c.cognome);
+
+      if (primoApp && primoApp.start_time) {
+        const link = document.createElement('a');
+        link.href = '#';
+        link.className = 'top-cliente-link';
+        link.style.cssText = 'color:inherit;text-decoration:underline;cursor:pointer;';
+        const boldSpan = document.createElement('span');
+        boldSpan.className = 'fw-bold';
+        boldSpan.textContent = `${idx + 1}.`;
+        link.appendChild(boldSpan);
+        link.append(` ${displayNome} ${displayCognome}`);
+        nomeSpan.appendChild(link);
+      } else {
+        const boldSpan = document.createElement('span');
+        boldSpan.className = 'fw-bold';
+        boldSpan.textContent = `${idx + 1}.`;
+        nomeSpan.appendChild(boldSpan);
+        nomeSpan.append(` ${displayNome} ${displayCognome}`);
+      }
+
+      const appBadge = document.createElement('span');
+      appBadge.className = 'badge bg-primary';
+      appBadge.textContent = `${c.num_app} appuntamenti`;
+
+      const spesaBadge = document.createElement('span');
+      spesaBadge.className = 'badge bg-info text-dark';
+      spesaBadge.textContent = `€ ${(c.totale_speso ?? 0).toFixed(2)}`;
+
+      li.appendChild(nomeSpan);
+      li.appendChild(appBadge);
+      li.appendChild(spesaBadge);
+      ul.appendChild(li);
     });
+  });
 }
 
 function aggiornaBtnOggi() {
@@ -3622,22 +3630,55 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <script>
+// Helpers come in calendar
+function decodeHtml(s) {
+  let str = String(s ?? '');
+  // Normalizza varianti apostrofo, incluse versioni doppio-escape e tipografiche
+  str = str
+    .replace(/&amp;apos;/gi, '&#39;')
+    .replace(/&amp;#39;/gi, '&#39;')
+    .replace(/&amp;#x27;/gi, '&#x27;')
+    .replace(/&amp;rsquo;/gi, '&#x2019;')
+    .replace(/&amp;#x2019;/gi, '&#x2019;')
+    .replace(/&apos;/gi, '&#39;')
+    .replace(/&rsquo;/gi, '&#x2019;');
+  const t = document.createElement('textarea');
+  let prev = null;
+  let out = str;
+  for (let i = 0; i < 3 && out !== prev; i++) {
+    prev = out;
+    t.innerHTML = out;
+    out = t.value;
+  }
+  // Uniforma tutte le varianti all'apostrofo ASCII per poterle poi normalizzare a ’
+  out = out.replace(/&#39;|&#x27;|&#x2019;/gi, "'");
+  return out;
+}
+function formatPersonName(s) {
+  const base = decodeHtml(s)
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[`´ʼʻ’']/g, '’') // normalizza apostrofi in ’
+    .toLocaleLowerCase('it-IT');
+  return base.replace(/(^|[ \-’])(\p{L})/gu, (_, p1, p2) => p1 + p2.toLocaleUpperCase('it-IT'));
+}
+
 function caricaPrenotazioniOnline(dateStr) {
   const list = document.getElementById('booking-online-list');
   const titoloData = document.getElementById('tile-booking-online-data');
   list.innerHTML = '<span class="text-muted">Caricamento...</span>';
   fetch(`/api/booking_online_giorno?date=${dateStr}`)
     .then(r => r.json())
-  .then(data => {
+    .then(data => {
       if (titoloData && data.data) {
-        titoloData.textContent = data.data;
+        titoloData.textContent = decodeHtml(data.data);
       }
       const prenotazioni = data.prenotazioni || [];
       if (!prenotazioni.length) {
         list.innerHTML = '<span class="text-muted">Nessuna prenotazione online per questa data.</span>';
         return;
       }
-      list.innerHTML = ''; // Svuota
+      list.innerHTML = '';
       prenotazioni.forEach(a => {
         const div = document.createElement('div');
         div.style.cssText = 'border-bottom:1px solid #eee; padding:4px 0;';
@@ -3647,11 +3688,16 @@ function caricaPrenotazioniOnline(dateStr) {
         oraSpan.textContent = a.ora;
 
         const clienteSpan = document.createElement('span');
-        clienteSpan.textContent = ` - ${a.nome_cliente} ${a.cognome_cliente} `;
+        // Decodifica e normalizza l’apostrofo in ’ (U+2019) come in calendar
+        const rawNome = decodeHtml(String(a.nome_cliente || '')).replace(/['`´ʼʻ]/g, '’');
+        const rawCognome = decodeHtml(String(a.cognome_cliente || '')).replace(/['`´ʼʻ]/g, '’');
+        const nome = formatPersonName(rawNome);
+        const cognome = formatPersonName(rawCognome);
+        clienteSpan.textContent = ` - ${nome} ${cognome} `;
 
         const servizioSpan = document.createElement('span');
         servizioSpan.style.color = '#1976d2';
-        servizioSpan.textContent = a.servizio;
+        servizioSpan.textContent = decodeHtml(a.servizio || '');
 
         div.appendChild(oraSpan);
         div.appendChild(clienteSpan);
