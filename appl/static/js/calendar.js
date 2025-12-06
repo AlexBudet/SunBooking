@@ -6677,15 +6677,65 @@ document.querySelectorAll('.selectable-cell:not(.calendar-closed)').forEach(cell
   });
 });
 
-document.querySelectorAll('.appointment-block, .note-off').forEach(block => {
-  block.addEventListener('mouseenter', function() {
-    // Rimuovi highlight-side da tutte le celle della riga in cui si trova il blocco
-    const cell = block.closest('.selectable-cell');
-    if (cell && cell.parentElement) {
-      cell.parentElement.querySelectorAll('.highlight-side').forEach(c => c.classList.remove('highlight-side'));
-    }
-  });
-});
+// Delegato: mostra l'highlight sopra i blocchi esistenti (escludendo .note-off)
+document.addEventListener('mouseenter', function(e) {
+  const blk = e.target.closest('.appointment-block:not(.note-off)');
+  if (!blk) return;
+
+  // Rimuovi highlight-side dalla riga (come era prima)
+  const cell = blk.closest('.selectable-cell');
+  if (cell && cell.parentElement) {
+    cell.parentElement.querySelectorAll('.highlight-side').forEach(c => c.classList.remove('highlight-side'));
+  }
+
+  // Applica l'highlight alla cella sottostante in modo che l'utente veda la destinazione (usa la funzione esistente)
+  if (typeof applyHighlightToCell === 'function' && cell) {
+    applyHighlightToCell(cell);
+  }
+}, true);
+
+document.addEventListener('mouseleave', function(e) {
+  const blk = e.target.closest('.appointment-block:not(.note-off)');
+  if (!blk) return;
+  // Rimuovi tutti gli highlight quando il mouse esce dal blocco
+  if (typeof clearCalendarHighlights === 'function') {
+    clearCalendarHighlights();
+  }
+}, true);
+
+// Se ci sono pseudoblocchi attivi nel navigator, quando si clicca sopra un appointment-block (non .note-off)
+// blocchiamo il comportamento nativo sul blocco e ridirigiamo il click alla cella sottostante.
+// Questo permette di creare/spostare appuntamenti sovrapponendoli ai blocchi esistenti.
+// Evitiamo ricorsioni verificando il flag `_fromPseudoRedirect` sull'evento sintetico.
+document.addEventListener('click', function(e) {
+  try {
+    if (e && e._fromPseudoRedirect) return; // evento sintetico: non reindirizzare
+  } catch(_) {}
+
+  if (!window.pseudoBlocks || !Array.isArray(window.pseudoBlocks) || window.pseudoBlocks.length === 0) return;
+
+  const clickedBlock = e.target.closest('.appointment-block:not(.note-off)');
+  if (!clickedBlock) return;
+
+  const targetCell = clickedBlock.closest('.selectable-cell');
+  if (!targetCell) return;
+
+  // Previeni che i gestori sul blocco ricevano l'evento originale
+  // stopImmediatePropagation per sicurezza (evita altri handler in cattura/same-target)
+  e.preventDefault();
+  e.stopImmediatePropagation();
+
+  // Dispatch di un click sintetico sulla cella (con flag per evitare loop)
+  const ev = new MouseEvent('click', { bubbles: true, cancelable: true, view: window });
+  try {
+    // Aggiungiamo un flag non enumerabile sull'evento per riconoscerlo nelle nostre listener
+    Object.defineProperty(ev, '_fromPseudoRedirect', { value: true, configurable: true, writable: false });
+  } catch(_) {
+    // In ambienti strani, fallback: assegna direttamente (potrebbe non essere consentito in alcuni browser)
+    try { ev._fromPseudoRedirect = true; } catch(_) {}
+  }
+  targetCell.dispatchEvent(ev);
+}, true);
 
 // =============================================================
 //   FUNZIONALITÀ CHAIN BUTTON (MACRO-BLOCCHI)
