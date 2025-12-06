@@ -4,7 +4,7 @@ from flask import Blueprint, app, render_template, jsonify, request, session, ab
 from appl.models import Appointment, AppointmentStatus, BusinessInfo, Operator, Service, ServiceCategory, Client, Receipt, Subcategory, User, db
 from datetime import datetime, date
 import requests
-from sqlalchemy import func, text
+from sqlalchemy import and_, func, or_, text
 from sqlalchemy.orm import selectinload
 from collections import defaultdict
 from sqlalchemy.orm.attributes import flag_modified
@@ -209,13 +209,48 @@ def api_services():
         
 @cassa_bp.route('/cassa/api/clients')
 def api_clients():
-    q = request.args.get('q', '').strip()
-    query = Client.query
-    if q and len(q) >= 2:
-        query = query.filter(
-            Client.cliente_nome.ilike(f"%{q}%") | Client.cliente_cognome.ilike(f"%{q}%")
+    q_raw = request.args.get('q', '').strip().lower()
+
+    # Se meno di 2 caratteri → ritorna lista vuota
+    if len(q_raw) < 2:
+        return jsonify([])
+
+    # Suddividi in parti (nome, cognome o pezzi multipli)
+    parts = [p for p in q_raw.split() if p]
+
+    # Costruzione filtri avanzati come nella route calendar
+    if len(parts) == 1:
+        term = f"%{parts[0]}%"
+        filters = or_(
+            func.lower(Client.cliente_nome).like(term),
+            func.lower(Client.cliente_cognome).like(term),
+            Client.cliente_cellulare.like(term)
         )
+    else:
+        # Cerca tutte le parti nel nome o cognome (AND combinato)
+        conditions = []
+        for part in parts:
+            term = f"%{part}%"
+            conditions.append(
+                or_(
+                    func.lower(Client.cliente_nome).like(term),
+                    func.lower(Client.cliente_cognome).like(term)
+                )
+            )
+        filters = and_(*conditions)
+
+    # Applichiamo filtri di esclusione
+    query = Client.query.filter(
+        filters,
+        Client.is_deleted == False,
+        ~((Client.cliente_nome == "cliente") & (Client.cliente_cognome == "booking")),
+        ~((func.lower(Client.cliente_nome) == "booking") & (func.lower(Client.cliente_cognome) == "online")),
+        func.lower(Client.cliente_nome) != "dummy",
+        func.lower(Client.cliente_cognome) != "dummy",
+    )
+
     clients = query.order_by(Client.cliente_nome).limit(20).all()
+
     return jsonify([
         {
             "id": c.id,

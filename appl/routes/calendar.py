@@ -2059,16 +2059,35 @@ def send_whatsapp_auto():
             app.logger.exception("[WHATSAPP] WBIZTOOL_WHATSAPP_CLIENT_ID non è un intero valido: %s", whatsapp_client_id)
             return jsonify({'error': 'Configurazione whatsapp client non valida'}), 500
 
-        numero_pulito = re.sub(r'\D', '', str(numero or ''))
+        # Normalizzazione numero in base alle regole:
+        # - Se inizia con '+': non modificare
+        # - Se inizia con '3': aggiungi '+39' davanti
+        # - Se inizia con cifra diversa da '3' e non ha '+': aggiungi '+'
+        raw = (str(numero or '')).strip().replace(' ', '')
+        if not raw:
+            app.logger.error("[WHATSAPP] Numero vuoto in input")
+            return jsonify({'error': 'Numero cliente non valido'}), 400
+
+        if raw.startswith('+'):
+            numero_norm = raw
+        elif raw and raw[0].isdigit():
+            if raw.startswith('3'):
+                numero_norm = '+39' + raw
+            else:
+                numero_norm = '+' + raw
+        else:
+            # Fallback: se non inizia con '+' o cifra, usa com'è
+            numero_norm = raw
+
+        # Per il provider: rimuovi non numerici, gestisci eventuale '00' all'inizio
+        numero_pulito = re.sub(r'\D', '', numero_norm or '')
         if numero_pulito.startswith('00'):
             numero_pulito = numero_pulito.lstrip('0')
         if not numero_pulito:
             app.logger.error("[WHATSAPP] Numero vuoto dopo normalizzazione")
             return jsonify({'error': 'Numero cliente non valido'}), 400
 
-        if not numero_pulito.startswith("39"):
-            numero_pulito = "39" + numero_pulito
-
+        # Ricava country_code: Italia = 39 se inizia con 39, altrimenti primi 2 numeri
         country_code = '39' if numero_pulito.startswith('39') else numero_pulito[:2]
 
         app.logger.info("[WHATSAPP] preparing send: phone=%s country=%s whatsapp_client=%s msg_len=%d",

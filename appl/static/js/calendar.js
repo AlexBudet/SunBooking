@@ -8087,8 +8087,27 @@ if (ordered.length) servizi_text = ordered.map(s => `• ${s}`).join('\n');
         return;
       }
 
-      let numero = cellulare.replace(/\D/g, '');
-      if (!numero.startsWith('39')) numero = '39' + numero;
+      // Normalizzazione numero per WhatsApp:
+      // - Inizia con '+': non modificare
+      // - Inizia con '3': aggiungi '+39' davanti
+      // - Inizia con cifra diversa da '3' e senza '+': aggiungi '+'
+      // Poi per wa.me rimuovi solo il '+' dal path
+      (function() {
+        cellulare = String(cellulare || '').trim().replace(/\s+/g, '');
+      })();
+      let numeroNorm;
+      if (cellulare.startsWith('+')) {
+        numeroNorm = cellulare;
+      } else if (/^\d/.test(cellulare)) {
+        if (cellulare.startsWith('3')) {
+          numeroNorm = '+39' + cellulare;
+        } else {
+          numeroNorm = '+' + cellulare;
+        }
+      } else {
+        // Fallback: se non inizia con + o cifra, usa com'è
+        numeroNorm = cellulare;
+      }
 
       const nomeFmt = (typeof window.capitalizeName === 'function') ? capitalizeName(nome) : (nome || "");
       let testo = (window.whatsappMessageTemplate || "Buongiorno, ecco un memo per il tuo appuntamento del {{data}} alle ore {{ora}}. Ci vediamo presto! Sun Booking")
@@ -8097,7 +8116,7 @@ if (ordered.length) servizi_text = ordered.map(s => `• ${s}`).join('\n');
         .replace("{{ora}}", ora)
         .replace("{{servizi}}", servizi_text ? ("\n" + servizi_text + "\n") : "");
 
-      const url = `https://wa.me/${numero}?text=${encodeURIComponent(testo)}`;
+      const url = `https://wa.me/${numeroNorm.replace(/^\+/, '')}?text=${encodeURIComponent(testo)}`;
 
       // Copia negli appunti (best effort)
       if (navigator.clipboard && window.isSecureContext) {
