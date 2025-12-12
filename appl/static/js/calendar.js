@@ -3349,12 +3349,40 @@ async function inviaWhatsappAutoSeRichiesto(appointment, data, csrfToken) {
       numero = info?.cliente_cellulare || "";
     } catch (_) {}
   }
-  numero = (numero || "").replace(/\D/g, "");
-  if (!numero) {
-    console.warn("Nessun numero cliente disponibile, WhatsApp non inviato");
-    return;
-  }
-  if (!numero.startsWith("39")) numero = "39" + numero;
+
+function normalizeForWbiz(raw) {
+    if (!raw) return '';
+    let s = String(raw).trim();
+
+    // 1. Gestione prefissi internazionali espliciti (+ o 00)
+    // Se inizia con +, togliamo il + e teniamo il resto (pulito da non-numeri)
+    if (s.startsWith('+')) {
+        return s.substring(1).replace(/\D/g, '');
+    }
+    // Se inizia con 00, togliamo 00 e teniamo il resto
+    if (s.startsWith('00')) {
+        return s.substring(2).replace(/\D/g, '');
+    }
+
+    // 2. Se non c'è prefisso esplicito, puliamo la stringa
+    const digits = s.replace(/\D/g, '');
+    if (!digits) return '';
+
+    // 3. Regola per numeri italiani (o presunti tali) inseriti senza prefisso internazionale
+    // Se inizia con 3, assumiamo sia un cellulare italiano senza +39 -> aggiungiamo 39
+    if (digits.startsWith('3')) {
+        return digits;
+    }
+
+    // Altrimenti (es. inizia con 0, o numeri esteri senza 00/+ esplicito che non iniziano con 3)
+    return digits;
+}
+
+numero = normalizeForWbiz(numero);
+if (!numero) {
+  console.warn("Nessun numero cliente disponibile dopo normalizzazione, WhatsApp non inviato");
+  return;
+}
 
   const payload = {
     numero: numero,
@@ -6679,6 +6707,9 @@ document.querySelectorAll('.selectable-cell:not(.calendar-closed)').forEach(cell
 
 // Delegato: mostra l'highlight sopra i blocchi esistenti (escludendo .note-off)
 document.addEventListener('mouseenter', function(e) {
+  // FIX: Verifica che e.target sia un elemento valido e supporti .closest
+  if (!e.target || typeof e.target.closest !== 'function') return;
+
   const blk = e.target.closest('.appointment-block:not(.note-off)');
   if (!blk) return;
 
@@ -6695,7 +6726,11 @@ document.addEventListener('mouseenter', function(e) {
 }, true);
 
 document.addEventListener('mouseleave', function(e) {
+  // FIX: Verifica che e.target sia un elemento valido e supporti .closest
+  if (!e.target || typeof e.target.closest !== 'function') return;
+
   const blk = e.target.closest('.appointment-block:not(.note-off)');
+
   if (!blk) return;
   // Rimuovi tutti gli highlight quando il mouse esce dal blocco
   if (typeof clearCalendarHighlights === 'function') {
@@ -6703,10 +6738,6 @@ document.addEventListener('mouseleave', function(e) {
   }
 }, true);
 
-// Se ci sono pseudoblocchi attivi nel navigator, quando si clicca sopra un appointment-block (non .note-off)
-// blocchiamo il comportamento nativo sul blocco e ridirigiamo il click alla cella sottostante.
-// Questo permette di creare/spostare appuntamenti sovrapponendoli ai blocchi esistenti.
-// Evitiamo ricorsioni verificando il flag `_fromPseudoRedirect` sull'evento sintetico.
 document.addEventListener('click', function(e) {
   try {
     if (e && e._fromPseudoRedirect) return; // evento sintetico: non reindirizzare
