@@ -3368,13 +3368,7 @@ function normalizeForWbiz(raw) {
     const digits = s.replace(/\D/g, '');
     if (!digits) return '';
 
-    // 3. Regola per numeri italiani (o presunti tali) inseriti senza prefisso internazionale
-    // Se inizia con 3, assumiamo sia un cellulare italiano senza +39 -> aggiungiamo 39
-    if (digits.startsWith('3')) {
-        return digits;
-    }
-
-    // Altrimenti (es. inizia con 0, o numeri esteri senza 00/+ esplicito che non iniziano con 3)
+    // Altrimenti... assumiamo che sia un numero nazionale italiano
     return digits;
 }
 
@@ -5025,7 +5019,8 @@ appointment.service_tag = appointment.service_tag || blk.tag || blk.serviceName;
             client_id: blk.clientId,
             client_name: blk.clientName,
             data: date,
-            ora: startTimeStr
+            ora: startTimeStr,
+            servizi: blk.serviceName
         }, csrfToken);
         alert("Messaggio WhatsApp inviato!");
     }
@@ -5293,6 +5288,11 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
   block.setAttribute('data-status', appointment.status || 0); 
   if (appointment.note) {
       block.setAttribute('data-note', appointment.note);
+  }
+
+  // PATCH: Salva il nome del servizio per recuperarlo correttamente nel Navigator (Cut/Paste)
+  if (appointment.service_name) {
+      block.setAttribute('data-service-name', appointment.service_name);
   }
 
   // --- LOGICA UNIFORME PER COLORE FONT SU SFONDI CHIARI ---
@@ -7069,7 +7069,7 @@ function copyAsNewPseudoBlock(block) {
   const clientId = block.getAttribute('data-client-id');
   const clientName = block.querySelector('.appointment-content .client-name a')?.textContent || "Cliente".trim();
   const serviceId = block.getAttribute('data-service-id');
-  const serviceName = block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent || "Servizio";
+  const serviceName = block.getAttribute('data-service-name') || block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent || "Servizio";
   const duration = parseInt(block.getAttribute('data-duration'), 10) || 15;
   const color = block.getAttribute('data-colore') || '#FFFFFF';
   const note = block.getAttribute('data-note') || '';
@@ -9125,3 +9125,42 @@ document.addEventListener('DOMContentLoaded', function() {
   // Flag di stato (se qualche altra parte del codice vuole sapere)
   window.__WHATSAPP_AUTO_DISABLED_MOBILE = true;
 })();
+
+// =============================================================
+//   INDICATORE VISUALE DROP SU BLOCCO APPUNTAMENTO
+// =============================================================
+document.addEventListener('mouseenter', function(e) {
+    // Verifica che il target sia valido
+    if (!e.target || typeof e.target.closest !== 'function') return;
+    
+    // Verifica se c'è uno pseudoblocco nel navigator (operazione di cut/copy/new in corso)
+    if (!window.pseudoBlocks || window.pseudoBlocks.length === 0) return;
+
+    // Trova il blocco appuntamento
+    const block = e.target.closest('.appointment-block');
+    
+    // Se non è un blocco, oppure è un blocco OFF (note-off), ignora
+    if (!block || block.classList.contains('note-off')) return;
+    
+    // Se ha già l'indicatore, ignora
+    if (block.querySelector('.appointment-drop-arrow')) return;
+
+    // Crea l'indicatore
+    const arrow = document.createElement('div');
+    arrow.className = 'appointment-drop-arrow';
+    arrow.innerHTML = '<i class="bi bi-arrow-down"></i>';
+    
+    block.appendChild(arrow);
+}, true); // Use capture per intercettare prima
+
+document.addEventListener('mouseleave', function(e) {
+    if (!e.target || typeof e.target.closest !== 'function') return;
+    
+    const block = e.target.closest('.appointment-block');
+    if (!block) return;
+
+    const arrow = block.querySelector('.appointment-drop-arrow');
+    if (arrow) {
+        arrow.remove();
+    }
+}, true);

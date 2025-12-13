@@ -290,18 +290,20 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="stat-voce"><strong>POS: </strong><span id="stat-pos-oggi">€ {{ "%.2f"|format(totale_pos) }}</span></div>
       <div class="stat-voce"><strong>Altro: </strong><span id="stat-altro-oggi">€ {{ "%.2f"|format(totale_altro) }}</span></div>
       <br>
+{% if current_user.ruolo|string != 'RuoloUtente.user' %}
 <div class="stat-voce" id="stat-incasso-fiscale">
   FISCALI: (<span class="stat-euro" id="stat-incasso-fiscale-euro"></span>)<br>
 </div>
 <div class="stat-voce" id="stat-incasso-test"></div>
   TEST: (<span class="stat-euro" id="stat-incasso-test-euro"></span>)
+{% endif %}
 </div>
-
     <div class="my-3">
       <canvas id="piePagamenti" width="180" height="180"></canvas>
     </div>
   </div>
 </div>
+
 <div class="tile-neumorphic tile-large" id="tile-appuntamenti">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title">
@@ -1602,8 +1604,13 @@ function triggerReportReload() {
       document.getElementById('stat-incasso-oggi').innerText = `€ ${data.totale.toFixed(2)}`;
       document.getElementById('stat-servizi-oggi').innerText = `€ ${data.totale_servizi.toFixed(2)}`;
       document.getElementById('stat-prodotti-oggi').innerText = `€ ${data.totale_prodotti.toFixed(2)}`;
-      document.getElementById('stat-incasso-test-euro').innerText = `€ ${(data.totale_test ?? 0).toFixed(2)}`;
-      document.getElementById('stat-incasso-fiscale-euro').innerText = `€ ${(data.totale_fiscale ?? 0).toFixed(2)}`;
+
+      const elTest = document.getElementById('stat-incasso-test-euro');
+      if (elTest) elTest.innerText = `€ ${(data.totale_test ?? 0).toFixed(2)}`;
+      
+      const elFisc = document.getElementById('stat-incasso-fiscale-euro');
+      if (elFisc) elFisc.innerText = `€ ${(data.totale_fiscale ?? 0).toFixed(2)}`;
+
       document.getElementById('stat-cash-oggi').innerText = `€ ${data.totale_cash.toFixed(2)}`;
       document.getElementById('stat-pos-oggi').innerText = `€ ${data.totale_pos.toFixed(2)}`;
       document.getElementById('stat-altro-oggi').innerText = `€ ${data.totale_altro.toFixed(2)}`;

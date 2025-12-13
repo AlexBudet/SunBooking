@@ -1466,6 +1466,36 @@ body:not(.quarter-55) .appointment-block {
   border-collapse: collapse;
 }
 
+/* Indicatore di drop su blocco appuntamento (quando c'è uno pseudoblocco attivo) */
+.appointment-drop-arrow {
+    position: absolute;
+    top: 55%;
+    left: 85%;
+    transform: translate(-45%, -15%);
+    z-index: 9999; /* Superiore al blocco */
+    width: 26px;
+    height: 26px;
+    background-color: rgba(255, 242, 247, 0.9);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    pointer-events: none; /* Lascia passare i click al blocco sottostante */
+    animation: dropArrowBounce 1s infinite ease-in-out;
+}
+
+.appointment-drop-arrow i {
+    color: #dc3596;
+    font-size: 1.4rem;
+    line-height: 1;
+}
+
+@keyframes dropArrowBounce {
+    0%, 100% { transform: translate(-50%, -50%) translateY(0); }
+    50% { transform: translate(-50%, -50%) translateY(-5px); }
+}
+
 /* assicurati che la table non imposti max-height */
 #WebAppointmentsModal .web-appt-table-container table#webApptTable {
   width: 100%;
