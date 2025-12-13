@@ -9132,6 +9132,9 @@ document.addEventListener('DOMContentLoaded', function() {
 document.addEventListener('mouseenter', function(e) {
     // Verifica che il target sia valido
     if (!e.target || typeof e.target.closest !== 'function') return;
+
+    // PATCH: In modalità touch-ui, l'indicatore di drop non serve (no hover) e causa problemi grafici
+    if (document.body.classList.contains('touch-ui')) return;
     
     // Verifica se c'è uno pseudoblocco nel navigator (operazione di cut/copy/new in corso)
     if (!window.pseudoBlocks || window.pseudoBlocks.length === 0) return;
