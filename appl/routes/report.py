@@ -949,65 +949,6 @@ def appuntamenti_presi_giorno():
         'presi_web': appuntamenti_web
     })
 
-@report_bp.route('/api/oroscopo_giornaliero')
-def oroscopo_giornaliero():
-    if not GEMINI_API_KEY:
-        current_app.logger.warning("GEMINI_API_KEY non impostata: API Gemini saltata.")
-        return jsonify({
-            "previsione": "Previsione non disponibile al momento.",
-            "citazione": "",
-            "consiglio": ""
-        })
-    
-    prompt = (
-        "Scrivi una breve previsione oroscopo generale per il centro estetico con tono positivo, massimo 3 frasi in italiano, iniziando con un simbolo astrologico come 🔮, 🪐, ⭐ o 🌟.\n"
-        "Poi a capo scrivi un consiglio del giorno per il centro estetico, iniziando con 💡 e senza inserire 'consiglio del giorno' nel testo."
-    )
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
-    body = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt}
-                ]
-            }
-        ]
-    }
-    try:
-        response = requests.post(url, json=body, headers={"Content-Type": "application/json"}, timeout=10)
-        data = response.json()
-        testo = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-        if not testo:
-            previsione = "Previsione non disponibile al momento."
-            citazione = ""
-            consiglio = ""
-        else:
-            # Divide il testo in base alle righe
-            righe = [r.strip() for r in testo.split('\n') if r.strip()]
-            # Cerca le parti
-            previsione = next((r for r in righe if r.startswith("♈") or r.startswith("🔮") or r.startswith("🪐") or r.startswith("⭐") or r.startswith("🌟")), "")
-            autore, cit = random.choice(CITAZIONI)
-            citazione = f"💄 {cit} ({autore})"
-            consiglio = next((r for r in righe if r.startswith("💡")), "")
-            # Se non trova, fallback
-            if not previsione and righe:
-                previsione = righe[0]
-            if not citazione and len(righe) > 1:
-                citazione = righe[1]
-            if not consiglio and len(righe) > 2:
-                consiglio = righe[2]
-    except Exception as e:
-        current_app.logger.error("Errore durante la chiamata all'API Gemini per l'oroscopo: %s", str(e))
-        previsione = "Previsione non disponibile al momento."
-        citazione = ""
-        consiglio = ""
-
-    return jsonify({
-        "previsione": previsione,
-        "citazione": citazione,
-        "consiglio": consiglio
-    })
-
 @report_bp.route('/api/report_incasso_sottocategorie')
 def report_incasso_sottocategorie():
     try:
