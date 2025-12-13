@@ -461,6 +461,10 @@ function openAddClientModal(callerId) {
                     clientSearchInputNav.value = fullName;
                     window.selectedClientIdNav = client.cliente_id;
                     window.selectedClientNameNav = fullName;
+
+                    // PATCH: Simula click per espandere il navigator e mostrare il campo servizi
+                    try { clientSearchInputNav.click(); } catch(e) {}
+
                     clientSearchInputNav.dispatchEvent(new Event('input', { bubbles: true }));
                     clientSearchInputNav.dispatchEvent(new Event('change', { bubbles: true }));
                     if (typeof saveNavigatorState === 'function') {
@@ -470,6 +474,8 @@ function openAddClientModal(callerId) {
                 const serviceInputNav = document.getElementById('serviceInputNav');
                 const selectedServicesList = document.getElementById('selectedServicesList');
                 if (serviceInputNav) {
+                    // Assicurati che sia visibile
+                    serviceInputNav.style.display = 'block';
                     serviceInputNav.focus();
                     setTimeout(() => {
                         loadFrequentServices();
@@ -481,6 +487,7 @@ function openAddClientModal(callerId) {
                     }, 100);
                 }
                 if (selectedServicesList) {
+                    selectedServicesList.style.display = 'block'; // Assicura visibilità
                     selectedServicesList.style.border = '2px solid #28a745';
                     setTimeout(() => {
                         selectedServicesList.style.border = '1px dashed #ccc';
@@ -7059,8 +7066,118 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
   if (confirmRestore) {
     setTimeout(() => location.reload(), 50);
   }
-
 }
+
+window.addCutSourceHighlight = addCutSourceHighlight;
+window.clearCutSourceHighlights = clearCutSourceHighlights;
+
+// NEW: Helper per applicare highlight da dati grezzi (utile per restore)
+function addCutSourceHighlightFromData(opId, date, startHour, startMinute, duration, width, left) {
+  const startTotal = parseInt(startHour, 10) * 60 + parseInt(startMinute, 10);
+  const endTotal = startTotal + parseInt(duration || '15', 10);
+
+  // Cerca celle corrispondenti nel DOM (che hanno data-date corretto)
+  const cells = document.querySelectorAll(`.selectable-cell[data-operator-id="${opId}"][data-date="${date}"]`);
+  cells.forEach(cell => {
+    const ch = parseInt(cell.getAttribute('data-hour'), 10);
+    const cm = parseInt(cell.getAttribute('data-minute'), 10);
+    if (isNaN(ch) || isNaN(cm)) return;
+    const cellStart = ch * 60 + cm;
+    
+    if (cellStart >= startTotal && cellStart < endTotal) {
+      addCutSourceHighlight(cell);
+      
+      // Handle overlay
+      if (width && width !== '100%') {
+        cell.style.position = 'relative';
+        let ov = cell.querySelector('.cut-source-overlay');
+        if (!ov) {
+          ov = document.createElement('div');
+          ov.className = 'cut-source-overlay';
+          ov.style.position = 'absolute';
+          ov.style.inset = '0 0 0 0';
+          ov.style.pointerEvents = 'none';
+          ov.style.boxSizing = 'border-box';
+          ov.style.zIndex = '0';
+          ov.style.border = 'none';
+          cell.appendChild(ov);
+        }
+        ov.style.width = width;
+        ov.style.left = left || '0%';
+      }
+    }
+  });
+}
+
+// NEW: evidenzia tutte le celle coperte dal blocco (durata > 15 min)
+function addCutSourceHighlightRange(block) {
+  if (!block) return;
+  const opId = block.getAttribute('data-operator-id');
+  const date = block.getAttribute('data-date') || window.selectedAppointmentDate || (typeof selectedDate !== 'undefined' ? selectedDate : '');
+  const startHour = block.getAttribute('data-hour');
+  const startMinute = block.getAttribute('data-minute');
+  const duration = block.getAttribute('data-duration');
+  const width = block.getAttribute('data-width') || block.style.width || '100%';
+  const left = block.getAttribute('data-left') || block.style.left || '0%';
+  
+  addCutSourceHighlightFromData(opId, date, startHour, startMinute, duration, width, left);
+}
+
+function cutAsNewPseudoBlock(block) {
+  if (!block) return;
+  const appointmentId = block.getAttribute('data-appointment-id');
+  if (!appointmentId) {
+    console.error("ID appuntamento mancante");
+    return;
+  }
+
+  // Evidenzia tutte le celle coperte dal blocco
+  try { addCutSourceHighlightRange(block); } catch (_) {}
+
+  const backup = {
+    appointment_id: String(appointmentId),
+    client_id: block.getAttribute('data-client-id') || null,
+    client_name: block.getAttribute('data-client-nome') || block.querySelector('.appointment-content .client-name a')?.textContent || '',
+    service_id: block.getAttribute('data-service-id') || null,
+    service_name: block.getAttribute('data-service-name') || block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent || '',
+    duration: parseInt(block.getAttribute('data-duration') || '15', 10),
+    operator_id: block.getAttribute('data-operator-id') || null,
+    hour: block.getAttribute('data-hour') || null,
+    minute: block.getAttribute('data-minute') || null,
+    appointment_date: block.getAttribute('data-date') || (typeof selectedDate !== 'undefined' ? selectedDate : ''),
+    note: block.getAttribute('data-note') || '',
+    colore: block.getAttribute('data-colore') || '',
+    colore_font: block.getAttribute('data-colore_font') || '',
+    status: parseInt(block.getAttribute('data-status') || '0', 10),
+    // SAVE WIDTH/LEFT for highlight restore
+    width: block.getAttribute('data-width') || block.style.width || '100%',
+    left: block.getAttribute('data-left') || block.style.left || '0%'
+  };
+    copyAsNewPseudoBlock(block);
+}
+
+function restoreCutHighlights() {
+  try {
+    const cutBlocks = _loadCutBlocks();
+    if (Array.isArray(cutBlocks)) {
+      cutBlocks.forEach(bkp => {
+        addCutSourceHighlightFromData(
+          bkp.operator_id,
+          bkp.appointment_date,
+          bkp.hour,
+          bkp.minute,
+          bkp.duration,
+          bkp.width,
+          bkp.left
+        );
+      });
+    }
+  } catch(e) { console.warn('restoreCutHighlights failed', e); }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  restoreCutHighlights();
+});
 
 function copyAsNewPseudoBlock(block) {
   if (!block) return;
@@ -7627,30 +7744,37 @@ function restoreNavigatorState() {
 
     // Se c'è un cliente selezionato, mantienilo e prepara subito il campo servizi:
     if (window.selectedClientIdNav) {
-      // mostra e focalizza il campo servizio
+      // mostra il campo servizio
       if (serviceInput) {
         serviceInput.style.display = 'block';
-        try { serviceInput.focus(); } catch (e) {}
       }
 
-      // carica i servizi per il cliente (preferisci last-services)
-      try {
-        if (typeof loadLastServicesForClient === 'function') {
-          loadLastServicesForClient(window.selectedClientIdNav);
-        } else if (typeof loadFrequentServices === 'function') {
-          loadFrequentServices();
+      // PATCH: Focus e caricamento servizi SOLO se NON ci sono già pseudoblocchi
+      if (!window.pseudoBlocks || window.pseudoBlocks.length === 0) {
+        // Il focus farà scattare l'onfocus HTML (loadFrequentServices), ma noi carichiamo anche quelli specifici
+        if (serviceInput) { try { serviceInput.focus(); } catch (e) {} }
+
+        // carica i servizi per il cliente (preferisci last-services)
+        try {
+          if (typeof loadLastServicesForClient === 'function') {
+            loadLastServicesForClient(window.selectedClientIdNav);
+          } else if (typeof loadFrequentServices === 'function') {
+            loadFrequentServices();
+          }
+        } catch (e) {
+          console.warn('restoreNavigatorState: load services failed', e);
+          if (typeof loadFrequentServices === 'function') loadFrequentServices();
         }
-      } catch (e) {
-        console.warn('restoreNavigatorState: load services failed', e);
-        if (typeof loadFrequentServices === 'function') loadFrequentServices();
+
+        // mostra contenitori servizi se presenti
+        const serviceResults = document.getElementById('serviceResultsNav');
+        if (serviceResults) serviceResults.style.display = 'block';
       }
 
-      // mostra contenitori servizi se presenti
-      const serviceResults = document.getElementById('serviceResultsNav');
       const selectedServicesList = document.getElementById('selectedServicesList');
-      if (serviceResults) serviceResults.style.display = 'block';
       if (selectedServicesList && window.pseudoBlocks && window.pseudoBlocks.length > 0) selectedServicesList.style.display = 'block';
     } else {
+
       // Nessun cliente selezionato: se c'è testo digitato, valuta se riaprire il client dropdown
       if (clientInput && clientInput.value && clientInput.value.trim()) {
         const q = clientInput.value.trim();
