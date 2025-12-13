@@ -387,16 +387,6 @@ document.addEventListener('DOMContentLoaded', function() {
   <div id="heatmapIncassi" style="width:100%;height:260px;"></div>
 </div>
 
-<div class="tile-neumorphic tile-large" id="tile-oroscopo">
-  <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
-<div class="tile-title" style="margin-bottom: 15px;">
-  ♈︎ ♉︎ ♊︎ <span style="letter-spacing:1px;">OROSCOPO DEL CENTRO</span> ♋︎ ♌︎ ♍︎ 
-</div>
-  <div id="oroscopo-content" style="font-size:0.9em; min-height:120px; padding-top: 15px;">
-    <span class="text-muted">Caricamento previsioni...</span>
-  </div>
-</div>
-
 <div class="tile-neumorphic tile-large" id="tile-palette-stagionale">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
 <div class="tile-title">PALETTE STAGIONALE</div>
@@ -1292,10 +1282,6 @@ document.addEventListener('DOMContentLoaded', function() {
   overflow-wrap: anywhere;
 }
 
-#oroscopo-content {
-padding: 15px !important;
-}
-
 #tabella-riassunto td:last-child,
 #tabella-riassunto th:last-child {
   font-weight: bold !important;
@@ -1378,7 +1364,6 @@ padding: 15px !important;
 .riassunto-giornaliero,
 .summary-tile,
 .daily-summary,
-#tile-oroscopo,
 #tile-palette-stagionale {
   overflow: hidden !important;
   box-sizing: border-box !important;
@@ -1388,7 +1373,6 @@ padding: 15px !important;
 /* Forza i figli a non eccedere il contenitore e a spezzare le parole se necessario */
 #tile-riassunto-giornaliero *,
 .riassunto-giornaliero *,
-#tile-oroscopo *,
 #tile-palette-stagionale * {
   max-width: 100% !important;
   box-sizing: border-box !important;
@@ -1424,29 +1408,6 @@ padding: 15px !important;
   padding-right: 8px !important;
 }
 
-#oroscopo-content > div {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: flex-start !important;
-  gap: 8px !important;
-  white-space: normal !important;
-  box-sizing: border-box !important;
-}
-#oroscopo-content > div > strong {
-  min-width: 86px !important;
-  flex: 0 0 auto !important;
-  display: inline-block !important;
-  font-weight: 700 !important;
-}
-#oroscopo-content > div > span,
-#oroscopo-content > div > i,
-#oroscopo-content > div > em,
-#oroscopo-content > div > b {
-  flex: 1 1 auto !important;
-  min-width: 0 !important;
-  overflow-wrap: anywhere !important;
-  word-break: break-word !important;
-}
 .report-actions {
   display: flex;
   gap: 0.5rem;
@@ -3072,117 +3033,6 @@ root.appendChild(row);
   });
 });
 </script>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const content = document.getElementById('oroscopo-content');
-  if (!content) return;
-
-  const today = new Date().toISOString().slice(0, 10);
-  const storageKey = 'oroscopo_' + today;
-
-  function clear(el) {
-    while (el.firstChild) el.removeChild(el.firstChild);
-  }
-
-  // Divide un eventuale simbolo/emoji iniziale dal testo vero e proprio senza generare HTML
-  function splitEmojiPrefix(testo) {
-    if (testo == null) return { emoji: '', text: '' };
-    const s = String(testo);
-    const m = s.match(/^([\p{Emoji}\p{So}\p{Sk}\p{Sc}\p{Sm}])\s*(.*)$/u);
-    return m ? { emoji: m[1], text: m[2] } : { emoji: '', text: s };
-  }
-
-  // Render sicuro (no innerHTML)
-  function mostraOroscopo(previsione, citazione, consiglio) {
-    clear(content);
-
-    function riga(label, value, italic = false) {
-      const wrap = document.createElement('div');
-      wrap.style.marginBottom = '20px';
-      wrap.style.display = 'flex';
-
-      const strong = document.createElement('strong');
-      strong.textContent = label;
-      wrap.appendChild(strong);
-
-      const { emoji, text } = splitEmojiPrefix(value);
-
-      if (emoji) {
-        const em = document.createElement('span');
-        em.style.fontSize = '1.5em';
-        em.style.verticalAlign = 'middle';
-        em.textContent = emoji;
-        wrap.appendChild(em);
-        wrap.appendChild(document.createTextNode(' '));
-      }
-
-      const nodeText = document.createTextNode(String(text || ''));
-      if (italic) {
-        const i = document.createElement('i');
-        i.appendChild(nodeText);
-        wrap.appendChild(i);
-      } else {
-        wrap.appendChild(nodeText);
-      }
-      return wrap;
-    }
-
-    content.appendChild(riga('OGGI: ', previsione, false));
-    content.appendChild(riga('CITAZIONE: ', citazione, true));
-    content.appendChild(riga('CONSIGLIO... ', consiglio, false));
-  }
-
-  // Mostra subito un placeholder non-HTML
-  content.textContent = 'caricamento previsioni...';
-
-  // 1) Leggi da cache giornaliera, se disponibile
-  const oroscopoSalvato = localStorage.getItem(storageKey);
-  if (oroscopoSalvato) {
-    try {
-      const obj = JSON.parse(oroscopoSalvato) || {};
-      mostraOroscopo(
-        obj.previsione || 'Previsione non disponibile al momento.',
-        obj.citazione  || 'Nessuna citazione disponibile.',
-        obj.consiglio  || 'Nessun consiglio disponibile.'
-      );
-      return; // abbiamo già renderizzato
-    } catch {
-      // Cache illeggibile: prosegui con il fetch
-    }
-  }
-
-  // 2) Fetch con timeout e fallback; nessun innerHTML
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000); // timeout 8s
-
-  fetch('/api/oroscopo_giornaliero', {
-    method: 'GET',
-    signal: controller.signal,
-    headers: { 'Accept': 'application/json' },
-    cache: 'no-store'
-  })
-  .then(r => {
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  })
-  .then(data => {
-    const prev = data && typeof data.previsione === 'string' ? data.previsione : 'Previsione non disponibile al momento.';
-    const cit  = data && typeof data.citazione  === 'string' ? data.citazione  : 'Nessuna citazione disponibile.';
-    const cons = data && typeof data.consiglio  === 'string' ? data.consiglio  : 'Nessun consiglio disponibile.';
-    mostraOroscopo(prev, cit, cons);
-
-    // Salvo solo i campi attesi
-    try {
-      localStorage.setItem(storageKey, JSON.stringify({ previsione: prev, citazione: cit, consiglio: cons }));
-    } catch {}
-  })
-  .catch(() => {
-    mostraOroscopo('Previsione non disponibile al momento.', '', '');
-  })
-  .finally(() => clearTimeout(timer));
-});
-</script>
-
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   fetch('/static/js/palette-stagionale.json')
