@@ -735,7 +735,7 @@ def client_history():
                         costo = voce.get('prezzo', None)
                         # Recupera l'operatore dal receipt
                         if receipt.operatore:
-                            operatore_nome = f"{receipt.operatore.user_nome} {receipt.operatore.user_cognome}".strip()
+                            operatore_nome = (receipt.operatore.user_nome or "").strip()
                         else:
                             operatore_nome = None
                         break
