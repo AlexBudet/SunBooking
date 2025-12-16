@@ -2061,7 +2061,9 @@ def send_whatsapp_auto():
 
         # Normalizzazione numero in base alle regole:
         # - Se inizia con '+': non modificare
-        # - Se inizia con '3': aggiungi '+39' davanti
+        # - Se inizia con '3':
+        #    - Se lunghezza > 10: assumiamo internazionale (es. 33...) -> aggiungi '+'
+        #    - Altrimenti (<= 10): assumiamo cellulare italiano -> aggiungi '+39'
         # - Se inizia con cifra diversa da '3' e non ha '+': aggiungi '+'
         raw = (str(numero or '')).strip().replace(' ', '')
         if not raw:
@@ -2072,7 +2074,12 @@ def send_whatsapp_auto():
             numero_norm = raw
         elif raw and raw[0].isdigit():
             if raw.startswith('3'):
-                numero_norm = '+39' + raw
+                # Euristica: i cellulari italiani sono tipicamente 10 cifre (es. 333 1234567)
+                # I numeri internazionali che iniziano con 3 (es. Francia 33...) sono spesso più lunghi
+                if len(raw) > 10:
+                    numero_norm = '+' + raw
+                else:
+                    numero_norm = '+39' + raw
             else:
                 numero_norm = '+' + raw
         else:
