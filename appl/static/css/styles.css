@@ -3218,7 +3218,7 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
 }
 
 #MobilePopupButtonsModal .modal-content {
-  background: #fff8fc !important;
+  background: rgb(219, 211, 177) !important;
 }
 
 .modal-backdrop,

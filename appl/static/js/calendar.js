@@ -1027,6 +1027,24 @@ function showClientInfoModal(clientId) {
           const newSn = payload.cliente_cognome || sn;
           const newFull = (`${newNm} ${newSn}`).trim();
 
+          // PATCH: Aggiorna input Navigator e rilancia ricerca per aggiornare dropdown e onclick
+          const navInput = document.getElementById('clientSearchInputNav');
+          if (navInput) {
+              // Aggiorna il testo nel campo di ricerca con il nuovo nome
+              navInput.value = newFull;
+              
+              // Se il cliente era già selezionato, aggiorna anche la variabile globale
+              if (String(window.selectedClientIdNav) === String(clientId)) {
+                  window.selectedClientNameNav = newFull;
+                  if (typeof saveNavigatorState === 'function') saveNavigatorState();
+              }
+
+              // Rilancia la ricerca per rigenerare il dropdown con i dati aggiornati (inclusi gli onclick)
+              if (typeof window.handleClientSearchNav === 'function') {
+                  window.handleClientSearchNav(newFull);
+              }
+          }
+
           // aggiorna header (MAIUSCOLO + GRASSETTO)
           if (headerTitleEl) {
             const esc = s => String(s || '').replace(/[&<>"'`]/g, ch =>
@@ -4863,6 +4881,10 @@ function chiediInvioWhatsappNavigator() {
       if (t.closest('.btn-popup') || t.closest('.popup-buttons') || t.closest('.appointment-block')) {
         return;
       }
+
+      // PATCH: Evita click multipli durante la creazione
+      if (window.isCreatingAppointment) return;
+
       if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
         e.stopImmediatePropagation();
         e.preventDefault();
@@ -4901,6 +4923,9 @@ if (blocksInCell.length >= 2) {
   return;
 }
             
+            // PATCH: Blocca ulteriori click
+            window.isCreatingAppointment = true;
+
             const operatorId = cell.getAttribute('data-operator-id');
             const hour = parseInt(cell.getAttribute('data-hour'), 10);
             const minute = parseInt(cell.getAttribute('data-minute'), 10);
@@ -5037,6 +5062,10 @@ appointment.service_tag = appointment.service_tag || blk.tag || blk.serviceName;
         }
         location.reload();
     }, 100);
+  }).catch(err => {
+      console.error(err);
+      alert("Errore creazione: " + err.message);
+      window.isCreatingAppointment = false; // PATCH: Sblocca click su errore
   });
 
             } else {
@@ -5275,6 +5304,7 @@ if (appointment.client_name && appointment.service_tag) {
                 .catch(err => {
                     console.error(err);
                     alert("Errore nella creazione multipla: " + err.message);
+                    window.isCreatingAppointment = false;
                 });
             }
         }
@@ -9291,3 +9321,33 @@ document.addEventListener('mouseleave', function(e) {
         arrow.remove();
     }
 }, true);
+
+// =============================================================
+//   GESTIONE BADGE NOTIFICHE WEB
+// =============================================================
+function checkPendingWebAppointments() {
+    fetch('/calendar/api/web-appointments/count-pending')
+        .then(r => r.json())
+        .then(data => {
+            const badge = document.getElementById('webApptBadge');
+            if (!badge) return;
+
+            const count = data.count || 0;
+            if (count > 0) {
+                badge.textContent = count > 99 ? '99+' : count;
+                badge.style.display = 'inline-block';
+                
+                // Opzionale: animazione pulsazione se il numero cambia o è > 0
+                badge.classList.add('animate__animated', 'animate__pulse'); 
+            } else {
+                badge.style.display = 'none';
+            }
+        })
+        .catch(err => console.warn('Check web pending failed', err));
+}
+
+// Avvia il controllo al caricamento e poi ogni minuto
+document.addEventListener('DOMContentLoaded', function() {
+    checkPendingWebAppointments();
+    setInterval(checkPendingWebAppointments, 60000);
+});
