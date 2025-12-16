@@ -143,6 +143,69 @@ for idx, uri in pool.items():
             'cliente_email': client.cliente_email,
             'note': client.note
         })
+    
+    # --- PATCH: Aggiunta rotte mancanti per update cliente (presenti in calendar.py come @app.route) ---
+    @child.route('/settings/api/update_client_info', methods=['POST'])
+    def update_client_info_wsgi():
+        from appl.models import Client
+        data = request.get_json(silent=True) or {}
+        client_id = data.get('client_id')
+        if not client_id:
+            return jsonify(success=False, error="client_id mancante"), 400
+
+        try:
+            client = db.session.get(Client, int(client_id))
+            if not client:
+                return jsonify(success=False, error="cliente non trovato"), 404
+
+            nome = data.get('cliente_nome')
+            cognome = data.get('cliente_cognome')
+            if nome is not None:
+                client.cliente_nome = nome.strip()
+            if cognome is not None:
+                client.cliente_cognome = cognome.strip()
+
+            db.session.commit()
+            return jsonify(success=True, cliente_nome=client.cliente_nome, cliente_cognome=client.cliente_cognome), 200
+
+        except Exception as e:
+            db.session.rollback()
+            child.logger.exception("update_client_info error")
+            return jsonify(success=False, error="errore interno"), 500
+
+    @child.route('/settings/api/update_client_phone', methods=['POST'])
+    def update_client_phone_wsgi():
+        from appl.models import Client
+        data = request.get_json()
+        client = db.session.get(Client, data.get('client_id'))
+        if client:
+            client.cliente_cellulare = data.get('phone', '')
+            db.session.commit()
+            return jsonify(success=True, phone=client.cliente_cellulare)
+        return jsonify(success=False), 404
+
+    @child.route('/settings/api/update_client_email', methods=['POST'])
+    def update_client_email_wsgi():
+        from appl.models import Client
+        data = request.get_json()
+        client = db.session.get(Client, data.get('client_id'))
+        if client:
+            client.cliente_email = data.get('email', '')
+            db.session.commit()
+            return jsonify(success=True, email=client.cliente_email)
+        return jsonify(success=False), 404
+    
+    @child.route('/settings/api/update_client_note', methods=['POST'])
+    def update_client_note_wsgi():
+        from appl.models import Client
+        data = request.get_json()
+        client = db.session.get(Client, data.get('client_id'))
+        if client:
+            client.note = data.get('note', '')
+            db.session.commit()
+            return jsonify(success=True, note=client.note)
+        return jsonify(success=False), 404
+    # --- FINE PATCH ---
 
     def with_db_cookie(app, idx_local, secure=False):
         def _wrap(environ, start_response):

@@ -2138,3 +2138,25 @@ def send_whatsapp_auto():
     except Exception as e:
         app.logger.exception("[WHATSAPP] Errore invio WhatsApp: %s", e)
         return jsonify({'error': str(e)}), 500
+    
+@calendar_bp.route('/api/web-appointments/count-pending', methods=['GET'])
+def count_pending_web_appointments():
+    """
+    Conta gli appuntamenti 'web' che non sono stati ancora gestiti/associati.
+    Cerca su TUTTI i giorni (nessun filtro data) e controlla nome/cognome del cliente.
+    """
+    try:
+        # Cerca appuntamenti source='web' associati a clienti con nome BOOKING e cognome ONLINE (case-insensitive)
+        # Include anche 'cliente booking' per retrocompatibilità con il dummy standard
+        count = Appointment.query.join(Client).filter(
+            Appointment.source == 'web',
+            or_(
+                and_(func.upper(Client.cliente_nome) == 'BOOKING', func.upper(Client.cliente_cognome) == 'ONLINE'),
+                and_(func.upper(Client.cliente_nome) == 'CLIENTE', func.upper(Client.cliente_cognome) == 'BOOKING')
+            )
+        ).count()
+
+        return jsonify({'count': count})
+    except Exception as e:
+        app.logger.exception("Errore conteggio web pending")
+        return jsonify({'count': 0})

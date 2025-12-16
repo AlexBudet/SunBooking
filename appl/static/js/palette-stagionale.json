@@ -1,22 +1,22 @@
 [
   {
-    "nome": "Bordeaux profondo",
-    "hex": "#5A0B1E",
-    "descrizione": "Un rosso vino intenso, sofisticato e caldo."
+    "nome": "Rosso Natale",
+    "hex": "#D6001C",
+    "descrizione": "Un rosso acceso che riscalda il cuor."
   },
   {
-    "nome": "Terracotta scuro",
-    "hex": "#A34726",
-    "descrizione": "Terracotta bruciata con accenti ramati."
+    "nome": "Bordeaux Glam",
+    "hex": "#800020",
+    "descrizione": "Un classico che non passa di moda."
   },
   {
-    "nome": "Prugna fumé",
-    "hex": "#4B2C39",
-    "descrizione": "Viola-prugna scuro con sottotoni caldi."
+    "nome": "Verde Abete",
+    "hex": "#2E7D32",
+    "descrizione": "Un richiamo selvaggio ad una natura di charme."
   },
   {
-    "nome": "Blu notte profondo",
-    "hex": "#0B1D3A",
-    "descrizione": "Blu quasi nero, elegante e profondo."
+    "nome": "Golden Glow",
+    "hex": "#ECDE9B",
+    "descrizione": "Dorato con un tocco di magia glitter."
   }
 ]
