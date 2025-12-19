@@ -4626,6 +4626,14 @@ function renderPseudoBlocksList() {
     row.style.border = `2px solid ${commonColor}`;
     row.style.marginBottom = '5px';
 
+    // PATCH: Aggiungi listener per la selezione del pseudoblocco
+    row.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (typeof handlePseudoBlockClick === 'function') {
+            handlePseudoBlockClick(this);
+        }
+    });
+
     const left = document.createElement('div');
 
     // label (senza innerHTML)
@@ -5041,7 +5049,10 @@ appointment.service_tag = appointment.service_tag || blk.tag || blk.serviceName;
 })();
 
     // Se restano pseudoblocchi: termina (niente WhatsApp, niente reload)
-    if (window.pseudoBlocks.length > 0) return;
+    if (window.pseudoBlocks.length > 0) {
+        window.isCreatingAppointment = false; // PATCH: Sblocca il click per il prossimo blocco
+        return;
+    }
 
     // Ultimo pseudoblocco: chiedi WhatsApp e poi reload
     clearNavigator(false);
@@ -6053,7 +6064,8 @@ function getRelevantBlocks(baseBlock) {
     const prev = candidates[i];
     const cur = group[0];
     const gap = getBlockStartTime(cur) - getBlockEndTime(prev);
-    if (gap <= MAX_GAP && gap >= -MAX_GAP) group.unshift(prev);
+    // PATCH: Rimosso check gap >= -MAX_GAP per permettere sovrapposizioni ampie (es. appuntamenti contemporanei)
+    if (gap <= MAX_GAP) group.unshift(prev);
     else break;
   }
   // verso il basso
@@ -6061,7 +6073,8 @@ function getRelevantBlocks(baseBlock) {
     const next = candidates[i];
     const cur = group[group.length - 1];
     const gap = getBlockStartTime(next) - getBlockEndTime(cur);
-    if (gap <= MAX_GAP && gap >= -MAX_GAP) group.push(next);
+    // PATCH: Rimosso check gap >= -MAX_GAP per permettere sovrapposizioni ampie
+    if (gap <= MAX_GAP) group.push(next);
     else break;
   }
 
