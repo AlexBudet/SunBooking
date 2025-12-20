@@ -364,7 +364,7 @@ td {
   gap: var(--pb-gap);
   padding: 0;
   top: auto !important;                     /* annulla top (anche inline) */
-  bottom: calc(100% + 1px) !important;  
+  bottom: 100% !important;  
 }
 
 
@@ -383,7 +383,7 @@ td {
   /* migliora leggibilità del testo/icona */
   font-size: var(--pb-fs) !important;
   padding: 0;                   /* niente padding che sballa l’aspect-ratio */
-  background-color: #000000; /* default */
+  background: linear-gradient(to bottom, #5c5c5c, #2c2c2c);
   color: #fff;
   box-shadow: 0 0 0 0.8px hsla(0, 0%, 96%, 0.76) !important; /* anello uniforme da 2px */
 }
@@ -403,14 +403,20 @@ td {
 /* Pulsante WhatsApp: scala in proporzione ma resta ancorato in basso a destra */
 .appointment-block .btn-popup.whatsapp-btn {
   left: auto !important;
-  right: calc(100% + 1px) !important;
+  right: 100% !important; /* Lato destro a 0px dal bordo sinistro del blocco */
   position: absolute !important;
-  bottom: 1px !important;
+  top: 0 !important;
+  bottom: 0 !important;
   box-sizing: border-box;
-  width: calc(var(--pb-item-w) * 0.9) !important;
-  aspect-ratio: 1 / 1 !important;
-  height: auto !important;
-  box-shadow: 0 0 0 0.8px hsla(0, 0%, 96%, 0.76) !important; /* anello uniforme da 2px */
+  width: 50px !important; /* Larghezza fissa */
+  height: 100% !important; /* Altezza del blocco */
+  background: linear-gradient(to left, #616161, #3a3a3a); 
+  aspect-ratio: auto !important;
+  border-radius: 8px 0 0 8px !important;
+  box-shadow: 0 0 0 0.8px hsla(0, 0%, 96%, 0.76) !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transform: none !important;
 }
 
 .appointment-block .btn-popup.whatsapp-btn i,
@@ -422,8 +428,8 @@ td {
 /* SVG e IMG dentro ai popup: dimensione proporzionale al bottone */
 .appointment-block .popup-buttons .btn-popup svg,
 .appointment-block .popup-buttons .btn-popup img {
-  width: calc(var(--pb-item-w) * 0.54) !important;
-  height: calc(var(--pb-item-w) * 0.54) !important;
+  width: calc(var(--pb-item-w) * 0.6) !important;
+  height: calc(var(--pb-item-w) * 0.6) !important;
   max-width: 100% !important;
   max-height: 100% !important;
   object-fit: contain !important;
@@ -782,7 +788,6 @@ td {
   transition: background 0.2s;
 }
 .btn-popup.whatsapp-btn:hover {
-  background: #222;
   color: #25D366;
 }
 .btn-popup.whatsapp-btn i.bi-whatsapp {
@@ -1851,6 +1856,7 @@ body.touch-ui .appointment-block .my-spia {
   top: 10px !important;
   right: 6px !important;
   left: auto !important;
+  
 }
 
 body.touch-ui .appointment-block .my-spia {
@@ -1862,7 +1868,7 @@ body.touch-ui .appointment-block .my-spia {
 body.touch-ui .appointment-block.active-popup .my-spia {
   display: inline-flex !important;  /* visibile in touch quando il blocco è attivo */
   opacity: 1 !important;
-  pointer-events: auto !important;  /* cliccabile */
+  pointer-events: none !important;  /* cliccabile */
 }
 
 /* nascondi elementi non usabili su touch */
@@ -3218,7 +3224,7 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
 }
 
 #MobilePopupButtonsModal .modal-content {
-  background: rgb(219, 211, 177) !important;
+  background: rgb(255, 218, 235) !important;
 }
 
 .modal-backdrop,
