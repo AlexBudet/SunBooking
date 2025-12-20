@@ -1819,6 +1819,7 @@ def calendar_next_appointments():
                 f"{getattr(appt.client, 'cliente_nome', '')} {getattr(appt.client, 'cliente_cognome', '')}".strip()
                 if appt.client else ""
             ),
+            "client_phone": "" if is_off else (getattr(appt.client, "cliente_cellulare", "") if appt.client else ""),
             "service": "" if is_off else (getattr(appt.service, "servizio_nome", "") if appt.service else ""),
             "operator": operator_name,
             "is_off": bool(is_off),

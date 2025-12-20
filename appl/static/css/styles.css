@@ -347,7 +347,7 @@ td {
 .appointment-block {
   position: relative;           /* necessario per top assoluto */
   --pb-cols: 6;
-  --pb-gap: 3px;
+  --pb-gap: 1px;
   --pb-item-w: calc((100% - (var(--pb-gap) * (var(--pb-cols) - 1))) / var(--pb-cols));
   --pb-fs: clamp(10px, calc(var(--pb-item-w) * 0.26), 18px);   /* testo */
   --pb-icon: clamp(14px, calc(var(--pb-item-w) * 0.42), 26px); /* icone */
@@ -412,7 +412,7 @@ td {
   height: 100% !important; /* Altezza del blocco */
   background: linear-gradient(to left, #616161, #3a3a3a); 
   aspect-ratio: auto !important;
-  border-radius: 8px 0 0 8px !important;
+  border-radius: 8px !important;
   box-shadow: 0 0 0 0.8px hsla(0, 0%, 96%, 0.76) !important;
   align-items: center !important;
   justify-content: center !important;
@@ -1938,7 +1938,7 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup
   border-radius: 6px;
   font-size: var(--pb-fs, 13px) !important;
   padding: 0;
-  background-color: #000000;
+  background: linear-gradient(to bottom, #5c5c5c, #2c2c2c);
   color: #fff;
   box-shadow: 0 0 0 0.8px hsla(0, 0%, 96%, 0.76) !important;
 }

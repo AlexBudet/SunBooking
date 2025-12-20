@@ -208,6 +208,7 @@ function normalizeRow(x) {
   return {
     start_time: x.start_time || "",
     client: isOff ? "OFF" : (x.client || ""),
+    client_phone: isOff ? "" : (x.client_phone || ""),
     service: isOff ? ""    : (x.service || ""),
     operator: x.operator || "",
     note: isOff ? (x.note || "") : "",
@@ -237,11 +238,12 @@ function exportXLSX(rows) {
     "Operatore": r.operator,
     "Ora": r.start_time,
     "Cliente": r.client,
+    "Cellulare": r.client_phone,
     "Servizio": r.service,
     "Nota": r.note,
     "Durata": r.duration || ""
   }));
-  const header = ["Operatore","Ora","Cliente","Servizio","Nota","Durata"];
+  const header = ["Operatore","Ora","Cliente","Cellulare","Servizio","Nota","Durata"];
 
   const ws = XLSX.utils.json_to_sheet(data, { header });
 
@@ -307,8 +309,8 @@ function exportPDF(rows) {
   doc.text(`Agenda del ${dataIt}`, 40, 40);
 
   // Tabella senza colonna "Data", con colonna "Durata" (solo OFF)
-  const head = [["Operatore","Ora","Cliente","Servizio","Nota","Durata"]];
-  const body = rows.map(r => [r.operator, r.start_time, r.client, r.service, r.note, r.duration || ""]);
+  const head = [["Operatore","Ora","Cliente","Cellulare","Servizio","Nota","Durata"]];
+  const body = rows.map(r => [r.operator, r.start_time, r.client,  r.client_phone, r.service, r.note, r.duration || ""]);
 
   doc.autoTable({
     head,
