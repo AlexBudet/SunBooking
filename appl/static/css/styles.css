@@ -383,7 +383,7 @@ td {
   /* migliora leggibilità del testo/icona */
   font-size: var(--pb-fs) !important;
   padding: 0;                   /* niente padding che sballa l’aspect-ratio */
-  background: linear-gradient(to bottom, #5c5c5c, #2c2c2c);
+  background: linear-gradient(to top, #5c5c5c, #2c2c2c);
   color: #fff;
   box-shadow: 0 0 0 0.8px hsla(0, 0%, 96%, 0.76) !important; /* anello uniforme da 2px */
 }
@@ -1047,6 +1047,7 @@ td {
     padding: 5px; /* se necessario */
     color: black;
     background-color: #f5f5f5;
+    font-size: 15px !important; 
 }
 
 /* Aggiungi questo codice al tuo file styles.css */
@@ -1055,6 +1056,7 @@ td {
     background: none;
     border: none;
     cursor: pointer;
+    font-size: 15px !important; 
   }
 
   /* Stile per evidenziare il pseudoblocco selezionato */
@@ -1142,9 +1144,9 @@ td {
 #serviceResultsNav .dropdown-item,
 #clientResultsNav .dropdown-item,
 #selectedServicesList .pseudo-block {
-    font-size: 1em;      /* oppure scegli la dimensione che preferisci */
+    font-size: 1.15em;      /* oppure scegli la dimensione che preferisci */
     font-family: Arial, Helvetica, sans-serif;    /* eredita dal campo input */
-    line-height: 1em;
+    line-height: 1.15em;
 }
 
 /* Rendi anche i pulsanti X coerenti */
@@ -3224,7 +3226,11 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
 }
 
 #MobilePopupButtonsModal .modal-content {
-  background: rgb(255, 218, 235) !important;
+  background: linear-gradient(to bottom right, rgb(255, 218, 235), rgb(255, 238, 245)) !important;
+}
+
+#MobilePopupButtonsModal .modal-header {
+  background: rgb(255, 249, 251) !important;  /* Rosa più scuro per l'header, regola a piacere */
 }
 
 .modal-backdrop,

@@ -426,7 +426,7 @@
             {% endfor %}
             {% endfor %} </tbody>
     </table>
-    <div id="clientInfoPopup" style="display:none; position:absolute; margin-top:-25px; z-index:9999; background:#000000; border:1px solid #ccc; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.15); padding:6px 10px; font-size:0.95em; width:auto; text-align:center;"></div>
+    <div id="clientInfoPopup" style="display:none; position:absolute; margin-top:-25px; z-index:9999; background: linear-gradient(to left, #2e2e2e, #3d3d3d); border:1px solid #ccc; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.15); padding:6px 10px; font-size:0.95em; width:auto; text-align:center;"></div>
     <div id="currentTimeIndicator" style="position: absolute; left: 0; right: 0; height: 1px; background: rgb(255, 0, 136); z-index: 10;"></div>
 </div>
 
@@ -1259,15 +1259,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const pw = popup.offsetWidth || 220;
     const ph = popup.offsetHeight || 140;
 
-    let left = rect.right + scrollX + 2;
+    let left = rect.right + scrollX;
     if (left + pw > document.documentElement.clientWidth + scrollX) {
-      left = rect.left + scrollX - pw - 2;
+      left = rect.left + scrollX - pw;
       if (left < 1) left = 1;
     }
 
     let top = rect.top + scrollY - 10;
     if (top + ph > document.documentElement.clientHeight + scrollY) {
-      top = Math.max(1, document.documentElement.clientHeight + scrollY - ph - 1);
+      top = Math.max(1, document.documentElement.clientHeight + scrollY - ph);
     }
     if (top < 1) top = 1;
 
