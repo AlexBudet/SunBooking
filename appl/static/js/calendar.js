@@ -3707,13 +3707,6 @@ document.addEventListener('DOMContentLoaded', function() {
   const IS_TOUCH = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch(_) { return false; } })();
 
   tooltipTriggerList.forEach(function(el) {
-    // 1) Blocca SEMPRE (modalità default) i tooltip dei pulsanti dentro .popup-buttons
-    if (!IS_TOUCH && el.closest('.popup-buttons')) {
-      // Rimuove attributo per prevenire nuova inizializzazione
-      el.removeAttribute('data-bs-toggle');
-      el.setAttribute('data-tooltip-blocked', '1');
-      return; // NON creare il tooltip
-    }
 
     // 2) Inizializzazioni consentite
     if (el.closest('.client-name')) {
@@ -3758,20 +3751,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
-
-document.addEventListener('show.bs.tooltip', function(ev) {
-  try {
-    const trg = ev.target;
-    const IS_TOUCH = document.body.classList.contains('touch-ui') ||
-                     (localStorage.getItem('sun_touch_ui') === '1');
-    if (!IS_TOUCH && trg.closest('.popup-buttons')) {
-      // Annulla apertura del tooltip della top bar in modalità default
-      ev.preventDefault();
-      const inst = bootstrap.Tooltip.getInstance(trg);
-      if (inst) inst.disable();
-    }
-  } catch(_) {}
-}, true);
 
 function openNoteModal(block) {
   const appointmentId = block.getAttribute('data-appointment-id') || "";
