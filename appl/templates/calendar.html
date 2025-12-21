@@ -267,6 +267,7 @@
     <button type="button"
             class="btn-popup delete-appointment-block"
             title="Elimina appuntamento"
+            data-bs-toggle="tooltip"
             data-appointment-id="{{ appt.id }}"
             onclick="if(window.deleteAppointment) window.deleteAppointment('{{ appt.id }}')">
       <i class="bi bi-trash"></i>
@@ -352,6 +353,7 @@
           class="delete-icon"
           title="Elimina appuntamento"
           data-appointment-id="{{ appt.id }}"
+          data-bs-toggle="tooltip"
           onclick="event.stopPropagation(); if(window.deleteAppointment) window.deleteAppointment('{{ appt.id }}')">
     <i class="bi bi-trash"></i>
   </button>
