@@ -4629,8 +4629,11 @@ function renderPseudoBlocksList() {
         }
       }
     } else {
+      // Dividi il nome per nascondere il telefono visivamente, ma preserva i dati completi
+      const nameParts = String(block.clientName || '').split(' - ');
+      const displayName = nameParts[0] || '';  // Mostra solo il nome (prima parte)
       const strong = document.createElement('strong');
-      strong.textContent = String(block.clientName || '');
+      strong.textContent = displayName;
       left.appendChild(strong);
       left.appendChild(document.createTextNode(' - '));
       const tagSpan = document.createElement('span');
