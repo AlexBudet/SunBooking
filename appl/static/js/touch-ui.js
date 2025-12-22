@@ -72,18 +72,73 @@ function buildBottomButtons(block) {
 }
 
 function closeAllPopups() {
+  // Reset active state and z-index
   document.querySelectorAll('.appointment-block.active-popup')
     .forEach(b => {
       b.classList.remove('active-popup');
       b.style.zIndex = '100';
     });
+
+  // Restore any client-info links disabled during "only cut" mode
+  document.querySelectorAll('.client-info-link[data-touch-only-cut="1"]').forEach(a => {
+    a.style.pointerEvents = '';
+    a.removeAttribute('data-touch-only-cut');
+  });
+
+  // Close client popups forcefully
   const clientPopup = document.getElementById('clientHistoryPopup');
   if (clientPopup) clientPopup.style.display = 'none';
   const small = document.getElementById('clientInfoPopup');
   if (small) small.style.display = 'none';
   forceHideClientInfoPopup();
+
+  // Ripristina esplicitamente gli stili dei bottoni noti (uno per uno)
+  const restoreSelectors = [
+    '.btn-popup.delete-appointment-block',
+    '.btn-popup.nota',
+    '.btn-popup.copia',
+    '.btn-popup.sposta',
+    '.btn-popup.colore',
+    '.btn-popup.color',
+    '.btn-popup.to-cash',
+    '.btn-popup.go-cash',
+    '.btn-popup.cassa',
+    '.btn-popup.add-services',
+    '.btn-popup.aggiungi-servizi',
+    '.btn-popup.aggiungi-servizio',
+    '.btn-popup.add-service',
+    '.btn-popup.whatsapp-btn',
+    '.btn-popup.copy-off-block',
+    '.btn-popup.delete-off-block',
+    '.btn-popup.touch-top-copy',
+    '.btn-popup.touch-top-delete',
+    '.btn-popup.taglia',
+    '.btn-popup.touch-top-cut'
+  ];
+restoreSelectors.forEach(sel => {
+  document.querySelectorAll(sel).forEach(btn => {
+    btn.style.display = '';
+    btn.style.visibility = '';
+    btn.style.zIndex = '';
+    // Ripristina eventuali override applicati al TAGLIA
+    btn.style.flex = '';
+    btn.style.width = '';
+  });
+});
+
+  // Rimuovi eventuali fallback creati (.btn-popup.taglia.touch-only-cut)
+  document.querySelectorAll('.btn-popup.taglia.touch-only-cut').forEach(btn => {
+    try { btn.remove(); } catch(_) {}
+  });
+
+  // Restore bars and clear inline overrides on containers
   document.querySelectorAll('.appointment-block .popup-buttons, .appointment-block .popup-buttons-bottom')
-    .forEach(el => { el.style.zIndex = ''; el.style.display = ''; });
+    .forEach(el => {
+      el.style.zIndex = '';
+      el.style.display = '';
+    });
+
+  // Close any my-spia popups
   closeAllMySpiaPopups();
 }
 
@@ -777,3 +832,131 @@ document.addEventListener('click', function(e) {
   forceHideClientInfoPopup();
   setTimeout(forceHideClientInfoPopup, 30);
 }, true);
+
+// Funzione per trovare i blocchi contigui dello stesso cliente nella stessa colonna
+function findContiguousBlocks(cutBlock) {
+  const clientId = cutBlock.getAttribute('data-client-id');
+  const operatorId = cutBlock.getAttribute('data-operator-id');
+  const date = cutBlock.getAttribute('data-date');
+  // Trova tutti i blocchi dello stesso cliente, operatore, data
+  const allBlocks = Array.from(document.querySelectorAll(`.appointment-block[data-client-id="${clientId}"][data-operator-id="${operatorId}"][data-date="${date}"]`));
+  // Ordina per start_time
+  allBlocks.sort((a, b) => {
+    const aTime = parseInt(a.getAttribute('data-hour')) * 60 + parseInt(a.getAttribute('data-minute'));
+    const bTime = parseInt(b.getAttribute('data-hour')) * 60 + parseInt(b.getAttribute('data-minute'));
+    return aTime - bTime;
+  });
+  // Trova l'indice del cutBlock
+  const cutIndex = allBlocks.indexOf(cutBlock);
+  if (cutIndex === -1) return [];
+  const contiguous = [];
+  // Controlla precedente
+  if (cutIndex > 0) {
+    const prev = allBlocks[cutIndex - 1];
+    const prevEnd = parseInt(prev.getAttribute('data-hour')) * 60 + parseInt(prev.getAttribute('data-minute')) + parseInt(prev.getAttribute('data-duration'));
+    const cutStart = parseInt(cutBlock.getAttribute('data-hour')) * 60 + parseInt(cutBlock.getAttribute('data-minute'));
+    if (prevEnd === cutStart) contiguous.push(prev);
+  }
+  // Controlla successivo
+  if (cutIndex < allBlocks.length - 1) {
+    const next = allBlocks[cutIndex + 1];
+    const cutEnd = parseInt(cutBlock.getAttribute('data-hour')) * 60 + parseInt(cutBlock.getAttribute('data-minute')) + parseInt(cutBlock.getAttribute('data-duration'));
+    const nextStart = parseInt(next.getAttribute('data-hour')) * 60 + parseInt(next.getAttribute('data-minute'));
+    if (cutEnd === nextStart) contiguous.push(next);
+  }
+  return contiguous;
+}
+
+function openTouchPopupForBlock(block) {
+  if (!block) return;
+
+  try { if (typeof ensureTopBarForTouch === 'function') ensureTopBarForTouch(block); } catch(_) {}
+  try { if (typeof ensureBottomBar === 'function') ensureBottomBar(block); } catch(_) {}
+
+  block.classList.add('active-popup');
+  block.style.zIndex = '11940';
+
+  const tb = block.querySelector('.popup-buttons');
+  const bb = block.querySelector('.popup-buttons-bottom');
+
+  if (tb) {
+    tb.style.setProperty('display', 'flex', 'important');
+    tb.style.zIndex = '11950';
+
+    // Nascondi TUTTI i bottoni esplicitamente, tranne TAGLIA
+    const hide = (sel) => tb.querySelectorAll(sel).forEach(btn => {
+      btn.style.setProperty('display', 'none', 'important');
+      btn.style.visibility = 'hidden';
+    });
+
+    // Elenco esplicito dei bottoni da NASCONDERE (tranne taglia)
+    hide('.btn-popup.delete-appointment-block');
+    hide('.btn-popup.nota');
+    hide('.btn-popup.copia');
+    hide('.btn-popup.sposta');
+    hide('.btn-popup.colore');
+    hide('.btn-popup.color');
+    hide('.btn-popup.to-cash');
+    hide('.btn-popup.go-cash');
+    hide('.btn-popup.cassa');
+    hide('.btn-popup.add-services');
+    hide('.btn-popup.aggiungi-servizi');
+    hide('.btn-popup.aggiungi-servizio');
+    hide('.btn-popup.add-service');
+    hide('.btn-popup.whatsapp-btn');
+    hide('.btn-popup.copy-off-block');
+    hide('.btn-popup.delete-off-block');
+    hide('.btn-popup.touch-top-copy');
+    hide('.btn-popup.touch-top-delete');
+
+    // Mostra SOLO il tasto TAGLIA:
+    // 1) preferisci .taglia (blocchi normali)
+    // 2) altrimenti usa .touch-top-cut (OFF)
+    // 3) se nessuno esiste, crea un fallback .taglia touch-only-cut
+    let cutBtn =
+      tb.querySelector('.btn-popup.taglia') ||
+      tb.querySelector('.btn-popup.touch-top-cut') ||
+      tb.querySelector('.btn-popup.taglia.touch-only-cut');
+
+    if (!cutBtn) {
+      const fallback = document.createElement('button');
+      fallback.className = 'btn-popup taglia touch-only-cut';
+      fallback.title = 'Taglia';
+      try { fallback.appendChild(biIcon('scissors')); } catch(_) {}
+      tb.appendChild(fallback);
+      cutBtn = fallback;
+    }
+
+    // Se il bottone taglia esiste ma è senza icona, inseriscila ora
+    if (cutBtn && !cutBtn.querySelector('i')) {
+      try { cutBtn.appendChild(biIcon('scissors')); } catch(_) { cutBtn.textContent = '✂'; }
+    }
+
+    if (cutBtn) {
+      cutBtn.style.setProperty('display', 'inline-flex', 'important');
+      cutBtn.style.visibility = 'visible';
+      cutBtn.style.zIndex = '11960';
+      // Mantieni la larghezza di 1/6 del blocco
+      cutBtn.style.setProperty('flex', '0 0 16.6667%', 'important');
+      cutBtn.style.setProperty('width', '16.6667%', 'important');
+      cutBtn.style.boxSizing = 'border-box';
+    }
+  }
+
+  // Nascondi sempre la bottom bar
+  if (bb) {
+    bb.style.setProperty('display', 'none', 'important');
+    bb.style.zIndex = '11950';
+  }
+
+  // Disabilita il link sul nome cliente mentre è aperto "solo taglia"
+  const clientLink = block.querySelector('.client-info-link');
+  if (clientLink) {
+    clientLink.setAttribute('data-touch-only-cut', '1');
+    clientLink.style.setProperty('pointer-events', 'none', 'important');
+  }
+}
+
+// Esponi le funzioni globalmente
+window.findContiguousBlocks = findContiguousBlocks;
+window.openTouchPopupForBlock = openTouchPopupForBlock;

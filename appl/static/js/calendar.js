@@ -3509,41 +3509,119 @@ document.addEventListener('DOMContentLoaded', function() {
     try { if (typeof window.closeAllPopups === 'function') window.closeAllPopups(); } catch (_) {}
   }
 
-  function onCutClick(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
+function onCutClick(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
 
-    // In touch‑ui, chiudi subito qualsiasi tooltip/popup info
-    if (isTouchUI()) hideAppointmentTooltipsAndPopups();
+  const TOUCH = isTouchUI();
 
-    // Rimuovi eventuale tooltip Bootstrap attaccato al pulsante
-    const inst = (window.bootstrap && window.bootstrap.Tooltip) ? bootstrap.Tooltip.getInstance(this) : null;
-    if (inst) { try { inst.dispose(); } catch(_) {} }
-    this.removeAttribute('data-bs-original-title');
-    this.removeAttribute('aria-describedby');
+  // In touch‑ui, chiudi subito qualsiasi tooltip/popup info
+  if (TOUCH) hideAppointmentTooltipsAndPopups();
 
-    // Rimuovi anche elementi tooltip residui dal DOM
-    document.querySelectorAll('.tooltip').forEach(t => { t.parentNode && t.parentNode.removeChild(t); });
+  // Rimuovi eventuale tooltip Bootstrap attaccato al pulsante
+  const inst = (window.bootstrap && window.bootstrap.Tooltip) ? bootstrap.Tooltip.getInstance(this) : null;
+  if (inst) { try { inst.dispose(); } catch(_) {} }
+  this.removeAttribute('data-bs-original-title');
+  this.removeAttribute('aria-describedby');
 
-    // Recupera il blocco
-    const block = this.closest('.appointment-block');
-    if (!block) return;
+  // Rimuovi anche elementi tooltip residui dal DOM
+  document.querySelectorAll('.tooltip').forEach(t => { t.parentNode && t.parentNode.removeChild(t); });
 
-    // Escludi blocchi OFF (senza client/service) come da logica esistente
-    const isOff = !block.getAttribute('data-client-id') || !block.getAttribute('data-service-id');
-    if (isOff) return;
+  // Recupera il blocco
+  const block = this.closest('.appointment-block');
+  if (!block) return;
 
-    // Limite Navigator (15)
-    window.pseudoBlocks = window.pseudoBlocks || [];
-    if (window.pseudoBlocks.length >= 15) {
-      alert('Hai già 15 elementi nel Navigator. Incolla o svuota prima di continuare.');
-      return;
-    }
+  // Escludi blocchi OFF
+  const isOff = !block.getAttribute('data-client-id') || !block.getAttribute('data-service-id');
+  if (isOff) return;
 
-    // Esegui operazione di taglio
-    cutAsNewPseudoBlock(block);
+  // Limite Navigator (15)
+  window.pseudoBlocks = window.pseudoBlocks || [];
+  if (window.pseudoBlocks.length >= 15) {
+    alert('Hai già 15 elementi nel Navigator. Incolla o svuota prima di continuare.');
+    return;
   }
+
+  // Lock per evitare chiusure immediate dei popup (touch-ui)
+  if (TOUCH) {
+    window._touchPopupOpenLock = true;
+    setTimeout(() => { window._touchPopupOpenLock = false; }, 800);
+  }
+
+  // TAGLIA
+  cutAsNewPseudoBlock(block);
+
+  // Dopo il taglio, apri i popup dei blocchi rilevanti (touch-ui)
+  if (TOUCH) {
+    try {
+      // Chiudi il popup del blocco tagliato
+      try {
+        block.classList.remove('active-popup');
+        block.style.zIndex = '100';
+        const tbOld = block.querySelector('.popup-buttons');
+        if (tbOld) tbOld.style.display = '';
+        const bbOld = block.querySelector('.popup-buttons-bottom');
+        if (bbOld) bbOld.style.display = '';
+      } catch(_) {}
+
+      // Trova blocchi rilevanti
+      let contiguous = [];
+      if (typeof getRelevantBlocks === 'function') {
+        try { contiguous = getRelevantBlocks(block).filter(b => b !== block); } catch(_) { contiguous = []; }
+      }
+      if ((!Array.isArray(contiguous) || contiguous.length === 0) && typeof window.findContiguousBlocks === 'function') {
+        try { contiguous = window.findContiguousBlocks(block).filter(b => b !== block); } catch(_) { contiguous = contiguous || []; }
+      }
+
+      console.log('onCutClick -> blocchi rilevanti:', contiguous.length, contiguous);
+
+      contiguous.forEach(b => {
+        try {
+          if (typeof window.initTouchOnBlock === 'function') window.initTouchOnBlock(b);
+
+if (typeof window.openTouchPopupForBlock === 'function') {
+  window.openTouchPopupForBlock(b, { only: 'cut' });
+} else {
+  // fallback minimo: mostra solo TAGLIA
+  b.classList.add('active-popup');
+  b.style.zIndex = '11940';
+
+  const tb = b.querySelector('.popup-buttons');
+  if (tb) {
+    tb.style.display = 'flex';
+
+    tb.querySelectorAll('.btn-popup').forEach(btn => {
+      btn.style.setProperty('display', 'none', 'important');
+    });
+
+    const cutBtn =
+      tb.querySelector('.btn-popup.taglia') ||
+      tb.querySelector('.btn-popup.touch-top-cut');
+
+    if (cutBtn) {
+      cutBtn.style.setProperty('display', 'inline-flex', 'important');
+    }
+  }
+
+  const bb = b.querySelector('.popup-buttons-bottom');
+  if (bb) {
+    bb.style.setProperty('display', 'none', 'important');
+  }
+}
+        } catch (err) {
+          console.warn('Errore apertura popup blocco:', err, b);
+        }
+      });
+
+      window._touchPopupOpenLock = true;
+      setTimeout(() => { window._touchPopupOpenLock = false; }, 700);
+    } catch (err) {
+      console.warn('onCutClick open contiguous popups error', err);
+      setTimeout(() => { window._touchPopupOpenLock = false; }, 700);
+    }
+  }
+}
 
   // Bind diretto ai bottoni già presenti (.sposta e .taglia, se presente)
   document.querySelectorAll('.appointment-block .popup-buttons .btn-popup.sposta, .appointment-block .popup-buttons .btn-popup.taglia')
@@ -4571,9 +4649,16 @@ function renderPseudoBlocksList() {
     localStorage.removeItem('selectedClientIdNav');
     localStorage.removeItem('selectedClientNameNav');
     localStorage.removeItem('pseudoBlocksData');
-    // Nascondi il pulsante "Svuota"
+
+    // Mostra/Nascondi "Svuota" in base al testo presente nei campi di ricerca
     const clearNavigatorBtn = document.getElementById('clearNavigatorBtn');
-    if (clearNavigatorBtn) clearNavigatorBtn.style.display = 'none';
+    const clientInput = document.getElementById('clientSearchInputNav');
+    const serviceInput = document.getElementById('serviceInputNav');
+    const anyText = (clientInput && clientInput.value.trim() !== '') || (serviceInput && serviceInput.value.trim() !== '');
+    if (clearNavigatorBtn) {
+      clearNavigatorBtn.style.display = anyText ? 'inline-block' : 'none';
+    }
+
     container.innerHTML = '';
     return;
   }
@@ -7986,6 +8071,10 @@ function resetNavigatorTimeout() {
 function openAppointmentNavigator() {
   expandAppointmentNavigator();
   resetNavigatorTimeout();
+
+  const clearNavigatorBtn = document.getElementById('clearNavigatorBtn');
+  if (clearNavigatorBtn) clearNavigatorBtn.style.display = 'inline-block';
+
   const nav = document.getElementById('appointmentNavigator');
   if (nav && !nav.dataset.listenersAdded) {
       nav.addEventListener('mousemove', resetNavigatorTimeout);
