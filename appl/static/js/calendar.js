@@ -3552,74 +3552,143 @@ function onCutClick(e) {
   // TAGLIA
   cutAsNewPseudoBlock(block);
 
-  // Dopo il taglio, apri i popup dei blocchi rilevanti (touch-ui)
-  if (TOUCH) {
+  // --- LOGICA CONTIGUI (TOUCH & DESKTOP) ---
+  // Chiudi il popup del blocco appena tagliato (se era aperto)
+  try {
+    block.classList.remove('active-popup');
+    block.style.zIndex = '100';
+    const tbOld = block.querySelector('.popup-buttons');
+    if (tbOld) tbOld.style.display = '';
+    const bbOld = block.querySelector('.popup-buttons-bottom');
+    if (bbOld) bbOld.style.display = '';
+  } catch(_) {}
+
+  // Trova blocchi rilevanti
+  let contiguous = [];
+  if (typeof getRelevantBlocks === 'function') {
+    try { contiguous = getRelevantBlocks(block).filter(b => b !== block); } catch(_) { contiguous = []; }
+  }
+  if ((!Array.isArray(contiguous) || contiguous.length === 0) && typeof window.findContiguousBlocks === 'function') {
+    try { contiguous = window.findContiguousBlocks(block).filter(b => b !== block); } catch(_) { contiguous = contiguous || []; }
+  }
+
+  console.log('onCutClick -> blocchi rilevanti:', contiguous.length, contiguous);
+
+  contiguous.forEach(b => {
     try {
-      // Chiudi il popup del blocco tagliato
-      try {
-        block.classList.remove('active-popup');
-        block.style.zIndex = '100';
-        const tbOld = block.querySelector('.popup-buttons');
-        if (tbOld) tbOld.style.display = '';
-        const bbOld = block.querySelector('.popup-buttons-bottom');
-        if (bbOld) bbOld.style.display = '';
-      } catch(_) {}
+      // Forza lo stato popup e z-index
+      b.classList.add('active-popup');
+      b.style.zIndex = '11940';
 
-      // Trova blocchi rilevanti
-      let contiguous = [];
-      if (typeof getRelevantBlocks === 'function') {
-        try { contiguous = getRelevantBlocks(block).filter(b => b !== block); } catch(_) { contiguous = []; }
-      }
-      if ((!Array.isArray(contiguous) || contiguous.length === 0) && typeof window.findContiguousBlocks === 'function') {
-        try { contiguous = window.findContiguousBlocks(block).filter(b => b !== block); } catch(_) { contiguous = contiguous || []; }
-      }
+      const tb = b.querySelector('.popup-buttons');
+      // container check
+      if (tb) {
+        // container: forziamo layout compatto e nascondiamo overflow
+        tb.style.setProperty('display', 'flex', 'important');
+        tb.style.setProperty('flex-wrap', 'wrap', 'important');
+        tb.style.setProperty('overflow', 'hidden', 'important');
+        tb.style.setProperty('padding', '0', 'important');
 
-      console.log('onCutClick -> blocchi rilevanti:', contiguous.length, contiguous);
+        // Trova il bottone TAGLIA preferito (normale o touch fallback)
+        let cutBtn = tb.querySelector('.btn-popup.taglia') || tb.querySelector('.btn-popup.touch-top-cut');
 
-      contiguous.forEach(b => {
-        try {
-          if (typeof window.initTouchOnBlock === 'function') window.initTouchOnBlock(b);
-
-if (typeof window.openTouchPopupForBlock === 'function') {
-  window.openTouchPopupForBlock(b, { only: 'cut' });
-} else {
-  // fallback minimo: mostra solo TAGLIA
-  b.classList.add('active-popup');
-  b.style.zIndex = '11940';
-
-  const tb = b.querySelector('.popup-buttons');
-  if (tb) {
-    tb.style.display = 'flex';
-
-    tb.querySelectorAll('.btn-popup').forEach(btn => {
-      btn.style.setProperty('display', 'none', 'important');
-    });
-
-    const cutBtn =
-      tb.querySelector('.btn-popup.taglia') ||
-      tb.querySelector('.btn-popup.touch-top-cut');
-
-    if (cutBtn) {
-      cutBtn.style.setProperty('display', 'inline-flex', 'important');
-    }
-  }
-
-  const bb = b.querySelector('.popup-buttons-bottom');
-  if (bb) {
-    bb.style.setProperty('display', 'none', 'important');
-  }
-}
-        } catch (err) {
-          console.warn('Errore apertura popup blocco:', err, b);
+        // Se non esiste, creiamo un fallback minimale senza alterare altri listeners
+        if (!cutBtn) {
+          cutBtn = document.createElement('button');
+          cutBtn.className = 'btn-popup taglia touch-only-cut';
+          cutBtn.type = 'button';
+          cutBtn.title = 'Taglia';
+          const i = document.createElement('i');
+          i.className = 'bi bi-scissors';
+          i.setAttribute('aria-hidden', 'true');
+          cutBtn.appendChild(i);
+          // Non collegare handler nuovo: lascia comportamento esistente (delegate/catch on document)
+          tb.appendChild(cutBtn);
         }
-      });
 
-      window._touchPopupOpenLock = true;
-      setTimeout(() => { window._touchPopupOpenLock = false; }, 700);
+        // Applica stile definitivo al taglia
+        const applyCutStyle = (el) => {
+          el.style.setProperty('display', 'inline-flex', 'important');
+          el.style.setProperty('flex', '0 0 16.6667%', 'important');
+          el.style.setProperty('width', '16.6667%', 'important');
+          el.style.setProperty('max-width', '16.6667%', 'important');
+          el.style.setProperty('box-sizing', 'border-box', 'important');
+          el.style.setProperty('visibility', 'visible', 'important');
+          el.style.setProperty('pointer-events', 'auto', 'important');
+        };
+        applyCutStyle(cutBtn);
+
+        // Nascondi / neutralizza TUTTI gli altri bottoni nel container (senza rimuoverli)
+        tb.querySelectorAll('.btn-popup').forEach(btn => {
+          if (btn === cutBtn) return;
+          btn.style.setProperty('display', 'none', 'important');
+          btn.style.setProperty('visibility', 'hidden', 'important');
+          btn.style.setProperty('pointer-events', 'none', 'important');
+          btn.style.removeProperty('width');
+          btn.style.removeProperty('flex');
+        });
+
+        // Assicuriamo che il container non permetta espansione dei bottoni nascosti
+        tb.style.setProperty('align-items', 'center', 'important');
+
+        // Nascondi la popup-bottom se presente
+        const bb = b.querySelector('.popup-buttons-bottom');
+        if (bb) {
+          bb.style.setProperty('display', 'none', 'important');
+          bb.style.setProperty('visibility', 'hidden', 'important');
+          bb.style.setProperty('pointer-events', 'none', 'important');
+        }
+
+        // Robust enforcement: osservatore temporaneo che mantiene lo stato "solo taglia"
+        // Si scollega automaticamente dopo 2000ms o quando il popup non è più attivo.
+        (function keepOnlyCutTemporary(container, cutElement, parentBlock) {
+          let attempts = 0;
+          const MAX_ATTEMPTS = 20; // ~20 * 100ms = 2s
+          const obs = new MutationObserver((mutations) => {
+            // Se il popup è chiuso, stoppa l'observer
+            if (!parentBlock.classList.contains('active-popup')) {
+              try { obs.disconnect(); } catch(_) {}
+              return;
+            }
+            attempts++;
+            // Re-applica la regola se qualcuno riaggiunge bottoni o cambia display
+            try {
+              // Re-hide non-cut buttons
+              container.querySelectorAll('.btn-popup').forEach(btn => {
+                if (btn === cutElement) {
+                  applyCutStyle(btn);
+                } else {
+                  btn.style.setProperty('display', 'none', 'important');
+                  btn.style.setProperty('visibility', 'hidden', 'important');
+                  btn.style.setProperty('pointer-events', 'none', 'important');
+                }
+              });
+              // Ensure container styles remain
+              container.style.setProperty('overflow', 'hidden', 'important');
+              container.style.setProperty('flex-wrap', 'wrap', 'important');
+            } catch (_) {}
+            if (attempts >= MAX_ATTEMPTS) {
+              try { obs.disconnect(); } catch(_) {}
+            }
+          });
+          try {
+            obs.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+          } catch(_) {}
+          // Safety timeout to disconnect in any case
+          setTimeout(() => {
+            try { obs.disconnect(); } catch(_) {}
+          }, 2100);
+        })(tb, cutBtn, b);
+      } // end if tb
     } catch (err) {
-      console.warn('onCutClick open contiguous popups error', err);
-      setTimeout(() => { window._touchPopupOpenLock = false; }, 700);
+      console.warn('Errore apertura popup blocco (enforce only-cut):', err, b);
     }
+  });
+
+  // Mantieni lock touch se era attivato originariamente (compatibilità)
+  if (TOUCH) {
+    window._touchPopupOpenLock = true;
+    setTimeout(() => { window._touchPopupOpenLock = false; }, 700);
   }
 }
 
@@ -4649,16 +4718,9 @@ function renderPseudoBlocksList() {
     localStorage.removeItem('selectedClientIdNav');
     localStorage.removeItem('selectedClientNameNav');
     localStorage.removeItem('pseudoBlocksData');
-
-    // Mostra/Nascondi "Svuota" in base al testo presente nei campi di ricerca
+    // Nascondi il pulsante "Svuota"
     const clearNavigatorBtn = document.getElementById('clearNavigatorBtn');
-    const clientInput = document.getElementById('clientSearchInputNav');
-    const serviceInput = document.getElementById('serviceInputNav');
-    const anyText = (clientInput && clientInput.value.trim() !== '') || (serviceInput && serviceInput.value.trim() !== '');
-    if (clearNavigatorBtn) {
-      clearNavigatorBtn.style.display = anyText ? 'inline-block' : 'none';
-    }
-
+    if (clearNavigatorBtn) clearNavigatorBtn.style.display = 'none';
     container.innerHTML = '';
     return;
   }
@@ -5544,6 +5606,33 @@ new bootstrap.Tooltip(noShowBtn, {
         e.stopPropagation();
         const appointmentId = block.getAttribute('data-appointment-id');
         if (!appointmentId) return;
+
+        // Rileva modalità desktop "default" (non touch e schermo ampio)
+        const isTouchUi = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch (_) { return document.body.classList.contains('touch-ui'); } })();
+        const isDesktopDefault = !isTouchUi && window.innerWidth >= 1200;
+
+        if (isDesktopDefault) {
+            // Memorizza il target corrente globalmente per il modal
+            window.__deleteOrNoShow_current = {
+                appointmentId: appointmentId,
+                blockSelector: `.appointment-block[data-appointment-id="${appointmentId}"]`
+            };
+
+            // Se il modal esiste, aprilo; altrimenti fallback alla cancellazione diretta
+            const modalEl = document.getElementById('DeleteOrNoShowModal');
+            if (modalEl) {
+                if (!window.__DeleteOrNoShow_modal_instance) {
+                    window.__DeleteOrNoShow_modal_instance = new bootstrap.Modal(modalEl, { keyboard: false });
+                }
+                // Aggiorna eventuali attribute utili per debugging/visual
+                modalEl.setAttribute('data-appointment-id', appointmentId);
+                window.__DeleteOrNoShow_modal_instance.show();
+                return;
+            }
+            // se non troviamo modal -> fallback al comportamento diretto
+        }
+
+        // Comportamento legacy: esegui la cancellazione immediata (usato in touch/mobile o se modal non presente)
         deleteBtn.disabled = true;
         deleteAppointment(appointmentId)
           .then(() => {
@@ -7964,20 +8053,17 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!deleteBtn) {
       deleteBtn = document.createElement('button');
       deleteBtn.className = 'btn-popup delete-appointment-block';
-      deleteBtn.style.position = 'absolute';
-      deleteBtn.style.top = '7px';
-      deleteBtn.style.left = '4px';
-      deleteBtn.style.backgroundColor = 'transparent';
+      const delIcon = document.createElement('i');
+      delIcon.className = 'bi bi-trash';
+      delIcon.style.fontSize = '1.5em';
+      delIcon.style.color = iconColor;
+      deleteBtn.innerHTML = '';
+      deleteBtn.appendChild(delIcon);
       block.appendChild(deleteBtn);
     }
 
-    const delIcon = document.createElement('i');
-    delIcon.className = 'bi bi-trash';
-    delIcon.style.fontSize = '1.5em';
-    delIcon.style.color = iconColor;
-    // rimuove contenuto precedente e aggiunge l'icona
-    deleteBtn.innerHTML = '';
-    deleteBtn.appendChild(delIcon);
+    const delIcon = deleteBtn.querySelector('i');
+    if (delIcon) delIcon.style.color = iconColor;
 
     deleteBtn.onmouseenter = function() {
       const popupBtns = block.querySelector('.popup-buttons');
@@ -7988,13 +8074,33 @@ document.addEventListener('DOMContentLoaded', function() {
       if (popupBtns) popupBtns.style.display = '';
     };
 
-    deleteBtn.onclick = function(e) {
+    // Rimuovi onclick precedente se presente
+    deleteBtn.onclick = null;
+
+    // Aggiungi listener per aprire modal in desktop default
+    deleteBtn.addEventListener('click', function(e) {
       e.stopPropagation();
       const appointmentId = block.getAttribute('data-appointment-id');
-      if (appointmentId) {
-        deleteAppointment(appointmentId);
+      if (!appointmentId) return;
+
+      // Rileva modalità desktop "default" (non touch e schermo ampio)
+      const isTouchUi = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch (_) { return document.body.classList.contains('touch-ui'); } })();
+      const isDesktopDefault = !isTouchUi && window.innerWidth >= 1200;
+
+      if (isDesktopDefault) {
+        // Apri il modal
+        const modalEl = document.getElementById('DeleteOrNoShowModal');
+        if (modalEl && typeof bootstrap !== 'undefined') {
+          window.__deleteOrNoShow_current = { appointmentId: appointmentId, sourceElement: deleteBtn };
+          window.__DeleteOrNoShow_modal_instance = window.__DeleteOrNoShow_modal_instance || new bootstrap.Modal(modalEl, { backdrop: 'static' });
+          try { window.__DeleteOrNoShow_modal_instance.show(); } catch (e) { console.warn('show DeleteOrNoShow failed', e); }
+          return;
+        }
       }
-    };
+
+      // Fallback
+      deleteAppointment(appointmentId);
+    });
   });
 });
 
@@ -9294,8 +9400,22 @@ document.addEventListener('click', function(e) {
   const id = delBtn.getAttribute('data-appointment-id') || (block && block.getAttribute('data-appointment-id'));
   if (!id) return;
 
-  if (typeof window.deleteAppointment === 'function') {
-    window.deleteAppointment(id);
+  // Rimuovi onclick inline per evitare comportamenti precedenti
+  try { delBtn.onclick = null; } catch(_) {}
+  try { delBtn.removeAttribute('onclick'); } catch(_) {}
+
+  // Apri il modal DeleteOrNoShow se disponibile
+  const modalEl = document.getElementById('DeleteOrNoShowModal');
+  if (modalEl && typeof bootstrap !== 'undefined') {
+    // salva contesto e mostra il modal
+    window.__deleteOrNoShow_current = { appointmentId: id, sourceElement: delBtn };
+    window.__DeleteOrNoShow_modal_instance = window.__DeleteOrNoShow_modal_instance || new bootstrap.Modal(modalEl, { backdrop: 'static' });
+    try { window.__DeleteOrNoShow_modal_instance.show(); } catch (e) { console.warn('show DeleteOrNoShow failed', e); }
+  } else {
+    // Fallback: se non ci sono modal/Bootstrap disponibili, chiamare la funzione esistente
+    if (typeof window.deleteAppointment === 'function') {
+      window.deleteAppointment(id);
+    }
   }
 }, true);
 
@@ -9434,4 +9554,41 @@ function checkPendingWebAppointments() {
 document.addEventListener('DOMContentLoaded', function() {
     checkPendingWebAppointments();
     setInterval(checkPendingWebAppointments, 60000);
+});
+
+// Inizializza il modal DeleteOrNoShow e collega i pulsanti (solo una volta)
+// Inizializza il modal DeleteOrNoShow e collega i pulsanti (solo una volta)
+document.addEventListener('DOMContentLoaded', function () {
+  const modalEl = document.getElementById('DeleteOrNoShowModal');
+  if (!modalEl || typeof bootstrap === 'undefined') return;
+
+  const btnDelete = modalEl.querySelector('#deleteOrNoShowBtn-delete');
+  const btnNoShow = modalEl.querySelector('#deleteOrNoShowBtn-noshow');
+  const btnCancel = modalEl.querySelector('#deleteOrNoShowBtn-cancel');
+
+  if (btnDelete) btnDelete.addEventListener('click', function () {
+    const ctx = window.__deleteOrNoShow_current || {};
+    const appointmentId = ctx.appointmentId;
+    if (!appointmentId) { try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {} return; }
+    btnDelete.disabled = true;
+    deleteAppointment(appointmentId)
+      .then(() => { try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {} window.__deleteOrNoShow_current = null; })
+      .catch(err => { console.error('Eliminazione fallita:', err); alert('Eliminazione fallita: ' + (err.message || err)); })
+      .finally(() => { btnDelete.disabled = false; });
+  });
+
+  // No-Show: usa la logica esistente impostando stato 2
+  if (btnNoShow) btnNoShow.addEventListener('click', function () {
+    const ctx = window.__deleteOrNoShow_current || {};
+    const appointmentId = ctx.appointmentId;
+    if (!appointmentId) { try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {} return; }
+    setNoShow(appointmentId);
+    try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {}
+    window.__deleteOrNoShow_current = null;
+  });
+
+  if (btnCancel) btnCancel.addEventListener('click', function () {
+    window.__deleteOrNoShow_current = null;
+    try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {}
+  });
 });

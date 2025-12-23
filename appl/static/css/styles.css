@@ -877,7 +877,6 @@ td {
   }
 
   .appointment-block.note-off .my-spia,
-  .appointment-block.note-off .no-show-button,
   .appointment-block.note-off .chain-button,
   .appointment-block.note-off .note-indicator {
     display: none !important;
@@ -907,10 +906,8 @@ td {
   opacity: 1;
 }
 
-  .my-spia,
-  .no-show-button {
+  .my-spia {
     position: absolute;
-    top: 13px;
     background-color: rgba(255, 255, 255, 0.3); /* Bianco al 30% */
     border: 1px solid rgba(0, 0, 0, 0.4); /* Bordo nero al 40% */
     border-radius: 50%;
@@ -929,52 +926,66 @@ td {
     border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
-.no-show-button {
-    top: auto;
-    bottom: 1px;   /* <--- Cambia qui da 10px a 1px */
-    right: 9px;
-    color: rgb(79, 79, 79);
-    font-size: 15px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
 /* Posiziona my-spia in alto a 1px dal bordo del blocco */
 .appointment-block .my-spia {
     position: absolute;
-    top: 1px;
     right: 6px;
     left: auto;
+    top: 9px;
     z-index: 2101;
-}
 
-/* Posiziona no-show in basso a 1px dal fondo del blocco */
-.appointment-block .btn-popup.no-show-button {
-    position: absolute;
-    bottom: 1px;
-    right: 6px;
-    left: auto;
-    z-index: 2101;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 24px !important;
+    min-height: 24px !important;
+    line-height: 1;
+    border-radius: 100%;
+    font-size: 14px;
+    transition: all 0.12s ease;
+    box-sizing: border-box;
 }
 
 /* La spia diventa visibile al passaggio del mouse sul blocco appuntamento */
-.appointment-block:hover .my-spia,
-.appointment-block:hover .no-show-button {
+.appointment-block:hover .my-spia {
     opacity: 1;
 }
 
 /* La spia deve essere sempre visibile se è attiva o lampeggiante */
 .my-spia.active, 
-.my-spia.blink,
-.no-show-button[data-status="3"] {
+.my-spia.blink {
     opacity: 1 !important; /* !important per sovrascrivere altri stili */
 }
 
-.my-spia.active,
-.no-show-button[data-status="3"] {
-    display: flex !important; /* Solo per no-show-button */
+.my-spia.active {
+    display: flex !important; /* Solo per my-spia attiva */
 }
+
+#DeleteOrNoShowModal .modal-dialog { max-width: 460px !important; }
+#DeleteOrNoShowModal .modal-content { min-height: 260px; }
+#DeleteOrNoShowModal .modal-body { min-height: 160px; }
+
+#deleteOrNoShowBtn-delete {
+  background-color: #ff0019 !important; /* red */
+  border-color: #dc3545 !important;
+  color: #fff !important;
+}
+#deleteOrNoShowBtn-delete:hover { background-color: #bb2d3b !important; }
+
+#deleteOrNoShowBtn-noshow {
+  background-color: #000 !important; /* black */
+  border-color: #000 !important;
+  color: #fff !important;
+}
+#deleteOrNoShowBtn-noshow:hover { background-color: #111 !important; }
+
+#deleteOrNoShowBtn-cancel {
+  background-color: #6c757d !important; /* gray */
+  border-color: #6c757d !important;
+  color: #fff !important;
+}
+#deleteOrNoShowBtn-cancel:hover { background-color: #5c636a !important; }
 
 @keyframes blinkYellow {
     0% { background-color: rgba(255, 255, 0, 0.837); }
@@ -1080,12 +1091,6 @@ td {
 .appointment-block .note-indicator i {
     font-size: 16px;
 }
-
-  /* Mostra il bottone quando si passa sopra al blocco */
-  .appointment-block:hover .no-show-button {
-    opacity: 0.8;
-    display: flex;
-  }
   
 /* Stile per l'appuntamento "non arrivato" - regola più specifica */
 .appointment-block[data-status="3"] {
@@ -1106,21 +1111,6 @@ td {
     background-image: radial-gradient(#555 1px, transparent 1px) !important;
     background-color: #000 !important;
   }
-
-  /* Nascondi i popup-buttons quando il tooltip del no-show è visibile */
-.no-show-button:hover ~ .popup-buttons,
-.no-show-button:hover + .popup-buttons,
-.no-show-button:hover .popup-buttons,
-.appointment-block:has(.no-show-button:hover) .popup-buttons {
-  display: none !important;
-}
-
-/* Correzione per il popup note che non appare */
-.no-show-button:hover ~ .note-popup,
-.no-show-button:hover + .note-popup,
-.appointment-block:has(.no-show-button:hover) .note-popup {
-  display: block !important; /* Forza la visualizzazione del popup note anche durante hover su no-show-button */
-}
 
 /* Assicurati che il popup note si attivi normalmente con l'hover */
 .appointment-block:hover .note-popup {
@@ -1874,7 +1864,6 @@ body.touch-ui .appointment-block.active-popup .my-spia {
 }
 
 /* nascondi elementi non usabili su touch */
-body.touch-ui .appointment-block .no-show-button,
 body.touch-ui .appointment-block .btn-popup.whatsapp-btn:not(.touch-bottom-wa),       /* solo icona laterale */
 body.touch-ui .appointment-block .btn-popup.delete-appointment-block:not(.touch-top-delete) {
   display: none !important;
@@ -2045,7 +2034,6 @@ body.touch-ui .appointment-block .resize-handle {
   opacity: 0.25;
 }
 
-body.touch-ui .appointment-block .no-show-button,
 body.touch-ui .appointment-block .icon-trash,
 body.touch-ui .appointment-block .delete-icon {
   display: none !important;

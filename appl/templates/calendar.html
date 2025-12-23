@@ -397,12 +397,7 @@
 <div class="my-spia"
      data-bs-toggle="tooltip"
      title="Segna cliente in istituto"></div>
-<button class="btn-popup no-show-button"
-        data-bs-toggle="tooltip"
-        data-appointment-id="{{ appt.id }}"
-        title="Segna NON ARRIVATO">
-    <i class="bi bi-x"></i>
-</button>
+
 <div class="resize-handle"></div>
 <button class="btn-chain-blocks"
         style="position:absolute; bottom:4px; right:4px; display:none;"
@@ -428,6 +423,26 @@
     </table>
     <div id="clientInfoPopup" style="display:none; position:absolute; margin-top:-25px; z-index:9999; background: linear-gradient(to left, #2e2e2e, #3d3d3d); border:1px solid #ccc; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.15); padding:6px 10px; font-size:0.95em; width:auto; text-align:center;"></div>
     <div id="currentTimeIndicator" style="position: absolute; left: 0; right: 0; height: 1px; background: rgb(255, 0, 136); z-index: 10;"></div>
+</div>
+
+<!-- Modal: conferma Elimina / No-Show (usato in modalità desktop default) -->
+<div class="modal fade" id="DeleteOrNoShowModal" tabindex="-1" aria-labelledby="DeleteOrNoShowModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="DeleteOrNoShowModalLabel">Cosa vuoi fare?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Scegli un'azione per questo appuntamento:</p>
+        <div class="d-grid gap-2">
+          <button id="deleteOrNoShowBtn-delete" type="button" class="btn btn-danger">Elimina il blocco</button>
+          <button id="deleteOrNoShowBtn-noshow" type="button" class="btn btn-warning">Indica come NON ARRIVATO (No-Show)</button>
+          <button id="deleteOrNoShowBtn-cancel" type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modal per i turni operatore (calendar.html) -->
