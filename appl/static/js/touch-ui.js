@@ -51,25 +51,55 @@ function makeBottomBtn(cls, title, icon, onClick) {
   return b;
 }
 
-function buildBottomButtons(block) {
-  const getDur = () => parseInt(block.getAttribute('data-duration') || '15', 10);
-  const setDur = (v) => setDuration(block, v);
+(function installTouchNoShowListener() {
+  if (window.__touchNoShowListenerInstalled) return;
+  window.__touchNoShowListenerInstalled = true;
 
-  const btnDown = makeBottomBtn('touch-resize-down', 'Aumenta durata di 15 min', 'arrow-down',
-    () => setDur(getDur() + 15));
-  const btnSpia = makeBottomBtn('touch-spia', 'Segna cliente in istituto', 'person-check',
-    () => block.querySelector('.my-spia')?.click());
-  const btnNo = makeBottomBtn('touch-noshow', 'Segna NON ARRIVATO', 'x',
-    () => block.querySelector('.no-show-button')?.click());
-  const btnWa = makeBottomBtn('whatsapp-btn touch-bottom-wa', 'Invia WhatsApp', 'whatsapp',
-    () => block.querySelector('.btn-popup.whatsapp-btn')?.click());
-  const btnNote = makeBottomBtn('nota', 'Nota appuntamento', 'pencil-square',
-    () => typeof window.openNoteModal === 'function' && window.openNoteModal(block));
-  const btnUp = makeBottomBtn('touch-resize-up', 'Riduci durata di 15 min', 'arrow-up',
-    () => setDur(getDur() - 15));
+  document.addEventListener('click', function (e) {
+    const btn = e.target && e.target.closest && e.target.closest('.btn-popup.touch-no-show, .btn-popup.touch-noshow');
+    if (!btn) return;
 
-  return [btnDown, btnSpia, btnNo, btnWa, btnNote, btnUp];
-}
+    // Intercetta qui per impedire l'handler inline e duplicazioni
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+
+    // Risali al blocco appuntamento in modo robusto
+    let block = btn.closest && btn.closest('.appointment-block');
+    let appointmentId = '';
+
+    if (block) {
+      appointmentId = block.getAttribute('data-appointment-id') || '';
+    } else {
+      appointmentId = btn.getAttribute && btn.getAttribute('data-appointment-id') || '';
+      if (!appointmentId) {
+        const active = document.querySelector('.appointment-block.active-popup');
+        if (active) {
+          block = active;
+          appointmentId = active.getAttribute('data-appointment-id') || '';
+        }
+      } else {
+        block = document.querySelector(`.appointment-block[data-appointment-id="${appointmentId}"]`) || null;
+      }
+    }
+
+    if (!appointmentId) return;
+
+    // Usa la stessa logica del modal Delete/NoShow: chiama setNoShow(appointmentId)
+    if (typeof window.setNoShow === 'function') {
+      try { window.setNoShow(appointmentId); } catch(_) {}
+    } else {
+      // Fallback: clicca il bottone no-show del blocco (se presente)
+      const noShow = block && block.querySelector('.btn-popup.no-show-button');
+      if (noShow && typeof noShow.click === 'function') {
+        noShow.click();
+      }
+    }
+
+    // Chiudi i popup dopo l’azione
+    setTimeout(() => { try { closeAllPopups(); } catch (_) {} }, 0);
+  }, true);
+})();
 
 function closeAllPopups() {
   // Reset active state and z-index
