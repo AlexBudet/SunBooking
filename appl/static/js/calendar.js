@@ -3808,39 +3808,41 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // Desktop: hover apre/chiude i popup
-  document.querySelectorAll('.appointment-block').forEach(block => {
-    block.addEventListener('mouseenter', function() {
-      if (block.hidePopupTimeout) {
-        clearTimeout(block.hidePopupTimeout);
-        block.hidePopupTimeout = null;
-      }
-      block.classList.add('active-popup');
-    });
-    block.addEventListener('mouseleave', function() {
-      block.hidePopupTimeout = setTimeout(() => {
-        block.classList.remove('active-popup');
-        block.hidePopupTimeout = null;
-      }, 200);
-    });
+document.querySelectorAll('.appointment-block').forEach(block => {
+  block.addEventListener('mouseenter', function() {
+    if (block.hidePopupTimeout) {
+      clearTimeout(block.hidePopupTimeout);
+      block.hidePopupTimeout = null;
+    }
+    block.classList.add('active-popup');
   });
+  block.addEventListener('mouseleave', function() {
+    if (block.hidePopupTimeout) {
+      clearTimeout(block.hidePopupTimeout);
+      block.hidePopupTimeout = null;
+    }
+    block.classList.remove('active-popup');
+  });
+});
 
-  document.querySelectorAll('.popup-buttons').forEach(popup => {
-    popup.addEventListener('mouseenter', function() {
-      const block = this.closest('.appointment-block');
-      if (block.hidePopupTimeout) {
-        clearTimeout(block.hidePopupTimeout);
-        block.hidePopupTimeout = null;
-      }
-      block.classList.add('active-popup');
-    });
-    popup.addEventListener('mouseleave', function() {
-      const block = this.closest('.appointment-block');
-      block.hidePopupTimeout = setTimeout(() => {
-        block.classList.remove('active-popup');
-        block.hidePopupTimeout = null;
-      }, 200);
-    });
+document.querySelectorAll('.popup-buttons').forEach(popup => {
+  popup.addEventListener('mouseenter', function() {
+    const block = this.closest('.appointment-block');
+    if (block && block.hidePopupTimeout) {
+      clearTimeout(block.hidePopupTimeout);
+      block.hidePopupTimeout = null;
+    }
+    if (block) block.classList.add('active-popup');
   });
+  popup.addEventListener('mouseleave', function() {
+    const block = this.closest('.appointment-block');
+    if (block && block.hidePopupTimeout) {
+      clearTimeout(block.hidePopupTimeout);
+      block.hidePopupTimeout = null;
+    }
+    if (block) block.classList.remove('active-popup');
+  });
+});
 
   // Draggable solo desktop
   document.querySelectorAll('.appointment-block').forEach(block => {
@@ -3850,12 +3852,39 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-  var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
   const IS_TOUCH = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch(_) { return false; } })();
+
+  // Enforce Bootstrap tooltips on OFF block internals (desktop default)
+  if (!IS_TOUCH) {
+    const offSelectors = [
+      '.appointment-block.note-off .popup-buttons .btn-popup',
+      '.appointment-block.note-off .my-spia',
+      '.appointment-block.note-off .delete-icon',
+      '.appointment-block.note-off .btn-popup.no-show-button',
+      '.appointment-block.note-off .whatsapp-btn'
+    ];
+    document.querySelectorAll(offSelectors.join(', ')).forEach(el => {
+      // Set attributes if missing to let Bootstrap pick them up
+      if (!el.getAttribute('data-bs-toggle')) el.setAttribute('data-bs-toggle', 'tooltip');
+
+      // Placement consistent with normal blocks
+      if (!el.getAttribute('data-bs-placement')) {
+        if (el.classList.contains('my-spia') || el.classList.contains('no-show-button')) {
+          el.setAttribute('data-bs-placement', 'right');
+        } else if (el.classList.contains('whatsapp-btn')) {
+          el.setAttribute('data-bs-placement', 'top');
+        } else {
+          el.setAttribute('data-bs-placement', 'bottom');
+        }
+      }
+    });
+  }
+
+  var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
 
   tooltipTriggerList.forEach(function(el) {
 
-    // 2) Inizializzazioni consentite
+    // Inizializzazioni coerenti con i blocchi normali
     if (el.closest('.client-name')) {
       new bootstrap.Tooltip(el, {
         placement: 'bottom',
@@ -3878,10 +3907,14 @@ document.addEventListener('DOMContentLoaded', function() {
         offset: [-46, 14]
       });
     } else {
-      new bootstrap.Tooltip(el, { container: 'body' });
+      new bootstrap.Tooltip(el, {
+        placement: el.getAttribute('data-bs-placement') || 'bottom',
+        container: 'body',
+        boundary: 'window'
+      });
     }
 
-    // 3) Logica pre‑esistente per il nome cliente (mantieni)
+    // Mantieni la logica pre‑esistente per il nome cliente
     if (el.closest('.client-name') && !IS_TOUCH) {
       el.addEventListener('mouseover', function() {
         const block = this.closest('.appointment-block');
@@ -7616,12 +7649,18 @@ function copyAndPasteBlockOff() {
     // Aggiungi un pulsante di copia direttamente nei blocchi OFF
     const copyBtn = document.createElement('button');
     copyBtn.className = 'btn-popup copy-off-block';
+    
+    // AGGIUNTA: Tooltip Bootstrap
+    copyBtn.setAttribute('data-bs-toggle', 'tooltip');
+    copyBtn.setAttribute('data-bs-placement', 'top');
+    copyBtn.setAttribute('title', 'Copia blocco OFF');
+
     const icon = document.createElement('i');
     icon.className = 'bi bi-files';
     icon.style.fontSize = '1.5em';
     icon.style.color = 'black';
     copyBtn.appendChild(icon);
-    copyBtn.title = 'Copia blocco OFF';
+    
     copyBtn.style.position = 'absolute';
     copyBtn.style.top = '4px';
     copyBtn.style.right = '4px';
@@ -7630,6 +7669,10 @@ function copyAndPasteBlockOff() {
     // Evita duplicati
     if (!block.querySelector('.copy-off-block')) {
       block.appendChild(copyBtn);
+      // Inizializza tooltip
+      if (window.bootstrap && window.bootstrap.Tooltip) {
+        new window.bootstrap.Tooltip(copyBtn);
+      }
     }
     
     // Gestore per il click sul pulsante di copia
@@ -7770,12 +7813,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!block.querySelector('.delete-off-block')) {
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'btn-popup delete-off-block';
+      
+      // AGGIUNTA: Tooltip Bootstrap
+      deleteBtn.setAttribute('data-bs-toggle', 'tooltip');
+      deleteBtn.setAttribute('data-bs-placement', 'top');
+      deleteBtn.setAttribute('title', 'Elimina blocco OFF');
+
       const icon = document.createElement('i');
       icon.className = 'bi bi-trash';
       icon.style.fontSize = '1.5em';
       icon.style.color = 'black';
       deleteBtn.appendChild(icon);
-      deleteBtn.title = 'Elimina blocco OFF';
+      
       deleteBtn.style.position = 'absolute';
       deleteBtn.style.top = '5px';
       deleteBtn.style.left = '4px';
@@ -7783,6 +7832,11 @@ document.addEventListener('DOMContentLoaded', function() {
       
       // Aggiungi il pulsante al blocco OFF
       block.appendChild(deleteBtn);
+      
+      // Inizializza tooltip
+      if (window.bootstrap && window.bootstrap.Tooltip) {
+        new window.bootstrap.Tooltip(deleteBtn);
+      }
       
       // Gestione del click sul pulsante di elimina
       deleteBtn.addEventListener('click', function(e) {
@@ -9190,46 +9244,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // =============================================================
-  //   FUNZIONE: CONTROLLA NUOVE PRENOTAZIONI ONLINE
-  // =============================================================
-  // Chiama il backend per vedere se ci sono nuove prenotazioni e illumina l'icona se necessario
-  function checkNuovePrenotazioni() {
-    fetch('/calendar/api/last-online-booking')
-      .then(r => r.json())
-      .then(data => {
-        if (!data.id) return spegniIcona(); // Se no ID, spegni
-        const lastSeen = localStorage.getItem(STORAGE_KEY);
-
-        // Se non c'è lastSeen, inizializzalo senza illuminare
-        if (!lastSeen) {
-          localStorage.setItem(STORAGE_KEY, String(data.id));
-          return spegniIcona();
-        }
-
-        // Confronto sicuro (numerico o stringa)
-        const current = Number(data.id);
-        const prev = Number(lastSeen);
-        if (!isNaN(current) && !isNaN(prev)) {
-          if (current > prev) {
-            illuminaIcona(); // Nuove prenotazioni
-          } else {
-            spegniIcona();
-          }
-        } else {
-          if (String(data.id) !== String(lastSeen)) {
-            illuminaIcona();
-          } else {
-            spegniIcona();
-          }
-        }
-      });
-  }
-
-  // Controlla subito e ogni 30 secondi
-  checkNuovePrenotazioni();
-  setInterval(checkNuovePrenotazioni, 30000);
-
-  // =============================================================
   //   EVENT LISTENER: APRI MODAL E RESET NOTIFICA
   // =============================================================
   if (btnWeb) {
@@ -9530,24 +9544,60 @@ document.addEventListener('mouseleave', function(e) {
 //   GESTIONE BADGE NOTIFICHE WEB
 // =============================================================
 function checkPendingWebAppointments() {
-    fetch('/calendar/api/web-appointments/count-pending')
-        .then(r => r.json())
-        .then(data => {
-            const badge = document.getElementById('webApptBadge');
-            if (!badge) return;
+    const badge = document.getElementById('webApptBadge');
+    const btnWeb = document.getElementById('btnWebInformatica');
+    const modalEl = document.getElementById('WebAppointmentsModal');
+    const isModalOpen = modalEl && modalEl.classList && modalEl.classList.contains('show');
 
-            const count = data.count || 0;
-            if (count > 0) {
-                badge.textContent = count > 99 ? '99+' : count;
-                badge.style.display = 'inline-block';
-                
-                // Opzionale: animazione pulsazione se il numero cambia o è > 0
-                badge.classList.add('animate__animated', 'animate__pulse'); 
-            } else {
-                badge.style.display = 'none';
+    // Pre-reset: evita che uno stato giallo residuo rimanga visibile durante l'attesa della fetch.
+    if (btnWeb) {
+        btnWeb.style.boxShadow = '';
+        // non forzare background qui se vuoi che CSS/inline prevalga; ma rimuoviamo eventuale giallo residuo
+        btnWeb.style.background = '';
+    }
+
+    fetch('/calendar/api/web-appointments/count-pending', { cache: 'no-store' })
+        .then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(data => {
+            const count = Number((data && data.count) || 0);
+
+            if (badge) {
+                if (count > 0) {
+                    badge.textContent = count > 99 ? '99+' : String(count);
+                    badge.style.display = 'inline-block';
+                    badge.classList.add('animate__animated', 'animate__pulse');
+                } else {
+                    badge.style.display = 'none';
+                    badge.classList.remove('animate__animated', 'animate__pulse');
+                }
+            }
+
+            // Colore del bottone: giallo SOLO se ci sono prenotazioni pendenti e il modal NON è aperto
+            if (btnWeb) {
+                if (count > 0 && !isModalOpen) {
+                    btnWeb.style.background = '#fff696ff';
+                } else {
+                    // Spegni e riportalo allo stato originale (lasciare stringa vuota permette inline/CSS di prevalere)
+                    btnWeb.style.background = '';
+                    btnWeb.style.boxShadow = '';
+                }
             }
         })
-        .catch(err => console.warn('Check web pending failed', err));
+        .catch(err => {
+            // In caso di errore, non accendere il bottone; solo log su console.
+            if (badge) {
+                badge.style.display = 'none';
+                badge.classList.remove('animate__animated', 'animate__pulse');
+            }
+            if (btnWeb) {
+                btnWeb.style.background = '';
+                btnWeb.style.boxShadow = '';
+            }
+            console.warn('Check web pending failed', err);
+        });
 }
 
 // Avvia il controllo al caricamento e poi ogni minuto
