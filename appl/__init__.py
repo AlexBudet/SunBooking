@@ -85,8 +85,8 @@ def create_app(db_uri: str | None = None):
     from .routes.clients import clients_bp
     from .routes.services import services_bp
     from .routes.operators import operators_bp
-    from .routes.cassa import cassa_bp
-    from .routes.report import report_bp
+    from appl.routes.cassa import cassa_bp
+    from appl.routes.report import report_bp
 
     app.register_blueprint(calendar_bp,  url_prefix="/calendar")
     app.register_blueprint(settings_bp,  url_prefix="/settings")
