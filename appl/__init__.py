@@ -75,10 +75,6 @@ def create_app(db_uri: str | None = None):
     # Inizializza SQLAlchemy
     db.init_app(app)
 
-    # Inizializza Flask-Migrate
-    from flask_migrate import Migrate
-    migrate = Migrate(app, db)
-
     # Importa e registra i blueprint
     from .routes.calendar import calendar_bp
     from .routes.settings import settings_bp
