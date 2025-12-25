@@ -89,9 +89,9 @@
 <th>Abbreviazione <span class="sort-icons">▲<br>▼</span></th>
 <th>Categoria <span class="sort-icons">▲<br>▼</span></th>
 <th>Sotto-categoria <span class="sort-icons">▲<br>▼</span></th>
-<th>Durata (min) <span class="sort-icons">▲<br>▼</span></th>
-<th>Prezzo (€) <span class="sort-icons">▲<br>▼</span></th>
-<th>Azioni</th>
+<th class="text-center">Durata (min) <span class="sort-icons">▲<br>▼</span></th>
+<th class="text-center">Prezzo (€) <span class="sort-icons">▲<br>▼</span></th>
+<th class="text-center">Azioni</th>
         </tr>
     </thead>
     <tbody>
@@ -101,13 +101,23 @@
             <td>{{ service.servizio_tag }}</td>
             <td>{{ service.servizio_categoria.value }}</td>
             <td>{{ service.servizio_sottocategoria.nome if service.servizio_sottocategoria else '-' }}</td>
-            <td>{{ service.servizio_durata }}</td>
-            <td>{{ "%.0f"|format(service.servizio_prezzo) if service.servizio_prezzo == service.servizio_prezzo|int else "%.2f"|format(service.servizio_prezzo) }}</td>
-<td>
+            <td class="text-center">{{ service.servizio_durata }}</td>
+            <td class="text-center">{{ "%.0f"|format(service.servizio_prezzo) if service.servizio_prezzo == service.servizio_prezzo|int else "%.2f"|format(service.servizio_prezzo) }}</td>
+<td class="text-center">
     {% if current_user.ruolo.value == 'user' %}
+        <button type="button"
+                class="btn btn-sm"
+                style="background-color: {{ '#ffeb3b' if service.servizio_descrizione else '#e9ecef' }}; color: #000;"
+                onclick="showNoRightsPopup()">Info</button>
         <button type="button" class="btn btn-sm btn-primary" onclick="showNoRightsPopup()">Modifica</button>
         <button type="button" class="btn btn-sm btn-danger" onclick="showNoRightsPopup()">Elimina</button>
     {% else %}
+        <button type="button"
+                class="btn btn-sm info-btn"
+                style="background-color: {{ '#ffeb3b' if service.servizio_descrizione else '#e9ecef' }}; color: #000;"
+                data-service-id="{{ service.id }}"
+                data-service-name="{{ service.servizio_nome }}"
+                onclick="openServiceInfoModal(this)">Descrizione</button>
         <a href="{{ url_for('settings.edit_service', service_id=service.id) }}" class="btn btn-sm btn-primary">Modifica</a>
         <form action="{{ url_for('settings.delete_service', service_id=service.id) }}" method="POST" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"> 
@@ -183,6 +193,34 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Info Servizio -->
+<div class="modal fade" id="ServiceInfoModal" tabindex="-1" aria-labelledby="ServiceInfoModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><span id="serviceInfoTitle"></span> — Caratteristiche servizio</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <div class="btn-group mb-2" role="group" aria-label="Editor toolbar">
+          <button type="button" class="btn btn-outline-secondary" onclick="execFormat('bold')"><b>B</b></button>
+          <button type="button" class="btn btn-outline-secondary" onclick="execFormat('italic')"><i>I</i></button>
+          <button type="button" class="btn btn-outline-secondary" onclick="execFormat('underline')"><u>U</u></button>
+          <button type="button" class="btn btn-outline-secondary" onclick="makeLink()">Link</button>
+        </div>
+        <div id="serviceInfoEditor"
+             contenteditable="true"
+             style="min-height: 220px; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fff;">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="serviceInfoSaveBtn" type="button" class="btn btn-primary" onclick="saveServiceInfo()">SALVA</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ANNULLA</button>
       </div>
     </div>
   </div>
@@ -361,5 +399,77 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+</script>
+<script>
+  // Mappa id -> descrizione per precompilare l'editor
+  const servicesDescriptions = {
+    {% for s in services %}
+      "{{ s.id }}": {{ (s.servizio_descrizione or "")|tojson }},
+    {% endfor %}
+  };
+  // CSRF resiliente: meta se presente, altrimenti valore Jinja
+  const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+  const CSRF_TOKEN = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : "{{ csrf_token() }}";
+
+  let currentServiceId = null;
+  let currentInfoButton = null;
+
+  function openServiceInfoModal(btn) {
+    currentServiceId = parseInt(btn.getAttribute('data-service-id'), 10);
+    currentInfoButton = btn;
+    const name = btn.getAttribute('data-service-name') || '';
+    const editor = document.getElementById('serviceInfoEditor');
+    document.getElementById('serviceInfoTitle').textContent = name;
+    editor.innerHTML = servicesDescriptions[currentServiceId] || '';
+    const modalEl = document.getElementById('ServiceInfoModal');
+    const bsModal = new bootstrap.Modal(modalEl);
+    bsModal.show();
+  }
+
+  function execFormat(cmd) {
+    document.execCommand(cmd, false, null);
+  }
+  function makeLink() {
+    const url = prompt('Inserisci URL completo (es. https://...)');
+    if (url) document.execCommand('createLink', false, url);
+  }
+
+  async function saveServiceInfo() {
+    if (!currentServiceId) return;
+    const editor = document.getElementById('serviceInfoEditor');
+    const html = editor.innerHTML.trim();
+
+    try {
+      // Usa url_for per gestire correttamente prefissi e percorsi
+      const urlPattern = "{{ url_for('settings.service_description', service_id=999999) }}";
+      const url = urlPattern.replace('999999', currentServiceId);
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': CSRF_TOKEN
+        },
+        body: JSON.stringify({ descrizione: html })
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || 'Errore nel salvataggio della descrizione');
+      }
+      // Aggiorna cache e colore del bottone Info
+      servicesDescriptions[currentServiceId] = html;
+      if (currentInfoButton) {
+        currentInfoButton.style.backgroundColor = html ? '#ffeb3b' : '#e9ecef';
+        currentInfoButton.style.color = '#000';
+      }
+      // Chiudi modal
+      const modalEl = document.getElementById('ServiceInfoModal');
+      const instance = bootstrap.Modal.getInstance(modalEl);
+      if (instance) instance.hide();
+    } catch (e) {
+      alert(e.message);
+      console.error(e);
+    }
+  }
 </script>
 {% endblock %}
