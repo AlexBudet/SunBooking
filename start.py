@@ -1,11 +1,7 @@
 import os, sys, time, socket, subprocess, multiprocessing
 from waitress import serve
+from appl import create_app, db
 from dotenv import load_dotenv
-
-try:
-    from .appl import create_app, db
-except ImportError:
-    from appl import create_app, db
 
 # CWD accanto allo script/exe
 if getattr(sys, "frozen", False):
