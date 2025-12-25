@@ -2862,8 +2862,8 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
     display: none !important;  /* nascosto di default */
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     line-height: 1;
     cursor: pointer;
     z-index: 2102;
