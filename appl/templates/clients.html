@@ -72,6 +72,7 @@
 .storico-btn {
   background-color: #f5ecdc; /* Beige */
   color: #333333; /* Grigio scuro */
+  border: 0.5px solid #c0c2b9 !important;
 }
 .storico-btn:hover {
   background-color: #d4cca9; /* Beige leggermente più scuro al passaggio del mouse */
@@ -81,7 +82,7 @@
 .btn-note-empty {
   background-color: #e9ecef !important;
   color: #6c757d !important;
-  border: 1px solid #ced4da !important;
+  border: 0.5px solid #ced4da !important;
 }
 .btn-note-empty:hover {
   background-color: #dde2e6 !important;
@@ -92,11 +93,15 @@
 .btn-note-filled {
   background-color: #ffc107 !important;
   color: #212529 !important;
-  border: 1px solid #ffc107 !important;
+  border: 1px solid #ffc71f !important;
 }
 .btn-note-filled:hover {
-  background-color: #e0a800 !important;
+  background-color: #ffeaac !important;
   color: #212529 !important;
+}
+
+#clientsTable td:last-child .btn {
+  margin-right: 1px;
 }
 </style>
 
@@ -682,30 +687,6 @@ document.addEventListener('DOMContentLoaded', function() {
             modificaLink.textContent = 'Modifica';
             azioniCell.appendChild(modificaLink);
 
-            // Form Elimina
-            const eliminaForm = document.createElement('form');
-            eliminaForm.action = `/settings/delete_client/${client.id}`;
-            eliminaForm.method = 'POST';
-            eliminaForm.style.display = 'inline';
-
-            const csrfInput = document.createElement('input');
-            csrfInput.type = 'hidden';
-            csrfInput.name = 'csrf_token';
-            csrfInput.value = '{{ csrf_token() }}';
-            eliminaForm.appendChild(csrfInput);
-
-            const eliminaBtn = document.createElement('button');
-            eliminaBtn.type = 'submit';
-            eliminaBtn.className = 'btn btn-sm btn-danger';
-            eliminaBtn.textContent = 'Elimina';
-            // Aggiungi popup di conferma
-            eliminaBtn.onclick = function() {
-                return confirm('Sei sicuro di voler eliminare questo cliente?');
-            };
-            eliminaForm.appendChild(eliminaBtn);
-
-            azioniCell.appendChild(eliminaForm);
-
             // Pulsante Note
             const noteBtn = document.createElement('button');
             noteBtn.type = 'button';
@@ -733,6 +714,31 @@ document.addEventListener('DOMContentLoaded', function() {
             row.appendChild(azioniCell);
 
             tbody.appendChild(row);
+            
+          // Form Elimina
+            const eliminaForm = document.createElement('form');
+            eliminaForm.action = `/settings/delete_client/${client.id}`;
+            eliminaForm.method = 'POST';
+            eliminaForm.style.display = 'inline';
+
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = '{{ csrf_token() }}';
+            eliminaForm.appendChild(csrfInput);
+
+            const eliminaBtn = document.createElement('button');
+            eliminaBtn.type = 'submit';
+            eliminaBtn.className = 'btn btn-sm btn-danger';
+            eliminaBtn.textContent = 'Elimina';
+            // Aggiungi popup di conferma
+            eliminaBtn.onclick = function() {
+                return confirm('Sei sicuro di voler eliminare questo cliente?');
+            };
+            eliminaForm.appendChild(eliminaBtn);
+
+            azioniCell.appendChild(eliminaForm);
+
         });
 
         // Attach event listeners per le nuove righe
