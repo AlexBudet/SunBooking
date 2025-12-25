@@ -38,7 +38,7 @@
     <div class="row align-items-center mb-1">
       <!-- Campo Tipo -->
       <div class="col-md-3">
-          <select class="form-control" id="user_tipo" name="user_tipo" required onchange="toggleCognomeField()" style="padding: 0.5rem;">
+         <select class="form-control" id="user_tipo" name="user_tipo" required onchange="toggleTipoFields()" style="padding: 0.5rem;">
               <option value="estetista">Estetista</option>
               <option value="macchinario">Solarium</option>
           </select>
@@ -47,10 +47,16 @@
       <div class="col-md-3">
           <input type="text" class="form-control" id="user_nome" name="user_nome" placeholder="Nome" required style="padding: 0.5rem;">
       </div>
-      <!-- Campo Cognome (visibile solo per estetista) -->
-      <div class="col-md-3" id="cognomeField">
-          <input type="text" class="form-control" id="user_cognome" name="user_cognome" placeholder="Cognome" style="padding: 0.5rem;">
-      </div>
+<!-- Campo Cognome (visibile solo per estetista) -->
+<div class="col-md-3" id="cognomeField">
+  <input type="text" class="form-control" id="user_cognome" name="user_cognome" placeholder="Cognome" style="padding: 0.5rem;">
+</div>
+
+<!-- Campo Cellulare (visibile solo per estetista) -->
+<div class="col-md-3" id="cellulareField">
+  <input type="text" id="user_cellulare" name="user_cellulare"
+         class="form-control" placeholder="Cellulare" inputmode="numeric">
+</div>
       <!-- Pulsante Aggiungi -->
       <div class="col-md-3">
           <button type="submit" class="btn btn-primary">Aggiungi Operatore</button>
@@ -60,13 +66,15 @@
 
 <!-- Tabella degli operatori esistenti -->
 <table class="table operators-table">
+    {% set show_cellulare = (current_user and (current_user.ruolo.value == 'admin' or current_user.ruolo.value == 'owner')) %}
     <thead>
         <tr>
             <th>Nome</th>
             <th>Cognome</th>
             <th>Tipo</th>
-            <th>Visibile in Agenda</th>
-            <th>Azioni</th>
+            <th class="cellulare-col" {% if not show_cellulare %}style="display:none"{% endif %}>Cellulare</th>
+            <th class="text-center">Visibile in Agenda</th>
+            <th class="text-center">Azioni</th>
         </tr>
     </thead>
     <tbody>
@@ -76,10 +84,11 @@
             <td>{{ operator.user_nome }}</td>
             <td>{{ operator.user_cognome }}</td>
             <td>{{ operator.user_tipo }}</td>
-            <td>
+            <td class="cellulare-col" {% if not show_cellulare %}style="display:none"{% endif %}>{% if operator.user_tipo != 'macchinario' and operator.user_cellulare != '0' %}{{ operator.user_cellulare }}{% endif %}</td>
+            <td class="text-center">
               <input type="checkbox" onchange="toggleOperatorVisibility({{ operator.id }}, this.checked)" id="operatorVisibility_{{ operator.id }}" {% if operator.is_visible %}checked{% endif %}>
             </td>
-<td>
+<td class="text-center">
   {% if current_user and current_user.ruolo.value == 'user' %}
     <button type="button" class="btn btn-sm btn-primary" onclick="showNoRightsPopup()">Modifica</button>
     <button type="button" class="btn btn-sm btn-danger" onclick="showNoRightsPopup()">Elimina</button>
@@ -129,25 +138,34 @@ function showNoRightsPopup() {
 </script>
 <!-- Script JavaScript per gestire il campo Cognome -->
 <script>
-    function toggleCognomeField() {
-        const tipoSelect = document.getElementById('user_tipo');
-        const cognomeField = document.getElementById('cognomeField');
-        const cognomeInput = document.getElementById('user_cognome');
+function toggleTipoFields() {
+  const tipoSelect = document.getElementById('user_tipo');
+  const cognomeField = document.getElementById('cognomeField');
+  const cognomeInput = document.getElementById('user_cognome');
+  const cellulareField = document.getElementById('cellulareField');
+  const cellulareInput = document.getElementById('user_cellulare');
 
-        if (tipoSelect.value === 'macchinario') {
-            // Nascondi o disabilita il campo Cognome per il macchinario
-            cognomeField.style.display = 'none';  // Nasconde il campo
-            cognomeInput.value = '';  // Resetta il valore del campo
-            cognomeInput.removeAttribute('required');  // Rimuove l'attributo required
-        } else {
-            // Mostra il campo Cognome per l'estetista
-            cognomeField.style.display = 'block';  // Mostra il campo
-            cognomeInput.setAttribute('required', 'required');  // Aggiunge l'attributo required
-        }
-    }
+  if (tipoSelect.value === 'macchinario') {
+    // Nascondi campi per macchinario
+    cognomeField.style.display = 'none';
+    cognomeInput.value = '';
+    cognomeInput.removeAttribute('required');
 
-    // Esegui la funzione all'avvio per impostare lo stato iniziale
-    document.addEventListener('DOMContentLoaded', toggleCognomeField);
+    cellulareField.style.display = 'none';
+    cellulareInput.value = '';
+    cellulareInput.removeAttribute('required');
+  } else {
+    // Mostra campi per estetista
+    cognomeField.style.display = 'block';
+    cognomeInput.setAttribute('required', 'required');
+
+    cellulareField.style.display = 'block';
+    cellulareInput.setAttribute('required', 'required');
+  }
+}
+
+// Stato iniziale all’avvio
+document.addEventListener('DOMContentLoaded', toggleTipoFields);
 </script>
   
   <script>

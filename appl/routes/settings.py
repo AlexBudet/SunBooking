@@ -245,6 +245,9 @@ def add_operator():
         user_nome = format_name(request.form.get('user_nome'))
         user_cognome = format_name(request.form.get('user_cognome', ''))  # Campo cognome può essere vuoto
         user_tipo = request.form.get('user_tipo')
+        user_cellulare = (request.form.get('user_cellulare') or '').strip()
+        if not user_cellulare:
+            user_cellulare = '0'
 
         # Verifica che i campi obbligatori siano stati compilati
         if not user_nome or not user_tipo:
@@ -259,6 +262,7 @@ def add_operator():
         new_operator = Operator(
             user_nome=user_nome,
             user_cognome=user_cognome,  # Cognome vuoto per macchinario
+            user_cellulare=user_cellulare,
             user_tipo=user_tipo
         )
         db.session.add(new_operator)
@@ -280,11 +284,13 @@ def edit_operator(operator_id):
         # Aggiorna i dati dell'operatore
         user_nome = format_name(request.form.get('user_nome'))
         user_cognome = format_name(request.form.get('user_cognome', ''))
+        user_cellulare = (request.form.get('user_cellulare') or '').strip()
         user_tipo = request.form.get('user_tipo')
 
         # Applica le modifiche all'operatore
         operator.user_nome = user_nome
         operator.user_cognome = user_cognome
+        operator.user_cellulare = user_cellulare
         operator.user_tipo = user_tipo
 
         try:
@@ -466,6 +472,27 @@ def delete_service(service_id):
     
     return redirect(url_for('settings.services'))
 
+@settings_bp.route('/settings/services/<int:service_id>/description', methods=['POST'])
+def service_description(service_id):
+    """Salva la descrizione HTML del servizio (servizio_descrizione)."""
+    service = db.session.get(Service, service_id)
+    if not service:
+        abort(404)
+
+    # Consenti solo a admin/owner di salvare (controllo tramite sessione)
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Forbidden'}), 403
+    
+    current_user = db.session.get(User, user_id)
+    if not current_user or current_user.ruolo.value == 'user':
+        return jsonify({'error': 'Forbidden'}), 403
+
+    data = request.get_json(silent=True) or {}
+    descr = (data.get('descrizione') or '').strip()
+    service.servizio_descrizione = descr if descr else None
+    db.session.commit()
+    return jsonify({'ok': True})
 # ===================== CLIENTS =====================
 @settings_bp.route('/settings/clients', methods=['GET'])
 def clients():
