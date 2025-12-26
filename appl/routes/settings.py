@@ -1775,6 +1775,140 @@ def send_operator_notifications():
 
     return jsonify({"sent": sent, "total": len(targets), "results": results})
 
+WA_OPERATOR_DEBUG = True
+_OP_STATE = {"date": None, "queue": [], "idx": 0, "last_sent_minute": None}
+_OP_LOCK = threading.Lock()
+
+def _op_dbg(msg: str):
+    if WA_OPERATOR_DEBUG:
+        print(f"[WA-OP] {msg}")
+
+def _now_local():
+    return datetime.now()
+
+def process_operator_tick():
+    """
+    Ogni minuto: al minuto configurato costruisce la coda 'domani' per gli operatori,
+    poi invia 1 messaggio/minuto finché la coda non è vuota.
+    Logica allineata a booking.process_morning_tick, adattata al contesto single-tenant.
+    """
+    with _OP_LOCK:
+        bi = BusinessInfo.query.first()
+        if not bi or not getattr(bi, 'operator_whatsapp_notification_enabled', False):
+            _op_dbg("disabilitato o BusinessInfo assente")
+            _OP_STATE.update({"date": None, "queue": [], "idx": 0, "last_sent_minute": None})
+            return {"enabled": False, "status": "disabled"}
+
+        reminder_time = getattr(bi, 'operator_whatsapp_notification_time', None)
+        tpl = getattr(bi, 'operator_whatsapp_message_template', None)
+        if not tpl or not reminder_time:
+            _op_dbg("config mancante (msg/time)")
+            return {"enabled": True, "status": "missing_config"}
+
+        now = _now_local()
+        now_time = now.time()
+
+        st = _OP_STATE
+        has_active_queue = bool(st["date"] == now.date() and st["idx"] < len(st["queue"]))
+        is_reminder_minute = (now_time.hour == reminder_time.hour and now_time.minute == reminder_time.minute)
+
+        # Costruisci coda solo al minuto del reminder e una volta al giorno
+        if is_reminder_minute and st["date"] != now.date():
+            queue = _build_operator_targets_for_tomorrow(require_phone=True)
+            if not queue:
+                _op_dbg("coda vuota per domani")
+                _OP_STATE.update({"date": now.date(), "queue": [], "idx": 0, "last_sent_minute": None})
+                return {"enabled": True, "status": "empty_queue"}
+            _OP_STATE.update({"date": now.date(), "queue": queue, "idx": 0, "last_sent_minute": None})
+            st = _OP_STATE
+            _op_dbg(f"coda costruita: {len(queue)} target")
+
+        # Se non è minuto reminder e non c'è coda, esci
+        if not (is_reminder_minute or has_active_queue):
+            _op_dbg("skip: no reminder minute and no active queue")
+            return {"enabled": True, "status": "idle"}
+
+        # Coda terminata
+        if st["idx"] >= len(st["queue"]):
+            _op_dbg("nessun messaggio da inviare")
+            _OP_STATE.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
+            return {"enabled": True, "status": "done"}
+
+        # 1 invio per minuto (ancorato al minuto intero)
+        current_slot = now.replace(second=0, microsecond=0)
+        last_slot = st["last_sent_minute"]
+        can_send = (last_slot is None) or (current_slot > last_slot)
+
+        _op_dbg(f"tick: idx={st['idx']}/{len(st['queue'])}, last_slot={last_slot}, current_slot={current_slot}, can_send={can_send}")
+
+        result = None
+        sent_flag = False
+        if can_send:
+            item = st["queue"][st["idx"]]
+            st["idx"] += 1  # avanza sempre, anche su errore
+
+            # Render testo operatore
+            try:
+                msg_text = _render_operator_msg(tpl, item)
+            except Exception as e:
+                _op_dbg(f"render error operator_id={item.get('operator_id')}: {repr(e)}")
+                msg_text = tpl or ""
+
+            # Credenziali WBIZ (non multi-tenant, variabili base)
+            api_key = os.getenv("WBIZTOOL_API_KEY")
+            client_id_str = os.getenv("WBIZTOOL_CLIENT_ID")
+            whatsapp_client_id = os.getenv("WBIZTOOL_WHATSAPP_CLIENT_ID")
+
+            ok = False
+            try:
+                client_id_int = int(client_id_str)
+                whatsapp_client_int = int(whatsapp_client_id)
+                client = WbizToolClient(api_key=api_key, client_id=client_id_int)
+                resp = client.send_message(
+                    phone=item.get("phone"),
+                    msg=msg_text or "",
+                    msg_type=0,
+                    whatsapp_client=whatsapp_client_int,
+                    country_code=item.get("country_code")
+                )
+                if isinstance(resp, dict):
+                    ok = resp.get("status") == 1
+                else:
+                    status = getattr(resp, 'status_code', None)
+                    ok = bool(status and 200 <= status < 300)
+                result = {"operator_id": item.get("operator_id"), "ok": ok}
+                _op_dbg(f"inviato={ok} operator_id={item.get('operator_id')} -> {item.get('phone')}")
+            except Exception as e:
+                result = {"operator_id": item.get("operator_id"), "ok": False, "error": str(e)}
+                _op_dbg(f"send error: {repr(e)}")
+
+            st["last_sent_minute"] = current_slot
+            sent_flag = True
+
+        # Fine coda -> reset o persist
+        if st["idx"] >= len(st["queue"]):
+            _op_dbg("tutti i messaggi inviati: reset")
+            _OP_STATE.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
+        else:
+            _OP_STATE.update(st)
+
+        return {
+            "enabled": True,
+            "status": "sent" if sent_flag else "waiting",
+            "queue_len": len(st.get("queue", [])),
+            "idx": st.get("idx", 0),
+            "result": result
+        }
+
+@settings_bp.route('/api/operator_notifications/tick', methods=['POST'])
+def operator_notifications_tick():
+    """
+    Endpoint da richiamare ogni minuto (Azure Logic App/Function/WebJob).
+    Costruisce la coda al minuto configurato e invia 1 messaggio/minuto.
+    """
+    out = process_operator_tick()
+    return jsonify(out), 200
+
 @settings_bp.route('/api/operator_notifications/trigger', methods=['POST'])
 def operator_notifications_trigger():
     # No secret required; respects time gating unless body sets {"force": true}

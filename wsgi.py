@@ -7,6 +7,8 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from waitress import serve
 from appl import create_app, db
 from appl.models import BusinessInfo
+import threading
+import time as time_mod
 
 base_dir = os.path.dirname(__file__)
 env_candidates = [
@@ -144,7 +146,6 @@ for idx, uri in pool.items():
             'note': client.note
         })
     
-    # --- PATCH: Aggiunta rotte mancanti per update cliente (presenti in calendar.py come @app.route) ---
     @child.route('/settings/api/update_client_info', methods=['POST'])
     def update_client_info_wsgi():
         from appl.models import Client
@@ -205,7 +206,6 @@ for idx, uri in pool.items():
             db.session.commit()
             return jsonify(success=True, note=client.note)
         return jsonify(success=False), 404
-    # --- FINE PATCH ---
 
     def with_db_cookie(app, idx_local, secure=False):
         def _wrap(environ, start_response):
@@ -227,6 +227,34 @@ for idx, uri in pool.items():
 
 application = DispatcherMiddleware(root_app, mounts)
 app = application
+
+def _start_operator_scheduler_once():
+    # Evita multi-avvio in ambienti con più worker (solo su Web App)
+    if os.getenv('WEBSITE_SITE_NAME'):  # Solo su Azure Web App
+        if hasattr(_start_operator_scheduler_once, '_started'):
+            return
+        _start_operator_scheduler_once._started = True
+
+        def worker():
+            while True:
+                try:
+                    for idx, child in children.items():
+                        try:
+                            with child.app_context():
+                                # Importa la funzione da settings.py
+                                from appl.routes.settings import process_operator_tick
+                                process_operator_tick()  # Passa app e tenant_id
+                        except Exception as e:
+                            print(f"[WA-OPERATOR][{idx}] tick error: {repr(e)}")
+                except Exception as e:
+                    print(f"[WA-OPERATOR] loop error: {repr(e)}")
+                time_mod.sleep(60)  # Ogni 60 secondi
+
+        t = threading.Thread(target=worker, name="wa_operator_scheduler", daemon=True)
+        t.start()
+
+# Chiama la funzione dopo aver creato i children
+_start_operator_scheduler_once()
 
 @root_app.route('/landing-web')
 def landing_web():
