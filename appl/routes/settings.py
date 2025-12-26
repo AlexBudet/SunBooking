@@ -15,6 +15,7 @@ from sqlalchemy.sql import func, or_
 from .. import db
 from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente
 from wbiztool_client import WbizToolClient
+from pytz import timezone
 
 # Blueprint per le rotte delle impostazioni
 settings_bp = Blueprint('settings', __name__, template_folder='../templates')
@@ -1793,7 +1794,8 @@ def _op_dbg(msg: str):
         print(f"[WA-OP] {msg}")
 
 def _now_local():
-    return datetime.now()
+    tz = timezone('Europe/Rome')
+    return datetime.now(tz)
 
 def process_operator_tick():
     """
@@ -1816,11 +1818,10 @@ def process_operator_tick():
             return {"enabled": True, "status": "missing_config"}
 
         now = _now_local()
-        now_time = now.time()
-
+        
         st = _OP_STATE
         has_active_queue = bool(st["date"] == now.date() and st["idx"] < len(st["queue"]))
-        is_reminder_minute = (now_time.hour == reminder_time.hour and now_time.minute == reminder_time.minute)
+        is_reminder_minute = (now.hour == reminder_time.hour and now.minute == reminder_time.minute)
 
         # Costruisci coda solo al minuto del reminder e una volta al giorno
         if is_reminder_minute and st["date"] != now.date():
