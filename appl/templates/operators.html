@@ -25,6 +25,8 @@
     display: table-cell !important;
   }
 
+  .operators-table .memo-turni-col { display: none !important; }
+
   /* nasconde i pulsanti "Turni" nella colonna Azioni su schermi stretti */
   .operators-table .operator-shift-link-settings {
     display: none !important;
@@ -74,6 +76,7 @@
             <th>Tipo</th>
             <th class="cellulare-col" {% if not show_cellulare %}style="display:none"{% endif %}>Cellulare</th>
             <th class="text-center">Visibile in Agenda</th>
+            <th class="text-center">Invia Memo turni</th>
             <th class="text-center">Azioni</th>
         </tr>
     </thead>
@@ -88,6 +91,27 @@
             <td class="text-center">
               <input type="checkbox" onchange="toggleOperatorVisibility({{ operator.id }}, this.checked)" id="operatorVisibility_{{ operator.id }}" {% if operator.is_visible %}checked{% endif %}>
             </td>
+  <!-- Memo turni -->
+<td class="text-center memo-turni-col">
+  {% set is_estetista = operator.user_tipo != 'macchinario' %}
+  {% set is_visible = operator.is_visible %}
+  {% set phone_digits = operator.user_cellulare|replace(' ', '')|replace('+','')|replace('-', '')|replace('.', '') %}
+  {% set has_phone = phone_digits|length > 3 %}
+
+  {% if is_estetista and is_visible and has_phone %}
+    <input
+      type="checkbox"
+      class="form-check-input"
+      id="notifyMemo-{{ operator.id }}"
+      {% if operator.notify_turni_via_whatsapp %}checked{% endif %}
+      {% if current_user and current_user.ruolo.value == 'user' %}disabled{% endif %}
+      onchange="toggleOperatorMemoTurni({{ operator.id }}, this.checked)"
+    >
+  {% else %}
+    <span class="text-muted">—</span>
+  {% endif %}
+</td>
+    <!-- Azioni -->
 <td class="text-center">
   {% if current_user and current_user.ruolo.value == 'user' %}
     <button type="button" class="btn btn-sm btn-primary" onclick="showNoRightsPopup()">Modifica</button>
@@ -742,6 +766,29 @@ function updateOperatorOrderFromDOM() {
             console.error('Error saving operator order:', error);
         });
     }
+}
+</script>
+<script>
+function toggleOperatorMemoTurni(operatorId, isEnabled) {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+  fetch(`/settings/operators/${operatorId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken
+    },
+    body: JSON.stringify({ notify_turni_via_whatsapp: isEnabled })
+  })
+  .then(response => {
+    if (!response.ok) {
+      console.error('Errore aggiornando "Memo turni"');
+      alert('Errore durante il salvataggio di "Memo turni".');
+    }
+  })
+  .catch(error => {
+    console.error('Errore durante la richiesta:', error);
+    alert('Errore di rete durante il salvataggio.');
+  });
 }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>

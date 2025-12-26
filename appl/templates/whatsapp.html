@@ -117,11 +117,6 @@
         <button type="submit" class="btn btn-success">Salva messaggio automatico</button>
     </form>
 </div>
-
-<br>
-<br>
-<br>
-<br>
 <script>
 (function () {
   const cb = document.getElementById('whatsapp_morning_reminder_enabled');
@@ -195,4 +190,148 @@
   }
 })();
 </script>
+<br>
+<hr>
+<div class="container mt-4" style="max-width:600px;">
+  <h3>Memo turni operatori (WhatsApp)</h3>
+
+  <!-- Toggle e orario: salvataggio immediato via JS -->
+  <div class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" role="switch"
+           id="operator_whatsapp_notification_enabled"
+           {% if business_info and business_info.operator_whatsapp_notification_enabled %}checked{% endif %}>
+    <label class="form-check-label" for="operator_whatsapp_notification_enabled">
+      Attiva invio automatico memo turni agli operatori
+    </label>
+  </div>
+
+  <div class="mb-3">
+    <label for="operator_whatsapp_notification_time" class="form-label">Orario invio (giorno seguente)</label>
+    <input type="time" class="form-control" id="operator_whatsapp_notification_time"
+           value="{{ business_info.operator_whatsapp_notification_time.strftime('%H:%M') if business_info and business_info.operator_whatsapp_notification_time else '20:00' }}">
+    <div class="form-text">
+      All’orario impostato, vengono inviati i memo per i turni del giorno successivo.
+    </div>
+  </div>
+
+<script>
+  (function() {
+    const enabledCb = document.getElementById('operator_whatsapp_notification_enabled');
+    const timeInput = document.getElementById('operator_whatsapp_notification_time');
+    if (!enabledCb || !timeInput) return;
+
+    function saveOperatorReminder(enabled, timeHHMM) {
+      const token = document.querySelector('input[name="csrf_token"]')?.value || '';
+      const params = new URLSearchParams();
+      params.set('csrf_token', token);
+      if (enabled) params.set('operator_whatsapp_notification_enabled', 'on');
+      if (timeHHMM) params.set('operator_whatsapp_notification_time', timeHHMM);
+      return fetch("{{ url_for('settings.whatsapp_per_operatori') }}", {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString()
+      })
+      .then(resp => { if (!resp.ok) throw new Error('HTTP ' + resp.status); })
+      .catch(err => {
+        console.error('Errore salvataggio impostazioni operatori', err);
+        enabledCb.checked = !enabled;
+        alert('Errore durante il salvataggio impostazioni operatori');
+      });
+    }
+
+    enabledCb.addEventListener('change', () => saveOperatorReminder(enabledCb.checked, timeInput.value));
+    timeInput.addEventListener('change', () => saveOperatorReminder(enabledCb.checked, timeInput.value));
+  })();
+</script>
+
+  <!-- Template messaggio operatori -->
+<form id="operatorTemplateForm" method="post" action="{{ url_for('settings.whatsapp_per_operatori') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label for="operator_whatsapp_message_template" class="form-label">Template messaggio operatori</label>
+      <textarea class="form-control" id="operator_whatsapp_message_template"
+                name="operator_whatsapp_message_template" rows="5" required>{{ business_info.operator_whatsapp_message_template or "Ciao {{operatore}}, domani {{data}} il tuo turno: {{ora_inizio}}-{{ora_fine}}. Appuntamenti: {{appuntamenti}}" }}</textarea>
+      <div class="form-text">
+        Variabili disponibili:<br>
+        <code>{{"{{operatore}}"}}</code>, <code>{{"{{data}}"}}</code>, <code>{{"{{ora_inizio}}"}}</code>, <code>{{"{{ora_fine}}"}}</code>, <code>{{"{{appuntamenti}}"}}</code>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-success">Salva template operatori</button>
+  </form>
+
+  <!-- Preview messaggi operatori (domani) -->
+  <div class="mt-3">
+    <button type="button" class="btn btn-outline-primary" id="previewOpsBtn">Preview (domani)</button>
+  </div>
+
+  <!-- Modal preview -->
+  <div class="modal fade" id="opsPreviewModal" tabindex="-1" aria-labelledby="opsPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="opsPreviewModalLabel">Anteprima messaggi operatori (domani)</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Contenuto caricato via JS -->
+          <div class="text-muted">Caricamento…</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+        </div>
+      </div>
+    </div>
+  </div>
+<br><br><br><br>
+  <script>
+  (function(){
+    const previewBtn = document.getElementById('previewOpsBtn');
+    const modalEl = document.getElementById('opsPreviewModal');
+    const modalBody = modalEl ? modalEl.querySelector('.modal-body') : null;
+
+    if (previewBtn && modalEl && modalBody) {
+      previewBtn.addEventListener('click', () => {
+        // Stato iniziale
+        modalBody.innerHTML = '<div class="text-muted">Caricamento…</div>';
+
+        // Chiede anteprima completa al backend
+        const url = "{{ url_for('settings.preview_operator_notifications') }}?full=1";
+        fetch(url, { credentials: 'same-origin' })
+          .then(r => r.ok ? r.json() : Promise.reject(r))
+          .then(j => {
+            const items = Array.isArray(j.items) ? j.items : [];
+            if (!items.length) {
+              modalBody.textContent = 'Nessun operatore da notificare per domani.';
+            } else {
+              // Costruisci blocchi messaggio uno dopo l’altro
+              const html = items.map(it => {
+                const op = (it.operatore || '').trim();
+                const phone = (it.phone || '').trim();
+                const msg = (it.msg_full || it.msg || it.msg_preview || '').trim();
+                const msgHtml = msg.replace(/\n/g, '<br>');
+                return `
+                  <div class="mb-4">
+                    <div class="fw-bold">${op}</div>
+                    <div class="text-muted small">${phone}</div>
+                    <div class="mt-2">${msgHtml}</div>
+                  </div>
+                `;
+              }).join('<hr>');
+              modalBody.innerHTML = html;
+            }
+            // Apri modal
+            const m = bootstrap.Modal.getOrCreateInstance(modalEl);
+            m.show();
+          })
+          .catch(e => {
+            modalBody.textContent = 'Errore durante la costruzione della preview.';
+            const m = bootstrap.Modal.getOrCreateInstance(modalEl);
+            m.show();
+          });
+      });
+    }
+  })();
+  </script>
+</div>
 {% endblock %}

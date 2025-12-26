@@ -12,7 +12,8 @@ from datetime import datetime, timedelta
 import os, ipaddress, time, requests
 from sqlalchemy.sql import func, or_
 from .. import db
-from ..models import Appointment, AppointmentStatus, Operator, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente
+from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente
+from wbiztool_client import WbizToolClient
 
 # Blueprint per le rotte delle impostazioni
 settings_bp = Blueprint('settings', __name__, template_folder='../templates')
@@ -310,7 +311,7 @@ def update_operator(operator_id):
     data = request.json
     operator = db.session.get(Operator, operator_id)
     if not operator:
-        abort(404)
+        return jsonify({'error': 'Operatore non trovato'}), 404
 
     # Aggiorna i campi base
     operator.user_nome = data.get('nome', operator.user_nome)
@@ -318,8 +319,11 @@ def update_operator(operator_id):
     operator.user_tipo = data.get('tipo', operator.user_tipo)
     operator.is_visible = data.get('is_visible', operator.is_visible)
 
+    # Nuovo flag: memo turni via WhatsApp
+    if 'notify_turni_via_whatsapp' in data:
+        operator.notify_turni_via_whatsapp = bool(data['notify_turni_via_whatsapp'])
+
     db.session.commit()
-    flash('Operatore aggiornato', 'success')
     return jsonify({"message": "Operatore aggiornato con successo!"}), 200
 
 @settings_bp.route('/settings/operators/<int:operator_id>/delete', methods=['POST'])
@@ -1498,3 +1502,271 @@ def export_clients():
     except Exception as e:
         current_app.logger.error(f"Errore in export_clients: {e}")
         return jsonify({"error": "Errore interno del server"}), 500
+    
+@settings_bp.route('/whatsapp_per_operatori', methods=['GET', 'POST'])
+def whatsapp_per_operatori():
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    if request.method == 'POST':
+        # ... campi già esistenti ...
+        op_enabled = 'operator_whatsapp_notification_enabled' in request.form
+        op_time_str = request.form.get('operator_whatsapp_notification_time')
+        op_tpl = request.form.get('operator_whatsapp_message_template')
+
+        if not business_info:
+            business_info = BusinessInfo(
+                business_name="Nome Azienda",
+                opening_time=datetime.strptime("08:00", "%H:%M").time(),
+                closing_time=datetime.strptime("20:00", "%H:%M").time(),
+            )
+            db.session.add(business_info)
+
+        # Persisti toggle/time/template operatori se passati
+        business_info.operator_whatsapp_notification_enabled = bool(op_enabled)
+        if op_time_str:
+            try:
+                business_info.operator_whatsapp_notification_time = datetime.strptime(op_time_str, '%H:%M').time()
+            except Exception:
+                pass
+        if op_tpl is not None:
+            business_info.operator_whatsapp_message_template = op_tpl
+
+        db.session.commit()
+        return redirect(url_for('settings.whatsapp'))
+
+    # GET render invariato
+    whatsapp_message = business_info.whatsapp_message if business_info and business_info.whatsapp_message else ""
+    whatsapp_message_auto = business_info.whatsapp_message_auto if business_info and getattr(business_info, "whatsapp_message_auto", None) else ""
+    whatsapp_message_morning = business_info.whatsapp_message_morning if business_info and getattr(business_info, "whatsapp_message_morning", None) else ""
+    return render_template('whatsapp.html',
+        business_info=business_info,
+        whatsapp_message=whatsapp_message,
+        whatsapp_message_auto=whatsapp_message_auto,
+        whatsapp_message_morning=whatsapp_message_morning
+    )
+
+def _normalize_for_wbiz(numero: str):
+    raw = (str(numero or '')).strip().replace(' ', '')
+    if not raw:
+        return None, None  # numero, country
+    if raw.startswith('+'):
+        numero_norm = raw
+    elif raw and raw[0].isdigit():
+        if raw.startswith('3'):
+            numero_norm = ('+' + raw) if len(raw) > 10 else ('+39' + raw)
+        else:
+            numero_norm = '+' + raw
+    else:
+        numero_norm = raw
+
+    numero_pulito = re.sub(r'\D', '', numero_norm or '')
+    if numero_pulito.startswith('00'):
+        numero_pulito = numero_pulito.lstrip('0')
+    if not numero_pulito:
+        return None, None
+    country_code = '39' if numero_pulito.startswith('39') else numero_pulito[:2]
+    return numero_pulito, country_code
+
+def _fmt_data_italiana(dt):
+    giorni = ["lunedì","martedì","mercoledì","giovedì","venerdì","sabato","domenica"]
+    return f"{giorni[dt.weekday()]} {dt.day}"
+
+def _build_operator_targets_for_tomorrow(require_phone: bool = True):
+    tomorrow = (datetime.now().date() + timedelta(days=1))
+    ops = db.session.query(Operator).filter(
+        Operator.is_deleted == False,
+        Operator.is_visible == True,
+        Operator.user_tipo != 'macchinario',
+        Operator.notify_turni_via_whatsapp == True
+    ).all()
+
+    targets = []
+    for op in ops:
+        phone, country = _normalize_for_wbiz(op.user_cellulare)
+        if require_phone and (not phone or len(phone) < 4):
+            continue
+
+        shift = db.session.query(OperatorShift).filter(
+            OperatorShift.operator_id == op.id,
+            OperatorShift.shift_date == tomorrow
+        ).first()
+
+        appts = db.session.query(Appointment).filter(
+            Appointment.operator_id == op.id,
+            Appointment.is_cancelled_by_client == False,
+            func.date(Appointment.start_time) == tomorrow
+        ).order_by(Appointment.start_time.asc()).all()
+
+        schedule_items = []
+        for a in appts:
+            # filtra fuori turno se necessario
+            if shift:
+                st, en = shift.shift_start_time, shift.shift_end_time
+                at = a.start_time.time()
+                if at < st or at >= en:
+                    continue
+
+            # Determina OFF robustamente:
+            c = a.client
+            svc = db.session.get(Service, a.service_id) if a.service_id else None
+
+            client_is_dummy_or_missing = (c is None) or (
+                (c.cliente_nome or '').strip().lower() == 'dummy' and
+                (c.cliente_cognome or '').strip().lower() == 'dummy'
+            )
+
+            service_is_dummy_or_missing = (svc is None) or (
+                (getattr(svc, 'servizio_nome', '') or '').strip().lower() == 'dummy' or
+                (getattr(svc, 'servizio_tag', '') or '').strip().lower() == 'dummy'
+            )
+
+            is_off = client_is_dummy_or_missing or service_is_dummy_or_missing
+
+            if is_off:
+                titolo = (a.note or '').strip()
+                label = titolo if titolo else 'OFF'
+                durata = a.duration if isinstance(a.duration, int) else None
+            else:
+                # Preferisci il tag, altrimenti nome servizio
+                if svc:
+                    label = (getattr(svc, 'servizio_nome', '') or '').strip() or (getattr(svc, 'servizio_tag', '') or '').strip()
+                else:
+                    label = ''
+                durata = None
+
+            schedule_items.append({
+                "ora": a.start_time.strftime('%H:%M'),
+                "label": label,
+                "is_off": is_off,
+                "durata": durata
+            })
+
+        targets.append({
+            "operator_id": op.id,
+            "operatore_nome": (op.user_nome or "").strip(),  # solo nome
+            "phone": phone,
+            "country_code": country,
+            "date": str(tomorrow),
+            "shift_start": shift.shift_start_time.strftime('%H:%M') if shift else None,
+            "shift_end": shift.shift_end_time.strftime('%H:%M') if shift else None,
+            "schedule": schedule_items
+        })
+
+    return targets
+
+def _render_operator_msg(tpl: str, target: dict):
+    tpl = (tpl or "")
+    lines = []
+    for x in target.get('schedule', []):
+        if not x:
+            continue
+        if x.get('is_off'):
+            dur = x.get('durata')
+            dur_txt = f" ({dur} minuti)" if (isinstance(dur, int) and dur > 0) else ""
+            lines.append(f"- {x.get('ora')} {x.get('label')}{dur_txt}")
+        else:
+            lines.append(f"- {x.get('ora')} {x.get('label')}")
+    appuntamenti_list = "\n".join(lines)
+    data_it = _fmt_data_italiana(datetime.strptime(target["date"], "%Y-%m-%d"))
+    return (tpl
+        .replace("{{operatore}}", target.get("operatore_nome", ""))
+        .replace("{{data}}", data_it)
+        .replace("{{ora_inizio}}", target.get("shift_start") or "OFF")
+        .replace("{{ora_fine}}", target.get("shift_end") or "OFF")
+        .replace("{{appuntamenti}}", ("\n" + appuntamenti_list + "\n") if appuntamenti_list else "")
+    )
+
+@settings_bp.route('/api/operator_notifications/preview', methods=['GET'], endpoint='preview_operator_notifications')
+def preview_operator_notifications():
+    bi = BusinessInfo.query.first()
+    tpl_default = "Ciao {{operatore}}, domani {{data}} il tuo turno: {{ora_inizio}}-{{ora_fine}}."
+    tpl = (getattr(bi, 'operator_whatsapp_message_template', '') or tpl_default)
+
+    # In preview includi anche operatori senza numero
+    targets = _build_operator_targets_for_tomorrow(require_phone=False)
+
+    full = str(request.args.get('full', '') or '').lower() in ('1', 'true', 'yes', 'on')
+    preview = []
+    for t in targets:
+        msg = _render_operator_msg(tpl, t)
+        item = {
+            "operator_id": t["operator_id"],
+            "operatore": t["operatore_nome"],
+            "phone": t.get("phone") or "(nessun numero)",
+            "date": t["date"],
+            "msg_preview": msg[:240] + ("..." if len(msg) > 240 else "")
+        }
+        if full:
+            item["msg_full"] = msg
+        preview.append(item)
+
+    return jsonify({
+        "enabled": bool(getattr(bi, 'operator_whatsapp_notification_enabled', False)),
+        "count": len(preview),
+        "items": preview
+    })
+
+@settings_bp.route('/api/operator_notifications/send', methods=['POST'], endpoint='send_operator_notifications')
+def send_operator_notifications():
+    bi = BusinessInfo.query.first()
+    data = request.get_json(silent=True) or {}
+    force = bool(data.get('force'))
+
+    if not bi or not bi.operator_whatsapp_notification_enabled:
+        if not force:
+            return jsonify({"error": "Invio disabilitato"}), 400
+
+    # Verifica orario solo se non forzato
+    if not force and bi.operator_whatsapp_notification_time:
+        now_hm = datetime.now().strftime('%H:%M')
+        cfg_hm = bi.operator_whatsapp_notification_time.strftime('%H:%M')
+        if now_hm < cfg_hm:
+            return jsonify({"error": f"Non ancora orario (configurato {cfg_hm})"}), 400
+
+    api_key = os.getenv("WBIZTOOL_API_KEY")
+    client_id_str = os.getenv("WBIZTOOL_CLIENT_ID")
+    whatsapp_client_id = os.getenv("WBIZTOOL_WHATSAPP_CLIENT_ID")
+    if not api_key or not client_id_str or not whatsapp_client_id:
+        current_app.logger.error("[OP WHATSAPP] Config WBIZ mancante")
+        return jsonify({'error': 'Configurazione WhatsApp mancante'}), 500
+
+    try:
+        client_id_int = int(client_id_str)
+        whatsapp_client_int = int(whatsapp_client_id)
+    except Exception:
+        return jsonify({'error': 'Configurazione WBIZ non valida'}), 500
+
+    try:
+        client = WbizToolClient(api_key=api_key, client_id=client_id_int)
+    except Exception:
+        return jsonify({'error': 'Errore inizializzazione client provider'}), 500
+
+    targets = _build_operator_targets_for_tomorrow()
+    tpl = (bi.operator_whatsapp_message_template or "Ciao {{operatore}}, domani {{data}} il tuo turno: {{ora_inizio}}-{{ora_fine}}.")
+    sent = 0
+    results = []
+
+    for t in targets:
+        msg = _render_operator_msg(tpl, t)
+        phone = t["phone"]
+        country = t["country_code"]
+        try:
+            resp = client.send_message(
+                phone=phone,
+                msg=msg,
+                msg_type=0,
+                whatsapp_client=whatsapp_client_int,
+                country_code=country
+            )
+            ok = False
+            if isinstance(resp, dict):
+                ok = resp.get("status") == 1
+            else:
+                status = getattr(resp, 'status_code', None)
+                ok = (status is not None and 200 <= status < 300)
+            sent += 1 if ok else 0
+            results.append({"operator_id": t["operator_id"], "ok": ok, "response": resp if isinstance(resp, dict) else getattr(resp, 'text', repr(resp))})
+        except Exception as e:
+            current_app.logger.exception("[OP WHATSAPP] send exception")
+            results.append({"operator_id": t["operator_id"], "ok": False, "error": str(e)})
+
+    return jsonify({"sent": sent, "total": len(targets), "results": results})
