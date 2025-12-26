@@ -27,7 +27,10 @@ def is_first_appointment_for_client(client_id):
     """
     if not client_id:
         return False
-    count = Appointment.query.filter(Appointment.client_id == client_id).count()
+    count = Appointment.query.filter(
+        Appointment.client_id == client_id,
+        Appointment.is_cancelled_by_client == False
+    ).count()
     return count == 0
 
 def append_new_client_marker(note_text):
@@ -109,7 +112,8 @@ def calendar_home():
     # Filtra gli appuntamenti per la data selezionata (00:00 di selected_date fino alle 23:59)
     appointments = Appointment.query.filter(
         Appointment.start_time >= selected_date,
-        Appointment.start_time < selected_date + timedelta(days=1)
+        Appointment.start_time < selected_date + timedelta(days=1),
+        Appointment.is_cancelled_by_client == False
     ).options(
         joinedload(Appointment.client),
         joinedload(Appointment.service),
@@ -556,7 +560,8 @@ def edit_appointment(appt_id):
                 # Conta appuntamenti pre-esistenti per il nuovo cliente, escludendo questo appt
                 prev_count = Appointment.query.filter(
                     Appointment.client_id == new_client_id,
-                    Appointment.id != appt.id
+                    Appointment.id != appt.id,
+                    Appointment.is_cancelled_by_client == False
                 ).count()
                 will_mark_new_client = (prev_count == 0)
 
@@ -871,7 +876,8 @@ def operator_multi_shifts(operator_id):
                     Appointment.operator_id == operator_id,
                     Appointment.start_time >= day_start,
                     Appointment.start_time <= day_end,
-                    Appointment.note.in_(["PAUSA", "OFF"])
+                    Appointment.note.in_(["PAUSA", "OFF"]),
+                    Appointment.is_cancelled_by_client == False
                 ).all()
                 for appt in off_appts:
                     db.session.delete(appt)
@@ -907,7 +913,8 @@ def operator_multi_shifts(operator_id):
                     existing_break = Appointment.query.filter_by(
                         operator_id=operator_id,
                         start_time=break_start_dt,
-                        client_id=dummy_client_id
+                        client_id=dummy_client_id,
+                        is_cancelled_by_client=False
                     ).first()
                     if not existing_break:
                         new_break = Appointment(
@@ -1289,7 +1296,10 @@ def api_appointment_status():
     if not ids:
         return jsonify({"success": False, "error": "Nessun appuntamento selezionato"}), 400
     # Ottimizzazione: query unica invece di loop N+1
-    appointments = Appointment.query.filter(Appointment.id.in_(ids)).all()
+    appointments = Appointment.query.filter(
+        Appointment.id.in_(ids),
+        Appointment.is_cancelled_by_client == False
+    ).all()
     result = [{"id": app.id, "stato": app.stato.value if hasattr(app.stato, "value") else app.stato} for app in appointments]
     return jsonify({"success": True, "appointments": result})
 
@@ -1307,7 +1317,8 @@ def next_appointments_for_client(client_id):
     appointments = Appointment.query.filter(
         Appointment.client_id == client_id,
         Appointment.start_time >= now,
-        Appointment.client.has(is_deleted=False)
+        Appointment.client.has(is_deleted=False),
+        Appointment.is_cancelled_by_client == False
     ).order_by(Appointment.start_time.asc()).limit(10).all()
 
     result = []
@@ -1329,7 +1340,10 @@ def online_appointments_by_booking_date():
     date_str = request.args.get('date')
     search = request.args.get('search', '').strip()
 
-    query = Appointment.query.filter(Appointment.source == "web").options(
+    query = Appointment.query.filter(
+        Appointment.source == "web",
+        Appointment.is_cancelled_by_client == False
+    ).options(
         joinedload(Appointment.client),
         joinedload(Appointment.service)
     )
@@ -1534,7 +1548,10 @@ def associa_cliente_booking():
         return jsonify({"success": False, "error": "Appuntamento non trovato"}), 404
 
     if appt.booking_session_id:
-        blocks = Appointment.query.filter_by(booking_session_id=appt.booking_session_id).all()
+        blocks = Appointment.query.filter_by(
+            booking_session_id=appt.booking_session_id,
+            is_cancelled_by_client=False
+        ).all()
     else:
         blocks = [appt]
 
@@ -1570,7 +1587,10 @@ def associa_cliente_booking():
 
 @calendar_bp.route('/api/last-online-booking', methods=['GET'])
 def last_online_booking():
-    last = Appointment.query.filter_by(source='web').order_by(Appointment.created_at.desc()).first()
+    last = Appointment.query.filter_by(
+        source='web',
+        is_cancelled_by_client=False
+    ).order_by(Appointment.created_at.desc()).first()
     if last:
         return jsonify({"id": last.id, "created_at": last.created_at.isoformat()})
     return jsonify({"id": None, "created_at": None})
@@ -1752,6 +1772,7 @@ def calendar_next_appointments():
     appointments = (
         Appointment.query
         .filter(Appointment.start_time >= day_start, Appointment.start_time <= day_end)
+        .filter(Appointment.is_cancelled_by_client == False)
         .options(
             joinedload(Appointment.client),
             joinedload(Appointment.service),
@@ -1915,7 +1936,10 @@ def send_whatsapp_auto():
                     # Gruppo: stessa sessione web, altrimenti tutti gli appuntamenti dello stesso cliente nella stessa data
                     if getattr(appt_ref, 'booking_session_id', None):
                         appts = (Appointment.query
-                                 .filter(Appointment.booking_session_id == appt_ref.booking_session_id)
+                                 .filter(
+                                     Appointment.booking_session_id == appt_ref.booking_session_id,
+                                     Appointment.is_cancelled_by_client == False
+                                 )
                                  .order_by(Appointment.start_time.asc())
                                  .all())
                     else:
@@ -1926,7 +1950,8 @@ def send_whatsapp_auto():
                                      .filter(
                                          Appointment.client_id == appt_ref.client_id,
                                          Appointment.start_time >= day_start,
-                                         Appointment.start_time <= day_end
+                                         Appointment.start_time <= day_end,
+                                         Appointment.is_cancelled_by_client == False
                                      )
                                      .order_by(Appointment.start_time.asc())
                                      .all())
@@ -1963,7 +1988,8 @@ def send_whatsapp_auto():
                              .filter(
                                  Appointment.client_id == int(client_id),
                                  Appointment.start_time >= day_start,
-                                 Appointment.start_time <= day_end
+                                 Appointment.start_time <= day_end,
+                                 Appointment.is_cancelled_by_client == False
                              )
                              .order_by(Appointment.start_time.asc())
                              .all())
@@ -1994,7 +2020,10 @@ def send_whatsapp_auto():
 
             if session_id:
                 session_appts = (Appointment.query
-                                 .filter(Appointment.booking_session_id == session_id)
+                                 .filter(
+                                     Appointment.booking_session_id == session_id,
+                                     Appointment.is_cancelled_by_client == False
+                                 )
                                  .order_by(Appointment.start_time.asc())
                                  .all())
                 if session_appts and session_appts[0].start_time:
@@ -2010,7 +2039,10 @@ def send_whatsapp_auto():
 
         # 4) Costruisci i servizi dal gruppo trovato
         if not servizi_str and ids:
-            appts = Appointment.query.filter(Appointment.id.in_(ids)).order_by(Appointment.start_time.asc()).all()
+            appts = Appointment.query.filter(
+                Appointment.id.in_(ids),
+                Appointment.is_cancelled_by_client == False
+            ).order_by(Appointment.start_time.asc()).all()
             lines = []
             for appt in appts:
                 svc = db.session.get(Service, appt.service_id) if appt.service_id else None
@@ -2158,6 +2190,7 @@ def count_pending_web_appointments():
         # Include anche 'cliente booking' per retrocompatibilità con il dummy standard
         count = Appointment.query.join(Client).filter(
             Appointment.source == 'web',
+            Appointment.is_cancelled_by_client == False,
             or_(
                 and_(func.upper(Client.cliente_nome) == 'BOOKING', func.upper(Client.cliente_cognome) == 'ONLINE'),
                 and_(func.upper(Client.cliente_nome) == 'CLIENTE', func.upper(Client.cliente_cognome) == 'BOOKING')

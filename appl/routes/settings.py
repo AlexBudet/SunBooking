@@ -227,7 +227,7 @@ def operators():
     user = session.get('user_id')
     current_user = db.session.get(User, user) if user else None
     operators = db.session.query(Operator).filter_by(is_deleted=False).all()
-    appointments = db.session.query(Appointment).all()
+    appointments = db.session.query(Appointment).filter(Appointment.is_cancelled_by_client == False).all()
     appointments_by_operator = {}
     for op in operators:
         appointments_by_operator[op.id] = [appt for appt in appointments if appt.operator_id == op.id]
@@ -744,7 +744,7 @@ def client_history():
         appointments = Appointment.query.filter_by(
             client_id=client.id,
             stato=AppointmentStatus.PAGATO
-        ).order_by(Appointment.start_time.desc()).all()
+        ).filter(Appointment.is_cancelled_by_client == False).order_by(Appointment.start_time.desc()).all()
 
         for appt in appointments:
             service = db.session.get(Service, appt.service_id)
@@ -836,7 +836,8 @@ def search_clients_settings():
             func.count(func.distinct(func.date(Appointment.start_time))).label('num_passaggi')
         ).filter(
             Appointment.client_id.in_(client_ids),
-            Appointment.stato == AppointmentStatus.PAGATO
+            Appointment.stato == AppointmentStatus.PAGATO,
+            Appointment.is_cancelled_by_client == False  # <-- AGGIUNGI QUESTO
         ).group_by(Appointment.client_id).all()
         num_passaggi_dict = {r.client_id: r.num_passaggi for r in num_passaggi_query}
 
@@ -845,7 +846,8 @@ def search_clients_settings():
             func.max(Appointment.start_time).label('ultimo_passaggio')
         ).filter(
             Appointment.client_id.in_(client_ids),
-            Appointment.stato == AppointmentStatus.PAGATO
+            Appointment.stato == AppointmentStatus.PAGATO,
+            Appointment.is_cancelled_by_client == False
         ).group_by(Appointment.client_id).all()
         ultimo_passaggio_dict = {r.client_id: r.ultimo_passaggio for r in ultimo_passaggio_query}
 
@@ -893,7 +895,8 @@ def recent_clients():
                 func.count(func.distinct(func.date(Appointment.start_time))).label('num_passaggi')
             ).filter(
                 Appointment.client_id.in_(client_ids),
-                Appointment.stato.in_([AppointmentStatus.PAGATO])
+                Appointment.stato.in_([AppointmentStatus.PAGATO]),
+                Appointment.is_cancelled_by_client == False  # <-- AGGIUNGI QUESTO
             ).group_by(Appointment.client_id).all()
 
             num_passaggi_dict = {row.client_id: row.num_passaggi for row in num_passaggi_query}
@@ -904,7 +907,8 @@ def recent_clients():
                 func.max(Appointment.start_time).label('ultimo_passaggio')
             ).filter(
                 Appointment.client_id.in_(client_ids),
-                Appointment.stato.in_([AppointmentStatus.PAGATO])
+                Appointment.stato.in_([AppointmentStatus.PAGATO]),
+                Appointment.is_cancelled_by_client == False
             ).group_by(Appointment.client_id).all()
 
             ultimo_passaggio_dict = {row.client_id: row.ultimo_passaggio for row in ultimo_passaggio_query}

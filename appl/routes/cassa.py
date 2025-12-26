@@ -31,7 +31,10 @@ def cassa():
     if appointments_json:
         try:
             appointments_ids = json.loads(appointments_json)
-            appointments = Appointment.query.filter(Appointment.id.in_(appointments_ids)).all()
+            appointments = Appointment.query.filter(
+                Appointment.id.in_(appointments_ids),
+                Appointment.is_cancelled_by_client == False
+            ).all()
             for appt in appointments:
                 servizi.append({
                     "id": appt.service.id,
@@ -871,7 +874,8 @@ def api_myspia():
         apps = Appointment.query.filter(
             Appointment.stato == AppointmentStatus.IN_ISTITUTO,
             Appointment.start_time >= day_start,
-            Appointment.start_time <= day_end
+            Appointment.start_time <= day_end,
+            Appointment.is_cancelled_by_client == False
         ).options(selectinload(Appointment.client), selectinload(Appointment.service), selectinload(Appointment.operator)).all()
 
         # Raggruppa per cliente
@@ -994,10 +998,11 @@ def myspia_dettagli():
             return jsonify({"success": False, "error": "Nessun id appuntamento"}), 400
 
         apps = (Appointment.query
-                .filter(Appointment.id.in_(ids))
+                .filter(Appointment.id.in_(ids),
+                        Appointment.is_cancelled_by_client == False)
                 .options(selectinload(Appointment.client),
-                         selectinload(Appointment.service),
-                         selectinload(Appointment.operator))
+                        selectinload(Appointment.service),
+                        selectinload(Appointment.operator))
                 .all())
         if not apps:
             return jsonify({"success": False, "error": "Appuntamenti non trovati"}), 404
