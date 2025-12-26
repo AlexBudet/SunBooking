@@ -327,7 +327,10 @@ def report():
             elif metodo:
                 totale_altro += prezzo
 
-    appuntamenti = Appointment.query.filter(func.date(Appointment.start_time) == oggi).all()
+    appuntamenti = Appointment.query.filter(
+        func.date(Appointment.start_time) == oggi,
+        Appointment.is_cancelled_by_client == False
+    ).all()
     totali = len(appuntamenti)
     completati = len([a for a in appuntamenti if a.stato in (
         AppointmentStatus.IN_ISTITUTO, AppointmentStatus.PAGATO, AppointmentStatus.NON_ARRIVATO
@@ -478,7 +481,8 @@ def report_day():
     ).join(Client, Appointment.client_id == Client.id).join(Service, Appointment.service_id == Service.id).filter(
         Client.cliente_nome.ilike('%dummy%') == False,
         Client.cliente_cognome.ilike('%dummy%') == False,
-        Service.servizio_nome.ilike('%dummy%') == False
+        Service.servizio_nome.ilike('%dummy%') == False,
+        Appointment.is_cancelled_by_client == False
     ).all()
 
     appuntamenti_validi = appuntamenti
@@ -550,7 +554,8 @@ def report_day():
     ).join(Client, Appointment.client_id == Client.id).join(Service, Appointment.service_id == Service.id).filter(
         Client.cliente_nome.ilike('%dummy%') == False,
         Client.cliente_cognome.ilike('%dummy%') == False,
-        Service.servizio_nome.ilike('%dummy%') == False
+        Service.servizio_nome.ilike('%dummy%') == False,
+        Appointment.is_cancelled_by_client == False
     ).all()
 
     clienti_serviti_per_giorno = defaultdict(set)
@@ -625,19 +630,22 @@ def appuntamenti_presi_oggi():
 
     totale = Appointment.query.filter(
         Appointment.created_at >= inizio,
-        Appointment.created_at <= fine
+        Appointment.created_at <= fine,
+        Appointment.is_cancelled_by_client == False
     ).count()
 
     gestionale = Appointment.query.filter(
         Appointment.created_at >= inizio,
         Appointment.created_at <= fine,
-        Appointment.source == AppointmentSource.gestionale
+        Appointment.source == AppointmentSource.gestionale,
+        Appointment.is_cancelled_by_client == False
     ).count()
 
     web = Appointment.query.filter(
         Appointment.created_at >= inizio,
         Appointment.created_at <= fine,
-        Appointment.source == AppointmentSource.web
+        Appointment.source == AppointmentSource.web,
+        Appointment.is_cancelled_by_client == False
     ).count()
 
     return jsonify({
@@ -654,7 +662,8 @@ def incasso_stimato_oggi():
 
     appointments = Appointment.query.filter(
         Appointment.start_time >= inizio,
-        Appointment.start_time <= fine
+        Appointment.start_time <= fine,
+        Appointment.is_cancelled_by_client == False
     ).all()
 
     totale = 0
@@ -698,6 +707,7 @@ def top_clienti_anno():
         )
         .join(subq, Appointment.client_id == subq.c.client_id)
         .filter(func.extract('year', Appointment.start_time) == year)
+        .filter(Appointment.is_cancelled_by_client == False)
         .group_by(Appointment.client_id, subq.c.totale_speso)
         .order_by(subq.c.totale_speso.desc())
         .limit(10)
@@ -726,7 +736,8 @@ def appuntamenti_giorno():
         return jsonify({'error': 'Data non valida'}), 400
     giorno = datetime.strptime(date_str, "%Y-%m-%d").date()
     appuntamenti = Appointment.query.filter(
-        func.date(Appointment.start_time) == giorno
+        func.date(Appointment.start_time) == giorno,
+        Appointment.is_cancelled_by_client == False
     ).all()
     # Restituisci solo gli id dei clienti
     return jsonify([
@@ -762,7 +773,8 @@ def heatmap_appuntamenti():
             Service.servizio_nome.isnot(None),
             func.lower(Client.cliente_nome) != 'dummy',
             func.lower(Client.cliente_cognome) != 'dummy',
-            func.lower(Service.servizio_nome) != 'dummy'
+            func.lower(Service.servizio_nome) != 'dummy',
+            Appointment.is_cancelled_by_client == False
         )
         .group_by(
             func.date(Appointment.start_time),
@@ -833,7 +845,9 @@ def next_appointments():
     now = datetime.now()
     appointments = (
         Appointment.query
-        .filter(Appointment.start_time >= now)
+        .filter(Appointment.start_time >= now,
+                Appointment.is_cancelled_by_client == False
+        )
         .order_by(Appointment.start_time.asc())
         .limit(6)  # Modifica qui il limite se vuoi più/meno appuntamenti
         .all()
@@ -881,7 +895,8 @@ def next_appointments():
 def agenda_data():
     date = request.args.get('date')
     appointments = Appointment.query.filter(
-        db.func.date(Appointment.start_time) == date
+        db.func.date(Appointment.start_time) == date,
+        Appointment.is_cancelled_by_client == False,
     ).order_by(Appointment.start_time).all()
 
     # Filtra in Python i blocchi OFF/dummy
@@ -928,19 +943,22 @@ def appuntamenti_presi_giorno():
     
     # Query per appuntamenti creati in quel giorno specifico
     appuntamenti_totali = Appointment.query.filter(
-        func.date(Appointment.created_at) == giorno
+        func.date(Appointment.created_at) == giorno,
+        Appointment.is_cancelled_by_client == False
     ).count()
     
     # Appuntamenti creati manualmente (source è null o vuoto)
     appuntamenti_gestionale = Appointment.query.filter(
         func.date(Appointment.created_at) == giorno,
-        Appointment.source == AppointmentSource.gestionale
+        Appointment.source == AppointmentSource.gestionale,
+        Appointment.is_cancelled_by_client == False
     ).count()
     
     # Appuntamenti creati via web booking
     appuntamenti_web = Appointment.query.filter(
         func.date(Appointment.created_at) == giorno,
-        Appointment.source == AppointmentSource.web
+        Appointment.source == AppointmentSource.web,
+        Appointment.is_cancelled_by_client == False
     ).count()
     
     return jsonify({
@@ -1410,7 +1428,8 @@ def booking_online_giorno():
     appointments = Appointment.query.filter(
         Appointment.created_at >= inizio,
         Appointment.created_at <= fine,
-        Appointment.source == AppointmentSource.web
+        Appointment.source == AppointmentSource.web,
+        Appointment.is_cancelled_by_client == False
     ).order_by(Appointment.created_at.asc()).all()
     result = []
     for a in appointments:

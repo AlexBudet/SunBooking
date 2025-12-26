@@ -15,7 +15,8 @@ def list_clients():
     for client in clients:
         num_passaggi = Appointment.query.filter(
             Appointment.client_id == client.id,
-            Appointment.stato.in_([0, 1, 2])
+            Appointment.stato.in_([0, 1, 2]),
+            Appointment.is_cancelled_by_client == False
         ).count()
         response.append({
             "id": client.id,
