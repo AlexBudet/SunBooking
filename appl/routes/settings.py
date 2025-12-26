@@ -10,6 +10,7 @@ from flask import Blueprint, render_template, request, jsonify, flash, redirect,
 from flask import current_app as app
 from datetime import datetime, timedelta
 import os, ipaddress, time, requests
+import threading
 from sqlalchemy.sql import func, or_
 from .. import db
 from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente
@@ -1678,10 +1679,9 @@ def _render_operator_msg(tpl: str, target: dict):
 @settings_bp.route('/api/operator_notifications/preview', methods=['GET'], endpoint='preview_operator_notifications')
 def preview_operator_notifications():
     bi = BusinessInfo.query.first()
-    tpl_default = "Ciao {{operatore}}, domani {{data}} il tuo turno: {{ora_inizio}}-{{ora_fine}}."
+    tpl_default = "Ciao {{operatore}}, domani {{data}} il tuo turno: {{ora_inizio}}-{{ora_fine}}. Appuntamenti: {{appuntamenti}}"
     tpl = (getattr(bi, 'operator_whatsapp_message_template', '') or tpl_default)
 
-    # In preview includi anche operatori senza numero
     targets = _build_operator_targets_for_tomorrow(require_phone=False)
 
     full = str(request.args.get('full', '') or '').lower() in ('1', 'true', 'yes', 'on')
@@ -1715,7 +1715,6 @@ def send_operator_notifications():
         if not force:
             return jsonify({"error": "Invio disabilitato"}), 400
 
-    # Verifica orario solo se non forzato
     if not force and bi.operator_whatsapp_notification_time:
         now_hm = datetime.now().strftime('%H:%M')
         cfg_hm = bi.operator_whatsapp_notification_time.strftime('%H:%M')
@@ -1741,7 +1740,7 @@ def send_operator_notifications():
         return jsonify({'error': 'Errore inizializzazione client provider'}), 500
 
     targets = _build_operator_targets_for_tomorrow()
-    tpl = (bi.operator_whatsapp_message_template or "Ciao {{operatore}}, domani {{data}} il tuo turno: {{ora_inizio}}-{{ora_fine}}.")
+    tpl = (bi.operator_whatsapp_message_template or "Ciao {{operatore}}, domani {{data}} il tuo turno: {{ora_inizio}}-{{ora_fine}}. Appuntamenti: {{appuntamenti}}")
     sent = 0
     results = []
 
@@ -1763,10 +1762,20 @@ def send_operator_notifications():
             else:
                 status = getattr(resp, 'status_code', None)
                 ok = (status is not None and 200 <= status < 300)
-            sent += 1 if ok else 0
-            results.append({"operator_id": t["operator_id"], "ok": ok, "response": resp if isinstance(resp, dict) else getattr(resp, 'text', repr(resp))})
+            if ok:
+                sent += 1
+            results.append({
+                "operator_id": t["operator_id"],
+                "ok": ok,
+                "response": resp if isinstance(resp, dict) else getattr(resp, 'text', repr(resp))
+            })
         except Exception as e:
             current_app.logger.exception("[OP WHATSAPP] send exception")
             results.append({"operator_id": t["operator_id"], "ok": False, "error": str(e)})
 
     return jsonify({"sent": sent, "total": len(targets), "results": results})
+
+@settings_bp.route('/api/operator_notifications/trigger', methods=['POST'])
+def operator_notifications_trigger():
+    # No secret required; respects time gating unless body sets {"force": true}
+    return send_operator_notifications()
