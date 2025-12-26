@@ -1513,7 +1513,6 @@ def export_clients():
 def whatsapp_per_operatori():
     business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
     if request.method == 'POST':
-        # ... campi già esistenti ...
         op_enabled = 'operator_whatsapp_notification_enabled' in request.form
         op_time_str = request.form.get('operator_whatsapp_notification_time')
         op_tpl = request.form.get('operator_whatsapp_message_template')
@@ -1526,15 +1525,20 @@ def whatsapp_per_operatori():
             )
             db.session.add(business_info)
 
-        # Persisti toggle/time/template operatori se passati
-        business_info.operator_whatsapp_notification_enabled = bool(op_enabled)
-        if op_time_str:
-            try:
-                business_info.operator_whatsapp_notification_time = datetime.strptime(op_time_str, '%H:%M').time()
-            except Exception:
-                pass
-        if op_tpl is not None:
-            business_info.operator_whatsapp_message_template = op_tpl
+        # Distingui submit form (solo template) da submit JS (enabled/time)
+        if 'operator_whatsapp_message_template' in request.form:
+            # Submit del form: aggiorna solo il template
+            if op_tpl is not None:
+                business_info.operator_whatsapp_message_template = op_tpl
+        else:
+            # Submit JS: aggiorna enabled e time
+            business_info.operator_whatsapp_notification_enabled = bool(op_enabled)
+            if op_time_str:
+                try:
+                    business_info.operator_whatsapp_notification_time = datetime.strptime(op_time_str, '%H:%M').time()
+                except Exception:
+                    pass
+            # Template lasciato invariato
 
         db.session.commit()
         return redirect(url_for('settings.whatsapp'))
@@ -1798,7 +1802,8 @@ def process_operator_tick():
     Logica allineata a booking.process_morning_tick, adattata al contesto single-tenant.
     """
     with _OP_LOCK:
-        bi = BusinessInfo.query.first()
+        bi = BusinessInfo.query.filter_by(is_deleted=False).first()
+        print(f"[DEBUG] bi: {bi}, enabled: {getattr(bi, 'operator_whatsapp_notification_enabled', False) if bi else 'None'}")
         if not bi or not getattr(bi, 'operator_whatsapp_notification_enabled', False):
             _op_dbg("disabilitato o BusinessInfo assente")
             _OP_STATE.update({"date": None, "queue": [], "idx": 0, "last_sent_minute": None})
