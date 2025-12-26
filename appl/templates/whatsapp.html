@@ -144,7 +144,7 @@
     })
     .then(resp => {
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      alert(enabled ? 'Invio automatico attivato' : 'Invio automatico disattivato');
+      // Rimosso alert di successo
     })
     .catch(err => {
       console.error('Errore salvataggio reminder', err);
@@ -154,7 +154,13 @@
   }
 
   // Salva immediatamente toggle e orario
-  cb.addEventListener('change', () => saveReminder(cb.checked));
+  cb.addEventListener('change', () => {
+  if (!confirm('Confermi di voler ' + (cb.checked ? 'attivare' : 'disattivare') + ' l\'invio automatico reminder giornaliero?')) {
+    cb.checked = !cb.checked;
+    return;
+  }
+  saveReminder(cb.checked);
+});
   if (timeInput) timeInput.addEventListener('change', () => saveReminder(cb.checked));
 
   // Intercetta "Salva messaggio automatico" per inviare SOLO il testo
@@ -215,7 +221,7 @@
   </div>
 
 <script>
-  (function() {
+(function() {
     const enabledCb = document.getElementById('operator_whatsapp_notification_enabled');
     const timeInput = document.getElementById('operator_whatsapp_notification_time');
     if (!enabledCb || !timeInput) return;
@@ -240,7 +246,16 @@
       });
     }
 
-    enabledCb.addEventListener('change', () => saveOperatorReminder(enabledCb.checked, timeInput.value));
+    enabledCb.addEventListener('change', () => {
+      console.log('Operator checkbox changed, checked:', enabledCb.checked);
+      if (!confirm('Confermi di voler ' + (enabledCb.checked ? 'attivare' : 'disattivare') + ' l\'invio automatico memo turni agli operatori?')) {
+        console.log('Confirm canceled');
+        enabledCb.checked = !enabledCb.checked;
+        return;
+      }
+      console.log('Confirm accepted, saving...');
+      saveOperatorReminder(enabledCb.checked, timeInput.value);
+    });
     timeInput.addEventListener('change', () => saveOperatorReminder(enabledCb.checked, timeInput.value));
   })();
 </script>

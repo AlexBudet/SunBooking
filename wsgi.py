@@ -236,14 +236,17 @@ def _start_operator_scheduler_once():
         _start_operator_scheduler_once._started = True
 
         def worker():
+            import importlib
+            # importa il modulo una volta e leggi attributi
+            settings_mod = importlib.import_module('appl.routes.settings')
+            process_operator_tick = getattr(settings_mod, 'process_operator_tick')
+
             while True:
                 try:
                     for idx, child in children.items():
                         try:
                             with child.app_context():
-                                # Importa la funzione da settings.py
-                                from appl.routes.settings import process_operator_tick
-                                process_operator_tick()  # Passa app e tenant_id
+                                process_operator_tick()
                         except Exception as e:
                             print(f"[WA-OPERATOR][{idx}] tick error: {repr(e)}")
                 except Exception as e:
