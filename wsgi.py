@@ -244,14 +244,28 @@ def _start_operator_scheduler_once():
             while True:
                 try:
                     for idx, child in children.items():
+                        creds = wbiztool_creds_for(idx)
+                        keys = list(creds.keys())
+                        old = {k: os.environ.get(k) for k in keys}
                         try:
+                            for k, v in creds.items():
+                                if v:
+                                    os.environ[k] = str(v)
+                                else:
+                                    os.environ.pop(k, None)
                             with child.app_context():
                                 process_operator_tick()
                         except Exception as e:
                             print(f"[WA-OPERATOR][{idx}] tick error: {repr(e)}")
+                        finally:
+                            for k, v in old.items():
+                                if v is None:
+                                    os.environ.pop(k, None)
+                                else:
+                                    os.environ[k] = v
                 except Exception as e:
                     print(f"[WA-OPERATOR] loop error: {repr(e)}")
-                time_mod.sleep(60)  # Ogni 60 secondi
+                time_mod.sleep(60)
 
         t = threading.Thread(target=worker, name="wa_operator_scheduler", daemon=True)
         t.start()
