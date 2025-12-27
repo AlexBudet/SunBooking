@@ -1601,6 +1601,11 @@ def _build_operator_targets_for_tomorrow(require_phone: bool = True):
             OperatorShift.shift_date == tomorrow
         ).first()
 
+        if not shift:
+            continue
+
+        # Skip operators with no shift for tomorrow
+
         appts = db.session.query(Appointment).filter(
             Appointment.operator_id == op.id,
             Appointment.is_cancelled_by_client == False,
