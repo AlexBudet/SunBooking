@@ -209,12 +209,12 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
       </div>
       <div class="modal-body">
-        <div class="btn-group mb-2" id="editorToolbar" role="group" aria-label="Editor toolbar">
-          <button type="button" class="btn btn-outline-secondary" onclick="execFormat('bold')"><b>B</b></button>
-          <button type="button" class="btn btn-outline-secondary" onclick="execFormat('italic')"><i>I</i></button>
-          <button type="button" class="btn btn-outline-secondary" onclick="execFormat('underline')"><u>U</u></button>
-          <button type="button" class="btn btn-outline-secondary" onclick="makeLink()">Link</button>
-        </div>
+<div class="btn-group mb-2" id="editorToolbar" role="group" aria-label="Editor toolbar">
+  <button type="button" id="btnBold" class="btn btn-outline-secondary" onclick="toggleFormat('bold')"><b>B</b></button>
+  <button type="button" id="btnItalic" class="btn btn-outline-secondary" onclick="toggleFormat('italic')"><i>I</i></button>
+  <button type="button" id="btnUnderline" class="btn btn-outline-secondary" onclick="toggleFormat('underline')"><u>U</u></button>
+  <button type="button" class="btn btn-outline-secondary" onclick="makeLink()">Link</button>
+</div>
         <div id="serviceInfoEditor"
              contenteditable="true"
              style="min-height: 220px; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fff;">
@@ -330,6 +330,16 @@ document.addEventListener('DOMContentLoaded', function() {
 th {
   position: relative;
 }
+#editorToolbar .btn.active {
+  background-color: #0d6efd;
+  color: #fff;
+  border-color: #0d6efd;
+}
+#editorToolbar .btn.active:hover {
+  background-color: #0b5ed7;
+  color: #fff;
+  border-color: #0b5ed7;
+}
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -434,6 +444,10 @@ function openServiceInfoModal(btn) {
   if (saveBtn) saveBtn.style.display = '';
   if (cancelBtn) cancelBtn.textContent = 'ANNULLA';
 
+  // Inizializza listeners e stato dei bottoni B/I
+  attachEditorToolbarListeners();
+  updateToolbarStates();
+
   const modalEl = document.getElementById('ServiceInfoModal');
   const bsModal = new bootstrap.Modal(modalEl);
   bsModal.show();
@@ -469,6 +483,48 @@ function openServiceInfoModalReadOnly(btn) {
     const url = prompt('Inserisci URL completo (es. https://...)');
     if (url) document.execCommand('createLink', false, url);
   }
+
+  let toolbarListenersAttached = false;
+
+function toggleFormat(cmd) {
+  document.execCommand(cmd, false, null);
+  updateToolbarStates();
+  const editor = document.getElementById('serviceInfoEditor');
+  if (editor) editor.focus();
+}
+
+function updateToolbarStates() {
+  const boldBtn = document.getElementById('btnBold');
+  const italicBtn = document.getElementById('btnItalic');
+  const underlineBtn = document.getElementById('btnUnderline');
+  const boldActive = document.queryCommandState('bold');
+  const italicActive = document.queryCommandState('italic');
+  const underlineActive = document.queryCommandState('underline');
+  if (boldBtn) {
+    boldBtn.classList.toggle('active', !!boldActive);
+    boldBtn.setAttribute('aria-pressed', boldActive ? 'true' : 'false');
+  }
+  if (italicBtn) {
+    italicBtn.classList.toggle('active', !!italicActive);
+    italicBtn.setAttribute('aria-pressed', italicActive ? 'true' : 'false');
+  }
+  if (underlineBtn) {
+    underlineBtn.classList.toggle('active', !!underlineActive);
+    underlineBtn.setAttribute('aria-pressed', underlineActive ? 'true' : 'false');
+  }
+}
+
+function attachEditorToolbarListeners() {
+  if (toolbarListenersAttached) return;
+  const editor = document.getElementById('serviceInfoEditor');
+  if (!editor) return;
+  ['keyup', 'mouseup', 'focus'].forEach(ev => editor.addEventListener(ev, updateToolbarStates));
+  document.addEventListener('selectionchange', function() {
+    const sel = document.getSelection();
+    if (editor && sel && editor.contains(sel.anchorNode)) updateToolbarStates();
+  });
+  toolbarListenersAttached = true;
+}
 
   async function saveServiceInfo() {
     if (!currentServiceId) return;

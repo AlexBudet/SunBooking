@@ -1929,3 +1929,5 @@ def operator_notifications_tick():
 def operator_notifications_trigger():
     # No secret required; respects time gating unless body sets {"force": true}
     return send_operator_notifications()
+
+# ================= MARKETING ====================
