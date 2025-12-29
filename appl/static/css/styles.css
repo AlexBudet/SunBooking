@@ -1777,8 +1777,6 @@ body.offline .btn.pagamento {
   display: none !important;
 }
 
-
-
 /* ===================== TOUCH UI (STILI PER TOUCHSCREEN quando attivati) ===================== */
 body.touch-ui .appointment-block .note-indicator {
   position: absolute !important;
