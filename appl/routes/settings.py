@@ -176,11 +176,6 @@ def set_business_info():
         closing_days = request.form.getlist('closing_days')
         business_info.closing_days_list = closing_days
 
-        business_info.operator_whatsapp_notification_enabled = 'operator_whatsapp_notification_enabled' in request.form
-        operator_time_str = request.form.get('operator_whatsapp_notification_time', '20:00')
-        business_info.operator_whatsapp_notification_time = datetime.strptime(operator_time_str, '%H:%M').time()
-        business_info.operator_whatsapp_message_template = request.form.get('operator_whatsapp_message_template', '')
-
         try:
             db.session.commit()
             flash("Informazioni aziendali aggiornate con successo!", "success")
@@ -376,15 +371,15 @@ def get_subcategories(category):
     """
     Restituisce le sottocategorie associate a una categoria specifica.
     """
-        # Controlla se la categoria è valida
+    # Controlla se la categoria è valida
     valid_categories = ["Solarium", "Estetica"]
     if category not in valid_categories:
             return jsonify({"error": f"Categoria '{category}' non valida"}), 400
 
-        # Recupera le sottocategorie per la categoria specificata
+    # Recupera le sottocategorie per la categoria specificata
     subcategories = Subcategory.query.filter_by(categoria=category, is_deleted=False).all()
 
-        # Restituisce un JSON con le sottocategorie
+    # Restituisce un JSON con le sottocategorie
     return jsonify([{'id': sub.id, 'name': sub.nome} for sub in subcategories])
 
 @settings_bp.route('/settings/services', methods=['POST'])
@@ -1168,7 +1163,7 @@ def whatsapp():
                 active_closing_time=datetime.strptime("20:00", "%H:%M").time(),
                 whatsapp_message=msg,
                 whatsapp_message_auto=msg_auto,
-                whatsapp_message_morning=whatsapp_message_morning
+                whatsapp_message_morning=msg_morning
             )
             db.session.add(business_info)
             flash('Impostazioni iniziali salvate!', 'success')
@@ -1510,4 +1505,9 @@ def export_clients():
         current_app.logger.error(f"Errore in export_clients: {e}")
         return jsonify({"error": "Errore interno del server"}), 500
     
+@settings_bp.route('/settings/whatsapp_per_operatori', methods=['GET', 'POST'])
+def whatsapp_per_operatori():
+    # Funzione rimossa: endpoint lasciato solo per compatibilità del template
+    return jsonify({"error": "Funzione promemoria operatori rimossa"}), 410
+
 # ================= MARKETING ===================

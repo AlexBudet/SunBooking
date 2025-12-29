@@ -117,6 +117,11 @@
         <button type="submit" class="btn btn-success">Salva messaggio automatico</button>
     </form>
 </div>
+
+<br>
+<br>
+<br>
+<br>
 <script>
 (function () {
   const cb = document.getElementById('whatsapp_morning_reminder_enabled');
@@ -144,7 +149,7 @@
     })
     .then(resp => {
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      // Rimosso alert di successo
+      alert(enabled ? 'Invio automatico attivato' : 'Invio automatico disattivato');
     })
     .catch(err => {
       console.error('Errore salvataggio reminder', err);
@@ -154,13 +159,7 @@
   }
 
   // Salva immediatamente toggle e orario
-  cb.addEventListener('change', () => {
-  if (!confirm('Confermi di voler ' + (cb.checked ? 'attivare' : 'disattivare') + ' l\'invio automatico reminder giornaliero?')) {
-    cb.checked = !cb.checked;
-    return;
-  }
-  saveReminder(cb.checked);
-});
+  cb.addEventListener('change', () => saveReminder(cb.checked));
   if (timeInput) timeInput.addEventListener('change', () => saveReminder(cb.checked));
 
   // Intercetta "Salva messaggio automatico" per inviare SOLO il testo
@@ -196,69 +195,4 @@
   }
 })();
 </script>
-<br>
-<hr>
-<div class="container mt-4" style="max-width:600px;">
-  <h3>Memo turni operatori (WhatsApp)</h3>
-
-  <!-- Toggle e orario: salvataggio immediato via JS -->
-  <div class="form-check form-switch mb-3">
-    <input class="form-check-input" type="checkbox" role="switch"
-           id="operator_whatsapp_notification_enabled"
-           {% if business_info and business_info.operator_whatsapp_notification_enabled %}checked{% endif %}>
-    <label class="form-check-label" for="operator_whatsapp_notification_enabled">
-      Attiva invio automatico memo turni agli operatori
-    </label>
-  </div>
-
-  <div class="mb-3">
-    <label for="operator_whatsapp_notification_time" class="form-label">Orario invio (giorno seguente)</label>
-    <input type="time" class="form-control" id="operator_whatsapp_notification_time"
-           value="{{ business_info.operator_whatsapp_notification_time.strftime('%H:%M') if business_info and business_info.operator_whatsapp_notification_time else '20:00' }}">
-    <div class="form-text">
-      All’orario impostato, vengono inviati i memo per i turni del giorno successivo.
-    </div>
-  </div>
-
-<script>
-(function() {
-    const enabledCb = document.getElementById('operator_whatsapp_notification_enabled');
-    const timeInput = document.getElementById('operator_whatsapp_notification_time');
-    if (!enabledCb || !timeInput) return;
-
-    function saveOperatorReminder(enabled, timeHHMM) {
-      const token = document.querySelector('input[name="csrf_token"]')?.value || '';
-      const params = new URLSearchParams();
-      params.set('csrf_token', token);
-      if (enabled) params.set('operator_whatsapp_notification_enabled', 'on');
-      if (timeHHMM) params.set('operator_whatsapp_notification_time', timeHHMM);
-      return fetch("{{ url_for('settings.whatsapp_per_operatori') }}", {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
-      })
-      .then(resp => { if (!resp.ok) throw new Error('HTTP ' + resp.status); })
-      .catch(err => {
-        console.error('Errore salvataggio impostazioni operatori', err);
-        enabledCb.checked = !enabled;
-        alert('Errore durante il salvataggio impostazioni operatori');
-      });
-    }
-
-    enabledCb.addEventListener('change', () => {
-      console.log('Operator checkbox changed, checked:', enabledCb.checked);
-      if (!confirm('Confermi di voler ' + (enabledCb.checked ? 'attivare' : 'disattivare') + ' l\'invio automatico memo turni agli operatori?')) {
-        console.log('Confirm canceled');
-        enabledCb.checked = !enabledCb.checked;
-        return;
-      }
-      console.log('Confirm accepted, saving...');
-      saveOperatorReminder(enabledCb.checked, timeInput.value);
-    });
-    timeInput.addEventListener('change', () => saveOperatorReminder(enabledCb.checked, timeInput.value));
-  })();
-</script>
-<br><br><br><br>
-</div>
 {% endblock %}
