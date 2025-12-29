@@ -1168,7 +1168,7 @@ def whatsapp():
                 active_closing_time=datetime.strptime("20:00", "%H:%M").time(),
                 whatsapp_message=msg,
                 whatsapp_message_auto=msg_auto,
-                whatsapp_message_morning=whatsapp_message_morning
+                whatsapp_message_morning=msg_morning
             )
             db.session.add(business_info)
             flash('Impostazioni iniziali salvate!', 'success')
@@ -1582,7 +1582,7 @@ def _fmt_data_italiana(dt):
     return f"{giorni[dt.weekday()]} {dt.day}"
 
 def _build_operator_targets_for_tomorrow(require_phone: bool = True):
-    tomorrow = (datetime.now().date() + timedelta(days=1))
+    tomorrow = (_now_local().date() + timedelta(days=1))
     ops = db.session.query(Operator).filter(
         Operator.is_deleted == False,
         Operator.is_visible == True,
@@ -1731,14 +1731,16 @@ def send_operator_notifications():
             return jsonify({"error": "Invio disabilitato"}), 400
 
     if not force and bi.operator_whatsapp_notification_time:
-        now_hm = datetime.now().strftime('%H:%M')
+        now_hm = _now_local().strftime('%H:%M')
         cfg_hm = bi.operator_whatsapp_notification_time.strftime('%H:%M')
         if now_hm < cfg_hm:
             return jsonify({"error": f"Non ancora orario (configurato {cfg_hm})"}), 400
 
+    # Credenziali WBIZ - LETTURA ESCLUSIVA DA CONFIG
     api_key = current_app.config.get("WBIZTOOL_API_KEY")
     client_id_str = current_app.config.get("WBIZTOOL_CLIENT_ID")
     whatsapp_client_id = current_app.config.get("WBIZTOOL_WHATSAPP_CLIENT_ID")
+
     if not api_key or not client_id_str or not whatsapp_client_id:
         current_app.logger.error("[OP WHATSAPP] Config WBIZ mancante")
         return jsonify({'error': 'Configurazione WhatsApp mancante'}), 500
@@ -1754,41 +1756,9 @@ def send_operator_notifications():
     except Exception:
         return jsonify({'error': 'Errore inizializzazione client provider'}), 500
 
-    targets = _build_operator_targets_for_tomorrow()
-    tpl = (bi.operator_whatsapp_message_template or "Ciao {{operatore}}, domani {{data}} il tuo turno: {{ora_inizio}}-{{ora_fine}}. Appuntamenti: {{appuntamenti}}")
-    sent = 0
-    results = []
-
-    for t in targets:
-        msg = _render_operator_msg(tpl, t)
-        phone = t["phone"]
-        country = t["country_code"]
-        try:
-            resp = client.send_message(
-                phone=phone,
-                msg=msg,
-                msg_type=0,
-                whatsapp_client=whatsapp_client_int,
-                country_code=country
-            )
-            ok = False
-            if isinstance(resp, dict):
-                ok = resp.get("status") == 1
-            else:
-                status = getattr(resp, 'status_code', None)
-                ok = (status is not None and 200 <= status < 300)
-            if ok:
-                sent += 1
-            results.append({
-                "operator_id": t["operator_id"],
-                "ok": ok,
-                "response": resp if isinstance(resp, dict) else getattr(resp, 'text', repr(resp))
-            })
-        except Exception as e:
-            current_app.logger.exception("[OP WHATSAPP] send exception")
-            results.append({"operator_id": t["operator_id"], "ok": False, "error": str(e)})
-
-    return jsonify({"sent": sent, "total": len(targets), "results": results})
+    # Invoca la logica condivisa: costruisce la coda se necessario e invia SOLO 1/minuto
+    out = process_operator_tick(force=force)
+    return jsonify(out), 200
 
 WA_OPERATOR_DEBUG = True
 _OP_STATE = defaultdict(lambda: {"date": None, "queue": [], "idx": 0, "last_sent_minute": None})
@@ -1802,7 +1772,7 @@ def _now_local():
     tz = timezone('Europe/Rome')
     return datetime.now(tz)
 
-def process_operator_tick():
+def process_operator_tick(force: bool = False):
     """
     Ogni minuto: al minuto configurato costruisce la coda 'domani' per gli operatori,
     poi invia 1 messaggio/minuto finché la coda non è vuota.
@@ -1837,7 +1807,7 @@ def process_operator_tick():
         is_in_window = 0 <= delta_seconds < 1800 
 
         # Costruisci coda se siamo nella finestra oraria e non l'abbiamo ancora fatto oggi
-        if is_in_window and st["date"] != now.date():
+        if (is_in_window or force) and st["date"] != now.date():
             queue = _build_operator_targets_for_tomorrow(require_phone=True)
             if not queue:
                 _op_dbg(f"coda vuota per domani (Business: {bi.business_name})")
@@ -1871,14 +1841,25 @@ def process_operator_tick():
         api_key = current_app.config.get("WBIZTOOL_API_KEY")
         client_id_str = current_app.config.get("WBIZTOOL_CLIENT_ID")
         whatsapp_client_id = current_app.config.get("WBIZTOOL_WHATSAPP_CLIENT_ID")
-        
-        ok = False
-        error_msg = None
-        
+
+        if not api_key or not client_id_str or not whatsapp_client_id:
+            current_app.logger.error("[OP WHATSAPP] Config WBIZ mancante")
+            return
+
         try:
             client_id_int = int(client_id_str)
             whatsapp_client_int = int(whatsapp_client_id)
+        except Exception:
+            return
+
+        try:
             client = WbizToolClient(api_key=api_key, client_id=client_id_int)
+        except Exception:
+            return
+
+        # Invoca la logica condivisa: costruisce la coda se necessario e invia SOLO 1/minuto
+        out = process_operator_tick(force=force)
+        return jsonify(out), 200
             
             # Render testo operatore
             try:
