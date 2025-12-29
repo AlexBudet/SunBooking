@@ -1844,76 +1844,75 @@ def process_operator_tick():
             _op_dbg("skip: no reminder minute and no active queue")
             return {"enabled": True, "status": "idle"}
 
-        # Coda terminata
         if st["idx"] >= len(st["queue"]):
             _op_dbg("nessun messaggio da inviare")
             _OP_STATE.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
             return {"enabled": True, "status": "done"}
 
-        # 1 invio per minuto (ancorato al minuto intero)
-        current_slot = now.replace(second=0, microsecond=0)
-        last_slot = st["last_sent_minute"]
-        can_send = (last_slot is None) or (current_slot > last_slot)
+        # Rate limiting: 1 messaggio al minuto
+        current_slot = f"{now.hour}:{now.minute}"
+        if st["last_sent_minute"] == current_slot:
+             _op_dbg("skip: già inviato in questo minuto")
+             return {"enabled": True, "status": "rate_limited"}
 
-        _op_dbg(f"tick: idx={st['idx']}/{len(st['queue'])}, last_slot={last_slot}, current_slot={current_slot}, can_send={can_send}")
-
-        result = None
-        sent_flag = False
-        if can_send:
-            item = st["queue"][st["idx"]]
-            st["idx"] += 1  # avanza sempre, anche su errore
-
+        # Prendi il prossimo target
+        item = st["queue"][st["idx"]]
+        
+        # Credenziali WBIZ
+        api_key = os.getenv("WBIZTOOL_API_KEY")
+        client_id_str = os.getenv("WBIZTOOL_CLIENT_ID")
+        whatsapp_client_id = os.getenv("WBIZTOOL_WHATSAPP_CLIENT_ID")
+        
+        ok = False
+        error_msg = None
+        
+        try:
+            client_id_int = int(client_id_str)
+            whatsapp_client_int = int(whatsapp_client_id)
+            client = WbizToolClient(api_key=api_key, client_id=client_id_int)
+            
             # Render testo operatore
             try:
                 msg_text = _render_operator_msg(tpl, item)
             except Exception as e:
                 _op_dbg(f"render error operator_id={item.get('operator_id')}: {repr(e)}")
                 msg_text = tpl or ""
+            
+            resp = client.send_message(
+                phone=item.get("phone"),
+                msg=msg_text or "",
+                msg_type=0,
+                whatsapp_client=whatsapp_client_int,
+                country_code=item.get("country_code")
+            )
+            if isinstance(resp, dict):
+                ok = resp.get("status") == 1
+            else:
+                status = getattr(resp, 'status_code', None)
+                ok = bool(status and 200 <= status < 300)
+            
+            _op_dbg(f"inviato={ok} operator_id={item.get('operator_id')} -> {item.get('phone')}")
 
-            # Credenziali WBIZ (non multi-tenant, variabili base)
-            api_key = os.getenv("WBIZTOOL_API_KEY")
-            client_id_str = os.getenv("WBIZTOOL_CLIENT_ID")
-            whatsapp_client_id = os.getenv("WBIZTOOL_WHATSAPP_CLIENT_ID")
+        except Exception as e:
+            error_msg = str(e)
+            _op_dbg(f"send error: {repr(e)}")
 
-            ok = False
-            try:
-                client_id_int = int(client_id_str)
-                whatsapp_client_int = int(whatsapp_client_id)
-                client = WbizToolClient(api_key=api_key, client_id=client_id_int)
-                resp = client.send_message(
-                    phone=item.get("phone"),
-                    msg=msg_text or "",
-                    msg_type=0,
-                    whatsapp_client=whatsapp_client_int,
-                    country_code=item.get("country_code")
-                )
-                if isinstance(resp, dict):
-                    ok = resp.get("status") == 1
-                else:
-                    status = getattr(resp, 'status_code', None)
-                    ok = bool(status and 200 <= status < 300)
-                result = {"operator_id": item.get("operator_id"), "ok": ok}
-                _op_dbg(f"inviato={ok} operator_id={item.get('operator_id')} -> {item.get('phone')}")
-            except Exception as e:
-                result = {"operator_id": item.get("operator_id"), "ok": False, "error": str(e)}
-                _op_dbg(f"send error: {repr(e)}")
-
-            st["last_sent_minute"] = current_slot
-            sent_flag = True
-
-        # Fine coda -> reset o persist
+        # Avanza indice e aggiorna timestamp
+        st["idx"] += 1
+        st["last_sent_minute"] = current_slot
+        
+        # Se abbiamo finito la coda, possiamo pulire
         if st["idx"] >= len(st["queue"]):
-            _op_dbg("tutti i messaggi inviati: reset")
-            _OP_STATE.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
-        else:
-            _OP_STATE.update(st)
+             _op_dbg("coda completata")
+             _OP_STATE.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
 
         return {
             "enabled": True,
-            "status": "sent" if sent_flag else "waiting",
-            "queue_len": len(st.get("queue", [])),
-            "idx": st.get("idx", 0),
-            "result": result
+            "status": "sent_one",
+            "operator_id": item.get("operator_id"),
+            "ok": ok,
+            "error": error_msg,
+            "remaining": len(st["queue"]) - st["idx"]
         }
 
 @settings_bp.route('/api/operator_notifications/tick', methods=['POST'])

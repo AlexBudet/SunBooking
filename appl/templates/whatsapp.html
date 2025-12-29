@@ -280,17 +280,17 @@
     <button type="button" class="btn btn-outline-primary" id="previewOpsBtn">Preview (domani)</button>
   </div>
 
-  <!-- Modal preview -->
+<!-- Modal preview -->
   <div class="modal fade" id="opsPreviewModal" tabindex="-1" aria-labelledby="opsPreviewModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg" style="max-width: 80vw; height: 90vh;">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="opsPreviewModalLabel">Anteprima messaggi operatori (domani)</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body p-0" style="overflow: hidden;">
           <!-- Contenuto caricato via JS -->
-          <div class="text-muted">Caricamento…</div>
+          <div class="text-muted p-3">Caricamento…</div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
@@ -298,17 +298,29 @@
       </div>
     </div>
   </div>
+
 <br><br><br><br>
   <script>
   (function(){
     const previewBtn = document.getElementById('previewOpsBtn');
     const modalEl = document.getElementById('opsPreviewModal');
-    const modalBody = modalEl ? modalEl.querySelector('.modal-body') : null;
+    
+    if (previewBtn && modalEl) {
+      const modalBody = modalEl.querySelector('.modal-body');
 
-    if (previewBtn && modalEl && modalBody) {
       previewBtn.addEventListener('click', () => {
-        // Stato iniziale
+        // Recupera bootstrap dall'oggetto window o globale
+        const bs = window.bootstrap || bootstrap;
+        if (!bs) {
+            console.error('Bootstrap non trovato!');
+            return;
+        }
+        
+        const modalInstance = bs.Modal.getOrCreateInstance(modalEl);
+        
+        // Mostra subito il modal con loader
         modalBody.innerHTML = '<div class="text-muted">Caricamento…</div>';
+        modalInstance.show();
 
         // Chiede anteprima completa al backend
         const url = "{{ url_for('settings.preview_operator_notifications') }}?full=1";
@@ -319,30 +331,55 @@
             if (!items.length) {
               modalBody.textContent = 'Nessun operatore da notificare per domani.';
             } else {
-              // Costruisci blocchi messaggio uno dopo l’altro
-              const html = items.map(it => {
-                const op = (it.operatore || '').trim();
-                const phone = (it.phone || '').trim();
-                const msg = (it.msg_full || it.msg || it.msg_preview || '').trim();
-                const msgHtml = msg.replace(/\n/g, '<br>');
-                return `
-                  <div class="mb-4">
-                    <div class="fw-bold">${op}</div>
-                    <div class="text-muted small">${phone}</div>
-                    <div class="mt-2">${msgHtml}</div>
-                  </div>
-                `;
-              }).join('<hr>');
-              modalBody.innerHTML = html;
+              // 1. Pulisce tutto il contenuto precedente
+              while (modalBody.firstChild) {
+                modalBody.removeChild(modalBody.firstChild);
+              }
+              
+              // 2. Crea UNICO contenitore per la lista che gestisce lo scroll internamente
+              const listContainer = document.createElement('div');
+              listContainer.className = 'd-flex flex-column gap-3';
+              // FORZA lo scroll su questo contenitore
+              listContainer.style.maxHeight = '67vh'; // Altezza massima esplicita
+              listContainer.style.overflowY = 'auto'; // Scroll verticale
+              listContainer.style.padding = '30px';   // Padding interno
+              
+              // 3. Popola il contenitore
+              items.forEach((it, index) => {
+                // Singolo blocco operatore
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'operator-item p-2 border rounded bg-light'; // Stile visivo per separare i blocchi
+                
+                // Nome
+                const nameEl = document.createElement('div');
+                nameEl.className = 'fw-bold text-primary';
+                nameEl.textContent = (it.operatore || 'Operatore').trim();
+                itemDiv.appendChild(nameEl);
+                
+                // Telefono
+                const phoneEl = document.createElement('div');
+                phoneEl.className = 'small text-muted mb-2';
+                phoneEl.textContent = (it.phone || '').trim();
+                itemDiv.appendChild(phoneEl);
+                
+                // Messaggio
+                const msgEl = document.createElement('div');
+                msgEl.className = 'text-break'; // Bootstrap class per spezzare parole lunghe
+                msgEl.style.whiteSpace = 'pre-wrap'; // Mantiene a capo
+                msgEl.textContent = (it.msg_full || it.msg || it.msg_preview || '').trim();
+                itemDiv.appendChild(msgEl);
+
+                // Aggiungi al contenitore principale
+                listContainer.appendChild(itemDiv);
+              });
+              
+              // 4. Inserisce il contenitore nel body
+              modalBody.appendChild(listContainer);
             }
-            // Apri modal
-            const m = bootstrap.Modal.getOrCreateInstance(modalEl);
-            m.show();
           })
           .catch(e => {
+            console.error(e);
             modalBody.textContent = 'Errore durante la costruzione della preview.';
-            const m = bootstrap.Modal.getOrCreateInstance(modalEl);
-            m.show();
           });
       });
     }
