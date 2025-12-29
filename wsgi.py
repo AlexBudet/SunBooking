@@ -222,7 +222,7 @@ for idx, uri in pool.items():
             return app(environ, sr)
         return _wrap
 
-    wrapped = with_request_env(child, creds)
+    wrapped = child  # usa la config del child (creds già in child.config), non toccare os.environ
     wrapped = with_db_cookie(wrapped, idx, secure=use_https)
     wrapped = block_paths(wrapped, ("/cassa", "/cassa.html"))
     wrapped = fix_delete_method_middleware(wrapped)
@@ -248,7 +248,8 @@ def _start_operator_scheduler_once():
             while True:
                 try:
                     for idx, child in children.items():
-                        # No need to hack os.environ anymore, as child.config has the creds
+                        # NON MODIFICARE PIÙ os.environ QUI
+                        # Le credenziali sono già in child.config grazie all'iniezione sopra
                         try:
                             with child.app_context():
                                 process_operator_tick()
