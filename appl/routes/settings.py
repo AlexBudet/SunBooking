@@ -1168,7 +1168,7 @@ def whatsapp():
                 active_closing_time=datetime.strptime("20:00", "%H:%M").time(),
                 whatsapp_message=msg,
                 whatsapp_message_auto=msg_auto,
-                whatsapp_message_morning=msg_morning
+                whatsapp_message_morning=whatsapp_message_morning
             )
             db.session.add(business_info)
             flash('Impostazioni iniziali salvate!', 'success')
@@ -1582,7 +1582,7 @@ def _fmt_data_italiana(dt):
     return f"{giorni[dt.weekday()]} {dt.day}"
 
 def _build_operator_targets_for_tomorrow(require_phone: bool = True):
-    tomorrow = (_now_local().date() + timedelta(days=1))
+    tomorrow = (datetime.now().date() + timedelta(days=1))
     ops = db.session.query(Operator).filter(
         Operator.is_deleted == False,
         Operator.is_visible == True,
@@ -1731,16 +1731,14 @@ def send_operator_notifications():
             return jsonify({"error": "Invio disabilitato"}), 400
 
     if not force and bi.operator_whatsapp_notification_time:
-        now_hm = _now_local().strftime('%H:%M')
+        now_hm = datetime.now().strftime('%H:%M')
         cfg_hm = bi.operator_whatsapp_notification_time.strftime('%H:%M')
         if now_hm < cfg_hm:
             return jsonify({"error": f"Non ancora orario (configurato {cfg_hm})"}), 400
 
-    # Credenziali WBIZ - LETTURA ESCLUSIVA DA CONFIG
-    api_key = current_app.config.get("WBIZTOOL_API_KEY")
-    client_id_str = current_app.config.get("WBIZTOOL_CLIENT_ID")
-    whatsapp_client_id = current_app.config.get("WBIZTOOL_WHATSAPP_CLIENT_ID")
-
+    api_key = os.getenv("WBIZTOOL_API_KEY")
+    client_id_str = os.getenv("WBIZTOOL_CLIENT_ID")
+    whatsapp_client_id = os.getenv("WBIZTOOL_WHATSAPP_CLIENT_ID")
     if not api_key or not client_id_str or not whatsapp_client_id:
         current_app.logger.error("[OP WHATSAPP] Config WBIZ mancante")
         return jsonify({'error': 'Configurazione WhatsApp mancante'}), 500
@@ -1756,12 +1754,44 @@ def send_operator_notifications():
     except Exception:
         return jsonify({'error': 'Errore inizializzazione client provider'}), 500
 
-    # Invoca la logica condivisa: costruisce la coda se necessario e invia SOLO 1/minuto
-    out = process_operator_tick(force=force)
-    return jsonify(out), 200
+    targets = _build_operator_targets_for_tomorrow()
+    tpl = (bi.operator_whatsapp_message_template or "Ciao {{operatore}}, domani {{data}} il tuo turno: {{ora_inizio}}-{{ora_fine}}. Appuntamenti: {{appuntamenti}}")
+    sent = 0
+    results = []
+
+    for t in targets:
+        msg = _render_operator_msg(tpl, t)
+        phone = t["phone"]
+        country = t["country_code"]
+        try:
+            resp = client.send_message(
+                phone=phone,
+                msg=msg,
+                msg_type=0,
+                whatsapp_client=whatsapp_client_int,
+                country_code=country
+            )
+            ok = False
+            if isinstance(resp, dict):
+                ok = resp.get("status") == 1
+            else:
+                status = getattr(resp, 'status_code', None)
+                ok = (status is not None and 200 <= status < 300)
+            if ok:
+                sent += 1
+            results.append({
+                "operator_id": t["operator_id"],
+                "ok": ok,
+                "response": resp if isinstance(resp, dict) else getattr(resp, 'text', repr(resp))
+            })
+        except Exception as e:
+            current_app.logger.exception("[OP WHATSAPP] send exception")
+            results.append({"operator_id": t["operator_id"], "ok": False, "error": str(e)})
+
+    return jsonify({"sent": sent, "total": len(targets), "results": results})
 
 WA_OPERATOR_DEBUG = True
-_OP_STATE = defaultdict(lambda: {"date": None, "queue": [], "idx": 0, "last_sent_minute": None})
+_OP_STATE = {"date": None, "queue": [], "idx": 0, "last_sent_minute": None}
 _OP_LOCK = threading.Lock()
 
 def _op_dbg(msg: str):
@@ -1772,7 +1802,7 @@ def _now_local():
     tz = timezone('Europe/Rome')
     return datetime.now(tz)
 
-def process_operator_tick(force: bool = False):
+def process_operator_tick():
     """
     Ogni minuto: al minuto configurato costruisce la coda 'domani' per gli operatori,
     poi invia 1 messaggio/minuto finché la coda non è vuota.
@@ -1780,11 +1810,10 @@ def process_operator_tick(force: bool = False):
     """
     with _OP_LOCK:
         bi = BusinessInfo.query.filter_by(is_deleted=False).first()
-        
+        print(f"[DEBUG] bi: {bi}, enabled: {getattr(bi, 'operator_whatsapp_notification_enabled', False) if bi else 'None'}")
         if not bi or not getattr(bi, 'operator_whatsapp_notification_enabled', False):
-            # Reset stato per questo tenant se disabilitato
-            if bi:
-                _OP_STATE[bi.id] = {"date": None, "queue": [], "idx": 0, "last_sent_minute": None}
+            _op_dbg("disabilitato o BusinessInfo assente")
+            _OP_STATE.update({"date": None, "queue": [], "idx": 0, "last_sent_minute": None})
             return {"enabled": False, "status": "disabled"}
 
         reminder_time = getattr(bi, 'operator_whatsapp_notification_time', None)
@@ -1795,37 +1824,29 @@ def process_operator_tick(force: bool = False):
 
         now = _now_local()
         
-        # Recupera stato specifico per questo tenant
-        st = _OP_STATE[bi.id]
-        
+        st = _OP_STATE
         has_active_queue = bool(st["date"] == now.date() and st["idx"] < len(st["queue"]))
-        
-        # Calcola finestra di avvio (es. 30 minuti di tolleranza)
-        reminder_dt = now.replace(hour=reminder_time.hour, minute=reminder_time.minute, second=0, microsecond=0)
-        delta_seconds = (now - reminder_dt).total_seconds()
-        # Accetta se siamo nell'orario esatto o entro 30 minuti dopo (per catch-up)
-        is_in_window = 0 <= delta_seconds < 1800 
+        is_reminder_minute = (now.hour == reminder_time.hour and now.minute == reminder_time.minute)
 
-        # Costruisci coda se siamo nella finestra oraria e non l'abbiamo ancora fatto oggi
-        if (is_in_window or force) and st["date"] != now.date():
+        # Costruisci coda solo al minuto del reminder e una volta al giorno
+        if is_reminder_minute and st["date"] != now.date():
             queue = _build_operator_targets_for_tomorrow(require_phone=True)
             if not queue:
-                _op_dbg(f"coda vuota per domani (Business: {bi.business_name})")
-                st.update({"date": now.date(), "queue": [], "idx": 0, "last_sent_minute": None})
+                _op_dbg("coda vuota per domani")
+                _OP_STATE.update({"date": now.date(), "queue": [], "idx": 0, "last_sent_minute": None})
                 return {"enabled": True, "status": "empty_queue"}
-            
-            st.update({"date": now.date(), "queue": queue, "idx": 0, "last_sent_minute": None})
-            _op_dbg(f"coda costruita: {len(queue)} target (Business: {bi.business_name})")
-            has_active_queue = True
+            _OP_STATE.update({"date": now.date(), "queue": queue, "idx": 0, "last_sent_minute": None})
+            st = _OP_STATE
+            _op_dbg(f"coda costruita: {len(queue)} target")
 
-        # Se non c'è coda attiva, esci
-        if not has_active_queue:
+        # Se non è minuto reminder e non c'è coda, esci
+        if not (is_reminder_minute or has_active_queue):
+            _op_dbg("skip: no reminder minute and no active queue")
             return {"enabled": True, "status": "idle"}
 
-        # Coda terminata
         if st["idx"] >= len(st["queue"]):
             _op_dbg("nessun messaggio da inviare")
-            st.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
+            _OP_STATE.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
             return {"enabled": True, "status": "done"}
 
         # Rate limiting: 1 messaggio al minuto
@@ -1836,40 +1857,27 @@ def process_operator_tick(force: bool = False):
 
         # Prendi il prossimo target
         item = st["queue"][st["idx"]]
-
+        
         # Credenziali WBIZ
-        api_key = current_app.config.get("WBIZTOOL_API_KEY")
-        client_id_str = current_app.config.get("WBIZTOOL_CLIENT_ID")
-        whatsapp_client_id = current_app.config.get("WBIZTOOL_WHATSAPP_CLIENT_ID")
-
-        if not api_key or not client_id_str or not whatsapp_client_id:
-            _op_dbg("missing wbiz config")
-            return {"enabled": True, "status": "missing_wbiz_config"}
-
+        api_key = os.getenv("WBIZTOOL_API_KEY")
+        client_id_str = os.getenv("WBIZTOOL_CLIENT_ID")
+        whatsapp_client_id = os.getenv("WBIZTOOL_WHATSAPP_CLIENT_ID")
+        
         ok = False
         error_msg = None
-
+        
         try:
             client_id_int = int(client_id_str)
             whatsapp_client_int = int(whatsapp_client_id)
-        except Exception:
-            _op_dbg("invalid wbiz config")
-            return {"enabled": True, "status": "invalid_wbiz_config"}
-
-        try:
             client = WbizToolClient(api_key=api_key, client_id=client_id_int)
-
+            
             # Render testo operatore
             try:
                 msg_text = _render_operator_msg(tpl, item)
             except Exception as e:
                 _op_dbg(f"render error operator_id={item.get('operator_id')}: {repr(e)}")
                 msg_text = tpl or ""
-
-            # Tronca messaggio a 4096 caratteri
-            if msg_text and len(msg_text) > 4096:
-                msg_text = msg_text[:4096]
-
+            
             resp = client.send_message(
                 phone=item.get("phone"),
                 msg=msg_text or "",
@@ -1882,7 +1890,7 @@ def process_operator_tick(force: bool = False):
             else:
                 status = getattr(resp, 'status_code', None)
                 ok = bool(status and 200 <= status < 300)
-
+            
             _op_dbg(f"inviato={ok} operator_id={item.get('operator_id')} -> {item.get('phone')}")
 
         except Exception as e:
@@ -1892,11 +1900,11 @@ def process_operator_tick(force: bool = False):
         # Avanza indice e aggiorna timestamp
         st["idx"] += 1
         st["last_sent_minute"] = current_slot
-
+        
         # Se abbiamo finito la coda, possiamo pulire
         if st["idx"] >= len(st["queue"]):
-            _op_dbg("coda completata")
-            st.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
+             _op_dbg("coda completata")
+             _OP_STATE.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
 
         return {
             "enabled": True,
