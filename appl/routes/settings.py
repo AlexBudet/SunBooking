@@ -1791,7 +1791,7 @@ def send_operator_notifications():
     return jsonify({"sent": sent, "total": len(targets), "results": results})
 
 WA_OPERATOR_DEBUG = True
-_OP_STATE = {"date": None, "queue": [], "idx": 0, "last_sent_minute": None}
+_OP_STATE = defaultdict(lambda: {"date": None, "queue": [], "idx": 0, "last_sent_minute": None})
 _OP_LOCK = threading.Lock()
 
 def _op_dbg(msg: str):
@@ -1810,10 +1810,11 @@ def process_operator_tick():
     """
     with _OP_LOCK:
         bi = BusinessInfo.query.filter_by(is_deleted=False).first()
-        print(f"[DEBUG] bi: {bi}, enabled: {getattr(bi, 'operator_whatsapp_notification_enabled', False) if bi else 'None'}")
+        
         if not bi or not getattr(bi, 'operator_whatsapp_notification_enabled', False):
-            _op_dbg("disabilitato o BusinessInfo assente")
-            _OP_STATE.update({"date": None, "queue": [], "idx": 0, "last_sent_minute": None})
+            # Reset stato per questo tenant se disabilitato
+            if bi:
+                _OP_STATE[bi.id] = {"date": None, "queue": [], "idx": 0, "last_sent_minute": None}
             return {"enabled": False, "status": "disabled"}
 
         reminder_time = getattr(bi, 'operator_whatsapp_notification_time', None)
@@ -1824,29 +1825,37 @@ def process_operator_tick():
 
         now = _now_local()
         
-        st = _OP_STATE
+        # Recupera stato specifico per questo tenant
+        st = _OP_STATE[bi.id]
+        
         has_active_queue = bool(st["date"] == now.date() and st["idx"] < len(st["queue"]))
-        is_reminder_minute = (now.hour == reminder_time.hour and now.minute == reminder_time.minute)
+        
+        # Calcola finestra di avvio (es. 30 minuti di tolleranza)
+        reminder_dt = now.replace(hour=reminder_time.hour, minute=reminder_time.minute, second=0, microsecond=0)
+        delta_seconds = (now - reminder_dt).total_seconds()
+        # Accetta se siamo nell'orario esatto o entro 30 minuti dopo (per catch-up)
+        is_in_window = 0 <= delta_seconds < 1800 
 
-        # Costruisci coda solo al minuto del reminder e una volta al giorno
-        if is_reminder_minute and st["date"] != now.date():
+        # Costruisci coda se siamo nella finestra oraria e non l'abbiamo ancora fatto oggi
+        if is_in_window and st["date"] != now.date():
             queue = _build_operator_targets_for_tomorrow(require_phone=True)
             if not queue:
-                _op_dbg("coda vuota per domani")
-                _OP_STATE.update({"date": now.date(), "queue": [], "idx": 0, "last_sent_minute": None})
+                _op_dbg(f"coda vuota per domani (Business: {bi.business_name})")
+                st.update({"date": now.date(), "queue": [], "idx": 0, "last_sent_minute": None})
                 return {"enabled": True, "status": "empty_queue"}
-            _OP_STATE.update({"date": now.date(), "queue": queue, "idx": 0, "last_sent_minute": None})
-            st = _OP_STATE
-            _op_dbg(f"coda costruita: {len(queue)} target")
+            
+            st.update({"date": now.date(), "queue": queue, "idx": 0, "last_sent_minute": None})
+            _op_dbg(f"coda costruita: {len(queue)} target (Business: {bi.business_name})")
+            has_active_queue = True
 
-        # Se non è minuto reminder e non c'è coda, esci
-        if not (is_reminder_minute or has_active_queue):
-            _op_dbg("skip: no reminder minute and no active queue")
+        # Se non c'è coda attiva, esci
+        if not has_active_queue:
             return {"enabled": True, "status": "idle"}
 
+        # Coda terminata
         if st["idx"] >= len(st["queue"]):
             _op_dbg("nessun messaggio da inviare")
-            _OP_STATE.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
+            st.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
             return {"enabled": True, "status": "done"}
 
         # Rate limiting: 1 messaggio al minuto
@@ -1878,6 +1887,10 @@ def process_operator_tick():
                 _op_dbg(f"render error operator_id={item.get('operator_id')}: {repr(e)}")
                 msg_text = tpl or ""
             
+            # PATCH: Tronca messaggio a 4096 caratteri
+            if msg_text and len(msg_text) > 4096:
+                msg_text = msg_text[:4096]
+
             resp = client.send_message(
                 phone=item.get("phone"),
                 msg=msg_text or "",
@@ -1904,7 +1917,7 @@ def process_operator_tick():
         # Se abbiamo finito la coda, possiamo pulire
         if st["idx"] >= len(st["queue"]):
              _op_dbg("coda completata")
-             _OP_STATE.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
+             st.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
 
         return {
             "enabled": True,
