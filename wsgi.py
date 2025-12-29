@@ -131,10 +131,6 @@ for idx, uri in pool.items():
     creds = wbiztool_creds_for(idx)
     creds["HIDE_CASSA"] = "1"
 
-    # Inject WBIZ creds into app config to avoid os.environ race conditions
-    for k, v in creds.items():
-        child.config[k] = v
-
     # Aggiungi la route mancante per client_info ai child
     @child.route('/settings/api/client_info/<int:client_id>')
     def client_info_wsgi(client_id):
@@ -222,7 +218,7 @@ for idx, uri in pool.items():
             return app(environ, sr)
         return _wrap
 
-    wrapped = child  # usa la config del child (creds già in child.config), non toccare os.environ
+    wrapped = with_request_env(child, creds)
     wrapped = with_db_cookie(wrapped, idx, secure=use_https)
     wrapped = block_paths(wrapped, ("/cassa", "/cassa.html"))
     wrapped = fix_delete_method_middleware(wrapped)
@@ -248,13 +244,25 @@ def _start_operator_scheduler_once():
             while True:
                 try:
                     for idx, child in children.items():
-                        # NON MODIFICARE PIÙ os.environ QUI
-                        # Le credenziali sono già in child.config grazie all'iniezione sopra
+                        creds = wbiztool_creds_for(idx)
+                        keys = list(creds.keys())
+                        old = {k: os.environ.get(k) for k in keys}
                         try:
+                            for k, v in creds.items():
+                                if v:
+                                    os.environ[k] = str(v)
+                                else:
+                                    os.environ.pop(k, None)
                             with child.app_context():
                                 process_operator_tick()
                         except Exception as e:
                             print(f"[WA-OPERATOR][{idx}] tick error: {repr(e)}")
+                        finally:
+                            for k, v in old.items():
+                                if v is None:
+                                    os.environ.pop(k, None)
+                                else:
+                                    os.environ[k] = v
                 except Exception as e:
                     print(f"[WA-OPERATOR] loop error: {repr(e)}")
                 time_mod.sleep(60)

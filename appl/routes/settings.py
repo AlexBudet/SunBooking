@@ -1836,39 +1836,37 @@ def process_operator_tick(force: bool = False):
 
         # Prendi il prossimo target
         item = st["queue"][st["idx"]]
-        
+
         # Credenziali WBIZ
         api_key = current_app.config.get("WBIZTOOL_API_KEY")
         client_id_str = current_app.config.get("WBIZTOOL_CLIENT_ID")
         whatsapp_client_id = current_app.config.get("WBIZTOOL_WHATSAPP_CLIENT_ID")
 
         if not api_key or not client_id_str or not whatsapp_client_id:
-            current_app.logger.error("[OP WHATSAPP] Config WBIZ mancante")
-            return
+            _op_dbg("missing wbiz config")
+            return {"enabled": True, "status": "missing_wbiz_config"}
+
+        ok = False
+        error_msg = None
 
         try:
             client_id_int = int(client_id_str)
             whatsapp_client_int = int(whatsapp_client_id)
         except Exception:
-            return
+            _op_dbg("invalid wbiz config")
+            return {"enabled": True, "status": "invalid_wbiz_config"}
 
         try:
             client = WbizToolClient(api_key=api_key, client_id=client_id_int)
-        except Exception:
-            return
 
-        # Invoca la logica condivisa: costruisce la coda se necessario e invia SOLO 1/minuto
-        out = process_operator_tick(force=force)
-        return jsonify(out), 200
-            
             # Render testo operatore
             try:
                 msg_text = _render_operator_msg(tpl, item)
             except Exception as e:
                 _op_dbg(f"render error operator_id={item.get('operator_id')}: {repr(e)}")
                 msg_text = tpl or ""
-            
-            # PATCH: Tronca messaggio a 4096 caratteri
+
+            # Tronca messaggio a 4096 caratteri
             if msg_text and len(msg_text) > 4096:
                 msg_text = msg_text[:4096]
 
@@ -1884,7 +1882,7 @@ def process_operator_tick(force: bool = False):
             else:
                 status = getattr(resp, 'status_code', None)
                 ok = bool(status and 200 <= status < 300)
-            
+
             _op_dbg(f"inviato={ok} operator_id={item.get('operator_id')} -> {item.get('phone')}")
 
         except Exception as e:
@@ -1894,11 +1892,11 @@ def process_operator_tick(force: bool = False):
         # Avanza indice e aggiorna timestamp
         st["idx"] += 1
         st["last_sent_minute"] = current_slot
-        
+
         # Se abbiamo finito la coda, possiamo pulire
         if st["idx"] >= len(st["queue"]):
-             _op_dbg("coda completata")
-             st.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
+            _op_dbg("coda completata")
+            st.update({"date": st["date"], "queue": [], "idx": 0, "last_sent_minute": None})
 
         return {
             "enabled": True,
