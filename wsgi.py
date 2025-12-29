@@ -131,6 +131,10 @@ for idx, uri in pool.items():
     creds = wbiztool_creds_for(idx)
     creds["HIDE_CASSA"] = "1"
 
+    # Inject WBIZ creds into app config to avoid os.environ race conditions
+    for k, v in creds.items():
+        child.config[k] = v
+
     # Aggiungi la route mancante per client_info ai child
     @child.route('/settings/api/client_info/<int:client_id>')
     def client_info_wsgi(client_id):
@@ -244,25 +248,12 @@ def _start_operator_scheduler_once():
             while True:
                 try:
                     for idx, child in children.items():
-                        creds = wbiztool_creds_for(idx)
-                        keys = list(creds.keys())
-                        old = {k: os.environ.get(k) for k in keys}
+                        # No need to hack os.environ anymore, as child.config has the creds
                         try:
-                            for k, v in creds.items():
-                                if v:
-                                    os.environ[k] = str(v)
-                                else:
-                                    os.environ.pop(k, None)
                             with child.app_context():
                                 process_operator_tick()
                         except Exception as e:
                             print(f"[WA-OPERATOR][{idx}] tick error: {repr(e)}")
-                        finally:
-                            for k, v in old.items():
-                                if v is None:
-                                    os.environ.pop(k, None)
-                                else:
-                                    os.environ[k] = v
                 except Exception as e:
                     print(f"[WA-OPERATOR] loop error: {repr(e)}")
                 time_mod.sleep(60)
