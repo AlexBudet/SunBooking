@@ -1736,9 +1736,9 @@ def send_operator_notifications():
         if now_hm < cfg_hm:
             return jsonify({"error": f"Non ancora orario (configurato {cfg_hm})"}), 400
 
-    api_key = os.getenv("WBIZTOOL_API_KEY")
-    client_id_str = os.getenv("WBIZTOOL_CLIENT_ID")
-    whatsapp_client_id = os.getenv("WBIZTOOL_WHATSAPP_CLIENT_ID")
+    api_key = current_app.config.get("WBIZTOOL_API_KEY")
+    client_id_str = current_app.config.get("WBIZTOOL_CLIENT_ID")
+    whatsapp_client_id = current_app.config.get("WBIZTOOL_WHATSAPP_CLIENT_ID")
     if not api_key or not client_id_str or not whatsapp_client_id:
         current_app.logger.error("[OP WHATSAPP] Config WBIZ mancante")
         return jsonify({'error': 'Configurazione WhatsApp mancante'}), 500
@@ -1868,9 +1868,9 @@ def process_operator_tick():
         item = st["queue"][st["idx"]]
         
         # Credenziali WBIZ
-        api_key = os.getenv("WBIZTOOL_API_KEY")
-        client_id_str = os.getenv("WBIZTOOL_CLIENT_ID")
-        whatsapp_client_id = os.getenv("WBIZTOOL_WHATSAPP_CLIENT_ID")
+        api_key = current_app.config.get("WBIZTOOL_API_KEY")
+        client_id_str = current_app.config.get("WBIZTOOL_CLIENT_ID")
+        whatsapp_client_id = current_app.config.get("WBIZTOOL_WHATSAPP_CLIENT_ID")
         
         ok = False
         error_msg = None
