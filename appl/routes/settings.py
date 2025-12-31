@@ -4,7 +4,7 @@ from sqlalchemy import and_
 from sqlalchemy.orm import joinedload
 from werkzeug.security import generate_password_hash, check_password_hash
 from gender_guesser.detector import Detector
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, session, abort
+from flask import Blueprint, current_app, render_template, request, jsonify, flash, redirect, url_for, session, abort
 from flask import current_app as app
 from datetime import datetime, timedelta
 import os, ipaddress, requests
@@ -1570,99 +1570,126 @@ def _normalize_for_wbiz(numero: str):
     return numero_pulito, country_code
 
 def _fmt_data_italiana(dt):
-    giorni = ["lunedì","martedì","mercoledì","giovedì","venerdì","sabato","domenica"]
-    return f"{giorni[dt.weekday()]} {dt.day}"
+    giorni = ["Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato","Domenica"]
+    mesi = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
+    return f"{giorni[dt.weekday()]} {dt.day} {mesi[dt.month - 1]}"
 
 def _build_operator_targets_for_tomorrow(require_phone: bool = True):
-    tomorrow = (datetime.now().date() + timedelta(days=1))
-    ops = db.session.query(Operator).filter(
+    tomorrow = datetime.now().date() + timedelta(days=1)
+    
+    # Query operators who are active, visible, not machines, and opted for WhatsApp notifications
+    operators = db.session.query(Operator).filter(
         Operator.is_deleted == False,
         Operator.is_visible == True,
         Operator.user_tipo != 'macchinario',
         Operator.notify_turni_via_whatsapp == True
     ).all()
-
+    
     targets = []
-    for op in ops:
+    for op in operators:
         phone, country = _normalize_for_wbiz(op.user_cellulare)
         if require_phone and (not phone or len(phone) < 4):
             continue
-
+        
+        # Fetch the shift for tomorrow
         shift = db.session.query(OperatorShift).filter(
             OperatorShift.operator_id == op.id,
             OperatorShift.shift_date == tomorrow
         ).first()
-
+        
         if not shift:
-            continue
+            continue  # Skip operators with no shift for tomorrow
 
-        # Skip operators with no shift for tomorrow
-
-        appts = db.session.query(Appointment).filter(
+        if shift.shift_start_time == shift.shift_end_time:
+            continue  # Skip day off
+        
+        # Fetch appointments for tomorrow, excluding cancelled ones
+        appointments = db.session.query(Appointment).filter(
             Appointment.operator_id == op.id,
             Appointment.is_cancelled_by_client == False,
             func.date(Appointment.start_time) == tomorrow
         ).order_by(Appointment.start_time.asc()).all()
-
+        
         schedule_items = []
-        for a in appts:
-            # filtra fuori turno se necessario
+        first_app_label = None
+        first_app_time = None
+        pausa_label = None
+        pausa_time = None
+        
+        for appt in appointments:
+            # Filter out appointments outside the shift time
             if shift:
-                st, en = shift.shift_start_time, shift.shift_end_time
-                at = a.start_time.time()
-                if at < st or at >= en:
+                shift_start = shift.shift_start_time
+                shift_end = shift.shift_end_time
+                appt_time = appt.start_time.time()
+                if appt_time < shift_start or appt_time >= shift_end:
                     continue
-
-            # Determina OFF robustamente:
-            c = a.client
-            svc = db.session.get(Service, a.service_id) if a.service_id else None
-
-            client_is_dummy_or_missing = (c is None) or (
-                (c.cliente_nome or '').strip().lower() == 'dummy' and
-                (c.cliente_cognome or '').strip().lower() == 'dummy'
+            
+            # Determine if it's an OFF slot
+            client = appt.client
+            service = db.session.get(Service, appt.service_id) if appt.service_id else None
+            
+            client_is_dummy = (
+                client is None or
+                (client.cliente_nome or '').strip().lower() == 'dummy' and
+                (client.cliente_cognome or '').strip().lower() == 'dummy'
             )
-
-            service_is_dummy_or_missing = (svc is None) or (
-                (getattr(svc, 'servizio_nome', '') or '').strip().lower() == 'dummy' or
-                (getattr(svc, 'servizio_tag', '') or '').strip().lower() == 'dummy'
+            
+            service_is_dummy = (
+                service is None or
+                (getattr(service, 'servizio_nome', '') or '').strip().lower() == 'dummy' or
+                (getattr(service, 'servizio_tag', '') or '').strip().lower() == 'dummy'
             )
-
-            is_off = client_is_dummy_or_missing or service_is_dummy_or_missing
-
+            
+            is_off = client_is_dummy or service_is_dummy
+            
             if is_off:
-                titolo = (a.note or '').strip()
+                titolo = (appt.note or '').strip()
                 label = titolo if titolo else 'OFF'
-                durata = a.duration if isinstance(a.duration, int) else None
+                duration = appt.duration if isinstance(appt.duration, int) else None
+                if label.upper() == 'PAUSA':
+                    pausa_label = label
+                    pausa_time = appt.start_time.strftime('%H:%M')
             else:
-                # Preferisci il tag, altrimenti nome servizio
-                if svc:
-                    label = (getattr(svc, 'servizio_nome', '') or '').strip() or (getattr(svc, 'servizio_tag', '') or '').strip()
+                # Prefer tag over name for service label
+                if service:
+                    label = (getattr(service, 'servizio_tag', '') or '').strip() or (getattr(service, 'servizio_nome', '') or '').strip()
                 else:
                     label = ''
-                durata = None
-
+                duration = None
+            
+            # Set first appointment if not set and not off
+            if first_app_label is None and not is_off:
+                first_app_label = label or ''
+                first_app_time = appt.start_time.strftime('%H:%M')
+            
             schedule_items.append({
-                "ora": a.start_time.strftime('%H:%M'),
+                "ora": appt.start_time.strftime('%H:%M'),
                 "label": label,
                 "is_off": is_off,
-                "durata": durata
+                "durata": duration
             })
-
+        
         targets.append({
             "operator_id": op.id,
-            "operatore_nome": (op.user_nome or "").strip(),  # solo nome
+            "operatore_nome": (op.user_nome or "").strip(),  # First name only
             "phone": phone,
             "country_code": country,
             "date": str(tomorrow),
             "shift_start": shift.shift_start_time.strftime('%H:%M') if shift else None,
             "shift_end": shift.shift_end_time.strftime('%H:%M') if shift else None,
-            "schedule": schedule_items
+            "schedule": schedule_items,
+            "primo_app_label": first_app_label,
+            "primo_app_time": first_app_time,
+            "pausa_label": pausa_label,
+            "pausa_time": pausa_time,
         })
-
+    
     return targets
 
 def _render_operator_msg(tpl: str, target: dict):
     tpl = (tpl or "")
+    
     lines = []
     for x in target.get('schedule', []):
         if not x:
@@ -1673,20 +1700,35 @@ def _render_operator_msg(tpl: str, target: dict):
             lines.append(f"- {x.get('ora')} {x.get('label')}{dur_txt}")
         else:
             lines.append(f"- {x.get('ora')} {x.get('label')}")
-    appuntamenti_list = "\n".join(lines)
+    
     data_it = _fmt_data_italiana(datetime.strptime(target["date"], "%Y-%m-%d"))
+
+    pausa_section = ""
+    if target.get("pausa_time"):
+        pausa_section = f"Pausa alle {target.get('pausa_time')}"
+    
     return (tpl
         .replace("{{operatore}}", target.get("operatore_nome", ""))
         .replace("{{data}}", data_it)
         .replace("{{ora_inizio}}", target.get("shift_start") or "OFF")
         .replace("{{ora_fine}}", target.get("shift_end") or "OFF")
-        .replace("{{appuntamenti}}", ("\n" + appuntamenti_list + "\n") if appuntamenti_list else "")
+        .replace("{{ora_primo_app}}", target.get("primo_app_time") or "N/D")
+        .replace("{{primo_app}}", target.get("primo_app_label") or "N/D")
+        .replace("{{ora_pausa}}", target.get("pausa_time") or "")
+        .replace("{{pausa}}", target.get("pausa_label") or "")
+        .replace("{{sezione_pausa}}", pausa_section)
     )
 
 @settings_bp.route('/api/operator_notifications/preview', methods=['GET'], endpoint='preview_operator_notifications')
 def preview_operator_notifications():
     bi = BusinessInfo.query.first()
-    tpl_default = "Ciao {{operatore}}, domani {{data}} il tuo turno: {{ora_inizio}}-{{ora_fine}}. Appuntamenti: {{appuntamenti}}"
+    tpl_default = (
+    "Ciao {{operatore}},\n\n"
+    "Domani {{data}} il tuo turno sarà: {{ora_inizio}}-{{ora_fine}}\n\n"
+    "{{pausa_section}}"
+    "Il primo impegno della giornata sarà alle {{ora_primo_app}} e sarà {{primo_app}}\n\n"
+    "Buon lavoro!"
+    )
     tpl = (getattr(bi, 'operator_whatsapp_message_template', '') or tpl_default)
 
     targets = _build_operator_targets_for_tomorrow(require_phone=False)
