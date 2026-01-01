@@ -7,6 +7,8 @@ from argon2 import PasswordHasher, exceptions as argon2_exceptions
 from sqlalchemy import text
 import time
 import json, os
+from flask_migrate import Migrate
+migrate = Migrate()
 
 # Istanza globale di SQLAlchemy
 db = SQLAlchemy()
@@ -74,6 +76,7 @@ def create_app(db_uri: str | None = None):
 
     # Inizializza SQLAlchemy
     db.init_app(app)
+    migrate.init_app(app, db)
 
     # Importa e registra i blueprint
     from .routes.calendar import calendar_bp
