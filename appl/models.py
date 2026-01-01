@@ -316,3 +316,119 @@ class LoginAttempt(db.Model):
     
 
 ######### SEZIONE PACCHETTI #########
+# Nuovi enum
+class PacchettoStatus(PyEnum):
+    Preventivo = "preventivo"
+    Attivo = "attivo"
+    Completato = "completato"
+    Abbandonato = "abbandonato"
+    Eliminato = "eliminato"  # Soft delete
+
+class ScontoTipo(PyEnum):
+    Percentuale = "percentuale"
+    Ogni_N_Omaggio = "ogni_n_omaggio"
+
+class SedutaStatus(PyEnum):
+    Presente = 1      # Solo presente
+    Pianificata = 2   # Pianificata (con data)
+    Saltata = 3       # Saltata
+    Effettuata = 4    # Effettuata (trigger invio WhatsApp automatico)
+
+# Tabella associazione pacchetti-operatori
+pacchetto_operator = db.Table(
+    'pacchetto_operator',
+    db.Column('pacchetto_id', db.Integer, db.ForeignKey('pacchetti.id'), primary_key=True),
+    db.Column('operator_id', db.Integer, db.ForeignKey('operatori.id'), primary_key=True)
+)
+
+# Classe Pacchetto
+class Pacchetto(db.Model):
+    __tablename__ = 'pacchetti'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clienti.id'), nullable=False)
+    nome = db.Column(db.String(100), nullable=False)
+    data_sottoscrizione = db.Column(db.Date, nullable=False)
+    note = db.Column(db.Text, nullable=True)
+    status = db.Column(
+        ENUM(PacchettoStatus, name="pacchetto_status_enum", create_type=True),
+        nullable=False,
+        default=PacchettoStatus.Preventivo
+    )
+    history = db.Column(db.Text, nullable=True)  # Storico semplice come testo
+    costo_totale_lordo = db.Column(db.Numeric(10, 2), nullable=False)  # Lordo
+    costo_totale_scontato = db.Column(db.Numeric(10, 2), nullable=True)  # Scontato
+    
+    # Relazioni
+    client = db.relationship('Client', backref='pacchetti')
+    preferred_operators = db.relationship(
+        'Operator',
+        secondary=pacchetto_operator,
+        backref='pacchetti'
+    )
+    sedute = db.relationship('PacchettoSeduta', backref='pacchetto', cascade='all, delete-orphan')
+    rate = db.relationship('PacchettoRata', backref='pacchetto', cascade='all, delete-orphan')
+    sconto_regole = db.relationship('PacchettoScontoRegola', backref='pacchetto', cascade='all, delete-orphan')
+    pagamento_regole = db.relationship('PacchettoPagamentoRegola', backref='pacchetto', cascade='all, delete-orphan')
+
+# Classe PacchettoSeduta (semplificata, diretta)
+class PacchettoSeduta(db.Model):
+    """Singola seduta del pacchetto, collegata direttamente a Pacchetto e Service"""
+    __tablename__ = 'pacchetto_sedute'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    pacchetto_id = db.Column(db.Integer, db.ForeignKey('pacchetti.id'), nullable=False)
+    service_id = db.Column(db.Integer, db.ForeignKey('servizi.id'), nullable=False)
+    
+    # Ordine cronologico delle sedute nel pacchetto (per sovrapporre tipi di servizio)
+    ordine = db.Column(db.Integer, nullable=False)
+    
+    # Data trattamento
+    data_trattamento = db.Column(db.DateTime, nullable=True)
+    
+    # Operatore (da class Operator)
+    operatore_id = db.Column(db.Integer, db.ForeignKey('operatori.id'), nullable=True)
+    
+    # Stato seduta
+    stato = db.Column(
+        db.Integer,  # Usa int per matchare
+        nullable=False,
+        default=SedutaStatus.Presente
+    )
+    
+    # Nota seduta
+    nota = db.Column(db.Text)
+    
+    # Relazioni
+    service = db.relationship('Service', backref='pacchetto_sedute')
+    operatore = db.relationship('Operator', backref='pacchetto_sedute')
+
+# Classe PacchettoRata
+class PacchettoRata(db.Model):
+    __tablename__ = 'pacchetto_rate'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    pacchetto_id = db.Column(db.Integer, db.ForeignKey('pacchetti.id'), nullable=False)
+    importo = db.Column(db.Numeric(10, 2), nullable=False)
+    data_scadenza = db.Column(db.Date, nullable=True)
+    is_pagata = db.Column(db.Boolean, default=False)  # Stato: attesa/pagata
+    data_pagamento = db.Column(db.DateTime, nullable=True)
+
+# Classe PacchettoScontoRegola
+class PacchettoScontoRegola(db.Model):
+    __tablename__ = 'pacchetto_sconto_regole'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    pacchetto_id = db.Column(db.Integer, db.ForeignKey('pacchetti.id'), nullable=False)
+    sconto_tipo = db.Column(
+        ENUM(ScontoTipo, name="sconto_tipo_enum", create_type=True),
+        nullable=False
+    )
+    sconto_valore = db.Column(db.Numeric(10, 2), nullable=True)  # Per Percentuale: valore %; per Ogni_N_Omaggio: N
+    omaggi_extra = db.Column(db.Integer, nullable=True)  # Per Ogni_N_Omaggio: numero omaggi
+    descrizione = db.Column(db.String(255), nullable=True)
+
+# Classe PacchettoPagamentoRegola
+class PacchettoPagamentoRegola(db.Model):
+    __tablename__ = 'pacchetto_pagamento_regole'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    pacchetto_id = db.Column(db.Integer, db.ForeignKey('pacchetti.id'), nullable=False)
+    formula_pagamenti = db.Column(db.Boolean, nullable=False)  # True: rate; False: saldo immediato
+    numero_rate = db.Column(db.Integer, nullable=False)  # Numero di rate
+    descrizione = db.Column(db.String(255), nullable=True)
