@@ -1,0 +1,96 @@
+<!-- appl/templates/pacchetti.html -->
+{% extends "base.html" %}
+
+{% block content %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<br><br><br>
+<div class="page-wide-90">
+    <h2>Pacchetti</h2>
+    <button class="btn btn-primary mb-3" onclick="openAddModal()">Aggiungi Pacchetto</button>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nome</th>
+                <th>Cliente</th>
+                <th>Status</th>
+                <th>Azioni</th>
+            </tr>
+        </thead>
+        <tbody id="pacchettiTable">
+            <!-- Popolato via JS -->
+        </tbody>
+    </table>
+</div>
+
+<!-- Modal per aggiungere/modificare pacchetto -->
+<div class="modal fade" id="pacchettoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Aggiungi Pacchetto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="pacchettoForm">
+                    <input type="hidden" id="pacchettoId">
+                    <div class="mb-3">
+                        <label for="nome" class="form-label">Nome</label>
+                        <input type="text" class="form-control" id="nome" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="client_id" class="form-label">Cliente</label>
+                        <select class="form-control" id="client_id" required>
+                            <!-- Popolato via JS -->
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-control" id="status" required>
+                            <option value="Preventivo">Preventivo</option>
+                            <option value="Attivo">Attivo</option>
+                            <option value="Completato">Completato</option>
+                            <option value="Abbandonato">Abbandonato</option>
+                            <option value="Eliminato">Eliminato</option>
+                        </select>
+                    </div>
+                    <!-- Aggiungi altri campi come data_sottoscrizione, note, etc. -->
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                <button type="button" class="btn btn-primary" onclick="savePacchetto()">Salva</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Carica pacchetti e popola tabella
+    async function loadPacchetti() {
+        const response = await fetch('/pacchetti/api/pacchetti');
+        const pacchetti = await response.json();
+        const tbody = document.getElementById('pacchettiTable');
+        tbody.innerHTML = pacchetti.map(p => `
+            <tr>
+                <td>${p.id}</td>
+                <td>${p.nome}</td>
+                <td>${p.client_nome}</td>
+                <td>${p.status}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editPacchetto(${p.id})">Modifica</button>
+                    <button class="btn btn-sm btn-danger" onclick="deletePacchetto(${p.id})">Elimina</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    // Funzioni per aggiungere/modificare/eliminare (da implementare con fetch alle API)
+    function openAddModal() { /* ... */ }
+    function savePacchetto() { /* ... */ }
+    function editPacchetto(id) { /* ... */ }
+    function deletePacchetto(id) { /* ... */ }
+
+    loadPacchetti();
+</script>
+{% endblock %}
