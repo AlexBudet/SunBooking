@@ -267,6 +267,7 @@ class BusinessInfo(db.Model):
     operator_whatsapp_notification_enabled = db.Column(db.Boolean, default=False)
     operator_whatsapp_notification_time = db.Column(db.Time, default=datetime.strptime("20:00", "%H:%M").time())
     operator_whatsapp_message_template = db.Column(db.Text, nullable=True)
+    whatsapp_template_pacchetti = db.Column(db.Text, nullable=True)
 
     @property
     def closing_days_list(self):
@@ -312,3 +313,6 @@ class LoginAttempt(db.Model):
 
     def __repr__(self):
         return f"<LoginAttempt {self.key} attempts={self.attempts}>"
+    
+
+######### SEZIONE PACCHETTI #########
