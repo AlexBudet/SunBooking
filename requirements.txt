@@ -2,6 +2,7 @@ Flask==2.3.2
 flask_sqlalchemy==3.1.1
 flask_wtf==1.2.2
 Flask-Caching>=2.3.0
+flask-migrate==4.0.5  # O la versione che usi, controlla con pip show flask-migrate
 gender_guesser==0.4.0
 gunicorn==21.2.0
 pandas==2.3.1
