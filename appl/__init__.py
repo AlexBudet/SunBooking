@@ -84,8 +84,8 @@ def create_app(db_uri: str | None = None):
     from .routes.clients import clients_bp
     from .routes.services import services_bp
     from .routes.operators import operators_bp
-    from .routes.cassa import cassa_bp
-    from .routes.report import report_bp
+    from appl.routes.cassa import cassa_bp
+    from appl.routes.report import report_bp
     from .routes.pacchetti import pacchetti_bp
 
     app.register_blueprint(calendar_bp,  url_prefix="/calendar")
@@ -93,8 +93,8 @@ def create_app(db_uri: str | None = None):
     app.register_blueprint(clients_bp,   url_prefix="/clients")
     app.register_blueprint(services_bp,  url_prefix="/services")
     app.register_blueprint(operators_bp, url_prefix="/operators")
-    app.register_blueprint(cassa_bp,     url_prefix="/cassa")
-    app.register_blueprint(report_bp ,   url_prefix="/report")
+    app.register_blueprint(cassa_bp)
+    app.register_blueprint(report_bp)
     app.register_blueprint(pacchetti_bp, url_prefix="/pacchetti")
 
     # ---- CONTEXT PROCESSOR: current_user disponibile in tutti i template ----
