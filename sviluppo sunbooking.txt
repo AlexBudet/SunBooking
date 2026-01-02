@@ -1,30 +1,59 @@
+- implementare SEZIONE PACCHETTI: due tipi di scontistiche: % su totale e sedute omaggio ogni tot sedute, occhio agli STATI (Enum) di pacchetti e sedute (vedi in models.py)
+
+Report:
+- btn Clienti se popolato mostra modal dove contenuto straborda in basso, formattare nomi
+
+Booking online:
+- far sì che cliente possa annullare solo prenotazioni fissate in date e ora SUCCESSIVE a datetime corrente
+
+Calendar:
+- verificare refresh di web app table, dopo associazione rimangono in rosso app da associare, devo fare refresh manuale per farli andare via!
+- quando associamo cliente booking online da "associa cliente" su blocco poi deve fare refresh e cambio colore
+- quando apro "associa cliente" da blocco source=web non ancora assegnato e non trova il cellulare, quando apriamo "+" deve pre-compilare i campi NOME, COGNOME e CELLULARE come da nota cliente su appuntamento online
+
+Settings:
+- creare un campo extra da mostrare in pagina booking per eventuali warning (es: controllare spam e-mail se non si riceve codice)
+
+- implementare SEZIONE MARKETING per invio whatsapp secondo filtri (CON LIMITAZIONI): ?
+- invio Wapp automatico dopo pagamento di NUOVO CLIENTE per recensione
+
+- WHATSAPP: VALUTARE PASSAGGIO A META VIA AZURE COMMUNICATION SERVICES !!!!!!!!! IMPORTANTISSIMO !!!
+
 WEB APP:
-- correggere e ultimare layout barra calendario su mobile
-- sfondo del modal appuntamento per mobile dev'essere trasparente e non bianco
-- eliminare conferme con invio wapp automatico su mobile
-- CALENDAR: aggiunge nota "***NUOVO CLIENTE***" a quanti blocchi? solo ai primi due? verificare
-- SETTINGS: contenuto di tile-settings straborda dal modal, correggere
-- BOOKING: a volte arrivano 4 PRENOTAZIONI IN UNA VOLTA alla stessa ora per lo stesso appuntamento, come mai???
+- uniformare stili dei modal di calendar (tutti sfondo rosa con gradiente?)
 - verificare sicurezza globale codice
 - creare app per mobile
-
-SETTINGS:
-- correggere problema X su ip della RCH ! (solo con start.py)
-
-DATABASE... occhio ai backup! (FARE TUTTO DOPO le 20:00 POSSIBILMENTE SABATO SERA E DOMENICA)
-- CALENDAR: visualizzare in web appointments table ANCHE GLI APPUNTAMENTI CANCELLATI DAL CLIENTE DA E-MAIL, dobbiamo utilizzare un soft delete aggiungendo al modello alla classe appointment il campo: "is_cancelled_by_client = db.Column(db.Boolean, default=False)"
-- SETTINGS: inserire in database il campo cellulare per ogni operatore, poi scrivere codice per inviare whatsapp automatico la sera prima ad ogni operatrice con gli appuntamenti per il giorno dopo
-- inserire "descrizione" al modello per la classe servizi, e "cellulare" al modello per la classe operatore, oltre a tutte le aggiunte per pacchetti, solarium e magazzino
-- Cercare il modo di DISATTIVARE L'OPERATIVITA' DELL'APP ON-PREMISE per i centri clienti del gestionale fuori abbonamento, attraverso un record da database che "spegne" il programma on-premise, verificare qual è la best practice
 
 WEB BOOKING:
 - opzionale: offrire la possibilità di PAGARE ONLINE gli appuntamenti
 - opzionale: mostrare descrizione per ogni servizio
 
 CORRETTI, DA VERIFICARE:
+- Nel modal di preview il testo straborda, rendere scrollabile
+- modal per descrizione servizio: tasti I e B per corsivo/grassetto devono rimanere selezionati con hover dopo il click, e se selezionati il carattere che scrivo sarà corsivo/grassetto, disattiva con un altro click
+- mostrare descrizione appuntamenti in settings anche per utenti: user (ma non editabili)
+- CALENDAR: visualizzare in web appointments table ANCHE GLI APPUNTAMENTI CANCELLATI DAL CLIENTE DA E-MAIL, dobbiamo utilizzare un soft delete aggiungendo al modello alla classe appointment il campo: "is_cancelled_by_client = db.Column(db.Boolean, default=False)"
+- SETTINGS: inserire in database il campo cellulare per ogni operatore, poi scrivere codice per inviare whatsapp automatico la sera prima ad ogni operatrice con gli appuntamenti per il giorno dopo
+- inserire "descrizione" al modello per la classe servizi oltre a tutte le aggiunte per pacchetti, solarium e magazzino
+- in modalità touch-ui DISABILITARE IL CLICK CON PSEUDOBLOCCO IN NAV SU ALTRO BLOCCO ! (se no se voglio tagliare piu appuntamenti dà problemi)
+- creare tasto SVUOTA sempre presente in pseudoblock navigator
+- se modifico cliente da tasto "i" quando è già in pseudoblock navigator, dopo modifica non me lo fa più selezionare
+- mostra notifica se ci sono appuntamenti in web appointments tables non ancora associati, anche per altri giorni che non siano quello attuale - implementare sistema di monitoring
+- invio whatsapp a numeri esteri
+- REPORT: contenuto di tile-settings straborda dal modal su mobile, correggere
+- se prenoto due trattamenti uguali e invio wapp automatico, li scrive tutti e due, se però invio wapp manuale TIENE SOLO UNO DEI DUE APPUNTAMENTI... uniformare la logica
+- WEB BOOKING: se indico operatore come non visibile in agenda, continua a contarlo tra operatori abilitati per servizi visibili online, correggere
+- su touch-ui se clicco un blocco appuntamento stato 0 e poi clicco un blocco off, non toglie il tooltip del blocco appuntamento, correggere
+- quando si assegna un cliente da web appt table il blocco deve CAMBIARE COLORE
+- correggere problema X su ip della RCH ! (solo con start.py)
+- eliminare conferme con invio wapp automatico su mobile
+- sfondo del modal appuntamento per mobile dev'essere trasparente e non bianco
+- controllare layout barra calendario su mobile
 - problema z-index bottoni bottom bar in touch-ui quando ci sono due blocchi sulla stessa cella e un altro blocco sotto, a volte i bottom bar di uno dei due rimane coperto da appuntamento sotto
+- se SPOSTO appuntamento e poi invio Wapp, prende i tag servizio invece dei nomi!
 - cerchio di attesa quando si stampa scontrino in fine carta rch?
 - indicare NUOVO CLIENTE (cioè cliente che ha un appuntamento prenotato PER LA PRIMA VOLTA)
+- impostare possibilità di spostare/creare appuntamento ANCHE SOVRAPPONENDOLO A CELLE DOVE C'E' GIA' UN ALTRO APPUNTAMENTO
 - IMPORTANTE!!! dopo TAGLIA di piu blocchi e incolla, a volte memo whatsapp prende orario del 2° appuntamento
 - implementare "sposta" per blocco off in modalità touch-ui
 - Heatmap Appuntamenti non deve contare i blocchi OFF 
@@ -51,6 +80,7 @@ CORRETTI, DA VERIFICARE:
 - opzioni "vai al pagamento" o "vedi in calendario" per blocchi in istituto in cassa.html, con icona floppy per blocchi editati
 - quando attivo o disattivo invio messaggio wapp la mattina, deve scrivere subito in database e mostrare popup di conferma
 - quando deseleziono "Visibile in Agenda" da settings/operators per un operatore, non salva l'impostazione e dà errore
+- mostrare highlight a mouseover se devo creare blocco da pseudoblocco su altro blocco
 - CHIUSURA GIORNALIERA
 - blocchi creati da "aggiungi servizi" da altro blocco non prendono il colore del blocco originario
 - creazione blocchi multipli con singoli click su pseudoblocco
@@ -69,6 +99,7 @@ CORRETTI, DA VERIFICARE:
 - quando nei modal di calendar seleziono cliente, serviceSearch dovrebbe mostrare prima della fetch alla 3a lettera i SERVIZI PIU UTILIZZATI DA QUEL CLIENTE in ordine di frequenza!
 - mostra "nota cliente" editabile in edit appt modal
 - sostituire titolo del pulsante "procedi al pagamento" in Calendar con "porta in cassa"
+- non deve comparire "TEST" nel report giornaliero con utente user
 - all'apertura modal edit appt per blocco source=web tiene in clipboard il cellulare
 - non abbina piu automaticamente il sesso alla creazione cliente
 - problema visualizzazione nomi apostrofati al click per aprire edit appt modal
@@ -85,6 +116,10 @@ CORRETTI, DA VERIFICARE:
 - errore cassa dopo chiusura giornaliera
 - settings/web booking -> se deseleziono "visualizza in booking" mostra - ancora comunque il servizio!
 - filtrare blocchi in istituto visibili in cassa, solo quelli della GIORNATA CORRENTE ... oppure FARE IN MODO CHE A FINE GIORNATA I BLOCCHI RIMASTI IN STATI 1 TORNINO IN STATO 0 (o stato 2)
+BOOKING: 
+- correggere possibilità di multi-click su conferma prenotazione
+- nuovo url con conferma popup per disdire appuntamento da e-mail lato cliente
+- impostare condizione per invio whatsapp a numeri stranieri
 
 comando per creare eseguibile da VSC:cd "C:\Program Files\SunBooking":
 
@@ -117,23 +152,12 @@ start.py
 
 git remote add origin https://github.com/AlexBudet/booking.git
 ---------------------------------------------------------
-- VERSIONE DARK AD ALTO CONTRASTO
-
 AI (GEMINI KEY = AIzaSyBKhUZcOJ6r7_U1yaab2qLBzqY6kVjn8us) -> alternativa più economica con Azure? - implementare query ai in report
 Prompt per richieste ad AI (per esempio: trovami la prima disponibilità in pausa pranzo settimana prossima con Erika per un massaggio di un'ora -> va alla pagina e blinka le celle adatte)
 
-CALENDAR:
-- creare black-list (cioè clienti con ALMENO UN TOT di non-arrivato nello storico) con opzione in Clients.html per attivarla
-
-TOUCH-UI:
-- aggiungere taglia per blocchi OFF
-
 ALTRO:
-- Sistemare tile di report e le tabelle nelle pagine di settings per mobile
 - Implementare logging di errori gratis ma professionale e funzionante
 - Verificare funzionamento LOTTERIA degli scontrini -> dà errore, verificare route
-- Mostra un simbolo di attesa tra click su tasto stampa scontrino e popup successivo°
-- predisporre SmartPos per nuova normativa, scontrinazione automatica al pagamento pos
 
 REPORT: creare una sezione REPORT con le stats e una sezione HOME con tiles interattivi (meteo, oroscopo, news estetica, andamento del mercato, video del giorno, console comandi piu usati)
 - al click su alcuni tile (per esempio le heatmap) aprire modal in grande in cui si possano ottenere heatmap in base a filtri personalizzabili
@@ -153,7 +177,7 @@ MODULI AGGIUNTIVI (occhio! fare in modo che da database i moduli aggiuntivi poss
 DASHBOARD
 - con news, sponsor (?), video, suggerimenti, oroscopo, meteo ecc ecc
 
-SOLARIUM
+SOLARIUM -> tenere su applicazione separata!
 - integrazione SunBooking x monitor e ricaricabili solarium
 
 PROMO e PACCHETTI
@@ -161,5 +185,6 @@ PROMO e PACCHETTI
 - pacchetti (ogni 5 seduta 1 omaggio, ecc) -> rateizzabili -> pagamento cassa integrato
 - ricaricabili (come solarium, paghi 100 carichi 125 ecc)
 - sistema rate (come usiamo in negozio)
+- raccolta punti (tot euro ogni tot euro spesi)
 
 ...Proporre prezzi IVA INCLUSA!
