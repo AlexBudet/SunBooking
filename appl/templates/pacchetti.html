@@ -3,17 +3,69 @@
 
 {% block content %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+    #clientDropdown, #serviceDropdown {
+        display: none;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    #pagamentoFields, #statusDiv, #omaggiExtra {
+        display: none;
+    }
+
+    .modal-body-scrollable {
+        max-height: 70vh;
+        max-width: 80vw;
+        padding: 10px;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+</style>
 <br><br><br>
 <div class="page-wide-90">
     <h2>Pacchetti</h2>
-    <button class="btn btn-primary mb-3" onclick="openAddModal()">Aggiungi Pacchetto</button>
+    
+    <!-- Campo di ricerca -->
+    <div class="mb-3">
+        <div class="row">
+            <div class="col-md-3">
+                <input type="text" class="form-control" id="searchNome" placeholder="Cerca per nome pacchetto">
+            </div>
+            <div class="col-md-3">
+                <input type="text" class="form-control" id="searchCliente" placeholder="Cerca per cliente">
+            </div>
+            <div class="col-md-2">
+                <select class="form-control" id="searchStatus">
+                    <option value="">Tutti gli status</option>
+                    <option value="Preventivo">Preventivo</option>
+                    <option value="Attivo">Attivo</option>
+                    <option value="Completato">Completato</option>
+                    <option value="Abbandonato">Abbandonato</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-secondary" onclick="searchPacchetti()">Cerca</button>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary" onclick="openAddModal()">Crea Nuovo Pacchetto</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tabella risultati -->
     <table class="table table-striped">
         <thead>
             <tr>
                 <th>ID</th>
                 <th>Nome</th>
                 <th>Cliente</th>
+                <th>Data Sottoscrizione</th>
+                <th>Note</th>
                 <th>Status</th>
+                <th>Costo Lordo</th>
+                <th>Costo Scontato</th>
+                <th>Operatori Preferiti</th>
+                <th>Sedute</th>
                 <th>Azioni</th>
             </tr>
         </thead>
@@ -24,37 +76,97 @@
 </div>
 
 <!-- Modal per aggiungere/modificare pacchetto -->
-<div class="modal fade" id="pacchettoModal" tabindex="-1">
+<div class="modal fade" id="pacchettoModal" tabindex="-1" aria-labelledby="modalTitle" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="modalTitle">Aggiungi Pacchetto</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="modalTitle">Crea Nuovo Pacchetto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body-scrollable">
                 <form id="pacchettoForm">
                     <input type="hidden" id="pacchettoId">
+                    
+                    <!-- Cliente (ricerca come in calendar.js) -->
                     <div class="mb-3">
-                        <label for="nome" class="form-label">Nome</label>
-                        <input type="text" class="form-control" id="nome" required>
+                        <label for="clientSearch" class="form-label">Cliente</label>
+                        <input type="text" class="form-control" id="clientSearch" placeholder="Cerca cliente..." autocomplete="off">
+                        <div id="clientDropdown" class="dropdown-menu"></div>
+                        <input type="hidden" id="client_id" required>
                     </div>
+                    
+                    <!-- Servizi (ricerca come in calendar.js) -->
                     <div class="mb-3">
-                        <label for="client_id" class="form-label">Cliente</label>
-                        <select class="form-control" id="client_id" required>
-                            <!-- Popolato via JS -->
+                        <label class="form-label">Servizi</label>
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <input type="text" class="form-control" id="serviceSearch" placeholder="Cerca servizio..." autocomplete="off">
+                                <div id="serviceDropdown" class="dropdown-menu"></div>
+                            </div>
+                            <div class="col-md-3">
+                                <input type="number" class="form-control" id="serviceQuantita" placeholder="Quantità" min="1">
+                            </div>
+                            <div class="col-md-3">
+                                <button type="button" class="btn btn-sm btn-success" onclick="addService()">Aggiungi</button>
+                            </div>
+                        </div>
+                        <ul id="serviziList" class="list-group"></ul>
+                    </div>
+                    
+                    <!-- Costo totale -->
+                    <div class="mb-3">
+                        <label for="costoTotale" class="form-label">Costo Totale Lordo</label>
+                        <input type="number" class="form-control" id="costoTotale" step="0.01" readonly>
+                    </div>
+                    
+                    <!-- Sconto -->
+                    <div class="mb-3">
+                        <label class="form-label">Tipo Sconto</label>
+                        <select class="form-select" id="scontoTipo" onchange="toggleScontoFields()">
+                            <option value="Percentuale">Percentuale</option>
+                            <option value="Ogni_N_Omaggio">Ogni N Omaggio</option>
+                        </select>
+                        <div id="scontoFields" class="mt-2">
+                            <input type="number" class="form-control" id="scontoValore" placeholder="Valore sconto (%)" step="0.01">
+                            <input type="number" class="form-control mt-1" id="omaggiExtra" placeholder="Omaggi extra">
+                        </div>
+                    </div>
+                    
+                    <!-- Pagamento -->
+                    <div class="mb-3">
+                        <label class="form-label">Tipo Pagamento</label>
+                        <select class="form-select" id="pagamentoTipo" onchange="togglePagamentoFields()">
+                            <option value="saldo">Saldo Immediato</option>
+                            <option value="rate">A Rate</option>
+                        </select>
+                        <div id="pagamentoFields" class="mt-2">
+                            <input type="number" class="form-control" id="numeroRate" placeholder="Numero rate" min="1">
+                        </div>
+                    </div>
+                    
+                    <!-- Operatori preferiti -->
+                    <div class="mb-3">
+                        <label class="form-label">Operatori Preferiti</label>
+                        <select class="form-select" id="operatoriSelect" multiple>
                         </select>
                     </div>
-                    <div class="mb-3">
+                    
+                    <!-- Status (solo per edit) -->
+                    <div class="mb-3" id="statusDiv">
                         <label for="status" class="form-label">Status</label>
-                        <select class="form-control" id="status" required>
+                        <select class="form-select" id="status">
                             <option value="Preventivo">Preventivo</option>
                             <option value="Attivo">Attivo</option>
                             <option value="Completato">Completato</option>
                             <option value="Abbandonato">Abbandonato</option>
-                            <option value="Eliminato">Eliminato</option>
                         </select>
                     </div>
-                    <!-- Aggiungi altri campi come data_sottoscrizione, note, etc. -->
+                    
+                    <!-- Note (in fondo) -->
+                    <div class="mb-3">
+                        <label for="note" class="form-label">Note</label>
+                        <textarea class="form-control" id="note" rows="2"></textarea>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -66,31 +178,359 @@
 </div>
 
 <script>
-    // Carica pacchetti e popola tabella
-    async function loadPacchetti() {
-        const response = await fetch('/pacchetti/api/pacchetti');
+    let serviziSelezionati = [];
+    let operatoriSelezionati = [];
+    let nomePacchetto = '';
+
+    // Genera nome pacchetto basato sui servizi
+    function updateNomePacchetto() {
+        const serviziRaggruppati = {};
+        serviziSelezionati.forEach(s => {
+            if (!serviziRaggruppati[s.nome]) serviziRaggruppati[s.nome] = 0;
+            serviziRaggruppati[s.nome] += s.quantita;
+        });
+        nomePacchetto = Object.entries(serviziRaggruppati).map(([nome, qty]) => `${nome} x${qty}`).join(', ');
+    }
+
+    // Carica dropdown clienti (usa createElement per sicurezza)
+    async function loadClienti() {
+        const response = await fetch('/pacchetti/api/clienti?q=');
+        const clienti = await response.json();
+        const select = document.getElementById('client_id');
+        select.innerHTML = '<option value="">Seleziona cliente</option>';
+        clienti.forEach(c => {
+            const option = document.createElement('option');
+            option.value = c.id;
+            option.textContent = `${c.nome} ${c.cognome} - ${c.cellulare}`;
+            select.appendChild(option);
+        });
+    }
+
+    // Carica dropdown servizi (usa createElement per sicurezza)
+    async function loadServizi() {
+        const response = await fetch('/pacchetti/api/servizi?q=');
+        const servizi = await response.json();
+        const select = document.getElementById('serviceSelect');
+        select.innerHTML = '<option value="">Seleziona servizio</option>';
+        servizi.forEach(s => {
+            const option = document.createElement('option');
+            option.value = s.id;
+            option.textContent = `${s.nome} (${s.categoria}) - €${s.prezzo}`;
+            option.dataset.prezzo = s.prezzo;
+            select.appendChild(option);
+        });
+    }
+
+    // Carica dropdown operatori (usa createElement per sicurezza)
+    async function loadOperatori() {
+        const response = await fetch('/pacchetti/api/operatori?q=');
+        const operatori = await response.json();
+        const select = document.getElementById('operatoriSelect');
+        select.innerHTML = '';
+        operatori.forEach(o => {
+            const option = document.createElement('option');
+            option.value = o.id;
+            option.textContent = o.nome;
+            select.appendChild(option);
+        });
+    }
+
+    // Carica pacchetti (usa createElement per sicurezza)
+    async function loadPacchetti(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const response = await fetch(`/pacchetti/api/pacchetti?${query}`);
         const pacchetti = await response.json();
         const tbody = document.getElementById('pacchettiTable');
-        tbody.innerHTML = pacchetti.map(p => `
-            <tr>
+        tbody.innerHTML = '';
+        pacchetti.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
                 <td>${p.id}</td>
                 <td>${p.nome}</td>
                 <td>${p.client_nome}</td>
+                <td>${p.data_sottoscrizione || ''}</td>
+                <td>${p.note || ''}</td>
                 <td>${p.status}</td>
+                <td>€${p.costo_totale_lordo.toFixed(2)}</td>
+                <td>${p.costo_totale_scontato ? '€' + p.costo_totale_scontato.toFixed(2) : ''}</td>
+                <td>${p.operatori_preferiti.join(', ')}</td>
+                <td>${p.sedute.map(s => `${s.service_nome} (${s.stato})`).join('<br>')}</td>
                 <td>
                     <button class="btn btn-sm btn-warning" onclick="editPacchetto(${p.id})">Modifica</button>
                     <button class="btn btn-sm btn-danger" onclick="deletePacchetto(${p.id})">Elimina</button>
                 </td>
-            </tr>
-        `).join('');
+            `;
+            tbody.appendChild(tr);
+        });
     }
 
-    // Funzioni per aggiungere/modificare/eliminare (da implementare con fetch alle API)
-    function openAddModal() { /* ... */ }
-    function savePacchetto() { /* ... */ }
-    function editPacchetto(id) { /* ... */ }
-    function deletePacchetto(id) { /* ... */ }
+    // Ricerca
+    function searchPacchetti() {
+        const params = {
+            nome: document.getElementById('searchNome').value,
+            cliente: document.getElementById('searchCliente').value,
+            status: document.getElementById('searchStatus').value
+        };
+        loadPacchetti(params);
+    }
 
-    loadPacchetti();
+    // Apri modal aggiunta
+    function openAddModal() {
+        document.getElementById('pacchettoId').value = '';
+        document.getElementById('modalTitle').textContent = 'Crea Nuovo Pacchetto';
+        document.getElementById('statusDiv').style.display = 'none';
+        resetForm();
+        loadClienti();
+        loadOperatori();
+        new bootstrap.Modal(document.getElementById('pacchettoModal')).show();
+    }
+
+    // Ricerca cliente (usa createElement per sicurezza)
+    document.getElementById('clientSearch').addEventListener('input', function() {
+        const query = this.value.trim();
+        if (query.length < 2) {
+            document.getElementById('clientDropdown').style.display = 'none';
+            return;
+        }
+        handleClientSearchPacchetti(query);
+    });
+
+    async function handleClientSearchPacchetti(query) {
+        try {
+            const response = await fetch(`/pacchetti/api/clienti?q=${encodeURIComponent(query)}`);
+            const clients = await response.json();
+            showClientDropdownPacchetti(clients);
+        } catch (error) {
+            console.error('Errore ricerca clienti:', error);
+        }
+    }
+
+    function showClientDropdownPacchetti(clients) {
+        const dropdown = document.getElementById('clientDropdown');
+        dropdown.innerHTML = '';
+        clients.forEach(c => {
+            const a = document.createElement('a');
+            a.className = 'dropdown-item';
+            a.href = '#';
+            a.textContent = `${c.nome} ${c.cognome} - ${c.cellulare}`;
+            a.onclick = () => selectClientPacchetti(c.id, `${c.nome} ${c.cognome}`);
+            dropdown.appendChild(a);
+        });
+        dropdown.style.display = 'block';
+    }
+
+    function selectClientPacchetti(id, name) {
+        document.getElementById('clientSearch').value = name;
+        document.getElementById('client_id').value = id;
+        document.getElementById('clientDropdown').style.display = 'none';
+    }
+
+    // Ricerca servizio (usa createElement per sicurezza)
+    document.getElementById('serviceSearch').addEventListener('input', function() {
+        const query = this.value.trim();
+        if (query.length < 2) {
+            document.getElementById('serviceDropdown').style.display = 'none';
+            return;
+        }
+        handleServiceSearchPacchetti(query);
+    });
+
+    async function handleServiceSearchPacchetti(query) {
+        try {
+            const response = await fetch(`/pacchetti/api/servizi?q=${encodeURIComponent(query)}`);
+            const servizi = await response.json();
+            showServiceDropdownPacchetti(servizi);
+        } catch (error) {
+            console.error('Errore ricerca servizi:', error);
+        }
+    }
+
+    function showServiceDropdownPacchetti(servizi) {
+        const dropdown = document.getElementById('serviceDropdown');
+        dropdown.innerHTML = '';
+        servizi.forEach(s => {
+            const a = document.createElement('a');
+            a.className = 'dropdown-item';
+            a.href = '#';
+            a.textContent = `${s.nome} (${s.categoria}) - €${s.prezzo}`;
+            a.onclick = () => selectServicePacchetti(s.id, s.nome, s.prezzo);
+            dropdown.appendChild(a);
+        });
+        dropdown.style.display = 'block';
+    }
+
+    function selectServicePacchetti(id, nome, prezzo) {
+        document.getElementById('serviceSearch').value = nome;
+        document.getElementById('serviceSearch').dataset.serviceId = id;
+        document.getElementById('serviceSearch').dataset.prezzo = prezzo;
+        document.getElementById('serviceDropdown').style.display = 'none';
+    }
+
+    // Aggiungi servizio alla lista
+    function addService() {
+        const searchInput = document.getElementById('serviceSearch');
+        const quantita = parseInt(document.getElementById('serviceQuantita').value);
+        if (!searchInput.dataset.serviceId || !quantita) return;
+        const service = {
+            id: searchInput.dataset.serviceId,
+            nome: searchInput.value.split(' - ')[0],
+            prezzo: parseFloat(searchInput.dataset.prezzo),
+            quantita: quantita
+        };
+        serviziSelezionati.push(service);
+        updateServiziList();
+        updateCostoTotale();
+        updateNomePacchetto();
+        searchInput.value = '';
+        delete searchInput.dataset.serviceId;
+        delete searchInput.dataset.prezzo;
+        document.getElementById('serviceQuantita').value = '';
+    }
+
+    // Aggiorna lista servizi (usa createElement per sicurezza)
+    function updateServiziList() {
+        const list = document.getElementById('serviziList');
+        list.innerHTML = '';
+        serviziSelezionati.forEach((s, i) => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            li.innerHTML = `${s.nome} x${s.quantita} - €${(s.prezzo * s.quantita).toFixed(2)} <button type="button" class="btn btn-sm btn-danger" onclick="removeService(${i})">Rimuovi</button>`;
+            list.appendChild(li);
+        });
+    }
+
+    // Rimuovi servizio
+    function removeService(index) {
+        serviziSelezionati.splice(index, 1);
+        updateServiziList();
+        updateCostoTotale();
+        updateNomePacchetto();
+    }
+
+    // Aggiorna costo totale
+    function updateCostoTotale() {
+        const totale = serviziSelezionati.reduce((sum, s) => sum + (s.prezzo * s.quantita), 0);
+        document.getElementById('costoTotale').value = totale.toFixed(2);
+    }
+
+    // Toggle campi sconto
+    function toggleScontoFields() {
+        const tipo = document.getElementById('scontoTipo').value;
+        const fields = document.getElementById('scontoFields');
+        if (tipo === 'Ogni_N_Omaggio') {
+            document.getElementById('scontoValore').placeholder = 'Ogni N sedute';
+            document.getElementById('omaggiExtra').style.display = '';
+        } else {
+            document.getElementById('scontoValore').placeholder = 'Valore sconto (%)';
+            document.getElementById('omaggiExtra').style.display = 'none';
+        }
+    }
+
+    // Toggle campi pagamento
+    function togglePagamentoFields() {
+        const tipo = document.getElementById('pagamentoTipo').value;
+        document.getElementById('pagamentoFields').style.display = tipo === 'rate' ? '' : 'none';
+    }
+
+    // Salva pacchetto
+    // Salva pacchetto
+    async function savePacchetto() {
+        const data = {
+            client_id: document.getElementById('client_id').value,
+            nome: nomePacchetto,
+            note: document.getElementById('note').value,
+            servizi: serviziSelezionati.map(s => ({ id: s.id, quantita: s.quantita })),
+            costo_totale: parseFloat(document.getElementById('costoTotale').value),
+            sconto_tipo: document.getElementById('scontoTipo').value,
+            sconto_valore: parseFloat(document.getElementById('scontoValore').value) || null,
+            omaggi_extra: parseInt(document.getElementById('omaggiExtra').value) || null,
+            pagamento_tipo: document.getElementById('pagamentoTipo').value,
+            numero_rate: parseInt(document.getElementById('numeroRate').value) || 1,
+            operatori: Array.from(document.getElementById('operatoriSelect').selectedOptions).map(o => parseInt(o.value))
+        };
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const id = document.getElementById('pacchettoId').value;
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/pacchetti/api/pacchetti/${id}` : '/pacchetti/api/pacchetti';
+
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('pacchettoModal')).hide();
+            loadPacchetti();
+        } else {
+            alert('Errore nel salvataggio');
+        }
+    }
+
+    // Edit pacchetto
+    async function editPacchetto(id) {
+        const response = await fetch(`/pacchetti/api/pacchetti/${id}`);
+        const pacchetto = await response.json();
+        
+        document.getElementById('pacchettoId').value = pacchetto.id;
+        document.getElementById('modalTitle').textContent = 'Modifica Pacchetto';
+        document.getElementById('statusDiv').style.display = '';
+        document.getElementById('client_id').value = pacchetto.client_id;
+        document.getElementById('nome').value = pacchetto.nome;
+        document.getElementById('note').value = pacchetto.note;
+        document.getElementById('status').value = pacchetto.status;
+        document.getElementById('costoTotale').value = pacchetto.costo_totale_lordo;
+        
+        // Ricarica servizi, operatori, etc.
+        serviziSelezionati = pacchetto.sedute.map(s => ({ id: s.service_id, quantita: 1 })); // Semplificato
+        updateServiziList();
+        
+        if (pacchetto.sconto) {
+            document.getElementById('scontoTipo').value = pacchetto.sconto.tipo;
+            document.getElementById('scontoValore').value = pacchetto.sconto.valore || '';
+            document.getElementById('omaggiExtra').value = pacchetto.sconto.omaggi || '';
+        }
+        
+        if (pacchetto.pagamento) {
+            document.getElementById('pagamentoTipo').value = pacchetto.pagamento.tipo;
+            document.getElementById('numeroRate').value = pacchetto.pagamento.numero_rate;
+        }
+        
+        // Operatori
+        const selectOp = document.getElementById('operatoriSelect');
+        Array.from(selectOp.options).forEach(o => o.selected = pacchetto.operatori.includes(parseInt(o.value)));
+        
+        loadClienti();
+        loadOperatori();
+        new bootstrap.Modal(document.getElementById('pacchettoModal')).show();
+    }
+
+    // Delete pacchetto
+    async function deletePacchetto(id) {
+        if (confirm('Confermi eliminazione?')) {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            await fetch(`/pacchetti/api/pacchetti/${id}`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } });
+            loadPacchetti();
+        }
+    }
+
+    // Reset form
+    function resetForm() {
+        document.getElementById('pacchettoForm').reset();
+        serviziSelezionati = [];
+        nomePacchetto = '';
+        document.getElementById('clientSearch').value = '';
+        document.getElementById('serviceSearch').value = '';
+        document.getElementById('clientDropdown').style.display = 'none';
+        document.getElementById('serviceDropdown').style.display = 'none';
+        updateServiziList();
+        updateCostoTotale();
+    }
+
+    // Init
+    document.addEventListener('DOMContentLoaded', () => {
+        loadPacchetti();
+    });
 </script>
 {% endblock %}
