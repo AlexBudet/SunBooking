@@ -6,58 +6,476 @@
   <br>
   <h3 class="mt-2">Dettaglio Pacchetto</h3>
 
-  <div class="card mt-3">
-    <div class="card-body">
-      <div><b>Cliente:</b> {{ pacchetto.client_nome }}</div>
-      <div><b>Nome Pacchetto:</b> {{ pacchetto.nome }}</div>
-      <div><b>Data Sottoscrizione:</b> {{ pacchetto.data_sottoscrizione }}</div>
-      <div><b>Status:</b> {{ pacchetto.status }}</div>
-      <div><b>Costo Lordo:</b> €{{ '%.2f'|format(pacchetto.costo_totale_lordo) }}</div>
-      <div><b>Costo Scontato:</b>
-        {% if pacchetto.costo_totale_scontato is not none %}
-          €{{ '%.2f'|format(pacchetto.costo_totale_scontato) }}
-        {% else %}
-          —
-        {% endif %}
-      </div>
-      <div class="mt-2"><b>Note:</b> {{ pacchetto.note or '—' }}</div>
-    </div>
+  <style>
+    .neomorphic-div {
+      background: rgb(255, 255, 255);
+      border-radius: 25px;
+      box-shadow: 5px 5px 10px #eeeeee, -5px -5px 10px #ffffff;
+      padding: 1.5rem;
+      text-align: center;
+      margin-top: 1.5rem;
+    }
+    .custom-dropdown {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      z-index: 1000;
+      min-width: 150px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    .custom-dropdown ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .custom-dropdown li {
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    .custom-dropdown li:hover {
+      background: #f0f0f0;
+    }
+    .custom-dropdown li.selected {
+      background: #e0e0e0;
+    }
+ .date-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.2);
+  z-index: 1000;
+}
+.date-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1001;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+  padding: 12px;
+  width: 420px;               /* widened modal */
+  max-width: 90vw;
+  display: block;
+}
+/* Center the table in the modal and remove all borders */
+.date-table {
+  border-collapse: collapse;
+  margin: 0 auto;          /* centers the table */
+  width: auto;             /* let content define width */
+  max-width: 360px;        /* comfortably narrower than the modal */
+}
+
+.date-table tr,
+.date-table td {
+  border: none !important; /* ensure no borders */
+}
+
+.date-table td {
+  padding: 0;              /* keep compact spacing */
+}
+
+/* Toggle utility used by the inline calendar */
+.hidden {
+  display: none;
+}
+
+#daySelect {
+  width: 80px;
+}
+
+#monthSelect {
+  width: 110px;
+}
+
+#yearSelect {
+  width: 80px;
+}
+  </style>
+
+  <div class="neomorphic-div">
+    <h3><b>NOME:</b> {{ pacchetto.client_nome }}&nbsp;&nbsp;&nbsp;<b>TEL:</b> {{ pacchetto.client_cellulare or '—' }}</h3>
   </div>
 
-  <h5 class="mt-4">Sedute</h5>
-  <table class="table table-sm">
-    <thead><tr><th>#</th><th>Servizio</th><th>Stato</th></tr></thead>
-    <tbody>
-      {% for s in pacchetto.sedute %}
-      <tr><td>{{ s.ordine }}</td><td>{{ s.service_nome }}</td><td>{{ s.stato }}</td></tr>
-      {% endfor %}
-      {% if pacchetto.sedute|length == 0 %}
-      <tr><td colspan="3">Nessuna seduta</td></tr>
-      {% endif %}
-    </tbody>
-  </table>
+  <div class="neomorphic-div">
+    <h4><b>PROGRAMMA:</b> {{ pacchetto.nome }}</h4>
+    <h4><b>PAGAMENTO:</b> €{{ '%.2f'|format(pacchetto.costo_totale_lordo) }} scontato → €{{ '%.2f'|format(pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo) }} in {{ pacchetto.rate|length }} rate</h4>
+    <h5>Stato pagamento: [Bozza - Totale pagato: €X / Totale dovuto: €Y] <button class="btn btn-sm btn-primary">Segna pagato</button></h5>
+  </div>
 
-  <h5 class="mt-4">Operatori Preferiti</h5>
-  <ul class="list-group list-group-flush">
-    {% for o in pacchetto.operatori %}
-      <li class="list-group-item">{{ o.nome }}</li>
-    {% endfor %}
-    {% if pacchetto.operatori|length == 0 %}
-      <li class="list-group-item">Nessun operatore preferito</li>
-    {% endif %}
-  </ul>
+  <div class="d-flex mt-4">
+    <div class="flex-fill">
+      <table class="table table-sm" id="seduteTable">
+        <thead>
+          <tr>
+            <th>DATA</th>
+            <th>TRATTAMENTO</th>
+            <th>N*</th>
+            <th>OPERATORE</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in pacchetto.sedute %}
+          <tr draggable="true" data-id="{{ s.id }}">
+            <td class="data-cell">{{ s.data_trattamento|default('—') }}</td>
+            <td>{{ s.service_nome }}</td>
+            <td class="n-star"></td>
+            <td class="operatore-cell" data-operatore-id="{{ s.operatore_id or '' }}">{{ s.operatore_nome or '' }}</td>
+          </tr>
+          {% endfor %}
+          {% if pacchetto.sedute|length == 0 %}
+          <tr><td colspan="4">Nessuna seduta</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    <div class="ms-3" style="width: 300px;">
+      <textarea id="noteEditor" class="form-control" rows="10">{{ pacchetto.note or '' }}</textarea>
+    </div>
+  </div>
+  </div>
+{% endblock %}
+{% block scripts %}
+<script>
+      // Global vars used by modal handlers (must be top-level)
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const pacchettoId = {{ pacchetto.id }};
+    const operatori = {{ pacchetto.all_operatori | tojson }};
 
-  <h5 class="mt-4">Rate</h5>
-  <table class="table table-sm">
-    <thead><tr><th>Importo</th><th>Pagata</th></tr></thead>
-    <tbody>
-      {% for r in pacchetto.rate %}
-      <tr><td>€{{ '%.2f'|format(r.importo) }}</td><td>{{ 'Sì' if r.is_pagata else 'No' }}</td></tr>
-      {% endfor %}
-      {% if pacchetto.rate|length == 0 %}
-      <tr><td colspan="2">Nessuna rata</td></tr>
-      {% endif %}
-    </tbody>
-  </table>
-</div>
+  // Date display helpers (top-level so modal handlers can use them)
+  function formatDisplayDate(iso) {
+    if (!iso) return '—';
+    const months = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'];
+    const parts = iso.split('-');
+    if (parts.length !== 3) return '—';
+    const y = parts[0];
+    const m = parseInt(parts[1], 10);
+    const d = parts[2].padStart(2, '0');
+    return `${d} ${months[m - 1]} ${y}`;
+  }
+
+  function normalizeDateCells() {
+    document.querySelectorAll('#seduteTable tbody tr[data-id]').forEach(row => {
+      const cell = row.querySelector('.data-cell');
+      const text = (cell.textContent || '').trim();
+      if (text && text !== '—' && /^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        cell.dataset.date = text;
+        cell.textContent = formatDisplayDate(text);
+      } else if (cell.dataset.date) {
+        cell.textContent = formatDisplayDate(cell.dataset.date);
+      } else {
+        cell.dataset.date = '';
+        cell.textContent = '—';
+      }
+    });
+  }
+
+  function populateNStar() {
+  const rows = document.querySelectorAll('#seduteTable tbody tr[data-id]');
+  const serviceCounts = {};
+  rows.forEach(row => {
+    const cells = row.cells;
+    const serviceName = cells[1].textContent.trim(); // TRATTAMENTO
+    const nCell = cells[2]; // N*
+    const dateIso = row.querySelector('.data-cell').dataset.date || '';
+
+    if (dateIso) {
+      const count = (serviceCounts[serviceName] || 0) + 1;
+      serviceCounts[serviceName] = count;
+      nCell.textContent = count;
+    } else {
+      nCell.textContent = '—';
+    }
+  });
+}
+
+  document.addEventListener('DOMContentLoaded', function() {
+
+    // Popola N* al caricamento
+    populateNStar();
+    normalizeDateCells()
+
+    // Click su cella operatore per modifica
+    document.addEventListener('click', function(e) {
+      if (e.target.closest('.operatore-cell')) {
+        const cell = e.target.closest('.operatore-cell');
+        const currentId = cell.dataset.operatoreId;
+        const sedutaId = cell.closest('tr').dataset.id;
+
+        // Rimuovi eventuali dropdown esistenti
+        document.querySelectorAll('.custom-dropdown').forEach(d => d.remove());
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'custom-dropdown';
+        dropdown.innerHTML = '<ul>' +
+          '<li data-value=""' + (currentId === '' ? ' class="selected"' : '') + '>(nessuno)</li>' +
+          operatori.map(o => `<li data-value="${o.id}"${o.id == currentId ? ' class="selected"' : ''}>${o.nome}</li>`).join('') +
+          '</ul>';
+
+        dropdown.addEventListener('click', function(e) {
+          if (e.target.tagName === 'LI') {
+            const newId = e.target.dataset.value;
+            fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/${sedutaId}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+              },
+              body: JSON.stringify({ operatore_id: newId || null })
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.message) {
+                cell.dataset.operatoreId = newId;
+                cell.textContent = newId ? operatori.find(o => o.id == newId).nome : '';
+                dropdown.remove(); // Chiudi dropdown dopo selezione
+              }
+            });
+          }
+        });
+
+        // Chiudi dropdown se si clicca fuori
+        document.addEventListener('click', function closeDropdown(e) {
+          if (!dropdown.contains(e.target) && !cell.contains(e.target)) {
+            setTimeout(() => {
+              dropdown.remove();
+              document.removeEventListener('click', closeDropdown);
+            }, 50); // Ritardo di 50ms prima di chiudere
+          }
+        });
+
+        cell.innerHTML = '';
+        cell.appendChild(dropdown);
+      }
+    });
+    // DnD per sedute
+    const tbody = document.querySelector('#seduteTable tbody');
+    let draggedRow = null;
+
+    tbody.addEventListener('dragstart', function(e) {
+      draggedRow = e.target.closest('tr');
+    });
+
+    tbody.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      const afterElement = getDragAfterElement(tbody, e.clientY);
+      if (afterElement == null) {
+        tbody.appendChild(draggedRow);
+      } else {
+        tbody.insertBefore(draggedRow, afterElement);
+      }
+    });
+
+    tbody.addEventListener('drop', function(e) {
+      e.preventDefault();
+      // Salva nuovo ordine
+      const rows = Array.from(tbody.querySelectorAll('tr[data-id]'));
+      const order = rows.map(row => parseInt(row.dataset.id));
+      fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/ordine`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ ordine: order })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.message) {
+          // Ricarica pagina per aggiornare ordine e ricalcolare N*
+          location.reload();
+        }
+      });
+    });
+
+    function getDragAfterElement(container, y) {
+      const draggableElements = [...container.querySelectorAll('tr[data-id]')];
+      return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
+        } else {
+          return closest;
+        }
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    // Salvataggio note
+    const noteEditor = document.getElementById('noteEditor');
+    let noteTimeout;
+    noteEditor.addEventListener('input', function() {
+      clearTimeout(noteTimeout);
+      noteTimeout = setTimeout(() => {
+        fetch(`/pacchetti/api/pacchetti/${pacchettoId}/note`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+          },
+          body: JSON.stringify({ note: noteEditor.value })
+        });
+      }, 1000); // Salva dopo 1s di inattività
+    });
+  });
+
+document.addEventListener('click', function(e) {
+  const cell = e.target.closest('.data-cell');
+  if (!cell) return;
+
+  const sedutaId = cell.closest('tr').dataset.id;
+  const initial = cell.dataset.date || null;
+
+  // Backdrop + modal
+  const backdrop = document.createElement('div');
+  backdrop.className = 'date-modal-backdrop';
+  const modal = document.createElement('div');
+  modal.className = 'date-modal';
+
+  // Build 1-column, 2-row table
+  const table = document.createElement('table');
+  table.className = 'date-table';
+  const trTop = document.createElement('tr');
+  const trBottom = document.createElement('tr');
+  const tdTop = document.createElement('td');
+  const tdBottom = document.createElement('td');
+
+tdTop.innerHTML = `
+  <div class="d-flex align-items-center mb-2">
+    <div class="d-flex gap-2">
+      <select id="daySelect" class="form-select form-select-sm"></select>
+      <select id="monthSelect" class="form-select form-select-sm"></select>
+      <select id="yearSelect" class="form-select form-select-sm"></select>
+    </div>
+  </div>
+`;
+  tdBottom.innerHTML = `
+    <div class="d-flex justify-content-end gap-2 mt-2">
+      <button type="button" class="btn btn-sm btn-primary" id="oggiBtn">OGGI</button>
+      <button type="button" class="btn btn-sm btn-success" id="salvaBtn">Salva</button>
+      <button type="button" class="btn btn-sm btn-secondary" id="annullaBtn">Annulla</button>
+    </div>
+  `;
+
+  trTop.appendChild(tdTop);
+  trBottom.appendChild(tdBottom);
+  table.appendChild(trTop);
+  table.appendChild(trBottom);
+
+  modal.appendChild(table);
+  document.body.appendChild(backdrop);
+  document.body.appendChild(modal);
+
+  const daySel = modal.querySelector('#daySelect');
+  const monthSel = modal.querySelector('#monthSelect');
+  const yearSel = modal.querySelector('#yearSelect');
+
+  // Populate selects
+  for (let d = 1; d <= 31; d++) {
+    const opt = document.createElement('option'); opt.value = d; opt.textContent = d; daySel.appendChild(opt);
+  }
+  const mesi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option'); opt.value = m; opt.textContent = mesi[m-1]; monthSel.appendChild(opt);
+  }
+  const now = new Date();
+  const cy = now.getFullYear();
+  for (let y = cy - 5; y <= cy + 5; y++) {
+    const opt = document.createElement('option'); opt.value = y; opt.textContent = y; yearSel.appendChild(opt);
+  }
+
+  // Helpers
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function clampDay(y, m, d) {
+    const last = new Date(y, m, 0).getDate();
+    return Math.min(d, last);
+  }
+
+    function setFromISO(iso) {
+      if (iso) {
+        const parts = iso.split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const d = parseInt(parts[2], 10);
+        yearSel.value = y;
+        monthSel.value = m;
+        daySel.value = d;
+      } else {
+        yearSel.value = now.getFullYear();
+        monthSel.value = now.getMonth() + 1;
+        daySel.value = now.getDate();
+      }
+    }
+
+    function getYMD() {
+      const y = parseInt(yearSel.value, 10);
+      const m = parseInt(monthSel.value, 10);
+      let d = parseInt(daySel.value, 10);
+
+      // Clamp day between 1 and last day of month
+      const last = new Date(y, m, 0).getDate();
+      if (Number.isNaN(d)) d = 1;
+      d = Math.min(Math.max(1, d), last);
+      daySel.value = String(d);
+
+      return { y, m, d };
+    }
+
+  // Init value from existing date or today
+setFromISO(initial);
+{
+  const ty = now.getFullYear();
+  const tm = now.getMonth() + 1;
+  const td = now.getDate();
+  yearSel.value = ty;
+  monthSel.value = tm;
+  daySel.value = td;
+}
+
+  // Keep calendar in sync with selects
+function onSelectChange() {
+  getYMD(); // clamps the day and updates daySel.value
+}
+daySel.addEventListener('change', onSelectChange);
+monthSel.addEventListener('change', onSelectChange);
+yearSel.addEventListener('change', onSelectChange);
+
+  // Actions
+modal.querySelector('#oggiBtn').addEventListener('click', () => {
+  const ty = now.getFullYear(), tm = now.getMonth() + 1, td = now.getDate();
+  yearSel.value = ty; monthSel.value = tm; daySel.value = td;
+});
+
+  function closeModal() { modal.remove(); backdrop.remove(); }
+  modal.querySelector('#annullaBtn').addEventListener('click', closeModal);
+  backdrop.addEventListener('click', closeModal);
+  document.addEventListener('keydown', function escHandler(ev) {
+    if (ev.key === 'Escape') { closeModal(); document.removeEventListener('keydown', escHandler); }
+  });
+
+  modal.querySelector('#salvaBtn').addEventListener('click', () => {
+    const { y, m, d } = getYMD();
+    const newDate = `${y}-${pad(m)}-${pad(d)}`; // YYYY-MM-DD
+    fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/${sedutaId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ data_trattamento: newDate })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) { alert(data.error); return; }
+    if (data.message) {
+    cell.dataset.date = newDate;
+    cell.textContent = formatDisplayDate(newDate);
+    closeModal();
+    populateNStar();
+    }
+    });
+  });
+});
+</script>
 {% endblock %}
