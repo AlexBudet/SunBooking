@@ -137,13 +137,16 @@ def api_pacchetti():
     # API per lista pacchetti con filtri (ricerca per nome, cliente, status)
     query_nome = request.args.get('nome', '').strip()
     query_cliente = request.args.get('cliente', '').strip()
+    query_cliente_id = request.args.get('cliente_id', '').strip()
     query_status = request.args.get('status', '').strip()
     
     pacchetti_query = Pacchetto.query.join(Client).filter(Pacchetto.status != PacchettoStatus.Eliminato)
     
     if query_nome:
         pacchetti_query = pacchetti_query.filter(Pacchetto.nome.ilike(f'%{query_nome}%'))
-    if query_cliente:
+    if query_cliente_id.isdigit():
+        pacchetti_query = pacchetti_query.filter(Pacchetto.client_id == int(query_cliente_id))
+    elif query_cliente:
         pacchetti_query = pacchetti_query.filter(
             or_(
                 Client.cliente_nome.ilike(f'%{query_cliente}%'),
@@ -192,17 +195,31 @@ def api_create_pacchetto():
         return jsonify({'error': 'Cliente non trovato'}), 404
     
     # Crea pacchetto
+    raw_status = str(data.get('status') or '').strip()
+    if raw_status:
+        try:
+            status_enum = PacchettoStatus[raw_status]          # nome: es. "Preventivo"
+        except KeyError:
+            try:
+                status_enum = PacchettoStatus(raw_status)      # value: es. "preventivo"
+            except ValueError:
+                status_enum = PacchettoStatus.Preventivo
+    else:
+        status_enum = PacchettoStatus.Preventivo
+    if status_enum == PacchettoStatus.Eliminato:
+        status_enum = PacchettoStatus.Preventivo  # non consentito in creazione
+
     pacchetto = Pacchetto(
         client_id=data['client_id'],
         nome=data['nome'],
         data_sottoscrizione=datetime.now().date(),
         note=data['note'],
-        status=PacchettoStatus.Preventivo,
+        status=status_enum,
         costo_totale_lordo=data['costo_totale'],
         costo_totale_scontato=data.get('costo_scontato')
     )
     db.session.add(pacchetto)
-    db.session.flush()  # Per ottenere id
+    db.session.flush()
     
     # Aggiungi sedute (servizi con quantità)
     ordine = 1
@@ -328,4 +345,33 @@ def api_get_pacchetto(id):
             'tipo': 'rate' if pagamento and pagamento.formula_pagamenti else 'saldo',
             'numero_rate': pagamento.numero_rate if pagamento else 1
         } if pagamento else None
+    })
+
+@pacchetti_bp.route('/detail/<int:id>', methods=['GET'])
+def pacchetto_detail(id):
+    pacchetto = Pacchetto.query.get_or_404(id)
+
+    def format_data_it(d):
+        mesi = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC']
+        return f"{d.day:02d} {mesi[d.month-1]} {d.year}"
+
+    sedute = [{'ordine': s.ordine, 'service_nome': s.service.servizio_nome, 'stato': s.stato}
+              for s in pacchetto.sedute]
+    rate = [{'importo': float(r.importo), 'is_pagata': r.is_pagata} for r in pacchetto.rate]
+    operatori = [{'id': o.id, 'nome': f"{o.user_nome} {o.user_cognome}"} for o in pacchetto.preferred_operators]
+    data_fmt = format_data_it(pacchetto.data_sottoscrizione) if pacchetto.data_sottoscrizione else ''
+
+    return render_template('pacchetto_detail.html', pacchetto={
+        'id': pacchetto.id,
+        'client_id': pacchetto.client_id,
+        'client_nome': f"{pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}",
+        'nome': pacchetto.nome,
+        'data_sottoscrizione': data_fmt,
+        'note': pacchetto.note,
+        'status': pacchetto.status.value,
+        'costo_totale_lordo': float(pacchetto.costo_totale_lordo),
+        'costo_totale_scontato': float(pacchetto.costo_totale_scontato) if pacchetto.costo_totale_scontato else None,
+        'operatori': operatori,
+        'sedute': sedute,
+        'rate': rate
     })
