@@ -3,7 +3,7 @@
 
 {% block content %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<style>
+<style>    
     #clientDropdown, #serviceDropdown {
         display: none;
         max-height: 200px;
@@ -20,52 +20,111 @@
         overflow-y: auto;
         overflow-x: hidden;
     }
+
+#clientDropdown, #serviceDropdown, #searchClienteDropdown {
+  display: none;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Centra verticalmente header e celle (sovrascrive Bootstrap) */
+.table thead th,
+.table tbody td { vertical-align: middle !important; }
+
+.table tbody tr { margin: 3px 0; padding: 1px; }
+
+/* Colore bordo riga per status (usa variabili Bootstrap) */
+.table tbody tr.status-preventivo { --bs-table-border-color: #ffdb10; --bs-border-width: 2px; }
+.table tbody tr.status-attivo { --bs-table-border-color: #f1fff1; --bs-border-width: 2px; }
+.table tbody tr.status-completato { --bs-table-border-color: #7e7e7e; --bs-border-width: 2px; }
+.table tbody tr.status-abbandonato { --bs-table-border-color: #ffb4b4; --bs-border-width: 2px; }
+
+/* Hover: colore di sfondo per cella/righe per status */
+.table tbody tr.status-preventivo:hover { --bs-table-bg: #fff7cc; }
+.table tbody tr.status-attivo:hover { --bs-table-bg: #e8ffe8; }
+.table tbody tr.status-completato:hover,
+.table tbody tr.status-terminato:hover { --bs-table-bg: #5c5c5c; --bs-table-color: #ffffff; }
+.table tbody tr.status-abbandonato:hover { --bs-table-bg: #ffe5e5; }
+
+/* Transizione morbida su colore di sfondo/testo */
+.table tbody tr[class*="status-"] > td,
+.table tbody tr[class*="status-"] > th {
+  transition: background-color .15s ease, color .15s ease;
+}
+
+/* Necessario per vedere i corner sui <td> */
+.table { border-collapse: separate; border-spacing: 0 10px; background-color: transparent; width: 90%; margin-left: 5%;}
+
+/* Bordi orizzontali su tutte le celle tranne azioni */
+.table tbody tr[class*="status-"] > td:not(.actions) {
+  border-top: var(--bs-border-width) solid var(--bs-table-border-color);
+  border-bottom: var(--bs-border-width) solid var(--bs-table-border-color);
+  border-left: 0;
+  border-right: 0;
+  background-clip: padding-box;
+}
+
+/* Prima cella: solo bordo sinistro + corner arrotondati */
+.table tbody tr[class*="status-"] > td:first-child {
+  border-left: var(--bs-border-width) solid var(--bs-table-border-color);
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+  overflow: hidden;
+}
+
+/* Penultima cella: solo bordo destro + corner arrotondati */
+.table tbody tr[class*="status-"] > td:nth-last-child(2) {
+  border-right: var(--bs-border-width) solid var(--bs-table-border-color);
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+  overflow: hidden;
+}
+
+/* Cella azioni: nessun bordo, nessun corner; appare "esterna" */
+.table tbody tr[class*="status-"] > td.actions {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background-color: transparent;
+}
 </style>
 <br><br><br>
 <div class="page-wide-90">
     <h2>Pacchetti</h2>
     
     <!-- Campo di ricerca -->
-    <div class="mb-3">
-        <div class="row">
-            <div class="col-md-3">
-                <input type="text" class="form-control" id="searchNome" placeholder="Cerca per nome pacchetto">
-            </div>
-            <div class="col-md-3">
-                <input type="text" class="form-control" id="searchCliente" placeholder="Cerca per cliente">
-            </div>
-            <div class="col-md-2">
-                <select class="form-control" id="searchStatus">
-                    <option value="">Tutti gli status</option>
-                    <option value="Preventivo">Preventivo</option>
-                    <option value="Attivo">Attivo</option>
-                    <option value="Completato">Completato</option>
-                    <option value="Abbandonato">Abbandonato</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-secondary" onclick="searchPacchetti()">Cerca</button>
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-primary" onclick="openAddModal()">Crea Nuovo Pacchetto</button>
-            </div>
-        </div>
+<div class="mb-3">
+  <div class="row">
+    <div class="col-md-5">
+      <input type="text" class="form-control" id="searchCliente" placeholder="Cerca per cliente" autocomplete="off">
+      <div id="searchClienteDropdown" class="dropdown-menu"></div>
     </div>
+    <div class="col-md-2">
+      <select class="form-control" id="searchStatus">
+        <option value="">Tutti gli status</option>
+        <option value="Preventivo">Preventivo</option>
+        <option value="Attivo">Attivo</option>
+        <option value="Completato">Completato</option>
+        <option value="Abbandonato">Abbandonato</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-secondary" onclick="searchPacchetti()">Cerca</button>
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-primary" onclick="openAddModal()">Crea Nuovo Pacchetto</button>
+    </div>
+  </div>
+</div>
     
     <!-- Tabella risultati -->
-    <table class="table table-striped">
+    <table class="table">
         <thead>
             <tr>
-                <th>ID</th>
-                <th>Nome</th>
                 <th>Cliente</th>
+                <th>Nome Pacchetto</th>
                 <th>Data Sottoscrizione</th>
-                <th>Note</th>
-                <th>Status</th>
                 <th>Costo Lordo</th>
                 <th>Costo Scontato</th>
-                <th>Operatori Preferiti</th>
-                <th>Sedute</th>
                 <th>Azioni</th>
             </tr>
         </thead>
@@ -130,6 +189,12 @@
                             <input type="number" class="form-control" id="scontoValore" placeholder="Valore sconto (%)" step="0.01">
                             <input type="number" class="form-control mt-1" id="omaggiExtra" placeholder="Omaggi extra">
                         </div>
+                    </div>
+
+                    <!-- Costo totale scontato (auto-calcolato) -->
+                    <div class="mb-3">
+                        <label for="costoTotaleScontato" class="form-label">Costo Totale Scontato</label>
+                        <input type="number" class="form-control" id="costoTotaleScontato" step="0.01" readonly>
                     </div>
                     
                     <!-- Pagamento -->
@@ -244,21 +309,38 @@
         tbody.innerHTML = '';
         pacchetti.forEach(p => {
             const tr = document.createElement('tr');
+
+            const statusRaw = (p.status ?? p.status_value ?? p.status_name ?? '');
+            const statusKey = String(statusRaw).toLowerCase();
+            if (statusKey) tr.classList.add(`status-${statusKey}`);
+            tr.dataset.status = statusKey;
+
+            tr.style.cursor = 'pointer';
+            tr.onclick = () => { window.location.href = '/pacchetti/detail/' + p.id; };
+
+function formatDataIt(iso) {
+  if (!iso) return '';
+  const [yyyy, mm, dd] = iso.split('T')[0].split('-');
+  const mesi = [
+    'GEN','FEB','MAR','APR','MAG','GIU',
+    'LUG','AGO','SET','OTT','NOV','DIC'
+  ];
+  const nomeMese = mesi[parseInt(mm, 10) - 1] || '';
+  return `${dd} ${nomeMese} ${yyyy}`;
+}
+
             tr.innerHTML = `
-                <td>${p.id}</td>
-                <td>${p.nome}</td>
-                <td>${p.client_nome}</td>
-                <td>${p.data_sottoscrizione || ''}</td>
-                <td>${p.note || ''}</td>
-                <td>${p.status}</td>
-                <td>€${p.costo_totale_lordo.toFixed(2)}</td>
-                <td>${p.costo_totale_scontato ? '€' + p.costo_totale_scontato.toFixed(2) : ''}</td>
-                <td>${p.operatori_preferiti.join(', ')}</td>
-                <td>${p.sedute.map(s => `${s.service_nome} (${s.stato})`).join('<br>')}</td>
-                <td>
-                    <button class="btn btn-sm btn-warning" onclick="editPacchetto(${p.id})">Modifica</button>
-                    <button class="btn btn-sm btn-danger" onclick="deletePacchetto(${p.id})">Elimina</button>
-                </td>
+            <td><b>${p.client_nome}</b></td>
+            <td>${p.nome}</td>
+            <td>${formatDataIt(p.data_sottoscrizione)}</td>
+            <td>€${p.costo_totale_lordo.toFixed(2)}</td>
+            <td>${p.costo_totale_scontato ? '€' + p.costo_totale_scontato.toFixed(2) : ''}</td>
+            <td class="actions">
+                <button type="button" class="btn btn-primary btn-sm btn-xxs me-1"
+                        onclick="event.stopPropagation(); editPacchetto(${p.id})">Modifica</button>
+                <button type="button" class="btn btn-danger btn-sm btn-xxs"
+                        onclick="event.stopPropagation(); deletePacchetto(${p.id})">Elimina</button>
+            </td>
             `;
             tbody.appendChild(tr);
         });
@@ -266,12 +348,17 @@
 
     // Ricerca
     function searchPacchetti() {
-        const params = {
-            nome: document.getElementById('searchNome').value,
-            cliente: document.getElementById('searchCliente').value,
-            status: document.getElementById('searchStatus').value
-        };
-        loadPacchetti(params);
+    const input = document.getElementById('searchCliente');
+    const clientId = input.dataset.clientId;
+    const params = {
+        status: document.getElementById('searchStatus').value
+    };
+    if (input.dataset.clientId) {
+        params.cliente_id = input.dataset.clientId;
+    } else {
+        params.cliente = input.value;
+    }
+    loadPacchetti(params);
     }
 
     // Apri modal aggiunta
@@ -324,6 +411,49 @@
         document.getElementById('client_id').value = id;
         document.getElementById('clientDropdown').style.display = 'none';
     }
+
+document.getElementById('searchCliente').addEventListener('input', function () {
+  // Se l'utente digita, azzera la selezione cliente_id
+  delete this.dataset.clientId;
+  const query = this.value.trim();
+  if (query.length < 2) {
+    document.getElementById('searchClienteDropdown').style.display = 'none';
+    return;
+  }
+  handleTopClientSearchPacchetti(query);
+});
+
+async function handleTopClientSearchPacchetti(query) {
+  try {
+    const response = await fetch(`/pacchetti/api/clienti?q=${encodeURIComponent(query)}`);
+    const clients = await response.json();
+    showTopClientDropdownPacchetti(clients);
+  } catch (error) {
+    console.error('Errore ricerca clienti (top):', error);
+  }
+}
+
+function showTopClientDropdownPacchetti(clients) {
+  const dropdown = document.getElementById('searchClienteDropdown');
+  dropdown.innerHTML = '';
+  clients.forEach(c => {
+    const a = document.createElement('a');
+    a.className = 'dropdown-item';
+    a.href = '#';
+    a.textContent = `${c.nome} ${c.cognome} - ${c.cellulare}`;
+    a.onclick = (e) => { e.preventDefault(); selectTopClientPacchetti(c.id, `${c.nome} ${c.cognome}`); };
+    dropdown.appendChild(a);
+  });
+  dropdown.style.display = 'block';
+}
+
+function selectTopClientPacchetti(id, name) {
+  const input = document.getElementById('searchCliente');
+  input.value = name;
+  input.dataset.clientId = String(id);
+  document.getElementById('searchClienteDropdown').style.display = 'none';
+  searchPacchetti();
+}
 
     // Ricerca servizio (usa createElement per sicurezza)
     document.getElementById('serviceSearch').addEventListener('input', function() {
@@ -411,6 +541,41 @@
     function updateCostoTotale() {
         const totale = serviziSelezionati.reduce((sum, s) => sum + (s.prezzo * s.quantita), 0);
         document.getElementById('costoTotale').value = totale.toFixed(2);
+        updateCostoScontato();
+    }
+
+    // Calcola costo scontato in base al tipo sconto
+    function updateCostoScontato() {
+        const totale = parseFloat(document.getElementById('costoTotale').value) || 0;
+        const tipo = document.getElementById('scontoTipo').value;
+        const val = parseFloat(document.getElementById('scontoValore').value);
+        const omaggiExtra = parseInt(document.getElementById('omaggiExtra').value) || 0;
+
+        let scontato = totale;
+
+        if (tipo === 'Percentuale') {
+            if (!isNaN(val) && val > 0) {
+                const perc = Math.min(Math.max(val, 0), 100);
+                scontato = totale * (1 - perc / 100);
+            }
+        } else if (tipo === 'Ogni_N_Omaggio') {
+            const N = parseInt(val);
+            if (!isNaN(N) && N > 0) {
+                const prezzi = [];
+                serviziSelezionati.forEach(s => {
+                    for (let i = 0; i < s.quantita; i++) {
+                        prezzi.push(s.prezzo);
+                    }
+                });
+                prezzi.sort((a, b) => a - b);
+                const freebies = Math.floor(prezzi.length / N) + (omaggiExtra > 0 ? omaggiExtra : 0);
+                const omaggiEffettivi = Math.min(freebies, prezzi.length);
+                const scontoSomma = prezzi.slice(0, omaggiEffettivi).reduce((sum, p) => sum + p, 0);
+                scontato = Math.max(totale - scontoSomma, 0);
+            }
+        }
+
+        document.getElementById('costoTotaleScontato').value = scontato.toFixed(2);
     }
 
     // Toggle campi sconto
@@ -424,7 +589,12 @@
             document.getElementById('scontoValore').placeholder = 'Valore sconto (%)';
             document.getElementById('omaggiExtra').style.display = 'none';
         }
+        updateCostoScontato();
     }
+
+    // Ricalcola scontato quando cambiano i campi sconto
+    document.getElementById('scontoValore').addEventListener('input', updateCostoScontato);
+    document.getElementById('omaggiExtra').addEventListener('input', updateCostoScontato);
 
     // Toggle campi pagamento
     function togglePagamentoFields() {
@@ -432,8 +602,6 @@
         document.getElementById('pagamentoFields').style.display = tipo === 'rate' ? '' : 'none';
     }
 
-    // Salva pacchetto
-    // Salva pacchetto
     async function savePacchetto() {
         const data = {
             client_id: document.getElementById('client_id').value,
@@ -446,7 +614,8 @@
             omaggi_extra: parseInt(document.getElementById('omaggiExtra').value) || null,
             pagamento_tipo: document.getElementById('pagamentoTipo').value,
             numero_rate: parseInt(document.getElementById('numeroRate').value) || 1,
-            operatori: Array.from(document.getElementById('operatoriSelect').selectedOptions).map(o => parseInt(o.value))
+            operatori: Array.from(document.getElementById('operatoriSelect').selectedOptions).map(o => parseInt(o.value)),
+            costo_scontato: parseFloat(document.getElementById('costoTotaleScontato').value) || null
         };
 
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
@@ -468,7 +637,6 @@
         }
     }
 
-    // Edit pacchetto
     async function editPacchetto(id) {
         const response = await fetch(`/pacchetti/api/pacchetti/${id}`);
         const pacchetto = await response.json();
@@ -481,28 +649,32 @@
         document.getElementById('note').value = pacchetto.note;
         document.getElementById('status').value = pacchetto.status;
         document.getElementById('costoTotale').value = pacchetto.costo_totale_lordo;
-        
-        // Ricarica servizi, operatori, etc.
-        serviziSelezionati = pacchetto.sedute.map(s => ({ id: s.service_id, quantita: 1 })); // Semplificato
+
+        document.getElementById('costoTotaleScontato').value = pacchetto.costo_totale_scontato != null
+            ? pacchetto.costo_totale_scontato.toFixed(2)
+            : '';
+
+        serviziSelezionati = pacchetto.sedute.map(s => ({ id: s.service_id, quantita: 1 }));
         updateServiziList();
-        
+
         if (pacchetto.sconto) {
             document.getElementById('scontoTipo').value = pacchetto.sconto.tipo;
             document.getElementById('scontoValore').value = pacchetto.sconto.valore || '';
             document.getElementById('omaggiExtra').value = pacchetto.sconto.omaggi || '';
         }
-        
+
         if (pacchetto.pagamento) {
             document.getElementById('pagamentoTipo').value = pacchetto.pagamento.tipo;
             document.getElementById('numeroRate').value = pacchetto.pagamento.numero_rate;
         }
-        
-        // Operatori
+
         const selectOp = document.getElementById('operatoriSelect');
         Array.from(selectOp.options).forEach(o => o.selected = pacchetto.operatori.includes(parseInt(o.value)));
-        
+
         loadClienti();
         loadOperatori();
+
+        updateCostoTotale(); // Aggiorna anche scontato in base ai campi popolati
         new bootstrap.Modal(document.getElementById('pacchettoModal')).show();
     }
 

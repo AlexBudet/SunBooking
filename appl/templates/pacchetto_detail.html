@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+<br>
+<div class="container mt-3">
+  <a class="btn btn-link" href="{{ url_for('pacchetti.pacchetti_home') }}">← Torna ai Pacchetti</a>
+  <br>
+  <h3 class="mt-2">Dettaglio Pacchetto</h3>
+
+  <div class="card mt-3">
+    <div class="card-body">
+      <div><b>Cliente:</b> {{ pacchetto.client_nome }}</div>
+      <div><b>Nome Pacchetto:</b> {{ pacchetto.nome }}</div>
+      <div><b>Data Sottoscrizione:</b> {{ pacchetto.data_sottoscrizione }}</div>
+      <div><b>Status:</b> {{ pacchetto.status }}</div>
+      <div><b>Costo Lordo:</b> €{{ '%.2f'|format(pacchetto.costo_totale_lordo) }}</div>
+      <div><b>Costo Scontato:</b>
+        {% if pacchetto.costo_totale_scontato is not none %}
+          €{{ '%.2f'|format(pacchetto.costo_totale_scontato) }}
+        {% else %}
+          —
+        {% endif %}
+      </div>
+      <div class="mt-2"><b>Note:</b> {{ pacchetto.note or '—' }}</div>
+    </div>
+  </div>
+
+  <h5 class="mt-4">Sedute</h5>
+  <table class="table table-sm">
+    <thead><tr><th>#</th><th>Servizio</th><th>Stato</th></tr></thead>
+    <tbody>
+      {% for s in pacchetto.sedute %}
+      <tr><td>{{ s.ordine }}</td><td>{{ s.service_nome }}</td><td>{{ s.stato }}</td></tr>
+      {% endfor %}
+      {% if pacchetto.sedute|length == 0 %}
+      <tr><td colspan="3">Nessuna seduta</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <h5 class="mt-4">Operatori Preferiti</h5>
+  <ul class="list-group list-group-flush">
+    {% for o in pacchetto.operatori %}
+      <li class="list-group-item">{{ o.nome }}</li>
+    {% endfor %}
+    {% if pacchetto.operatori|length == 0 %}
+      <li class="list-group-item">Nessun operatore preferito</li>
+    {% endif %}
+  </ul>
+
+  <h5 class="mt-4">Rate</h5>
+  <table class="table table-sm">
+    <thead><tr><th>Importo</th><th>Pagata</th></tr></thead>
+    <tbody>
+      {% for r in pacchetto.rate %}
+      <tr><td>€{{ '%.2f'|format(r.importo) }}</td><td>{{ 'Sì' if r.is_pagata else 'No' }}</td></tr>
+      {% endfor %}
+      {% if pacchetto.rate|length == 0 %}
+      <tr><td colspan="2">Nessuna rata</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
