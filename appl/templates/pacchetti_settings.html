@@ -1,0 +1,967 @@
+<!-- appl/templates/pacchetti_settings.html -->
+{% extends "settings.html" %}
+
+{% block settings_content %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+  .promo-card {
+    background: #f8f9fa;
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 2px 2px 8px #e0e0e0, -2px -2px 8px #ffffff;
+  }
+  .promo-card .badge {
+    font-size: 0.85rem;
+  }
+  .template-preview {
+    background: #e9ecef;
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: monospace;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .variable-tag {
+    background: #0d6efd;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin: 2px;
+    display: inline-block;
+  }
+  .variable-tag:hover {
+    background: #0b5ed7;
+  }
+  .whatsapp-preview-container {
+    background: #e5ddd5;
+    background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAABSSURBVHgB7dAxAQAgDMCwgX/PMAIXJKDnujvvB/iz+joA/hISkJCAhAQkJCAhAQkJSEhAQgISEpCQgIQEJCQgIQEJCUhIQEICEhKQkICEBB4WnAMLVwYxmgAAAABJRU5ErkJggg==");
+    border-radius: 8px;
+    padding: 20px;
+    min-height: 200px;
+  }
+  .whatsapp-bubble {
+    background: #dcf8c6;
+    border-radius: 8px;
+    padding: 12px 16px;
+    max-width: 100%;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    white-space: pre-wrap;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+    position: relative;
+  }
+  .whatsapp-bubble::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -8px;
+    border-width: 8px;
+    border-style: solid;
+    border-color: #dcf8c6 transparent transparent transparent;
+  }
+    .disclaimer-preview {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1.5rem;
+    font-size: 0.9rem;
+    max-height: 400px;
+    overflow-y: auto;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .disclaimer-signature-line {
+    border-top: 1px solid #000;
+    width: 200px;
+    margin-top: 40px;
+    padding-top: 5px;
+    font-size: 0.8rem;
+  }
+</style>
+<div class="container mt-3">
+    <h1>Impostazioni Pacchetti</h1>
+
+  <!-- NUOVA SEZIONE: Giorni Abbandono -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-clock-history"></i> Regole Stato Pacchetto</h5>
+        </div>
+        <div class="card-body">
+          <div class="row align-items-center">
+            <div class="col-md-6">
+              <label for="giorniAbbandono" class="form-label">
+                <strong>Giorni di inattività per "Abbandonato"</strong>
+              </label>
+              <p class="text-muted small mb-2">
+                Dopo quanti giorni senza modifiche o sedute un pacchetto viene considerato abbandonato?
+              </p>
+            </div>
+            <div class="col-md-3">
+              <div class="input-group">
+                <input type="number" class="form-control" id="giorniAbbandono" 
+                       min="1" max="365" value="{{ giorni_abbandono or 90 }}">
+                <span class="input-group-text">giorni</span>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-primary w-100" onclick="saveGiorniAbbandono()">
+                <i class="bi bi-save"></i> Salva
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Colonna sinistra: Promo personalizzate -->
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0"><i class="bi bi-gift"></i> Promo Personalizzate</h5>
+          <button class="btn btn-sm btn-primary" onclick="openAddPromoModal()">
+            <i class="bi bi-plus-lg"></i> Nuova Promo
+          </button>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small">
+            Configura le promozioni predefinite del centro. Queste saranno disponibili come opzioni rapide durante la creazione dei pacchetti.
+          </p>
+          
+          <div id="promoList">
+            <!-- Promo caricate dinamicamente -->
+            <div class="text-center text-muted py-4" id="noPromoMessage">
+              <i class="bi bi-tag" style="font-size: 2rem;"></i>
+              <p class="mt-2">Nessuna promo configurata</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Colonna destra: Template WhatsApp -->
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="bi bi-whatsapp"></i> Template WhatsApp Pacchetto</h5>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small">
+            Configura il messaggio da inviare ai clienti con il riepilogo del loro pacchetto.
+          </p>
+
+          <div class="mb-3">
+            <label class="form-label">Variabili disponibili:</label>
+            <div>
+              <span class="variable-tag" onclick="insertVariable('{cliente_nome}')">Nome Cliente</span>
+              <span class="variable-tag" onclick="insertVariable('{pacchetto_nome}')">Nome Pacchetto</span>
+              <span class="variable-tag" onclick="insertVariable('{sedute_effettuate}')">Sedute Effettuate</span>
+              <span class="variable-tag" onclick="insertVariable('{sedute_totali}')">Sedute Totali</span>
+              <span class="variable-tag" onclick="insertVariable('{rate_pagate}')">Rate Pagate</span>
+              <span class="variable-tag" onclick="insertVariable('{rate_totali}')">Rate Totali</span>
+              <span class="variable-tag" onclick="insertVariable('{importo_pagato}')">Importo Pagato</span>
+              <span class="variable-tag" onclick="insertVariable('{importo_totale}')">Importo Totale</span>
+              <span class="variable-tag" onclick="insertVariable('{prossima_seduta}')">Prossima Seduta</span>
+              <span class="variable-tag" onclick="insertVariable('{centro_nome}')">Nome Centro</span>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="whatsappTemplate" class="form-label">Testo del messaggio:</label>
+            <textarea class="form-control" id="whatsappTemplate" rows="8" placeholder="Scrivi il template del messaggio...">{{ whatsapp_template or 'Ciao {cliente_nome}! 👋
+
+Ecco il riepilogo del tuo pacchetto \"{pacchetto_nome}\":
+
+📋 Sedute: {sedute_effettuate}/{sedute_totali} completate
+💳 Pagamenti: {rate_pagate}/{rate_totali} rate (€{importo_pagato}/€{importo_totale})
+
+Ti aspettiamo! 💆‍♀️
+{centro_nome}' }}</textarea>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button class="btn btn-success flex-grow-1" onclick="saveWhatsappTemplate()">
+              <i class="bi bi-save"></i> Salva Template
+            </button>
+            <button class="btn btn-outline-secondary" onclick="resetToDefault()" title="Ripristina testo predefinito">
+              <i class="bi bi-arrow-counterclockwise"></i> Default
+            </button>
+            <button class="btn btn-outline-primary" onclick="showPreviewModal()" title="Anteprima messaggio">
+              <i class="bi bi-eye"></i> Anteprima
+            </button>
+          </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NUOVA SEZIONE: Disclaimer Servizi -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Disclaimer per Servizio</h5>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Configura le indicazioni, controindicazioni e avvertenze specifiche per ogni servizio. 
+          Questi testi verranno automaticamente inclusi nel consenso informato del pacchetto.
+        </p>
+
+        <div class="row">
+          <div class="col-md-4">
+            <label for="selectServizio" class="form-label">Seleziona Servizio:</label>
+            <select class="form-select" id="selectServizio" onchange="loadServizioDisclaimer()">
+              <option value="">-- Seleziona un servizio --</option>
+              {% for servizio in servizi %}
+              <option value="{{ servizio.id }}" data-disclaimer="{{ servizio.servizio_disclaimer or '' }}">
+                {{ servizio.servizio_nome }}
+                {% if servizio.servizio_disclaimer %}✓{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            <small class="text-muted">✓ = disclaimer già configurato</small>
+          </div>
+          <div class="col-md-8">
+            <label for="servizioDisclaimer" class="form-label">Disclaimer del servizio:</label>
+            <textarea class="form-control" id="servizioDisclaimer" rows="6" 
+                      placeholder="Es: Controindicazioni: gravidanza, pacemaker, epilessia..."></textarea>
+            <div class="d-flex gap-2 mt-2">
+              <button class="btn btn-success" onclick="saveServizioDisclaimer()" id="btnSaveServizio" disabled>
+                <i class="bi bi-save"></i> Salva Disclaimer Servizio
+              </button>
+              <button class="btn btn-outline-secondary" onclick="clearServizioDisclaimer()" id="btnClearServizio" disabled>
+                <i class="bi bi-trash"></i> Rimuovi
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- NUOVA SEZIONE: Template Disclaimer / Consenso Informato -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Template Disclaimer / Consenso Informato</h5>
+          <div>
+            <button class="btn btn-sm btn-outline-secondary me-2" onclick="resetDisclaimerToDefault()" title="Ripristina testo predefinito">
+              <i class="bi bi-arrow-counterclockwise"></i> Default
+            </button>
+            <button class="btn btn-sm btn-outline-primary" onclick="showDisclaimerPreview()" title="Anteprima stampa">
+              <i class="bi bi-printer"></i> Anteprima Stampa
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small">
+            Configura il testo del consenso informato che il cliente dovrà firmare all'inizio del pacchetto. 
+            Può essere stampato o inviato via WhatsApp.
+          </p>
+
+          <div class="mb-3">
+            <label class="form-label">Variabili disponibili:</label>
+            <div>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{cliente_nome}')">Nome Cliente</span>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{cliente_cognome}')">Cognome Cliente</span>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{cliente_cellulare}')">Cellulare</span>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{pacchetto_nome}')">Nome Pacchetto</span>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{pacchetto_servizi}')">Elenco Servizi</span>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{sedute_totali}')">Sedute Totali</span>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{importo_totale}')">Importo Totale</span>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{importo_totale_lordo}')">Importo Lordo</span>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{data_sottoscrizione}')">Data Sottoscrizione</span>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{centro_nome}')">Nome Centro</span>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{centro_indirizzo}')">Indirizzo Centro</span>
+              <span class="variable-tag" onclick="insertDisclaimerVariable('{data_odierna}')">Data Odierna</span>
+    <span class="variable-tag bg-warning text-dark" onclick="insertDisclaimerVariable('{disclaimers_servizi}')">
+      <i class="bi bi-exclamation-triangle"></i> Disclaimers Servizi
+    </span>
+  </div>
+  <small class="text-muted d-block mt-1">
+    <i class="bi bi-info-circle"></i> La variabile <code>{disclaimers_servizi}</code> inserirà automaticamente 
+    i disclaimer di tutti i servizi inclusi nel pacchetto.
+  </small>
+          </div>
+
+          <div class="mb-3">
+            <label for="disclaimerTemplate" class="form-label">Testo del consenso informato:</label>
+            <textarea class="form-control" id="disclaimerTemplate" rows="12" placeholder="Scrivi il template del disclaimer...">{{ disclaimer_template or default_disclaimer }}</textarea>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button class="btn btn-success flex-grow-1" onclick="saveDisclaimerTemplate()">
+              <i class="bi bi-save"></i> Salva Template Disclaimer
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Anteprima Disclaimer (per stampa) -->
+<div class="modal fade" id="disclaimerPreviewModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-text"></i> Anteprima Consenso Informato</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="disclaimer-preview" id="disclaimerPreviewContent">
+          <!-- Contenuto anteprima -->
+        </div>
+        <div class="disclaimer-signature-line">
+          Firma del cliente
+        </div>
+      </div>
+      <div class="modal-footer">
+        <small class="text-muted me-auto">Esempio con dati fittizi</small>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+        <button type="button" class="btn btn-primary" onclick="printDisclaimer()">
+          <i class="bi bi-printer"></i> Stampa
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Aggiungi/Modifica Promo -->
+<div class="modal fade" id="promoModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="promoModalTitle">Nuova Promo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="promoForm">
+          <input type="hidden" id="promoId">
+          
+          <div class="mb-3">
+            <label for="promoNome" class="form-label">Nome Promo</label>
+            <input type="text" class="form-control" id="promoNome" placeholder="es. Promo Estate 2026" required>
+          </div>
+
+          <div class="mb-3">
+            <label for="promoTipo" class="form-label">Tipo Sconto</label>
+            <select class="form-select" id="promoTipo" onchange="togglePromoFields()">
+              <option value="percentuale">Sconto Percentuale</option>
+              <option value="sedute_omaggio">Sedute Omaggio</option>
+            </select>
+          </div>
+
+          <!-- Campi per Percentuale -->
+          <div id="promoPercentualeFields">
+            <div class="row">
+              <div class="col-md-6">
+                <label for="promoSoglia" class="form-label">Ogni N sedute</label>
+                <input type="number" class="form-control" id="promoSoglia" min="1" placeholder="es. 5">
+              </div>
+              <div class="col-md-6">
+                <label for="promoPercentuale" class="form-label">Sconto %</label>
+                <input type="number" class="form-control" id="promoPercentuale" min="1" max="100" placeholder="es. 10">
+              </div>
+            </div>
+            <small class="text-muted">Esempio: 10% di sconto ogni 5 sedute acquistate</small>
+          </div>
+
+          <!-- Campi per Sedute Omaggio -->
+          <div id="promoOmaggioFields" style="display: none;">
+            <div class="row">
+              <div class="col-md-6">
+                <label for="promoOmaggioSoglia" class="form-label">Ogni N sedute</label>
+                <input type="number" class="form-control" id="promoOmaggioSoglia" min="1" placeholder="es. 10">
+              </div>
+              <div class="col-md-6">
+                <label for="promoOmaggioQty" class="form-label">Sedute omaggio</label>
+                <input type="number" class="form-control" id="promoOmaggioQty" min="1" placeholder="es. 3">
+              </div>
+            </div>
+            <small class="text-muted">Esempio: 3 sedute omaggio ogni 10 sedute acquistate</small>
+          </div>
+
+          <div class="mb-3 mt-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="promoAttiva" checked>
+              <label class="form-check-label" for="promoAttiva">Promo attiva</label>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" onclick="savePromo()">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Anteprima WhatsApp -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="bi bi-whatsapp"></i> Anteprima Messaggio WhatsApp</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="whatsapp-preview-container">
+          <div class="whatsapp-bubble" id="previewBubble">
+            <!-- Contenuto anteprima -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <small class="text-muted me-auto">Esempio con dati fittizi</small>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<br><br>
+
+<script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+// Template disclaimer di default
+const defaultDisclaimerTemplate = `CONSENSO INFORMATO PER TRATTAMENTI ESTETICI
+
+Io sottoscritto/a {cliente_nome} {cliente_cognome}, 
+in data {data_odierna}, dichiaro di aver ricevuto informazioni complete relative al pacchetto "{pacchetto_nome}" che prevede i seguenti trattamenti:
+
+{pacchetto_servizi}
+
+Numero totale sedute: {sedute_totali}
+Valore pacchetto da listino: € {importo_totale_lordo}
+Importo totale pacchetto in promo: € {importo_totale}
+
+INDICAZIONI E CONTROINDICAZIONI DEI TRATTAMENTI:
+{disclaimers_servizi}
+
+DICHIARO:
+• Di essere stato/a informato/a sulle caratteristiche dei trattamenti proposti
+• Di non avere controindicazioni note ai trattamenti sopra elencati
+• Di aver comunicato eventuali patologie, allergie o condizioni di salute rilevanti
+• Di aver compreso le modalità di pagamento concordate
+• Di acconsentire al trattamento dei miei dati personali ai sensi del GDPR
+
+Centro: {centro_nome}
+Indirizzo: {centro_indirizzo}
+
+Data: {data_odierna}
+
+_______________________________
+Firma del cliente`;
+
+// =============== GIORNI ABBANDONO ===============
+async function saveGiorniAbbandono() {
+  const giorni = parseInt(document.getElementById('giorniAbbandono').value) || 90;
+  
+  if (giorni < 1 || giorni > 365) {
+    alert('⚠️ Inserisci un valore tra 1 e 365 giorni');
+    return;
+  }
+  
+  try {
+    const response = await fetch('/settings/api/pacchetti/giorni_abbandono', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({ giorni: giorni })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      alert('✅ Impostazione salvata!');
+    } else {
+      alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
+    }
+  } catch (error) {
+    console.error('Errore:', error);
+    alert('❌ Errore di connessione');
+  }
+}
+
+// =============== DISCLAIMER ===============
+function insertDisclaimerVariable(variable) {
+  const textarea = document.getElementById('disclaimerTemplate');
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  textarea.value = text.substring(0, start) + variable + text.substring(end);
+  textarea.focus();
+  textarea.setSelectionRange(start + variable.length, start + variable.length);
+}
+
+function resetDisclaimerToDefault() {
+  if (confirm('Vuoi ripristinare il template predefinito? Le modifiche non salvate andranno perse.')) {
+    document.getElementById('disclaimerTemplate').value = defaultDisclaimerTemplate;
+  }
+}
+
+function showDisclaimerPreview() {
+  const template = document.getElementById('disclaimerTemplate').value;
+  const preview = template
+    .replace(/{cliente_nome}/g, 'Maria')
+    .replace(/{cliente_cognome}/g, 'Rossi')
+    .replace(/{cliente_cellulare}/g, '333 1234567')
+    .replace(/{pacchetto_nome}/g, '10 Pressoterapia + 5 Massaggio')
+    .replace(/{pacchetto_servizi}/g, '• 10 Pressoterapia\n• 5 Massaggio Rilassante')
+    .replace(/{sedute_totali}/g, '15')
+    .replace(/{importo_totale}/g, '300.00')
+    .replace(/{importo_totale_lordo}/g, '450.00')
+    .replace(/{data_sottoscrizione}/g, '07/01/2026')
+    .replace(/{centro_nome}/g, 'Beauty Center')
+    .replace(/{centro_indirizzo}/g, 'Via Roma 123, Milano')
+    .replace(/{data_odierna}/g, new Date().toLocaleDateString('it-IT'));
+  
+  document.getElementById('disclaimerPreviewContent').innerText = preview;
+  new bootstrap.Modal(document.getElementById('disclaimerPreviewModal')).show();
+}
+
+function printDisclaimer() {
+  const content = document.getElementById('disclaimerPreviewContent').innerText;
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <html>
+    <head>
+      <title>Consenso Informato</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 40px; line-height: 1.6; }
+        .signature-line { border-top: 1px solid #000; width: 250px; margin-top: 60px; padding-top: 10px; }
+      </style>
+    </head>
+    <body>
+      <pre style="white-space: pre-wrap; font-family: Arial, sans-serif;">${content}</pre>
+      <div class="signature-line">Firma del cliente</div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.print();
+}
+
+async function saveDisclaimerTemplate() {
+  const template = document.getElementById('disclaimerTemplate').value;
+  
+  try {
+    const response = await fetch('/settings/api/pacchetti/disclaimer_template', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({ template: template })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      alert('✅ Template disclaimer salvato con successo!');
+    } else {
+      alert('❌ Errore nel salvataggio: ' + (data.error || 'Errore sconosciuto'));
+    }
+  } catch (error) {
+    console.error('Errore:', error);
+    alert('❌ Errore di connessione');
+  }
+}
+
+// Mostra modal anteprima
+function showPreviewModal() {
+  const template = document.getElementById('whatsappTemplate').value;
+  const preview = template
+    .replace(/{cliente_nome}/g, 'Maria Rossi')
+    .replace(/{pacchetto_nome}/g, '10 Pressoterapia + 5 Massaggio')
+    .replace(/{sedute_effettuate}/g, '7')
+    .replace(/{sedute_totali}/g, '15')
+    .replace(/{rate_pagate}/g, '2')
+    .replace(/{rate_totali}/g, '3')
+    .replace(/{importo_pagato}/g, '200.00')
+    .replace(/{importo_totale}/g, '300.00')
+    .replace(/{prossima_seduta}/g, '15 Gen 2026 ore 10:00')
+    .replace(/{centro_nome}/g, 'Beauty Center');
+  
+  document.getElementById('previewBubble').textContent = preview;
+  new bootstrap.Modal(document.getElementById('previewModal')).show();
+}
+
+// Toggle campi promo in base al tipo
+function togglePromoFields() {
+  const tipo = document.getElementById('promoTipo').value;
+  document.getElementById('promoPercentualeFields').style.display = tipo === 'percentuale' ? '' : 'none';
+  document.getElementById('promoOmaggioFields').style.display = tipo === 'sedute_omaggio' ? '' : 'none';
+}
+
+// Apri modal nuova promo
+function openAddPromoModal() {
+  document.getElementById('promoId').value = '';
+  document.getElementById('promoModalTitle').textContent = 'Nuova Promo';
+  document.getElementById('promoForm').reset();
+  document.getElementById('promoAttiva').checked = true;
+  togglePromoFields();
+  new bootstrap.Modal(document.getElementById('promoModal')).show();
+}
+
+// Salva promo (TODO: collegare a API backend)
+function savePromo() {
+  const id = document.getElementById('promoId').value;
+  const tipo = document.getElementById('promoTipo').value;
+  
+  const data = {
+    nome: document.getElementById('promoNome').value,
+    tipo: tipo,
+    attiva: document.getElementById('promoAttiva').checked
+  };
+
+  if (tipo === 'percentuale') {
+    data.soglia = parseInt(document.getElementById('promoSoglia').value) || 0;
+    data.percentuale = parseInt(document.getElementById('promoPercentuale').value) || 0;
+  } else {
+    data.soglia = parseInt(document.getElementById('promoOmaggioSoglia').value) || 0;
+    data.sedute_omaggio = parseInt(document.getElementById('promoOmaggioQty').value) || 0;
+  }
+
+  console.log('Salvataggio promo:', data);
+  // TODO: fetch POST/PUT a /settings/api/pacchetti/promo
+  
+  alert('Funzionalità in sviluppo - Promo salvata localmente');
+  bootstrap.Modal.getInstance(document.getElementById('promoModal')).hide();
+  // loadPromo();
+}
+
+// Inserisci variabile nel template
+function insertVariable(variable) {
+  const textarea = document.getElementById('whatsappTemplate');
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  textarea.value = text.substring(0, start) + variable + text.substring(end);
+  textarea.focus();
+  textarea.setSelectionRange(start + variable.length, start + variable.length);
+  updatePreview();
+}
+
+// Aggiorna anteprima template
+function updatePreview() {
+  const template = document.getElementById('whatsappTemplate').value;
+  const preview = template
+    .replace('{cliente_nome}', 'Maria Rossi')
+    .replace('{pacchetto_nome}', '10 Pressoterapia + 5 Massaggio')
+    .replace('{sedute_effettuate}', '7')
+    .replace('{sedute_totali}', '15')
+    .replace('{rate_pagate}', '2')
+    .replace('{rate_totali}', '3')
+    .replace('{importo_pagato}', '200.00')
+    .replace('{importo_totale}', '300.00')
+    .replace('{prossima_seduta}', '15 Gen 2026 ore 10:00')
+    .replace('{centro_nome}', 'Beauty Center');
+  
+  document.getElementById('templatePreview').textContent = preview;
+}
+
+// Salva template WhatsApp
+async function saveWhatsappTemplate() {
+  const template = document.getElementById('whatsappTemplate').value;
+  
+  try {
+    const response = await fetch('/settings/api/pacchetti/whatsapp_template', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({ template: template })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      alert('✅ Template salvato con successo!');
+    } else {
+      alert('❌ Errore nel salvataggio: ' + (data.error || 'Errore sconosciuto'));
+    }
+  } catch (error) {
+    console.error('Errore:', error);
+    alert('❌ Errore di connessione');
+  }
+}
+
+// Carica template esistente (opzionale, già caricato da Jinja)
+async function loadWhatsappTemplate() {
+  try {
+    const response = await fetch('/settings/api/pacchetti/whatsapp_template');
+    const data = await response.json();
+    if (data.template) {
+      document.getElementById('whatsappTemplate').value = data.template;
+      updatePreview();
+    }
+  } catch (error) {
+    console.error('Errore caricamento template:', error);
+  }
+}
+
+// Carica promo esistenti
+async function loadPromo() {
+  try {
+    const response = await fetch('/settings/api/pacchetti/promo');
+    const promoList = await response.json();
+    
+    const container = document.getElementById('promoList');
+    const noPromoMsg = document.getElementById('noPromoMessage');
+    
+    if (promoList.length === 0) {
+      noPromoMsg.style.display = '';
+      return;
+    }
+    
+    noPromoMsg.style.display = 'none';
+    container.innerHTML = '';
+    
+    promoList.forEach(promo => {
+      const card = document.createElement('div');
+      card.className = 'promo-card d-flex justify-content-between align-items-center';
+      card.id = `promo-${promo.id}`;
+      
+      let descrizione = '';
+      if (promo.tipo === 'percentuale') {
+        descrizione = `${promo.percentuale}% sconto ogni ${promo.soglia} sedute`;
+      } else {
+        descrizione = `${promo.sedute_omaggio} sedute omaggio ogni ${promo.soglia} acquistate`;
+      }
+      
+      card.innerHTML = `
+        <div>
+          <strong>${promo.nome}</strong>
+          <span class="badge ${promo.attiva ? 'bg-success' : 'bg-secondary'} ms-2">
+            ${promo.attiva ? 'Attiva' : 'Disattiva'}
+          </span>
+          <br>
+          <small class="text-muted">${descrizione}</small>
+        </div>
+        <div>
+          <button class="btn btn-sm btn-outline-primary me-1" onclick="editPromo(${promo.id})">
+            <i class="bi bi-pencil"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-danger" onclick="deletePromo(${promo.id})">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+      `;
+      container.appendChild(card);
+    });
+  } catch (error) {
+    console.error('Errore caricamento promo:', error);
+  }
+}
+
+// Modifica promo
+async function editPromo(id) {
+  try {
+    const response = await fetch('/settings/api/pacchetti/promo');
+    const promoList = await response.json();
+    const promo = promoList.find(p => p.id === id);
+    
+    if (!promo) return;
+    
+    document.getElementById('promoId').value = promo.id;
+    document.getElementById('promoModalTitle').textContent = 'Modifica Promo';
+    document.getElementById('promoNome').value = promo.nome;
+    document.getElementById('promoTipo').value = promo.tipo;
+    document.getElementById('promoAttiva').checked = promo.attiva;
+    
+    togglePromoFields();
+    
+    if (promo.tipo === 'percentuale') {
+      document.getElementById('promoSoglia').value = promo.soglia || '';
+      document.getElementById('promoPercentuale').value = promo.percentuale || '';
+    } else {
+      document.getElementById('promoOmaggioSoglia').value = promo.soglia || '';
+      document.getElementById('promoOmaggioQty').value = promo.sedute_omaggio || '';
+    }
+    
+    new bootstrap.Modal(document.getElementById('promoModal')).show();
+  } catch (error) {
+    console.error('Errore:', error);
+  }
+}
+
+// Elimina promo
+async function deletePromo(id) {
+  if (!confirm('Vuoi eliminare questa promo?')) return;
+  
+  try {
+    const response = await fetch(`/settings/api/pacchetti/promo/${id}`, {
+      method: 'DELETE',
+      headers: { 'X-CSRFToken': csrfToken }
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+      loadPromo();
+    } else {
+      alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
+    }
+  } catch (error) {
+    console.error('Errore:', error);
+    alert('❌ Errore di connessione');
+  }
+}
+
+// Salva promo
+async function savePromo() {
+  const id = document.getElementById('promoId').value;
+  const tipo = document.getElementById('promoTipo').value;
+  
+  const data = {
+    nome: document.getElementById('promoNome').value,
+    tipo: tipo,
+    attiva: document.getElementById('promoAttiva').checked
+  };
+
+  if (tipo === 'percentuale') {
+    data.soglia = parseInt(document.getElementById('promoSoglia').value) || 0;
+    data.percentuale = parseInt(document.getElementById('promoPercentuale').value) || 0;
+  } else {
+    data.soglia = parseInt(document.getElementById('promoOmaggioSoglia').value) || 0;
+    data.sedute_omaggio = parseInt(document.getElementById('promoOmaggioQty').value) || 0;
+  }
+
+  try {
+    const url = id ? `/settings/api/pacchetti/promo/${id}` : '/settings/api/pacchetti/promo';
+    const method = id ? 'PUT' : 'POST';
+    
+    const response = await fetch(url, {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify(data)
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      bootstrap.Modal.getInstance(document.getElementById('promoModal')).hide();
+      loadPromo();
+    } else {
+      alert('❌ Errore: ' + (result.error || 'Errore sconosciuto'));
+    }
+  } catch (error) {
+    console.error('Errore:', error);
+    alert('❌ Errore di connessione');
+  }
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+  loadPromo(); 
+  updatePreview();
+  
+  // Aggiorna preview quando si modifica il template
+  document.getElementById('whatsappTemplate').addEventListener('input', updatePreview);
+});
+
+// Reset WhatsApp template to default
+function resetToDefault() {
+  if (confirm('Vuoi ripristinare il template predefinito?')) {
+    document.getElementById('whatsappTemplate').value = `Ciao {cliente_nome}! 👋
+
+Ecco il riepilogo del tuo pacchetto "{pacchetto_nome}":
+
+📋 Sedute: {sedute_effettuate}/{sedute_totali} completate
+💳 Pagamenti: {rate_pagate}/{rate_totali} rate (€{importo_pagato}/€{importo_totale})
+
+Ti aspettiamo! 💆‍♀️
+{centro_nome}`;
+  }
+}
+
+// =============== DISCLAIMER SERVIZI ===============
+function loadServizioDisclaimer() {
+  const select = document.getElementById('selectServizio');
+  const textarea = document.getElementById('servizioDisclaimer');
+  const btnSave = document.getElementById('btnSaveServizio');
+  const btnClear = document.getElementById('btnClearServizio');
+  
+  if (!select.value) {
+    textarea.value = '';
+    btnSave.disabled = true;
+    btnClear.disabled = true;
+    return;
+  }
+  
+  const option = select.options[select.selectedIndex];
+  textarea.value = option.dataset.disclaimer || '';
+  btnSave.disabled = false;
+  btnClear.disabled = false;
+}
+
+async function saveServizioDisclaimer() {
+  const servizioId = document.getElementById('selectServizio').value;
+  const disclaimer = document.getElementById('servizioDisclaimer').value.trim();
+  
+  if (!servizioId) {
+    alert('⚠️ Seleziona un servizio');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/settings/api/servizi/${servizioId}/disclaimer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({ disclaimer: disclaimer })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      // Aggiorna il data-attribute e il ✓ nell'option
+      const select = document.getElementById('selectServizio');
+      const option = select.options[select.selectedIndex];
+      option.dataset.disclaimer = disclaimer;
+      
+      // Aggiorna testo option con ✓ se ha disclaimer
+      const nomeBase = option.textContent.replace('✓', '').trim();
+      option.textContent = disclaimer ? `${nomeBase} ✓` : nomeBase;
+      
+      alert('✅ Disclaimer servizio salvato!');
+    } else {
+      alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
+    }
+  } catch (error) {
+    console.error('Errore:', error);
+    alert('❌ Errore di connessione');
+  }
+}
+
+async function clearServizioDisclaimer() {
+  if (!confirm('Vuoi rimuovere il disclaimer per questo servizio?')) return;
+  
+  document.getElementById('servizioDisclaimer').value = '';
+  await saveServizioDisclaimer();
+}
+</script>
+{% endblock %}

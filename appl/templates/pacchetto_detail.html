@@ -1,20 +1,86 @@
 {% extends "base.html" %}
 {% block content %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.0/jspdf.plugin.autotable.min.js"></script>
 <br>
+  <br><br>
 <div class="container mt-3">
-  <a class="btn btn-link" href="{{ url_for('pacchetti.pacchetti_home') }}">← Torna ai Pacchetti</a>
-  <br>
-  <h3 class="mt-2">Dettaglio Pacchetto</h3>
-
+    <h3 class="mt-2">&nbsp;&nbsp;&nbsp;Dettaglio Pacchetto</h3>
   <style>
     .neomorphic-div {
       background: rgb(255, 255, 255);
-      border-radius: 25px;
+      border-radius: 20px;
       box-shadow: 5px 5px 10px #eeeeee, -5px -5px 10px #ffffff;
-      padding: 1.5rem;
+      padding: 1.2rem;
       text-align: center;
-      margin-top: 1.5rem;
+      margin-top: 1.2rem;
     }
+    .neomorphic-div.programma-card {
+      border: 2px solid transparent;
+    }
+
+    /* Stile per pacchetti completamente pagati */
+    .neomorphic-div.pagato-tutto {
+      background: #e9ecef;
+      opacity: 0.85;
+    }
+    .neomorphic-div.pagato-tutto input,
+    .neomorphic-div.pagato-tutto button:not(.alert *),
+    .neomorphic-div.pagato-tutto .form-control {
+      pointer-events: none;
+      opacity: 0.6;
+    }
+    
+    .neomorphic-div.programma-card {
+      border: 2px solid transparent;
+    }
+
+    .programma-card.status-preventivo { border-color: #ffdb10; }
+    .programma-card.status-attivo { border-color: #81e1ff; }
+    .programma-card.status-completato { border-color: #7e7e7e; background-color: #b1b1b1; color: white;}
+    .programma-card.status-abbandonato { border-color: #ff0000; }
+
+    .programma-card.status-preventivo:hover { background-color: #fff7cc; }
+    .programma-card.status-attivo:hover { background-color: #e7f7ff; }
+    .programma-card.status-abbandonato:hover { background-color: #ffe5e5; }
+    .programma-card.status-completato:hover { background-color: #5c5c5c; color: #ffffff; }
+    .programma-card.status-completato:hover a,
+    .programma-card.status-completato:hover h4,
+    .programma-card.status-completato:hover h5,
+    .programma-card.status-completato:hover b { color: #ffffff; }
+
+.status-row { transition: background-color .15s ease, color .15s ease; }
+
+.status-row.status-preventivo:hover > td,
+.status-row.status-preventivo.dragging > td { background-color: #fff7cc !important; }
+
+.status-row.status-attivo:hover > td,
+.status-row.status-attivo.dragging > td { background-color: #e8f8ff !important; }
+
+.status-row.status-abbandonato:hover > td,
+.status-row.status-abbandonato.dragging > td { background-color: #ffe5e5 !important; }
+
+.status-row.status-completato:hover > td,
+.status-row.status-completato.dragging > td { background-color: #5c5c5c !important; color: #ffffff !important; }
+
+.status-row.status-completato:hover > td *,
+.status-row.status-completato.dragging > td * { color: #ffffff !important; }
+
+/* Sfondo grigio permanente per righe sedute quando pacchetto è completato */
+.status-row.status-completato > td {
+  background-color: #b1b1b1 !important;
+  color: #ffffff !important;
+}
+.status-row.status-completato > td * {
+  color: #ffffff !important;
+}
+
+/* Header tabella sedute quando pacchetto è completato */
+.status-completato #seduteTable thead th {
+  background-color: #7e7e7e !important;
+  color: #ffffff !important;
+}
+
     .custom-dropdown {
       position: absolute;
       background: white;
@@ -41,6 +107,14 @@
     .custom-dropdown li.selected {
       background: #e0e0e0;
     }
+
+    /* Allineamento centrale tabella Rate */
+    .rate-table th,
+    .rate-table td {
+      text-align: center;
+      vertical-align: middle;
+    }
+
  .date-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -95,16 +169,231 @@
 #yearSelect {
   width: 80px;
 }
+
+    .rata-data-cell {
+      cursor: pointer;
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: background-color 0.15s ease;
+    }
+    .rata-data-cell:hover {
+      background-color: #e9ecef;
+    }
+
+    .rata-date-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1001;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+      padding: 16px;
+      width: 360px;
+      max-width: 90vw;
+    }
+
+    .seduta-option {
+      padding: 8px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    .seduta-option:hover {
+      background-color: #f5f5f5;
+    }
+    .seduta-option.selected {
+      background-color: #e3f2fd;
+      border-left: 3px solid #0d6efd;
+    }
+    .seduta-option:last-child {
+      border-bottom: none;
+    }
+
+    /* Calendario interattivo */
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 2px;
+      margin-top: 8px;
+    }
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .calendar-day-header {
+      text-align: center;
+      font-weight: bold;
+      font-size: 0.75rem;
+      padding: 4px;
+      color: #666;
+    }
+    .calendar-day {
+      text-align: center;
+      padding: 6px 4px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    .calendar-day:hover {
+      background-color: #e9ecef;
+    }
+    .calendar-day.other-month {
+      color: #ccc;
+    }
+    .calendar-day.selected {
+      background-color: #0d6efd;
+      color: white;
+    }
+    .calendar-day.today {
+      border: 1px solid #0d6efd;
+    }
+    .calendar-toggle-btn {
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: background-color 0.15s;
+    }
+    .calendar-toggle-btn:hover {
+      background-color: #e9ecef;
+    }
+
+    /* Icone azione posizionate a destra */
+.action-icons-right {
+  position: absolute;
+  right: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 0.75rem;
+  background-color: rgb(255, 255, 255) !important; /* Forza sfondo bianco */
+  padding: 0.5rem 1rem; /* Aggiungi padding interno per allargare */
+  border-radius: 20px; /* Stesso border-radius del div principale */
+}
+.action-icons-right:hover {
+  background-color: rgb(255, 255, 255) !important; /* Mantieni sfondo bianco su hover */
+}
+.action-icon {
+  text-decoration: none;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.action-icon:hover {
+  transform: scale(1.15);
+  opacity: 0.8;
+}
+
+    /* Tooltip ordinamento */
+    .sort-tooltip {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      padding: 8px;
+      z-index: 1000;
+      display: flex;
+      gap: 6px;
+    }
+    .sort-btn {
+      width: 36px;
+      height: 36px;
+      border: 1px solid #dee2e6;
+      border-radius: 6px;
+      background: #f8f9fa;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      transition: all 0.15s ease;
+    }
+    .sort-btn:hover {
+      background: #e9ecef;
+      border-color: #adb5bd;
+    }
+    .sort-btn:active {
+      background: #dee2e6;
+    }
+    .clickable-header {
+      cursor: pointer;
+      user-select: none;
+    }
+    .clickable-header:hover {
+      text-decoration: underline;
+    }
+
+/* Stato 3 = Saltata: bordo rosso, sfondo rosa chiarissimo */
+tr.seduta-stato-3,
+tr.seduta-saltata {
+  background-color: #fff0f0 !important;
+}
+tr.seduta-stato-3 td,
+tr.seduta-saltata td {
+  background-color: #fff0f0 !important;
+}
+/* Stato 4 = Effettuata: bordo grigio chiaro, sfondo grigio chiarissimo */
+tr.seduta-stato-4,
+tr.seduta-effettuata {
+  background-color: #f5f5f5 !important;
+}
+tr.seduta-stato-4 td,
+tr.seduta-effettuata td {
+  background-color: #f5f5f5 !important;
+}
+/* Rate pagate - stile disabilitato */
+tr.rata-pagata {
+  background-color: #e9ecef !important;
+}
+tr.rata-pagata input {
+  background-color: #e9ecef !important;
+  color: #6c757d !important;
+}
   </style>
 
-  <div class="neomorphic-div">
-    <h3><b>NOME:</b> {{ pacchetto.client_nome }}&nbsp;&nbsp;&nbsp;<b>TEL:</b> {{ pacchetto.client_cellulare or '—' }}</h3>
+  <div class="neomorphic-div programma-card status-{{ pacchetto.status|lower }}" style="position: relative;">
+  <a href="#" class="client-info-link" data-client-id="{{ pacchetto.client_id }}" style="text-decoration:none; color:inherit; cursor:pointer;">
+    <h4 class="mb-0">
+      <b>NOME:</b> {{ pacchetto.client_nome }}&nbsp;&nbsp;&nbsp;
+      <b>TEL:</b> {{ pacchetto.client_cellulare or '—' }}
+    </h4>
+  </a>
+  <div class="action-icons-right">
+    <a href="#" class="action-icon" id="btnDisclaimer" title="Disclaimer / Consenso Informato" style="color: #6f42c1; font-size: 1.5rem;">
+      <i class="bi bi-file-earmark-medical"></i>
+    </a>
+    <a href="#" class="action-icon" id="btnWhatsapp" title="Invia su WhatsApp" style="color: #25D366; font-size: 1.5rem;">
+      <i class="bi bi-whatsapp"></i>
+    </a>
+    <a href="#" class="action-icon" id="btnPdf" title="Genera PDF" style="color: #dc3545; font-size: 1.5rem;">
+      <i class="bi bi-file-earmark-pdf"></i>
+    </a>
+    <a href="#" class="action-icon" id="btnStampa" title="Stampa" style="color: #6c757d; font-size: 1.5rem;">
+      <i class="bi bi-printer"></i>
+    </a>
   </div>
+</div>
 
-  <div class="neomorphic-div">
-    <h4><b>PROGRAMMA:</b> {{ pacchetto.nome }}</h4>
-    <h4><b>PAGAMENTO:</b> €{{ '%.2f'|format(pacchetto.costo_totale_lordo) }} scontato → €{{ '%.2f'|format(pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo) }} in {{ pacchetto.rate|length }} rate</h4>
-    <h5>Stato pagamento: [Bozza - Totale pagato: €X / Totale dovuto: €Y] <button class="btn btn-sm btn-primary">Segna pagato</button></h5>
+<div class="modal fade" id="clientInfoModal" tabindex="-1" aria-labelledby="clientInfoModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="clientInfoModalLabel">Dati Cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body" id="clientInfoModalBody">
+        <!-- Qui verranno caricati i dati dinamicamente via JS -->
+        <div class="text-center text-muted">Caricamento...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <div class="neomorphic-div programma-card status-{{ pacchetto.status|lower }}">
+    <h5><b>PROGRAMMA:</b> {{ pacchetto.nome }}</h5>
   </div>
 
   <div class="d-flex mt-4">
@@ -113,22 +402,29 @@
         <thead>
           <tr>
             <th>DATA</th>
-            <th>TRATTAMENTO</th>
+            <th class="clickable-header" id="trattamentoHeader" onclick="toggleSortTooltip(event)">TRATTAMENTO <i class="bi bi-arrow-down-up" style="font-size: 0.8rem;"></i></th>
             <th>N*</th>
-            <th>OPERATORE</th>
+            <th class="clickable-header" id="operatoreHeader" onclick="toggleOperatoreHeaderDropdown(event)">OPERATORE <i class="bi bi-people" style="font-size: 0.8rem;"></i></th>
+            <th>EFFETTUATA</th>
           </tr>
         </thead>
         <tbody>
           {% for s in pacchetto.sedute %}
-          <tr draggable="true" data-id="{{ s.id }}">
+          <tr draggable="true" data-id="{{ s.id }}" data-stato="{{ s.stato }}" data-data="{{ s.data_trattamento or '' }}"
+              class="status-row status-{{ pacchetto.status|lower }} seduta-stato-{{ s.stato }}">
             <td class="data-cell">{{ s.data_trattamento|default('—') }}</td>
             <td>{{ s.service_nome }}</td>
             <td class="n-star"></td>
             <td class="operatore-cell" data-operatore-id="{{ s.operatore_id or '' }}">{{ s.operatore_nome or '' }}</td>
+            <td class="effettuata-cell text-center">
+              <input type="checkbox" class="form-check-input effettuata-check" 
+                     data-seduta-id="{{ s.id }}" 
+                     {% if s.stato == 4 %}checked{% endif %}>
+            </td>
           </tr>
           {% endfor %}
           {% if pacchetto.sedute|length == 0 %}
-          <tr><td colspan="4">Nessuna seduta</td></tr>
+          <tr><td colspan="5">Nessuna seduta</td></tr>
           {% endif %}
         </tbody>
       </table>
@@ -138,272 +434,1346 @@
     </div>
   </div>
   </div>
+
+{% set sedute_with_date = pacchetto.sedute | selectattr('data_trattamento') %}
+{% set first_seduta = sedute_with_date | first if sedute_with_date else none %}
+{% set first_date = first_seduta.data_trattamento if first_seduta else none %}
+
+{% set tutte_rate_pagate = pacchetto.rate|length > 0 and pacchetto.rate|selectattr('is_pagata', 'false')|list|length == 0 %}
+
+  <div class="neomorphic-div programma-card status-{{ pacchetto.status|lower }}{% if tutte_rate_pagate %} pagato-tutto{% endif %}" style="width: 51.5%; margin-left: 16%;">
+  <h5><b>PAGAMENTO</b></h5>
+  <div class="d-flex flex-wrap align-items-center gap-3">
+    <div class="me-3">
+      <div class="small text-muted">Costo totale lordo</div>
+      <div>€{{ '%.2f'|format(pacchetto.costo_totale_lordo) }}</div>
+    </div>
+
+    <div class="me-3">
+      <div class="small text-muted">Sconto applicato</div>
+      {% if pacchetto.sconto and pacchetto.sconto.tipo == 'ogni_n_omaggio' %}
+        <input type="text" id="scontoInput" class="form-control form-control-sm d-inline-block" style="width:120px; background-color: #e9ecef; color: #6c757d;"
+               value="Sedute omaggio" disabled readonly>
+      {% else %}
+        <input type="text" id="scontoInput" class="form-control form-control-sm d-inline-block" style="width:120px;"
+               value="{{ pacchetto.sconto.valore if pacchetto.sconto and pacchetto.sconto.valore else '' }}"
+               placeholder="%">
+      {% endif %}
+    </div>
+
+    <div class="me-3">
+      <div class="small text-muted">Prezzo scontato</div>
+      {% set prezzo_scontato = pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo %}
+      {% set prezzo_has_decimals = (prezzo_scontato * 100) % 100 != 0 %}
+      <div class="d-flex align-items-center">
+        <span id="prezzoScontato">€{{ '%.2f'|format(prezzo_scontato) }}</span>
+        {% if prezzo_has_decimals %}
+        <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="prezzoRoundDown" title="Arrotonda per difetto">↓</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="prezzoRoundUp" title="Arrotonda per eccesso">↑</button>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="me-3">
+      <div class="small text-muted">N. rate</div>
+      <div class="d-flex align-items-center">
+        <input type="number" id="numeroRate" class="form-control form-control-sm d-inline-block" style="width:70px;"
+               value="{{ pacchetto.pagamento.numero_rate if pacchetto.pagamento else 1 }}">
+        <button type="button" class="btn btn-sm btn-outline-primary ms-1" id="btnCalcolaRate" title="Ricalcola rate">
+          <i class="bi bi-calculator"></i>
+        </button>
+      </div>
+    </div>
+       </div>
+  <h5 class="mt-3">Rate</h5>
+  <table class="table table-sm rate-table">
+    <thead>
+      <tr>
+        <th>N. rata</th>
+        <th>Importo</th>
+        <th>Stato</th>
+        <th>Data</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set numero_rate = pacchetto.pagamento.numero_rate if pacchetto.pagamento else 1 %}
+      {% if pacchetto.rate|length > 0 %}
+        {% for r in pacchetto.rate %}
+        {% set has_decimals = (r.importo * 100) % 100 != 0 %}
+        <tr data-rata-id="{{ r.id }}" class="{% if r.is_pagata %}rata-pagata{% endif %}">
+          <td>Rata {{ loop.index }}</td>
+          <td>
+            <div class="d-flex align-items-center">
+              <input type="number" step="1" class="form-control form-control-sm rata-importo-input" 
+                     id="rata-importo-{{ r.id }}"
+                     value="{{ '%.2f'|format(r.importo) }}" 
+                     data-rata-id="{{ r.id }}" 
+                     style="width: 100px;"
+                     {% if r.is_pagata %}disabled{% endif %}>
+              {% if not r.is_pagata %}
+              <button type="button" class="btn btn-sm btn-outline-primary ms-1 btn-calcola-rata" 
+                      data-rata-id="{{ r.id }}" title="Applica modifica">
+                <i class="bi bi-calculator"></i>
+              </button>
+              {% endif %}
+              {% if has_decimals and not r.is_pagata %}
+              <button type="button" class="btn btn-sm btn-outline-secondary ms-1 round-down" data-rata-id="{{ r.id }}">↓</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary ms-1 round-up" data-rata-id="{{ r.id }}">↑</button>
+              {% endif %}
+            </div>
+          </td>
+          <td>
+            {% if r.is_pagata %}
+              Pagata
+            {% else %}
+              <button class="btn btn-sm btn-success" onclick="segnaPagata({{ r.id }})"><i class="bi bi-cash-stack"></i></button>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.is_pagata and r.data_pagamento %}
+              {# Mostra data pagamento effettivo, non modificabile #}
+              <span class="text-success fw-bold">
+                {{ r.data_pagamento.strftime('%d/%m/%Y') }}
+              </span>
+            {% else %}
+              {# Data scadenza modificabile #}
+              {% set default_date = first_date if loop.index == 1 else '' %}
+              {% set is_seduta_ref = r.data_scadenza and r.data_scadenza[:4] == '0001' %}
+              {% set seduta_num = r.data_scadenza[-2:]|int if is_seduta_ref else 0 %}
+              <span class="rata-data-cell" data-rata-id="{{ r.id }}" 
+                    data-date="{{ '' if is_seduta_ref else (r.data_scadenza if r.data_scadenza else default_date) }}" 
+                    data-seduta-ref="{{ 'seduta:' ~ seduta_num if is_seduta_ref else '' }}">
+                {% if is_seduta_ref %}
+                  {{ seduta_num }}ª SEDUTA
+                {% elif r.data_scadenza %}
+                  {{ r.data_scadenza }}
+                {% elif loop.index == 1 and first_date %}
+                  {{ first_date }}
+                {% else %}
+                  —
+                {% endif %}
+              </span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        {# Placeholder righe quando non ci sono rate generate: calcolo importo stimato #}
+        {% set totale = pacchetto.costo_totale_scontato if pacchetto.costo_totale_scontato else pacchetto.costo_totale_lordo %}
+        {% set importo = (totale / numero_rate) if numero_rate > 0 else 0 %}
+        {% for i in range(1, numero_rate + 1) %}
+        <tr>
+          <td>{{ i }}</td>
+          <td>€{{ '%.2f'|format(importo) }}</td>
+          <td>No</td>
+          <td>{{ first_date or '—' }}</td>
+        </tr>
+        {% endfor %}
+      {% endif %}
+    </tbody>
+  </table>
+    {% if tutte_rate_pagate %}
+  <div class="alert alert-success text-center mt-3 mb-0" style="font-size: 1.3rem; font-weight: bold;">
+    ✅ PAGATO TUTTO
+  </div>
+  {% endif %}
+</div>
+  </div>
+  <br><br>
 {% endblock %}
 {% block scripts %}
 <script>
-      // Global vars used by modal handlers (must be top-level)
-    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-    const pacchettoId = {{ pacchetto.id }};
-    const operatori = {{ pacchetto.all_operatori | tojson }};
+/* Script pulito e con struttura sicura per pacchetto_detail */
+const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+const pacchettoId = {{ pacchetto.id }};
+const operatori = {{ pacchetto.all_operatori | tojson }};
 
-  // Date display helpers (top-level so modal handlers can use them)
-  function formatDisplayDate(iso) {
-    if (!iso) return '—';
-    const months = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'];
-    const parts = iso.split('-');
-    if (parts.length !== 3) return '—';
-    const y = parts[0];
-    const m = parseInt(parts[1], 10);
-    const d = parts[2].padStart(2, '0');
-    return `${d} ${months[m - 1]} ${y}`;
-  }
+// Mostra messaggio se arrivati da calendar dopo aver fissato una seduta
+(function checkPacchettoSedutaMessage() {
+  try {
+    const msgData = localStorage.getItem('pacchettoSedutaFissata');
+    if (msgData) {
+      const data = JSON.parse(msgData);
+      localStorage.removeItem('pacchettoSedutaFissata');
+      alert(`Seduta ${data.sedutaId} fissata per il ${data.data} alle ore ${data.ora}`);
+    }
+  } catch (e) { /* nulla */ }
+})();
 
-  function normalizeDateCells() {
-    document.querySelectorAll('#seduteTable tbody tr[data-id]').forEach(row => {
-      const cell = row.querySelector('.data-cell');
-      const text = (cell.textContent || '').trim();
-      if (text && text !== '—' && /^\d{4}-\d{2}-\d{2}$/.test(text)) {
-        cell.dataset.date = text;
-        cell.textContent = formatDisplayDate(text);
-      } else if (cell.dataset.date) {
-        cell.textContent = formatDisplayDate(cell.dataset.date);
-      } else {
-        cell.dataset.date = '';
-        cell.textContent = '—';
-      }
-    });
-  }
+function formatDisplayDate(iso) {
+  if (!iso) return '—';
+  const months = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'];
+  const parts = String(iso).split('-');
+  if (parts.length !== 3) return '—';
+  const y = parts[0];
+  const m = parseInt(parts[1], 10);
+  const d = parts[2].padStart(2, '0');
+  return `${d} ${months[m - 1]} ${y}`;
+}
 
-  function populateNStar() {
+// Formatta riferimento seduta per display
+function formatSedutaRef(ref) {
+  if (!ref || !ref.startsWith('seduta:')) return null;
+  const num = parseInt(ref.replace('seduta:', ''), 10);
+  return `${num}ª SEDUTA`;
+}
+
+// Aggiorna le rate che hanno riferimento a una seduta quando questa riceve una data
+function updateRateWithSedutaRef(sedutaIndex, newDate) {
+  const ref = `seduta:${sedutaIndex}`;
+  document.querySelectorAll('.rata-data-cell').forEach(cell => {
+    if (cell.dataset.sedutaRef === ref) {
+      // Aggiorna via API - la seduta ora ha una data, salviamo quella data reale
+      const rataId = cell.dataset.rataId;
+      fetch(`/pacchetti/api/rate/${rataId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ data_scadenza: newDate })
+      })
+      .then(r => r.json())
+      .then(data => {
+        cell.dataset.date = newDate;
+        cell.dataset.sedutaRef = '';
+        cell.textContent = formatDisplayDate(newDate);
+      });
+    }
+  });
+}
+
+function normalizeDateCells() {
+  document.querySelectorAll('#seduteTable tbody tr[data-id]').forEach(row => {
+    const cell = row.querySelector('.data-cell');
+    const text = (cell.textContent || '').trim();
+    if (text && text !== '—' && /^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      cell.dataset.date = text;
+      cell.textContent = formatDisplayDate(text);
+    } else if (cell.dataset.date) {
+      cell.textContent = formatDisplayDate(cell.dataset.date);
+    } else {
+      cell.dataset.date = '';
+      cell.textContent = '—';
+    }
+  });
+}
+
+function populateNStar() {
+  console.log('populateNStar called');
   const rows = document.querySelectorAll('#seduteTable tbody tr[data-id]');
   const serviceCounts = {};
   rows.forEach(row => {
     const cells = row.cells;
-    const serviceName = cells[1].textContent.trim(); // TRATTAMENTO
-    const nCell = cells[2]; // N*
+    const serviceName = (cells[1] && cells[1].textContent) ? cells[1].textContent.trim() : '';
+    const nCell = cells[2];
     const dateIso = row.querySelector('.data-cell').dataset.date || '';
 
     if (dateIso) {
       const count = (serviceCounts[serviceName] || 0) + 1;
       serviceCounts[serviceName] = count;
-      nCell.textContent = count;
+      if (nCell) nCell.textContent = count;
+      console.log(dateIso, count);
     } else {
-      nCell.textContent = '—';
+      if (nCell) nCell.textContent = '—';
     }
   });
 }
 
-  document.addEventListener('DOMContentLoaded', function() {
+function segnaPagata(rataId) {
+  // reindirizza alla cassa; la gestione del pagamento avviene lì
+  window.location.href = '/cassa?rata_id=' + rataId;
+}
 
-    // Popola N* al caricamento
-    populateNStar();
-    normalizeDateCells()
+// Ordinamento sedute
+function sortSedute(mode) {
+  const allRows = Array.from(document.querySelectorAll('#seduteTable tbody tr[data-id]'));
+  if (allRows.length === 0) return;
 
-    // Click su cella operatore per modifica
-    document.addEventListener('click', function(e) {
-      if (e.target.closest('.operatore-cell')) {
-        const cell = e.target.closest('.operatore-cell');
-        const currentId = cell.dataset.operatoreId;
-        const sedutaId = cell.closest('tr').dataset.id;
+  // Separa le sedute con data (fisse) da quelle senza data (da riordinare)
+  const fixedPositions = {}; // posizione -> id seduta (per quelle con data)
+  const movableRows = [];    // righe senza data da riordinare
+  
+  allRows.forEach((row, index) => {
+    const dataCell = row.querySelector('.data-cell');
+    const hasDate = dataCell && dataCell.textContent.trim() !== '—' && dataCell.textContent.trim() !== '';
+    
+    if (hasDate) {
+      // Seduta con data: mantieni posizione fissa
+      fixedPositions[index] = parseInt(row.dataset.id);
+    } else {
+      // Seduta senza data: da riordinare
+      movableRows.push(row);
+    }
+  });
 
-        // Rimuovi eventuali dropdown esistenti
-        document.querySelectorAll('.custom-dropdown').forEach(d => d.remove());
+  // Se non ci sono sedute da riordinare, esci
+  if (movableRows.length === 0) return;
 
-        const dropdown = document.createElement('div');
-        dropdown.className = 'custom-dropdown';
-        dropdown.innerHTML = '<ul>' +
-          '<li data-value=""' + (currentId === '' ? ' class="selected"' : '') + '>(nessuno)</li>' +
-          operatori.map(o => `<li data-value="${o.id}"${o.id == currentId ? ' class="selected"' : ''}>${o.nome}</li>`).join('') +
-          '</ul>';
+  // Raggruppa le sedute MOVIBILI per servizio
+  const serviceOrder = [];
+  const serviceGroups = {};
+  
+  movableRows.forEach(row => {
+    const serviceName = row.cells[1] ? row.cells[1].textContent.trim() : '';
+    if (!serviceGroups[serviceName]) {
+      serviceGroups[serviceName] = [];
+      serviceOrder.push(serviceName);
+    }
+    serviceGroups[serviceName].push(parseInt(row.dataset.id));
+  });
 
-        dropdown.addEventListener('click', function(e) {
-          if (e.target.tagName === 'LI') {
-            const newId = e.target.dataset.value;
-            fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/${sedutaId}`, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-              },
-              body: JSON.stringify({ operatore_id: newId || null })
-            })
-            .then(res => res.json())
-            .then(data => {
-              if (data.message) {
-                cell.dataset.operatoreId = newId;
-                cell.textContent = newId ? operatori.find(o => o.id == newId).nome : '';
-                dropdown.remove(); // Chiudi dropdown dopo selezione
-              }
-            });
+  let sortedMovable = [];
+  const maxCount = Math.max(...serviceOrder.map(s => serviceGroups[s].length));
+
+  switch (mode) {
+    case 'sequential': {
+      // SEQUENZIALE: Prima TUTTE le sedute del servizio A, poi TUTTE del B, ecc.
+      serviceOrder.forEach(service => {
+        serviceGroups[service].forEach(id => {
+          sortedMovable.push(id);
+        });
+      });
+      break;
+    }
+    
+    case 'sequential-reverse': {
+      // SEQUENZIALE DAL BASSO: Stessa logica di sequential ma invertito
+      [...serviceOrder].reverse().forEach(service => {
+        [...serviceGroups[service]].reverse().forEach(id => {
+          sortedMovable.push(id);
+        });
+      });
+      break;
+    }
+    
+    case 'alternating': {
+      // ALTERNATO: Prima tutte le 1ª sedute di ogni servizio, poi le 2ª, ecc.
+      for (let i = 0; i < maxCount; i++) {
+        serviceOrder.forEach(service => {
+          if (serviceGroups[service][i] !== undefined) {
+            sortedMovable.push(serviceGroups[service][i]);
           }
         });
-
-        // Chiudi dropdown se si clicca fuori
-        document.addEventListener('click', function closeDropdown(e) {
-          if (!dropdown.contains(e.target) && !cell.contains(e.target)) {
-            setTimeout(() => {
-              dropdown.remove();
-              document.removeEventListener('click', closeDropdown);
-            }, 50); // Ritardo di 50ms prima di chiudere
+      }
+      break;
+    }
+    
+    case 'alternating-reverse': {
+      // ALTERNATO DAL BASSO: Stessa logica di alternating ma invertito
+      for (let i = maxCount - 1; i >= 0; i--) {
+        [...serviceOrder].reverse().forEach(service => {
+          const group = serviceGroups[service];
+          if (group[i] !== undefined) {
+            sortedMovable.push(group[i]);
           }
         });
+      }
+      break;
+    }
+  }
 
-        cell.innerHTML = '';
-        cell.appendChild(dropdown);
+  // Ricostruisci l'ordine finale: posizioni fisse + movibili riordinate
+  const newOrder = [];
+  let movableIndex = 0;
+  
+  for (let i = 0; i < allRows.length; i++) {
+    if (fixedPositions[i] !== undefined) {
+      // Posizione fissa: mantieni la seduta con data
+      newOrder.push(fixedPositions[i]);
+    } else {
+      // Posizione libera: inserisci la prossima seduta riordinata
+      newOrder.push(sortedMovable[movableIndex]);
+      movableIndex++;
+    }
+  }
+
+  // Invia al server
+  if (newOrder.length > 0) {
+    fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/ordine`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ ordine: newOrder })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.message) {
+        location.reload();
       }
     });
-    // DnD per sedute
-    const tbody = document.querySelector('#seduteTable tbody');
-    let draggedRow = null;
+  }
+}
 
-    tbody.addEventListener('dragstart', function(e) {
-      draggedRow = e.target.closest('tr');
+function toggleOperatoreHeaderDropdown(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  
+  const header = document.getElementById('operatoreHeader');
+  
+  // Rimuovi dropdown esistenti
+  const existingDropdown = document.querySelector('.operatore-header-dropdown');
+  if (existingDropdown) {
+    existingDropdown.remove();
+    return;
+  }
+  
+  // Crea dropdown
+  const dropdown = document.createElement('div');
+  dropdown.className = 'operatore-header-dropdown custom-dropdown';
+  
+  let html = '<ul>';
+  html += '<li data-value="">(nessuno)</li>';
+  html += operatori.map(o => `<li data-value="${o.id}">${o.nome}</li>`).join('');
+  html += '</ul>';
+  dropdown.innerHTML = html;
+  
+  // Posiziona dropdown sotto l'header
+  const rect = header.getBoundingClientRect();
+  dropdown.style.position = 'absolute';
+  dropdown.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+  dropdown.style.left = (rect.left + window.scrollX) + 'px';
+  dropdown.style.zIndex = '1000';
+  document.body.appendChild(dropdown);
+  
+  // Click su opzione
+  dropdown.addEventListener('click', function(evt) {
+    if (evt.target.tagName !== 'LI') return;
+    const newOperatoreId = evt.target.dataset.value;
+    
+    // Trova tutte le sedute SENZA DATA
+    const seduteSenzaData = [];
+    document.querySelectorAll('#seduteTable tbody tr[data-id]').forEach(row => {
+      const dataCell = row.querySelector('.data-cell');
+      const hasDate = dataCell && dataCell.textContent.trim() !== '—' && dataCell.textContent.trim() !== '';
+      
+      if (!hasDate) {
+        seduteSenzaData.push(row.dataset.id);
+      }
+    });
+    
+    if (seduteSenzaData.length === 0) {
+      alert('Tutte le sedute hanno già una data assegnata');
+      dropdown.remove();
+      return;
+    }
+    
+    // Aggiorna tutte le sedute senza data
+    let completed = 0;
+    seduteSenzaData.forEach(sedutaId => {
+      fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/${sedutaId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ operatore_id: newOperatoreId || null })
+      })
+      .then(r => r.json())
+      .then(data => {
+        completed++;
+        if (completed === seduteSenzaData.length) {
+          location.reload();
+        }
+      });
+    });
+    
+    dropdown.remove();
+  });
+  
+  // Chiudi al click fuori
+  const closeHandler = function(evt) {
+    const dd = document.querySelector('.operatore-header-dropdown');
+    if (dd && !dd.contains(evt.target) && !evt.target.closest('#operatoreHeader')) {
+      dd.remove();
+      document.removeEventListener('click', closeHandler);
+    }
+  };
+  
+  setTimeout(function() {
+    document.addEventListener('click', closeHandler);
+  }, 10);
+}
+
+function toggleSortTooltip(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  
+  const header = document.getElementById('trattamentoHeader');
+  
+  // Rimuovi tooltip esistente
+  const existingTooltip = document.querySelector('.sort-tooltip');
+  if (existingTooltip) {
+    existingTooltip.remove();
+    return;
+  }
+  
+  // Crea tooltip
+  const tooltip = document.createElement('div');
+  tooltip.className = 'sort-tooltip';
+  tooltip.innerHTML = `
+    <button class="sort-btn" data-mode="sequential" title="Sequenziale (1→N)">
+      <i class="bi bi-sort-numeric-down"></i>
+    </button>
+    <button class="sort-btn" data-mode="sequential-reverse" title="Sequenziale inverso (N→1)">
+      <i class="bi bi-sort-numeric-up"></i>
+    </button>
+    <button class="sort-btn" data-mode="alternating" title="Alternato crescente">
+      <i class="bi bi-arrow-down-short"></i>
+    </button>
+    <button class="sort-btn" data-mode="alternating-reverse" title="Alternato decrescente">
+      <i class="bi bi-arrow-up-short"></i>
+    </button>
+  `;
+  
+  // Posiziona tooltip
+  const rect = header.getBoundingClientRect();
+  tooltip.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+  tooltip.style.left = (rect.left + window.scrollX) + 'px';
+  document.body.appendChild(tooltip);
+  
+  // Aggiungi click handler ai bottoni
+  tooltip.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.onclick = function(e) {
+      e.stopPropagation();
+      const mode = this.dataset.mode;
+      tooltip.remove();
+      sortSedute(mode);
+    };
+  });
+  
+  // Chiudi al click fuori
+  const closeHandler = function(evt) {
+    const tt = document.querySelector('.sort-tooltip');
+    if (tt && !tt.contains(evt.target) && !evt.target.closest('#trattamentoHeader')) {
+      tt.remove();
+      document.removeEventListener('click', closeHandler);
+    }
+  };
+  
+  setTimeout(function() {
+    document.addEventListener('click', closeHandler);
+  }, 10);
+}
+/* MAIN SETUP */
+document.addEventListener('DOMContentLoaded', function () {
+  normalizeDateCells();
+  populateNStar();
+
+  // Funzione per calcolare lo stato corretto della seduta
+  function calcolaStatoSeduta(dataStr, isEffettuata) {
+    if (isEffettuata) return 4; // Effettuata
+    
+    if (!dataStr || dataStr === '—' || dataStr === '') {
+      return 1; // Presente (nessuna data)
+    }
+    
+    const oggi = new Date();
+    oggi.setHours(0, 0, 0, 0);
+    const dataSeduta = new Date(dataStr);
+    dataSeduta.setHours(0, 0, 0, 0);
+    
+    if (dataSeduta < oggi) {
+      return 3; // Saltata (data passata, non effettuata)
+    }
+    return 2; // Pianificata (data futura o oggi)
+  }
+
+  // Funzione per aggiornare lo stile della riga
+  function aggiornaStileRiga(row, stato) {
+    // Rimuovi tutte le classi di stato
+    row.classList.remove('seduta-stato-1', 'seduta-stato-2', 'seduta-stato-3', 'seduta-stato-4');
+    row.classList.remove('seduta-saltata', 'seduta-effettuata');
+    
+    // Aggiungi la classe corretta
+    row.classList.add('seduta-stato-' + stato);
+    row.dataset.stato = stato;
+  }
+
+  // Aggiorna stati al caricamento pagina (per sedute saltate)
+  function aggiornaStatiSedute() {
+    document.querySelectorAll('#seduteTable tbody tr[data-id]').forEach(row => {
+      const checkbox = row.querySelector('.effettuata-check');
+      const isEffettuata = checkbox ? checkbox.checked : false;
+      
+      // Usa data ISO dal dataset
+      let dataISO = row.dataset.data || '';
+      
+      const statoCorrente = parseInt(row.dataset.stato) || 1;
+      const statoCalcolato = calcolaStatoSeduta(dataISO, isEffettuata);
+      
+      // Aggiorna stile se stato è cambiato (es: seduta diventata "saltata")
+      if (statoCalcolato !== statoCorrente && !isEffettuata) {
+        aggiornaStileRiga(row, statoCalcolato);
+        
+        // Aggiorna anche sul server se lo stato è cambiato a "Saltata"
+        if (statoCalcolato === 3) {
+          const sedutaId = row.dataset.id;
+          fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/${sedutaId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ stato: statoCalcolato })
+          });
+        }
+      } else {
+        aggiornaStileRiga(row, statoCorrente);
+      }
+    });
+  }
+
+  // Gestione checkbox "Effettuata"
+  document.querySelectorAll('.effettuata-check').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+      const sedutaId = this.dataset.sedutaId;
+      const isEffettuata = this.checked;
+      const row = this.closest('tr');
+      const dataISO = row.dataset.data || '';
+      
+      // Calcola nuovo stato
+      const newStato = calcolaStatoSeduta(dataISO, isEffettuata);
+      
+      // Aggiorna stile immediatamente
+      aggiornaStileRiga(row, newStato);
+      
+      fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/${sedutaId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ stato: newStato })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.message) {
+          // Ricarica la pagina per aggiornare lo status del pacchetto (bordi, colori)
+          location.reload();
+          // Rollback se errore
+          checkbox.checked = !isEffettuata;
+          const oldStato = calcolaStatoSeduta(dataISO, !isEffettuata);
+          aggiornaStileRiga(row, oldStato);
+        }
+      })
+      .catch(() => {
+        checkbox.checked = !isEffettuata;
+        const oldStato = calcolaStatoSeduta(dataISO, !isEffettuata);
+        aggiornaStileRiga(row, oldStato);
+      });
+    });
+  });
+
+  // Esegui al caricamento
+  aggiornaStatiSedute();
+
+document.addEventListener('click', function interceptClientInfo(e) {
+  const link = e.target.closest('.client-info-link');
+  if (!link) return;
+  e.preventDefault();
+  const clientId = link.dataset.clientId;
+  const modalWrap = document.getElementById('clientInfoModal');
+  const modalBody = document.getElementById('clientInfoModalBody');
+  const clientInfoUrl = `/settings/api/client_info/${encodeURIComponent(clientId)}`;
+
+  modalBody.innerHTML = '<div class="text-center text-muted">Caricamento...</div>';
+
+  fetch(clientInfoUrl)
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then(data => {
+      modalBody.innerHTML = '';
+
+      const clientId = link.dataset.clientId;
+
+      const grid = document.createElement('div');
+      grid.className = 'row g-3';
+
+      // Funzione per salvare un campo
+      function saveField(field, value, input, btn) {
+        let url, body;
+        switch (field) {
+          case 'nome':
+            url = '/settings/api/update_client_info';
+            body = { client_id: clientId, cliente_nome: value };
+            break;
+          case 'cognome':
+            url = '/settings/api/update_client_info';
+            body = { client_id: clientId, cliente_cognome: value };
+            break;
+          case 'cellulare':
+            url = '/settings/api/update_client_phone';
+            body = { client_id: clientId, phone: value };
+            break;
+          case 'email':
+            url = '/settings/api/update_client_email';
+            body = { client_id: clientId, email: value };
+            break;
+        }
+
+        btn.disabled = true;
+        btn.textContent = '...';
+
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+          body: JSON.stringify(body)
+        })
+        .then(r => r.json())
+        .then(resp => {
+          if (resp.success || resp.message) {
+            input.classList.remove('is-invalid');
+            input.classList.add('is-valid');
+            input.dataset.originalValue = value;
+            btn.textContent = 'Salvato ✓';
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-success');
+            setTimeout(() => {
+              input.classList.remove('is-valid');
+            }, 1500);
+          } else {
+            input.classList.add('is-invalid');
+            btn.textContent = 'Errore';
+            btn.classList.add('btn-danger');
+            setTimeout(() => {
+              btn.textContent = 'Salva';
+              btn.classList.remove('btn-danger');
+              btn.classList.add('btn-primary');
+              btn.disabled = false;
+            }, 2000);
+          }
+        })
+        .catch(err => {
+          console.error('save field error:', err);
+          input.classList.add('is-invalid');
+          btn.textContent = 'Errore';
+          btn.classList.add('btn-danger');
+          setTimeout(() => {
+            btn.textContent = 'Salva';
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-primary');
+            btn.disabled = false;
+          }, 2000);
+        });
+      }
+
+      const makeCol = (label, value, field) => {
+        const col = document.createElement('div');
+        col.className = 'col-12 col-md-6';
+        const lbl = document.createElement('label');
+        lbl.className = 'form-label fw-bold text-uppercase small';
+        lbl.textContent = label;
+        
+        const inputGroup = document.createElement('div');
+        inputGroup.className = 'd-flex gap-2';
+        
+        const input = document.createElement('input');
+        input.className = 'form-control';
+        input.value = value || '';
+        input.dataset.field = field;
+        input.dataset.originalValue = value || '';
+        
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-primary btn-sm';
+        btn.textContent = 'Salva';
+        btn.style.whiteSpace = 'nowrap';
+        
+        // Abilita/disabilita bottone quando cambia il valore
+        input.addEventListener('input', function() {
+          if (this.value !== this.dataset.originalValue) {
+            btn.disabled = false;
+            btn.textContent = 'Salva';
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-primary');
+          } else {
+            btn.disabled = true;
+            btn.textContent = 'Salvato ✓';
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-success');
+          }
+        });
+        
+        // Click sul bottone Salva
+        btn.addEventListener('click', function() {
+          saveField(field, input.value, input, btn);
+        });
+        
+        // Inizialmente disabilitato (nessuna modifica)
+        btn.disabled = true;
+        btn.textContent = 'Salva';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-success');
+        
+        inputGroup.append(input, btn);
+        col.append(lbl, inputGroup);
+        return col;
+      };
+
+      grid.append(
+        makeCol('Nome', data.cliente_nome, 'nome'),
+        makeCol('Cognome', data.cliente_cognome, 'cognome'),
+        makeCol('Cellulare', data.cliente_cellulare, 'cellulare'),
+        makeCol('Email', data.cliente_email, 'email')
+      );
+
+      const noteWrap = document.createElement('div');
+      noteWrap.className = 'mt-3';
+      const noteLbl = document.createElement('label');
+      noteLbl.className = 'form-label fw-bold text-uppercase small';
+      noteLbl.textContent = 'Note cliente';
+      
+      const noteGroup = document.createElement('div');
+      noteGroup.className = 'd-flex gap-2 align-items-start';
+      
+      const note = document.createElement('textarea');
+      note.className = 'form-control';
+      note.rows = 3;
+      note.value = data.note || '';
+      note.dataset.originalValue = data.note || '';
+      
+      const noteBtn = document.createElement('button');
+      noteBtn.type = 'button';
+      noteBtn.className = 'btn btn-success btn-sm';
+      noteBtn.textContent = 'Salvato ✓';
+      noteBtn.style.whiteSpace = 'nowrap';
+      noteBtn.disabled = true;
+      
+      // Abilita/disabilita bottone quando cambia il valore
+      note.addEventListener('input', function() {
+        if (this.value !== this.dataset.originalValue) {
+          noteBtn.disabled = false;
+          noteBtn.textContent = 'Salva';
+          noteBtn.classList.remove('btn-success');
+          noteBtn.classList.add('btn-primary');
+        } else {
+          noteBtn.disabled = true;
+          noteBtn.textContent = 'Salvato ✓';
+          noteBtn.classList.remove('btn-primary');
+          noteBtn.classList.add('btn-success');
+        }
+      });
+      
+      // Click sul bottone Salva note
+      noteBtn.addEventListener('click', function() {
+        noteBtn.disabled = true;
+        noteBtn.textContent = '...';
+        
+        fetch('/settings/api/update_client_note', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+          body: JSON.stringify({ client_id: clientId, note: note.value })
+        })
+        .then(r => r.json())
+        .then(resp => {
+          if (resp.success || resp.message) {
+            note.classList.remove('is-invalid');
+            note.classList.add('is-valid');
+            note.dataset.originalValue = note.value;
+            noteBtn.textContent = 'Salvato ✓';
+            noteBtn.classList.remove('btn-primary');
+            noteBtn.classList.add('btn-success');
+            setTimeout(() => {
+              note.classList.remove('is-valid');
+            }, 1500);
+          } else {
+            note.classList.add('is-invalid');
+            noteBtn.textContent = 'Errore';
+            noteBtn.classList.add('btn-danger');
+            setTimeout(() => {
+              noteBtn.textContent = 'Salva';
+              noteBtn.classList.remove('btn-danger');
+              noteBtn.classList.add('btn-primary');
+              noteBtn.disabled = false;
+            }, 2000);
+          }
+        })
+        .catch(err => {
+          console.error('save note error:', err);
+          note.classList.add('is-invalid');
+          noteBtn.textContent = 'Errore';
+          noteBtn.classList.add('btn-danger');
+          setTimeout(() => {
+            noteBtn.textContent = 'Salva';
+            noteBtn.classList.remove('btn-danger');
+            noteBtn.classList.add('btn-primary');
+            noteBtn.disabled = false;
+          }, 2000);
+        });
+      });
+      
+      noteGroup.append(note, noteBtn);
+      noteWrap.append(noteLbl, noteGroup);
+
+      modalBody.append(grid, noteWrap);
+    })
+    .catch(err => {
+      console.error('client_info fetch error:', err);
+      modalBody.innerHTML = '<div class="alert alert-danger mb-0">Impossibile caricare i dati cliente.</div>';
+    })
+    .finally(() => {
+      const modalInstance = bootstrap.Modal.getOrCreateInstance(modalWrap);
+      modalInstance.show();
     });
 
-    tbody.addEventListener('dragover', function(e) {
+  // Reload quando il modal viene chiuso
+  modalWrap.addEventListener('hidden.bs.modal', function onModalHidden() {
+    modalWrap.removeEventListener('hidden.bs.modal', onModalHidden);
+    location.reload();
+  });
+
+}, true);
+
+// Operatore: delegazione click
+document.addEventListener('click', function (e) {
+  const opCell = e.target.closest('.operatore-cell');
+  if (!opCell) return;
+
+  const cell = opCell;
+  const currentId = cell.dataset.operatoreId || '';
+  const sedutaId = cell.closest('tr').dataset.id;
+  const currentText = cell.textContent; // Salva il testo attuale
+
+  // Rimuovi dropdown esistenti
+  document.querySelectorAll('.custom-dropdown').forEach(d => d.remove());
+
+  const dropdown = document.createElement('div');
+  dropdown.className = 'custom-dropdown';
+
+  // Costruisco lista operatori (semplice)
+  let html = '<ul>';
+  html += `<li data-value=""${currentId === '' ? ' class="selected"' : ''}>(nessuno)</li>`;
+  html += operatori.map(o => `<li data-value="${o.id}"${o.id == currentId ? ' class="selected"' : ''}>${o.nome}</li>`).join('');
+  html += '</ul>';
+  dropdown.innerHTML = html;
+
+  dropdown.addEventListener('click', function (evt) {
+    if (evt.target.tagName !== 'LI') return;
+    const newId = evt.target.dataset.value;
+    fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/${sedutaId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ operatore_id: newId || null })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.message) {
+        dropdown.remove();
+        location.reload();
+      }
+    });
+  });
+
+  // chiusura al click esterno
+  setTimeout(() => { // slight delay per evitare chiusura immediata
+    function closeHandler(ev) {
+      if (!dropdown.contains(ev.target) && !cell.contains(ev.target)) {
+        dropdown.remove();
+        cell.textContent = currentText; // Ripristina il testo originale
+        document.removeEventListener('click', closeHandler);
+      }
+    }
+    document.addEventListener('click', closeHandler);
+  }, 20);
+
+  cell.innerHTML = '';
+  cell.appendChild(dropdown);
+});
+
+  // DnD per sedute
+  const tbody = document.querySelector('#seduteTable tbody');
+  if (tbody) {
+    let draggedRow = null;
+
+tbody.addEventListener('dragstart', function (e) {
+  draggedRow = e.target.closest('tr');
+  if (draggedRow) draggedRow.classList.add('dragging');
+});
+tbody.addEventListener('dragend', function () {
+  if (draggedRow) {
+    draggedRow.classList.remove('dragging');
+    draggedRow = null;
+  }
+});
+
+    tbody.addEventListener('dragover', function (e) {
       e.preventDefault();
       const afterElement = getDragAfterElement(tbody, e.clientY);
-      if (afterElement == null) {
+      if (!afterElement) {
         tbody.appendChild(draggedRow);
       } else {
         tbody.insertBefore(draggedRow, afterElement);
       }
     });
 
-    tbody.addEventListener('drop', function(e) {
+    tbody.addEventListener('drop', function (e) {
       e.preventDefault();
-      // Salva nuovo ordine
       const rows = Array.from(tbody.querySelectorAll('tr[data-id]'));
-      const order = rows.map(row => parseInt(row.dataset.id));
+      const order = rows.map(r => parseInt(r.dataset.id));
       fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/ordine`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': csrfToken
-        },
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
         body: JSON.stringify({ ordine: order })
       })
-      .then(res => res.json())
+      .then(r => r.json())
       .then(data => {
-        if (data.message) {
-          // Ricarica pagina per aggiornare ordine e ricalcolare N*
-          location.reload();
-        }
+        if (data.message) location.reload();
       });
     });
+  }
 
-    function getDragAfterElement(container, y) {
-      const draggableElements = [...container.querySelectorAll('tr[data-id]')];
-      return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) {
-          return { offset: offset, element: child };
-        } else {
-          return closest;
-        }
-      }, { offset: Number.NEGATIVE_INFINITY }).element;
-    }
+  function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('tr[data-id]')];
+    return draggableElements.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset: offset, element: child };
+      } else {
+        return closest;
+      }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+  }
 
-    // Salvataggio note
-    const noteEditor = document.getElementById('noteEditor');
+  // Note auto-save
+  const noteEditor = document.getElementById('noteEditor');
+  if (noteEditor) {
     let noteTimeout;
-    noteEditor.addEventListener('input', function() {
+    noteEditor.addEventListener('input', function () {
       clearTimeout(noteTimeout);
       noteTimeout = setTimeout(() => {
         fetch(`/pacchetti/api/pacchetti/${pacchettoId}/note`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken
-          },
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
           body: JSON.stringify({ note: noteEditor.value })
         });
-      }, 1000); // Salva dopo 1s di inattività
+      }, 1000);
+    });
+  }
+
+  // Sconto auto-save e aggiornamento prezzo mostrato (con risposta dal server)
+  const scontoInput = document.getElementById('scontoInput');
+  if (scontoInput) {
+    let scontoTimeout;
+    scontoInput.addEventListener('input', function () {
+      clearTimeout(scontoTimeout);
+      scontoTimeout = setTimeout(() => {
+        fetch(`/pacchetti/api/pacchetti/${pacchettoId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+          body: JSON.stringify({ sconto_valore: this.value })
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.costo_totale_scontato !== undefined) {
+            const el = document.getElementById('prezzoScontato');
+            if (el) el.textContent = '€' + (Number(data.costo_totale_scontato) || 0).toFixed(2);
+          }
+        });
+      }, 400);
+    });
+  }
+
+  // Click handler per aprire il modal redirect Agenda (delegazione per .data-cell)
+  document.addEventListener('click', function (ev) {
+    const cell = ev.target.closest('.data-cell');
+    if (!cell) return;
+
+    const row = cell.closest('tr');
+    const sedutaId = row.dataset.id;
+
+    // Recupera i dati della seduta dalla riga
+    const serviceName = row.querySelector('td:nth-child(2)').textContent.trim();
+    const operatoreCell = row.querySelector('.operatore-cell');
+    const operatoreId = operatoreCell ? operatoreCell.dataset.operatoreId : '';
+
+    // Ottieni dati pacchetto (già disponibili come variabili globali)
+    // pacchettoId è già definito in precedenza nel file
+    // Serve anche il clientId
+    const clientId = {{ pacchetto.client_id }};
+    const clientName = '{{ pacchetto.client_nome }}';
+    const clientCellulare = '{{ pacchetto.client_cellulare }}';
+
+    // Crea modal di conferma redirect
+    const backdrop = document.createElement('div');
+    backdrop.className = 'date-modal-backdrop';
+    backdrop.style.zIndex = '10000';
+    
+    const modal = document.createElement('div');
+    modal.className = 'date-modal';
+    modal.style.zIndex = '10001';
+    modal.style.maxWidth = '500px';
+    modal.style.padding = '20px';
+    
+    const message = document.createElement('p');
+    message.style.fontSize = '1.1rem';
+    message.style.marginBottom = '20px';
+    message.textContent = 'Sarai reindirizzato alla pagina Agenda per selezionare data e ora per questa seduta.';
+    
+    const btnContainer = document.createElement('div');
+    btnContainer.style.display = 'flex';
+    btnContainer.style.justifyContent = 'center';
+    btnContainer.style.gap = '10px';
+    
+    const btnOk = document.createElement('button');
+    btnOk.type = 'button';
+    btnOk.className = 'btn btn-primary';
+    btnOk.textContent = 'OK';
+    btnOk.style.minWidth = '80px';
+    
+    const btnAnnulla = document.createElement('button');
+    btnAnnulla.type = 'button';
+    btnAnnulla.className = 'btn btn-secondary';
+    btnAnnulla.textContent = 'Annulla';
+    btnAnnulla.style.minWidth = '80px';
+    
+    btnContainer.appendChild(btnOk);
+    btnContainer.appendChild(btnAnnulla);
+    modal.appendChild(message);
+    modal.appendChild(btnContainer);
+    document.body.appendChild(backdrop);
+    document.body.appendChild(modal);
+    
+    function closeModal() {
+      modal.remove();
+      backdrop.remove();
+    }
+    
+    btnAnnulla.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+    
+    btnOk.addEventListener('click', function() {
+      // Salva i dati della seduta in localStorage per il calendar
+      const sedutaData = {
+        pacchettoId: pacchettoId,
+        sedutaId: sedutaId,
+        serviceName: serviceName,
+        operatoreId: operatoreId,
+        clientId: clientId,
+        clientName: clientName,
+        clientCellulare: clientCellulare
+      };
+      
+      try {
+        localStorage.setItem('pendingSedutaFromPacchetto', JSON.stringify(sedutaData));
+        // Redirect a calendar sulla data odierna
+        const today = new Date().toISOString().split('T')[0];
+        window.location.href = `/calendar?date=${today}`;
+      } catch (e) {
+        console.error('Errore nel salvataggio dati seduta:', e);
+        alert('Errore nel salvataggio dei dati. Riprova.');
+        closeModal();
+      }
+    });
+  }); // end click handler (data-cell)
+
+    // Importo input change
+// Pulsante CALCOLA per singola rata
+document.addEventListener('click', function(e) {
+  if (e.target.closest('.btn-calcola-rata')) {
+    const btn = e.target.closest('.btn-calcola-rata');
+    const rataId = btn.dataset.rataId;
+    const input = document.querySelector(`input.rata-importo-input[data-rata-id="${rataId}"]`);
+    if (!input) return;
+    
+    const importo = parseFloat(input.value) || 0;
+    
+    fetch(`/pacchetti/api/rate/${rataId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ importo: importo })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        alert(data.error);
+        location.reload(); // Ripristina valori originali
+      } else {
+        location.reload();
+      }
+    });
+  }
+});
+
+// Pulsante CALCOLA per numero rate (con conferma se ci sono rate pagate)
+document.getElementById('btnCalcolaRate').addEventListener('click', function() {
+  const newNumRate = parseInt(document.getElementById('numeroRate').value) || 1;
+  
+  // Prima verifica se ci sono rate pagate
+  fetch(`/pacchetti/api/pacchetti/${pacchettoId}/check_rate_pagate`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.has_rate_pagate) {
+        const conferma = confirm(
+          `ATTENZIONE: Ci sono ${data.count} rate già pagate per un totale di €${data.totale_pagato.toFixed(2)}.\n\n` +
+          `Modificando il numero di rate, le rate pagate verranno mantenute e le nuove rate saranno calcolate sul residuo.\n\n` +
+          `Vuoi continuare?`
+        );
+        if (!conferma) return;
+      }
+      
+      // Procedi con l'aggiornamento
+      fetch(`/pacchetti/api/pacchetti/${pacchettoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ numero_rate: newNumRate })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          alert(data.error);
+        } else {
+          location.reload();
+        }
+      });
+    });
+});
+
+// Rounding buttons (mantieni questi ma rimuovi location.reload automatico)
+document.addEventListener('click', function (e) {
+  if (e.target.matches('.round-down')) {
+    const rataId = e.target.dataset.rataId;
+    const input = document.querySelector(`input.rata-importo-input[data-rata-id="${rataId}"]`);
+    if (input && !input.disabled) {
+      const val = parseFloat(input.value) || 0;
+      const newVal = Math.floor(val);
+      input.value = newVal.toFixed(2);
+      // NON invia automaticamente, l'utente deve cliccare CALCOLA
+    }
+  }
+  if (e.target.matches('.round-up')) {
+    const rataId = e.target.dataset.rataId;
+    const input = document.querySelector(`input.rata-importo-input[data-rata-id="${rataId}"]`);
+    if (input && !input.disabled) {
+      const val = parseFloat(input.value) || 0;
+      const newVal = Math.ceil(val);
+      input.value = newVal.toFixed(2);
+      // NON invia automaticamente, l'utente deve cliccare CALCOLA
+    }
+  }
+});
+
+  // Prepara lista sedute con date per il dropdown
+  const seduteConDate = [];
+  document.querySelectorAll('#seduteTable tbody tr[data-id]').forEach((row, idx) => {
+    const dateCell = row.querySelector('.data-cell');
+    const dateIso = dateCell ? dateCell.dataset.date : '';
+    const serviceName = row.cells[1] ? row.cells[1].textContent.trim() : '';
+    seduteConDate.push({
+      index: idx + 1,
+      date: dateIso,
+      service: serviceName
     });
   });
 
-document.addEventListener('click', function(e) {
-  const cell = e.target.closest('.data-cell');
-  if (!cell) return;
+  // Click handler per rata-data-cell
+  document.addEventListener('click', function (ev) {
+    const cell = ev.target.closest('.rata-data-cell');
+    if (!cell) return;
 
-  const sedutaId = cell.closest('tr').dataset.id;
-  const initial = cell.dataset.date || null;
+    const rataId = cell.dataset.rataId;
+    const initialIso = cell.dataset.date || '';
+    const initialSedutaRef = cell.dataset.sedutaRef || '';
 
-  // Backdrop + modal
-  const backdrop = document.createElement('div');
-  backdrop.className = 'date-modal-backdrop';
-  const modal = document.createElement('div');
-  modal.className = 'date-modal';
+    // Backdrop
+    const backdrop = document.createElement('div');
+    backdrop.className = 'date-modal-backdrop';
 
-  // Build 1-column, 2-row table
-  const table = document.createElement('table');
-  table.className = 'date-table';
-  const trTop = document.createElement('tr');
-  const trBottom = document.createElement('tr');
-  const tdTop = document.createElement('td');
-  const tdBottom = document.createElement('td');
+    // Modal
+    const modal = document.createElement('div');
+    modal.className = 'rata-date-modal';
 
-tdTop.innerHTML = `
-  <div class="d-flex align-items-center mb-2">
-    <div class="d-flex gap-2">
-      <select id="daySelect" class="form-select form-select-sm"></select>
-      <select id="monthSelect" class="form-select form-select-sm"></select>
-      <select id="yearSelect" class="form-select form-select-sm"></select>
-    </div>
-  </div>
-`;
-  tdBottom.innerHTML = `
-    <div class="d-flex justify-content-end gap-2 mt-2">
-      <button type="button" class="btn btn-sm btn-primary" id="oggiBtn">OGGI</button>
-      <button type="button" class="btn btn-sm btn-success" id="salvaBtn">Salva</button>
-      <button type="button" class="btn btn-sm btn-secondary" id="annullaBtn">Annulla</button>
-    </div>
-  `;
+    // Contenuto modal
+    let html = `
+      <h6 class="mb-3"><strong>Seleziona data rata</strong></h6>
+      <div class="mb-3">
+        <label class="form-label small text-muted">Scegli da seduta:</label>
+        <div class="border rounded" style="max-height: 150px; overflow-y: auto;">
+    `;
 
-  trTop.appendChild(tdTop);
-  trBottom.appendChild(tdBottom);
-  table.appendChild(trTop);
-  table.appendChild(trBottom);
+    seduteConDate.forEach(s => {
+      const dateDisplay = s.date ? formatDisplayDate(s.date) : '(verrà compilata quando assegnata)';
+      const isSelected = initialSedutaRef === `seduta:${s.index}`;
+      // Escape del nome servizio per evitare XSS
+      const safeService = s.service.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const safeDateDisplay = s.date ? formatDisplayDate(s.date) : '(verrà compilata quando assegnata)';
+      html += `<div class="seduta-option${isSelected ? ' selected' : ''}" data-date="${s.date || ''}" data-seduta-index="${s.index}">
+        <strong>Seduta ${s.index}</strong> - ${safeService}<br>
+        <small class="text-muted">${safeDateDisplay}</small>
+      </div>`;
+    });
 
-  modal.appendChild(table);
-  document.body.appendChild(backdrop);
-  document.body.appendChild(modal);
+    html += `
+        </div>
+      </div>
+      <hr>
+      <div class="mb-3">
+        <label class="form-label small text-muted">Oppure scegli data manualmente:</label>
+        <div class="d-flex gap-2 align-items-center">
+          <select id="rataDaySelect" class="form-select form-select-sm" style="width:80px;"></select>
+          <select id="rataMonthSelect" class="form-select form-select-sm" style="width:110px;"></select>
+          <select id="rataYearSelect" class="form-select form-select-sm" style="width:80px;"></select>
+          <span class="calendar-toggle-btn" id="toggleCalendarBtn" title="Apri calendario"><i class="bi bi-calendar3"></i></span>
+        </div>
+      </div>
+      <div id="calendarContainer" class="mb-3" style="display:none;">
+        <div class="calendar-header">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="calPrevMonth">&lt;</button>
+          <span id="calMonthYear" class="fw-bold"></span>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="calNextMonth">&gt;</button>
+        </div>
+        <div class="calendar-grid" id="calendarGrid">
+          <div class="calendar-day-header">Lu</div>
+          <div class="calendar-day-header">Ma</div>
+          <div class="calendar-day-header">Me</div>
+          <div class="calendar-day-header">Gi</div>
+          <div class="calendar-day-header">Ve</div>
+          <div class="calendar-day-header">Sa</div>
+          <div class="calendar-day-header">Do</div>
+        </div>
+      </div>
+      <div class="d-flex justify-content-end gap-2">
+        <button type="button" class="btn btn-sm btn-primary" id="rataOggiBtn">OGGI</button>
+        <button type="button" class="btn btn-sm btn-success" id="rataSalvaBtn">Salva</button>
+        <button type="button" class="btn btn-sm btn-secondary" id="rataAnnullaBtn">Annulla</button>
+      </div>
+    `;
 
-  const daySel = modal.querySelector('#daySelect');
-  const monthSel = modal.querySelector('#monthSelect');
-  const yearSel = modal.querySelector('#yearSelect');
+    modal.innerHTML = html;
+    document.body.appendChild(backdrop);
+    document.body.appendChild(modal);
 
-  // Populate selects
-  for (let d = 1; d <= 31; d++) {
-    const opt = document.createElement('option'); opt.value = d; opt.textContent = d; daySel.appendChild(opt);
-  }
-  const mesi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-  for (let m = 1; m <= 12; m++) {
-    const opt = document.createElement('option'); opt.value = m; opt.textContent = mesi[m-1]; monthSel.appendChild(opt);
-  }
-  const now = new Date();
-  const cy = now.getFullYear();
-  for (let y = cy - 5; y <= cy + 5; y++) {
-    const opt = document.createElement('option'); opt.value = y; opt.textContent = y; yearSel.appendChild(opt);
-  }
+    const daySel = modal.querySelector('#rataDaySelect');
+    const monthSel = modal.querySelector('#rataMonthSelect');
+    const yearSel = modal.querySelector('#rataYearSelect');
+    const calendarContainer = modal.querySelector('#calendarContainer');
+    const calendarGrid = modal.querySelector('#calendarGrid');
+    const calMonthYear = modal.querySelector('#calMonthYear');
 
-  // Helpers
-  function pad(n) { return String(n).padStart(2, '0'); }
-  function clampDay(y, m, d) {
-    const last = new Date(y, m, 0).getDate();
-    return Math.min(d, last);
-  }
+    // Traccia se è stata selezionata una seduta (con o senza data)
+    let selectedSedutaRef = initialSedutaRef;
 
-    function setFromISO(iso) {
-      if (iso) {
-        const parts = iso.split('-');
-        const y = parseInt(parts[0], 10);
-        const m = parseInt(parts[1], 10);
-        const d = parseInt(parts[2], 10);
-        yearSel.value = y;
-        monthSel.value = m;
-        daySel.value = d;
+    // Popola selects
+    for (let d = 1; d <= 31; d++) {
+      const opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = d;
+      daySel.appendChild(opt);
+    }
+    const mesi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+    for (let m = 1; m <= 12; m++) {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = mesi[m-1];
+      monthSel.appendChild(opt);
+    }
+    const now = new Date();
+    const cy = now.getFullYear();
+    for (let y = cy - 5; y <= cy + 5; y++) {
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = y;
+      yearSel.appendChild(opt);
+    }
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function setDateSelects(isoDate) {
+      if (isoDate && /^\d{4}-\d{2}-\d{2}$/.test(isoDate)) {
+        const parts = isoDate.split('-');
+        yearSel.value = parts[0];
+        monthSel.value = parseInt(parts[1], 10);
+        daySel.value = parseInt(parts[2], 10);
       } else {
         yearSel.value = now.getFullYear();
         monthSel.value = now.getMonth() + 1;
@@ -411,71 +1781,651 @@ tdTop.innerHTML = `
       }
     }
 
-    function getYMD() {
+    function getSelectedDate() {
       const y = parseInt(yearSel.value, 10);
       const m = parseInt(monthSel.value, 10);
       let d = parseInt(daySel.value, 10);
-
-      // Clamp day between 1 and last day of month
       const last = new Date(y, m, 0).getDate();
-      if (Number.isNaN(d)) d = 1;
       d = Math.min(Math.max(1, d), last);
-      daySel.value = String(d);
-
-      return { y, m, d };
+      return `${y}-${pad(m)}-${pad(d)}`;
     }
 
-  // Init value from existing date or today
-setFromISO(initial);
-{
-  const ty = now.getFullYear();
-  const tm = now.getMonth() + 1;
-  const td = now.getDate();
-  yearSel.value = ty;
-  monthSel.value = tm;
-  daySel.value = td;
-}
+    // Calendario interattivo
+    let calYear = now.getFullYear();
+    let calMonth = now.getMonth();
 
-  // Keep calendar in sync with selects
-function onSelectChange() {
-  getYMD(); // clamps the day and updates daySel.value
-}
-daySel.addEventListener('change', onSelectChange);
-monthSel.addEventListener('change', onSelectChange);
-yearSel.addEventListener('change', onSelectChange);
+    function renderCalendar() {
+      calendarGrid.querySelectorAll('.calendar-day').forEach(el => el.remove());
+      calMonthYear.textContent = `${mesi[calMonth]} ${calYear}`;
 
-  // Actions
-modal.querySelector('#oggiBtn').addEventListener('click', () => {
-  const ty = now.getFullYear(), tm = now.getMonth() + 1, td = now.getDate();
-  yearSel.value = ty; monthSel.value = tm; daySel.value = td;
-});
+      const firstDay = new Date(calYear, calMonth, 1);
+      const lastDay = new Date(calYear, calMonth + 1, 0);
+      const daysInMonth = lastDay.getDate();
 
-  function closeModal() { modal.remove(); backdrop.remove(); }
-  modal.querySelector('#annullaBtn').addEventListener('click', closeModal);
-  backdrop.addEventListener('click', closeModal);
-  document.addEventListener('keydown', function escHandler(ev) {
-    if (ev.key === 'Escape') { closeModal(); document.removeEventListener('keydown', escHandler); }
-  });
+      let startDay = firstDay.getDay();
+      startDay = startDay === 0 ? 6 : startDay - 1;
 
-  modal.querySelector('#salvaBtn').addEventListener('click', () => {
-    const { y, m, d } = getYMD();
-    const newDate = `${y}-${pad(m)}-${pad(d)}`; // YYYY-MM-DD
-    fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/${sedutaId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-      body: JSON.stringify({ data_trattamento: newDate })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.error) { alert(data.error); return; }
-    if (data.message) {
-    cell.dataset.date = newDate;
-    cell.textContent = formatDisplayDate(newDate);
-    closeModal();
-    populateNStar();
+      const prevMonthLastDay = new Date(calYear, calMonth, 0).getDate();
+      for (let i = startDay - 1; i >= 0; i--) {
+        const dayEl = document.createElement('div');
+        dayEl.className = 'calendar-day other-month';
+        dayEl.textContent = prevMonthLastDay - i;
+        calendarGrid.appendChild(dayEl);
+      }
+
+      const selectedY = parseInt(yearSel.value, 10);
+      const selectedM = parseInt(monthSel.value, 10);
+      const selectedD = parseInt(daySel.value, 10);
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dayEl = document.createElement('div');
+        dayEl.className = 'calendar-day';
+        dayEl.textContent = d;
+        dayEl.dataset.day = d;
+
+        if (calYear === now.getFullYear() && calMonth === now.getMonth() && d === now.getDate()) {
+          dayEl.classList.add('today');
+        }
+
+        if (calYear === selectedY && calMonth + 1 === selectedM && d === selectedD) {
+          dayEl.classList.add('selected');
+        }
+
+        dayEl.addEventListener('click', function() {
+          yearSel.value = calYear;
+          monthSel.value = calMonth + 1;
+          daySel.value = d;
+          selectedSedutaRef = ''; // Reset seduta ref quando si sceglie data manuale
+          modal.querySelectorAll('.seduta-option').forEach(o => o.classList.remove('selected'));
+          renderCalendar();
+        });
+
+        calendarGrid.appendChild(dayEl);
+      }
+
+      const totalCells = startDay + daysInMonth;
+      const remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+      for (let i = 1; i <= remaining; i++) {
+        const dayEl = document.createElement('div');
+        dayEl.className = 'calendar-day other-month';
+        dayEl.textContent = i;
+        calendarGrid.appendChild(dayEl);
+      }
     }
+
+    modal.querySelector('#toggleCalendarBtn').addEventListener('click', function() {
+      if (calendarContainer.style.display === 'none') {
+        calYear = parseInt(yearSel.value, 10);
+        calMonth = parseInt(monthSel.value, 10) - 1;
+        renderCalendar();
+        calendarContainer.style.display = 'block';
+      } else {
+        calendarContainer.style.display = 'none';
+      }
+    });
+
+    modal.querySelector('#calPrevMonth').addEventListener('click', function() {
+      calMonth--;
+      if (calMonth < 0) { calMonth = 11; calYear--; }
+      renderCalendar();
+    });
+
+    modal.querySelector('#calNextMonth').addEventListener('click', function() {
+      calMonth++;
+      if (calMonth > 11) { calMonth = 0; calYear++; }
+      renderCalendar();
+    });
+
+    [daySel, monthSel, yearSel].forEach(sel => {
+      sel.addEventListener('change', function() {
+        selectedSedutaRef = ''; // Reset seduta ref quando si cambia data manualmente
+        modal.querySelectorAll('.seduta-option').forEach(o => o.classList.remove('selected'));
+        if (calendarContainer.style.display !== 'none') {
+          calYear = parseInt(yearSel.value, 10);
+          calMonth = parseInt(monthSel.value, 10) - 1;
+          renderCalendar();
+        }
+      });
+    });
+
+    // Set initial date
+    setDateSelects(initialIso);
+
+    function closeModal() {
+      modal.remove();
+      backdrop.remove();
+    }
+
+    function saveDate(newDate, sedutaRef) {
+      let payload = {};
+      
+      if (sedutaRef) {
+        // Codifica il riferimento seduta come data fittizia: 0001-01-XX
+        const sedutaIndex = parseInt(sedutaRef.replace('seduta:', ''), 10);
+        const fakeDate = `0001-01-${String(sedutaIndex).padStart(2, '0')}`;
+        payload.data_scadenza = fakeDate;
+      } else {
+        payload.data_scadenza = newDate;
+      }
+
+      fetch(`/pacchetti/api/rate/${rataId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify(payload)
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (sedutaRef) {
+          cell.dataset.date = '';
+          cell.dataset.sedutaRef = sedutaRef;
+          cell.textContent = formatSedutaRef(sedutaRef);
+        } else {
+          cell.dataset.date = newDate;
+          cell.dataset.sedutaRef = '';
+          cell.textContent = formatDisplayDate(newDate);
+        }
+        closeModal();
+      });
+    }
+
+    // Click su seduta option
+    modal.querySelectorAll('.seduta-option').forEach(opt => {
+      opt.addEventListener('click', function() {
+        const date = this.dataset.date;
+        const sedutaIndex = this.dataset.sedutaIndex;
+        
+        // Evidenzia selezione
+        modal.querySelectorAll('.seduta-option').forEach(o => o.classList.remove('selected'));
+        this.classList.add('selected');
+
+        if (date) {
+          // Seduta con data: imposta la data
+          setDateSelects(date);
+          selectedSedutaRef = ''; // Ha già una data, non serve il ref
+          if (calendarContainer.style.display !== 'none') {
+            calYear = parseInt(yearSel.value, 10);
+            calMonth = parseInt(monthSel.value, 10) - 1;
+            renderCalendar();
+          }
+        } else {
+          // Seduta senza data: salva il riferimento
+          selectedSedutaRef = `seduta:${sedutaIndex}`;
+        }
+      });
+    });
+
+    modal.querySelector('#rataAnnullaBtn').addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+
+    modal.querySelector('#rataOggiBtn').addEventListener('click', function() {
+      yearSel.value = now.getFullYear();
+      monthSel.value = now.getMonth() + 1;
+      daySel.value = now.getDate();
+      selectedSedutaRef = '';
+      modal.querySelectorAll('.seduta-option').forEach(o => o.classList.remove('selected'));
+      if (calendarContainer.style.display !== 'none') {
+        calYear = now.getFullYear();
+        calMonth = now.getMonth();
+        renderCalendar();
+      }
+    });
+
+    modal.querySelector('#rataSalvaBtn').addEventListener('click', function() {
+      if (selectedSedutaRef) {
+        // Salva riferimento seduta
+        saveDate(null, selectedSedutaRef);
+      } else {
+        // Salva data
+        const newDate = getSelectedDate();
+        saveDate(newDate, null);
+      }
+    });
+
+    document.addEventListener('keydown', function escHandler(ev) {
+      if (ev.key === 'Escape') {
+        closeModal();
+        document.removeEventListener('keydown', escHandler);
+      }
     });
   });
+
+  // Arrotondamento prezzo scontato
+const prezzoRoundDown = document.getElementById('prezzoRoundDown');
+const prezzoRoundUp = document.getElementById('prezzoRoundUp');
+
+if (prezzoRoundDown) {
+  prezzoRoundDown.addEventListener('click', function() {
+    const prezzoSpan = document.getElementById('prezzoScontato');
+    const currentVal = parseFloat(prezzoSpan.textContent.replace('€', '').trim()) || 0;
+    const newVal = Math.floor(currentVal);
+    
+    fetch(`/pacchetti/api/pacchetti/${pacchettoId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ costo_totale_scontato: newVal })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.message) {
+        location.reload();
+      }
+    });
+  });
+}
+
+if (prezzoRoundUp) {
+  prezzoRoundUp.addEventListener('click', function() {
+    const prezzoSpan = document.getElementById('prezzoScontato');
+    const currentVal = parseFloat(prezzoSpan.textContent.replace('€', '').trim()) || 0;
+    const newVal = Math.ceil(currentVal);
+    
+    fetch(`/pacchetti/api/pacchetti/${pacchettoId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ costo_totale_scontato: newVal })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.message) {
+        location.reload();
+      }
+    });
+  });
+}
+
+  // Controlla se le rate sono allineate al totale pacchetto
+  // Questo controllo avviene SEMPRE al caricamento della pagina
+  const rateDisallineate = {{ 'true' if pacchetto.rate_disallineate else 'false' }};
+  const differenzaRate = {{ pacchetto.differenza_rate|default(0) }};
+  const totalePacchetto = {{ pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo or 0 }};
+  const totalePagato = {{ pacchetto.totale_rate_pagate|default(0) }};
+  const totaleNonPagato = {{ pacchetto.totale_rate_non_pagate|default(0) }};
+  
+  // Controlla anche se arriviamo dalla cassa con parametro ricalcola_rate
+  const urlParams = new URLSearchParams(window.location.search);
+  const forzaRicalcolo = urlParams.get('ricalcola_rate') === '1';
+  
+  if (forzaRicalcolo) {
+    // Rimuovi il parametro dall'URL senza ricaricare
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }
+  
+  // Mostra popup se rate disallineate O se forzato dalla cassa
+  if (rateDisallineate || forzaRicalcolo) {
+    setTimeout(() => {
+      const rateNonPagate = document.querySelectorAll('tr[data-rata-id]:not(.rata-pagata)');
+      if (rateNonPagate.length > 0) {
+        const rimanente = totalePacchetto - totalePagato;
+        const numRateNonPagate = rateNonPagate.length;
+        const importoPerRata = (rimanente / numRateNonPagate).toFixed(2);
+        
+        let messaggio;
+        if (differenzaRate > 0) {
+          messaggio = `⚠️ ATTENZIONE: Le rate non sono allineate al totale del pacchetto!\n\n` +
+            `Totale pacchetto: €${totalePacchetto.toFixed(2)}\n` +
+            `Già pagato: €${totalePagato.toFixed(2)}\n` +
+            `Rate non pagate: €${totaleNonPagato.toFixed(2)}\n` +
+            `MANCANO: €${differenzaRate.toFixed(2)}\n\n` +
+            `Vuoi ridistribuire €${rimanente.toFixed(2)} sulle ${numRateNonPagate} rate rimanenti?\n` +
+            `(€${importoPerRata} per rata)`;
+        } else if (differenzaRate < 0) {
+          messaggio = `⚠️ ATTENZIONE: Le rate superano il totale del pacchetto!\n\n` +
+            `Totale pacchetto: €${totalePacchetto.toFixed(2)}\n` +
+            `Già pagato: €${totalePagato.toFixed(2)}\n` +
+            `Rate non pagate: €${totaleNonPagato.toFixed(2)}\n` +
+            `ECCEDENZA: €${Math.abs(differenzaRate).toFixed(2)}\n\n` +
+            `Vuoi ridistribuire €${rimanente.toFixed(2)} sulle ${numRateNonPagate} rate rimanenti?\n` +
+            `(€${importoPerRata} per rata)`;
+        } else {
+          // differenzaRate === 0 ma forzaRicalcolo
+          messaggio = `L'importo della rata pagata è stato modificato.\n\n` +
+            `Totale pacchetto: €${totalePacchetto.toFixed(2)}\n` +
+            `Già pagato: €${totalePagato.toFixed(2)}\n` +
+            `Rimanente: €${rimanente.toFixed(2)}\n\n` +
+            `Vuoi distribuire €${rimanente.toFixed(2)} sulle ${numRateNonPagate} rate rimanenti?\n` +
+            `(€${importoPerRata} per rata)`;
+        }
+        
+        if (confirm(messaggio)) {
+          // Chiama il nuovo endpoint che ridistribuisce tutte le rate in una sola transazione
+          fetch(`/pacchetti/api/pacchetti/${pacchettoId}/ridistribuisci_rate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({})
+          })
+          .then(r => r.json())
+          .then(data => {
+            if (data.error) {
+              alert('Errore: ' + data.error);
+            } else {
+              location.reload();
+            }
+          })
+          .catch(err => {
+            alert('Errore durante la ridistribuzione delle rate');
+            console.error(err);
+          });
+        }
+      }
+    }, 300);
+  }
+
+// Funzione per generare il PDF del pacchetto
+function generaPdfPacchetto(stampaDiretta = false) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'a4'
+  });
+  
+  // Dati dal template
+  const clienteNome = "{{ pacchetto.client_nome|escapejs }}";
+  const clienteTel = "{{ pacchetto.client_cellulare|escapejs if pacchetto.client_cellulare else '—' }}";
+  const programmaNome = "{{ pacchetto.nome|escapejs }}";
+  const dataCreazione = "{{ pacchetto.data_sottoscrizione|escapejs }}";
+  const costoLordo = "€{{ '%.2f'|format(pacchetto.costo_totale_lordo) }}";
+  const costoScontato = document.getElementById('prezzoScontato')?.textContent || "€{{ '%.2f'|format(pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo) }}";
+  const note = document.getElementById('noteEditor')?.value || "";
+  
+  // Estrai cognome per nome file
+  const parti = clienteNome.trim().split(' ');
+  const cognome = parti.length > 1 ? parti[parti.length - 1] : parti[0];
+  const nomeFile = `${cognome}_${programmaNome.replace(/\s+/g, '_')}_${dataCreazione.replace(/\s+/g, '_')}.pdf`;
+  
+  let yPos = 40;
+  
+  // Titolo
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DETTAGLIO PACCHETTO', 297, yPos, { align: 'center' });
+  yPos += 35;
+  
+  // Info cliente
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('CLIENTE:', 40, yPos);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${clienteNome}   Tel: ${clienteTel}`, 100, yPos);
+  yPos += 25;
+  
+  // Programma
+  doc.setFont('helvetica', 'bold');
+  doc.text('PROGRAMMA:', 40, yPos);
+  doc.setFont('helvetica', 'normal');
+  doc.text(programmaNome, 130, yPos);
+  yPos += 25;
+  
+  // Data creazione
+  doc.setFont('helvetica', 'bold');
+  doc.text('DATA:', 40, yPos);
+  doc.setFont('helvetica', 'normal');
+  doc.text(dataCreazione, 80, yPos);
+  yPos += 25;
+  
+  // Costi
+  doc.setFont('helvetica', 'bold');
+  doc.text('COSTO LORDO:', 40, yPos);
+  doc.setFont('helvetica', 'normal');
+  doc.text(costoLordo, 140, yPos);
+  doc.setFont('helvetica', 'bold');
+  doc.text('COSTO SCONTATO:', 250, yPos);
+  doc.setFont('helvetica', 'normal');
+  doc.text(costoScontato, 380, yPos);
+  yPos += 35;
+  
+  // Tabella SEDUTE
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('SEDUTE', 40, yPos);
+  yPos += 10;
+  
+  // Raccogli dati sedute dalla tabella
+  const seduteRows = [];
+  document.querySelectorAll('#seduteTable tbody tr[data-id]').forEach(row => {
+    const data = row.querySelector('.data-cell')?.textContent.trim() || '—';
+    const trattamento = row.querySelectorAll('td')[1]?.textContent.trim() || '';
+    const nStar = row.querySelector('.n-star')?.textContent.trim() || '';
+    const operatore = row.querySelector('.operatore-cell')?.textContent.trim() || '';
+    const effettuata = row.querySelector('.effettuata-check')?.checked ? 'Sì' : 'No';
+    seduteRows.push([data, trattamento, nStar, operatore, effettuata]);
+  });
+  
+  if (seduteRows.length > 0) {
+    doc.autoTable({
+      startY: yPos,
+      head: [['Data', 'Trattamento', 'N*', 'Operatore', 'Effettuata']],
+      body: seduteRows,
+      styles: { fontSize: 9, cellPadding: 4 },
+      headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold' },
+      columnStyles: {
+        0: { cellWidth: 80 },
+        1: { cellWidth: 180 },
+        2: { cellWidth: 40 },
+        3: { cellWidth: 100 },
+        4: { cellWidth: 60 }
+      },
+      margin: { left: 40, right: 40 }
+    });
+    yPos = doc.lastAutoTable.finalY + 25;
+  } else {
+    yPos += 20;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'italic');
+    doc.text('Nessuna seduta', 40, yPos);
+    yPos += 25;
+  }
+  
+  // Tabella RATE
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RATE', 40, yPos);
+  yPos += 10;
+  
+  // Raccogli dati rate dalla tabella
+  const rateRows = [];
+  document.querySelectorAll('.rate-table tbody tr[data-rata-id]').forEach((row, idx) => {
+    const importoInput = row.querySelector('.rata-importo-input');
+    const importo = importoInput ? `€${parseFloat(importoInput.value).toFixed(2)}` : '—';
+    const stato = row.classList.contains('rata-pagata') ? 'Pagata' : 'Da pagare';
+    const dataCell = row.querySelectorAll('td')[3];
+    const data = dataCell?.textContent.trim() || '—';
+    rateRows.push([`Rata ${idx + 1}`, importo, stato, data]);
+  });
+  
+  if (rateRows.length > 0) {
+    doc.autoTable({
+      startY: yPos,
+      head: [['N. Rata', 'Importo', 'Stato', 'Data']],
+      body: rateRows,
+      styles: { fontSize: 9, cellPadding: 4 },
+      headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold' },
+      columnStyles: {
+        0: { cellWidth: 80 },
+        1: { cellWidth: 100 },
+        2: { cellWidth: 100 },
+        3: { cellWidth: 120 }
+      },
+      margin: { left: 40, right: 40 }
+    });
+    yPos = doc.lastAutoTable.finalY + 25;
+  }
+  
+  // Note (se presenti)
+  if (note && note.trim()) {
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('NOTE', 40, yPos);
+    yPos += 15;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const noteLines = doc.splitTextToSize(note, 515);
+    doc.text(noteLines, 40, yPos);
+  }
+  
+  if (stampaDiretta) {
+    // Apri finestra di stampa
+    const pdfBlob = doc.output('blob');
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    const printWindow = window.open(pdfUrl);
+    if (printWindow) {
+      printWindow.onload = function() {
+        printWindow.print();
+      };
+    }
+  } else {
+    // Scarica il PDF
+    doc.save(nomeFile);
+  }
+}
+
+// Funzione per generare il PDF del Disclaimer / Consenso Informato
+async function generaDisclaimerPdf(stampaDiretta = false) {
+  const { jsPDF } = window.jspdf;
+  
+  // Recupera il template disclaimer e i dati dal server
+  let templateData;
+  try {
+    const response = await fetch(`/settings/api/pacchetti/${pacchettoId}/disclaimer_data`);
+    templateData = await response.json();
+    if (!templateData.success) {
+      alert('❌ Errore nel recupero dei dati disclaimer');
+      return;
+    }
+  } catch (error) {
+    console.error('Errore:', error);
+    alert('❌ Errore di connessione');
+    return;
+  }
+  
+  // Dati cliente dal template Jinja
+  const clienteNome = "{{ pacchetto.client_nome|escapejs }}".split(' ')[0] || '';
+  const clienteCognome = "{{ pacchetto.client_nome|escapejs }}".split(' ').slice(1).join(' ') || '';
+  const clienteCellulare = "{{ pacchetto.client_cellulare|escapejs if pacchetto.client_cellulare else '—' }}";
+  const programmaNome = "{{ pacchetto.nome|escapejs }}";
+  const dataOdierna = new Date().toLocaleDateString('it-IT');
+  const dataSottoscrizione = "{{ pacchetto.data_sottoscrizione|escapejs if pacchetto.data_sottoscrizione else '—' }}";
+  const seduteTotali = {{ pacchetto.sedute|length }};
+  const importoTotale = "{{ '%.2f'|format(pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo) }}";
+  const importoTotaleLordo = "{{ '%.2f'|format(pacchetto.costo_totale_lordo) }}";
+  const centroNome = templateData.centro_nome || 'Centro Estetico';
+  const centroIndirizzo = templateData.centro_indirizzo || '';
+  
+  // Template di default se non salvato in DB
+  const defaultTemplate = `CONSENSO INFORMATO PER TRATTAMENTI ESTETICI
+
+Io sottoscritto/a {cliente_nome} {cliente_cognome}, 
+in data {data_odierna}, dichiaro di aver ricevuto informazioni complete relative al pacchetto "{pacchetto_nome}" che prevede i seguenti trattamenti:
+
+{pacchetto_servizi}
+
+Numero totale sedute: {sedute_totali}
+Importo totale da listino: € {importo_totale_lordo}
+Importo totale promo: € {importo_totale}
+
+INDICAZIONI E CONTROINDICAZIONI DEI TRATTAMENTI:
+{disclaimers_servizi}
+
+DICHIARO:
+• Di essere stato/a informato/a sulle caratteristiche dei trattamenti proposti
+• Di non avere controindicazioni note ai trattamenti sopra elencati
+• Di aver comunicato eventuali patologie, allergie o condizioni di salute rilevanti
+• Di aver compreso le modalità di pagamento concordate
+• Di acconsentire al trattamento dei miei dati personali ai sensi del GDPR
+
+Centro: {centro_nome}
+Indirizzo: {centro_indirizzo}
+
+Data: {data_odierna}
+
+_______________________________
+Firma del cliente`;
+
+  // Usa template da DB o default
+  let template = templateData.template || defaultTemplate;
+  
+  // Sostituisci tutte le variabili
+  const disclaimerText = template
+    .replace(/{cliente_nome}/g, clienteNome)
+    .replace(/{cliente_cognome}/g, clienteCognome)
+    .replace(/{cliente_cellulare}/g, clienteCellulare)
+    .replace(/{pacchetto_nome}/g, programmaNome)
+    .replace(/{pacchetto_servizi}/g, templateData.servizi_text || '')
+    .replace(/{sedute_totali}/g, seduteTotali)
+    .replace(/{importo_totale}/g, importoTotale)
+    .replace(/{importo_totale_lordo}/g, importoTotaleLordo)
+    .replace(/{data_sottoscrizione}/g, dataSottoscrizione)
+    .replace(/{centro_nome}/g, centroNome)
+    .replace(/{centro_indirizzo}/g, centroIndirizzo)
+    .replace(/{data_odierna}/g, dataOdierna)
+    .replace(/{disclaimers_servizi}/g, templateData.disclaimers_text || 'Nessuna controindicazione specifica.');
+  
+  // Genera PDF
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'pt',
+    format: 'a4'
+  });
+  
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const maxWidth = pageWidth - (margin * 2);
+  let yPos = margin;
+  const fontSize = 11;
+  const lineHeight = 1.5;
+  
+  doc.setFontSize(fontSize);
+  doc.setFont('helvetica', 'normal');
+  
+  // Dividi il testo in righe e gestisci le pagine
+  const allLines = disclaimerText.split('\n');
+  
+  allLines.forEach(paragraph => {
+    const lines = doc.splitTextToSize(paragraph, maxWidth);
+    
+    lines.forEach(line => {
+      // Controlla se serve nuova pagina
+      if (yPos + fontSize * lineHeight > pageHeight - margin) {
+        doc.addPage();
+        yPos = margin;
+      }
+      
+      doc.text(line, margin, yPos);
+      yPos += fontSize * lineHeight;
+    });
+  });
+  
+  // Salva o stampa
+  const clienteFullName = `${clienteNome} ${clienteCognome}`.trim().replace(/\s+/g, '_');
+  const nomeFile = `Disclaimer_${clienteFullName}_${programmaNome.replace(/\s+/g, '_')}.pdf`;
+  
+  if (stampaDiretta) {
+    doc.autoPrint();
+    window.open(doc.output('bloburl'), '_blank');
+  } else {
+    doc.save(nomeFile);
+  }
+}
+
+// Event listener per i pulsanti PDF e Stampa
+document.getElementById('btnPdf').addEventListener('click', function(e) {
+  e.preventDefault();
+  generaPdfPacchetto(false);
 });
+
+document.getElementById('btnStampa').addEventListener('click', function(e) {
+  e.preventDefault();
+  generaPdfPacchetto(true);
+});
+
+// Event listener per il pulsante Disclaimer
+document.getElementById('btnDisclaimer').addEventListener('click', function(e) {
+  e.preventDefault();
+  generaDisclaimerPdf(false);
+});
+   
+}); // end DOMContentLoaded
 </script>
 {% endblock %}

@@ -103,17 +103,108 @@ window.lastClickPosition = null;
 window._lastBlocksCountPerCell = window._lastBlocksCountPerCell || new Map();
 window.CLIENT_ID_BOOKING = null;
 
-// (inserire qui) -> aggiungi variabile globale per il gap contiguo (minuti)
+// variabile globale per il gap contiguo (minuti)
 window.CONTIGUOUS_BLOCK_MAX_GAP_MINUTES = window.CONTIGUOUS_BLOCK_MAX_GAP_MINUTES ?? 30;
+
+// Funzione per capitalizzare nome/cognome (prima lettera maiuscola per ogni parola)
+function capitalizeName(name) {
+  if (!name) return name;
+  return name.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+}
+window.capitalizeName = capitalizeName;
+
+// DICHIARAZIONE csrfToken SPOSTATA QUI (prima era dopo la funzione checkPendingSedutaFromPacchetto)
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+// === GESTIONE SEDUTA DA PACCHETTO ===
+// Controlla se stiamo arrivando da pacchetto_detail per creare una seduta
+(function checkPendingSedutaFromPacchetto() {
+  try {
+    const pendingSedutaJSON = localStorage.getItem('pendingSedutaFromPacchetto');
+    if (!pendingSedutaJSON) return;
+    
+    const sedutaData = JSON.parse(pendingSedutaJSON);
+    if (!sedutaData || !sedutaData.sedutaId) return;
+    
+    // Rimuovi immediatamente per evitare loop
+    localStorage.removeItem('pendingSedutaFromPacchetto');
+    
+    // Recupera serviceId dal nome servizio
+    fetch(`/calendar/api/service-by-name?name=${encodeURIComponent(sedutaData.serviceName)}`, {
+      headers: { 'X-CSRFToken': csrfToken }
+    })
+    .then(r => r.json())
+    .then(serviceData => {
+      if (serviceData.error) {
+        console.error('Servizio non trovato:', serviceData.error);
+        return;
+      }
+      
+      // AGGIORNA LE VARIABILI GLOBALI DEL NAVIGATOR
+      window.selectedClientIdNav = sedutaData.clientId;
+      window.selectedClientNameNav = sedutaData.clientName;
+      
+      // POPOLA IL CAMPO "CERCA CLIENTE" NEL NAVIGATOR
+      const clientInputNav = document.getElementById('clientSearchInputNav');
+      if (clientInputNav) {
+        clientInputNav.value = sedutaData.clientName;
+      }
+      
+      // MOSTRA GLI ALTRI CAMPI DEL NAVIGATOR
+      const serviceInputNav = document.getElementById('serviceInputNav');
+      const selectedServicesList = document.getElementById('selectedServicesList');
+      if (serviceInputNav) {
+        serviceInputNav.style.display = 'block';
+      }
+      if (selectedServicesList) {
+        selectedServicesList.style.display = 'block';
+      }
+      
+      // Crea pseudoblocco con i dati della seduta
+      window.pseudoBlocks = window.pseudoBlocks || [];
+      window.pseudoBlocks.push({
+        clientId: sedutaData.clientId,
+        clientName: sedutaData.clientName,
+        serviceId: serviceData.id,
+        serviceName: serviceData.nome,
+        tag: serviceData.nome,
+        duration: serviceData.durata,
+        color: serviceData.colore || '#3498db',
+        pacchettoSedutaId: sedutaData.sedutaId,
+        pacchettoId: sedutaData.pacchettoId
+      });
+      
+      // Salva in localStorage per persistenza
+      try {
+        localStorage.setItem('selectedClientIdNav', sedutaData.clientId);
+        localStorage.setItem('selectedClientNameNav', sedutaData.clientName);
+        localStorage.setItem('pseudoBlocksData', JSON.stringify(window.pseudoBlocks));
+      } catch (e) {
+        console.error('Errore salvataggio localStorage:', e);
+      }
+      
+      // Renderizza il pseudoblocco
+      if (typeof renderPseudoBlocksList === 'function') {
+        renderPseudoBlocksList();
+      }
+    })
+    .catch(err => {
+      console.error('Errore nel recupero del servizio:', err);
+    });
+    
+  } catch (e) {
+    console.error('Errore nel caricamento seduta da pacchetto:', e);
+    localStorage.removeItem('pendingSedutaFromPacchetto');
+  }
+})();
+// === FINE GESTIONE SEDUTA DA PACCHETTO ===
 
 // === BLOCCO: LOCK CLICK ESTERNI MODAL CREAZIONE APPUNTAMENTO ===
 function enableCreateApptModalLock(modalEl) {
   if (!modalEl || modalEl._createApptLockActive) return;
   const handler = (e) => {
     const t = e.target;
-    // dentro il modal corrente → ok
     if (modalEl.contains(t)) return;
-    // NUOVO: non bloccare i click dentro altri modal Bootstrap (es. AddClientModal)
     const otherModal = t.closest('.modal.show');
     if (otherModal && otherModal !== modalEl) return;
 
@@ -161,10 +252,9 @@ function showCreateApptOutsideClickWarning(modalEl) {
   clearTimeout(warn._hideTimer);
   warn._hideTimer = setTimeout(() => { warn.style.display = 'none'; }, 2600);
 }
-// === FINE BLOCCO LOCK ===
 
 function formatDateItalian(dateStr) {
-  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr; // Fallback se non yyyy-mm-dd
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
   const [year, month, day] = dateStr.split('-');
   const months = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
   return `${parseInt(day)} ${months[parseInt(month) - 1]} ${year}`;
@@ -172,14 +262,6 @@ function formatDateItalian(dateStr) {
 
 window.formatDateItalian = formatDateItalian;
 
-// Funzione per capitalizzare nome/cognome (prima lettera maiuscola per ogni parola)
-function capitalizeName(name) {
-  if (!name) return name;
-  return name.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
-}
-window.capitalizeName = capitalizeName;  // Rendi globale se serve altrove
-
-const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 fetch('/calendar/api/client-id-booking', {
   headers: { 'X-CSRFToken': csrfToken }
 })
@@ -2308,6 +2390,31 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
         })
         .then(appointment => {
             console.log("Risposta appointment:", appointment);
+          
+          // Gestisci redirect a pacchetto se presente
+          if (appointment.pacchettoInfo) {
+            const pInfo = appointment.pacchettoInfo;
+            
+            const doRedirectToPacchetto = () => {
+              // Salva messaggio in sessionStorage per mostrarlo nella pagina pacchetto
+              const message = `Per SEDUTA ${pInfo.sedutaOrdine} la data fissata è ${pInfo.dataFissata}`;
+              sessionStorage.setItem('pacchettoSedutaMessage', message);
+              
+              // Redirect alla pagina pacchetto_detail
+              window.location.href = `/pacchetti/detail/${pInfo.pacchettoId}`;
+            };
+            
+            // Se è stato chiesto l'invio WhatsApp, aspetta che finisca prima di redirigere
+            if (inviaWhatsapp) {
+              inviaWhatsappAutoSeRichiesto(appointment, data, csrfToken).finally(doRedirectToPacchetto);
+            } else {
+              setTimeout(doRedirectToPacchetto, 100);
+            }
+            
+            return; // Esci dalla funzione, non fare il reload normale
+          }
+          
+          // Comportamento standard (quando NON deriva da pacchetto)
           if (appointment.start_time) {
             const [h, m] = appointment.start_time.split(':');
             sessionStorage.setItem('scrollToHour', parseInt(h, 10));
@@ -2329,9 +2436,9 @@ const doReload = () => {
 // Se è stato chiesto l'invio WhatsApp, aspetta che finisca prima di ricaricare
 if (inviaWhatsapp) {
   inviaWhatsappAutoSeRichiesto(appointment, data, csrfToken).finally(doReload);
+} else {
+  setTimeout(doReload, 100);
 }
-
-setTimeout(doReload, 100);
 
         })
         .catch(error => {
@@ -3449,44 +3556,169 @@ if (!numero) {
   }
 }
 
-// COPIA
-document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.appointment-block .popup-buttons .btn-popup.copia')
-  .forEach(button => {
-    button.addEventListener('click', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      const tooltipEl = document.querySelector('.tooltip');
-      if (tooltipEl) {
-        tooltipEl.remove();
-      }
-      this.removeAttribute('data-bs-original-title');
-      this.removeAttribute('aria-describedby');
-      // Recupera il blocco corrente
+// COPIA - LISTENER DELEGATO (funziona su bottoni esistenti E creati dinamicamente)
+document.addEventListener('click', function(e) {
+  const button = e.target.closest('.appointment-block .popup-buttons .btn-popup.copia');
+  if (!button) return;
+  
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+  
+  // Chiudi tooltip
+  document.querySelectorAll('.tooltip').forEach(t => t.remove());
+  button.removeAttribute('data-bs-original-title');
+  button.removeAttribute('aria-describedby');
+  
+  const block = button.closest('.appointment-block');
+  if (!block) return;
 
-      // DOPO: solo blocco singolo, no contiguous
-      const block = this.closest('.appointment-block');
-      if (!block) return;
-
-      // Escludi blocchi OFF
-      const isOff = !block.getAttribute('data-client-id') || !block.getAttribute('data-service-id');
-      if (isOff) {
-        alert("Non puoi copiare un blocco OFF nel Navigator.");
-        return;
-      }
-
-      // Limite 15 elementi nel Navigator
-      window.pseudoBlocks = window.pseudoBlocks || [];
-      if (window.pseudoBlocks.length >= 15) {
-        alert("Limite massimo di 15 elementi nel Navigator raggiunto.");
-        return;
-      }
-
+  // === GESTIONE BLOCCO CONTIGUO (data-copia-mode) ===
+  // Se il blocco ha data-copia-mode, è un blocco contiguo già aperto con SOLO COPIA
+  if (block.hasAttribute('data-copia-mode')) {
+    console.log("COPIA su blocco contiguo (data-copia-mode):", block.getAttribute('data-appointment-id'));
+    
+    // Escludi blocchi OFF
+    const isOffContiguo = !block.getAttribute('data-client-id') || !block.getAttribute('data-service-id');
+    if (isOffContiguo) {
+      alert("Non puoi copiare un blocco OFF nel Navigator.");
+      return;
+    }
+    
+    // Limite 15 elementi nel Navigator
+    window.pseudoBlocks = window.pseudoBlocks || [];
+    if (window.pseudoBlocks.length >= 15) {
+      alert("Limite massimo di 15 elementi nel Navigator raggiunto.");
+      return;
+    }
+    
+    // Copia il blocco nel navigator
+    if (typeof window.copyAsNewPseudoBlock === 'function') {
+      window.copyAsNewPseudoBlock(block);
+    } else if (typeof copyAsNewPseudoBlock === 'function') {
       copyAsNewPseudoBlock(block);
+    }
+    
+    // Marca come processato
+    block.setAttribute('data-copia-mode-done', '1');
+    block.removeAttribute('data-copia-mode');
+    
+    // Chiudi il popup di questo blocco
+    block.classList.remove('active-popup');
+    block.style.zIndex = '100';
+    
+    // Nascondi le barre popup di questo blocco specifico
+    const tbContiguo = block.querySelector('.popup-buttons');
+    const bbContiguo = block.querySelector('.popup-buttons-bottom');
+    if (tbContiguo) tbContiguo.style.display = 'none';
+    if (bbContiguo) bbContiguo.style.display = 'none';
+    
+    // Ripristina gli stili dei bottoni di questo blocco
+    block.querySelectorAll('.btn-popup').forEach(btn => {
+      btn.style.display = '';
+      btn.style.visibility = '';
+      btn.style.zIndex = '';
+      btn.style.flex = '';
+      btn.style.width = '';
     });
-  });
-});
+    
+    // Riattiva il link cliente
+    const clientLink = block.querySelector('.client-info-link');
+    if (clientLink) {
+      clientLink.removeAttribute('data-touch-only-cut');
+      clientLink.style.removeProperty('pointer-events');
+    }
+    
+    // Trova altri blocchi contigui NON ancora processati
+    const contiguousBlocksNext = typeof getRelevantBlocks === 'function' 
+      ? getRelevantBlocks(block) 
+      : [block];
+    
+    const otherBlocksNext = contiguousBlocksNext.filter(b => 
+      b !== block && 
+      !b.hasAttribute('data-copia-mode-done') &&
+      !b.hasAttribute('data-copia-mode')
+    );
+    
+    if (otherBlocksNext.length > 0) {
+      otherBlocksNext.forEach(otherBlock => {
+        if (typeof window.openTouchPopupForBlockCopiaOnly === 'function') {
+          window.openTouchPopupForBlockCopiaOnly(otherBlock);
+        }
+      });
+    }
+    
+    return; // IMPORTANTE: esci qui, non continuare con la logica normale
+  }
+
+  // === LOGICA NORMALE (blocco NON contiguo, prima copia) ===
+
+  // Escludi blocchi OFF
+  const isOff = !block.getAttribute('data-client-id') || !block.getAttribute('data-service-id');
+  if (isOff) {
+    alert("Non puoi copiare un blocco OFF nel Navigator.");
+    return;
+  }
+
+  // Limite 15 elementi nel Navigator
+  window.pseudoBlocks = window.pseudoBlocks || [];
+  if (window.pseudoBlocks.length >= 15) {
+    alert("Limite massimo di 15 elementi nel Navigator raggiunto.");
+    return;
+  }
+
+  if (typeof window.copyAsNewPseudoBlock === 'function') {
+    window.copyAsNewPseudoBlock(block);
+  } else if (typeof copyAsNewPseudoBlock === 'function') {
+    copyAsNewPseudoBlock(block);
+  }
+
+  // === CHIUDI TUTTO SUL BLOCCO CORRENTE ===
+  if (typeof window.closeAllPopups === 'function') {
+    window.closeAllPopups();
+  }
+  block.classList.remove('active-popup');
+  block.style.zIndex = '100';
+
+  // Chiudi TUTTI i tooltip Bootstrap
+  document.querySelectorAll('.tooltip').forEach(t => t.remove());
+
+  // === APRI SOLO COPIA SUI BLOCCHI CONTIGUI (SOLO TOUCH-UI) ===
+  const isTouchUI = (() => {
+    try { return localStorage.getItem('sun_touch_ui') === '1' || document.body.classList.contains('touch-ui'); }
+    catch(e) { return false; }
+  })();
+  
+  if (isTouchUI) {
+    const contiguousBlocks = typeof getRelevantBlocks === 'function' 
+      ? getRelevantBlocks(block) 
+      : [block];
+    
+    const otherBlocks = contiguousBlocks.filter(b => b !== block);
+    
+    if (otherBlocks.length > 0) {
+      otherBlocks.forEach(otherBlock => {
+        // Usa la funzione touch-ui
+        if (typeof window.openTouchPopupForBlockCopiaOnly === 'function') {
+          window.openTouchPopupForBlockCopiaOnly(otherBlock);
+        }
+      });
+      
+      // Auto-reset dopo 8 secondi
+      setTimeout(() => {
+        document.querySelectorAll('[data-copia-mode]').forEach(ob => {
+          ob.removeAttribute('data-copia-mode');
+          if (typeof window.closeAllPopups === 'function') {
+            window.closeAllPopups();
+          } else {
+            ob.classList.remove('active-popup');
+            ob.style.zIndex = '100';
+          }
+        });
+      }, 8000);
+    }
+  }
+}, true); // CAPTURE PHASE - intercetta PRIMA degli altri handler!
   
 // SPOSTA/TAGLIA
 (function bindCutMoveButtons() {
@@ -5216,7 +5448,7 @@ appointment.service_tag = appointment.service_tag || blk.tag || blk.serviceName;
         return;
     }
 
-    // Ultimo pseudoblocco: chiedi WhatsApp e poi reload
+    // Ultimo pseudoblocco: chiedi WhatsApp e poi redirect
     clearNavigator(false);
     const want = await chiediInvioWhatsappNavigator();
     if (want === true) {
@@ -5229,12 +5461,51 @@ appointment.service_tag = appointment.service_tag || blk.tag || blk.serviceName;
         }, csrfToken);
         alert("Messaggio WhatsApp inviato!");
     }
+    
+    // Se proviene da pacchetto, aggiorna data seduta e redirect
+    if (blk.pacchettoSedutaId && blk.pacchettoId) {
+        // Formatta la data per il messaggio
+        const dateObj = new Date(date);
+        const dayStr = ('0' + dateObj.getDate()).slice(-2);
+        const monthStr = ('0' + (dateObj.getMonth() + 1)).slice(-2);
+        const yearStr = dateObj.getFullYear();
+        const formattedDate = `${dayStr}/${monthStr}/${yearStr}`;
+        
+        // Aggiorna la data_trattamento della seduta nel database
+        try {
+            await fetch(`/pacchetti/api/sedute/${blk.pacchettoSedutaId}/update-data`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    data_trattamento: date  // formato YYYY-MM-DD
+                })
+            });
+        } catch (err) {
+            console.error('Errore aggiornamento data seduta:', err);
+        }
+        
+        // Salva messaggio in localStorage
+        localStorage.setItem('pacchettoSedutaFissata', JSON.stringify({
+            sedutaId: blk.pacchettoSedutaId,
+            data: formattedDate,
+            ora: startTimeStr
+        }));
+        
+        // Redirect a pacchetto_detail
+        window.location.href = `/pacchetti/detail/${blk.pacchettoId}`;
+        return;
+    }
+    
     setTimeout(() => {
         if (window.lastClickPosition !== undefined && window.lastClickPosition !== null) {
             sessionStorage.setItem('lastClickPosition', window.lastClickPosition);
         }
         location.reload();
     }, 100);
+
   }).catch(err => {
       console.error(err);
       alert("Errore creazione: " + err.message);
@@ -5465,9 +5736,59 @@ if (appointment.client_name && appointment.service_tag) {
     });
     
     // Svuota l'Appointment Navigator se non ci sono più pseudo-blocchi
+    // Svuota l'Appointment Navigator se non ci sono più pseudo-blocchi
     if (window.pseudoBlocks.length === 0) {
       clearNavigator(false);
-  }
+    }
+
+    // Se proviene da pacchetto, aggiorna data seduta e redirect
+    const firstBlock = pseudoBlocksData[0];
+    if (firstBlock && firstBlock.pacchettoSedutaId && firstBlock.pacchettoId) {
+        // Formatta la data per il messaggio
+        const dateObj = new Date(date);
+        const dayStr = ('0' + dateObj.getDate()).slice(-2);
+        const monthStr = ('0' + (dateObj.getMonth() + 1)).slice(-2);
+        const yearStr = dateObj.getFullYear();
+        const formattedDate = `${dayStr}/${monthStr}/${yearStr}`;
+        
+        // Ottieni ora dal primo appuntamento creato
+        const firstAppt = responses[0];
+        let oraMsg = '';
+        if (typeof firstAppt.start_time === 'string') {
+            const m = firstAppt.start_time.match(/(\d{2}:\d{2})/);
+            oraMsg = m ? m[1] : '';
+        }
+        if (!oraMsg) {
+            oraMsg = ('0' + hour).slice(-2) + ':' + ('0' + minute).slice(-2);
+        }
+        
+        // Aggiorna la data_trattamento della seduta nel database
+        try {
+            await fetch(`/pacchetti/api/sedute/${firstBlock.pacchettoSedutaId}/update-data`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    data_trattamento: date  // formato YYYY-MM-DD
+                })
+            });
+        } catch (err) {
+            console.error('Errore aggiornamento data seduta:', err);
+        }
+        
+        // Salva messaggio in localStorage
+        localStorage.setItem('pacchettoSedutaFissata', JSON.stringify({
+            sedutaId: firstBlock.pacchettoSedutaId,
+            data: formattedDate,
+            ora: oraMsg
+        }));
+        
+        // Redirect a pacchetto_detail
+        window.location.href = `/pacchetti/detail/${firstBlock.pacchettoId}`;
+        return;
+    }
 
     // Aggiungiamo un reload ritardato per assicurarci che tutto venga visualizzato correttamente
     setTimeout(() => {

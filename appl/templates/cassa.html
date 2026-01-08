@@ -361,6 +361,7 @@
     const clientId = "{{ client_id | default('', true) }}";
 
     window.SERVIZI_PRECOMPILATI = servizi;
+    window.RATA_ID_PRECOMPILATA = {{ request.args.get('rata_id') | tojson | safe if request.args.get('rata_id') else 'null' }};
 
     if (operatorName) {
       const operatorInput = document.getElementById('operatorSelectInput');
@@ -835,101 +836,122 @@ function renderMySpiaList(gruppi) {
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-document.getElementById('confermaBtn').addEventListener('click', function(e) {
-  e.preventDefault();
-  const btnLotteria = document.getElementById('btnLotteria');
-  // Controlla i metodi di pagamento delle voci dello pseudoscontrino
-  const rows = document.querySelectorAll('.scontrino-row');
-  const pagamentiDigitali = Array.from(rows).some(row => {
-    const select = row.querySelector('select');
-    return select && (select.value === 'pos' || select.value === 'bank');
-  });
-  if (btnLotteria) {
-    if (pagamentiDigitali) {
-      btnLotteria.classList.remove('d-none');
-      btnLotteria.focus();
-    } else {
-      btnLotteria.classList.add('d-none');
+  document.getElementById('confermaBtn').addEventListener('click', function(e) {
+    e.preventDefault();
+    const btnLotteria = document.getElementById('btnLotteria');
+    // Controlla i metodi di pagamento delle voci dello pseudoscontrino
+    const rows = document.querySelectorAll('.scontrino-row');
+    const pagamentiDigitali = Array.from(rows).some(row => {
+      const select = row.querySelector('select');
+      return select && (select.value === 'pos' || select.value === 'bank');
+    });
+    if (btnLotteria) {
+      if (pagamentiDigitali) {
+        btnLotteria.classList.remove('d-none');
+        btnLotteria.focus();
+      } else {
+        btnLotteria.classList.add('d-none');
+      }
     }
-  }
-});
+  });
 
-// handler con priorità massima: viene eseguito prima, blocca gli altri e apre la modale
-document.getElementById('btnLotteria').addEventListener('click', function (e) {
-  e.preventDefault();              // evita azioni di default (form, ecc.)
-  e.stopPropagation();             // ferma il bubbling
-  e.stopImmediatePropagation();    // ***ferma anche gli altri listener sullo stesso nodo***
+  // handler con priorità massima: viene eseguito prima, blocca gli altri e apre la modale
+  document.getElementById('btnLotteria').addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
 
-  // mostra la modale (getOrCreate evita doppioni)
-  const modalEl = document.getElementById('modalLotteria');
-  bootstrap.Modal.getOrCreateInstance(modalEl).show();
-}, true);                           
+    // mostra la modale (getOrCreate evita doppioni)
+    const modalEl = document.getElementById('modalLotteria');
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  }, true);
 
   document.getElementById('lotteria_invia').addEventListener('click', function() {
     const lotteria = document.getElementById('lotteria_codice').value.trim();
-    // Prepara il payload come già fai per lo scontrino
-// Trova le righe dei servizi attuali
-const rows = document.querySelectorAll('.scontrino-row');
-if (rows.length === 0) {
-  alert('Aggiungi almeno un servizio prima di generare lo scontrino!');
-  return;
-}
-const voci = [];
-rows.forEach(row => {
-  const nome = row.querySelector('.flex-grow-1')?.textContent.trim() || '';
-  const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
-  const sconto_riga = parseInt(row.querySelector('.scontrino-row-sconto')?.value || '0');
-  const metodo = row.querySelector('select')?.value || 'cash';
-  const servizio_id = row.dataset.servizioId || null;
-  const appointment_id = row.dataset.appointmentId || null;
+    
+    // Trova le righe dei servizi attuali
+    const rows = document.querySelectorAll('.scontrino-row');
+    if (rows.length === 0) {
+      alert('Aggiungi almeno un servizio prima di generare lo scontrino!');
+      return;
+    }
+    
+    const voci = [];
+    let hasError = false;
+    
+    rows.forEach(row => {
+      if (hasError) return;
+      
+      const nome = row.querySelector('.flex-grow-1')?.textContent.trim() || '';
+      const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
+      const sconto_riga = parseInt(row.querySelector('.scontrino-row-sconto')?.value || '0');
+      const metodo = row.querySelector('select')?.value || 'cash';
+      const servizio_id = row.dataset.servizioId || null;
+      const appointment_id = row.dataset.appointmentId || null;
 
-          if (!isFinite(prezzo) || isNaN(prezzo)) {
-          alert('Prezzo non valido in una riga. Correggi prima di inviare.');
-          return;
+      if (!isFinite(prezzo) || isNaN(prezzo)) {
+        alert('Prezzo non valido in una riga. Correggi prima di inviare.');
+        hasError = true;
+        return;
+      }
+      if (prezzo < 0) {
+        alert('Prezzi negativi non sono consentiti. Correggi il prezzo e riprova.');
+        hasError = true;
+        return;
+      }
+      
+      const voce = {
+        servizio_id,
+        nome,
+        prezzo,
+        sconto_riga,
+        tipo: 'service',
+        metodo_pagamento: metodo,
+        is_fiscale: true
+      };
+      if (appointment_id) voce.appointment_id = appointment_id;
+      voci.push(voce);
+    });
+    
+    if (hasError) return;
+    
+    const cliente_id = document.getElementById('clientSearchInputCassa').dataset.selectedClient || null;
+    const operatore_id = document.getElementById('operatorSelectInput').dataset.selectedOperator || null;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    const payload = {
+      voci,
+      cliente_id,
+      operatore_id,
+      is_fiscale: true,
+      lotteria: lotteria
+    };
+
+    fetch('/cassa/send-to-rch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+      },
+      body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+      // Se c'è un pacchetto associato, redirect alla pagina dettaglio
+      if (data.redirect_to_pacchetto) {
+        const url = `/pacchetti/detail/${data.redirect_to_pacchetto}`;
+        if (data.rata_importo_modificato) {
+          window.location.href = url + '?ricalcola_rate=1';
+        } else {
+          window.location.href = url;
         }
-        if (prezzo < 0) {
-          alert('Prezzi negativi non sono consentiti. Correggi il prezzo e riprova.');
-          return;
-        }
-        
-  const voce = {
-    servizio_id,
-    nome,
-    prezzo,
-    sconto_riga,
-    tipo: 'service',
-    metodo_pagamento: metodo,
-    is_fiscale: true
-  };
-  if (appointment_id) voce.appointment_id = appointment_id;
-  voci.push(voce);
-});
-const cliente_id = document.getElementById('clientSearchInputCassa').dataset.selectedClient || null;
-const operatore_id = document.getElementById('operatorSelectInput').dataset.selectedOperator || null;
-const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+      } else {
+        location.reload();
+      }
+    });
+  }); // chiude lotteria_invia listener
 
-const payload = {
-  voci,
-  cliente_id,
-  operatore_id,
-  is_fiscale: true,
-  lotteria: lotteria
-};
-
-fetch('/cassa/send-to-rch', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-  },
-  body: JSON.stringify(payload)
-})
-.then(r => r.json())
-.then(data => {
-  location.reload();
-});
-  });
-});
+}); // chiude DOMContentLoaded
 </script>
 <script>
 document.getElementById('btnAnnullaScontrino').addEventListener('click', function(e) {
@@ -988,8 +1010,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <style>
-  /* Riga contenitore con spazio riservato a destra per i pulsanti */
-  .myspia-item {
+.myspia-item {
     position: relative;
     margin-bottom: 12px;
     padding-right: 44px;     /* spazio per 2 pulsanti 28px + margini */

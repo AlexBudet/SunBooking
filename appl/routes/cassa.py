@@ -1,7 +1,7 @@
 import json
 import html, re, time as pytime
 from flask import Blueprint, app, render_template, jsonify, request, session, abort, current_app
-from appl.models import Appointment, AppointmentStatus, BusinessInfo, Operator, Service, ServiceCategory, Client, Receipt, Subcategory, User, db
+from appl.models import Appointment, AppointmentStatus, BusinessInfo, Operator, Service, ServiceCategory, Client, Receipt, Subcategory, User, Pacchetto, PacchettoRata, PacchettoStatus, db
 from datetime import datetime, date
 import requests
 from sqlalchemy import and_, func, or_, text
@@ -20,7 +20,51 @@ def cassa():
     operator_name = request.args.get('operator_name')
     servizi_json = request.args.get('servizi')
     appointments_json = request.args.get('appointments')
+    rata_id = request.args.get('rata_id')
     servizi = []
+
+    # Se rata_id presente, carica dati dalla rata del pacchetto
+    if rata_id:
+        try:
+            rata = PacchettoRata.query.get(int(rata_id))
+            if rata and not rata.is_pagata:
+                pacchetto = Pacchetto.query.get(rata.pacchetto_id)
+                if pacchetto:
+                    # Determina numero rata
+                    rate_ordinate = PacchettoRata.query.filter_by(pacchetto_id=pacchetto.id).order_by(PacchettoRata.id).all()
+                    numero_rata = next((i+1 for i, r in enumerate(rate_ordinate) if r.id == rata.id), 1)
+                    
+                    # Cliente
+                    if pacchetto.client:
+                        client_id = pacchetto.client_id
+                        client_name = f"{pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}"
+                    
+                    # Operatore preferito (primo se presente)
+                    if pacchetto.preferred_operators:
+                        first_op = pacchetto.preferred_operators[0]
+                        operator_id = first_op.id
+                        operator_name = f"{first_op.user_nome} {first_op.user_cognome}"
+                    
+                    # Determina categoria dal primo servizio del pacchetto
+                    categoria = "Estetica"  # default
+                    if pacchetto.sedute:
+                        first_seduta = pacchetto.sedute[0] if pacchetto.sedute else None
+                        if first_seduta and first_seduta.service:
+                            categoria = first_seduta.service.servizio_categoria.value
+                    
+                    # Crea servizio virtuale per la rata
+                    servizi = [{
+                        'id': None,  # Nessun service_id reale
+                        'nome': f"Rata {numero_rata} - {pacchetto.nome}",
+                        'prezzo': float(rata.importo),
+                        'categoria': categoria,
+                        'is_fiscale': True,
+                        'metodo_pagamento': 'contanti',
+                        'rata_id': rata.id,  # IMPORTANTE: per marcare come pagata dopo
+                        'pacchetto_id': pacchetto.id
+                    }]
+        except Exception as e:
+            current_app.logger.error(f"Errore caricamento rata {rata_id}: {e}")
 
     if servizi_json:
         try:
@@ -547,8 +591,72 @@ def send_to_rch():
             "is_fiscale": False
         })
 
+    pacchetto_ids_modificati = set()  # Per tracciare i pacchetti con rate modificate
+    
+    for v in voci:
+        rata_id = v.get('rata_id')
+        if rata_id:
+            try:
+                rata = PacchettoRata.query.get(int(rata_id))
+                if rata and not rata.is_pagata:
+                    # Controlla se l'importo è stato modificato
+                    importo_pagato = float(v.get('prezzo', 0))
+                    importo_originale = float(rata.importo)
+                    importo_modificato = abs(importo_pagato - importo_originale) > 0.01
+                    
+                    if importo_modificato:
+                        # Aggiorna l'importo della rata con quello effettivamente pagato
+                        rata.importo = importo_pagato
+                        pacchetto_ids_modificati.add(rata.pacchetto_id)
+                    
+                    rata.is_pagata = True
+                    rata.data_pagamento = datetime.now()
+                    
+                    # Aggiorna history e status pacchetto
+                    pacchetto = rata.pacchetto
+                    if pacchetto:
+                        # Trova numero rata
+                        rata_num = next((i+1 for i, r in enumerate(pacchetto.rate) if r.id == rata.id), 0)
+                        # Aggiungi history
+                        try:
+                            history = json.loads(pacchetto.history) if pacchetto.history else []
+                        except:
+                            history = []
+                        
+                        if importo_modificato:
+                            history.append({"ts": datetime.now().isoformat(), "azione": f"Pagata rata {rata_num} (importo modificato: €{importo_pagato:.2f})"})
+                        else:
+                            history.append({"ts": datetime.now().isoformat(), "azione": f"Pagata rata {rata_num}"})
+                        pacchetto.history = json.dumps(history)
+                        
+                        # Imposta status Attivo
+                        if pacchetto.status.value not in ("completato", "eliminato"):
+                            pacchetto.status = PacchettoStatus.Attivo
+                    
+                    db.session.commit()
+                    current_app.logger.info(f"Rata {rata_id} marcata come pagata (importo: €{importo_pagato:.2f})")
+            except Exception as e:
+                current_app.logger.error(f"Errore marcatura rata {rata_id}: {e}")
+
+    # Prepara response con info per redirect a pacchetto se necessario
     response = {"results": results, "reset_voci": True}
-    # Salva idempotency solo se non ci sono errori nei risultati (per evitare loop su retry fiscali falliti)
+    
+    # Se c'è un pacchetto con rata modificata, indica di fare redirect
+    if pacchetto_ids_modificati:
+        # Prendi il primo pacchetto (di solito ce n'è uno solo)
+        pacchetto_id = list(pacchetto_ids_modificati)[0]
+        response["redirect_to_pacchetto"] = pacchetto_id
+        response["rata_importo_modificato"] = True
+    elif any(v.get('rata_id') for v in voci):
+        # Anche se non modificato, se c'era una rata, redirect al pacchetto
+        for v in voci:
+            if v.get('rata_id'):
+                rata = PacchettoRata.query.get(int(v['rata_id']))
+                if rata:
+                    response["redirect_to_pacchetto"] = rata.pacchetto_id
+                    break
+    
+    # Salva idempotency solo se non ci sono errori nei risultati
     if idempotency_key and not any("error" in str(r).lower() for r in results):
         IDEMPOTENCY_STORE[idempotency_key] = response
     return jsonify(response)
@@ -674,6 +782,40 @@ def api_receipt_detail(receipt_id):
         "totale_scontrinato": s.total_amount if s.is_fiscale else 0
     })
 
+def ripristina_rate_da_scontrino(scontrino):
+    """Ripristina le rate pacchetto associate a uno scontrino stornato/eliminato"""
+    if not scontrino or not scontrino.voci:
+        return
+    
+    voci = scontrino.voci
+    if isinstance(voci, str):
+        try:
+            voci = json.loads(voci)
+        except:
+            voci = []
+    
+    for v in voci:
+        rata_id = v.get('rata_id')
+        if rata_id:
+            try:
+                rata = db.session.get(PacchettoRata, int(rata_id))
+                if rata and rata.is_pagata:
+                    rata.is_pagata = False
+                    rata.data_pagamento = None
+                    # Ricalcola status pacchetto
+                    pacchetto = rata.pacchetto
+                    if pacchetto and pacchetto.status == PacchettoStatus.Attivo:
+                        # Verifica se ci sono ancora rate pagate o sedute effettuate
+                        ha_rata_pagata = any(r.is_pagata for r in pacchetto.rate if r.id != rata.id)
+                        ha_seduta_effettuata = any(s.stato == 4 for s in pacchetto.sedute)
+                        if not ha_rata_pagata and not ha_seduta_effettuata:
+                            pacchetto.status = PacchettoStatus.Preventivo
+                    current_app.logger.info(f"Rata {rata_id} ripristinata (non pagata)")
+            except Exception as e:
+                current_app.logger.error(f"Errore ripristino rata {rata_id}: {e}")
+    
+    db.session.commit()
+
 @cassa_bp.route('/cassa/api/receipt/<int:id>', methods=['DELETE'])
 def api_receipt_delete(id):
     try:
@@ -698,10 +840,16 @@ def api_receipt_delete(id):
             storno_result = stornare_scontrino_specifico(scontrino)
             if "error" in storno_result:
                 return jsonify({"error": f"Storno fallito: {storno_result['error']}"}), 400
+            
+            # Ripristina rate pacchetto associate
+            ripristina_rate_da_scontrino(scontrino)
 
             # NON eliminare lo scontrino originale!
             # Semplicemente termina qui: la voce negativa è già stata aggiunta da stornare_scontrino_specifico
             return '', 204
+
+        # Per non fiscali, ripristina rate prima di eliminare
+        ripristina_rate_da_scontrino(scontrino)
         
         # Per non fiscali, puoi continuare a eliminare
         db.session.delete(scontrino)

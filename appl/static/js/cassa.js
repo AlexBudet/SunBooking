@@ -241,6 +241,8 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       const metodo = row.querySelector('select')?.value || 'cash';
       const servizio_id = row.dataset.servizioId || null;
       const appointment_id = row.dataset.appointmentId || null;
+      const rata_id = row.dataset.rataId || null;
+      const pacchetto_id = row.dataset.pacchettoId || null;
       const voce = {
         servizio_id,
         nome,
@@ -251,6 +253,8 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
         is_fiscale: !isGrigia
       };
       if (appointment_id) voce.appointment_id = appointment_id;
+      if (rata_id) voce.rata_id = parseInt(rata_id);
+      if (pacchetto_id) voce.pacchetto_id = parseInt(pacchetto_id);
       if (isGrigia) {
         voci_non_fiscali.push(voce);
       } else {
@@ -403,25 +407,28 @@ function showPendingModal(key) {
   });
 }
       async function fiscaleOkFinalize() {
-        // Non fiscali (grigi) se presenti
-        if (voci_non_fiscali.length > 0) {
-          const payloadNonFiscale = {
-            voci: voci_non_fiscali,
-            cliente_id,
-            operatore_id,
-            is_fiscale: false
-          };
-            await fetch('/cassa/send-to-rch', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-              },
-              body: JSON.stringify(payloadNonFiscale)
-            });
-        }
+    // Non fiscali (grigi) se presenti
+    // Se ci sono voci non fiscali, salva Receipt non fiscale (NON invia a RCH)
+    let nonFiscaleResponse = null;
+    if (voci_non_fiscali.length > 0) {
+      const payloadNonFiscale = {
+        voci: voci_non_fiscali,
+        cliente_id,
+        operatore_id,
+        is_fiscale: false
+      };
+      const res = await fetch('/cassa/send-to-rch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+        },
+        body: JSON.stringify(payloadNonFiscale)
+      });
+      nonFiscaleResponse = await res.json();
+    }
 
-        alert('Pagamento registrato con successo!');
+    alert('Pagamento registrato con successo!');
 
         // Aggiorna stati appuntamenti
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
@@ -495,6 +502,7 @@ function showPendingModal(key) {
     }
 
     // Se ci sono voci non fiscali, salva Receipt non fiscale (NON invia a RCH)
+    let nonFiscaleResponse = null;  // <-- AGGIUNGI
     if (voci_non_fiscali.length > 0) {
       const payloadNonFiscale = {
         voci: voci_non_fiscali,
@@ -502,7 +510,7 @@ function showPendingModal(key) {
         operatore_id,
         is_fiscale: false
       };
-      await fetch('/cassa/send-to-rch', {
+      const res = await fetch('/cassa/send-to-rch', {  // <-- CATTURA res
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -510,6 +518,7 @@ function showPendingModal(key) {
         },
         body: JSON.stringify(payloadNonFiscale)
       });
+      nonFiscaleResponse = await res.json();  // <-- AGGIUNGI
     }
 
     alert('Pagamento registrato con successo!');
@@ -566,8 +575,18 @@ function showPendingModal(key) {
     }
     // Svuota il pseudoscontrino subito (ma NON navigare immediatamente) per permettere repaint visibile.
     resetScontrino(true);
-    // Dopo un breve delay ricarica la pagina (permette al browser di mostrare il contenuto svuotato).
-    setTimeout(() => { window.location.href = '/cassa'; }, 150);
+    // NUOVO: Se il pagamento non fiscale era una rata di pacchetto, redirect a pacchetto_detail
+    if (nonFiscaleResponse && nonFiscaleResponse.redirect_to_pacchetto) {
+      const url = `/pacchetti/detail/${nonFiscaleResponse.redirect_to_pacchetto}`;
+      if (nonFiscaleResponse.rata_importo_modificato) {
+        window.location.href = url + '?ricalcola_rate=1';
+      } else {
+        window.location.href = url;
+      }
+    } else {
+      // Comportamento normale per tutti gli altri pagamenti non fiscali
+      setTimeout(() => { window.location.href = '/cassa'; }, 150);
+    }
   });
 });
 
@@ -701,9 +720,11 @@ function aggiungiRigaServizio(servizio, salva = true) {
 
   const row = document.createElement('div');
   row.dataset.appointmentId = servizio.appointment_id || '';
+  row.dataset.rataId = servizio.rata_id || '';
+  row.dataset.pacchettoId = servizio.pacchetto_id || '';
   row.className = 'd-flex align-items-center border scontrino-row mb-1';
   row.style.background = '#fff';
-  row.dataset.servizioId = servizio.id;
+  row.dataset.servizioId = servizio.id || '';
 
   // Se la riga proviene da un appuntamento del calendar, memorizza l'id originale
   if (servizio.appointment_id) {

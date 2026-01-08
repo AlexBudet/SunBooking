@@ -153,6 +153,7 @@ class Service(db.Model):
     servizio_sottocategoria_id = db.Column(db.Integer, db.ForeignKey('sottocategorie.id'), nullable=True)
     servizio_sottocategoria = db.relationship('Subcategory', backref='servizi')
     servizio_descrizione = db.Column(db.String(2000), nullable=True)
+    servizio_disclaimer = db.Column(db.String(3000), nullable=True)
     is_deleted = db.Column(db.Boolean, default=False)
     is_visible_in_calendar = db.Column(db.Boolean, default=True)
     is_visible_online = db.Column(db.Boolean, default=True)
@@ -200,11 +201,13 @@ class Appointment(db.Model):
                       nullable=False)
     booking_session_id = db.Column(db.String(64), nullable=True, index=True) 
     is_cancelled_by_client = db.Column(db.Boolean, default=False)
+    pacchetto_seduta_id = db.Column(db.Integer, db.ForeignKey('pacchetto_sedute.id'), nullable=True)
 
     # Relazioni
     client = db.relationship('Client', backref='appointments')
     operator = db.relationship('Operator', backref='appointments')
     service = db.relationship('Service', backref='appointments')
+    pacchetto_seduta = db.relationship('PacchettoSeduta', backref='appointment', uselist=False)
 
     # Proprietà calcolate
     @property
@@ -268,6 +271,8 @@ class BusinessInfo(db.Model):
     operator_whatsapp_notification_time = db.Column(db.Time, default=datetime.strptime("20:00", "%H:%M").time())
     operator_whatsapp_message_template = db.Column(db.Text, nullable=True)
     whatsapp_template_pacchetti = db.Column(db.Text, nullable=True)
+    whatsapp_template_pacchetti_disclaimer = db.Column(db.Text, nullable=True)
+    pacchetti_giorni_abbandono = db.Column(db.Integer, nullable=True, default=90)
 
     @property
     def closing_days_list(self):
@@ -327,6 +332,29 @@ class PacchettoStatus(PyEnum):
 class ScontoTipo(PyEnum):
     Percentuale = "percentuale"
     Ogni_N_Omaggio = "ogni_n_omaggio"
+
+# Promo salvate per i pacchetti
+class PromoPacchetto(db.Model):
+    __tablename__ = 'promo_pacchetti'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    nome = db.Column(db.String(100), nullable=False)
+    tipo = db.Column(db.String(50), nullable=False)  # 'percentuale' o 'sedute_omaggio'
+    soglia = db.Column(db.Integer, nullable=True)  # Ogni N sedute
+    percentuale = db.Column(db.Integer, nullable=True)  # % sconto (se tipo=percentuale)
+    sedute_omaggio = db.Column(db.Integer, nullable=True)  # Num sedute omaggio (se tipo=sedute_omaggio)
+    attiva = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, server_default=func.now())
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nome': self.nome,
+            'tipo': self.tipo,
+            'soglia': self.soglia,
+            'percentuale': self.percentuale,
+            'sedute_omaggio': self.sedute_omaggio,
+            'attiva': self.attiva
+        }
 
 class SedutaStatus(PyEnum):
     Presente = 1      # Solo presente
