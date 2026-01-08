@@ -587,8 +587,13 @@ function initTouchOnBlock(block){
   }
 
   if (!block._touchToggleBound) {
-    // Usa capture per gestire prima i click sul nome cliente
     block.addEventListener('click', (e) => {
+      // BLOCCA se in modalità copia (solo COPIA visibile)
+      if (block.hasAttribute('data-copia-mode')) {
+        e.stopPropagation();
+        return;
+      }
+      
       // Pulsanti popup: lascia la gestione originale
       if (e.target.closest('.btn-popup')) return;
 
@@ -913,11 +918,18 @@ function openTouchPopupForBlock(block) {
     tb.style.setProperty('display', 'flex', 'important');
     tb.style.zIndex = '11950';
 
-    // Nascondi TUTTI i bottoni esplicitamente, tranne TAGLIA
-    const hide = (sel) => tb.querySelectorAll(sel).forEach(btn => {
-      btn.style.setProperty('display', 'none', 'important');
-      btn.style.visibility = 'hidden';
-    });
+// Nascondi TUTTI i bottoni esplicitamente, tranne TAGLIA
+const hide = (sel) => tb.querySelectorAll(sel).forEach(btn => {
+  btn.style.setProperty('display', 'none', 'important');
+  btn.style.setProperty('visibility', 'hidden', 'important');
+  btn.style.setProperty('flex', '0 0 0px', 'important');
+  btn.style.setProperty('width', '0px', 'important');
+  btn.style.setProperty('height', '0px', 'important');
+  btn.style.setProperty('padding', '0', 'important');
+  btn.style.setProperty('margin', '0', 'important');
+  btn.style.setProperty('border', 'none', 'important');
+  btn.style.setProperty('overflow', 'hidden', 'important');
+});
 
     // Elenco esplicito dei bottoni da NASCONDERE (tranne taglia)
     hide('.btn-popup.delete-appointment-block');
@@ -929,6 +941,7 @@ function openTouchPopupForBlock(block) {
     hide('.btn-popup.to-cash');
     hide('.btn-popup.go-cash');
     hide('.btn-popup.cassa');
+    hide('.btn-popup.pagamento');
     hide('.btn-popup.add-services');
     hide('.btn-popup.aggiungi-servizi');
     hide('.btn-popup.aggiungi-servizio');
@@ -987,6 +1000,240 @@ function openTouchPopupForBlock(block) {
   }
 }
 
+// === COPIA: mostra SOLO il bottone COPIA sui blocchi contigui (stessa logica di openTouchPopupForBlock ma per COPIA) ===
+function openTouchPopupForBlockCopiaOnly(block) {
+  if (!block) return;
+
+  try { if (typeof ensureTopBarForTouch === 'function') ensureTopBarForTouch(block); } catch(_) {}
+  try { if (typeof ensureBottomBar === 'function') ensureBottomBar(block); } catch(_) {}
+
+  block.classList.add('active-popup');
+  block.style.zIndex = '11940';
+
+  // Marca il blocco per impedire che altri handler riaprano i popup
+  block.setAttribute('data-copia-mode', '1');
+
+  const tb = block.querySelector('.popup-buttons');
+  const bb = block.querySelector('.popup-buttons-bottom');
+
+  if (tb) {
+    tb.style.setProperty('display', 'flex', 'important');
+    tb.style.zIndex = '11950';
+
+// Nascondi TUTTI i bottoni esplicitamente, tranne COPIA
+const hide = (sel) => tb.querySelectorAll(sel).forEach(btn => {
+  btn.style.setProperty('display', 'none', 'important');
+  btn.style.setProperty('visibility', 'hidden', 'important');
+  btn.style.setProperty('flex', '0 0 0px', 'important');
+  btn.style.setProperty('width', '0px', 'important');
+  btn.style.setProperty('height', '0px', 'important');
+  btn.style.setProperty('padding', '0', 'important');
+  btn.style.setProperty('margin', '0', 'important');
+  btn.style.setProperty('border', 'none', 'important');
+  btn.style.setProperty('overflow', 'hidden', 'important');
+});
+
+    // Elenco esplicito dei bottoni da NASCONDERE (tranne copia)
+    hide('.btn-popup.delete-appointment-block');
+    hide('.btn-popup.nota');
+    hide('.btn-popup.taglia');
+    hide('.btn-popup.sposta');
+    hide('.btn-popup.colore');
+    hide('.btn-popup.color');
+    hide('.btn-popup.to-cash');
+    hide('.btn-popup.go-cash');
+    hide('.btn-popup.cassa');
+    hide('.btn-popup.pagamento');
+    hide('.btn-popup.add-services');
+    hide('.btn-popup.aggiungi-servizi');
+    hide('.btn-popup.aggiungi-servizio');
+    hide('.btn-popup.add-service');
+    hide('.btn-popup.whatsapp-btn');
+    hide('.btn-popup.copy-off-block');
+    hide('.btn-popup.delete-off-block');
+    hide('.btn-popup.touch-top-delete');
+    hide('.btn-popup.touch-top-cut');
+    hide('.btn-popup.touch-top-note');
+
+    // Mostra SOLO il tasto COPIA:
+    let copiaBtn =
+      tb.querySelector('.btn-popup.copia') ||
+      tb.querySelector('.btn-popup.touch-top-copy');
+
+    if (!copiaBtn) {
+      const fallback = document.createElement('button');
+      fallback.className = 'btn-popup copia touch-only-copia';
+      fallback.title = 'Copia';
+      try { fallback.appendChild(biIcon('copy')); } catch(_) { fallback.textContent = '📋'; }
+      tb.appendChild(fallback);
+      copiaBtn = fallback;
+    }
+
+    // Se il bottone copia esiste ma è senza icona, inseriscila ora
+    if (copiaBtn && !copiaBtn.querySelector('i')) {
+      try { copiaBtn.appendChild(biIcon('copy')); } catch(_) { copiaBtn.textContent = '📋'; }
+    }
+
+    if (copiaBtn) {
+      copiaBtn.style.setProperty('display', 'inline-flex', 'important');
+      copiaBtn.style.visibility = 'visible';
+      copiaBtn.style.zIndex = '11960';
+      // Mantieni la larghezza di 1/6 del blocco (come taglia)
+      copiaBtn.style.setProperty('flex', '0 0 16.6667%', 'important');
+      copiaBtn.style.setProperty('width', '16.6667%', 'important');
+      copiaBtn.style.boxSizing = 'border-box';
+    }
+  }
+
+  // Nascondi sempre la bottom bar
+  if (bb) {
+    bb.style.setProperty('display', 'none', 'important');
+    bb.style.zIndex = '11950';
+  }
+
+  // Disabilita il link sul nome cliente mentre è aperto "solo copia"
+  const clientLink = block.querySelector('.client-info-link');
+  if (clientLink) {
+    clientLink.setAttribute('data-touch-only-cut', '1');
+    clientLink.style.setProperty('pointer-events', 'none', 'important');
+  }
+}
+
+// Esponi globalmente
+window.openTouchPopupForBlockCopiaOnly = openTouchPopupForBlockCopiaOnly;
+
 // Esponi le funzioni globalmente
 window.findContiguousBlocks = findContiguousBlocks;
 window.openTouchPopupForBlock = openTouchPopupForBlock;
+
+// =============================================================
+// LISTENER DELEGATO PER COPIA SU BLOCCHI CONTIGUI (data-copia-mode)
+// SOLO TOUCH-UI: Intercetta i click sui pulsanti COPIA mostrati dopo la prima copia
+// =============================================================
+document.addEventListener('click', function(e) {
+  // Intercetta solo click su .btn-popup.copia
+  const copiaBtn = e.target.closest('.btn-popup.copia');
+  if (!copiaBtn) return;
+  
+  const block = copiaBtn.closest('.appointment-block');
+  if (!block) return;
+  
+  // Gestisci SOLO blocchi in modalità copia (contigui)
+  if (!block.hasAttribute('data-copia-mode')) return;
+  
+  // BLOCCA TUTTO SUBITO
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+  
+  console.log("TOUCH-UI: COPIA delegato su blocco contiguo:", block.getAttribute('data-appointment-id'));
+  
+  // Chiudi tooltip
+  document.querySelectorAll('.tooltip').forEach(t => t.remove());
+  copiaBtn.removeAttribute('data-bs-original-title');
+  copiaBtn.removeAttribute('aria-describedby');
+  
+  // Escludi blocchi OFF
+  const isOff = !block.getAttribute('data-client-id') || !block.getAttribute('data-service-id');
+  if (isOff) {
+    alert("Non puoi copiare un blocco OFF nel Navigator.");
+    return;
+  }
+  
+  // Limite 15 elementi nel Navigator
+  window.pseudoBlocks = window.pseudoBlocks || [];
+  if (window.pseudoBlocks.length >= 15) {
+    alert("Limite massimo di 15 elementi nel Navigator raggiunto.");
+    return;
+  }
+  
+  // Copia il blocco nel navigator
+  if (typeof window.copyAsNewPseudoBlock === 'function') {
+    window.copyAsNewPseudoBlock(block);
+  }
+  
+  // Marca come già processato
+  block.setAttribute('data-copia-mode-done', '1');
+  block.removeAttribute('data-copia-mode');
+  
+  // Chiudi il popup di questo blocco SENZA chiamare closeAllPopups (evita sballare layout)
+  block.classList.remove('active-popup');
+  block.style.zIndex = '100';
+  
+  // Nascondi le barre popup di questo blocco specifico
+  const tb = block.querySelector('.popup-buttons');
+  const bb = block.querySelector('.popup-buttons-bottom');
+  if (tb) tb.style.display = 'none';
+  if (bb) bb.style.display = 'none';
+  
+  // Ripristina gli stili dei bottoni di questo blocco
+  block.querySelectorAll('.btn-popup').forEach(btn => {
+    btn.style.display = '';
+    btn.style.visibility = '';
+    btn.style.zIndex = '';
+    btn.style.flex = '';
+    btn.style.width = '';
+  });
+  
+  // Riattiva il link cliente
+  const clientLink = block.querySelector('.client-info-link');
+  if (clientLink) {
+    clientLink.removeAttribute('data-touch-only-cut');
+    clientLink.style.removeProperty('pointer-events');
+  }
+  
+  // Trova altri blocchi contigui NON ancora processati
+  const contiguousBlocks = typeof window.getRelevantBlocks === 'function' 
+    ? window.getRelevantBlocks(block) 
+    : [block];
+  
+  const otherBlocks = contiguousBlocks.filter(b => 
+    b !== block && 
+    !b.hasAttribute('data-copia-mode-done') &&
+    !b.hasAttribute('data-copia-mode')
+  );
+  
+  if (otherBlocks.length > 0) {
+    otherBlocks.forEach(otherBlock => {
+      if (typeof window.openTouchPopupForBlockCopiaOnly === 'function') {
+        window.openTouchPopupForBlockCopiaOnly(otherBlock);
+      }
+    });
+    
+    // Auto-reset dopo 8 secondi
+    setTimeout(() => {
+      document.querySelectorAll('[data-copia-mode], [data-copia-mode-done]').forEach(ob => {
+        ob.removeAttribute('data-copia-mode');
+        ob.removeAttribute('data-copia-mode-done');
+        ob.classList.remove('active-popup');
+        ob.style.zIndex = '100';
+        // Nascondi popup bars
+        const tbOb = ob.querySelector('.popup-buttons');
+        const bbOb = ob.querySelector('.popup-buttons-bottom');
+        if (tbOb) tbOb.style.display = 'none';
+        if (bbOb) bbOb.style.display = 'none';
+        // Ripristina stili bottoni
+        ob.querySelectorAll('.btn-popup').forEach(btn => {
+          btn.style.display = '';
+          btn.style.visibility = '';
+          btn.style.zIndex = '';
+          btn.style.flex = '';
+          btn.style.width = '';
+        });
+        // Riattiva link cliente
+        const cl = ob.querySelector('.client-info-link');
+        if (cl) {
+          cl.removeAttribute('data-touch-only-cut');
+          cl.style.removeProperty('pointer-events');
+        }
+      });
+    }, 8000);
+  } else {
+    // Pulisci i marker dopo un attimo
+    setTimeout(() => {
+      document.querySelectorAll('[data-copia-mode-done]').forEach(ob => {
+        ob.removeAttribute('data-copia-mode-done');
+      });
+    }, 100);
+  }
+}, true); // CAPTURE PHASE

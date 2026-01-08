@@ -437,6 +437,9 @@ def create_appointment():
                 else:
                     inherited_status = AppointmentStatus.DEFAULT
 
+                # Recupera pacchetto_seduta_id se presente (per integrazione pacchetti)
+                pb_pacchetto_seduta_id = _norm_id(pb.get('pacchettoSedutaId') if isinstance(pb, dict) else None)
+
                 new_appt = Appointment(
                     client_id=client_id,
                     operator_id=operator_id,
@@ -446,7 +449,8 @@ def create_appointment():
                     colore=pb_color,
                     colore_font=colore_font,
                     note=note,
-                    stato=inherited_status
+                    stato=inherited_status,
+                    pacchetto_seduta_id=pb_pacchetto_seduta_id
                 )
                 if first_created is None:
                     first_created = new_appt
@@ -466,7 +470,30 @@ def create_appointment():
                 first_created.note = append_new_client_marker(first_created.note)
 
             db.session.commit()
-            return jsonify({
+            
+            # Aggiorna la data_trattamento della seduta se collegata a pacchetto
+            pacchetto_info = None
+            for appt in created_appts:
+                if appt.pacchetto_seduta_id:
+                    from appl.models import PacchettoSeduta
+                    seduta = PacchettoSeduta.query.get(appt.pacchetto_seduta_id)
+                    if seduta:
+                        seduta.data_trattamento = appt.start_time
+                        seduta.operatore_id = appt.operator_id
+                        db.session.add(seduta)
+                        
+                        # Salva info per il redirect
+                        if not pacchetto_info:
+                            pacchetto_info = {
+                                'pacchettoId': seduta.pacchetto_id,
+                                'sedutaId': seduta.id,
+                                'dataFissata': appt.start_time.strftime('%d/%m/%Y %H:%M'),
+                                'sedutaOrdine': seduta.ordine
+                            }
+            
+            db.session.commit()
+            
+            response_data = {
                 "message": "Appuntamenti creati con successo!",
                 "appointments": [
                     {
@@ -480,7 +507,13 @@ def create_appointment():
                     }
                     for appt in created_appts
                 ]
-            }), 201
+            }
+            
+            # Aggiungi info pacchetto se presente
+            if pacchetto_info:
+                response_data['pacchettoInfo'] = pacchetto_info
+            
+            return jsonify(response_data), 201
 
         # --- CASO SINGOLO ---
         status_value = data.get('status', AppointmentStatus.DEFAULT.value)
@@ -2201,3 +2234,27 @@ def count_pending_web_appointments():
     except Exception as e:
         app.logger.exception("Errore conteggio web pending")
         return jsonify({'count': 0})
+    
+@calendar_bp.route('/api/service-by-name', methods=['GET'])
+def get_service_by_name():
+    """Recupera un servizio dal nome (per integrazione pacchetti)"""
+    service_name = request.args.get('name', '').strip()
+    if not service_name:
+        return jsonify({"error": "Nome servizio mancante"}), 400
+    
+    service = Service.query.filter(
+        Service.servizio_nome == service_name,
+        Service.is_deleted == False
+    ).first()
+    
+    if not service:
+        return jsonify({"error": f"Servizio '{service_name}' non trovato"}), 404
+    
+    return jsonify({
+        "id": service.id,
+        "nome": service.servizio_nome,
+        "tag": service.servizio_tag,
+        "durata": service.servizio_durata,
+        "prezzo": service.servizio_prezzo,
+        "colore": getattr(service, 'colore', None)
+    })

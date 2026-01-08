@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import os, ipaddress, requests
 from sqlalchemy.sql import func, or_
 from .. import db
-from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente
+from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto
 
 # Blueprint per le rotte delle impostazioni
 settings_bp = Blueprint('settings', __name__, template_folder='../templates')
@@ -1753,5 +1753,237 @@ def preview_operator_notifications():
         "count": len(preview),
         "items": preview
     })
+
+# ================= PACCHETTI ====================
+@settings_bp.route('/pacchetti_settings', methods=['GET'])
+def pacchetti_settings():
+    """Pagina impostazioni pacchetti - promo e template WhatsApp."""
+    business_info = BusinessInfo.query.first()
+    template = getattr(business_info, 'whatsapp_template_pacchetti', None) if business_info else None
+    disclaimer = getattr(business_info, 'whatsapp_template_pacchetti_disclaimer', None) if business_info else None
+    giorni = getattr(business_info, 'pacchetti_giorni_abbandono', 90) if business_info else 90
+    
+    # Carica solo servizi attivi, visibili online e non dummy
+    servizi = Service.query.filter(
+        Service.is_deleted == False,
+        Service.is_visible_online == True,
+        Service.servizio_nome != 'dummy'
+    ).order_by(Service.servizio_nome).all()
+    
+    return render_template('pacchetti_settings.html', 
+                           whatsapp_template=template,
+                           disclaimer_template=disclaimer,
+                           giorni_abbandono=giorni,
+                           servizi=servizi)
+
+@settings_bp.route('/api/pacchetti/whatsapp_template', methods=['GET'])
+def api_get_whatsapp_template_pacchetti():
+    """Restituisce il template WhatsApp per pacchetti."""
+    business_info = BusinessInfo.query.first()
+    template = getattr(business_info, 'whatsapp_template_pacchetti', None) if business_info else None
+    return jsonify({'template': template or ''})
+
+@settings_bp.route('/api/pacchetti/whatsapp_template', methods=['POST'])
+def api_save_whatsapp_template_pacchetti():
+    """Salva il template WhatsApp per pacchetti."""
+    data = request.get_json(silent=True) or {}
+    template = data.get('template', '').strip()
+    
+    business_info = BusinessInfo.query.first()
+    if not business_info:
+        business_info = BusinessInfo(
+            business_name="Centro",
+            opening_time=datetime.strptime("08:00", "%H:%M").time(),
+            closing_time=datetime.strptime("20:00", "%H:%M").time(),
+            active_opening_time=datetime.strptime("08:00", "%H:%M").time(),
+            active_closing_time=datetime.strptime("20:00", "%H:%M").time()
+        )
+        db.session.add(business_info)
+    
+    business_info.whatsapp_template_pacchetti = template if template else None
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Template salvato con successo'})
+
+@settings_bp.route('/api/pacchetti/giorni_abbandono', methods=['POST'])
+def api_save_giorni_abbandono():
+    """Salva il numero di giorni per considerare un pacchetto abbandonato."""
+    data = request.get_json(silent=True) or {}
+    giorni = data.get('giorni', 90)
+    
+    try:
+        giorni = int(giorni)
+        if giorni < 1 or giorni > 365:
+            return jsonify({'success': False, 'error': 'Valore deve essere tra 1 e 365'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Valore non valido'}), 400
+    
+    business_info = BusinessInfo.query.first()
+    if not business_info:
+        business_info = BusinessInfo(
+            business_name="Centro",
+            opening_time=datetime.strptime("08:00", "%H:%M").time(),
+            closing_time=datetime.strptime("20:00", "%H:%M").time(),
+            active_opening_time=datetime.strptime("08:00", "%H:%M").time(),
+            active_closing_time=datetime.strptime("20:00", "%H:%M").time()
+        )
+        db.session.add(business_info)
+    
+    business_info.pacchetti_giorni_abbandono = giorni
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Giorni abbandono salvati'})
+
+@settings_bp.route('/api/pacchetti/disclaimer_template', methods=['GET'])
+def api_get_disclaimer_template():
+    """Restituisce il template disclaimer per pacchetti."""
+    business_info = BusinessInfo.query.first()
+    template = getattr(business_info, 'whatsapp_template_pacchetti_disclaimer', None) if business_info else None
+    return jsonify({'template': template or ''})
+
+@settings_bp.route('/api/pacchetti/disclaimer_template', methods=['POST'])
+def api_save_disclaimer_template():
+    """Salva il template disclaimer per pacchetti."""
+    data = request.get_json(silent=True) or {}
+    template = data.get('template', '').strip()
+    
+    business_info = BusinessInfo.query.first()
+    if not business_info:
+        business_info = BusinessInfo(
+            business_name="Centro",
+            opening_time=datetime.strptime("08:00", "%H:%M").time(),
+            closing_time=datetime.strptime("20:00", "%H:%M").time(),
+            active_opening_time=datetime.strptime("08:00", "%H:%M").time(),
+            active_closing_time=datetime.strptime("20:00", "%H:%M").time()
+        )
+        db.session.add(business_info)
+    
+    business_info.whatsapp_template_pacchetti_disclaimer = template if template else None
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Template disclaimer salvato con successo'})
+
+# API per salvare disclaimer servizio
+@settings_bp.route('/api/servizi/<int:servizio_id>/disclaimer', methods=['POST'])
+def api_save_servizio_disclaimer(servizio_id):
+    """Salva il disclaimer per un servizio specifico."""
+    servizio = Service.query.get(servizio_id)
+    if not servizio:
+        return jsonify({'success': False, 'error': 'Servizio non trovato'}), 404
+    
+    data = request.get_json(silent=True) or {}
+    disclaimer = data.get('disclaimer', '').strip()
+    
+    servizio.servizio_disclaimer = disclaimer if disclaimer else None
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Disclaimer salvato'})
+
+@settings_bp.route('/api/pacchetti/<int:pacchetto_id>/disclaimer_data', methods=['GET'])
+def api_get_disclaimer_data(pacchetto_id):
+    """Restituisce i dati per generare il PDF disclaimer del pacchetto."""
+    pacchetto = Pacchetto.query.get_or_404(pacchetto_id)
+    business_info = BusinessInfo.query.first()
+    
+    # Raggruppa servizi per nome e conta quantità
+    servizi_count = {}
+    servizi_disclaimers = {}
+    
+    for seduta in pacchetto.sedute:
+        service = seduta.service
+        if service:
+            nome = service.servizio_nome
+            if nome not in servizi_count:
+                servizi_count[nome] = 0
+                # Salva il disclaimer se presente
+                if service.servizio_disclaimer:
+                    servizi_disclaimers[nome] = service.servizio_disclaimer
+            servizi_count[nome] += 1
+    
+    # Prepara lista servizi
+    servizi = [{'nome': nome, 'quantita': qty} for nome, qty in servizi_count.items()]
+    
+    # Prepara lista disclaimers (solo servizi che ce l'hanno)
+    disclaimers = [{'servizio': nome, 'testo': testo} for nome, testo in servizi_disclaimers.items()]
+    
+    # Prepara elenco servizi formattato
+    servizi_text = '\n'.join([f"• {s['quantita']} {s['nome']}" for s in servizi])
+    
+    # Prepara disclaimers formattati
+    disclaimers_text = '\n\n'.join([f"{d['servizio']}:\n{d['testo']}" for d in disclaimers]) if disclaimers else ''
+    
+    # Recupera il template disclaimer (o usa default)
+    template = getattr(business_info, 'whatsapp_template_pacchetti_disclaimer', None) if business_info else None
+    
+    return jsonify({
+        'success': True,
+        'template': template,
+        'servizi': servizi,
+        'servizi_text': servizi_text,
+        'disclaimers': disclaimers,
+        'disclaimers_text': disclaimers_text,
+        'centro_nome': business_info.business_name if business_info else 'Centro Estetico',
+        'centro_indirizzo': f"{business_info.address or ''}, {business_info.city or ''}".strip(', ') if business_info else ''
+    })
+# ================= PROMO PACCHETTI ====================
+@settings_bp.route('/api/pacchetti/promo', methods=['GET'])
+def api_get_promo_list():
+    """Restituisce tutte le promo salvate."""
+    promo_list = PromoPacchetto.query.order_by(PromoPacchetto.nome).all()
+    return jsonify([p.to_dict() for p in promo_list])
+
+@settings_bp.route('/api/pacchetti/promo', methods=['POST'])
+def api_create_promo():
+    """Crea una nuova promo."""
+    data = request.get_json(silent=True) or {}
+    
+    nome = (data.get('nome') or '').strip()
+    if not nome:
+        return jsonify({'error': 'Nome promo obbligatorio'}), 400
+    
+    tipo = data.get('tipo', 'percentuale')
+    
+    promo = PromoPacchetto(
+        nome=nome,
+        tipo=tipo,
+        soglia=data.get('soglia'),
+        percentuale=data.get('percentuale') if tipo == 'percentuale' else None,
+        sedute_omaggio=data.get('sedute_omaggio') if tipo == 'sedute_omaggio' else None,
+        attiva=data.get('attiva', True)
+    )
+    db.session.add(promo)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'promo': promo.to_dict()})
+
+@settings_bp.route('/api/pacchetti/promo/<int:promo_id>', methods=['PUT'])
+def api_update_promo(promo_id):
+    """Aggiorna una promo esistente."""
+    promo = PromoPacchetto.query.get_or_404(promo_id)
+    data = request.get_json(silent=True) or {}
+    
+    if 'nome' in data:
+        promo.nome = (data['nome'] or '').strip()
+    if 'tipo' in data:
+        promo.tipo = data['tipo']
+    if 'soglia' in data:
+        promo.soglia = data['soglia']
+    if 'percentuale' in data:
+        promo.percentuale = data['percentuale']
+    if 'sedute_omaggio' in data:
+        promo.sedute_omaggio = data['sedute_omaggio']
+    if 'attiva' in data:
+        promo.attiva = data['attiva']
+    
+    db.session.commit()
+    return jsonify({'success': True, 'promo': promo.to_dict()})
+
+@settings_bp.route('/api/pacchetti/promo/<int:promo_id>', methods=['DELETE'])
+def api_delete_promo(promo_id):
+    """Elimina una promo."""
+    promo = PromoPacchetto.query.get_or_404(promo_id)
+    db.session.delete(promo)
+    db.session.commit()
+    return jsonify({'success': True})
 
 # ================= MARKETING ====================

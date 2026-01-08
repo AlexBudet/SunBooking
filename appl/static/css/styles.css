@@ -1956,6 +1956,31 @@ body.touch-ui .appointment-block .popup-buttons-bottom:hover {
   display: none !important;
 }
 
+/* Modal backdrop e modal per redirect Agenda da pacchetto */
+.date-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+}
+
+.date-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  padding: 20px;
+  z-index: 10001;
+  max-width: 500px;
+  width: 90%;
+}
+
 /* ===================== TOUCH UI OVERRIDES ===================== */
 /* Apri popup SOLO a click (classe .active-popup), non su hover */
 body.touch-ui .appointment-block:hover:not(.disable-popup):not(.active-popup) .popup-buttons,
