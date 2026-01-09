@@ -1,6 +1,6 @@
 # appl/routes/pacchetti.py
 import json
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, app, render_template, request, jsonify
 from appl import db
 from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus
 from sqlalchemy import func, or_, and_
@@ -799,10 +799,16 @@ def api_update_seduta(id, seduta_id):
             seduta.data_trattamento = None
         else:
             try:
-                base = str(raw).strip()[:10]  # YYYY-MM-DD
-                seduta.data_trattamento = datetime.strptime(base, '%Y-%m-%d')
+                # ✅ CORREZIONE: Prova prima DateTime completo, poi fallback a solo data
+                try:
+                    # Formato DateTime completo ISO: "2026-01-09T14:30:00.000Z"
+                    seduta.data_trattamento = datetime.strptime(raw, '%Y-%m-%dT%H:%M:%S.%fZ')
+                except ValueError:
+                    # Fallback: solo data "YYYY-MM-DD"
+                    base = str(raw).strip()[:10]
+                    seduta.data_trattamento = datetime.strptime(base, '%Y-%m-%d')
             except Exception:
-                return jsonify({'error': 'Formato data non valido. Atteso YYYY-MM-DD'}), 400
+                return jsonify({'error': 'Formato data non valido'}), 400
 
     if 'stato' in data:
         seduta.stato = data['stato']
@@ -816,8 +822,8 @@ def api_update_seduta(id, seduta_id):
 
     db.session.commit()
     return jsonify({'message': 'Seduta aggiornata'})
-    
 @pacchetti_bp.route('/api/rate/<int:rata_id>', methods=['PUT'])
+
 def api_update_rata(rata_id):
     rata = PacchettoRata.query.get_or_404(rata_id)
     data = request.get_json() or {}
@@ -973,37 +979,149 @@ def api_ridistribuisci_rate(id):
         'num_rate': num_rate_non_pagate,
         'totale_rimanente': importo_rimanente
     })
-
+    
+@pacchetti_bp.route('/api/check-disponibili', methods=['POST'])
+def check_pacchetti_disponibili():
+    """
+    Verifica se un cliente ha pacchetti con sedute disponibili per i servizi selezionati.
+    
+    Request JSON:
+        {
+            "client_id": int,
+            "service_ids": [int, int, ...]
+        }
+    
+    Response JSON:
+        [
+            {
+                "pacchetto_id": int,
+                "pacchetto_nome": str,
+                "client_nome": str,
+                "status": str,
+                "sedute_disponibili": [
+                    {
+                        "seduta_id": int,
+                        "service_id": int,
+                        "service_nome": str,
+                        "ordine": int
+                    },
+                    ...
+                ],
+                "sedute_totali": int,
+                "sedute_effettuate": int
+            },
+            ...
+        ]
+    """
+    try:
+        data = request.get_json()
+        client_id = data.get('client_id')
+        service_ids = data.get('service_ids', [])
+        
+        if not client_id or not service_ids:
+            return jsonify([]), 200
+        
+        # Trova tutti i pacchetti del cliente con status Preventivo o Attivo
+        pacchetti = Pacchetto.query.filter(
+            and_(
+                Pacchetto.client_id == client_id,
+                Pacchetto.status.in_([PacchettoStatus.Preventivo, PacchettoStatus.Attivo])
+            )
+        ).all()
+        
+        risultati = []
+        
+        for pacchetto in pacchetti:
+            print(f"DEBUG: Pacchetto {pacchetto.id} - {pacchetto.nome}")
+            print(f"DEBUG: Sedute totali: {len(pacchetto.sedute)}")
+            
+            sedute_disponibili = []
+            for seduta in pacchetto.sedute:
+                print(f"  - Seduta {seduta.id}: service_id={seduta.service_id}, stato={seduta.stato} (tipo: {type(seduta.stato)})")
+                print(f"    Confronto: {seduta.service_id} in {service_ids} = {seduta.service_id in service_ids}")
+                print(f"    Stato != Effettuata: {seduta.stato} != {SedutaStatus.Effettuata} = {seduta.stato != SedutaStatus.Effettuata}")
+                # Converti service_ids in interi per confronto corretto
+                service_ids_int = [int(sid) for sid in service_ids]
+                if seduta.service_id in service_ids_int and seduta.stato != SedutaStatus.Effettuata:
+                    sedute_disponibili.append({
+                        'seduta_id': seduta.id,
+                        'service_id': seduta.service_id,
+                        'service_nome': seduta.service.servizio_nome if seduta.service else 'Servizio',
+                        'ordine': seduta.ordine
+                    })
+            
+            if sedute_disponibili:
+                risultati.append({
+                    'pacchetto_id': pacchetto.id,
+                    'pacchetto_nome': pacchetto.nome,
+                    'client_nome': f"{pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}",
+                    'status': pacchetto.status.value,
+                    'sedute_disponibili': sedute_disponibili,
+                    'sedute_totali': len(pacchetto.sedute),
+                    'sedute_effettuate': len([s for s in pacchetto.sedute if s.stato == SedutaStatus.Effettuata.value])
+                })
+        
+        return jsonify(risultati), 200
+        
+    except Exception as e:
+        print(f"Errore check_pacchetti_disponibili: {str(e)}")
+        return jsonify([]), 500
+    
 @pacchetti_bp.route('/api/sedute/<int:seduta_id>/update-data', methods=['POST'])
 def update_seduta_data(seduta_id):
-    """Aggiorna la data_trattamento di una PacchettoSeduta dopo aver creato l'appuntamento"""
+    """Aggiorna la data_trattamento di una seduta specifica"""
     try:
-        data = request.get_json() or {}
+        data = request.get_json()
         data_trattamento = data.get('data_trattamento')
+        operatore_id = data.get('operatore_id')
+
+        print(f"DEBUG update_seduta_data: seduta_id={seduta_id}, data_trattamento={data_trattamento}")
         
         if not data_trattamento:
-            return jsonify({'error': 'Data mancante'}), 400
+            return jsonify({'error': 'data_trattamento mancante'}), 400
         
+        # Trova la seduta
         seduta = PacchettoSeduta.query.get(seduta_id)
         if not seduta:
             return jsonify({'error': 'Seduta non trovata'}), 404
         
-        # Converti stringa data in oggetto date
-        from datetime import datetime
+        # ✅ FIX: Parsing robusto - rimuovi timezone per evitare problemi con SQLite
         try:
-            seduta.data_trattamento = datetime.strptime(data_trattamento, '%Y-%m-%d').date()
+            # Rimuovi 'Z' e qualsiasi timezone, poi parsa
+            clean_date = data_trattamento.replace('Z', '').replace('+00:00', '')
+            # Rimuovi anche millisecondi se presenti
+            if '.' in clean_date:
+                clean_date = clean_date.split('.')[0]
+            # Ora parsa come datetime naive
+            seduta.data_trattamento = datetime.strptime(clean_date, '%Y-%m-%dT%H:%M:%S')
         except ValueError:
-            return jsonify({'error': 'Formato data non valido'}), 400
+            # Fallback: prova solo data
+            try:
+                seduta.data_trattamento = datetime.strptime(data_trattamento[:10], '%Y-%m-%d')
+            except:
+                return jsonify({'error': f'Formato data non valido: {data_trattamento}'}), 400
+            
+        # ✅ NUOVO: Aggiorna operatore se fornito e diverso
+        if operatore_id is not None:
+            operatore_id_int = int(operatore_id) if operatore_id else None
+            if seduta.operatore_id != operatore_id_int:
+                print(f"DEBUG: Cambio operatore da {seduta.operatore_id} a {operatore_id_int}")
+                seduta.operatore_id = operatore_id_int
         
+        print(f"DEBUG: Salvando seduta.data_trattamento = {seduta.data_trattamento}")
         db.session.commit()
+        print(f"DEBUG: Commit completato!")
         
         return jsonify({
             'success': True,
-            'seduta_id': seduta.id,
-            'data_trattamento': seduta.data_trattamento.strftime('%Y-%m-%d')
-        })
+            'seduta_id': seduta_id,
+            'data_trattamento': str(seduta.data_trattamento),
+            'operatore_id': seduta.operatore_id
+        }), 200
         
     except Exception as e:
         db.session.rollback()
-        app.logger.error(f"Errore aggiornamento data seduta: {e}")
-        return jsonify({'error': 'Errore server'}), 500
+        print(f"Errore update_seduta_data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500

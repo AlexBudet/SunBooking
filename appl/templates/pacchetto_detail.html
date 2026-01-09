@@ -558,17 +558,12 @@ tr.rata-pagata input {
         </tr>
         {% endfor %}
       {% else %}
-        {# Placeholder righe quando non ci sono rate generate: calcolo importo stimato #}
-        {% set totale = pacchetto.costo_totale_scontato if pacchetto.costo_totale_scontato else pacchetto.costo_totale_lordo %}
-        {% set importo = (totale / numero_rate) if numero_rate > 0 else 0 %}
-        {% for i in range(1, numero_rate + 1) %}
+        {# Nessuna rata: genera automaticamente via JS al caricamento #}
         <tr>
-          <td>{{ i }}</td>
-          <td>€{{ '%.2f'|format(importo) }}</td>
-          <td>No</td>
-          <td>{{ first_date or '—' }}</td>
+          <td colspan="4" class="text-center text-muted">
+            <em>Generazione rate in corso...</em>
+          </td>
         </tr>
-        {% endfor %}
       {% endif %}
     </tbody>
   </table>
@@ -595,7 +590,7 @@ const operatori = {{ pacchetto.all_operatori | tojson }};
     if (msgData) {
       const data = JSON.parse(msgData);
       localStorage.removeItem('pacchettoSedutaFissata');
-      alert(`Seduta ${data.sedutaId} fissata per il ${data.data} alle ore ${data.ora}`);
+      alert(`Seduta fissata per il ${data.data} alle ore ${data.ora}`);
     }
   } catch (e) { /* nulla */ }
 })();
@@ -678,6 +673,21 @@ function populateNStar() {
 }
 
 function segnaPagata(rataId) {
+  {% if hide_cassa or config.get('HIDE_CASSA') %}
+  // Mostra popup elegante invece di alert
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  backdrop.innerHTML = `
+    <div style="background:#fff;padding:24px 32px;border-radius:12px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+      <div style="font-size:2rem;margin-bottom:12px;">⚠️</div>
+      <div style="font-size:1.1rem;margin-bottom:16px;">Funzione non disponibile in questa versione</div>
+      <button onclick="this.closest('div').parentElement.remove()" class="btn btn-primary">OK</button>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  return;
+  {% endif %}
   // reindirizza alla cassa; la gestione del pagamento avviene lì
   window.location.href = '/cassa?rata_id=' + rataId;
 }
@@ -952,6 +962,24 @@ function toggleSortTooltip(event) {
 document.addEventListener('DOMContentLoaded', function () {
   normalizeDateCells();
   populateNStar();
+
+  // Auto-genera rate se non esistono
+  const rateEsistenti = document.querySelectorAll('.rate-table tbody tr[data-rata-id]').length;
+  if (rateEsistenti === 0) {
+    const numeroRate = parseInt(document.getElementById('numeroRate').value) || 1;
+    fetch(`/pacchetti/api/pacchetti/${pacchettoId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ numero_rate: numeroRate })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.message) {
+        location.reload();
+      }
+    })
+    .catch(err => console.error('Errore auto-generazione rate:', err));
+  }
 
   // Funzione per calcolare lo stato corretto della seduta
   function calcolaStatoSeduta(dataStr, isEffettuata) {
@@ -1471,6 +1499,31 @@ tbody.addEventListener('dragend', function () {
 
     const row = cell.closest('tr');
     const sedutaId = row.dataset.id;
+
+    // ✅ NUOVO: Controlla se la data è già compilata
+    const existingDate = row.dataset.data; // contiene la data se già compilata
+    const hasExistingDate = existingDate && existingDate.trim() !== '' && existingDate !== '—';
+    
+    // Se la data è già compilata, redirect diretto alla data esistente (solo visualizzazione)
+    if (hasExistingDate) {
+      // Estrai la data in formato YYYY-MM-DD
+      let dateForRedirect = existingDate;
+      // Se la data contiene anche l'ora (es. "2026-01-09 10:30:00"), prendi solo la parte data
+      if (dateForRedirect.includes(' ')) {
+        dateForRedirect = dateForRedirect.split(' ')[0];
+      }
+      // Se la data è in formato italiano (DD/MM/YYYY), convertila
+      if (dateForRedirect.includes('/')) {
+        const parts = dateForRedirect.split('/');
+        if (parts.length === 3) {
+          dateForRedirect = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+        }
+      }
+      
+      // Redirect diretto al calendario su quella data
+      window.location.href = `/calendar?date=${dateForRedirect}`;
+      return;
+    }
 
     // Recupera i dati della seduta dalla riga
     const serviceName = row.querySelector('td:nth-child(2)').textContent.trim();

@@ -298,6 +298,35 @@ Ti aspettiamo! 💆‍♀️
 
           <div class="mb-3">
             <label for="disclaimerTemplate" class="form-label">Testo del consenso informato:</label>
+            
+            <!-- Barra strumenti formattazione -->
+            <div class="btn-toolbar mb-2" role="toolbar">
+              <div class="btn-group me-2" role="group">
+                <button type="button" class="btn btn-sm btn-outline-secondary format-btn" data-format="bold" title="Grassetto">
+                  <i class="bi bi-type-bold"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary format-btn" data-format="italic" title="Corsivo">
+                  <i class="bi bi-type-italic"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary format-btn" data-format="underline" title="Sottolineato">
+                  <i class="bi bi-type-underline"></i>
+                </button>
+              </div>
+              <div class="btn-group me-2" role="group">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="applyDisclaimerFormat('ul')" title="Elenco Puntato">
+                  <i class="bi bi-list-ul"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="applyDisclaimerFormat('ol')" title="Elenco Numerato">
+                  <i class="bi bi-list-ol"></i>
+                </button>
+              </div>
+              <div class="btn-group" role="group">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="applyDisclaimerFormat('line')" title="Linea Separatrice">
+                  <i class="bi bi-dash-lg"></i>
+                </button>
+              </div>
+            </div>
+            
             <textarea class="form-control" id="disclaimerTemplate" rows="12" placeholder="Scrivi il template del disclaimer...">{{ disclaimer_template or default_disclaimer }}</textarea>
           </div>
 
@@ -509,6 +538,88 @@ function insertDisclaimerVariable(variable) {
   textarea.value = text.substring(0, start) + variable + text.substring(end);
   textarea.focus();
   textarea.setSelectionRange(start + variable.length, start + variable.length);
+}
+
+// Stato attivo dei formati
+let activeFormats = {
+  bold: false,
+  italic: false,
+  underline: false
+};
+
+// Funzione per applicare formattazione al disclaimer template
+function applyDisclaimerFormat(format) {
+  const textarea = document.getElementById('disclaimerTemplate');
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const selectedText = textarea.value.substring(start, end);
+  let replacement = '';
+  
+  switch(format) {
+    case 'ul':
+      replacement = selectedText.split('\n').map(line => line.trim() ? `• ${line}` : line).join('\n');
+      break;
+    case 'ol':
+      let counter = 1;
+      replacement = selectedText.split('\n').map(line => line.trim() ? `${counter++}. ${line}` : line).join('\n');
+      break;
+    case 'line':
+      replacement = '\n___________________________\n';
+      break;
+    default:
+      replacement = selectedText;
+  }
+  
+  textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+  textarea.focus();
+  
+  // Posiziona cursore dopo il testo inserito
+  const newPos = start + replacement.length;
+  textarea.setSelectionRange(newPos, newPos);
+}
+
+// Toggle formato (bold, italic, underline) con highlight
+function toggleFormat(format, button) {
+  activeFormats[format] = !activeFormats[format];
+  
+  // Aggiorna visuale del pulsante
+  if (activeFormats[format]) {
+    button.classList.add('active', 'btn-secondary');
+    button.classList.remove('btn-outline-secondary');
+  } else {
+    button.classList.remove('active', 'btn-secondary');
+    button.classList.add('btn-outline-secondary');
+  }
+}
+
+// Intercetta input nella textarea per applicare formati attivi
+function handleDisclaimerInput(event) {
+  // Solo per caratteri normali (non backspace, enter, ecc)
+  if (event.inputType !== 'insertText' || !event.data) return;
+  
+  const textarea = event.target;
+  const pos = textarea.selectionStart;
+  const char = event.data;
+  
+  // Se non ci sono formati attivi, esci
+  if (!activeFormats.bold && !activeFormats.italic && !activeFormats.underline) return;
+  
+  // Rimuovi il carattere appena inserito
+  const before = textarea.value.substring(0, pos - 1);
+  const after = textarea.value.substring(pos);
+  
+  // Costruisci il testo formattato
+  let formatted = char;
+  if (activeFormats.bold) formatted = `**${formatted}**`;
+  if (activeFormats.italic) formatted = `*${formatted}*`;
+  if (activeFormats.underline) formatted = `__${formatted}__`;
+  
+  // Inserisci il testo formattato
+  textarea.value = before + formatted + after;
+  
+  // Posiziona cursore alla fine del testo formattato
+  const newPos = before.length + formatted.length;
+  textarea.setSelectionRange(newPos, newPos);
 }
 
 function resetDisclaimerToDefault() {
@@ -874,6 +985,20 @@ async function savePromo() {
 
 // Init
 document.addEventListener('DOMContentLoaded', () => {
+  // Event listeners per pulsanti formattazione con toggle
+  document.querySelectorAll('.format-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const format = this.dataset.format;
+      toggleFormat(format, this);
+    });
+  });
+  
+  // Event listener per textarea disclaimer con formattazione automatica
+  const disclaimerTextarea = document.getElementById('disclaimerTemplate');
+  if (disclaimerTextarea) {
+    disclaimerTextarea.addEventListener('input', handleDisclaimerInput);
+  }
+
   loadPromo(); 
   updatePreview();
   

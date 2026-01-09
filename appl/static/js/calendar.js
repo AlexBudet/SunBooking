@@ -103,6 +103,9 @@ window.lastClickPosition = null;
 window._lastBlocksCountPerCell = window._lastBlocksCountPerCell || new Map();
 window.CLIENT_ID_BOOKING = null;
 
+// Variabile per tracciare il pacchetto selezionato durante la creazione appuntamento
+window.pacchettoSelezionato = null;
+
 // variabile globale per il gap contiguo (minuti)
 window.CONTIGUOUS_BLOCK_MAX_GAP_MINUTES = window.CONTIGUOUS_BLOCK_MAX_GAP_MINUTES ?? 30;
 
@@ -267,6 +270,148 @@ fetch('/calendar/api/client-id-booking', {
 })
   .then(resp => resp.json())
   .then(data => { window.CLIENT_ID_BOOKING = data.client_id_booking; });
+
+// =============================================================
+//   FUNZIONI PER CHECK PACCHETTI DISPONIBILI
+// =============================================================
+
+// Verifica se il cliente ha pacchetti con sedute disponibili per i servizi selezionati
+async function checkPacchettiDisponibili(clientId, serviceIds) {
+  if (!clientId || !serviceIds || serviceIds.length === 0) {
+    return [];
+  }
+
+  try {
+    const response = await fetch('/pacchetti/api/check-disponibili', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        service_ids: serviceIds
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Errore check pacchetti:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error('Errore durante check pacchetti:', error);
+    return [];
+  }
+}
+
+// Mostra popup per selezione pacchetto (se ce ne sono più di uno)
+function mostraPopupSelezionePacchetto(pacchetti, callback) {
+  // Crea il modal dinamicamente
+  const modalId = 'SelectPacchettoModal';
+  let modalEl = document.getElementById(modalId);
+  
+  if (modalEl) {
+    modalEl.remove();
+  }
+
+  modalEl = document.createElement('div');
+  modalEl.id = modalId;
+  modalEl.className = 'modal fade';
+  modalEl.tabIndex = -1;
+  modalEl.innerHTML = `
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Pacchetti Disponibili</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-3">Il cliente ha dei pacchetti con sedute disponibili. Seleziona un'opzione:</p>
+          <div class="list-group" id="pacchettiList"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-success" id="btnCreaSedutaPacchetto">Crea app come seduta del pacchetto</button>
+          <button type="button" class="btn btn-secondary" id="btnCreaSenzaPacchetto">Crea senza pacchetto</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modalEl);
+
+  const listContainer = modalEl.querySelector('#pacchettiList');
+  
+  pacchetti.forEach(pac => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'list-group-item list-group-item-action';
+    
+    // Estrai i nomi dei servizi dalle sedute disponibili (unici)
+    const nomiServiziUnici = [...new Set(pac.sedute_disponibili.map(s => s.service_nome))].join(', ');
+    const numSedute = pac.sedute_disponibili.length;
+    
+    item.innerHTML = `
+      <div class="d-flex w-100 justify-content-between">
+        <h6 class="mb-1">${pac.pacchetto_nome}</h6>
+        <small>${numSedute} sedute disponibili</small>
+      </div>
+      <small class="text-muted">Servizi: ${nomiServiziUnici}</small>
+    `;
+    
+    // Click sull'elemento: svuota navigator e vai al pacchetto
+    item.addEventListener('click', () => {
+      bsModal.hide();
+      
+      // Svuota il navigator
+      window.pseudoBlocks = [];
+      window.selectedClientIdNav = null;
+      window.selectedClientNameNav = "";
+      window.pacchettoSelezionato = null;
+      renderPseudoBlocksList();
+      saveNavigatorState();
+      
+      // Redirect alla pagina del pacchetto
+      const currentPath = window.location.pathname;
+      const basePathMatch = currentPath.match(/^(\/s\/\d+\/)/);
+      const basePath = basePathMatch ? basePathMatch[1] : '/';
+      window.location.href = `${basePath}pacchetti/detail/${pac.pacchetto_id}`;
+    });
+    
+    listContainer.appendChild(item);
+  });
+
+  const btnSedutaPacchetto = modalEl.querySelector('#btnCreaSedutaPacchetto');
+  const btnSenza = modalEl.querySelector('#btnCreaSenzaPacchetto');
+  
+  // Bottone: Crea come seduta del pacchetto
+  btnSedutaPacchetto.addEventListener('click', () => {
+    bsModal.hide();
+    // Seleziona il primo pacchetto e marca che deve aggiornare la data
+    const pacchettoSelezionato = pacchetti.length === 1 ? pacchetti[0] : pacchetti[0];
+    pacchettoSelezionato._shouldUpdateSedutaData = true; // Flag per sapere che deve aggiornare la data
+    callback(pacchettoSelezionato);
+  });
+  
+  // Bottone: Crea senza pacchetto
+  btnSenza.addEventListener('click', () => {
+    bsModal.hide();
+    callback(null); // Non associare nessun pacchetto
+  });
+
+  const bsModal = new bootstrap.Modal(modalEl);
+  
+  modalEl.addEventListener('hidden.bs.modal', () => {
+    modalEl.remove();
+  });
+  
+  bsModal.show();
+}
+
+window.checkPacchettiDisponibili = checkPacchettiDisponibili;
+window.mostraPopupSelezionePacchetto = mostraPopupSelezionePacchetto;
 
 if (typeof window.clearCalendarHighlights !== 'function') {
   function clearCalendarHighlights() {
@@ -4625,6 +4770,41 @@ function selectServiceNav(serviceId, serviceName, serviceDuration, serviceTag) {
   resultsContainer.style.display = 'none';
 
   renderPseudoBlocksList();
+
+  // Check pacchetti disponibili SUBITO dopo la selezione del servizio
+  if (window.selectedClientIdNav && window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+      const serviceIds = window.pseudoBlocks.map(pb => pb.serviceId).filter(id => id);
+      if (serviceIds.length > 0) {
+          checkPacchettiDisponibili(window.selectedClientIdNav, serviceIds).then(pacchetti => {
+              if (pacchetti && pacchetti.length > 0) {
+                  mostraPopupSelezionePacchetto(pacchetti, (pacchettoSelezionato) => {
+                      window.pacchettoSelezionato = pacchettoSelezionato;
+                      console.log('Pacchetto selezionato:', pacchettoSelezionato);
+                      
+                      // ✅ FIX: Assegna SUBITO pacchettoSedutaId e pacchettoId ai pseudoblocchi
+                      if (pacchettoSelezionato && pacchettoSelezionato.sedute_disponibili && window.pseudoBlocks) {
+                          window.pseudoBlocks.forEach(blk => {
+                              const sedutaMatch = pacchettoSelezionato.sedute_disponibili.find(
+                                  s => String(s.service_id) === String(blk.serviceId)
+                              );
+                              if (sedutaMatch) {
+                                  blk.pacchettoSedutaId = sedutaMatch.seduta_id;
+                                  blk.pacchettoId = pacchettoSelezionato.pacchetto_id;
+                                  console.log(`✅ Assegnato pacchettoSedutaId=${sedutaMatch.seduta_id} al blocco ${blk.serviceName}`);
+                              }
+                          });
+                          if (typeof saveNavigatorState === 'function') {
+                              saveNavigatorState();
+                          }
+                      }
+                  });
+              } else {
+                  window.pacchettoSelezionato = null;
+              }
+          });
+      }
+  }
+
 }
 
 function maybeShowPseudoBlock() {
@@ -5304,6 +5484,12 @@ function chiediInvioWhatsappNavigator() {
             return;
         }
 
+        // Controllo per servizio mancante
+        if (window.pseudoBlocks.some(blk => !blk.serviceId)) {
+            alert("Parametri mancanti: assicurati di aver selezionato un servizio.");
+            return;
+        }
+
 const blocksInCell = Array.from(cell.querySelectorAll('.appointment-block'));
 const hasOffBlock = blocksInCell.some(b =>
   !b.getAttribute('data-client-id') || b.getAttribute('data-client-id') === "dummy" || b.classList.contains('note-off')
@@ -5356,7 +5542,24 @@ if (blocksInCell.length >= 2) {
                     status: blk.status || 0
                 };
 
-                
+// ✅ FIX: Usa direttamente pacchettoSedutaId se già presente nel blocco
+// (settato dalla callback del popup OPPURE da pendingSedutaFromPacchetto)
+if (blk.pacchettoSedutaId) {
+    payload.pacchetto_seduta_id = blk.pacchettoSedutaId;
+    console.log('✅ pacchettoSedutaId già presente nel blocco:', blk.pacchettoSedutaId);
+}
+// Fallback: cerca in window.pacchettoSelezionato se il blocco non ha già i dati
+else if (window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_disponibili) {
+    const sedutaMatch = window.pacchettoSelezionato.sedute_disponibili.find(
+        s => String(s.service_id) === String(blk.serviceId)
+    );
+    if (sedutaMatch) {
+        payload.pacchetto_seduta_id = sedutaMatch.seduta_id;
+        blk.pacchettoSedutaId = sedutaMatch.seduta_id;
+        blk.pacchettoId = window.pacchettoSelezionato.pacchetto_id;
+        console.log('✅ sedutaMatch trovato, assegnato pacchettoSedutaId:', sedutaMatch.seduta_id);
+    }
+}
 
                 fetch('/calendar/create', {
                     method: 'POST',
@@ -5461,50 +5664,95 @@ appointment.service_tag = appointment.service_tag || blk.tag || blk.serviceName;
         }, csrfToken);
         alert("Messaggio WhatsApp inviato!");
     }
+
+// *** AGGIUNGI QUESTO DEBUG ***
+console.log("🔍 DEBUG REDIRECT CHECK:");
+console.log("  blk.pacchettoSedutaId:", blk.pacchettoSedutaId);
+console.log("  blk.pacchettoId:", blk.pacchettoId);
+console.log("  blk.shouldUpdateSeduta:", blk.shouldUpdateSeduta);
     
-    // Se proviene da pacchetto, aggiorna data seduta e redirect
-    if (blk.pacchettoSedutaId && blk.pacchettoId) {
-        // Formatta la data per il messaggio
-        const dateObj = new Date(date);
-        const dayStr = ('0' + dateObj.getDate()).slice(-2);
-        const monthStr = ('0' + (dateObj.getMonth() + 1)).slice(-2);
-        const yearStr = dateObj.getFullYear();
-        const formattedDate = `${dayStr}/${monthStr}/${yearStr}`;
+// Se proviene da pacchetto, aggiorna data seduta e redirect
+if (blk.pacchettoSedutaId && blk.pacchettoId) {
+    // ✅ DEFINISCI basePath PRIMA di usarlo
+    const currentPath = window.location.pathname;
+    const basePathMatch = currentPath.match(/^(\/s\/\d+\/)/);
+    const basePath = basePathMatch ? basePathMatch[1] : '/';
+    
+    // Formatta la data per il messaggio
+    const dateObj = new Date(date);
+    const dayStr = ('0' + dateObj.getDate()).slice(-2);
+    const monthStr = ('0' + (dateObj.getMonth() + 1)).slice(-2);
+    const yearStr = dateObj.getFullYear();
+    const formattedDate = `${dayStr}/${monthStr}/${yearStr}`;
+    
+    // Aggiorna la data_trattamento SEMPRE se c'è pacchettoSedutaId
+console.log('🟡 STEP 5: Prima del fetch update-data');
+console.log('  blk.pacchettoSedutaId:', blk.pacchettoSedutaId);
+console.log('  blk.shouldUpdateSeduta:', blk.shouldUpdateSeduta);
+if (blk.pacchettoSedutaId) {
+    const updateUrl = `${basePath}pacchetti/api/sedute/${blk.pacchettoSedutaId}/update-data`;
+    console.log('🟡 STEP 6: updateUrl:', updateUrl);
+    
+    const startTime = new Date(date);
+    startTime.setHours(hour, minute, 0, 0);
+    const dateTimeString = startTime.toISOString();
+    console.log('🟡 STEP 7: Costruzione datetime');
+    console.log('  date:', date);
+    console.log('  hour:', hour, 'minute:', minute);
+    console.log('  startTime:', startTime);
+    console.log('  dateTimeString:', dateTimeString);
+
+    localStorage.setItem('debug_seduta_update', JSON.stringify({
+        timestamp: new Date().toISOString(),
+        seduta_id: blk.pacchettoSedutaId,
+        data_trattamento: dateTimeString,
+        url: updateUrl
+    }));
+    
+    // ✅ ASPETTA la risposta prima del redirect!
+    try {
+        const response = await fetch(updateUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                data_trattamento: dateTimeString,
+                operatore_id: operatorId
+            })
+        });
         
-        // Aggiorna la data_trattamento della seduta nel database
-        try {
-            await fetch(`/pacchetti/api/sedute/${blk.pacchettoSedutaId}/update-data`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
-                },
-                body: JSON.stringify({
-                    data_trattamento: date  // formato YYYY-MM-DD
-                })
-            });
-        } catch (err) {
-            console.error('Errore aggiornamento data seduta:', err);
-        }
-        
-        // Salva messaggio in localStorage
-        localStorage.setItem('pacchettoSedutaFissata', JSON.stringify({
-            sedutaId: blk.pacchettoSedutaId,
-            data: formattedDate,
-            ora: startTimeStr
+        const result = await response.json();
+        console.log('🟢 STEP 8: Risposta fetch ricevuta');
+        console.log('  response.status:', response.status);
+        console.log('  response.ok:', response.ok);
+        console.log('  result:', result);
+        localStorage.setItem('debug_seduta_response', JSON.stringify({
+            status: response.status,
+            ok: response.ok,
+            data: result
         }));
         
-        // Redirect a pacchetto_detail
-        window.location.href = `/pacchetti/detail/${blk.pacchettoId}`;
-        return;
+        if (!response.ok) {
+            console.error('Errore aggiornamento seduta:', result);
+        }
+    } catch (err) {
+        console.error('Errore fetch seduta:', err);
+        localStorage.setItem('debug_seduta_error', err.toString());
     }
     
-    setTimeout(() => {
-        if (window.lastClickPosition !== undefined && window.lastClickPosition !== null) {
-            sessionStorage.setItem('lastClickPosition', window.lastClickPosition);
-        }
-        location.reload();
-    }, 100);
+    localStorage.setItem('pacchettoSedutaFissata', JSON.stringify({
+        sedutaId: blk.pacchettoSedutaId,
+        data: formattedDate,
+        ora: startTimeStr
+    }));
+}
+
+// ✅ Redirect DOPO aver atteso il fetch
+window.location.href = `${basePath}pacchetti/detail/${blk.pacchettoId}`;
+return;
+}
 
   }).catch(err => {
       console.error(err);
@@ -5530,6 +5778,34 @@ appointment.service_tag = appointment.service_tag || blk.tag || blk.serviceName;
                         note: blk.note || "",
                         status: blk.status || 0
                     };
+
+// Aggiungi pacchetto_seduta_id se disponibile dal check pacchetti
+console.log('🔴 STEP 1: Controllo pacchettoSelezionato');
+console.log('  window.pacchettoSelezionato:', window.pacchettoSelezionato);
+if (window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_disponibili) {
+  console.log('🔴 STEP 2: sedute_disponibili trovate:', window.pacchettoSelezionato.sedute_disponibili);
+  console.log('  blk.serviceId:', blk.serviceId, 'tipo:', typeof blk.serviceId);
+  const sedutaMatch = window.pacchettoSelezionato.sedute_disponibili.find(
+    s => {
+      console.log('  confronto s.service_id:', s.service_id, 'tipo:', typeof s.service_id, '=== blk.serviceId:', blk.serviceId, '→', s.service_id === blk.serviceId, 'o ==', s.service_id == blk.serviceId);
+      return s.service_id == blk.serviceId;
+    }
+  );
+console.log('🔴 STEP 3: sedutaMatch:', sedutaMatch);
+if (sedutaMatch) {
+  payload.pacchetto_seduta_id = sedutaMatch.seduta_id;
+  blk.pacchettoSedutaId = sedutaMatch.seduta_id;
+  blk.pacchettoId = window.pacchettoSelezionato.pacchetto_id;
+  blk.shouldUpdateSeduta = true;
+  console.log('🔴 STEP 4: Impostati su blk:');
+  console.log('  blk.pacchettoSedutaId:', blk.pacchettoSedutaId);
+  console.log('  blk.pacchettoId:', blk.pacchettoId);
+  console.log('  blk.shouldUpdateSeduta:', blk.shouldUpdateSeduta);
+} else {
+  console.log('🔴 STEP 3 FALLITO: sedutaMatch è null/undefined!');
+                      }
+                    }
+
                     console.log("Invio pseudoblocchi:", window.pseudoBlocks);
                     return fetch('/calendar/create', {
                         method: 'POST',
@@ -5581,6 +5857,13 @@ Promise.all(requests)
     // Importante: salviamo la cella originale prima di modificarla
     const initialCell = cell;
     
+    // Ordina le risposte in base all'orario di inizio
+    responses.sort((a, b) => {
+        const startTimeA = new Date(a.start_time).getTime();
+        const startTimeB = new Date(b.start_time).getTime();
+        return startTimeA - startTimeB;
+    });
+
     // Ordina le risposte in base all'orario di inizio
     responses.sort((a, b) => {
         const startTimeA = new Date(a.start_time).getTime();
@@ -5762,32 +6045,50 @@ if (appointment.client_name && appointment.service_tag) {
             oraMsg = ('0' + hour).slice(-2) + ':' + ('0' + minute).slice(-2);
         }
         
+        // ✅ FIX: Costruisci datetime ISO completo da date + ora
+        const [hh, mm] = oraMsg.split(':').map(Number);
+        const fullDateTime = new Date(date);
+        fullDateTime.setHours(hh, mm, 0, 0);
+        const isoDateTime = fullDateTime.toISOString();  // "2026-01-09T10:30:00.000Z"
+        
+        console.log('📅 DEBUG update-data:', {
+            date: date,
+            oraMsg: oraMsg,
+            isoDateTime: isoDateTime,
+            sedutaId: firstBlock.pacchettoSedutaId
+        });
+        
         // Aggiorna la data_trattamento della seduta nel database
         try {
-            await fetch(`/pacchetti/api/sedute/${firstBlock.pacchettoSedutaId}/update-data`, {
+            const updateResp = await fetch(`/pacchetti/api/sedute/${firstBlock.pacchettoSedutaId}/update-data`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': csrfToken
                 },
                 body: JSON.stringify({
-                    data_trattamento: date  // formato YYYY-MM-DD
+                    data_trattamento: isoDateTime,  // ✅ USA ISO DATETIME COMPLETO!
+                    operatore_id: operatorId
                 })
             });
+            
+            const updateResult = await updateResp.json();
+            console.log('📅 Risposta update-data:', updateResult);
+            
+            // Salva messaggio in localStorage
+            localStorage.setItem('pacchettoSedutaFissata', JSON.stringify({
+                sedutaId: firstBlock.pacchettoSedutaId,
+                data: formattedDate,
+                ora: oraMsg
+            }));
+            
+            // Redirect a pacchetto_detail
+            window.location.href = `/pacchetti/detail/${firstBlock.pacchettoId}`;
+            return;
         } catch (err) {
             console.error('Errore aggiornamento data seduta:', err);
+            alert('Errore nell\'aggiornamento della seduta. Riprova.');
         }
-        
-        // Salva messaggio in localStorage
-        localStorage.setItem('pacchettoSedutaFissata', JSON.stringify({
-            sedutaId: firstBlock.pacchettoSedutaId,
-            data: formattedDate,
-            ora: oraMsg
-        }));
-        
-        // Redirect a pacchetto_detail
-        window.location.href = `/pacchetti/detail/${firstBlock.pacchettoId}`;
-        return;
     }
 
     // Aggiungiamo un reload ritardato per assicurarci che tutto venga visualizzato correttamente
