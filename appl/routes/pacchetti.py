@@ -665,7 +665,15 @@ def api_get_pacchetto(id):
 
 @pacchetti_bp.route('/detail/<int:id>', methods=['GET'])
 def pacchetto_detail(id):
-    pacchetto = Pacchetto.query.get_or_404(id)
+    # EAGER LOADING: carica tutto in UNA sola query
+    pacchetto = Pacchetto.query.options(
+        joinedload(Pacchetto.client),
+        selectinload(Pacchetto.rate),
+        selectinload(Pacchetto.sedute).joinedload(PacchettoSeduta.service),
+        selectinload(Pacchetto.preferred_operators),
+        selectinload(Pacchetto.sconto_regole),
+        selectinload(Pacchetto.pagamento_regole)
+    ).get_or_404(id)
 
     # Aggiorna lo status del pacchetto prima di mostrare la pagina
     aggiorna_status_pacchetto(pacchetto)
@@ -675,15 +683,23 @@ def pacchetto_detail(id):
         mesi = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC']
         return f"{d.day:02d} {mesi[d.month-1]} {d.year}"
 
-    # Sedute ordinate per ordine
-    sedute_query = PacchettoSeduta.query.filter_by(pacchetto_id=pacchetto.id).order_by(PacchettoSeduta.ordine).all()
+    # Carica tutti gli operatori in una sola query (invece di N query)
+    # Raccogli gli ID operatore usati nelle sedute
+    operatore_ids = set()
+    for s in pacchetto.sedute:
+        if s.operatore_id:
+            operatore_ids.add(s.operatore_id)
+    
+    # Carica tutti gli operatori necessari in una query
+    operatori_map = {}
+    if operatore_ids:
+        operatori_db = Operator.query.filter(Operator.id.in_(operatore_ids)).all()
+        operatori_map = {o.id: f"{o.user_nome} {o.user_cognome}" for o in operatori_db}
+
+    # Costruisci sedute usando i dati già caricati (zero query aggiuntive)
+    sedute_ordinate = sorted(pacchetto.sedute, key=lambda s: s.ordine or 0)
     sedute = []
-    for s in sedute_query:
-        op_nome = None
-        if getattr(s, 'operatore_id', None):
-            op = Operator.query.get(s.operatore_id)
-            if op:
-                op_nome = f"{op.user_nome} {op.user_cognome}"
+    for s in sedute_ordinate:
         sedute.append({
             'id': s.id,
             'ordine': s.ordine,
@@ -692,15 +708,16 @@ def pacchetto_detail(id):
             'service_tag': s.service.servizio_tag if s.service else None,
             'service_duration': s.service.servizio_durata if s.service else None,
             'stato': s.stato,
-            'data_trattamento': s.data_trattamento.strftime('%Y-%m-%d') if getattr(s, 'data_trattamento', None) else None,
-            'operatore_nome': op_nome
+            'data_trattamento': s.data_trattamento.strftime('%Y-%m-%d') if s.data_trattamento else None,
+            'operatore_id': s.operatore_id,
+            'operatore_nome': operatori_map.get(s.operatore_id) if s.operatore_id else None
         })
 
     # Ordina rate: prima le pagate (per data_pagamento), poi le non pagate (per id)
     rate_ordinate = sorted(pacchetto.rate, key=lambda r: (
-        0 if r.is_pagata else 1,  # Pagate prima
-        r.data_pagamento or datetime.max if r.is_pagata else datetime.max,  # Per data pagamento
-        r.id  # Per ID come fallback
+        0 if r.is_pagata else 1,
+        r.data_pagamento or datetime.max if r.is_pagata else datetime.max,
+        r.id
     ))
     rate = [{'id': r.id, 'importo': float(r.importo), 'is_pagata': r.is_pagata, 'data_scadenza': r.data_scadenza.isoformat() if r.data_scadenza else None, 'data_pagamento': r.data_pagamento} for r in rate_ordinate]
 
@@ -713,15 +730,21 @@ def pacchetto_detail(id):
     rate_disallineate = abs(totale_rate - totale_pacchetto) > 0.01
     differenza_rate = round(totale_pacchetto - totale_rate, 2)
 
+    # Usa i dati già caricati (zero query aggiuntive)
     operatori = [{'id': o.id, 'nome': f"{o.user_nome} {o.user_cognome}"} for o in pacchetto.preferred_operators]
+    
     all_operatori = [{'id': o.id, 'nome': f"{o.user_nome} {o.user_cognome}"} for o in Operator.query.filter(Operator.is_deleted == False, Operator.user_tipo == 'estetista', Operator.is_visible == True).all()]
+    
     data_fmt = format_data_it(pacchetto.data_sottoscrizione) if pacchetto.data_sottoscrizione else ''
+    
+    # Usa i dati già caricati
     sconto = pacchetto.sconto_regole[0] if pacchetto.sconto_regole else None
     sconto_dict = {
         'tipo': sconto.sconto_tipo.value if sconto else None,
         'valore': float(sconto.sconto_valore) if sconto and sconto.sconto_valore else None,
         'omaggi': sconto.omaggi_extra if sconto else None
     } if sconto else None
+    
     pagamento = pacchetto.pagamento_regole[0] if pacchetto.pagamento_regole else None
     pagamento_dict = {
         'tipo': 'rate' if pagamento and pagamento.formula_pagamenti else 'saldo',
