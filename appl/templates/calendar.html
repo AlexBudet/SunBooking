@@ -381,7 +381,7 @@
 <i class="bi bi-box-seam pacchetto-badge" 
    data-bs-toggle="tooltip"
    data-bs-html="true"
-   title="<strong>📦 {{ appt.pacchetto_seduta.pacchetto.nome_pacchetto|e }}</strong><br>Servizio: {{ appt.pacchetto_seduta.servizio_nome|e }}<br>Seduta {{ appt.pacchetto_seduta.numero_seduta }} di {{ appt.pacchetto_seduta.pacchetto.sedute|length }}"
+   title="<strong>📦 {{ appt.pacchetto_seduta.pacchetto.nome|e }}</strong><br>Servizio: {{ appt.pacchetto_seduta.service.servizio_nome|e if appt.pacchetto_seduta.service else '' }}<br>Seduta {{ appt.pacchetto_seduta.ordine }} di {{ appt.pacchetto_seduta.pacchetto.sedute|length }}"
    style="margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;"></i>
 {% endif %}
 {% if appt.client and appt.client.is_deleted %}
