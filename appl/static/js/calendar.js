@@ -4094,6 +4094,13 @@ document.addEventListener('DOMContentLoaded', function() {
       const block = button.closest('.appointment-block');
       if (!block) return;
 
+      // Se è un appuntamento di pacchetto, vai al pacchetto
+      const pacchettoId = block.getAttribute('data-pacchetto-id') || button.getAttribute('data-pacchetto-id');
+      if (pacchettoId) {
+        window.location.href = `/pacchetti/detail/${pacchettoId}`;
+        return;
+      }
+
       // helper decodifica (fallback)
       const decodeHtml = (s) => { const t = document.createElement('textarea'); t.innerHTML = String(s || ''); return t.value; };
 
@@ -4151,6 +4158,19 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
+  // Listener delegato per pulsante "Vai al pacchetto" (appuntamenti seduta pacchetto)
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-popup.vai-pacchetto');
+    if (!btn) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const block = btn.closest('.appointment-block');
+    const pacchettoId = block?.getAttribute('data-pacchetto-id') || btn.getAttribute('data-pacchetto-id');
+    if (pacchettoId) {
+      window.location.href = `/pacchetti/detail/${pacchettoId}`;
+    }
+  }, true);
+
     // Aggiunge l'event listener per il pulsante "nota" nei popup dei blocchi appuntamento
     document.querySelectorAll('.appointment-block .popup-buttons .btn-popup.nota').forEach(button => {
         button.addEventListener('click', function(e) {
@@ -4199,6 +4219,32 @@ document.querySelectorAll('.appointment-block').forEach(block => {
       block.hidePopupTimeout = null;
     }
     block.classList.remove('active-popup');
+    
+    // ✅ NUOVO: Pulisci gli stili inline applicati dal JS (taglia/copia contigui)
+    const tb = block.querySelector('.popup-buttons');
+    const bb = block.querySelector('.popup-buttons-bottom');
+    if (tb) {
+      tb.style.removeProperty('display');
+      tb.style.removeProperty('flex-wrap');
+      tb.style.removeProperty('overflow');
+      tb.style.removeProperty('padding');
+      tb.style.removeProperty('align-items');
+    }
+    if (bb) {
+      bb.style.removeProperty('display');
+      bb.style.removeProperty('visibility');
+      bb.style.removeProperty('pointer-events');
+    }
+    // Pulisci stili inline dei singoli bottoni
+    block.querySelectorAll('.popup-buttons .btn-popup').forEach(btn => {
+      btn.style.removeProperty('display');
+      btn.style.removeProperty('visibility');
+      btn.style.removeProperty('pointer-events');
+      btn.style.removeProperty('flex');
+      btn.style.removeProperty('width');
+      btn.style.removeProperty('max-width');
+      btn.style.removeProperty('box-sizing');
+    });
   });
 });
 
@@ -4217,7 +4263,34 @@ document.querySelectorAll('.popup-buttons').forEach(popup => {
       clearTimeout(block.hidePopupTimeout);
       block.hidePopupTimeout = null;
     }
-    if (block) block.classList.remove('active-popup');
+    if (block) {
+      block.classList.remove('active-popup');
+      
+      // ✅ NUOVO: Stessa pulizia stili inline
+      const tb = block.querySelector('.popup-buttons');
+      const bb = block.querySelector('.popup-buttons-bottom');
+      if (tb) {
+        tb.style.removeProperty('display');
+        tb.style.removeProperty('flex-wrap');
+        tb.style.removeProperty('overflow');
+        tb.style.removeProperty('padding');
+        tb.style.removeProperty('align-items');
+      }
+      if (bb) {
+        bb.style.removeProperty('display');
+        bb.style.removeProperty('visibility');
+        bb.style.removeProperty('pointer-events');
+      }
+      block.querySelectorAll('.popup-buttons .btn-popup').forEach(btn => {
+        btn.style.removeProperty('display');
+        btn.style.removeProperty('visibility');
+        btn.style.removeProperty('pointer-events');
+        btn.style.removeProperty('flex');
+        btn.style.removeProperty('width');
+        btn.style.removeProperty('max-width');
+        btn.style.removeProperty('box-sizing');
+      });
+    }
   });
 });
 
@@ -5228,6 +5301,16 @@ function renderPseudoBlocksList() {
       strong.textContent = displayName;
       left.appendChild(strong);
       left.appendChild(document.createTextNode(' - '));
+      
+      // *** NUOVO: Aggiungi icona pacchetto se collegato a seduta ***
+      if (block.pacchettoSedutaId) {
+        const pacchettoIcon = document.createElement('i');
+        pacchettoIcon.className = 'bi bi-box-seam';
+        pacchettoIcon.style.cssText = 'margin-right:4px;font-size:0.85em;opacity:0.7;';
+        pacchettoIcon.title = `📦 Collegato a: ${block.pacchettoNome || 'Pacchetto'}`;
+        left.appendChild(pacchettoIcon);
+      }
+      
       const tagSpan = document.createElement('span');
       tagSpan.textContent = String(block.tag || '');
       left.appendChild(tagSpan);
@@ -5779,10 +5862,16 @@ return;
                         status: blk.status || 0
                     };
 
+// *** FIX: Se blk ha già pacchettoSedutaId (da checkPendingSedutaFromPacchetto), usalo direttamente! ***
+if (blk.pacchettoSedutaId) {
+    payload.pacchetto_seduta_id = blk.pacchettoSedutaId;
+    console.log('✅ pacchettoSedutaId già presente nel blocco:', blk.pacchettoSedutaId);
+}
+
 // Aggiungi pacchetto_seduta_id se disponibile dal check pacchetti
 console.log('🔴 STEP 1: Controllo pacchettoSelezionato');
 console.log('  window.pacchettoSelezionato:', window.pacchettoSelezionato);
-if (window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_disponibili) {
+if (!payload.pacchetto_seduta_id && window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_disponibili) {
   console.log('🔴 STEP 2: sedute_disponibili trovate:', window.pacchettoSelezionato.sedute_disponibili);
   console.log('  blk.serviceId:', blk.serviceId, 'tipo:', typeof blk.serviceId);
   const sedutaMatch = window.pacchettoSelezionato.sedute_disponibili.find(
@@ -7977,38 +8066,25 @@ function addCutSourceHighlightRange(block) {
   addCutSourceHighlightFromData(opId, date, startHour, startMinute, duration, width, left);
 }
 
-function cutAsNewPseudoBlock(block) {
-  if (!block) return;
-  const appointmentId = block.getAttribute('data-appointment-id');
-  if (!appointmentId) {
-    console.error("ID appuntamento mancante");
-    return;
+  // *** Assicurati che il pseudoblocco conservi i dati pacchetto ***
+  try {
+    if (!Array.isArray(window.pseudoBlocks)) window.pseudoBlocks = [];
+    if (window.pseudoBlocks.length > 0) {
+      const pseudo = window.pseudoBlocks[0];
+      pseudo._origin_appointment_id = String(appointmentId);
+      pseudo._origin_backup = backup;
+      // *** Conserva relazione pacchetto nel pseudoblocco ***
+      if (backup.pacchettoSedutaId) {
+        pseudo.pacchettoSedutaId = backup.pacchettoSedutaId;
+        pseudo.pacchettoId = backup.pacchettoId;
+        pseudo.pacchettoNome = backup.pacchettoNome;
+        console.log('✅ CUT: Conservata relazione pacchetto sedutaId:', backup.pacchettoSedutaId);
+      }
+      try { saveNavigatorState(); } catch (e) {}
+    }
+  } catch (e) {
+    console.warn('cutAsNewPseudoBlock: non è stato possibile marcare il pseudoblocco con origin_backup', e);
   }
-
-  // Evidenzia tutte le celle coperte dal blocco
-  try { addCutSourceHighlightRange(block); } catch (_) {}
-
-  const backup = {
-    appointment_id: String(appointmentId),
-    client_id: block.getAttribute('data-client-id') || null,
-    client_name: block.getAttribute('data-client-nome') || block.querySelector('.appointment-content .client-name a')?.textContent || '',
-    service_id: block.getAttribute('data-service-id') || null,
-    service_name: block.getAttribute('data-service-name') || block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent || '',
-    duration: parseInt(block.getAttribute('data-duration') || '15', 10),
-    operator_id: block.getAttribute('data-operator-id') || null,
-    hour: block.getAttribute('data-hour') || null,
-    minute: block.getAttribute('data-minute') || null,
-    appointment_date: block.getAttribute('data-date') || (typeof selectedDate !== 'undefined' ? selectedDate : ''),
-    note: block.getAttribute('data-note') || '',
-    colore: block.getAttribute('data-colore') || '',
-    colore_font: block.getAttribute('data-colore_font') || '',
-    status: parseInt(block.getAttribute('data-status') || '0', 10),
-    // SAVE WIDTH/LEFT for highlight restore
-    width: block.getAttribute('data-width') || block.style.width || '100%',
-    left: block.getAttribute('data-left') || block.style.left || '0%'
-  };
-    copyAsNewPseudoBlock(block);
-}
 
 function restoreCutHighlights() {
   try {
@@ -8033,7 +8109,7 @@ document.addEventListener('DOMContentLoaded', function() {
   restoreCutHighlights();
 });
 
-function copyAsNewPseudoBlock(block) {
+async function copyAsNewPseudoBlock(block, isCut = false) {
   if (!block) return;
   
   // Ottieni i dati dell'appuntamento
@@ -8044,12 +8120,14 @@ function copyAsNewPseudoBlock(block) {
   const duration = parseInt(block.getAttribute('data-duration'), 10) || 15;
   const color = block.getAttribute('data-colore') || '#FFFFFF';
   const note = block.getAttribute('data-note') || '';
-  console.log("Nota estratta:", note);
+  
+  // *** Dati pacchetto ***
+  const pacchettoSedutaId = block.getAttribute('data-pacchetto-seduta-id');
+  const pacchettoId = block.getAttribute('data-pacchetto-id');
+  const pacchettoNome = block.getAttribute('data-pacchetto-nome');
   
   // Se si tratta di un blocco OFF (clientId e serviceId null/undefined/"")
   if (!clientId && !serviceId) {
-    // RIMOSSO: controllo duplicati su note OFF
-    // Crea sempre un nuovo pseudo-blocco OFF
     window.pseudoBlocks.unshift({
       clientId: null,
       clientName: "BLOCCO OFF",
@@ -8068,14 +8146,68 @@ function copyAsNewPseudoBlock(block) {
     return;
   }
 
-  // Ottieni il tag del servizio (importante per la visualizzazione)
+  // *** Gestione pacchetto: TAGLIA vs COPIA ***
+  let finalSedutaId = null;
+  let finalPacchettoId = null;
+  let finalPacchettoNome = null;
+  
+  if (pacchettoSedutaId) {
+    if (isCut) {
+      // TAGLIA: Mantieni la STESSA seduta - la data verrà aggiornata al nuovo orario
+      finalSedutaId = pacchettoSedutaId;
+      finalPacchettoId = pacchettoId;
+      finalPacchettoNome = pacchettoNome;
+      console.log('✂️ TAGLIA: Mantenuta la stessa seduta pacchetto:', finalSedutaId);
+    } else {
+      // COPIA: Chiedi se associare alla PROSSIMA seduta disponibile
+      if (pacchettoId && clientId) {
+        try {
+          const resp = await fetch(`/pacchetti/api/sedute-disponibili/${pacchettoId}?client_id=${clientId}`);
+          if (resp.ok) {
+            const seduteDisponibili = await resp.json();
+            // Filtra solo le sedute NON ancora pianificate e con lo stesso servizio
+            // ESCLUDI la seduta corrente (quella che stiamo copiando)
+            const seduteNonPianificate = seduteDisponibili.filter(s => 
+              !s.data_trattamento && 
+              String(s.service_id) === String(serviceId) &&
+              String(s.seduta_id) !== String(pacchettoSedutaId)
+            );
+            
+            console.log('📦 Sedute non pianificate per questo servizio:', seduteNonPianificate);
+            
+            if (seduteNonPianificate.length > 0) {
+              const prossimaSeduta = seduteNonPianificate[0];
+              const conferma = confirm(
+                `📦 Questo appuntamento è collegato al pacchetto "${pacchettoNome || 'Pacchetto'}".\n\n` +
+                `Ci sono ancora ${seduteNonPianificate.length} seduta/e da pianificare per questo servizio.\n\n` +
+                `Vuoi collegare la COPIA alla prossima seduta disponibile (n° ${prossimaSeduta.numero_seduta})?`
+              );
+              
+              if (conferma) {
+                finalSedutaId = prossimaSeduta.seduta_id;
+                finalPacchettoId = pacchettoId;
+                finalPacchettoNome = pacchettoNome;
+                console.log('✅ COPIA: Collegata alla seduta:', finalSedutaId);
+              }
+            } else {
+              console.log('ℹ️ Nessuna seduta non pianificata disponibile per questo servizio');
+            }
+          }
+        } catch (err) {
+          console.warn('Errore nel fetch delle sedute disponibili:', err);
+        }
+      }
+    }
+  }
+
+  // Ottieni il tag del servizio
   let serviceTag = serviceName;
   const fullServiceText = block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent;
   if (fullServiceText && fullServiceText.includes(' - ')) {
     serviceTag = fullServiceText.split(' - ')[0].trim();
   }
 
-  // Crea SEMPRE il nuovo pseudo-blocco (consenti duplicati)
+  // Crea il nuovo pseudo-blocco
   const newPseudoBlock = {
     clientId: clientId,
     clientName: clientName,
@@ -8085,12 +8217,21 @@ function copyAsNewPseudoBlock(block) {
     duration: duration,
     color: color,
     fontColor: computeFontColor(color),
-    note: note
+    note: note,
+    // Relazione pacchetto
+    pacchettoSedutaId: finalSedutaId,
+    pacchettoId: finalPacchettoId,
+    pacchettoNome: finalPacchettoNome
   };
+  
+  if (finalSedutaId) {
+    console.log('📦 Pseudoblocco creato con pacchettoSedutaId:', finalSedutaId);
+  }
+  
   window.pseudoBlocks.unshift(newPseudoBlock);
   window.commonPseudoBlockColor = color;
 
-  // SELEZIONA il cliente nel Navigator (necessario per aggiungere nuovi servizi)
+  // SELEZIONA il cliente nel Navigator
   try {
     window.selectedClientIdNav = clientId || null;
     window.selectedClientNameNav = clientName || "";
@@ -8180,7 +8321,7 @@ function addCutSourceHighlightRange(block) {
   });
 }
 
-function cutAsNewPseudoBlock(block) {
+async function cutAsNewPseudoBlock(block) {
   if (!block) return;
   const appointmentId = block.getAttribute('data-appointment-id');
   if (!appointmentId) {
@@ -8208,7 +8349,7 @@ function cutAsNewPseudoBlock(block) {
     status: parseInt(block.getAttribute('data-status') || '0', 10)
   };
 
-  copyAsNewPseudoBlock(block);
+await copyAsNewPseudoBlock(block, true);
 
   try {
     if (!Array.isArray(window.pseudoBlocks)) window.pseudoBlocks = [];
