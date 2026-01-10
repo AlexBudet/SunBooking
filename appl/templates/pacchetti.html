@@ -94,6 +94,51 @@
 
 .table tbody tr { margin: 3px 0; padding: 1px; }
 
+/* Colonna Pacchetto: larghezza massima con ellipsis */
+.table tbody td:nth-child(2) {
+  max-width: 320px;
+  position: relative;
+}
+
+/* Nome completo visibile di default */
+.table tbody td:nth-child(2) .nome-completo {
+  display: inline;
+}
+.table tbody td:nth-child(2) .nome-tag {
+  display: none;
+}
+
+/* Su schermi medi: mostra tag invece di nome completo */
+@media (max-width: 1200px) {
+  .table tbody td:nth-child(2) { max-width: 220px; }
+  .table tbody td:nth-child(2) .nome-completo { display: none; }
+  .table tbody td:nth-child(2) .nome-tag { display: inline; }
+}
+
+/* Su schermi piccoli: ancora più compatto */
+@media (max-width: 1200px) {
+  .table tbody td:nth-child(2) { max-width: 150px; }
+}
+
+/* Badge PAGATO responsive */
+.badge-pagato {
+    font-size: 0.7rem;
+    background-color: #9e9e9e;
+    color: white;
+    margin-left: 6px;
+    white-space: nowrap;
+}
+.badge-pagato .badge-text {
+    display: inline;
+}
+@media (max-width: 1200px) {
+    .table tbody td:nth-child(2) { max-width: 200px; }
+    .badge-pagato .badge-text { display: none; }
+}
+@media (max-width: 1200px) {
+    .table tbody td:nth-child(2) { max-width: 150px; }
+}
+
 /* Colore bordo riga per status (usa variabili Bootstrap) */
 .table tbody tr.status-preventivo { --bs-table-border-color: #ffdb10; --bs-border-width: 2px; }
 .table tbody tr.status-attivo { --bs-table-border-color: #81e1ff; --bs-border-width: 2px; }
@@ -151,6 +196,44 @@
   border-radius: 0 !important;
   background-color: transparent;
 }
+
+/* Tooltip stile nero come in calendar */
+.tooltip {
+  background-color: #242424 !important;
+  color: #fff !important;
+  text-align: center;
+  padding: 2px 4px;
+  opacity: 1 !important;
+  border-radius: 6px;
+}
+.tooltip.bs-tooltip-top .tooltip-arrow::before { border-top-color: #212529 !important; }
+.tooltip.bs-tooltip-bottom .tooltip-arrow::before { border-bottom-color: #212529 !important; }
+.tooltip.bs-tooltip-start .tooltip-arrow::before { border-left-color: #212529 !important; }
+.tooltip.bs-tooltip-end .tooltip-arrow::before { border-right-color: #212529 !important; }
+
+/* Colonne sortabili */
+.table thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.table thead th.sortable:hover {
+  background-color: #e9ecef;
+}
+.table thead th.sortable i {
+  font-size: 0.75rem;
+  opacity: 0.5;
+  margin-left: 4px;
+}
+.table thead th.sortable.asc i::before {
+  content: "\F128"; /* bi-arrow-up */
+}
+.table thead th.sortable.desc i::before {
+  content: "\F129"; /* bi-arrow-down */
+}
+.table thead th.sortable.asc i,
+.table thead th.sortable.desc i {
+  opacity: 1;
+}
 </style>
 <br><br><br>
 <div class="page-wide-90">
@@ -160,15 +243,19 @@
 <div class="mb-3">
   <div class="row">
     <div class="col-md-3">
-      <input type="text" class="form-control" id="searchCliente" placeholder="Cerca per cliente" autocomplete="off">
+      <input type="text" class="form-control" id="searchCliente" placeholder="Cerca per cliente" autocomplete="off"
+             data-bs-toggle="tooltip" data-bs-placement="top" title="Cerca un cliente per nome, cognome o cellulare">
       <div id="searchClienteDropdown" class="dropdown-menu"></div>
     </div>
     <div class="col-md-3">
-      <input type="text" class="form-control" id="searchProgramma" placeholder="Cerca per programma" autocomplete="off">
+      <input type="text" class="form-control" id="searchProgramma" placeholder="Cerca per programma" autocomplete="off"
+             data-bs-toggle="tooltip" data-bs-placement="top" title="Il nome del programma è composto dai servizi inclusi (es: '10 Massaggio + 5 Pressoterapia')">
       <div id="searchProgrammaDropdown" class="dropdown-menu"></div>
     </div>
     <div class="col-md-2">
-      <select class="form-control" id="searchStatus">
+           <select class="form-control" id="searchStatus"
+              data-bs-toggle="tooltip" data-bs-placement="top" data-bs-html="true" 
+              title="Filtra i pacchetti per stato:<br><br>🟡 <b>Giallo</b> = Preventivo<br>🔵 <b>Azzurro</b> = Attivo<br>⚫ <b>Grigio</b> = Completato<br>🔴 <b>Rosa</b> = Abbandonato">
         <option value="">Tutti gli status</option>
         <option value="Preventivo">Preventivo</option>
         <option value="Attivo">Attivo</option>
@@ -180,7 +267,8 @@
       <button class="btn btn-secondary" onclick="searchPacchetti()">Cerca</button>
     </div>
     <div class="col-md-2">
-      <button class="btn btn-primary" onclick="openAddModal()">Crea Nuovo Pacchetto</button>
+      <button class="btn btn-primary" onclick="openAddModal()"
+              data-bs-toggle="tooltip" data-bs-placement="top" title="Crea un nuovo pacchetto/programma per un cliente">Crea Nuovo Pacchetto</button>
     </div>
   </div>
 </div>
@@ -189,11 +277,11 @@
     <table class="table">
         <thead>
             <tr>
-                <th>Cliente</th>
-                <th>Pacchetto</th>
-                <th>Creato il</th>
-                <th>Da Listino</th>
-                <th>Scontato</th>
+                <th class="sortable" data-sort="client_nome">Cliente <i class="bi bi-arrow-down-up"></i></th>
+                <th class="sortable" data-sort="nome">Pacchetto <i class="bi bi-arrow-down-up"></i></th>
+                <th class="sortable" data-sort="data_sottoscrizione">Creato il <i class="bi bi-arrow-down-up"></i></th>
+                <th class="sortable" data-sort="costo_totale_lordo">Da Listino <i class="bi bi-arrow-down-up"></i></th>
+                <th class="sortable" data-sort="costo_totale_scontato">Scontato <i class="bi bi-arrow-down-up"></i></th>
                 <th>Azioni</th>
             </tr>
         </thead>
@@ -332,6 +420,10 @@
     let nomePacchetto = '';
     let promoSalvate = []; // Array delle promo caricate da settings
 
+    // Variabili per ordinamento
+    let currentSort = { field: 'data_sottoscrizione', direction: 'desc' };
+    let pacchettiData = []; // Cache dei dati per ordinamento client-side
+
     // Carica promo salvate
     async function loadPromoSalvate() {
       try {
@@ -458,7 +550,13 @@ function toggleScontoFields() {
     document.addEventListener('DOMContentLoaded', () => {
         loadPacchetti();
         loadPromoSalvate();
-    });
+        setupSorting();
+
+        // Inizializza tutti i tooltip Bootstrap
+        document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+            new bootstrap.Tooltip(el);
+        });
+    })
 
 // Genera le righe per selezionare le sedute omaggio
 function generateSeduteOmaggioRows() {
@@ -656,9 +754,44 @@ function generateSeduteOmaggioRows() {
     async function loadPacchetti(params = {}) {
         const query = new URLSearchParams(params).toString();
         const response = await fetch(`/pacchetti/api/pacchetti?${query}`);
-        const pacchetti = await response.json();
+        pacchettiData = await response.json(); // Salva in cache
+        renderPacchetti();
+    }
+
+    // Ordina e renderizza i pacchetti
+    function renderPacchetti() {
         const tbody = document.getElementById('pacchettiTable');
         tbody.innerHTML = '';
+        
+        // Ordina i dati
+        const sorted = [...pacchettiData].sort((a, b) => {
+            let valA = a[currentSort.field];
+            let valB = b[currentSort.field];
+            
+            // Gestione null/undefined
+            if (valA == null) valA = '';
+            if (valB == null) valB = '';
+            
+            // Confronto numerico per prezzi
+            if (currentSort.field === 'costo_totale_lordo' || currentSort.field === 'costo_totale_scontato') {
+                valA = parseFloat(valA) || 0;
+                valB = parseFloat(valB) || 0;
+            }
+            // Confronto date
+            else if (currentSort.field === 'data_sottoscrizione') {
+                valA = valA ? new Date(valA).getTime() : 0;
+                valB = valB ? new Date(valB).getTime() : 0;
+            }
+            // Confronto stringhe (case-insensitive)
+            else if (typeof valA === 'string') {
+                valA = valA.toLowerCase();
+                valB = valB.toLowerCase();
+            }
+            
+            if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
         
         function formatDataIt(iso) {
             if (!iso) return '';
@@ -668,7 +801,7 @@ function generateSeduteOmaggioRows() {
             return `${dd} ${nomeMese} ${yyyy}`;
         }
         
-pacchetti.forEach(p => {
+sorted.forEach(p => {
     const tr = document.createElement('tr');
     const statusRaw = (p.status ?? p.status_value ?? p.status_name ?? '');
     const statusKey = String(statusRaw).toLowerCase();
@@ -677,29 +810,86 @@ pacchetti.forEach(p => {
     tr.style.cursor = 'pointer';
     tr.onclick = () => { window.location.href = '/pacchetti/detail/' + p.id; };
 
-    // DEBUG: verifica dati ricevuti
-    console.log(`Pacchetto ${p.id} - Status: ${statusKey}, Tutte rate pagate: ${p.tutte_rate_pagate}`);
-    
+// Mappa tooltip per status
+const statusTooltips = {
+    'preventivo': 'Pacchetto in fase di proposta, non ancora iniziato',
+    'attivo': 'Pacchetto in corso: almeno 1 seduta effettuata o 1 rata pagata',
+    'completato': 'Pacchetto terminato: tutte le sedute e rate completate',
+    'abbandonato': 'Pacchetto non modificato da oltre 3 settimane'
+};
+const statusTooltip = statusTooltips[statusKey] || '';
+
 // Badge "PAGATO" se status attivo e tutte rate pagate
 const badgePagato = (statusKey === 'attivo' && p.tutte_rate_pagate === true) 
-    ? '<span class="badge badge-pagato ms-2">💰 PAGATO</span>' 
+    ? '<span class="badge badge-pagato" data-bs-toggle="tooltip" title="Tutte le rate sono state pagate">💰<span class="badge-text"> PAGATO</span></span>' 
     : '';
 
-    tr.innerHTML = `
-        <td><b>${p.client_nome}</b></td>
-        <td>${p.nome}${badgePagato}</td>
-        <td>${formatDataIt(p.data_sottoscrizione)}</td>
-        <td>€${p.costo_totale_lordo.toFixed(2)}</td>
-        <td>${p.costo_totale_scontato ? '€' + p.costo_totale_scontato.toFixed(2) : ''}</td>
+// Genera nome con tag (abbreviato)
+function generaTag(nome) {
+    if (!nome) return '';
+    return nome.split(' + ').map(parte => {
+        const match = parte.match(/^(\d+)\s+(.+)$/);
+        if (match) {
+            const qty = match[1];
+            const servizio = match[2];
+            const tag = servizio.substring(0, 3).toUpperCase();
+            return `${qty} ${tag}`;
+        }
+        return parte.substring(0, 6).toUpperCase();
+    }).join(' + ');
+}
+
+const nomeTag = p.nome_tags || generaTag(p.nome);
+
+tr.innerHTML = `
+    <td>
+      <b data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca per vedere i dettagli del pacchetto">${p.client_nome}</b>
+    </td>
+    <td data-bs-toggle="tooltip" data-bs-placement="top" title="${p.nome}">
+      <span class="nome-completo">${p.nome}</span>
+      <span class="nome-tag">${nomeTag}</span>
+      ${badgePagato}
+    </td>
+    <td>${formatDataIt(p.data_sottoscrizione)}</td>
+    <td>€${p.costo_totale_lordo.toFixed(2)}</td>
+    <td>${p.costo_totale_scontato ? '€' + p.costo_totale_scontato.toFixed(2) : ''}</td>
     <td class="actions">
-        <button type="button" class="btn btn-primary btn-sm btn-xxs me-1"
-                onclick="event.stopPropagation(); editPacchetto(${p.id})">Modifica</button>
         <button type="button" class="btn btn-danger btn-sm btn-xxs"
                 onclick="event.stopPropagation(); deletePacchetto(${p.id})">Elimina</button>
     </td>
-    `;
-    tbody.appendChild(tr);
+`;
+tbody.appendChild(tr);
+
+// Reinizializza i tooltip per i nuovi elementi
+const tooltips = tr.querySelectorAll('[data-bs-toggle="tooltip"]');
+tooltips.forEach(el => new bootstrap.Tooltip(el));
 });
+    }
+
+    // Gestione click su header per ordinamento
+    function setupSorting() {
+        document.querySelectorAll('.table thead th.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const field = th.dataset.sort;
+                
+                // Toggle direzione se stesso campo, altrimenti asc
+                if (currentSort.field === field) {
+                    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSort.field = field;
+                    currentSort.direction = 'asc';
+                }
+                
+                // Aggiorna classi CSS
+                document.querySelectorAll('.table thead th.sortable').forEach(t => {
+                    t.classList.remove('asc', 'desc');
+                });
+                th.classList.add(currentSort.direction);
+                
+                // Re-renderizza
+                renderPacchetti();
+            });
+        });
     }
 
     // Ricerca pacchetti con filtri concatenati
@@ -1097,50 +1287,6 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
     }
 }
 
-    // Edit pacchetto
-    async function editPacchetto(id) {
-        const response = await fetch(`/pacchetti/api/pacchetti/${id}`);
-        const pacchetto = await response.json();
-        
-        document.getElementById('pacchettoId').value = pacchetto.id;
-        document.getElementById('modalTitle').textContent = 'Modifica Pacchetto';
-        document.getElementById('statusDiv').style.display = '';
-        document.getElementById('client_id').value = pacchetto.client_id;
-        document.getElementById('note').value = pacchetto.note;
-        document.getElementById('status').value = pacchetto.status;
-        document.getElementById('costoTotale').value = pacchetto.costo_totale_lordo;
-        document.getElementById('costoTotaleScontato').value = pacchetto.costo_totale_scontato != null
-            ? pacchetto.costo_totale_scontato.toFixed(2) : '';
-
-        // Carica sedute pagate (escludi omaggio)
-        serviziSelezionati = pacchetto.sedute
-            .filter(s => !s.omaggio)
-            .map(s => ({ id: s.service_id, nome: s.service_nome, prezzo: s.prezzo || 0, quantita: 1 }));
-        updateServiziList();
-        updateScontoState();
-
-        if (pacchetto.sconto) {
-            document.getElementById('scontoTipo').value = pacchetto.sconto.tipo;
-            toggleScontoFields();
-            
-            if (pacchetto.sconto.tipo === 'Percentuale') {
-                document.getElementById('scontoPercentuale').value = pacchetto.sconto.valore || '';
-            } else if (pacchetto.sconto.tipo === 'Ogni_N_Omaggio') {
-                const numOmaggi = pacchetto.sedute.filter(s => s.omaggio).length;
-                document.getElementById('numeroSeduteOmaggio').value = numOmaggi;
-                generateSeduteOmaggioRows();
-            }
-        }
-
-        const selectOp = document.getElementById('operatoriSelect');
-        Array.from(selectOp.options).forEach(o => o.selected = pacchetto.operatori.includes(parseInt(o.value)));
-
-        loadClienti();
-        loadOperatori();
-        updateCostoTotale();
-        new bootstrap.Modal(document.getElementById('pacchettoModal')).show();
-    }
-
     // Delete pacchetto
     async function deletePacchetto(id) {
         if (confirm('Confermi eliminazione?')) {
@@ -1170,10 +1316,5 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         updateServiziList();
         updateCostoTotale();
     }
-
-    // Init
-    document.addEventListener('DOMContentLoaded', () => {
-        loadPacchetti();
-    });
 </script>
 {% endblock %}
