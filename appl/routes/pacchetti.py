@@ -2,7 +2,7 @@
 import json
 from flask import Blueprint, app, render_template, request, jsonify
 from appl import db
-from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus
+from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo
 from sqlalchemy import func, or_, and_
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload, selectinload
@@ -170,13 +170,18 @@ def pacchetti_home():
     # Status disponibili per filtri
     status_options = [s.value for s in PacchettoStatus if s != PacchettoStatus.Eliminato]
     
+    # Recupera giorni abbandono da BusinessInfo
+    business_info = BusinessInfo.query.first()
+    giorni_abbandono = business_info.pacchetti_giorni_abbandono if business_info and business_info.pacchetti_giorni_abbandono else 90
+
     return render_template('pacchetti.html',
                            pacchetti=pacchetti_data,
                            clienti=clienti_data,
                            servizi=servizi_data,
                            operatori=operatori_data,
                            status_options=status_options,
-                           current_filter_status=filter_status)
+                           current_filter_status=filter_status,
+                           giorni_abbandono=giorni_abbandono)
 
 @pacchetti_bp.route('/api/clienti', methods=['GET'])
 def api_clienti():

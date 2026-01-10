@@ -1,5 +1,67 @@
 document.addEventListener('DOMContentLoaded', function () {
 
+// Popup successo auto-chiudibile
+function showSuccessPopup(message, timeout = 5000, onClose = null) {
+  // Rimuovi eventuali popup esistenti
+  const existing = document.getElementById('successPopupOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'successPopupOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+
+  const popup = document.createElement('div');
+  popup.style.cssText = 'background:#fff;padding:30px 50px;border-radius:12px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-width:400px;';
+
+  const icon = document.createElement('div');
+  icon.innerHTML = '<i class="bi bi-check-circle-fill" style="font-size:48px;color:#28a745;"></i>';
+  popup.appendChild(icon);
+
+  const text = document.createElement('p');
+  text.style.cssText = 'margin:15px 0 20px;font-size:18px;font-weight:500;';
+  text.textContent = message;
+  popup.appendChild(text);
+
+  const countdown = document.createElement('small');
+  countdown.style.cssText = 'color:#888;';
+  countdown.textContent = `Chiusura automatica in ${Math.ceil(timeout/1000)} secondi...`;
+  popup.appendChild(countdown);
+
+  const btnOk = document.createElement('button');
+  btnOk.className = 'btn btn-success mt-3 d-block w-100';
+  btnOk.textContent = 'Ok';
+  btnOk.onclick = () => overlay.remove();
+  popup.appendChild(btnOk);
+
+  overlay.appendChild(popup);
+  document.body.appendChild(overlay);
+
+  // Countdown visivo
+  let remaining = Math.ceil(timeout / 1000);
+  const countdownInterval = setInterval(() => {
+    remaining--;
+    if (remaining > 0) {
+      countdown.textContent = `Chiusura automatica in ${remaining} secondi...`;
+    } else {
+      clearInterval(countdownInterval);
+    }
+  }, 1000);
+
+  const closePopup = () => {
+    overlay.remove();
+    if (onClose) onClose();
+  };
+
+  btnOk.onclick = closePopup;
+
+  // Auto-chiusura
+  setTimeout(() => {
+    if (document.getElementById('successPopupOverlay')) {
+      closePopup();
+    }
+  }, timeout);
+}
+
   // Funzione per capitalizzare nome/cognome (prima lettera maiuscola per ogni parola)
   function capitalizeName(name) {
     if (!name) return name || '';
@@ -428,7 +490,9 @@ function showPendingModal(key) {
       nonFiscaleResponse = await res.json();
     }
 
-    alert('Pagamento registrato con successo!');
+    showSuccessPopup('Pagamento registrato con successo!', 5000, () => {
+      window.location.href = '/cassa';
+    });
 
         // Aggiorna stati appuntamenti
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
@@ -467,7 +531,6 @@ function showPendingModal(key) {
           window.originalAppointmentIds.clear();
         }
         resetScontrino(true);
-        setTimeout(() => { window.location.href = '/cassa'; }, 150);
       }
 
       try {
@@ -521,7 +584,9 @@ function showPendingModal(key) {
       nonFiscaleResponse = await res.json();  // <-- AGGIUNGI
     }
 
-    alert('Pagamento registrato con successo!');
+    showSuccessPopup('Pagamento registrato con successo!', 5000, () => {
+      window.location.href = '/cassa';
+    });
 
     // Aggiorna prima gli appointment delle righe effettive e poi quelli originali portati da calendar.
     // Raccogliamo le promise e le aspettiamo tutte (allSettled) prima di resettare e reload.
@@ -583,9 +648,6 @@ function showPendingModal(key) {
       } else {
         window.location.href = url;
       }
-    } else {
-      // Comportamento normale per tutti gli altri pagamenti non fiscali
-      setTimeout(() => { window.location.href = '/cassa'; }, 150);
     }
   });
 });

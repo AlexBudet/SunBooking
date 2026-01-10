@@ -366,6 +366,20 @@ tr.rata-pagata input {
 .tooltip.bs-tooltip-bottom .tooltip-arrow::before { border-bottom-color: #212529 !important; }
 .tooltip.bs-tooltip-start .tooltip-arrow::before { border-left-color: #212529 !important; }
 .tooltip.bs-tooltip-end .tooltip-arrow::before { border-right-color: #212529 !important; }
+
+    .sort-icon {
+      font-family: monospace;
+      font-size: 10px;
+      font-weight: bold;
+      line-height: 1;
+      display: inline-block;
+      text-align: center;
+    }
+    .sort-btn {
+      min-width: 32px;
+      min-height: 40px;
+      padding: 3px 5px;
+    }
   </style>
 
   <div class="neomorphic-div programma-card status-{{ pacchetto.status|lower }}" style="position: relative;">
@@ -421,12 +435,12 @@ tr.rata-pagata input {
   <tr>
     <th data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca sulla data per fissare l'appuntamento in agenda">DATA</th>
     <th class="clickable-header" id="trattamentoHeader" onclick="toggleSortTooltip(event)"
-        data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca per riordinare le sedute (alternato, raggruppato, ecc.)">
+        data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca per riordinare le sedute non ancora pianificate (raggruppate per tipo trattamento o alternate)">
       TRATTAMENTO <i class="bi bi-arrow-down-up" style="font-size: 0.8rem;"></i>
     </th>
     <th data-bs-toggle="tooltip" data-bs-placement="top" title="Numero progressivo per tipo di trattamento">N*</th>
     <th class="clickable-header" id="operatoreHeader" onclick="toggleOperatoreHeaderDropdown(event)"
-        data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca per assegnare un operatore a tutte le sedute">
+        data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca per assegnare un operatore a tutte le sedute non ancora pianificate">
       OPERATORE <i class="bi bi-people" style="font-size: 0.8rem;"></i>
     </th>
     <th data-bs-toggle="tooltip" data-bs-placement="top" title="Spunta quando la seduta è stata completata">EFFETTUATA</th>
@@ -445,7 +459,8 @@ tr.rata-pagata input {
     <td>{{ s.service_nome }}</td>
     <td class="n-star"></td>
     <td class="operatore-cell" data-operatore-id="{{ s.operatore_id or '' }}"
-        data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca per cambiare l'operatore di questa seduta">
+        data-bs-toggle="tooltip" data-bs-placement="top" 
+        title="{% if s.data_trattamento %}Operatore già assegnato: per modificarlo sposta l'appuntamento in Agenda{% else %}Clicca per cambiare l'operatore di questa seduta{% endif %}">
       {{ s.operatore_nome or '' }}
     </td>
     <td class="effettuata-cell text-center">
@@ -949,17 +964,17 @@ function toggleSortTooltip(event) {
   const tooltip = document.createElement('div');
   tooltip.className = 'sort-tooltip';
   tooltip.innerHTML = `
-    <button class="sort-btn" data-mode="sequential" title="Sequenziale (1→N)">
-      <i class="bi bi-sort-numeric-down"></i>
+    <button class="sort-btn" data-mode="sequential" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Sequenziale: prima tutti A, poi tutti B (AABB)">
+      <span class="sort-icon">A<br>A<br>B<br>B</span>
     </button>
-    <button class="sort-btn" data-mode="sequential-reverse" title="Sequenziale inverso (N→1)">
-      <i class="bi bi-sort-numeric-up"></i>
+    <button class="sort-btn" data-mode="sequential-reverse" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Sequenziale inverso (BBAA)">
+      <span class="sort-icon">B<br>B<br>A<br>A</span>
     </button>
-    <button class="sort-btn" data-mode="alternating" title="Alternato crescente">
-      <i class="bi bi-arrow-down-short"></i>
+    <button class="sort-btn" data-mode="alternating" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Alternato: A-B-A-B (ABAB)">
+      <span class="sort-icon">A<br>B<br>A<br>B</span>
     </button>
-    <button class="sort-btn" data-mode="alternating-reverse" title="Alternato decrescente">
-      <i class="bi bi-arrow-up-short"></i>
+    <button class="sort-btn" data-mode="alternating-reverse" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Alternato inverso (BABA)">
+      <span class="sort-icon">B<br>A<br>B<br>A</span>
     </button>
   `;
   
@@ -969,6 +984,11 @@ function toggleSortTooltip(event) {
   tooltip.style.left = (rect.left + window.scrollX) + 'px';
   document.body.appendChild(tooltip);
   
+  // Inizializza tooltip Bootstrap sui nuovi bottoni
+  tooltip.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+    new bootstrap.Tooltip(el);
+  });
+
   // Aggiungi click handler ai bottoni
   tooltip.querySelectorAll('.sort-btn').forEach(btn => {
     btn.onclick = function(e) {
@@ -1385,6 +1405,15 @@ document.addEventListener('click', function interceptClientInfo(e) {
 document.addEventListener('click', function (e) {
   const opCell = e.target.closest('.operatore-cell');
   if (!opCell) return;
+
+  const row = opCell.closest('tr');
+  const dataTrattamento = row.dataset.data; // controlla se c'è già una data
+
+  // Se c'è già una data, blocca la modifica
+  if (dataTrattamento) {
+    toastr.warning('Questa seduta ha già un appuntamento fissato in agenda. Per cambiare l\'operatore, sposta il blocco dal calendario.');
+    return;
+  }
 
   const cell = opCell;
   const currentId = cell.dataset.operatoreId || '';
