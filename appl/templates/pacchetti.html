@@ -182,8 +182,16 @@
   overflow: hidden;
 }
 
-/* Penultima cella: solo bordo destro + corner arrotondati */
-.table tbody tr[class*="status-"] > td:nth-last-child(2) {
+/* Penultima cella CON bordo destro: solo quando ESISTE la cella .actions dopo */
+.table tbody tr[class*="status-"] > td:nth-last-child(2):has(+ td.actions) {
+  border-right: var(--bs-border-width) solid var(--bs-table-border-color);
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+  overflow: hidden;
+}
+
+/* Ultima cella CON bordo destro: quando NON è .actions */
+.table tbody tr[class*="status-"] > td:last-child:not(.actions) {
   border-right: var(--bs-border-width) solid var(--bs-table-border-color);
   border-top-right-radius: 8px;
   border-bottom-right-radius: 8px;
@@ -255,7 +263,7 @@
     <div class="col-md-2">
            <select class="form-control" id="searchStatus"
               data-bs-toggle="tooltip" data-bs-placement="top" data-bs-html="true" 
-              title="Filtra i pacchetti per stato:<br><br>🟡 <b>Giallo</b> = Preventivo<br>🔵 <b>Azzurro</b> = Attivo<br>⚫ <b>Grigio</b> = Completato<br>🔴 <b>Rosa</b> = Abbandonato">
+              title="Filtra i pacchetti per stato:<br><br>🟡 <b>Preventivo</b><br>Pacchetto creato ma non iniziato<br><br>🔵 <b>Attivo</b><br>Pacchetto con almeno una seduta effettuata o una rata pagata<br><br>⚫ <b>Completato</b><br>Pacchetto completato e pagato<br><br>🔴 <b>Abbandonato</b><br>Pacchetto non aggiornato da almeno {{ giorni_abbandono }} giorni<br>"
         <option value="">Tutti gli status</option>
         <option value="Preventivo">Preventivo</option>
         <option value="Attivo">Attivo</option>
@@ -282,7 +290,9 @@
                 <th class="sortable" data-sort="data_sottoscrizione">Creato il <i class="bi bi-arrow-down-up"></i></th>
                 <th class="sortable" data-sort="costo_totale_lordo">Da Listino <i class="bi bi-arrow-down-up"></i></th>
                 <th class="sortable" data-sort="costo_totale_scontato">Scontato <i class="bi bi-arrow-down-up"></i></th>
+                {% if current_user and current_user.ruolo.value != 'user' %}
                 <th>Azioni</th>
+                {% endif %}
             </tr>
         </thead>
         <tbody id="pacchettiTable">
@@ -423,6 +433,8 @@
     // Variabili per ordinamento
     let currentSort = { field: 'data_sottoscrizione', direction: 'desc' };
     let pacchettiData = []; // Cache dei dati per ordinamento client-side
+
+    const userRuolo = '{{ current_user.ruolo.value if current_user else "user" }}';
 
     // Carica promo salvate
     async function loadPromoSalvate() {
@@ -853,10 +865,12 @@ tr.innerHTML = `
     <td>${formatDataIt(p.data_sottoscrizione)}</td>
     <td>€${p.costo_totale_lordo.toFixed(2)}</td>
     <td>${p.costo_totale_scontato ? '€' + p.costo_totale_scontato.toFixed(2) : ''}</td>
+    ${userRuolo !== 'user' ? `
     <td class="actions">
         <button type="button" class="btn btn-danger btn-sm btn-xxs"
                 onclick="event.stopPropagation(); deletePacchetto(${p.id})">Elimina</button>
     </td>
+    ` : ''}
 `;
 tbody.appendChild(tr);
 
