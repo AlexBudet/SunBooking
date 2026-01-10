@@ -289,6 +289,7 @@ function _filterOffTopBarButtons(topBar) {
     btn.classList.contains('delete-appointment-block') ||
     (btn.classList.contains('nota') && btn.classList.contains('touch-top-note')) ||
     (btn.classList.contains('copia') && btn.classList.contains('touch-top-copy')) ||
+    btn.classList.contains('vai-pacchetto') ||  // <-- AGGIUNTO: permetti vai-pacchetto
     // Consenti il CUT touch anche senza classe "taglia"
     btn.classList.contains('touch-top-cut');
 
@@ -300,7 +301,7 @@ function _filterOffTopBarButtons(topBar) {
   // Nascondi in modo esplicito le azioni note richieste
   topBar.querySelectorAll(
     '.btn-popup.colore, .btn-popup.color, ' + // colore
-    '.btn-popup.to-cash, .btn-popup.go-cash, .btn-popup.cassa, ' + // porta in cassa
+    '.btn-popup.to-cash, .btn-popup.go-cash, .btn-popup.cassa, .btn-popup.pagamento:not(.vai-pacchetto), ' + // porta in cassa (MA NON vai-pacchetto)
     '.btn-popup.add-services, .btn-popup.aggiungi-servizi, .btn-popup.aggiungi-servizio, .btn-popup.add-service, ' + // aggiungi servizi
     '.btn-popup.copia:not(.touch-top-copy)' // copia generica (interna) non la nostra top
   ).forEach(btn => { btn.style.display = 'none'; });
@@ -941,7 +942,8 @@ const hide = (sel) => tb.querySelectorAll(sel).forEach(btn => {
     hide('.btn-popup.to-cash');
     hide('.btn-popup.go-cash');
     hide('.btn-popup.cassa');
-    hide('.btn-popup.pagamento');
+    // MODIFICATO: non nasconde .vai-pacchetto
+    tb.querySelectorAll('.btn-popup.pagamento:not(.vai-pacchetto)').forEach(btn => { btn.style.display = 'none'; });
     hide('.btn-popup.add-services');
     hide('.btn-popup.aggiungi-servizi');
     hide('.btn-popup.aggiungi-servizio');
@@ -1237,3 +1239,16 @@ document.addEventListener('click', function(e) {
     }, 100);
   }
 }, true); // CAPTURE PHASE
+
+// Listener delegato per pulsante "Vai al pacchetto" in touch mode
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.btn-popup.vai-pacchetto');
+  if (!btn) return;
+  e.stopPropagation();
+  e.preventDefault();
+  const block = btn.closest('.appointment-block');
+  const pacchettoId = block?.getAttribute('data-pacchetto-id') || btn.getAttribute('data-pacchetto-id');
+  if (pacchettoId) {
+    window.location.href = `/pacchetti/detail/${pacchettoId}`;
+  }
+}, true);

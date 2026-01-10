@@ -2,9 +2,10 @@
 import json
 from flask import Blueprint, app, render_template, request, jsonify
 from appl import db
-from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus
+from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus
 from sqlalchemy import func, or_, and_
 from datetime import datetime, timedelta
+from sqlalchemy.orm import joinedload, selectinload
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN, ROUND_CEILING
 
 pacchetti_bp = Blueprint('pacchetti', __name__)
@@ -266,13 +267,20 @@ def api_operatori():
 
 @pacchetti_bp.route('/api/pacchetti', methods=['GET'])
 def api_pacchetti():
+    
     # API per lista pacchetti con filtri (ricerca per nome, cliente, status)
     query_nome = request.args.get('nome', '').strip()
     query_cliente = request.args.get('cliente', '').strip()
     query_cliente_id = request.args.get('cliente_id', '').strip()
     query_status = request.args.get('status', '').strip()
     
-    pacchetti_query = Pacchetto.query.join(Client).filter(Pacchetto.status != PacchettoStatus.Eliminato)
+    # ✅ EAGER LOADING: carica tutto in una sola query
+    pacchetti_query = Pacchetto.query.join(Client).options(
+        joinedload(Pacchetto.client),
+        selectinload(Pacchetto.rate),
+        selectinload(Pacchetto.sedute).joinedload(PacchettoSeduta.service),
+        selectinload(Pacchetto.preferred_operators)
+    ).filter(Pacchetto.status != PacchettoStatus.Eliminato)
     
     if query_nome:
         pacchetti_query = pacchetti_query.filter(Pacchetto.nome.ilike(f'%{query_nome}%'))
@@ -309,6 +317,7 @@ def api_pacchetti():
         tutte_rate_pagate = False
         if p.rate and len(p.rate) > 0:
             tutte_rate_pagate = all(r.is_pagata for r in p.rate)
+        # ✅ MANTIENE TUTTI I CAMPI ORIGINALI
         sedute_info = [{'ordine': s.ordine, 'service_nome': s.service.servizio_nome, 'stato': s.stato} for s in p.sedute]
         operatori_pref = [f"{o.user_nome} {o.user_cognome}" for o in p.preferred_operators]
         result.append({
@@ -321,8 +330,8 @@ def api_pacchetti():
             'status': p.status.value,
             'costo_totale_lordo': float(p.costo_totale_lordo),
             'costo_totale_scontato': float(p.costo_totale_scontato) if p.costo_totale_scontato else None,
-            'operatori_preferiti': operatori_pref,
-            'sedute': sedute_info,
+            'operatori_preferiti': operatori_pref,  # ✅ MANTENUTO!
+            'sedute': sedute_info,                   # ✅ MANTENUTO!
             'tutte_rate_pagate': tutte_rate_pagate
         })
     return jsonify(result)
@@ -799,7 +808,7 @@ def api_update_seduta(id, seduta_id):
             seduta.data_trattamento = None
         else:
             try:
-                # ✅ CORREZIONE: Prova prima DateTime completo, poi fallback a solo data
+                # Prova prima DateTime completo, poi fallback a solo data
                 try:
                     # Formato DateTime completo ISO: "2026-01-09T14:30:00.000Z"
                     seduta.data_trattamento = datetime.strptime(raw, '%Y-%m-%dT%H:%M:%S.%fZ')
@@ -816,12 +825,18 @@ def api_update_seduta(id, seduta_id):
     # Aggiungi voce history con dettaglio azione
     if 'stato' in data and data['stato'] == SedutaStatus.Effettuata.value:
         aggiungi_history(pacchetto, f"Seduta {seduta.ordine} effettuata")
+        
+        # Cerca l'appuntamento che ha pacchetto_seduta_id = seduta.id
+        appointment = Appointment.query.filter_by(pacchetto_seduta_id=seduta.id).first()
+        if appointment:
+            appointment.stato = AppointmentStatus.PAGATO
     else:
         aggiungi_history(pacchetto, f"Modificata seduta {seduta.ordine}")
     aggiorna_status_pacchetto(pacchetto)
 
     db.session.commit()
     return jsonify({'message': 'Seduta aggiornata'})
+
 @pacchetti_bp.route('/api/rate/<int:rata_id>', methods=['PUT'])
 
 def api_update_rata(rata_id):
@@ -1125,3 +1140,63 @@ def update_seduta_data(seduta_id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+    
+# Aggiungi questo endpoint dopo check_pacchetti_disponibili (circa riga 1078):
+
+@pacchetti_bp.route('/api/sedute-disponibili/<int:pacchetto_id>', methods=['GET'])
+def get_sedute_disponibili(pacchetto_id):
+    """
+    Restituisce le sedute disponibili (non pianificate/non effettuate) per un pacchetto specifico.
+    
+    Query params:
+        - client_id (opzionale): per verifica di sicurezza
+        
+    Response JSON:
+        [
+            {
+                "seduta_id": int,
+                "service_id": int,
+                "service_nome": str,
+                "numero_seduta": int,
+                "ordine": int,
+                "data_trattamento": str|null,
+                "stato": str
+            },
+            ...
+        ]
+    """
+    try:
+        client_id = request.args.get('client_id', type=int)
+        
+        pacchetto = Pacchetto.query.filter(
+            Pacchetto.id == pacchetto_id,
+            Pacchetto.status.in_([PacchettoStatus.Preventivo, PacchettoStatus.Attivo])
+        ).first()
+        
+        if not pacchetto:
+            return jsonify([]), 404
+        
+        # Verifica che il pacchetto appartenga al cliente (se specificato)
+        if client_id and pacchetto.client_id != client_id:
+            return jsonify([]), 403
+        
+        sedute_disponibili = []
+        for seduta in pacchetto.sedute:
+            # Includi tutte le sedute che non sono ancora effettuate
+            if seduta.stato != SedutaStatus.Effettuata:
+                sedute_disponibili.append({
+                    'seduta_id': seduta.id,
+                    'service_id': seduta.service_id,
+                    'service_nome': seduta.service.servizio_nome if seduta.service else 'Servizio',
+                    'servizio_tag': seduta.service.servizio_tag if seduta.service else '',
+                    'numero_seduta': seduta.ordine + 1,  # 1-based per display
+                    'ordine': seduta.ordine,
+                    'data_trattamento': seduta.data_trattamento.isoformat() if seduta.data_trattamento else None,
+                    'stato': seduta.stato.value if hasattr(seduta.stato, 'value') else str(seduta.stato)
+                })
+        
+        return jsonify(sedute_disponibili), 200
+        
+    except Exception as e:
+        print(f"Errore get_sedute_disponibili: {str(e)}")
+        return jsonify([]), 500

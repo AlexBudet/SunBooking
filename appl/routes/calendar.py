@@ -6,7 +6,7 @@ from sqlalchemy.orm import joinedload
 from datetime import time as dtime
 from datetime import datetime, timedelta, time, timezone
 import requests
-from ..models import OperatorShift, db, Appointment, AppointmentStatus, Operator, Client, Service, BusinessInfo
+from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, Operator, Client, Service, BusinessInfo
 from appl import app
 import random
 import json
@@ -117,7 +117,8 @@ def calendar_home():
     ).options(
         joinedload(Appointment.client),
         joinedload(Appointment.service),
-        joinedload(Appointment.operator)
+        joinedload(Appointment.operator),
+        joinedload(Appointment.pacchetto_seduta).joinedload(PacchettoSeduta.pacchetto)
     ).all()
 
     for appt in appointments:
@@ -438,7 +439,13 @@ def create_appointment():
                     inherited_status = AppointmentStatus.DEFAULT
 
                 # Recupera pacchetto_seduta_id se presente (per integrazione pacchetti)
-                pb_pacchetto_seduta_id = _norm_id(pb.get('pacchettoSedutaId') if isinstance(pb, dict) else None)
+                                # Recupera pacchetto_seduta_id se presente (per integrazione pacchetti)
+                # Supporta sia snake_case (pacchetto_seduta_id) che camelCase (pacchettoSedutaId)
+                pb_pacchetto_seduta_id = _norm_id(
+                    pb.get('pacchetto_seduta_id') if isinstance(pb, dict) else None
+                ) or _norm_id(
+                    pb.get('pacchettoSedutaId') if isinstance(pb, dict) else None
+                )
 
                 new_appt = Appointment(
                     client_id=client_id,
@@ -520,6 +527,9 @@ def create_appointment():
         if not isinstance(status_value, int) or status_value not in [e.value for e in AppointmentStatus]:
             status_value = AppointmentStatus.DEFAULT.value
 
+        # Recupera pacchetto_seduta_id se presente (supporta entrambi i formati)
+        single_pacchetto_seduta_id = _norm_id(data.get('pacchetto_seduta_id')) or _norm_id(data.get('pacchettoSedutaId'))
+
         new_appt = Appointment(
             client_id=client_id,
             operator_id=operator_id,
@@ -529,21 +539,40 @@ def create_appointment():
             colore=colore,
             colore_font=colore_font,
             note=note,
-            stato=AppointmentStatus(status_value)
+            stato=AppointmentStatus(status_value),
+            pacchetto_seduta_id=single_pacchetto_seduta_id  # <-- AGGIUNTO
         )
 
         # titolo personalizzato per client dummy
         if raw_client_id in ("dummy", "0"):
             new_appt.note = (data.get('titolo') or '').strip()
 
-        # Marker “NUOVO CLIENTE” se è il primo appuntamento storico
+        # Marker "NUOVO CLIENTE" se è il primo appuntamento storico
         if is_new_client:
             new_appt.note = append_new_client_marker(new_appt.note)
 
         db.session.add(new_appt)
         db.session.commit()
 
-        return jsonify({
+        # Aggiorna la data_trattamento della seduta se collegata a pacchetto (CASO SINGOLO)
+        pacchetto_info = None
+        if new_appt.pacchetto_seduta_id:
+            from appl.models import PacchettoSeduta
+            seduta = PacchettoSeduta.query.get(new_appt.pacchetto_seduta_id)
+            if seduta:
+                seduta.data_trattamento = new_appt.start_time
+                seduta.operatore_id = new_appt.operator_id
+                db.session.add(seduta)
+                db.session.commit()
+                
+                pacchetto_info = {
+                    'pacchettoId': seduta.pacchetto_id,
+                    'sedutaId': seduta.id,
+                    'dataFissata': new_appt.start_time.strftime('%d/%m/%Y %H:%M'),
+                    'sedutaOrdine': seduta.ordine
+                }
+
+        response_data = {
             "id": new_appt.id,
             "client_name": f"{new_appt.client.cliente_nome} {new_appt.client.cliente_cognome}" if new_appt.client else "OFF",
             "service_name": new_appt.service.servizio_nome if new_appt.service else "OFF",
@@ -552,7 +581,13 @@ def create_appointment():
             "operator_id": new_appt.operator_id,
             "note": new_appt.note,
             "status": new_appt.stato.value if hasattr(new_appt.stato, "value") else new_appt.stato
-        }), 201
+        }
+        
+        # Aggiungi info pacchetto se presente
+        if pacchetto_info:
+            response_data['pacchettoInfo'] = pacchetto_info
+            
+        return jsonify(response_data), 201
 
     except Exception as e:
         db.session.rollback()
@@ -737,6 +772,14 @@ def delete_appointment(appointment_id):
         appt = db.session.get(Appointment, appointment_id)
         if not appt:
             return jsonify({"error": "Appuntamento non trovato"}), 404
+
+        # Se l'appuntamento è collegato a una seduta pacchetto, cancella la data_trattamento
+        if appt.pacchetto_seduta_id:
+            seduta = db.session.get(PacchettoSeduta, appt.pacchetto_seduta_id)
+            if seduta:
+                seduta.data_trattamento = None
+                seduta.operatore_id = None  # Opzionale: resetta anche l'operatore
+                app.logger.info(f"Cancellata data_trattamento dalla seduta {seduta.id} del pacchetto {seduta.pacchetto_id}")
 
         db.session.delete(appt)
         db.session.commit()

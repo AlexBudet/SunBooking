@@ -261,6 +261,13 @@
                       data-minute="{{ quarter * 15 }}"
                       data-source="{{ appt.source.value }}" 
                       {% if appt.note %} data-note="{{ appt.note|e }}" {% endif %}
+                      {% if appt.pacchetto_seduta %}
+                      data-pacchetto-seduta-id="{{ appt.pacchetto_seduta.id }}"
+                      data-pacchetto-id="{{ appt.pacchetto_seduta.pacchetto_id }}"
+                      data-pacchetto-nome="{{ appt.pacchetto_seduta.pacchetto.nome_pacchetto|e }}"
+                      data-pacchetto-servizio="{{ appt.pacchetto_seduta.servizio_nome|e }}"
+                      data-pacchetto-seduta-numero="{{ appt.pacchetto_seduta.numero_seduta }}"
+                      {% endif %}
                  >
 <div class="popup-buttons">
   {% if not appt.client.is_deleted %}
@@ -284,10 +291,18 @@
             data-appointment-id="{{ appt.id }}">
       <i class="bi bi-palette"></i>
     </button>
+    {% if appt.pacchetto_seduta %}
+    <button type="button" class="btn-popup pagamento vai-pacchetto" title="Vai al pacchetto" data-bs-toggle="tooltip"
+            data-appointment-id="{{ appt.id }}"
+            data-pacchetto-id="{{ appt.pacchetto_seduta.pacchetto_id }}">
+      <i class="bi bi-box-seam"></i>
+    </button>
+    {% else %}
     <button type="button" class="btn-popup pagamento" title="Porta in cassa" data-bs-toggle="tooltip"
             data-appointment-id="{{ appt.id }}">
       <i class="bi bi-currency-euro"></i>
     </button>
+    {% endif %}
     <button type="button" class="btn-popup aggiungi-servizi" title="Aggiungi Servizi" data-bs-toggle="tooltip"
             data-appointment-id="{{ appt.id }}">
       <i class="bi bi-plus"></i>
@@ -362,6 +377,13 @@
 <div class="appointment-content">
 <!-- Un solo paragrafo per il nome/“+” -->
 <p class="client-name">
+{% if appt.pacchetto_seduta %}
+<i class="bi bi-box-seam pacchetto-badge" 
+   data-bs-toggle="tooltip"
+   data-bs-html="true"
+   title="<strong>📦 {{ appt.pacchetto_seduta.pacchetto.nome_pacchetto|e }}</strong><br>Servizio: {{ appt.pacchetto_seduta.servizio_nome|e }}<br>Seduta {{ appt.pacchetto_seduta.numero_seduta }} di {{ appt.pacchetto_seduta.pacchetto.sedute|length }}"
+   style="margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;"></i>
+{% endif %}
 {% if appt.client and appt.client.is_deleted %}
     <a href="javascript:void(0)" title="assegnare nuovo cliente o eliminare">?</a>
   {% elif appt.client and appt.client.cliente_nome|lower == 'dummy' and appt.client.cliente_cognome|lower == 'dummy' and appt.note %}
