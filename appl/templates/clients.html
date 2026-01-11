@@ -154,15 +154,15 @@
 <table class="table sortable" id="clientsTable">
     <thead>
         <tr>
-<th>Nome <span class="sort-icons">▲<br>▼</span></th>
-<th>Cognome <span class="sort-icons">▲<br>▼</span></th>
-<th>Cellulare <span class="sort-icons">▲<br>▼</span></th>
-<th>E-mail <span class="sort-icons">▲<br>▼</span></th>
-<th>Data Nascita <span class="sort-icons">▲<br>▼</span></th>
-<th>Sesso <span class="sort-icons">▲<br>▼</span></th>
-<th>Creato il <span class="sort-icons">▲<br>▼</span></th>
-<th>Passaggi <span class="sort-icons">▲<br>▼</span></th>
-<th>Ultimo Passaggio <span class="sort-icons">▲<br>▼</span></th>
+<th class="sortable" data-sort="cliente_nome">Nome <span class="sort-icons">▲<br>▼</span></th>
+<th class="sortable" data-sort="cliente_cognome">Cognome <span class="sort-icons">▲<br>▼</span></th>
+<th class="sortable" data-sort="cliente_cellulare">Cellulare <span class="sort-icons">▲<br>▼</span></th>
+<th class="sortable" data-sort="cliente_email">E-mail <span class="sort-icons">▲<br>▼</span></th>
+<th class="sortable" data-sort="cliente_data_nascita">Data Nascita <span class="sort-icons">▲<br>▼</span></th>
+<th class="sortable" data-sort="cliente_sesso">Sesso <span class="sort-icons">▲<br>▼</span></th>
+<th class="sortable" data-sort="cliente_creato_il">Creato il <span class="sort-icons">▲<br>▼</span></th>
+<th class="sortable" data-sort="cliente_passaggi">Passaggi <span class="sort-icons">▲<br>▼</span></th>
+<th class="sortable" data-sort="cliente_ultimo_passaggio">Ultimo Passaggio <span class="sort-icons">▲<br>▼</span></th>
 <th>Azioni</th>
         </tr>
     </thead>
@@ -556,6 +556,7 @@ return `
     </script>
 <script>
 let originalRows = []; // Non necessario ora, ma lasciato per compatibilità
+let lastClients = [];  // Array clienti per sorting
 
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('clientSearchInput');
@@ -589,7 +590,8 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch('/settings/api/recent-clients')
             .then(r => r.json())
             .then(clients => {
-                populateTable(clients);
+                lastClients = clients || [];
+                populateTable(lastClients);
             })
             .catch(() => {
                 tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Errore nel caricamento.</td></tr>';
@@ -601,7 +603,8 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(`/settings/api/search-clients?q=${encodeURIComponent(searchValue)}`)
             .then(r => r.json())
             .then(clients => {
-                populateTable(clients);
+                lastClients = clients || [];
+                populateTable(lastClients);
             })
             .catch(() => {
                 tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Errore nella ricerca.</td></tr>';
@@ -745,6 +748,39 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeof updateNoteButtonStyles === 'function') updateNoteButtonStyles();
         attachEventListenersToRows(tbody.querySelectorAll('tr'));
     }
+    // === SORTING TABELLA CLIENTI ===
+    const sortState = { field: null, asc: true };
+
+    function sortClientsBy(field, asc) {
+        if (!Array.isArray(lastClients) || lastClients.length === 0) return;
+        const sorted = lastClients.slice().sort((a, b) => {
+            let va = a[field];
+            let vb = b[field];
+            if (va === null || va === undefined) va = '';
+            if (vb === null || vb === undefined) vb = '';
+            va = String(va).toLowerCase();
+            vb = String(vb).toLowerCase();
+            if (va < vb) return asc ? -1 : 1;
+            if (va > vb) return asc ? 1 : -1;
+            return 0;
+        });
+        populateTable(sorted);
+    }
+
+    document.querySelectorAll('#clientsTable thead th.sortable').forEach(function(th) {
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', function() {
+            const field = th.dataset.sort;
+            if (!field) return;
+            if (sortState.field === field) {
+                sortState.asc = !sortState.asc;
+            } else {
+                sortState.field = field;
+                sortState.asc = true;
+            }
+            sortClientsBy(field, sortState.asc);
+        });
+    });
 
     // Funzione per attachare event listeners (copia dalla risposta precedente)
     function attachEventListenersToRows(rows) {
@@ -876,7 +912,9 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  document.getElementById('btnExportClientsExcel').addEventListener('click', async function() {
+  var btnExport = document.getElementById('btnExportClientsExcel');
+  if (!btnExport) return;
+  btnExport.addEventListener('click', async function() {
     try {
       const CSRF = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
       const response = await fetch('/settings/api/export_clients', {
@@ -919,4 +957,5 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
+
 {% endblock %}

@@ -114,8 +114,7 @@
     <!-- Azioni -->
 <td class="text-center">
   {% if current_user and current_user.ruolo.value == 'user' %}
-    <button type="button" class="btn btn-sm btn-primary" onclick="showNoRightsPopup()">Modifica</button>
-    <button type="button" class="btn btn-sm btn-danger" onclick="showNoRightsPopup()">Elimina</button>
+&nbsp;
   {% else %}
     <a href="{{ url_for('settings.edit_operator', operator_id=operator.id) }}" class="btn btn-sm btn-primary">Modifica</a>
     <form action="{{ url_for('settings.delete_operator', operator_id=operator.id) }}" method="POST" style="display:inline;">
