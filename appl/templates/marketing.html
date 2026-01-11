@@ -1,0 +1,874 @@
+{% extends "settings.html" %}
+
+{% block settings_content %}
+<div class="container-fluid mt-4" style="max-width: 1400px;">
+    
+    <!-- SEZIONE 1: INVIO WHATSAPP DI MARKETING -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0"><i class="bi bi-whatsapp me-2"></i>Campagne WhatsApp Marketing</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <!-- COLONNA FILTRI -->
+                <div class="col-lg-4 border-end">
+                    <h5 class="mb-3"><i class="bi bi-funnel me-2"></i>Filtri Selezione Clienti</h5>
+                    
+                    <form id="marketingFiltersForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <!-- Filtro: Inattività cliente -->
+                        <div class="filter-section mb-4 p-3 bg-light rounded">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input filter-toggle" type="checkbox" id="filter_inactivity" name="filter_inactivity">
+                                <label class="form-check-label fw-bold" for="filter_inactivity">
+                                    <i class="bi bi-clock-history me-1"></i>Clienti inattivi da
+                                </label>
+                            </div>
+                            <div class="row g-2 filter-options" id="filter_inactivity_options" style="display:none;">
+                                <div class="col-6">
+                                    <input type="number" class="form-control form-control-sm" id="inactivity_value" name="inactivity_value" min="1" value="3">
+                                </div>
+                                <div class="col-6">
+                                    <select class="form-select form-select-sm" id="inactivity_unit" name="inactivity_unit">
+                                        <option value="months" selected>Mesi</option>
+                                        <option value="years">Anni</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 mt-1">
+                                    <small class="text-muted">Clienti che non hanno appuntamenti da almeno X tempo</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filtro: Top Spender -->
+                        <div class="filter-section mb-4 p-3 bg-light rounded">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input filter-toggle" type="checkbox" id="filter_top_spender" name="filter_top_spender">
+                                <label class="form-check-label fw-bold" for="filter_top_spender">
+                                    <i class="bi bi-currency-euro me-1"></i>Top Spender (per fatturato)
+                                </label>
+                            </div>
+                            <div class="row g-2 filter-options" id="filter_top_spender_options" style="display:none;">
+                                <div class="col-6">
+                                    <label class="form-label small">Dal</label>
+                                    <input type="date" class="form-control form-control-sm" id="spender_from" name="spender_from">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label small">Al</label>
+                                    <input type="date" class="form-control form-control-sm" id="spender_to" name="spender_to">
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <label class="form-label small">Spesa minima (€)</label>
+                                    <input type="number" class="form-control form-control-sm" id="spender_min" name="spender_min" min="0" step="10" value="100">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filtro: Per Servizio -->
+                        <div class="filter-section mb-4 p-3 bg-light rounded">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input filter-toggle" type="checkbox" id="filter_service" name="filter_service">
+                                <label class="form-check-label fw-bold" for="filter_service">
+                                    <i class="bi bi-bookmark-star me-1"></i>Per Servizio utilizzato
+                                </label>
+                            </div>
+                            <div class="row g-2 filter-options" id="filter_service_options" style="display:none;">
+                                <div class="col-12">
+                                    <select class="form-select form-select-sm" id="service_id" name="service_id">
+                                        <option value="">-- Seleziona servizio --</option>
+                                        {% for service in services %}
+                                        <option value="{{ service.id }}">{{ service.servizio_nome }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <label class="form-label small">Numero minimo utilizzi</label>
+                                    <input type="number" class="form-control form-control-sm" id="service_min_usage" name="service_min_usage" min="1" value="1">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filtro: Frequenza visite -->
+                        <div class="filter-section mb-4 p-3 bg-light rounded">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input filter-toggle" type="checkbox" id="filter_frequency" name="filter_frequency">
+                                <label class="form-check-label fw-bold" for="filter_frequency">
+                                    <i class="bi bi-graph-up me-1"></i>Per Frequenza visite
+                                </label>
+                            </div>
+                            <div class="row g-2 filter-options" id="filter_frequency_options" style="display:none;">
+                                <div class="col-12">
+                                    <select class="form-select form-select-sm" id="frequency_type" name="frequency_type">
+                                        <option value="high">Clienti frequenti (≥4 visite/mese)</option>
+                                        <option value="medium">Clienti regolari (2-3 visite/mese)</option>
+                                        <option value="low">Clienti occasionali (1 visita/mese)</option>
+                                        <option value="rare">Clienti rari (&lt;1 visita/mese)</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <label class="form-label small">Periodo di analisi (mesi)</label>
+                                    <input type="number" class="form-control form-control-sm" id="frequency_months" name="frequency_months" min="1" max="24" value="6">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filtro: Per Categoria servizio -->
+                        <div class="filter-section mb-4 p-3 bg-light rounded">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input filter-toggle" type="checkbox" id="filter_category" name="filter_category">
+                                <label class="form-check-label fw-bold" for="filter_category">
+                                    <i class="bi bi-tags me-1"></i>Per Categoria servizio
+                                </label>
+                            </div>
+                            <div class="row g-2 filter-options" id="filter_category_options" style="display:none;">
+                                <div class="col-12">
+                                    <select class="form-select form-select-sm" id="category_id" name="category_id">
+                                        <option value="">-- Seleziona categoria --</option>
+                                        <option value="Solarium">Solarium</option>
+                                        <option value="Estetica">Estetica</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filtro: Nuovi clienti -->
+                        <div class="filter-section mb-4 p-3 bg-light rounded">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input filter-toggle" type="checkbox" id="filter_new_clients" name="filter_new_clients">
+                                <label class="form-check-label fw-bold" for="filter_new_clients">
+                                    <i class="bi bi-person-plus me-1"></i>Nuovi clienti
+                                </label>
+                            </div>
+                            <div class="row g-2 filter-options" id="filter_new_clients_options" style="display:none;">
+                                <div class="col-12">
+                                    <label class="form-label small">Acquisiti negli ultimi X giorni</label>
+                                    <input type="number" class="form-control form-control-sm" id="new_clients_days" name="new_clients_days" min="1" value="30">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filtro: Per Sesso -->
+                        <div class="filter-section mb-4 p-3 bg-light rounded">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input filter-toggle" type="checkbox" id="filter_gender" name="filter_gender">
+                                <label class="form-check-label fw-bold" for="filter_gender">
+                                    <i class="bi bi-people me-1"></i>Per Genere
+                                </label>
+                            </div>
+                            <div class="row g-2 filter-options" id="filter_gender_options" style="display:none;">
+                                <div class="col-12">
+                                    <select class="form-select form-select-sm" id="gender" name="gender">
+                                        <option value="F">Donna</option>
+                                        <option value="M">Uomo</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pulsante cerca -->
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="button" class="btn btn-primary" id="btnSearchClients">
+                                <i class="bi bi-search me-2"></i>Cerca Clienti
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="btnResetFilters">
+                                <i class="bi bi-x-circle me-2"></i>Reset Filtri
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- COLONNA RISULTATI -->
+                <div class="col-lg-4 border-end">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0"><i class="bi bi-people me-2"></i>Risultati <span id="resultsCount" class="badge bg-secondary">0</span></h5>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="btnSelectAll">Seleziona tutti</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnDeselectAll">Deseleziona</button>
+                        </div>
+                    </div>
+                    
+                    <div id="clientResults" class="overflow-auto" style="max-height: 600px;">
+                        <div class="text-muted text-center py-5">
+                            <i class="bi bi-search fs-1 d-block mb-2"></i>
+                            Usa i filtri per cercare clienti
+                        </div>
+                    </div>
+
+                    <div class="mt-3 p-3 bg-light rounded">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span><strong>Selezionati:</strong> <span id="selectedCount">0</span> clienti</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COLONNA TEMPLATE MESSAGGIO -->
+                <div class="col-lg-4">
+                    <h5 class="mb-3"><i class="bi bi-chat-dots me-2"></i>Template Messaggio</h5>
+                    
+                    <form id="marketingMessageForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <!-- Template predefiniti e salvati -->
+                        <div class="mb-3">
+                            <label class="form-label">Template</label>
+                            <select class="form-select" id="templatePreset">
+                                <option value="">-- Seleziona template --</option>
+                                    {% for tpl in saved_templates %}
+                                    <option value="saved_{{ tpl.id }}" data-testo="{{ tpl.testo|e }}">📄 {{ tpl.nome }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                <optgroup label="✨ Predefiniti">
+                                    <option value="riattivazione">🔄 Riattivazione cliente inattivo</option>
+                                    <option value="promo">🎁 Promozione speciale</option>
+                                    <option value="fidelity">⭐ Programma fedeltà</option>
+                                    <option value="novita">🆕 Novità servizi</option>
+                                    <option value="stagionale">🌸 Promo stagionale</option>
+                                </optgroup>
+                            </select>
+                        </div>
+
+<div class="mb-3">
+    <label for="marketing_message" class="form-label">Messaggio WhatsApp</label>
+    <textarea class="form-control" id="marketing_message" name="marketing_message" rows="10" placeholder="Scrivi il messaggio...">{{ marketing_message or '' }}</textarea>
+    <div class="form-text">
+        <span data-bs-toggle="tooltip" data-bs-html="true" 
+          title="<code>{{'{{nome}}'}}</code> = Nome<br><code>{{'{{cognome}}'}}</code> = Cognome<br><code>{{'{{giorni_assenza}}'}}</code> = giorni assenza<br><code>{{'{{totale_visite}}'}}</code> = visite<br><code>{{'{{totale_speso}}'}}</code> = speso<br><code>{{'{{centro}}'}}</code> = centro" 
+          style="cursor: help; text-decoration: underline dotted;">
+        ℹ️ Variabili disponibili
+        </span>
+    </div>
+</div>
+
+                        <!-- Anteprima messaggio -->
+                        <div class="mb-3">
+                            <label class="form-label">Anteprima (primo cliente selezionato)</label>
+<div id="messagePreview" class="p-3 bg-success bg-opacity-10 rounded border" style="min-height: 100px; white-space: pre-wrap;"><span class="text-muted">Seleziona almeno un cliente per vedere l'anteprima</span></div>
+                        </div>
+
+                        <!-- Pulsanti azioni -->
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-success btn-lg" id="btnSendMarketing" disabled>
+                                <i class="bi bi-whatsapp me-2"></i>Invia a <span id="sendCount">0</span> clienti
+                            </button>
+                            <small class="text-muted d-block text-center mt-2">
+                                Limite giornaliero: {{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 30 }} invii
+                            </small>
+                            <div class="btn-group w-100">
+                                <button type="button" class="btn btn-outline-primary" id="btnSaveTemplate">
+                                    <i class="bi bi-save me-2"></i>Salva come nuovo
+                                </button>
+                                <button type="button" class="btn btn-outline-danger" id="btnDeleteTemplate" style="display:none;">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr class="my-5">
+
+    <!-- SEZIONE 2: MESSAGGIO AUTOMATICO NUOVO CLIENTE -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-success text-white">
+            <h4 class="mb-0"><i class="bi bi-person-plus me-2"></i>Messaggio Automatico a Nuovo Cliente</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-lg-6">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Quando un <strong>NUOVO CLIENTE</strong> paga in cassa, verrà mostrato un prompt per inviare un messaggio di benvenuto con richiesta di recensione.
+                    </div>
+
+                    <!-- Toggle attivazione -->
+                    <div class="form-check form-switch mb-4">
+                        <input class="form-check-input" type="checkbox" role="switch" id="new_client_welcome_enabled" 
+                               {% if business_info and business_info.new_client_welcome_enabled %}checked{% endif %}>
+                        <label class="form-check-label fw-bold" for="new_client_welcome_enabled">
+                            Attiva messaggio di benvenuto automatico ai nuovi clienti
+                        </label>
+                    </div>
+
+                    <!-- Opzioni aggiuntive -->
+                    <div id="newClientOptions" style="{% if not (business_info and business_info.new_client_welcome_enabled) %}display:none;{% endif %}">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Link Google Reviews (opzionale)</label>
+                            <input type="url" class="form-control" id="google_review_link" name="google_review_link" 
+                                   value="{{ business_info.google_review_link if business_info else '' }}"
+                                   placeholder="https://g.page/r/...">
+                            <div class="form-text">Inserisci il link diretto per lasciare una recensione su Google</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="new_client_delay_send" name="new_client_delay_send"
+                                       {% if business_info and business_info.new_client_delay_send %}checked{% endif %}>
+                                <label class="form-check-label" for="new_client_delay_send">
+                                    Invia il messaggio con ritardo (es. dopo 2 ore)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="mb-3" id="delayOptions" style="{% if not (business_info and business_info.new_client_delay_send) %}display:none;{% endif %}">
+                            <label class="form-label">Ritardo invio (ore)</label>
+                            <input type="number" class="form-control" id="new_client_delay_hours" name="new_client_delay_hours" 
+                                   min="1" max="48" value="{{ business_info.new_client_delay_hours if business_info and business_info.new_client_delay_hours else 2 }}">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <form id="newClientMessageForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <label for="new_client_message" class="form-label">Template messaggio di benvenuto</label>
+                        <textarea class="form-control" id="new_client_message" name="new_client_message" rows="8">{{ new_client_message or default_welcome_message }}</textarea>
+<div class="form-text mb-3">
+    <span data-bs-toggle="tooltip" data-bs-html="true" 
+          title="<code>{{'{{nome}}'}}</code> = Nome Cliente<br><code>{{'{{centro}}'}}</code> = Nome Istituto<br><code>{{'{{link_recensione}}'}}</code> = link Google" 
+          style="cursor: help; text-decoration: underline dotted;">
+        ℹ️ Variabili disponibili
+    </span>
+</div>
+
+                        <!-- Anteprima -->
+                        <div class="mb-3">
+                            <label class="form-label">Anteprima messaggio</label>
+<div id="newClientPreview" class="p-3 bg-success bg-opacity-10 rounded border" style="white-space: pre-wrap;">{{ (new_client_message or default_welcome_message)|replace('{{nome}}', 'Maria')|replace('{{centro}}', business_info.business_name if business_info else 'Il tuo Centro')|replace('{{link_recensione}}', 'https://g.page/...')|safe }}</div>
+                        </div>
+
+                        <button type="button" class="btn btn-success" id="btnSaveNewClientMessage">
+                            <i class="bi bi-save me-2"></i>Salva Template Benvenuto
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        {% if current_user and current_user.ruolo.value == 'owner' %}
+    <!-- SEZIONE 3: IMPOSTAZIONI OWNER -->
+    <div class="card mb-4 shadow-sm">
+        <div class="card-header bg-dark text-white">
+            <h4 class="mb-0"><i class="bi bi-gear me-2"></i>Impostazioni Avanzate (Owner)</h4>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Limite massimo invii giornalieri</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="max_daily_sends" 
+                               value="{{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 30 }}"
+                               min="1" max="100">
+                        <button class="btn btn-primary" type="button" id="btnSaveMaxSends">
+                            <i class="bi bi-save"></i> Salva
+                        </button>
+                    </div>
+                    <div class="form-text">Numero massimo di messaggi WhatsApp inviabili al giorno (1-100)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+<br><br>
+<!-- CSS aggiuntivo -->
+<style>
+.filter-section {
+    transition: all 0.3s ease;
+}
+.filter-section:has(.filter-toggle:checked) {
+    background-color: #e7f1ff !important;
+    border-left: 3px solid #0d6efd;
+}
+.client-item {
+    transition: background-color 0.2s;
+}
+.client-item:hover {
+    background-color: #f8f9fa;
+}
+.client-item.selected {
+    background-color: #d1e7dd;
+}
+#clientResults .client-item {
+    border-bottom: 1px solid #eee;
+    padding: 10px;
+}
+.tooltip code {
+    color: #ffacdf !important;
+    background: transparent;
+}
+</style>
+
+<!-- JavaScript -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // Inizializza tooltip Bootstrap
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (el) {
+        return new bootstrap.Tooltip(el);
+    });
+
+    // Toggle opzioni filtro
+    document.querySelectorAll('.filter-toggle').forEach(function(toggle) {
+        toggle.addEventListener('change', function() {
+            const optionsId = this.id + '_options';
+            const options = document.getElementById(optionsId);
+            if (options) {
+                options.style.display = this.checked ? 'flex' : 'none';
+            }
+        });
+    });
+
+    // Toggle nuovo cliente - salva automaticamente
+    const newClientToggle = document.getElementById('new_client_welcome_enabled');
+    if (newClientToggle) {
+        newClientToggle.addEventListener('change', function() {
+            const options = document.getElementById('newClientOptions');
+            options.style.display = this.checked ? 'block' : 'none';
+            saveNewClientSettings();
+        });
+    }
+
+    // Toggle ritardo invio
+    const delayToggle = document.getElementById('new_client_delay_send');
+    if (delayToggle) {
+        delayToggle.addEventListener('change', function() {
+            const options = document.getElementById('delayOptions');
+            options.style.display = this.checked ? 'block' : 'none';
+        });
+    }
+
+    // Reset filtri
+    document.getElementById('btnResetFilters')?.addEventListener('click', function() {
+        document.querySelectorAll('.filter-toggle').forEach(t => {
+            t.checked = false;
+            const optionsId = t.id + '_options';
+            const options = document.getElementById(optionsId);
+            if (options) options.style.display = 'none';
+        });
+        document.getElementById('clientResults').innerHTML = `
+            <div class="text-muted text-center py-5">
+                <i class="bi bi-search fs-1 d-block mb-2"></i>
+                Usa i filtri per cercare clienti
+            </div>`;
+        updateCounts();
+    });
+
+    // Cerca clienti
+    document.getElementById('btnSearchClients')?.addEventListener('click', searchClients);
+
+    // Seleziona/Deseleziona tutti
+    document.getElementById('btnSelectAll')?.addEventListener('click', function() {
+        document.querySelectorAll('.client-checkbox').forEach(cb => {
+            cb.checked = true;
+            cb.closest('.client-item')?.classList.add('selected');
+        });
+        updateCounts();
+        updatePreview();
+    });
+
+    document.getElementById('btnDeselectAll')?.addEventListener('click', function() {
+        document.querySelectorAll('.client-checkbox').forEach(cb => {
+            cb.checked = false;
+            cb.closest('.client-item')?.classList.remove('selected');
+        });
+        updateCounts();
+        updatePreview();
+    });
+
+    // Template predefiniti e salvati
+    document.getElementById('templatePreset')?.addEventListener('change', function() {
+        const selected = this.value;
+        const deleteBtn = document.getElementById('btnDeleteTemplate');
+        
+        // Template predefiniti hardcoded
+        const presets = {
+            'riattivazione': `Ciao {{'{{nome}}'}}! 👋
+
+Ci manchi! Sono passati {{'{{giorni_assenza}}'}} giorni dalla tua ultima visita da {{'{{centro}}'}}.
+
+Abbiamo preparato un'offerta speciale per te: 15% di sconto sul tuo prossimo trattamento!
+
+Prenota ora e torna a prenderti cura di te ✨
+
+Ti aspettiamo! 💆‍♀️`,
+            
+            'promo': `Ciao {{'{{nome}}'}}! 🎁
+
+Abbiamo una promozione esclusiva per te da {{'{{centro}}'}}!
+
+Solo per questa settimana: SCONTO SPECIALE su tutti i nostri trattamenti!
+
+Non perdere questa occasione! Contattaci per prenotare 📞`,
+            
+            'fidelity': `Ciao {{'{{nome}}'}}! ⭐
+
+Grazie per la tua fedeltà a {{'{{centro}}'}}! 
+
+Con {{'{{totale_visite}}'}} visite, sei tra i nostri clienti più affezionati e vogliamo premiarti con un trattamento OMAGGIO!
+
+Contattaci per scoprire quale sorpresa ti abbiamo riservato 🎁`,
+            
+            'novita': `Ciao {{'{{nome}}'}}! 🆕
+
+Abbiamo grandi novità da {{'{{centro}}'}}!
+
+Nuovi trattamenti e tecnologie ti aspettano per un'esperienza ancora più esclusiva!
+
+Vieni a scoprirli con uno sconto lancio del 10%! ✨
+
+Prenota ora il tuo appuntamento 📅`,
+            
+            'stagionale': `Ciao {{'{{nome}}'}}! 🌸
+
+La nuova stagione è arrivata da {{'{{centro}}'}}!
+
+È il momento perfetto per preparare la tua pelle con i nostri trattamenti stagionali.
+
+Scopri i nuovi pacchetti e le offerte dedicate! 
+
+Ti aspettiamo 💆‍♀️`
+        };
+        
+        if (selected.startsWith('saved_')) {
+            // Template salvato: leggi da data-testo
+            const option = this.options[this.selectedIndex];
+            const testo = option.dataset.testo || '';
+            document.getElementById('marketing_message').value = testo;
+            deleteBtn.style.display = 'block';
+            deleteBtn.dataset.templateId = selected.replace('saved_', '');
+        } else if (presets[selected]) {
+            document.getElementById('marketing_message').value = presets[selected];
+            deleteBtn.style.display = 'none';
+        } else {
+            deleteBtn.style.display = 'none';
+        }
+        updatePreview();
+    });
+
+    // Aggiorna anteprima quando cambia il testo
+    document.getElementById('marketing_message')?.addEventListener('input', updatePreview);
+    document.getElementById('new_client_message')?.addEventListener('input', updateNewClientPreview);
+
+    // Salva template marketing
+    document.getElementById('btnSaveTemplate')?.addEventListener('click', saveMarketingTemplate);
+
+    // Salva template nuovo cliente
+    document.getElementById('btnSaveNewClientMessage')?.addEventListener('click', saveNewClientMessage);
+
+    // Invia marketing
+    document.getElementById('btnSendMarketing')?.addEventListener('click', sendMarketingMessages);
+
+    // Funzioni
+    function searchClients() {
+        const form = document.getElementById('marketingFiltersForm');
+        const formData = new FormData(form);
+        
+        // Converti in oggetto per JSON
+        const filters = {};
+        for (let [key, value] of formData.entries()) {
+            filters[key] = value;
+        }
+        
+        // Aggiungi stato checkbox
+        document.querySelectorAll('.filter-toggle').forEach(toggle => {
+            filters[toggle.name] = toggle.checked;
+        });
+
+        const resultsDiv = document.getElementById('clientResults');
+        resultsDiv.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-2">Ricerca in corso...</p></div>';
+
+        fetch("{{ url_for('settings.marketing_search_clients') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': formData.get('csrf_token')
+            },
+            body: JSON.stringify(filters)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.clients && data.clients.length > 0) {
+                let html = '';
+                data.clients.forEach(client => {
+                    html += `
+                        <div class="client-item d-flex align-items-center" data-client='${JSON.stringify(client)}'>
+                            <input type="checkbox" class="form-check-input client-checkbox me-3" 
+                                   value="${client.id}" data-phone="${client.cellulare || ''}">
+                            <div class="flex-grow-1">
+                                <div class="fw-bold">${client.nome} ${client.cognome}</div>
+                                <small class="text-muted">
+                                    📱 ${client.cellulare || 'N/D'}
+                                    ${client.giorni_assenza ? ' • 📅 ' + client.giorni_assenza + ' gg fa' : ''}
+                                    ${client.totale_visite ? ' • 🔄 ' + client.totale_visite + ' visite' : ''}
+                                </small>
+                            </div>
+                        </div>`;
+                });
+                resultsDiv.innerHTML = html;
+                
+                // Aggiungi eventi click
+                document.querySelectorAll('.client-checkbox').forEach(cb => {
+                    cb.addEventListener('change', function() {
+                        this.closest('.client-item')?.classList.toggle('selected', this.checked);
+                        updateCounts();
+                        updatePreview();
+                    });
+                });
+                
+                document.querySelectorAll('.client-item').forEach(item => {
+                    item.addEventListener('click', function(e) {
+                        if (e.target.type !== 'checkbox') {
+                            const cb = this.querySelector('.client-checkbox');
+                            cb.checked = !cb.checked;
+                            this.classList.toggle('selected', cb.checked);
+                            updateCounts();
+                            updatePreview();
+                        }
+                    });
+                });
+            } else {
+                resultsDiv.innerHTML = '<div class="text-muted text-center py-5"><i class="bi bi-emoji-frown fs-1 d-block mb-2"></i>Nessun cliente trovato</div>';
+            }
+            document.getElementById('resultsCount').textContent = data.clients ? data.clients.length : 0;
+            updateCounts();
+        })
+        .catch(err => {
+            console.error(err);
+            resultsDiv.innerHTML = '<div class="text-danger text-center py-5">Errore durante la ricerca</div>';
+        });
+    }
+
+    function updateCounts() {
+        const selected = document.querySelectorAll('.client-checkbox:checked').length;
+        document.getElementById('selectedCount').textContent = selected;
+        document.getElementById('sendCount').textContent = selected;
+        document.getElementById('btnSendMarketing').disabled = selected === 0;
+    }
+
+    function updatePreview() {
+        const previewDiv = document.getElementById('messagePreview');
+        const message = document.getElementById('marketing_message').value;
+        const firstSelected = document.querySelector('.client-checkbox:checked');
+        
+        if (!firstSelected) {
+            previewDiv.innerHTML = '<span class="text-muted">Seleziona almeno un cliente per vedere l\'anteprima</span>';
+            return;
+        }
+        
+        const clientItem = firstSelected.closest('.client-item');
+        const clientData = JSON.parse(clientItem.dataset.client || '{}');
+        
+        let preview = message
+            .replace(/\{\{nome\}\}/g, clientData.nome || '')
+            .replace(/\{\{cognome\}\}/g, clientData.cognome || '')
+            .replace(/\{\{giorni_assenza\}\}/g, clientData.giorni_assenza || '0')
+            .replace(/\{\{ultimo_servizio\}\}/g, clientData.ultimo_servizio || '')
+            .replace(/\{\{totale_visite\}\}/g, clientData.totale_visite || '0')
+            .replace(/\{\{totale_speso\}\}/g, clientData.totale_speso || '0')
+            .replace(/\{\{servizio_preferito\}\}/g, clientData.servizio_preferito || '')
+            .replace(/\{\{centro\}\}/g, '{{ business_info.business_name if business_info else "Centro" }}');
+        
+        previewDiv.textContent = preview;
+    }
+
+    function updateNewClientPreview() {
+        const previewDiv = document.getElementById('newClientPreview');
+        const message = document.getElementById('new_client_message').value;
+        const link = document.getElementById('google_review_link').value || 'https://g.page/...';
+        
+        let preview = message
+            .replace(/\{\{nome\}\}/g, 'Maria')
+            .replace(/\{\{centro\}\}/g, '{{ business_info.business_name if business_info else "Centro" }}')
+            .replace(/\{\{link_recensione\}\}/g, link);
+        
+        previewDiv.textContent = preview;
+    }
+
+    function saveMarketingTemplate() {
+        const message = document.getElementById('marketing_message').value;
+        if (!message.trim()) {
+            alert('Inserisci un messaggio prima di salvare');
+            return;
+        }
+        
+        const nome = prompt('Nome del template:', 'Nuovo template');
+        if (!nome || !nome.trim()) return;
+        
+        const token = document.querySelector('#marketingMessageForm input[name="csrf_token"]').value;
+        
+        fetch("{{ url_for('settings.marketing_create_template') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': token
+            },
+            body: JSON.stringify({ nome: nome.trim(), testo: message })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('Template salvato! Ricarico la pagina...');
+                location.reload();
+            } else {
+                alert('Errore: ' + (data.error || 'Errore sconosciuto'));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Errore durante il salvataggio');
+        });
+    }
+
+    // Elimina template
+    document.getElementById('btnDeleteTemplate')?.addEventListener('click', function() {
+        const templateId = this.dataset.templateId;
+        if (!templateId) return;
+        
+        if (!confirm('Eliminare questo template?')) return;
+        
+        const token = document.querySelector('#marketingMessageForm input[name="csrf_token"]').value;
+        
+        fetch(`/settings/api/marketing/templates/${templateId}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': token }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('Template eliminato!');
+                location.reload();
+            } else {
+                alert('Errore eliminazione');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Errore');
+        });
+    });
+
+    function saveNewClientSettings() {
+        const enabled = document.getElementById('new_client_welcome_enabled').checked;
+        const token = document.querySelector('#newClientMessageForm input[name="csrf_token"]').value;
+        
+        fetch("{{ url_for('settings.marketing_new_client_settings') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': token
+            },
+            body: JSON.stringify({ 
+                enabled: enabled,
+                google_review_link: document.getElementById('google_review_link').value,
+                delay_send: document.getElementById('new_client_delay_send').checked,
+                delay_hours: document.getElementById('new_client_delay_hours').value
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            console.log('Settings saved:', data);
+        })
+        .catch(err => console.error(err));
+    }
+
+    function saveNewClientMessage() {
+        const message = document.getElementById('new_client_message').value;
+        const token = document.querySelector('#newClientMessageForm input[name="csrf_token"]').value;
+        
+        saveNewClientSettings(); // Salva anche le impostazioni
+        
+        fetch("{{ url_for('settings.marketing_save_new_client_template') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': token
+            },
+            body: JSON.stringify({ template: message })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('Template benvenuto salvato con successo!');
+            } else {
+                alert('Errore: ' + (data.error || 'Errore sconosciuto'));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Errore durante il salvataggio');
+        });
+    }
+
+    function sendMarketingMessages() {
+        const selectedClients = [];
+        document.querySelectorAll('.client-checkbox:checked').forEach(cb => {
+            const clientItem = cb.closest('.client-item');
+            const clientData = JSON.parse(clientItem.dataset.client || '{}');
+            selectedClients.push(clientData);
+        });
+        
+        if (selectedClients.length === 0) {
+            alert('Seleziona almeno un cliente');
+            return;
+        }
+        
+        const message = document.getElementById('marketing_message').value;
+        if (!message.trim()) {
+            alert('Inserisci un messaggio');
+            return;
+        }
+        
+        if (!confirm(`Confermi l'invio del messaggio a ${selectedClients.length} clienti?`)) {
+            return;
+        }
+        
+        const token = document.querySelector('#marketingMessageForm input[name="csrf_token"]').value;
+        
+        // Per ora mostra solo l'anteprima - la logica di invio sarà implementata successivamente
+        alert(`Funzionalità di invio in sviluppo.\n\nClienti selezionati: ${selectedClients.length}\n\nI messaggi verranno inviati tramite WhatsApp Web.`);
+        
+        // TODO: Implementare la logica di invio effettiva
+    }
+
+    // Inizializza link recensione listener
+    document.getElementById('google_review_link')?.addEventListener('input', updateNewClientPreview);
+});
+
+    // Salva limite invii giornalieri (solo owner)
+    document.getElementById('btnSaveMaxSends')?.addEventListener('click', function() {
+        const maxSends = document.getElementById('max_daily_sends').value;
+        const token = document.querySelector('#marketingMessageForm input[name="csrf_token"]').value;
+        
+        fetch("{{ url_for('settings.marketing_set_max_daily_sends') }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': token
+            },
+            body: JSON.stringify({ max_sends: maxSends })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('Limite salvato: ' + data.max_sends + ' invii/giorno');
+            } else {
+                alert('Errore: ' + (data.error || 'Errore sconosciuto'));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Errore durante il salvataggio');
+        });
+    });
+</script>
+
+{% endblock %}
