@@ -2630,6 +2630,8 @@ Firma del cliente`;
     doc.save(nomeFile);
   }
 }
+// Espone la funzione globalmente per onclick inline
+window.generaDisclaimerPdf = generaDisclaimerPdf;
 
 // Event listener per i pulsanti PDF e Stampa
 document.getElementById('btnPdf').addEventListener('click', function(e) {
