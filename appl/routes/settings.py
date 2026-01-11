@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import os, ipaddress, requests
 from sqlalchemy.sql import func, or_
 from .. import db
-from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto
+from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate
 
 # Blueprint per le rotte delle impostazioni
 settings_bp = Blueprint('settings', __name__, template_folder='../templates')
@@ -1987,3 +1987,456 @@ def api_delete_promo(promo_id):
     return jsonify({'success': True})
 
 # ================= MARKETING ====================
+# Messaggio di benvenuto predefinito
+DEFAULT_WELCOME_MESSAGE = """Ciao {{nome}}! 👋
+
+Grazie per aver scelto {{centro}} per il tuo primo trattamento!
+
+Speriamo che la tua esperienza sia stata fantastica ✨
+
+Se ti sei trovato/a bene, ti saremmo grati se lasciassi una recensione su Google:
+{{link_recensione}}
+
+Le tue 5 stelle ⭐⭐⭐⭐⭐ ci aiutano a crescere!
+
+A presto! 💆‍♀️"""
+
+@settings_bp.route('/marketing', methods=['GET'])
+def marketing():
+    """Pagina principale Marketing"""
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    services = Service.query.filter_by(is_deleted=False).order_by(Service.servizio_nome).all()
+    saved_templates = MarketingTemplate.query.order_by(MarketingTemplate.nome).all()
+    
+    # Recupera template marketing salvato
+    marketing_message = getattr(business_info, 'marketing_message_template', '') if business_info else ''
+    
+    # Recupera template nuovo cliente
+    new_client_message = getattr(business_info, 'new_client_welcome_message', '') if business_info else ''
+    
+    user_id = session.get('user_id')
+    current_user = db.session.get(User, user_id) if user_id else None
+    
+    return render_template(
+        'marketing.html',
+        business_info=business_info,
+        services=services,
+        saved_templates=saved_templates,
+        marketing_message=marketing_message,
+        new_client_message=new_client_message,
+        default_welcome_message=DEFAULT_WELCOME_MESSAGE,
+        current_user=current_user
+    )
+
+@settings_bp.route('/api/marketing/search-clients', methods=['POST'])
+def marketing_search_clients():
+    """Ricerca clienti con filtri avanzati per campagne marketing"""
+    data = request.get_json(silent=True) or {}
+    
+    try:
+        # Query base: clienti attivi con cellulare
+        query = Client.query.filter(
+            Client.is_deleted == False,
+            Client.cliente_cellulare != None,
+            Client.cliente_cellulare != '',
+            Client.cliente_cellulare != '0',
+            Client.cliente_nome != 'dummy',
+            Client.cliente_nome != 'cliente'
+        )
+        
+        today = datetime.now().date()
+        now = datetime.now()
+        
+        # Verifica se almeno un filtro è attivo
+        any_filter_active = any([
+            data.get('filter_inactivity'),
+            data.get('filter_top_spender'),
+            data.get('filter_service') and data.get('service_id'),
+            data.get('filter_frequency'),
+            data.get('filter_category') and data.get('category_id'),
+            data.get('filter_new_clients'),
+            data.get('filter_gender') and data.get('gender')
+        ])
+        
+        if not any_filter_active:
+            return jsonify({
+                'success': True, 
+                'clients': [],
+                'message': 'Seleziona almeno un filtro per cercare clienti'
+            })
+        
+        # FILTRO: Inattività (solo mesi/anni, minimo 1 mese)
+        if data.get('filter_inactivity'):
+            inactivity_value = max(1, int(data.get('inactivity_value', 3)))
+            inactivity_unit = data.get('inactivity_unit', 'months')
+            
+            if inactivity_unit == 'years':
+                cutoff_date = today - timedelta(days=inactivity_value * 365)
+            else:  # months (default)
+                cutoff_date = today - timedelta(days=inactivity_value * 30)
+            
+            cutoff_datetime = datetime.combine(cutoff_date, datetime.min.time())
+            
+            last_appt_subq = db.session.query(
+                Appointment.client_id,
+                func.max(Appointment.start_time).label('last_appt')
+            ).filter(
+                Appointment.is_cancelled_by_client == False,
+                Appointment.stato != AppointmentStatus.NON_ARRIVATO
+            ).group_by(Appointment.client_id).subquery()
+            
+            query = query.outerjoin(
+                last_appt_subq, 
+                Client.id == last_appt_subq.c.client_id
+            ).filter(
+                or_(
+                    last_appt_subq.c.last_appt == None,
+                    last_appt_subq.c.last_appt < cutoff_datetime
+                )
+            )
+        
+        # FILTRO: Top Spender
+        if data.get('filter_top_spender'):
+            spender_from = data.get('spender_from')
+            spender_to = data.get('spender_to')
+            spender_min = float(data.get('spender_min', 100))
+            
+            receipt_query = db.session.query(
+                Receipt.cliente_id,
+                func.sum(Receipt.total_amount).label('total_spent')
+            ).filter(Receipt.cliente_id != None)
+            
+            if spender_from:
+                try:
+                    receipt_query = receipt_query.filter(Receipt.created_at >= datetime.strptime(spender_from, '%Y-%m-%d'))
+                except:
+                    pass
+            if spender_to:
+                try:
+                    receipt_query = receipt_query.filter(Receipt.created_at <= datetime.strptime(spender_to, '%Y-%m-%d'))
+                except:
+                    pass
+            
+            receipt_subq = receipt_query.group_by(Receipt.cliente_id).having(
+                func.sum(Receipt.total_amount) >= spender_min
+            ).subquery()
+            
+            query = query.join(receipt_subq, Client.id == receipt_subq.c.cliente_id)
+        
+        # FILTRO: Per servizio
+        if data.get('filter_service') and data.get('service_id'):
+            try:
+                service_id = int(data.get('service_id'))
+                min_usage = int(data.get('service_min_usage', 1))
+                
+                service_subq = db.session.query(
+                    Appointment.client_id
+                ).filter(
+                    Appointment.service_id == service_id,
+                    Appointment.is_cancelled_by_client == False,
+                    Appointment.stato != AppointmentStatus.NON_ARRIVATO
+                ).group_by(Appointment.client_id).having(
+                    func.count(Appointment.id) >= min_usage
+                ).subquery()
+                
+                query = query.filter(Client.id.in_(db.session.query(service_subq.c.client_id)))
+            except (ValueError, TypeError):
+                pass
+        
+        # FILTRO: Frequenza visite
+        if data.get('filter_frequency'):
+            frequency_type = data.get('frequency_type', 'medium')
+            frequency_months = int(data.get('frequency_months', 6))
+            start_date = datetime.combine(today - timedelta(days=frequency_months * 30), datetime.min.time())
+            
+            freq_subq = db.session.query(
+                Appointment.client_id,
+                func.count(Appointment.id).label('visit_count')
+            ).filter(
+                Appointment.start_time >= start_date,
+                Appointment.is_cancelled_by_client == False,
+                Appointment.stato != AppointmentStatus.NON_ARRIVATO
+            ).group_by(Appointment.client_id).subquery()
+            
+            thresholds = {'high': 4, 'medium': 2, 'low': 1, 'rare': 0}
+            min_visits = thresholds.get(frequency_type, 1) * frequency_months
+            
+            if frequency_type == 'rare':
+                query = query.outerjoin(freq_subq, Client.id == freq_subq.c.client_id).filter(
+                    or_(freq_subq.c.visit_count == None, freq_subq.c.visit_count < frequency_months)
+                )
+            elif frequency_type == 'high':
+                query = query.join(freq_subq, Client.id == freq_subq.c.client_id).filter(
+                    freq_subq.c.visit_count >= min_visits
+                )
+            else:
+                max_visits = (thresholds.get(frequency_type, 1) + 1) * frequency_months
+                query = query.join(freq_subq, Client.id == freq_subq.c.client_id).filter(
+                    freq_subq.c.visit_count >= min_visits, freq_subq.c.visit_count < max_visits
+                )
+        
+        # FILTRO: Per categoria
+        if data.get('filter_category') and data.get('category_id'):
+            try:
+                category = data.get('category_id')
+                cat_subq = db.session.query(Appointment.client_id).join(Service).filter(
+                    Service.servizio_categoria == ServiceCategory[category],
+                    Appointment.is_cancelled_by_client == False
+                ).distinct().subquery()
+                query = query.filter(Client.id.in_(db.session.query(cat_subq.c.client_id)))
+            except KeyError:
+                pass
+        
+        # FILTRO: Nuovi clienti
+        if data.get('filter_new_clients'):
+            new_clients_days = int(data.get('new_clients_days', 30))
+            cutoff = datetime.combine(today - timedelta(days=new_clients_days), datetime.min.time())
+            query = query.filter(Client.created_at >= cutoff)
+        
+        # FILTRO: Per genere
+        if data.get('filter_gender') and data.get('gender'):
+            query = query.filter(Client.cliente_sesso == data.get('gender'))
+        
+        # LIMITE 50 risultati per velocità
+        clients = query.distinct().limit(30).all()
+        
+        if not clients:
+            return jsonify({'success': True, 'clients': [], 'message': 'Nessun cliente trovato con questi filtri'})
+        
+        # Ottimizzazione: query batch per tutti i clienti
+        client_ids = [c.id for c in clients]
+        
+        # Batch: ultimo appuntamento per cliente
+        last_appts = db.session.query(
+            Appointment.client_id,
+            func.max(Appointment.start_time).label('last_time')
+        ).filter(
+            Appointment.client_id.in_(client_ids),
+            Appointment.is_cancelled_by_client == False,
+            Appointment.stato != AppointmentStatus.NON_ARRIVATO
+        ).group_by(Appointment.client_id).all()
+        last_appt_dict = {r.client_id: r.last_time for r in last_appts}
+        
+        # Batch: totale visite per cliente
+        visit_counts = db.session.query(
+            Appointment.client_id,
+            func.count(Appointment.id).label('cnt')
+        ).filter(
+            Appointment.client_id.in_(client_ids),
+            Appointment.is_cancelled_by_client == False,
+            Appointment.stato != AppointmentStatus.NON_ARRIVATO
+        ).group_by(Appointment.client_id).all()
+        visits_dict = {r.client_id: r.cnt for r in visit_counts}
+        
+        # Batch: totale speso per cliente
+        spent_totals = db.session.query(
+            Receipt.cliente_id,
+            func.sum(Receipt.total_amount).label('total')
+        ).filter(Receipt.cliente_id.in_(client_ids)).group_by(Receipt.cliente_id).all()
+        spent_dict = {r.cliente_id: float(r.total or 0) for r in spent_totals}
+        
+        # Costruisci risposta
+        clients_data = []
+        for client in clients:
+            last_time = last_appt_dict.get(client.id)
+            giorni_assenza = None
+            if last_time:
+                if last_time.tzinfo is not None:
+                    last_time = last_time.replace(tzinfo=None)
+                giorni_assenza = (now - last_time).days
+            
+            clients_data.append({
+                'id': client.id,
+                'nome': client.cliente_nome,
+                'cognome': client.cliente_cognome,
+                'cellulare': client.cliente_cellulare,
+                'email': client.cliente_email,
+                'giorni_assenza': giorni_assenza,
+                'totale_visite': visits_dict.get(client.id, 0),
+                'totale_speso': round(spent_dict.get(client.id, 0), 2)
+            })
+        
+        return jsonify({'success': True, 'clients': clients_data, 'limited': len(clients) == 30})
+        
+    except Exception as e:
+        current_app.logger.exception("Errore ricerca clienti marketing: %s", e)
+        return jsonify({'success': False, 'error': str(e), 'clients': []})
+    
+@settings_bp.route('/api/marketing/save-template', methods=['POST'])
+def marketing_save_template():
+    """Salva il template del messaggio marketing"""
+    data = request.get_json(silent=True) or {}
+    template = data.get('template', '')
+    
+    try:
+        business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+        if not business_info:
+            return jsonify({'success': False, 'error': 'BusinessInfo non trovato'})
+        
+        business_info.marketing_message_template = template
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        current_app.logger.exception("Errore salvataggio template marketing: %s", e)
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@settings_bp.route('/api/marketing/new-client-settings', methods=['POST'])
+def marketing_new_client_settings():
+    """Salva le impostazioni per il messaggio nuovo cliente"""
+    data = request.get_json(silent=True) or {}
+    
+    try:
+        business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+        if not business_info:
+            return jsonify({'success': False, 'error': 'BusinessInfo non trovato'})
+        
+        business_info.new_client_welcome_enabled = data.get('enabled', False)
+        business_info.google_review_link = data.get('google_review_link', '')
+        business_info.new_client_delay_send = data.get('delay_send', False)
+        business_info.new_client_delay_hours = int(data.get('delay_hours', 2))
+        
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        current_app.logger.exception("Errore salvataggio impostazioni nuovo cliente: %s", e)
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@settings_bp.route('/api/marketing/save-new-client-template', methods=['POST'])
+def marketing_save_new_client_template():
+    """Salva il template del messaggio di benvenuto nuovo cliente"""
+    data = request.get_json(silent=True) or {}
+    template = data.get('template', '')
+    
+    try:
+        business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+        if not business_info:
+            return jsonify({'success': False, 'error': 'BusinessInfo non trovato'})
+        
+        business_info.new_client_welcome_message = template
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        current_app.logger.exception("Errore salvataggio template nuovo cliente: %s", e)
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@settings_bp.route('/api/marketing/check-new-client', methods=['GET'])
+def marketing_check_new_client():
+    """API per verificare se mostrare il prompt di benvenuto in cassa"""
+    client_id = request.args.get('client_id')
+    
+    if not client_id:
+        return jsonify({'show_prompt': False})
+    
+    try:
+        business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+        if not business_info or not getattr(business_info, 'new_client_welcome_enabled', False):
+            return jsonify({'show_prompt': False})
+        
+        # Verifica se è un nuovo cliente (primo pagamento)
+        receipt_count = Receipt.query.filter(Receipt.cliente_id == int(client_id)).count()
+        
+        if receipt_count == 0:  # Primo pagamento = nuovo cliente
+            client = Client.query.get(int(client_id))
+            if client:
+                template = getattr(business_info, 'new_client_welcome_message', '') or DEFAULT_WELCOME_MESSAGE
+                google_link = getattr(business_info, 'google_review_link', '') or ''
+                
+                message = template.replace('{{nome}}', client.cliente_nome or '')
+                message = message.replace('{{centro}}', business_info.business_name or 'Centro')
+                message = message.replace('{{link_recensione}}', google_link)
+                
+                return jsonify({
+                    'show_prompt': True,
+                    'client_name': f"{client.cliente_nome} {client.cliente_cognome}",
+                    'client_phone': client.cliente_cellulare,
+                    'message': message,
+                    'delay_send': getattr(business_info, 'new_client_delay_send', False),
+                    'delay_hours': getattr(business_info, 'new_client_delay_hours', 2)
+                })
+        
+        return jsonify({'show_prompt': False})
+        
+    except Exception as e:
+        current_app.logger.exception("Errore check nuovo cliente: %s", e)
+        return jsonify({'show_prompt': False})
+    
+@settings_bp.route('/api/marketing/max-daily-sends', methods=['POST'])
+def marketing_set_max_daily_sends():
+    """Imposta il limite massimo di invii giornalieri (solo owner)"""
+    user_id = session.get('user_id')
+    current_user = db.session.get(User, user_id) if user_id else None
+    
+    if not current_user or current_user.ruolo.value != 'owner':
+        return jsonify({'success': False, 'error': 'Solo il proprietario può modificare questo valore'}), 403
+    
+    data = request.get_json(silent=True) or {}
+    max_sends = data.get('max_sends', 30)
+    
+    try:
+        max_sends = int(max_sends)
+        if max_sends < 1 or max_sends > 100:
+            return jsonify({'success': False, 'error': 'Valore deve essere tra 1 e 100'}), 400
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Valore non valido'}), 400
+    
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    if not business_info:
+        return jsonify({'success': False, 'error': 'BusinessInfo non trovato'}), 404
+    
+    business_info.marketing_max_daily_sends = max_sends
+    db.session.commit()
+    
+    return jsonify({'success': True, 'max_sends': max_sends})
+    
+# ================= MARKETING TEMPLATES ====================
+@settings_bp.route('/api/marketing/templates', methods=['GET'])
+def marketing_get_templates():
+    """Restituisce tutti i template salvati"""
+    templates = MarketingTemplate.query.order_by(MarketingTemplate.nome).all()
+    return jsonify([t.to_dict() for t in templates])
+
+@settings_bp.route('/api/marketing/templates', methods=['POST'])
+def marketing_create_template():
+    """Crea un nuovo template"""
+    data = request.get_json(silent=True) or {}
+    nome = (data.get('nome') or '').strip()
+    testo = (data.get('testo') or '').strip()
+    
+    if not nome:
+        return jsonify({'success': False, 'error': 'Nome obbligatorio'}), 400
+    if not testo:
+        return jsonify({'success': False, 'error': 'Testo obbligatorio'}), 400
+    
+    template = MarketingTemplate(nome=nome, testo=testo)
+    db.session.add(template)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'template': template.to_dict()})
+
+@settings_bp.route('/api/marketing/templates/<int:template_id>', methods=['PUT'])
+def marketing_update_template(template_id):
+    """Aggiorna un template esistente"""
+    template = MarketingTemplate.query.get_or_404(template_id)
+    data = request.get_json(silent=True) or {}
+    
+    if 'nome' in data:
+        template.nome = (data['nome'] or '').strip()
+    if 'testo' in data:
+        template.testo = (data['testo'] or '').strip()
+    
+    db.session.commit()
+    return jsonify({'success': True, 'template': template.to_dict()})
+
+@settings_bp.route('/api/marketing/templates/<int:template_id>', methods=['DELETE'])
+def marketing_delete_template(template_id):
+    """Elimina un template"""
+    template = MarketingTemplate.query.get_or_404(template_id)
+    db.session.delete(template)
+    db.session.commit()
+    return jsonify({'success': True})
