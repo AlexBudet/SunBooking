@@ -387,6 +387,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const serviceForm = document.getElementById('add-service-form');
     if (serviceForm) {
         serviceForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+
             const nameField = document.getElementById('service_name');
             const tagField = document.getElementById('service_tag');
 
@@ -397,17 +399,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (name.length > 30) {
                 alert('ATTENZIONE! indicare un nome servizio più corto di 30 caratteri (spazi compresi)');
-                event.preventDefault();
                 nameField.focus();
                 return;
             }
 
             if (tag.length > 12) {
                 alert('ATTENZIONE! indicare un tag servizio più corto di 12 caratteri (spazi compresi)');
-                event.preventDefault();
                 tagField.focus();
                 return;
             }
+
+            const formData = new FormData(serviceForm);
+            const csrfToken = formData.get('csrf_token') || '';
+
+            fetch(serviceForm.action, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(async response => {
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(text.replace(/<[^>]*>/g, '').trim() || 'Errore durante l\'aggiunta del servizio');
+                }
+                return response;
+            })
+            .then(() => {
+                alert('Servizio aggiunto con successo!');
+                location.reload();
+            })
+            .catch(error => {
+                alert(error.message);
+            });
         });
     }
 });

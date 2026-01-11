@@ -1651,9 +1651,9 @@ def _build_operator_targets_for_tomorrow(require_phone: bool = True):
                     pausa_label = label
                     pausa_time = appt.start_time.strftime('%H:%M')
             else:
-                # Prefer tag over name for service label
+                # Prefer name over tag for service label
                 if service:
-                    label = (getattr(service, 'servizio_tag', '') or '').strip() or (getattr(service, 'servizio_nome', '') or '').strip()
+                    label = (getattr(service, 'servizio_nome', '') or '').strip() or (getattr(service, 'servizio_tag', '') or '').strip()
                 else:
                     label = ''
                 duration = None
