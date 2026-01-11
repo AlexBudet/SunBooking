@@ -406,6 +406,11 @@ class Pacchetto(db.Model):
     history = db.Column(db.Text, nullable=True)  # Storico semplice come testo
     costo_totale_lordo = db.Column(db.Numeric(10, 2), nullable=False)  # Lordo
     costo_totale_scontato = db.Column(db.Numeric(10, 2), nullable=True)  # Scontato
+
+    # Consenso informato firmato (PDF caricato)
+    consenso_pdf = db.Column(db.LargeBinary, nullable=True)
+    consenso_pdf_nome = db.Column(db.String(255), nullable=True)
+    consenso_pdf_data = db.Column(db.DateTime, nullable=True)
     
     # Relazioni
     client = db.relationship('Client', backref='pacchetti')

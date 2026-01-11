@@ -76,11 +76,7 @@
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
   }
   .disclaimer-signature-line {
-    border-top: 1px solid #000;
-    width: 200px;
-    margin-top: 40px;
-    padding-top: 5px;
-    font-size: 0.8rem;
+display:none;
   }
 </style>
 <div class="container mt-3">
@@ -351,18 +347,12 @@ Ti aspettiamo! 💆‍♀️
       </div>
       <div class="modal-body">
         <div class="disclaimer-preview" id="disclaimerPreviewContent">
-          <!-- Contenuto anteprima -->
-        </div>
-        <div class="disclaimer-signature-line">
           Firma del cliente
         </div>
       </div>
       <div class="modal-footer">
-        <small class="text-muted me-auto">Esempio con dati fittizi</small>
+        <small class="text-muted me-auto">Anteprima di come apparirà il documento per la stampa</small>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
-        <button type="button" class="btn btn-primary" onclick="printDisclaimer()">
-          <i class="bi bi-printer"></i> Stampa
-        </button>
       </div>
     </div>
   </div>
@@ -455,7 +445,7 @@ Ti aspettiamo! 💆‍♀️
         </div>
       </div>
       <div class="modal-footer">
-        <small class="text-muted me-auto">Esempio con dati fittizi</small>
+        <small class="text-muted me-auto">Anteprima di come apparirà il messaggio in Whatsapp</small>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
       </div>
     </div>
@@ -466,6 +456,20 @@ Ti aspettiamo! 💆‍♀️
 
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+function safeFocusNoScroll(el) {
+  if (!el) return;
+  try {
+    el.focus({ preventScroll: true });
+    return;
+  } catch (e) {
+    // fallback
+  }
+  const sx = window.scrollX || 0;
+  const sy = window.scrollY || 0;
+  el.focus();
+  window.scrollTo(sx, sy);
+}
 
 // Template disclaimer di default
 const defaultDisclaimerTemplate = `CONSENSO INFORMATO PER TRATTAMENTI ESTETICI
@@ -536,8 +540,10 @@ function insertDisclaimerVariable(variable) {
   const end = textarea.selectionEnd;
   const text = textarea.value;
   textarea.value = text.substring(0, start) + variable + text.substring(end);
-  textarea.focus();
+  safeFocusNoScroll(textarea);
+  const __s0 = { x: window.scrollX || 0, y: window.scrollY || 0 };
   textarea.setSelectionRange(start + variable.length, start + variable.length);
+  window.scrollTo(__s0.x, __s0.y);
 }
 
 // Stato attivo dei formati
@@ -571,17 +577,32 @@ function applyDisclaimerFormat(format) {
   }
   
   textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
-  textarea.focus();
-  
+  safeFocusNoScroll(textarea);
   // Posiziona cursore dopo il testo inserito
   const newPos = start + replacement.length;
+  const __s1 = { x: window.scrollX || 0, y: window.scrollY || 0 };
   textarea.setSelectionRange(newPos, newPos);
+  window.scrollTo(__s1.x, __s1.y);
 }
 
 // Toggle formato (bold, italic, underline) con highlight
 function toggleFormat(format, button) {
+  const textarea = document.getElementById('disclaimerTemplate');
+  if (!textarea) return;
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+
+  // Se c'è una selezione, applica/toglie il formato sulla selezione (toggle)
+  if (start !== end) {
+    applyFormatToSelection(format, textarea, start, end);
+    // non cambiare lo stato "activeFormats" quando agiamo su una selezione
+    return;
+  }
+
+  // Altrimenti toggle della modalità (per digitare con il formato attivo)
   activeFormats[format] = !activeFormats[format];
-  
+
   // Aggiorna visuale del pulsante
   if (activeFormats[format]) {
     button.classList.add('active', 'btn-secondary');
@@ -592,31 +613,80 @@ function toggleFormat(format, button) {
   }
 }
 
+// Applica o rimuove il marcatore del formato alla selezione (toggle)
+function applyFormatToSelection(format, textarea, start, end) {
+  const markers = {
+    bold: { pre: '**', post: '**' },
+    italic: { pre: '*', post: '*' },
+    underline: { pre: '__', post: '__' }
+  };
+  const marker = markers[format];
+  if (!marker) return;
+
+  const value = textarea.value;
+  const selected = value.substring(start, end);
+
+  // Se la selezione è già racchiusa esattamente dal marcatore, rimuovilo
+  const hasPre = value.substring(start - marker.pre.length, start) === marker.pre && start - marker.pre.length >= 0;
+  const hasPost = value.substring(end, end + marker.post.length) === marker.post;
+
+  if (hasPre && hasPost) {
+    // Rimuovi i marker
+    const before = value.substring(0, start - marker.pre.length);
+    const middle = value.substring(start, end);
+    const after = value.substring(end + marker.post.length);
+    textarea.value = before + middle + after;
+
+    // Riposiziona selezione sulla stessa porzione di testo (senza marker)
+    const newStart = start - marker.pre.length;
+    const newEnd = newStart + middle.length;
+    safeFocusNoScroll(textarea);
+    const __s2 = { x: window.scrollX || 0, y: window.scrollY || 0 };
+    textarea.setSelectionRange(newStart, newEnd);
+    window.scrollTo(__s2.x, __s2.y);
+    return;
+  }
+
+  // Altrimenti aggiungi i marker attorno alla selezione
+  const before = value.substring(0, start);
+  const after = value.substring(end);
+  const newValue = before + marker.pre + selected + marker.post + after;
+  textarea.value = newValue;
+
+  // Seleziona il testo formattato (esatto contenuto selezionato incluso i marker)
+  const newStart = start + marker.pre.length;
+  const newEnd = newStart + selected.length;
+  safeFocusNoScroll(textarea);
+  const __s3 = { x: window.scrollX || 0, y: window.scrollY || 0 };
+  textarea.setSelectionRange(newStart, newEnd);
+  window.scrollTo(__s3.x, __s3.y);
+}
+
 // Intercetta input nella textarea per applicare formati attivi
 function handleDisclaimerInput(event) {
   // Solo per caratteri normali (non backspace, enter, ecc)
   if (event.inputType !== 'insertText' || !event.data) return;
-  
+
   const textarea = event.target;
   const pos = textarea.selectionStart;
   const char = event.data;
-  
+
   // Se non ci sono formati attivi, esci
   if (!activeFormats.bold && !activeFormats.italic && !activeFormats.underline) return;
-  
+
   // Rimuovi il carattere appena inserito
   const before = textarea.value.substring(0, pos - 1);
   const after = textarea.value.substring(pos);
-  
-  // Costruisci il testo formattato
+
+  // Costruisci il testo formattato in base ai formati attivi
   let formatted = char;
   if (activeFormats.bold) formatted = `**${formatted}**`;
   if (activeFormats.italic) formatted = `*${formatted}*`;
   if (activeFormats.underline) formatted = `__${formatted}__`;
-  
+
   // Inserisci il testo formattato
   textarea.value = before + formatted + after;
-  
+
   // Posiziona cursore alla fine del testo formattato
   const newPos = before.length + formatted.length;
   textarea.setSelectionRange(newPos, newPos);
@@ -628,9 +698,59 @@ function resetDisclaimerToDefault() {
   }
 }
 
+// Utility: escape HTML per sicurezza
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Converte i marker **..**, *..*, __..__ in HTML e mantiene i newline come <br>
+function markdownLikeToHtml(text) {
+  if (!text) return '';
+  let s = escapeHtml(text);
+  // sostituzioni non greedy, supporto multilinea
+  s = s.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
+  s = s.replace(/__(.+?)__/gs, '<u>$1</u>');
+  s = s.replace(/\*(.+?)\*/gs, '<em>$1</em>');
+  // normalizza ritorni riga e converte in <br>
+  s = s.replace(/\r\n?/g, '\n').replace(/\n/g, '<br>');
+  return s;
+}
+
+// Rimuove eventuale blocco di firma presente nel template
+function stripSignatureFromTemplate(text) {
+  if (!text) return '';
+  // rimuove una eventuale linea di underscore seguita da "Firma del cliente" (case-insensitive)
+  return text.replace(/[\r\n]*_+[\s\r\n]*Firma del cliente\s*$/i, '').trim();
+}
+
+// Renderizza markers tipo **bold**, *italic*, __underline__ in HTML (mantiene newline come <br>)
+function markdownLikeToHtml(text) {
+  if (!text) return '';
+  // escape semplice
+  const escapeHtml = s => String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  let s = escapeHtml(text);
+  s = s.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
+  s = s.replace(/__(.+?)__/gs, '<u>$1</u>');
+  s = s.replace(/\*(.+?)\*/gs, '<em>$1</em>');
+  s = s.replace(/\r\n?/g, '\n').replace(/\n/g, '<br>');
+  return s;
+}
+
 function showDisclaimerPreview() {
-  const template = document.getElementById('disclaimerTemplate').value;
-  const preview = template
+  let template = document.getElementById('disclaimerTemplate').value || '';
+  // Sostituzioni demo
+  let preview = template
     .replace(/{cliente_nome}/g, 'Maria')
     .replace(/{cliente_cognome}/g, 'Rossi')
     .replace(/{cliente_cellulare}/g, '333 1234567')
@@ -643,33 +763,13 @@ function showDisclaimerPreview() {
     .replace(/{centro_nome}/g, 'Beauty Center')
     .replace(/{centro_indirizzo}/g, 'Via Roma 123, Milano')
     .replace(/{data_odierna}/g, new Date().toLocaleDateString('it-IT'));
-  
-  document.getElementById('disclaimerPreviewContent').innerText = preview;
+
+  // Rimuoviamo la firma già contenuta nel template per evitare duplicati
+  preview = stripSignatureFromTemplate(preview);
+
+  document.getElementById('disclaimerPreviewContent').innerHTML = markdownLikeToHtml(preview);
   new bootstrap.Modal(document.getElementById('disclaimerPreviewModal')).show();
 }
-
-function printDisclaimer() {
-  const content = document.getElementById('disclaimerPreviewContent').innerText;
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
-    <html>
-    <head>
-      <title>Consenso Informato</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 40px; line-height: 1.6; }
-        .signature-line { border-top: 1px solid #000; width: 250px; margin-top: 60px; padding-top: 10px; }
-      </style>
-    </head>
-    <body>
-      <pre style="white-space: pre-wrap; font-family: Arial, sans-serif;">${content}</pre>
-      <div class="signature-line">Firma del cliente</div>
-    </body>
-    </html>
-  `);
-  printWindow.document.close();
-  printWindow.print();
-}
-
 async function saveDisclaimerTemplate() {
   const template = document.getElementById('disclaimerTemplate').value;
   

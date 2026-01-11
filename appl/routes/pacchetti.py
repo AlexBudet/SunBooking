@@ -1,12 +1,27 @@
 # appl/routes/pacchetti.py
 import json
-from flask import Blueprint, app, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify
 from appl import db
 from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo
 from sqlalchemy import func, or_, and_
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload, selectinload
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN, ROUND_CEILING
+from datetime import datetime
+from werkzeug.utils import secure_filename
+import magic
+
+# Configurazione sicurezza upload
+ALLOWED_EXTENSIONS = {'pdf'}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def validate_pdf(file_data):
+    """Verifica che il file sia effettivamente un PDF (magic bytes)"""
+    mime = magic.from_buffer(file_data[:2048], mime=True)
+    return mime == 'application/pdf'
 
 pacchetti_bp = Blueprint('pacchetti', __name__)
 
@@ -1227,3 +1242,109 @@ def get_sedute_disponibili(pacchetto_id):
     except Exception as e:
         print(f"Errore get_sedute_disponibili: {str(e)}")
         return jsonify([]), 500
+    
+# ============ CONSENSO INFORMATO API ============
+@pacchetti_bp.route('/api/pacchetti/<int:id>/consenso', methods=['POST'])
+def upload_consenso(id):
+    """Upload del consenso informato firmato (PDF)"""
+    pacchetto = Pacchetto.query.get_or_404(id)
+    
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'Nessun file caricato'}), 400
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'Nessun file selezionato'}), 400
+    
+    if not allowed_file(file.filename):
+        return jsonify({'success': False, 'error': 'Tipo file non consentito. Solo PDF.'}), 400
+    
+    # Leggi il contenuto
+    file_data = file.read()
+    
+    # Verifica dimensione
+    if len(file_data) > MAX_FILE_SIZE:
+        return jsonify({'success': False, 'error': 'File troppo grande. Max 10 MB.'}), 400
+    
+    # Verifica che sia realmente un PDF (magic bytes)
+    if not validate_pdf(file_data):
+        return jsonify({'success': False, 'error': 'Il file non è un PDF valido.'}), 400
+    
+    # Sanitizza il nome file
+    filename = secure_filename(file.filename)
+    
+    # Salva nel database
+    pacchetto.consenso_pdf = file_data
+    pacchetto.consenso_pdf_nome = filename
+    pacchetto.consenso_pdf_data = datetime.now()
+    
+    try:
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'Consenso caricato con successo',
+            'filename': filename,
+            'upload_date': pacchetto.consenso_pdf_data.strftime('%d/%m/%Y %H:%M')
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@pacchetti_bp.route('/api/pacchetti/<int:id>/consenso', methods=['GET'])
+def download_consenso(id):
+    """Download del consenso informato caricato"""
+    pacchetto = Pacchetto.query.get_or_404(id)
+    
+    if not pacchetto.consenso_pdf:
+        return jsonify({'success': False, 'error': 'Nessun consenso caricato'}), 404
+    
+    from flask import Response
+    response = Response(
+        pacchetto.consenso_pdf,
+        mimetype='application/pdf',
+        headers={
+            'Content-Disposition': f'inline; filename="{pacchetto.consenso_pdf_nome or "consenso.pdf"}"'
+        }
+    )
+    return response
+
+
+@pacchetti_bp.route('/api/pacchetti/<int:id>/consenso', methods=['DELETE'])
+def delete_consenso(id):
+    """Elimina il consenso informato caricato"""
+    pacchetto = Pacchetto.query.get_or_404(id)
+    
+    if not pacchetto.consenso_pdf:
+        return jsonify({'success': False, 'error': 'Nessun consenso da eliminare'}), 404
+    
+    pacchetto.consenso_pdf = None
+    pacchetto.consenso_pdf_nome = None
+    pacchetto.consenso_pdf_data = None
+    
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Consenso eliminato'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@pacchetti_bp.route('/api/pacchetti/<int:id>/consenso/info', methods=['GET'])
+def consenso_info(id):
+    """Restituisce info sul consenso caricato (se esiste)"""
+    pacchetto = Pacchetto.query.get_or_404(id)
+    
+    if pacchetto.consenso_pdf:
+        return jsonify({
+            'success': True,
+            'has_consenso': True,
+            'filename': pacchetto.consenso_pdf_nome,
+            'upload_date': pacchetto.consenso_pdf_data.strftime('%d/%m/%Y %H:%M') if pacchetto.consenso_pdf_data else None
+        })
+    else:
+        return jsonify({
+            'success': True,
+            'has_consenso': False
+        })
