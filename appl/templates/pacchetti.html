@@ -242,6 +242,12 @@
 .table thead th.sortable.desc i {
   opacity: 1;
 }
+/* Nascondi colonne sotto 1200px */
+@media (max-width: 1200px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
 </style>
 <br><br><br>
 <div class="page-wide-90">
@@ -288,10 +294,10 @@
                 <th class="sortable" data-sort="client_nome">Cliente <i class="bi bi-arrow-down-up"></i></th>
                 <th class="sortable" data-sort="nome">Pacchetto <i class="bi bi-arrow-down-up"></i></th>
                 <th class="sortable" data-sort="data_sottoscrizione">Creato il <i class="bi bi-arrow-down-up"></i></th>
-                <th class="sortable" data-sort="costo_totale_lordo">Da Listino <i class="bi bi-arrow-down-up"></i></th>
-                <th class="sortable" data-sort="costo_totale_scontato">Scontato <i class="bi bi-arrow-down-up"></i></th>
+                <th class="sortable hide-mobile" data-sort="costo_totale_lordo">Da Listino <i class="bi bi-arrow-down-up"></i></th>
+                <th class="sortable hide-mobile" data-sort="costo_totale_scontato">Scontato <i class="bi bi-arrow-down-up"></i></th>
                 {% if current_user and current_user.ruolo.value != 'user' %}
-                <th>Azioni</th>
+                <th class="hide-mobile">Azioni</th>
                 {% endif %}
             </tr>
         </thead>
@@ -863,10 +869,10 @@ tr.innerHTML = `
       ${badgePagato}
     </td>
     <td>${formatDataIt(p.data_sottoscrizione)}</td>
-    <td>€${p.costo_totale_lordo.toFixed(2)}</td>
-    <td>${p.costo_totale_scontato ? '€' + p.costo_totale_scontato.toFixed(2) : ''}</td>
+    <td class="hide-mobile">€${p.costo_totale_lordo.toFixed(2)}</td>
+    <td class="hide-mobile">${p.costo_totale_scontato ? '€' + p.costo_totale_scontato.toFixed(2) : ''}</td>
     ${userRuolo !== 'user' ? `
-    <td class="actions">
+    <td class="actions hide-mobile">
         <button type="button" class="btn btn-danger btn-sm btn-xxs"
                 onclick="event.stopPropagation(); deletePacchetto(${p.id})">Elimina</button>
     </td>
@@ -1331,4 +1337,44 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         updateCostoTotale();
     }
 </script>
+
+<script>
+// Disabilita tooltip su schermi < 1200px
+(function() {
+    function handleTooltips() {
+        const isMobile = window.innerWidth < 1200;
+        
+        if (isMobile) {
+            // Distruggi tutti i tooltip esistenti
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+                const tooltip = bootstrap.Tooltip.getInstance(el);
+                if (tooltip) {
+                    tooltip.dispose();
+                }
+                // Rimuovi l'attributo per evitare reinizializzazione
+                el.removeAttribute('data-bs-toggle');
+                el.setAttribute('data-tooltip-disabled', 'true');
+            });
+        } else {
+            // Reinizializza tooltip se tornati a desktop
+            document.querySelectorAll('[data-tooltip-disabled="true"]').forEach(el => {
+                el.setAttribute('data-bs-toggle', 'tooltip');
+                el.removeAttribute('data-tooltip-disabled');
+                new bootstrap.Tooltip(el);
+            });
+        }
+    }
+    
+    // Esegui al caricamento
+    document.addEventListener('DOMContentLoaded', handleTooltips);
+    
+    // Esegui al resize (con debounce)
+    let resizeTimer;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(handleTooltips, 250);
+    });
+})();
+</script>
+
 {% endblock %}
