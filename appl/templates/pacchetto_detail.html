@@ -426,8 +426,9 @@ display: none;
   /* Tabella sedute: usa tutta la larghezza possibile */
   #seduteTable,
   #seduteTable.table {
-    width: 100% !important;
-    max-width: 100% !important;
+    width: 94% !important;
+    max-width: 94% !important;
+    margin-left: 3% !important;
   }
 
 .pagamento-div {
@@ -1247,6 +1248,13 @@ document.addEventListener('click', function interceptClientInfo(e) {
   const link = e.target.closest('.client-info-link');
   if (!link) return;
   e.preventDefault();
+  
+  // Disabilita editing dati cliente in modalità mobile
+  if (window.innerWidth < 1200) {
+    alert('Operazione non consentita in modalità mobile');
+    return;
+  }
+  
   const clientId = link.dataset.clientId;
   const modalWrap = document.getElementById('clientInfoModal');
   const modalBody = document.getElementById('clientInfoModalBody');
