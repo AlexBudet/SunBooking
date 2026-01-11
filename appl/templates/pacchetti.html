@@ -247,6 +247,22 @@
   .hide-mobile {
     display: none !important;
   }
+  /* Su mobile, la colonna "Creato il" (terza colonna) deve avere border destro e radius */
+  .table tbody tr[class*="status-"] > td:nth-child(3) {
+    border-right: var(--bs-border-width) solid var(--bs-table-border-color);
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    overflow: hidden;
+  }
+
+  .tooltip {
+    display: none;
+  }
+
+  /* Disabilita tooltip nativi del browser su mobile */
+  [title] {
+    pointer-events: none;
+  }
 }
 </style>
 <br><br><br>
