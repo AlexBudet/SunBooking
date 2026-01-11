@@ -421,9 +421,16 @@
                     
                     <!-- Operatori preferiti -->
                     <div class="mb-3">
-                        <label class="form-label">Operatori Preferiti</label>
-                        <select class="form-select" id="operatoriSelect" multiple>
-                        </select>
+                        <label class="form-label">Operatore Preferito</label>
+                        <div class="d-flex gap-2 align-items-center">
+                            <select class="form-select" id="operatoriSelect" multiple style="flex:1">
+                            </select>
+                            <button type="button"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    id="btnDeselezionaOperatori"
+                                    title="Deseleziona tutti gli operatori"
+                                    onclick="deselezionaOperatori()">Deseleziona</button>
+                        </div>
                     </div>
                     
                     <!-- Status (solo per edit) -->
@@ -1352,6 +1359,12 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         updateServiziList();
         updateCostoTotale();
     }
+
+function deselezionaOperatori() {
+    const select = document.getElementById('operatoriSelect');
+    if (!select) return;
+    Array.from(select.options).forEach(o => o.selected = false);
+}
 </script>
 
 <script>
