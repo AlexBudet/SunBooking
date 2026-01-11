@@ -381,6 +381,12 @@ tr.rata-pagata input {
       padding: 3px 5px;
     }
 
+/* Placeholder più chiaro per la textarea note */
+#noteEditor::placeholder {
+  color: #adb5bd !important;  /* grigio chiaro */
+  opacity: 1;
+}
+
 @media (max-width: 1200px) {
 .primo-div {
 display: none;
@@ -435,7 +441,6 @@ display: none;
   max-width: 80% !important;
   table-layout: auto !important;
 }
-
   }
   </style>
 
@@ -447,10 +452,45 @@ display: none;
     </h4>
   </a>
 <div class="action-icons-right">
-  <a href="#" class="action-icon" id="btnDisclaimer" style="color: #6f42c1; font-size: 1.5rem;"
-     data-bs-toggle="tooltip" data-bs-placement="bottom" title="Genera il consenso informato per i trattamenti">
-    <i class="bi bi-file-earmark-medical"></i>
-  </a>
+  <!-- Dropdown Consenso Informato -->
+  <div class="dropdown d-inline-block">
+    <a href="#" class="action-icon dropdown-toggle" id="btnDisclaimerDropdown" 
+       style="color: #6f42c1; font-size: 1.5rem;" 
+       data-bs-toggle="dropdown" aria-expanded="false"
+       title="Consenso Informato">
+      <i class="bi bi-file-earmark-medical"></i>
+      <span id="consensoBadge" class="position-absolute translate-middle badge rounded-pill bg-success" style="display:none; font-size: 0.5rem; top: 5px; right: -5px;">
+        ✓
+      </span>
+    </a>
+    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="btnDisclaimerDropdown">
+      <!-- Opzioni quando NON c'è consenso caricato -->
+      <li id="menuStampaConsenso">
+        <a class="dropdown-item" href="#" onclick="generaDisclaimerPdf(); return false;">
+          <i class="bi bi-file-earmark-pdf text-danger"></i> Genera PDF
+        </a>
+      </li>
+      <li id="menuCaricaConsenso">
+        <a class="dropdown-item" href="#" onclick="document.getElementById('consensoFileInput').click(); return false;">
+          <i class="bi bi-upload text-primary"></i> Carica firmato
+        </a>
+      </li>
+      <li><hr class="dropdown-divider" id="consensoDivider" style="display:none;"></li>
+      <!-- Opzioni quando C'È consenso caricato -->
+      <li id="menuVisualizzaConsenso" style="display:none;">
+        <a class="dropdown-item" href="#" onclick="visualizzaConsenso(); return false;">
+          <i class="bi bi-eye text-success"></i> Visualizza caricato
+        </a>
+      </li>
+      <li id="menuEliminaConsenso" style="display:none;">
+        <a class="dropdown-item text-danger" href="#" onclick="eliminaConsenso(); return false;">
+          <i class="bi bi-trash"></i> Elimina caricato
+        </a>
+      </li>
+    </ul>
+  </div>
+  <!-- Input file nascosto per upload -->
+  <input type="file" id="consensoFileInput" accept=".pdf" style="display:none;" onchange="caricaConsenso(this)">
   <a href="#" class="action-icon" id="btnWhatsapp" style="color: #25D366; font-size: 1.5rem;"
      data-bs-toggle="tooltip" data-bs-placement="bottom" title="Invia riepilogo pacchetto al cliente via WhatsApp">
     <i class="bi bi-whatsapp"></i>
@@ -534,8 +574,12 @@ display: none;
       </table>
     </div>
     <div class="ms-3" style="width: 300px;">
-  <textarea id="noteEditor" class="form-control" rows="10"
-            data-bs-toggle="tooltip" data-bs-placement="left" title="Appunti interni sul pacchetto (salvati automaticamente)">{{ pacchetto.note or '' }}</textarea>
+<textarea id="noteEditor" class="form-control" rows="10"
+          placeholder="Appunti interni sul pacchetto (salvati automaticamente)"
+          spellcheck="false"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off">{{ pacchetto.note or '' }}</textarea>
     </div>
   </div>
   </div>
@@ -2598,12 +2642,6 @@ document.getElementById('btnStampa').addEventListener('click', function(e) {
   generaPdfPacchetto(true);
 });
 
-// Event listener per il pulsante Disclaimer
-document.getElementById('btnDisclaimer').addEventListener('click', function(e) {
-  e.preventDefault();
-  generaDisclaimerPdf(false);
-});
-
 // Event listener per il pulsante WhatsApp
 document.getElementById('btnWhatsapp').addEventListener('click', async function(e) {
   e.preventDefault();
@@ -2846,15 +2884,152 @@ Ti aspettiamo! 💆‍♀️
     user-select: none;
   }
 
-/* Stili visivi per campi disabilitati in mobile */
-@media (max-width: 1199.98px) {
   .mobile-disabled {
     pointer-events: none !important;
     opacity: 0.65 !important;
     cursor: not-allowed !important;
   }
 }
-
-}
 </style>
+<script>
+// ============ CONSENSO INFORMATO - Upload/View/Delete ============
+
+// Stato corrente del consenso
+let consensoCaricato = false;
+
+// Carica info consenso all'avvio
+document.addEventListener('DOMContentLoaded', function() {
+  checkConsensoStatus();
+});
+
+async function checkConsensoStatus() {
+  try {
+    const response = await fetch(`/pacchetti/api/pacchetti/${pacchettoId}/consenso/info`);
+    const data = await response.json();
+    
+    if (data.success && data.has_consenso) {
+      consensoCaricato = true;
+      aggiornaMenuConsenso(true, data.filename, data.upload_date);
+    } else {
+      consensoCaricato = false;
+      aggiornaMenuConsenso(false);
+    }
+  } catch (error) {
+    console.error('Errore check consenso:', error);
+  }
+}
+
+function aggiornaMenuConsenso(hasConsenso, filename = null, uploadDate = null) {
+  const badge = document.getElementById('consensoBadge');
+  const menuStampa = document.getElementById('menuStampaConsenso');
+  const menuCarica = document.getElementById('menuCaricaConsenso');
+  const menuVisualizza = document.getElementById('menuVisualizzaConsenso');
+  const menuElimina = document.getElementById('menuEliminaConsenso');
+  const divider = document.getElementById('consensoDivider');
+  
+  if (hasConsenso) {
+    // Mostra badge verde
+    badge.style.display = 'inline-block';
+    badge.title = `Caricato: ${filename} (${uploadDate})`;
+    
+    // Mostra tutte le opzioni
+    menuStampa.style.display = 'block';
+    menuCarica.style.display = 'block';
+    divider.style.display = 'block';
+    menuVisualizza.style.display = 'block';
+    menuElimina.style.display = 'block';
+  } else {
+    // Nascondi badge
+    badge.style.display = 'none';
+    
+    // Mostra solo stampa e carica
+    menuStampa.style.display = 'block';
+    menuCarica.style.display = 'block';
+    divider.style.display = 'none';
+    menuVisualizza.style.display = 'none';
+    menuElimina.style.display = 'none';
+  }
+}
+
+async function caricaConsenso(input) {
+  if (!input.files || !input.files[0]) return;
+  
+  const file = input.files[0];
+  
+  // Validazione client-side
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    alert('⚠️ Solo file PDF sono consentiti.');
+    input.value = '';
+    return;
+  }
+  
+  if (file.size > 10 * 1024 * 1024) {
+    alert('⚠️ Il file è troppo grande. Massimo 10 MB.');
+    input.value = '';
+    return;
+  }
+  
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  try {
+    const response = await fetch(`/pacchetti/api/pacchetti/${pacchettoId}/consenso`, {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': csrfToken
+      },
+      body: formData
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      alert('✅ Consenso caricato con successo!');
+      consensoCaricato = true;
+      aggiornaMenuConsenso(true, data.filename, data.upload_date);
+    } else {
+      alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
+    }
+  } catch (error) {
+    console.error('Errore upload:', error);
+    alert('❌ Errore di connessione');
+  }
+  
+  // Reset input
+  input.value = '';
+}
+
+function visualizzaConsenso() {
+  // Apre il PDF in una nuova tab
+  window.open(`/pacchetti/api/pacchetti/${pacchettoId}/consenso`, '_blank');
+}
+
+async function eliminaConsenso() {
+  if (!confirm('Vuoi eliminare il consenso caricato? Questa azione non può essere annullata.')) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/pacchetti/api/pacchetti/${pacchettoId}/consenso`, {
+      method: 'DELETE',
+      headers: {
+        'X-CSRFToken': csrfToken
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      alert('✅ Consenso eliminato.');
+      consensoCaricato = false;
+      aggiornaMenuConsenso(false);
+    } else {
+      alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
+    }
+  } catch (error) {
+    console.error('Errore eliminazione:', error);
+    alert('❌ Errore di connessione');
+  }
+}
+</script>
 {% endblock %}
