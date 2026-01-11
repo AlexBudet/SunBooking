@@ -1,23 +1,24 @@
-- implementare SEZIONE PACCHETTI: due tipi di scontistiche: % su totale e sedute omaggio ogni tot sedute, occhio agli STATI (Enum) di pacchetti e sedute (vedi in models.py)
+Cassa:
+- occhio dà errore di formato quando stampiamo scontrino con " ' " (per es Skin's)
 
 Report:
 - btn Clienti se popolato mostra modal dove contenuto straborda in basso, formattare nomi
+- tile migliori clienti dell'anno deve essere customizzabile (cambiare l'anno o impostare per mese?) e deve contare non solo appuntamenti in stato pagato, ma anche PAGAMENTI per quel cliente senza appuntamento (che ora non fa)
+
+Calendar:
+- quando associamo cliente booking online da "associa cliente" su blocco poi deve fare refresh e cambio colore
+- quando apro "associa cliente" da blocco source=web non ancora assegnato e non trova il cellulare, quando apriamo "+" deve pre-compilare i campi NOME, COGNOME e CELLULARE come da nota cliente su appuntamento online
+- verificare refresh di web app table, dopo associazione rimangono in rosso app da associare, devo fare refresh manuale per farli andare via!
+- ERRORE quando provo a fare "copia" su un blocco off da modalità touch-ui... mi dice "non puoi copiare blocco off nel navigator", me lo da da wsgi.py, VERIFICARE E CORREGGERE
+- PENSARE A WARNING DA APPLICARE A CERTI SERVIZI IN CASO DI APPUNTAMENTI SOVRAPPOSTI (per es. per quel servizio ho un solo macchinario, non posso farne due in contemporanea)
 
 Booking online:
 - far sì che cliente possa annullare solo prenotazioni fissate in date e ora SUCCESSIVE a datetime corrente
 
-Calendar:
-- verificare refresh di web app table, dopo associazione rimangono in rosso app da associare, devo fare refresh manuale per farli andare via!
-- quando associamo cliente booking online da "associa cliente" su blocco poi deve fare refresh e cambio colore
-- quando apro "associa cliente" da blocco source=web non ancora assegnato e non trova il cellulare, quando apriamo "+" deve pre-compilare i campi NOME, COGNOME e CELLULARE come da nota cliente su appuntamento online
-
 Settings:
 - creare un campo extra da mostrare in pagina booking per eventuali warning (es: controllare spam e-mail se non si riceve codice)
 
-- implementare SEZIONE MARKETING per invio whatsapp secondo filtri (CON LIMITAZIONI): ?
-- invio Wapp automatico dopo pagamento di NUOVO CLIENTE per recensione
-
-- WHATSAPP: VALUTARE PASSAGGIO A META VIA AZURE COMMUNICATION SERVICES !!!!!!!!! IMPORTANTISSIMO !!!
+- WHATSAPP: VALUTARE PASSAGGIO A UNIPILE ?
 
 WEB APP:
 - uniformare stili dei modal di calendar (tutti sfondo rosa con gradiente?)
@@ -28,7 +29,34 @@ WEB BOOKING:
 - opzionale: offrire la possibilità di PAGARE ONLINE gli appuntamenti
 - opzionale: mostrare descrizione per ogni servizio
 
+GENERALE: 
+- fare un refresh automatico ogni tot minuti?
+- impostare logica per evitare multi-click in altri punti?
+- creare logging dei messaggi flask del terminale e da console?
+
+
+
+
+
 CORRETTI, DA VERIFICARE:
+- deve dare popup di conferma dopo aggiunta nuovo servizio
+- template memo whatsapp, scrivere il primo servizio con "servizio_nome" invece che con "servizio_tag"
+- settings/Clienti: header tabella non sono ordinabili e danno errore al click
+- nascondere tasti "modifica" e "elimina" per operatori quando loggato da user (già disattivati ma non basta)
+- al click su button consenso informato in pacchetto_detail.html, invece di scaricare direttamente il .pdf si devono aprire due tasti, uno per scaricare in pdf, uno per CARICARE IL PDF (con massima attenzione alla sicurezza), e salvarlo in database (creiamo quindi il relativo record nella class Pacchetto o quella che reputi più adatta). Quando ci sarà il documento caricato, al click sul bottone ci sarà invece sempre il button per scaricare in .pdf, ma anche quello per VISUALIZZARE il documento caricato o per ELIMINARLO. In caso fosse eliminato (campo vuoto in database) deve tornare la vista di quando non c'è il consenso caricato, ovvero tasto "stampa" e tasto "carica"
+- in alcuni campi di testo con sfondo bianco il cursore al caricamento rimane bianco e quindi sembra scomparire, fix con cursore colore nero? (per es. nota appuntamento da blocco)
+- sistemare editing del template disclaimer in Pacchetti
+PACCHETTI: verificare sezioni Pacchetti in modalità touch e mobile e riadattare
+SEZIONE MARKETING per invio whatsapp secondo filtri (CON LIMITAZIONI):
+- limitare numero di invii, e implementare tooltip informativi
+- fare sparire popup di notifica pagamento avvenuto in automatico dopo tot secondi
+- PACCHETTI: colonne in nome pacchetto riordinabili dall'header, creata funzione per invio Whatsapp
+- larghezza colonna "Nome Pacchetto" in pacchetti.html impostare max-width e... se possibile se straborda mostrare al posto di nome servizio i tag servizio, e il badge "PAGATO" se non c'è spazio deve mostrare solo il simbolo emoji
+appuntamenti correlati a seduta pacchetto NON DEVONO AVERE POPUP-BUTTON "vai in cassa" ma bensì lo stesso popup-button solo in questi casi deve avere tooltip "vai al pacchetto", inoltre va scritto in nota o comunque contrassegnato in qualche modo il fatto che l'appuntamento è la seduta di un pacchetto
+- far sì che se voglio creare appuntamento per cliente che ha pacchetto per quel servizio, dopo creazione blocco mi porti nel relativo pacchetto per visualizzare data compilata
+- quando creo un appuntamento da pseudoblock navigator (searchClientNav e searchServiceNav) o da modal di creazione appuntamento (searchClient e searchService) in caso siano associati UN CLIENTE + UN SERVIZIO che trovano corrispondenza in uno dei pacchetti salvati in database, ALLORA ANDRA' CREATO UN BLOCCO APPUNTAMENTO con correlazione alla relativa seduta e relativo pacchetto, che avrà comportamento diverso (al posto di popup-button "vai in cassa" il click su quel popup-button porterà al pacchetto!)
+- se in pacchetti.html visualizza pacchetti attivi, fare in modo che ci sia un simbolo per i pacchetti attivi non completati come sedute ma già pagati
+- IMPORTANTE: SI E' PERSA LA LOGICA MULTI-TAGLIA e MULTI-INCOLLA per piu blocchi, dopo il primo copia o taglia al click su altro blocco INCOLLA DIRETTAMENTE IL SINGOLO BLOCCO SOVRAPPONENDOLO!!! RIPRISTINARE!!!
 - Nel modal di preview il testo straborda, rendere scrollabile
 - modal per descrizione servizio: tasti I e B per corsivo/grassetto devono rimanere selezionati con hover dopo il click, e se selezionati il carattere che scrivo sarà corsivo/grassetto, disattiva con un altro click
 - mostrare descrizione appuntamenti in settings anche per utenti: user (ma non editabili)
@@ -182,9 +210,7 @@ SOLARIUM -> tenere su applicazione separata!
 
 PROMO e PACCHETTI
 - gift card (paghi in anticipo tot, hai gift card con +10% o +20%)
-- pacchetti (ogni 5 seduta 1 omaggio, ecc) -> rateizzabili -> pagamento cassa integrato
 - ricaricabili (come solarium, paghi 100 carichi 125 ecc)
-- sistema rate (come usiamo in negozio)
 - raccolta punti (tot euro ogni tot euro spesi)
 
 ...Proporre prezzi IVA INCLUSA!
