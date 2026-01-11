@@ -380,13 +380,57 @@ tr.rata-pagata input {
       min-height: 40px;
       padding: 3px 5px;
     }
+
+@media (max-width: 1200px) {
+.primo-div {
+display: none;
+}
+
+.action-icons-right {
+  display: none;
+}
+
+.form-control {
+display: none;
+}
+
+.tooltip {
+  display: none;
+}
+
+.bi.bi-arrow-down-up{
+  display: none;
+}
+
+.bi.bi-people {
+  display: none;
+}
+
+  /* Se il layout usa .d-flex con .flex-fill, passa a colonna per permettere piena larghezza */
+  .d-flex {
+    flex-direction: column !important;
+    gap: 0.5rem;
+  }
+
+  .d-flex > .flex-fill {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  /* Tabella sedute: usa tutta la larghezza possibile */
+  #seduteTable,
+  #seduteTable.table {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  }
   </style>
 
   <div class="neomorphic-div programma-card status-{{ pacchetto.status|lower }}" style="position: relative;">
   <a href="#" class="client-info-link" data-client-id="{{ pacchetto.client_id }}" style="text-decoration:none; color:inherit; cursor:pointer;">
     <h4 class="mb-0">
-      <b>NOME:</b> {{ pacchetto.client_nome }}&nbsp;&nbsp;&nbsp;
-      <b>TEL:</b> {{ pacchetto.client_cellulare or '—' }}
+      <b class="primo-div">NOME:</b> {{ pacchetto.client_nome }}&nbsp;&nbsp;&nbsp;
+      <b class="primo-div">TEL:</b> {{ pacchetto.client_cellulare or '—' }}
     </h4>
   </a>
 <div class="action-icons-right">
