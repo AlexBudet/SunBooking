@@ -129,7 +129,7 @@ def pacchetti_home():
     pacchetti_data = []
     for p in pacchetti:
         sedute_info = [{'ordine': s.ordine, 'service_nome': s.service.servizio_nome, 'stato': s.stato} for s in p.sedute]
-        operatori_pref = [f"{o.user_nome} {o.user_cognome}" for o in p.preferred_operators]
+        operatori_pref = [f"{o.user_nome}" for o in p.preferred_operators]
         pacchetti_data.append({
             'id': p.id,
             'client_id': p.client_id,
@@ -164,7 +164,7 @@ def pacchetti_home():
     operatori = Operator.query.filter(Operator.is_deleted == False, Operator.user_tipo == 'estetista', Operator.is_visible == True).limit(50).all()
     operatori_data = [{
         'id': o.id,
-        'nome': f"{o.user_nome} {o.user_cognome}"
+        'nome': f"{o.user_nome}"
     } for o in operatori]
     
     # Status disponibili per filtri
@@ -260,14 +260,13 @@ def api_operatori():
             Operator.user_tipo == 'estetista',
             Operator.is_visible == True,  # Filtro per estetiste
             or_(
-                Operator.user_nome.ilike(f'%{query}%'),
-                Operator.user_cognome.ilike(f'%{query}%')
+                Operator.user_nome.ilike(f'%{query}%')
             )
         )
     ).limit(50).all()
     return jsonify([{
         'id': o.id,
-        'nome': f"{o.user_nome} {o.user_cognome}"
+        'nome': f"{o.user_nome}"
     } for o in operatori])
 
 @pacchetti_bp.route('/api/pacchetti', methods=['GET'])
@@ -324,7 +323,7 @@ def api_pacchetti():
             tutte_rate_pagate = all(r.is_pagata for r in p.rate)
         # ✅ MANTIENE TUTTI I CAMPI ORIGINALI
         sedute_info = [{'ordine': s.ordine, 'service_nome': s.service.servizio_nome, 'stato': s.stato} for s in p.sedute]
-        operatori_pref = [f"{o.user_nome} {o.user_cognome}" for o in p.preferred_operators]
+        operatori_pref = [f"{o.user_nome}" for o in p.preferred_operators]
         result.append({
             'id': p.id,
             'client_id': p.client_id,
@@ -617,7 +616,7 @@ def api_get_pacchetto(id):
         if getattr(s, 'operatore_id', None):
             op = Operator.query.get(s.operatore_id)
             if op:
-                operatore_nome = f"{op.user_nome} {op.user_cognome}"
+                operatore_nome = f"{op.user_nome}"
         sedute.append({
             'id': s.id,
             'service_id': s.service_id,
@@ -699,7 +698,7 @@ def pacchetto_detail(id):
     operatori_map = {}
     if operatore_ids:
         operatori_db = Operator.query.filter(Operator.id.in_(operatore_ids)).all()
-        operatori_map = {o.id: f"{o.user_nome} {o.user_cognome}" for o in operatori_db}
+        operatori_map = {o.id: f"{o.user_nome}" for o in operatori_db}
 
     # Costruisci sedute usando i dati già caricati (zero query aggiuntive)
     sedute_ordinate = sorted(pacchetto.sedute, key=lambda s: s.ordine or 0)
@@ -736,9 +735,9 @@ def pacchetto_detail(id):
     differenza_rate = round(totale_pacchetto - totale_rate, 2)
 
     # Usa i dati già caricati (zero query aggiuntive)
-    operatori = [{'id': o.id, 'nome': f"{o.user_nome} {o.user_cognome}"} for o in pacchetto.preferred_operators]
+    operatori = [{'id': o.id, 'nome': f"{o.user_nome}"} for o in pacchetto.preferred_operators]
     
-    all_operatori = [{'id': o.id, 'nome': f"{o.user_nome} {o.user_cognome}"} for o in Operator.query.filter(Operator.is_deleted == False, Operator.user_tipo == 'estetista', Operator.is_visible == True).all()]
+    all_operatori = [{'id': o.id, 'nome': f"{o.user_nome}"} for o in Operator.query.filter(Operator.is_deleted == False, Operator.user_tipo == 'estetista', Operator.is_visible == True).all()]
     
     data_fmt = format_data_it(pacchetto.data_sottoscrizione) if pacchetto.data_sottoscrizione else ''
     

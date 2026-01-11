@@ -423,6 +423,19 @@ display: none;
     width: 100% !important;
     max-width: 100% !important;
   }
+
+.pagamento-div {
+  width: 80% !important;
+  margin-left: 10% !important;
+}
+
+.pagamento-div .rate-table,
+.rate-table {
+  width: 80% !important;
+  max-width: 80% !important;
+  table-layout: auto !important;
+}
+
   }
   </style>
 
@@ -533,7 +546,7 @@ display: none;
 
 {% set tutte_rate_pagate = pacchetto.rate|length > 0 and pacchetto.rate|selectattr('is_pagata', 'false')|list|length == 0 %}
 
-  <div class="neomorphic-div programma-card status-{{ pacchetto.status|lower }}{% if tutte_rate_pagate %} pagato-tutto{% endif %}" style="width: 51.5%; margin-left: 16%;">
+  <div class="neomorphic-div programma-card pagamento-div status-{{ pacchetto.status|lower }}{% if tutte_rate_pagate %} pagato-tutto{% endif %}" style="width: 51.5%; margin-left: 16%;">
   <h5><b>PAGAMENTO</b></h5>
 <div class="d-flex flex-wrap align-items-center gap-3">
   <div class="me-3">
@@ -2719,4 +2732,129 @@ Ti aspettiamo! 💆‍♀️
    
 }); // end DOMContentLoaded
 </script>
+<script>
+(function() {
+  const SELECTORS = ['#seduteTable', '.rate-table'].join(',');
+  let debounceTimer = null;
+
+  function mobileHandler(e) {
+    const target = e.target;
+    const table = target.closest && (target.closest('#seduteTable') || target.closest('.rate-table'));
+    if (table && window.innerWidth < 1200) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      alert('Operazione non consentita in modalità mobile');
+    }
+  }
+
+  function updateMobileMode() {
+    const isMobile = window.innerWidth < 1200;
+    document.querySelectorAll(SELECTORS).forEach(t => {
+      if (isMobile) {
+        t.classList.add('mobile-disabled-clicks');
+      } else {
+        t.classList.remove('mobile-disabled-clicks');
+      }
+    });
+  }
+
+  function onResize() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      updateMobileMode();
+    }, 150);
+  }
+
+  document.addEventListener('click', mobileHandler, true);
+  window.addEventListener('resize', onResize);
+  document.addEventListener('DOMContentLoaded', () => {
+    updateMobileMode();
+  });
+})();
+</script>
+<script>
+(function() {
+  const inputs = [
+    document.getElementById('scontoInput'),
+    document.getElementById('numeroRate')
+  ].filter(Boolean);
+  const calcBtn = document.getElementById('btnCalcolaRate');
+
+  function setMobileDisabled(enable) {
+    inputs.forEach(el => {
+      if (!el) return;
+      if (enable) {
+        el.setAttribute('disabled', 'disabled');
+        el.classList.add('mobile-disabled');
+        el.setAttribute('aria-disabled', 'true');
+      } else {
+        el.removeAttribute('disabled');
+        el.classList.remove('mobile-disabled');
+        el.removeAttribute('aria-disabled');
+      }
+    });
+
+    if (calcBtn) {
+      if (enable) {
+        calcBtn.setAttribute('disabled', 'disabled');
+        calcBtn.classList.add('mobile-disabled');
+        calcBtn.setAttribute('aria-disabled', 'true');
+      } else {
+        calcBtn.removeAttribute('disabled');
+        calcBtn.classList.remove('mobile-disabled');
+        calcBtn.removeAttribute('aria-disabled');
+      }
+    }
+  }
+
+  let resizeTimer = null;
+  function update() {
+    const isMobile = window.innerWidth < 1200;
+    setMobileDisabled(isMobile);
+  }
+
+  document.addEventListener('DOMContentLoaded', update);
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(update, 150);
+  });
+
+  // Extra: block programmatic click on calcBtn on mobile just in case
+  document.addEventListener('click', function(e) {
+    const target = e.target;
+    if (window.innerWidth < 1200) {
+      if (target && (target.closest && (target.closest('#scontoInput') || target.closest('#numeroRate') || target.closest('#btnCalcolaRate')))) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        alert('Operazione non consentita in modalità mobile');
+      }
+    }
+  }, true);
+})();
+</script>
+<style>
+/* indicazione visiva su mobile: cursore non consentito */
+@media (max-width: 1199.98px) {
+  #seduteTable.mobile-disabled-clicks,
+  .rate-table.mobile-disabled-clicks {
+    cursor: not-allowed;
+  }
+  #seduteTable.mobile-disabled-clicks td,
+  .rate-table.mobile-disabled-clicks td {
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
+/* Stili visivi per campi disabilitati in mobile */
+@media (max-width: 1199.98px) {
+  .mobile-disabled {
+    pointer-events: none !important;
+    opacity: 0.65 !important;
+    cursor: not-allowed !important;
+  }
+}
+
+}
+</style>
 {% endblock %}
