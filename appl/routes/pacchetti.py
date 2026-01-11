@@ -9,7 +9,9 @@ from sqlalchemy.orm import joinedload, selectinload
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN, ROUND_CEILING
 from datetime import datetime
 from werkzeug.utils import secure_filename
-import magic
+from werkzeug.utils import secure_filename
+import filetype  # Sostituisce python-magic - nessuna dipendenza di sistema
+import json
 
 # Configurazione sicurezza upload
 ALLOWED_EXTENSIONS = {'pdf'}
@@ -20,8 +22,8 @@ def allowed_file(filename):
 
 def validate_pdf(file_data):
     """Verifica che il file sia effettivamente un PDF (magic bytes)"""
-    mime = magic.from_buffer(file_data[:2048], mime=True)
-    return mime == 'application/pdf'
+    kind = filetype.guess(file_data)
+    return kind is not None and kind.mime == 'application/pdf'
 
 pacchetti_bp = Blueprint('pacchetti', __name__)
 
