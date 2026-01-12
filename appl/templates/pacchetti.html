@@ -597,6 +597,19 @@ function toggleScontoFields() {
         document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
             new bootstrap.Tooltip(el);
         });
+
+        // Nascondi il tooltip del searchStatus quando si clicca o si apre il dropdown
+        const searchStatusEl = document.getElementById('searchStatus');
+        if (searchStatusEl) {
+            ['click', 'focus', 'mousedown'].forEach(evt => {
+                searchStatusEl.addEventListener(evt, function() {
+                    const tooltip = bootstrap.Tooltip.getInstance(searchStatusEl);
+                    if (tooltip) {
+                        tooltip.hide();
+                    }
+                });
+            });
+        }
     })
 
 // Genera le righe per selezionare le sedute omaggio
