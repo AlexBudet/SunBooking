@@ -6,7 +6,7 @@ from sqlalchemy.orm import joinedload
 from datetime import time as dtime
 from datetime import datetime, timedelta, time, timezone
 import requests
-from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, Operator, Client, Service, BusinessInfo
+from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo
 from appl import app
 import random
 import json
@@ -636,6 +636,23 @@ def edit_appointment(appt_id):
             # Aggiornamenti campi
             if 'client_id' in data:
                 appt.client_id = new_client_id
+                
+                # Se è un blocco web con placeholder, assegna nuovo colore random
+                if appt.source == AppointmentSource.web and new_client_id != original_client_id:
+                    new_color = random_color()
+                    new_font_color = compute_font_color(new_color)
+                    appt.colore = new_color
+                    appt.colore_font = new_font_color
+                    
+                    # Propaga il colore a tutti i blocchi della stessa sessione
+                    if appt.booking_session_id:
+                        session_blocks = Appointment.query.filter_by(
+                            booking_session_id=appt.booking_session_id,
+                            is_cancelled_by_client=False
+                        ).all()
+                        for block in session_blocks:
+                            block.colore = new_color
+                            block.colore_font = new_font_color
 
             if 'operator_id' in data:
                 try:
@@ -1659,7 +1676,15 @@ def associa_cliente_booking():
     date_str = appt.start_time.strftime("%Y-%m-%d") if appt.start_time else ""
     hour = appt.start_time.strftime("%H") if appt.start_time else ""
     minute = appt.start_time.strftime("%M") if appt.start_time else ""
-    return jsonify({"success": True, "date": date_str, "hour": hour, "minute": minute, "new_client_id": client.id})
+    return jsonify({
+        "success": True, 
+        "date": date_str, 
+        "hour": hour, 
+        "minute": minute, 
+        "new_client_id": client.id,
+        "new_color": new_color,
+        "new_font_color": new_font_color
+    })
 
 @calendar_bp.route('/api/last-online-booking', methods=['GET'])
 def last_online_booking():
@@ -2258,22 +2283,32 @@ def send_whatsapp_auto():
 @calendar_bp.route('/api/web-appointments/count-pending', methods=['GET'])
 def count_pending_web_appointments():
     """
-    Conta gli appuntamenti 'web' che non sono stati ancora gestiti/associati.
-    Cerca su TUTTI i giorni (nessun filtro data) e controlla nome/cognome del cliente.
+    Conta le SESSIONI di booking 'web' che non sono state ancora gestite/associate.
+    Raggruppa per booking_session_id (o appuntamento singolo se NULL).
+    Esclude appuntamenti cancellati dal cliente e quelli assegnati a operatori eliminati o non visibili.
     """
     try:
-        # Cerca appuntamenti source='web' associati a clienti con nome BOOKING e cognome ONLINE (case-insensitive)
-        # Include anche 'cliente booking' per retrocompatibilità con il dummy standard
-        count = Appointment.query.join(Client).filter(
+        # Subquery: trova tutti gli appuntamenti web pending validi
+        # poi raggruppa per booking_session_id (o id se booking_session_id è NULL)
+        from sqlalchemy import case, literal_column
+        
+        # Conta sessioni uniche: usa COALESCE per trattare booking_session_id NULL come id singolo
+        count = db.session.query(
+            func.count(func.distinct(
+                func.coalesce(Appointment.booking_session_id, func.concat('single-', Appointment.id))
+            ))
+        ).select_from(Appointment).join(Client).join(Operator).filter(
             Appointment.source == 'web',
             Appointment.is_cancelled_by_client == False,
+            Operator.is_deleted == False,
+            Operator.is_visible == True,
             or_(
                 and_(func.upper(Client.cliente_nome) == 'BOOKING', func.upper(Client.cliente_cognome) == 'ONLINE'),
                 and_(func.upper(Client.cliente_nome) == 'CLIENTE', func.upper(Client.cliente_cognome) == 'BOOKING')
             )
-        ).count()
+        ).scalar()
 
-        return jsonify({'count': count})
+        return jsonify({'count': count or 0})
     except Exception as e:
         app.logger.exception("Errore conteggio web pending")
         return jsonify({'count': 0})

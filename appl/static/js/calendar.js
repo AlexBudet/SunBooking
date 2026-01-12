@@ -597,6 +597,20 @@ function openAddClientModal(callerId) {
     
     if (addClientForm) {
       addClientForm.reset();
+
+      // Pre-carica i dati se proveniamo da un blocco web senza match
+      if (callerId === 'assignModal' && window._pendingWebClientData) {
+        const data = window._pendingWebClientData;
+        const nomeInput = addClientForm.querySelector('#cliente_nome');
+        const cognomeInput = addClientForm.querySelector('#cliente_cognome');
+        const cellulareInput = addClientForm.querySelector('#cliente_cellulare');
+        
+        if (nomeInput && data.nome) nomeInput.value = data.nome;
+        if (cognomeInput && data.cognome) cognomeInput.value = data.cognome;
+        if (cellulareInput && data.cellulare) cellulareInput.value = data.cellulare;
+        
+        // Non cancellare i dati subito, potrebbero servire se l'utente chiude e riapre
+      }
       
       const newForm = addClientForm.cloneNode(true);
       addClientForm.parentNode.replaceChild(newForm, addClientForm);
@@ -2841,23 +2855,45 @@ function openModifyPopup(appointmentId) {
   const clientNome = block.getAttribute('data-client-nome') || '';
   const clientCognome = block.getAttribute('data-client-cognome') || '';
   
+  // Reset dei dati pre-caricamento per AddClientModal
+  window._pendingWebClientData = null;
+  
   // NEW: auto-copia il cellulare dalle note per placeholder BOOKING/ONLINE (source=web)
   try {
     const src = (block.getAttribute('data-source') || '').trim().toLowerCase();
     if (src === 'web' && clientNome === 'BOOKING' && clientCognome === 'ONLINE') {
       const note = block.getAttribute('data-note') || '';
-      // estrai cellulare come da backend: "Cellulare:" o "Telefono:"
-      const m = String(note).match(/(?:Cellulare|Telefono)\s*:\s*([^\s,]+(?:\s+[^\s,]+)*)/i);
-      if (m && m[1]) {
-        let phone = m[1].replace(/\s+/g, '');
-        if (phone.startsWith('+39')) phone = phone.slice(3);
-        if (phone.startsWith('0')) phone = phone.slice(1);
-        if (phone) {
-          navigator.clipboard && navigator.clipboard.writeText(phone)
-            .then(() => console.log('📋 Numero copiato in clipboard:', phone))
-            .catch(err => console.warn('Clipboard copy failed:', err));
-        }
+      // estrai nome, cognome, cellulare dalle note
+      let extractedNome = '';
+      let extractedCognome = '';
+      let extractedCellulare = '';
+      
+      const mNome = String(note).match(/Nome\s*:\s*([^,\n]+)/i);
+      const mCognome = String(note).match(/Cognome\s*:\s*([^,\n]+)/i);
+      const mCell = String(note).match(/(?:Cellulare|Telefono)\s*:\s*([^\s,]+(?:\s+[^\s,]+)*)/i);
+      
+      if (mNome && mNome[1]) extractedNome = mNome[1].trim();
+      if (mCognome && mCognome[1]) extractedCognome = mCognome[1].trim();
+      if (mCell && mCell[1]) {
+        extractedCellulare = mCell[1].replace(/\s+/g, '');
+        if (extractedCellulare.startsWith('+39')) extractedCellulare = extractedCellulare.slice(3);
+        if (extractedCellulare.startsWith('0')) extractedCellulare = extractedCellulare.slice(1);
       }
+      
+      // Copia cellulare in clipboard (comportamento esistente)
+      if (extractedCellulare) {
+        navigator.clipboard && navigator.clipboard.writeText(extractedCellulare)
+          .then(() => console.log('📋 Numero copiato in clipboard:', extractedCellulare))
+          .catch(err => console.warn('Clipboard copy failed:', err));
+      }
+      
+      // Salva i dati per pre-caricamento in AddClientModal
+      window._pendingWebClientData = {
+        nome: extractedNome,
+        cognome: extractedCognome,
+        cellulare: extractedCellulare,
+        appointmentId: appointmentId
+      };
     }
   } catch (e) {
     console.warn('auto-copy phone failed', e);
@@ -3095,7 +3131,7 @@ function openModifyPopup(appointmentId) {
             baseBlock.getAttribute('data-booking_session_id')
           ));
 
-          return Promise.allSettled(updates);
+          return Promise.allSettled(updates).then(() => shouldReload);
         })
         .then((shouldReload) => {
           const bs = bootstrap.Modal.getInstance(document.getElementById('EditAppointmentModal'));
@@ -9960,6 +9996,9 @@ try {
 } catch (whErr) {
   console.warn('Errore flusso WhatsApp dopo associazione:', whErr);
 }
+
+// Ricarica la pagina per forzare aggiornamento UI dopo associazione
+location.reload();
 
             } else {
               // Mostra errore
