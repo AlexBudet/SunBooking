@@ -9,6 +9,10 @@ from sqlalchemy.orm import selectinload
 from collections import defaultdict
 from sqlalchemy.orm.attributes import flag_modified
 
+def clean_str(s):
+    # Rimuove apostrofi e caratteri HTML problematici
+    return str(s).replace("'", "").replace('"', "").replace("&", "").replace(";", "").replace("<", "").replace(">", "")
+
 cassa_bp = Blueprint('cassa', __name__)
 
 @cassa_bp.route('/cassa')
@@ -52,12 +56,11 @@ def cassa():
                         if first_seduta and first_seduta.service:
                             categoria = first_seduta.service.servizio_categoria.value
                     
-                    # Crea servizio virtuale per la rata
                     servizi = [{
                         'id': None,  # Nessun service_id reale
-                        'nome': f"Rata {numero_rata} - {pacchetto.nome}",
+                        'nome': clean_str(f"Rata {numero_rata} - {pacchetto.nome}"),
                         'prezzo': float(rata.importo),
-                        'categoria': categoria,
+                        'categoria': clean_str(categoria),
                         'is_fiscale': True,
                         'metodo_pagamento': 'contanti',
                         'rata_id': rata.id,  # IMPORTANTE: per marcare come pagata dopo
@@ -82,10 +85,10 @@ def cassa():
             for appt in appointments:
                 servizi.append({
                     "id": appt.service.id,
-                    "nome": appt.service.servizio_nome,
+                    "nome": clean_str(appt.service.servizio_nome),
                     "prezzo": appt.service.servizio_prezzo,
-                    "tag": appt.service.servizio_tag,
-                    "sottocategoria": appt.service.servizio_sottocategoria.nome if appt.service.servizio_sottocategoria else "",
+                    "tag": clean_str(appt.service.servizio_tag),
+                    "sottocategoria": clean_str(appt.service.servizio_sottocategoria.nome) if appt.service.servizio_sottocategoria else "",
                     "appointment_id": appt.id
                 })
         except Exception as e:
@@ -239,13 +242,13 @@ def api_services():
         return jsonify([
             {
                 "id": s.id,
-                "nome": s.servizio_nome,
-                "tag": s.servizio_tag,
+                "nome": clean_str(s.servizio_nome),
+                "tag": clean_str(s.servizio_tag),
                 "prezzo": s.servizio_prezzo,
-                "categoria": s.servizio_categoria.value if s.servizio_categoria else "",
-                "sottocategoria": s.servizio_sottocategoria.nome if s.servizio_sottocategoria else "",
+                "categoria": clean_str(s.servizio_categoria.value) if s.servizio_categoria else "",
+                "sottocategoria": clean_str(s.servizio_sottocategoria.nome) if s.servizio_sottocategoria else "",
                 "is_prodotti": (
-                    s.servizio_sottocategoria and s.servizio_sottocategoria.nome.lower() == "prodotti"
+                    s.servizio_sottocategoria and clean_str(s.servizio_sottocategoria.nome.lower()) == "prodotti"
                 )
             }
             for s in services
@@ -397,7 +400,7 @@ def send_to_rch():
             prezzo_cents = int(round(prezzo_finale * 100))
 
             desc = (v.get("nome") or (srv.servizio_nome if srv else "Servizio"))[:32]
-            desc = html.escape(desc.replace(")", "").replace("(", "").replace("/", "-"))
+            desc = clean_str(html.unescape(desc)).replace(")", "").replace("(", "").replace("/", "-")
 
             reparto = "R2" if getattr(srv, "servizio_sottocategoria", None) and \
                                srv.servizio_sottocategoria.nome.upper() == "PRODOTTI" else "R1"
