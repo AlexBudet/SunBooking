@@ -361,9 +361,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div class="tile-neumorphic tile-large" id="tile-top-clienti">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
-  <div class="tile-title" id="top-clienti-title">TOP CLIENTI</div>
+  <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
+    <span id="top-clienti-title">TOP 10 CLIENTI</span>
+    <div class="btn-group btn-group-sm" role="group">
+      <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo active" data-periodo="mese">Ultimo mese</button>
+      <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo" data-periodo="anno">Ultimo anno</button>
+    </div>
+  </div>
   <ul class="list-group list-group-flush" id="top-clienti-list" style="width: 100%; text-align: center;">
-    <!-- Popolato via JS -->
+    <li class="list-group-item">Caricamento...</li>
   </ul>
 </div>
 
@@ -593,9 +599,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Modal clienti -->
 <div class="modal fade" id="modalClienti" tabindex="-1" aria-labelledby="modalClientiLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-scrollable" style="max-width:90vw;">
-    <div class="modal-content">
-      <div class="modal-header d-flex align-items-center gap-2">
+  <div class="modal-dialog modal-dialog-scrollable" style="max-width:90vw; height:90vh;">
+    <div class="modal-content" style="height:100%; max-height:90vh; display:flex; flex-direction:column;">
+      <div class="modal-header d-flex align-items-center gap-2" style="flex-shrink:0;">
         <h4 class="modal-title" id="modalClientiLabel">Clienti</h4>
         <button id="btnExportExcelClienti" class="btn btn-success btn-sm ms-2" title="Esporta in Excel">
           <i class="bi bi-file-earmark-excel"></i>
@@ -605,20 +611,21 @@ document.addEventListener('DOMContentLoaded', function() {
         </button>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
       </div>
-      <div class="modal-body p-3">
-        <div id="wrapperTabellaClienti" style="max-height:80vh; overflow-y:auto; width:100%;">
+      <div class="modal-body p-3" style="flex:1 1 auto; overflow:hidden; min-height:0;">
+        <div id="wrapperTabellaClienti" style="height:100%; overflow-y:auto;">
           <table class="table table-bordered table-sm mb-0 sticky-thead" style="width:100%;">
-    <thead class="table-dark">
-      <tr>
-        <th colspan="4" id="clienti-stats-range" style="text-align:center; background:#e9ecef; color:#333; font-weight:600;"></th>
-      </tr>
-      <tr>
-        <th class="sortable" data-sort="nome">Nome cliente</th>
-        <th class="sortable" data-sort="passaggi">Numero passaggi</th>
-        <th class="sortable" data-sort="ultimo">Ultimo passaggio</th>
-        <th class="sortable" data-sort="frequenza">Frequenza</th>
-      </tr>
-    </thead>
+            <thead class="table-dark">
+              <tr>
+                <th colspan="5" id="clienti-stats-range" style="text-align:center; background:#e9ecef; color:#333; font-weight:600;"></th>
+              </tr>
+              <tr>
+                <th class="sortable" data-sort="nome">Nome cliente</th>
+                <th class="sortable" data-sort="passaggi">Numero passaggi</th>
+                <th class="sortable" data-sort="spesa_totale">Spesa totale</th>
+                <th class="sortable" data-sort="ultimo">Ultimo passaggio</th>
+                <th class="sortable" data-sort="frequenza">Frequenza</th>
+              </tr>
+            </thead>
             <tbody id="corpoTabellaClienti"></tbody>
           </table>
         </div>
@@ -1417,6 +1424,26 @@ document.addEventListener('DOMContentLoaded', function() {
     display: block !important;
   }
 
+#wrapperTabellaClienti {
+  border-bottom: 1px solid #dddddd !important;
+}
+
+.btn-top-clienti-periodo {
+  font-size: 0.7rem !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+}
+.btn-top-clienti-periodo.active {
+  background-color: #343a40 !important;
+  color: #fff !important;
+  border-color: #343a40 !important;
+}
+
+/* Highlight per top 3 clienti */
+#top-clienti-list .highlight {
+    background-color: #ffedf99f !important; /* giallo chiaro */
+}
+
   @media (min-width:1201px){
   .report-tiles-grid.tiles-draggable .tile-neumorphic { cursor: move; }
 }
@@ -1468,9 +1495,8 @@ function triggerReportReload() {
 
     caricaPrenotazioniOnline(selectedDate);
 
-  // Aggiorna titolo top clienti
-  const year = selectedDate ? new Date(selectedDate).getFullYear() : new Date().getFullYear();
-  document.getElementById('top-clienti-title').innerText = `TOP 10 CLIENTI ${year}`;
+  // Aggiorna titolo top clienti - ora gestito dal toggle mese/anno
+  // Il titolo è fisso "TOP 10 CLIENTI" e il periodo è selezionato dai bottoni
 
   // Aggiorna titolo incasso
   const date = new Date(selectedDate);
@@ -1660,74 +1686,8 @@ function triggerReportReload() {
       document.getElementById('stat-app-presi-web').innerText = dataApp.presi_web;
     });
 
-// Aggiorna top clienti
-if (!window.__topClientiReq) window.__topClientiReq = 0;
-const thisReq = ++window.__topClientiReq;
-
-fetch(`/api/top_clienti_anno?year=${year}`)
-  .then(r => r.json())
-  .then(clienti => {
-    return fetch(`/api/appuntamenti_giorno?date=${selectedDate}`)
-      .then(r => r.json())
-      .then(apps => ({ clienti, apps }));
-  })
-  .then(({ clienti, apps }) => {
-    if (thisReq !== window.__topClientiReq) return; // risposta obsoleta, ignora
-
-    const ul = document.getElementById('top-clienti-list');
-    if (!ul) return;
-    ul.innerHTML = '';
-
-    const formatPersonName = (s) => {
-      if (s == null) return '';
-      const base = String(s).trim().replace(/\s+/g, ' ').toLocaleLowerCase('it-IT');
-      return base.replace(/(^|[ \-’'])(\p{L})/gu, (_, p1, p2) => p1 + p2.toLocaleUpperCase('it-IT'));
-    };
-
-    const clientiConApp = new Set(apps.map(a => a.client_id));
-    clienti.slice(0, 10).forEach((c, idx) => {
-      const primoApp = apps.find(a => a.client_id === c.id && a.start_time);
-
-      const li = document.createElement('li');
-      li.className = 'list-group-item d-flex align-items-center gap-3';
-
-      const nomeSpan = document.createElement('span');
-      const displayNome = formatPersonName(c.nome);
-      const displayCognome = formatPersonName(c.cognome);
-
-      if (primoApp && primoApp.start_time) {
-        const link = document.createElement('a');
-        link.href = '#';
-        link.className = 'top-cliente-link';
-        link.style.cssText = 'color:inherit;text-decoration:underline;cursor:pointer;';
-        const boldSpan = document.createElement('span');
-        boldSpan.className = 'fw-bold';
-        boldSpan.textContent = `${idx + 1}.`;
-        link.appendChild(boldSpan);
-        link.append(` ${displayNome} ${displayCognome}`);
-        nomeSpan.appendChild(link);
-      } else {
-        const boldSpan = document.createElement('span');
-        boldSpan.className = 'fw-bold';
-        boldSpan.textContent = `${idx + 1}.`;
-        nomeSpan.appendChild(boldSpan);
-        nomeSpan.append(` ${displayNome} ${displayCognome}`);
-      }
-
-      const appBadge = document.createElement('span');
-      appBadge.className = 'badge bg-primary';
-      appBadge.textContent = `${c.num_app} appuntamenti`;
-
-      const spesaBadge = document.createElement('span');
-      spesaBadge.className = 'badge bg-info text-dark';
-      spesaBadge.textContent = `€ ${(c.totale_speso ?? 0).toFixed(2)}`;
-
-      li.appendChild(nomeSpan);
-      li.appendChild(appBadge);
-      li.appendChild(spesaBadge);
-      ul.appendChild(li);
-    });
-  });
+// Aggiorna top clienti - RIMOSSO, ora gestito da caricaTopClienti()
+// La funzione caricaTopClienti() è definita in uno script separato
 }
 
 function aggiornaBtnOggi() {
@@ -3166,7 +3126,7 @@ document.getElementById('btnExportPdfPassaggiCassa').addEventListener('click', f
 });
 </script>
 <script>
-  let clientiData = [];
+let clientiData = [];
 let clientiSortKey = 'passaggi';
 let clientiSortDir = -1;
 
@@ -3175,24 +3135,29 @@ function renderTabellaClienti() {
   data.sort((a, b) => {
     let vA = a[clientiSortKey], vB = b[clientiSortKey];
     if (clientiSortKey === 'passaggi') return clientiSortDir * (vA - vB);
-    if (clientiSortKey === 'ultimo')   return clientiSortDir * (vA.localeCompare(vB));
+    if (clientiSortKey === 'spesa_totale') return clientiSortDir * (vA - vB);
+    if (clientiSortKey === 'ultimo') return clientiSortDir * (vA.localeCompare(vB));
     if (clientiSortKey === 'frequenza') return clientiSortDir * (a.frequenza_idx - b.frequenza_idx);
     return clientiSortDir * vA.localeCompare(vB);
   });
 
   const tbody = document.getElementById('corpoTabellaClienti');
-  tbody.innerHTML = ''; // ok per pulire; in alternativa: tbody.textContent = '';
+  tbody.innerHTML = '';
 
   data.forEach(row => {
     const tr = document.createElement('tr');
 
     const tdNome = document.createElement('td');
-    tdNome.textContent = String(row.nome ?? '');
+    tdNome.textContent = String(row.nome ?? '').toLocaleUpperCase('it-IT');
     tr.appendChild(tdNome);
 
     const tdPass = document.createElement('td');
     tdPass.textContent = String(row.passaggi ?? '');
     tr.appendChild(tdPass);
+
+    const tdSpesa = document.createElement('td');
+    tdSpesa.textContent = '€ ' + (row.spesa_totale ?? 0).toFixed(2);
+    tr.appendChild(tdSpesa);
 
     const tdUltimo = document.createElement('td');
     tdUltimo.textContent = String(row.ultimo ?? '');
@@ -3204,18 +3169,24 @@ function renderTabellaClienti() {
 
     tbody.appendChild(tr);
   });
+}
 
-// Ordinamento header
-document.querySelectorAll('#modalClienti th.sortable').forEach(th => {
-  th.style.cursor = 'pointer';
-  th.addEventListener('click', function() {
-    const key = th.dataset.sort;
-    if (clientiSortKey === key) clientiSortDir *= -1;
-    else { clientiSortKey = key; clientiSortDir = 1; }
-    renderTabellaClienti();
+// Binding evento SOLO UNA VOLTA al caricamento della pagina
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('#modalClienti th.sortable').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', function() {
+      const key = th.dataset.sort;
+      if (clientiSortKey === key) {
+        clientiSortDir *= -1;
+      } else {
+        clientiSortKey = key;
+        clientiSortDir = -1;
+      }
+      renderTabellaClienti();
+    });
   });
 });
-}
 </script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
@@ -3579,6 +3550,76 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   dateInput.addEventListener('change', aggiornaTileBookingOnline);
   aggiornaTileBookingOnline();
+});
+</script>
+<script>
+// TOP CLIENTI con toggle mese/anno
+let topClientiPeriodo = 'mese';
+
+function caricaTopClienti(periodo) {
+  topClientiPeriodo = periodo || topClientiPeriodo;
+  
+  const list = document.getElementById('top-clienti-list');
+  list.innerHTML = '<li class="list-group-item text-muted">Caricamento...</li>';
+  
+  fetch(`/api/top_clienti_spesa?periodo=${topClientiPeriodo}`)
+    .then(r => r.json())
+    .then(data => {
+      list.innerHTML = '';
+      
+      if (!data || data.length === 0) {
+        list.innerHTML = '<li class="list-group-item text-muted">Nessun cliente trovato</li>';
+        return;
+      }
+      
+      function formatPersonName(str) {
+        if (!str) return '';
+        const base = String(str).toLowerCase();
+        return base.replace(/(^|[ \-''])(\p{L})/gu, (_, p1, p2) => p1 + p2.toLocaleUpperCase('it-IT'));
+      }
+      
+      data.forEach((c, idx) => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+        if (idx < 3) li.classList.add('highlight');
+        
+        const nomeSpan = document.createElement('span');
+        nomeSpan.style.flex = '1';
+        nomeSpan.style.textAlign = 'left';
+        
+        const medal = idx === 0 ? '🥇 ' : idx === 1 ? '🥈 ' : idx === 2 ? '🥉 ' : (idx + 1) + '. ';
+        nomeSpan.textContent = medal + formatPersonName(c.nome || 'N/D');
+        
+        const spesaBadge = document.createElement('span');
+        spesaBadge.className = 'badge bg-success';
+        spesaBadge.textContent = '€ ' + (c.spesa_totale || 0).toFixed(2);
+        
+        const passaggiBadge = document.createElement('span');
+        passaggiBadge.className = 'badge bg-info ms-1';
+        passaggiBadge.textContent = c.passaggi + ' pass.';
+        
+        li.appendChild(nomeSpan);
+        li.appendChild(spesaBadge);
+        li.appendChild(passaggiBadge);
+        list.appendChild(li);
+      });
+    })
+    .catch(err => {
+      console.error('Errore caricamento top clienti:', err);
+      list.innerHTML = '<li class="list-group-item text-danger">Errore caricamento</li>';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  caricaTopClienti('mese');
+  
+  document.querySelectorAll('.btn-top-clienti-periodo').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.btn-top-clienti-periodo').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      caricaTopClienti(this.dataset.periodo);
+    });
+  });
 });
 </script>
 {% endblock %}
