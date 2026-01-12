@@ -18,6 +18,36 @@ from dotenv import load_dotenv
 load_dotenv()
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')  # leggi da .env
 
+def _get_clienti_spesa_aggregato(start, end, limit=None):
+    """
+    Query aggregata per spesa clienti - usata da report_clienti e top_clienti_spesa.
+    Restituisce: [{ client_id, nome, cognome, spesa_totale, passaggi, ultimo_passaggio }]
+    """
+    # Query aggregata con GROUP BY
+    query = (
+        db.session.query(
+            Receipt.cliente_id.label('client_id'),
+            Client.cliente_nome,
+            Client.cliente_cognome,
+            func.sum(Receipt.total_amount).label('spesa_totale'),
+            func.count(Receipt.id).label('passaggi'),
+            func.max(Receipt.created_at).label('ultimo_passaggio')
+        )
+        .join(Client, Receipt.cliente_id == Client.id)
+        .filter(
+            Receipt.created_at >= start,
+            Receipt.created_at < end,
+            Receipt.cliente_id.isnot(None)
+        )
+        .group_by(Receipt.cliente_id, Client.cliente_nome, Client.cliente_cognome)
+        .order_by(func.sum(Receipt.total_amount).desc())
+    )
+    
+    if limit:
+        query = query.limit(limit)
+    
+    return query.all()
+
 def to_rome(dt):
     if dt is None:
         return None
@@ -1203,49 +1233,24 @@ def report_passaggi_cassa():
 
 @report_bp.route('/api/report_clienti')
 def report_clienti():
-
     date_from = request.args.get('dateFrom')
     date_to = request.args.get('dateTo')
     if not date_from or not date_to:
         return jsonify({'error': 'Date non valide'}), 400
 
     start = datetime.strptime(date_from, "%Y-%m-%d")
-    end = datetime.strptime(date_to, "%Y-%m-%d")
+    end = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
 
-    receipts = Receipt.query.filter(
-        Receipt.created_at >= start,
-        Receipt.created_at < end + timedelta(days=1)
-    ).all()
-
-    # Raggruppa per cliente
-    clienti = {}
-    for r in receipts:
-        if not r.cliente: continue
-        cid = r.cliente.id
-        nome = f"{r.cliente.cliente_nome} {r.cliente.cliente_cognome}"
-        data_pass = r.created_at.strftime('%d-%m-%Y')
-        if cid not in clienti:
-            clienti[cid] = {
-                'nome': nome,
-                'passaggi': 0,
-                'ultimo': data_pass,
-                'date_list': []
-            }
-        clienti[cid]['passaggi'] += 1
-        clienti[cid]['date_list'].append(r.created_at.date())
-        # Aggiorna ultimo passaggio se più recente
-        if r.created_at.strftime('%d-%m-%Y') > clienti[cid]['ultimo']:
-            clienti[cid]['ultimo'] = r.created_at.strftime('%d-%m-%Y')
-
+    # Query aggregata veloce
+    results = _get_clienti_spesa_aggregato(start, end)
+    
     # Calcola frequenza
-    def calcola_frequenza(date_list, start, end):
-        if not date_list: return "occasionale", 4
-        giorni = (end - start).days + 1
-        n_pass = len(date_list)
+    def calcola_frequenza(passaggi, start, end):
+        giorni = (end - start).days
         if giorni < 7:
             return "occasionale", 4
         sett = giorni / 7
-        freq = n_pass / sett
+        freq = passaggi / sett
         if freq > 2:
             return "giornaliera", 0
         elif freq > 1:
@@ -1258,14 +1263,16 @@ def report_clienti():
             return "occasionale", 4
 
     rows = []
-    for c in clienti.values():
-        freq, freq_idx = calcola_frequenza(c['date_list'], start, end)
+    for r in results:
+        nome = f"{r.cliente_nome or ''} {r.cliente_cognome or ''}".strip() or "Cliente sconosciuto"
+        freq, freq_idx = calcola_frequenza(r.passaggi, start, end)
         rows.append({
-            'nome': c['nome'],
-            'passaggi': c['passaggi'],
-            'ultimo': c['ultimo'],
+            'nome': nome,
+            'passaggi': r.passaggi,
+            'ultimo': r.ultimo_passaggio.strftime('%d-%m-%Y') if r.ultimo_passaggio else '',
             'frequenza': freq,
-            'frequenza_idx': freq_idx
+            'frequenza_idx': freq_idx,
+            'spesa_totale': round(float(r.spesa_totale or 0), 2)
         })
 
     return jsonify({'rows': rows})
@@ -1446,3 +1453,29 @@ def booking_online_giorno():
         "data": giorno.strftime("%d/%m/%Y"),
         "prenotazioni": result
     })
+
+@report_bp.route('/api/top_clienti_spesa')
+def top_clienti_spesa():
+    """Top 10 clienti per spesa totale (ultimo mese o ultimo anno)"""
+    periodo = request.args.get('periodo', 'anno')  # 'mese' o 'anno'
+    
+    oggi = datetime.now()
+    if periodo == 'mese':
+        start = oggi - timedelta(days=30)
+    else:
+        start = oggi - timedelta(days=365)
+    
+    # Query aggregata veloce (limit 10)
+    results = _get_clienti_spesa_aggregato(start, oggi, limit=10)
+    
+    top10 = []
+    for r in results:
+        nome = f"{r.cliente_nome or ''} {r.cliente_cognome or ''}".strip() or "Cliente sconosciuto"
+        top10.append({
+            'id': r.client_id,
+            'nome': nome,
+            'spesa_totale': round(float(r.spesa_totale or 0), 2),
+            'passaggi': r.passaggi
+        })
+    
+    return jsonify(top10)
