@@ -423,12 +423,15 @@ display: none;
     margin-right: 1 !important;
   }
 
-  /* Tabella sedute: usa tutta la larghezza possibile */
+  .flex-fill {
+    overflow-x: auto !important;
+  }
   #seduteTable,
   #seduteTable.table {
     width: 94% !important;
     max-width: 94% !important;
     margin-right: 3% !important;
+    box-sizing: border-box;
   }
 
 .pagamento-div {
