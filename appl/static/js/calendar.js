@@ -3742,6 +3742,12 @@ document.addEventListener('click', function(e) {
   const button = e.target.closest('.appointment-block .popup-buttons .btn-popup.copia');
   if (!button) return;
   
+  const block = button.closest('.appointment-block');
+  if (!block) return;
+
+  // ESCLUDI blocchi OFF: hanno logica separata (copia diretta in touch-ui.js)
+  if (block.classList.contains('note-off')) return;
+  
   e.preventDefault();
   e.stopPropagation();
   e.stopImmediatePropagation();
@@ -3750,9 +3756,6 @@ document.addEventListener('click', function(e) {
   document.querySelectorAll('.tooltip').forEach(t => t.remove());
   button.removeAttribute('data-bs-original-title');
   button.removeAttribute('aria-describedby');
-  
-  const block = button.closest('.appointment-block');
-  if (!block) return;
 
   // === GESTIONE BLOCCO CONTIGUO (data-copia-mode) ===
   // Se il blocco ha data-copia-mode, è un blocco contiguo già aperto con SOLO COPIA

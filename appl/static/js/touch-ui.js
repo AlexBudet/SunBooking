@@ -1120,6 +1120,9 @@ document.addEventListener('click', function(e) {
   const block = copiaBtn.closest('.appointment-block');
   if (!block) return;
   
+  // ESCLUDI blocchi OFF: hanno logica separata (copia diretta, non navigator)
+  if (block.classList.contains('note-off')) return;
+  
   // Gestisci SOLO blocchi in modalità copia (contigui)
   if (!block.hasAttribute('data-copia-mode')) return;
   
