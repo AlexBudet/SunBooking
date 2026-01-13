@@ -417,6 +417,27 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+<script>
+// Reload solo se inattivo da più di 15 minuti
+(function() {
+  let lastActivity = Date.now();
+  const IDLE_RELOAD_MS = 15 * 60 * 1000;
+  
+  ['click', 'keydown', 'mousemove', 'touchstart'].forEach(evt => {
+    document.addEventListener(evt, () => { lastActivity = Date.now(); }, { passive: true });
+  });
+  
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') {
+      const idle = Date.now() - lastActivity;
+      if (idle > IDLE_RELOAD_MS) {
+        console.log('[IDLE] Reloading after', Math.round(idle/60000), 'min inactivity');
+        location.reload();
+      }
+    }
+  });
+})();
+</script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
