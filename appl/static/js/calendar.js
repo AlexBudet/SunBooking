@@ -1831,7 +1831,6 @@ resultsContainer.style.display = 'block';
     }
 }
 
-// Funzioni di selezione
 function selectClient(clientId, fullName) {
   const modal = document.querySelector('.modal.show');
   const input = modal ? modal.querySelector('#clientSearchInput') : document.getElementById('clientSearchInput');
@@ -1840,6 +1839,58 @@ function selectClient(clientId, fullName) {
   if (input) input.value = fullName;
   if (hidden) hidden.value = clientId;
   if (results) results.style.display = 'none';
+  
+  // Aggiungi icona info accanto al campo clientSearchInput (STESSO STILE DEL DROPDOWN)
+  if (input) {
+    // Cerca il container corretto: prima #clientSearchInputContainer, poi parentElement
+    let container = input.closest('#clientSearchInputContainer') || input.parentElement;
+    
+    if (container) {
+      // Assicurati che il container abbia position relative
+      if (getComputedStyle(container).position === 'static') {
+        container.style.position = 'relative';
+      }
+      
+      // Rimuovi eventuali icone precedenti
+      const oldIcon = container.querySelector('.client-info-btn');
+      if (oldIcon) oldIcon.remove();
+      
+      // Crea nuova icona
+      const infoBtn = document.createElement('button');
+      infoBtn.type = 'button';
+      infoBtn.className = 'client-info-btn';
+      infoBtn.title = 'Info cliente';
+      infoBtn.setAttribute('aria-label', 'Info cliente');
+      infoBtn.innerText = 'i';
+      infoBtn.style.position = 'absolute';
+      infoBtn.style.right = '10px';
+      infoBtn.style.top = '50%';
+      infoBtn.style.transform = 'translateY(-50%)';
+      infoBtn.style.zIndex = '10';
+      container.appendChild(infoBtn);
+      
+      // Aggiungi listener per aprire il modal info cliente
+      infoBtn.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof showClientInfoModal === 'function') {
+          showClientInfoModal(clientId);
+        }
+      };
+      
+      // NUOVO: Aggiungi listener sull'input per rimuovere l'icona quando l'utente modifica il campo
+      const removeIconHandler = function() {
+        const icon = container.querySelector('.client-info-btn');
+        if (icon) {
+          icon.remove();
+        }
+        // Rimuovi anche l'handler dopo la prima modifica
+        input.removeEventListener('input', removeIconHandler);
+      };
+      input.addEventListener('input', removeIconHandler);
+    }
+  }
+  
   // Ricarica i servizi suggeriti per il cliente selezionato
   if (typeof loadServicesForModal === 'function') loadServicesForModal();
 }
@@ -4804,24 +4855,66 @@ function removePseudoBlock(index) {
   }
 }
 
-  function selectClientNav(clientId, fullName) {
-    window.selectedClientIdNav = clientId;
-    window.selectedClientNameNav = fullName;
-    
-    // chiudi dropdown
-    const input = document.getElementById('clientSearchInputNav');
-    const resultsContainer = document.getElementById('clientResultsNav');
-    input.value = fullName;
-    resultsContainer.style.display = 'none';
+function selectClientNav(clientId, fullName) {
+  window.selectedClientIdNav = clientId;
+  window.selectedClientNameNav = fullName;
   
-    saveNavigatorState();
+  // chiudi dropdown
+  const input = document.getElementById('clientSearchInputNav');
+  const resultsContainer = document.getElementById('clientResultsNav');
+  input.value = fullName;
+  resultsContainer.style.display = 'none';
+  
+  // Aggiungi icona info accanto al campo Navigator (STESSO STILE DEL DROPDOWN)
+  const container = input.parentElement;
+  
+  // Rimuovi eventuali icone precedenti
+  const oldIcon = container.querySelector('.client-info-btn-nav');
+  if (oldIcon) oldIcon.remove();
+  
+  // Crea nuova icona
+  const infoBtn = document.createElement('button');
+  infoBtn.type = 'button';
+  infoBtn.className = 'client-info-btn client-info-btn-nav';
+  infoBtn.title = 'Info cliente';
+  infoBtn.setAttribute('aria-label', 'Info cliente');
+  infoBtn.innerText = 'i';
+  infoBtn.style.position = 'absolute';
+  infoBtn.style.right = '48px';  // AUMENTATO per Navigator
+  infoBtn.style.top = '50%';
+  infoBtn.style.transform = 'translateY(-50%)';
+  infoBtn.style.zIndex = '10';
+  container.style.position = 'relative';
+  container.appendChild(infoBtn);
+  
+  // Aggiungi listener per aprire il modal info cliente
+  infoBtn.onclick = function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof showClientInfoModal === 'function') {
+      showClientInfoModal(clientId);
+    }
+  };
+  
+  // NUOVO: Aggiungi listener sull'input per rimuovere l'icona quando l'utente modifica il campo
+  const removeIconHandler = function() {
+    const icon = container.querySelector('.client-info-btn-nav');
+    if (icon) {
+      icon.remove();
+    }
+    // Rimuovi anche l'handler dopo la prima modifica
+    input.removeEventListener('input', removeIconHandler);
+  };
+  input.addEventListener('input', removeIconHandler);
 
-    // Se esiste una logica di caricamento servizi, continua:
-    loadLastServicesForClient(clientId);
-  
-    // Aggiorna (o crea) il pseudo-blocco se c’è già anche un service
-    maybeShowPseudoBlock();
-  }
+  saveNavigatorState();
+
+  // Se esiste una logica di caricamento servizi, continua:
+  loadLastServicesForClient(clientId);
+
+  // Aggiorna (o crea) il pseudo-blocco se c'è già anche un service
+  maybeShowPseudoBlock();
+}
   
 function selectServiceNav(serviceId, serviceName, serviceDuration, serviceTag) {
   console.log("DEBUG: selectServiceNav called with serviceId:", serviceId);
@@ -9690,27 +9783,40 @@ function loadWebAppointments(date, search) {
         arr.forEach(session => {
           const tr = document.createElement('tr');
 
-// Colonna 1: Data di booking (centrata)
-const tdBooking = document.createElement('td');
-tdBooking.style.textAlign = 'center';
-const bookingDateStr = (session?.data_booking ?? '').toString().split(' ')[0];  // Prendi solo la parte data
-tdBooking.textContent = formatDateItalian(bookingDateStr);
-tr.appendChild(tdBooking);
+          // Colonna 1: Data di booking (centrata)
+          const tdBooking = document.createElement('td');
+          tdBooking.style.textAlign = 'center';
+          const bookingDateStr = (session?.data_booking ?? '').toString().split(' ')[0];
+          tdBooking.textContent = formatDateItalian(bookingDateStr);
+          tr.appendChild(tdBooking);
 
-// Colonna 2: Cliente (nome cognome - cellulare)
-const tdCliente = document.createElement('td');
-const nome = (session?.nome ?? '').toString();
-const cognome = (session?.cognome ?? '').toString();
-const cell = (session?.cellulare ?? '').toString();
-tdCliente.textContent = `${nome}${nome && cognome ? ' ' : ''}${cognome}${cell ? ' - ' + cell : ''}`;
-tr.appendChild(tdCliente);
+          // Colonna 2: Cliente (nome cognome - cellulare)
+          const tdCliente = document.createElement('td');
+          const nome = (session?.nome ?? '').toString();
+          const cognome = (session?.cognome ?? '').toString();
+          const cell = (session?.cellulare ?? '').toString();
+          tdCliente.textContent = `${nome}${nome && cognome ? ' ' : ''}${cognome}${cell ? ' - ' + cell : ''}`;
+          tr.appendChild(tdCliente);
 
-// Colonna 3: Match cliente (mostra se c'è un match con clienti esistenti)
-const tdMatch = document.createElement('td');
-tdMatch.style.textAlign = 'center';  // Aggiungi centramento se necessario
-const matchCliente = !!session?.match_cliente;  
-tdMatch.textContent = matchCliente ? 'Sì' : 'No';  // O lascia vuoto se non hai dati
-tr.appendChild(tdMatch);
+          // Colonna 3: Match cliente (mostra se c'è un match con clienti esistenti)
+          const tdMatch = document.createElement('td');
+          tdMatch.style.textAlign = 'center';
+          const matchCliente = !!session?.match_cliente;
+          const matchType = session?.match_type || 'none';
+
+          if (matchType === 'full') {
+            tdMatch.textContent = 'Sì';
+          } else if (matchType === 'phone_only') {
+            // Mostra icona cellulare per match solo telefono
+            const phoneIcon = document.createElement('span');
+            phoneIcon.textContent = '📱';
+            phoneIcon.style.fontSize = '1.4em';
+            phoneIcon.title = 'Match solo cellulare';
+            tdMatch.appendChild(phoneIcon);
+          } else {
+            tdMatch.textContent = 'No';
+          }
+          tr.appendChild(tdMatch);
 
           // Colonna 4: Bottone associa / stato (logica per mostrare ❓, 🟢 o niente)
           const tdBtn = document.createElement('td');
@@ -9721,6 +9827,7 @@ tr.appendChild(tdMatch);
 
           const matchClienteId = session?.match_cliente_id ?? null;
           const clientId = session?.client_id ?? null;
+          
           // identifica placeholder: backend flag OR dummy id OR nome/cognome "cliente"/"booking"
           const isPlaceholder =
             !!session?.placeholder_exists ||
@@ -9733,9 +9840,18 @@ tr.appendChild(tdMatch);
           if (matchCliente && isPlaceholder) {
             // Mostra ❓ solo quando esiste un match e il blocco è ancora placeholder/booking
             const btn = document.createElement('button');
-            btn.className = 'btn btn-link btn-associa';
             btn.type = 'button';
             btn.title = 'Associa';
+            
+            // NEW: determina colore icona in base a match_type
+            if (matchType === 'phone_only') {
+              btn.className = 'btn btn-link btn-associa-phone';
+              btn.dataset.matchType = 'phone_only';
+            } else {
+              btn.className = 'btn btn-link btn-associa';
+              btn.dataset.matchType = 'full';
+            }
+            
             if (Array.isArray(session?.ids) && session.ids[0] != null) {
               btn.dataset.appointmentId = String(session.ids[0]);
             }
@@ -9747,9 +9863,20 @@ tr.appendChild(tdMatch);
             btn.dataset.clientNome = (session.nome || '');
             btn.dataset.clientCognome = (session.cognome || '');
             btn.dataset.clientCellulare = (session.cellulare || '');
+            
+            // Salva anche i dati del cliente matchato per il modal di confronto
+            if (matchType === 'phone_only' && session.match_cliente) {
+              const matchParts = session.match_cliente.split(' - ');
+              const matchNameParts = matchParts[0]?.split(' ') || [];
+              btn.dataset.matchNome = matchNameParts[0] || '';
+              btn.dataset.matchCognome = matchNameParts.slice(1).join(' ') || '';
+              btn.dataset.matchCellulare = matchParts[1] || '';
+            }
+            
             const icon = document.createElement('span');
             icon.textContent = '❓';
-            icon.style.color = '#d32f2f';
+            // Rosso per match completo, giallo per match solo telefono
+            icon.style.color = (matchType === 'phone_only') ? '#ffc107' : '#d32f2f';
             icon.style.fontSize = '1.6em';
             btn.appendChild(icon);
             tdBtn.appendChild(btn);
@@ -9854,17 +9981,53 @@ if (tdAppt.textContent.trim()) {
 })();
 
       // Per ogni bottone "Associa", aggiungi listener per la richiesta al backend
-      document.querySelectorAll('.btn-associa').forEach(btn => {
+      document.querySelectorAll('.btn-associa, .btn-associa-phone').forEach(btn => {
         btn.addEventListener('click', async function () {
-          // Conferma associazione
+          const matchType = btn.dataset.matchType || 'full';
+          
+          // Se è match solo cellulare, mostra modal di confronto
+          if (matchType === 'phone_only') {
+            const bookingData = {
+              nome: btn.dataset.clientNome || '',
+              cognome: btn.dataset.clientCognome || '',
+              cellulare: btn.dataset.clientCellulare || ''
+            };
+            
+            const existingClientData = {
+              nome: btn.dataset.matchNome || '',
+              cognome: btn.dataset.matchCognome || '',
+              cellulare: btn.dataset.matchCellulare || ''
+            };
+            
+            // Mostra modal di confronto
+            showPhoneOnlyMatchModal(bookingData, existingClientData, async function() {
+              // Utente ha confermato: procedi con associazione
+              await performAssociation(btn);
+            }, function() {
+              // Utente ha annullato: non fare nulla
+              console.log('Associazione annullata dall\'utente');
+            });
+            
+            return; // Esci qui per match phone_only
+          }
+          
+          // Match completo: conferma standard
           if (!window.confirm('Vuoi associare questo appuntamento al cliente selezionato?')) return;
-
+          
+          // Procedi con associazione per match completo
+          await performAssociation(btn);
+        });
+      });
+      
+      // Funzione helper per eseguire l'associazione (evita duplicazione codice)
+      async function performAssociation(btn) {
           // Estrai dati dal dataset del bottone
           const appointmentId = btn.dataset.appointmentId;
           const matchClienteId = btn.dataset.matchClienteId || null;
           const nome = btn.dataset.clientNome || '';
           const cognome = btn.dataset.clientCognome || '';
           const cellulare = btn.dataset.clientCellulare || '';
+          const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
           const payload = matchClienteId ? {
             appointment_id: appointmentId,
@@ -10008,8 +10171,7 @@ location.reload();
               alert(data.error || 'Errore nell\'associazione');
             }
           });
-        });
-      });
+      } // Fine performAssociation
     })
     .catch(err => {
       // =============================================================
@@ -10447,3 +10609,117 @@ document.addEventListener('DOMContentLoaded', function () {
     try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {}
   });
 });
+
+
+// =============================================================
+//   MODAL DI CONFRONTO PER MATCH SOLO CELLULARE
+// =============================================================
+function showPhoneOnlyMatchModal(bookingData, existingClientData, onConfirm, onCancel) {
+  // Crea il modal dinamicamente
+  const modalId = 'PhoneOnlyMatchModal';
+  let modal = document.getElementById(modalId);
+  
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = modalId;
+    modal.className = 'modal fade';
+    modal.tabIndex = -1;
+    modal.setAttribute('aria-labelledby', modalId + 'Label');
+    modal.setAttribute('aria-hidden', 'true');
+    
+    modal.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header bg-warning text-dark">
+            <h5 class="modal-title" id="${modalId}Label">
+              <span style="font-size: 1.3em;">⚠️</span> 
+              Conferma Associazione - Match Cellulare
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-3">
+              <strong>Il cellulare corrisponde ma nome/cognome sono diversi.</strong><br>
+              Vuoi associare questo appuntamento al cliente esistente?
+            </p>
+            <div class="row">
+              <div class="col-6">
+                <div class="card">
+                  <div class="card-header bg-light">
+                    <strong>📋 Dati Prenotazione</strong>
+                  </div>
+                  <div class="card-body">
+                    <p><strong>Nome:</strong> <span id="bookingNome"></span></p>
+                    <p><strong>Cognome:</strong> <span id="bookingCognome"></span></p>
+                    <p><strong>Cellulare:</strong> <span id="bookingCellulare"></span></p>
+                  </div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="card">
+                  <div class="card-header bg-primary text-white">
+                    <strong>👤 Cliente in Rubrica</strong>
+                  </div>
+                  <div class="card-body">
+                    <p><strong>Nome:</strong> <span id="existingNome"></span></p>
+                    <p><strong>Cognome:</strong> <span id="existingCognome"></span></p>
+                    <p><strong>Cellulare:</strong> <span id="existingCellulare"></span></p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="btnPhoneMatchCancel">
+              Annulla
+            </button>
+            <button type="button" class="btn btn-primary" id="btnPhoneMatchConfirm">
+              Associa
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+  }
+  
+  // Popola i dati nel modal
+  document.getElementById('bookingNome').textContent = bookingData.nome || '-';
+  document.getElementById('bookingCognome').textContent = bookingData.cognome || '-';
+  document.getElementById('bookingCellulare').textContent = bookingData.cellulare || '-';
+  
+  document.getElementById('existingNome').textContent = existingClientData.nome || '-';
+  document.getElementById('existingCognome').textContent = existingClientData.cognome || '-';
+  document.getElementById('existingCellulare').textContent = existingClientData.cellulare || '-';
+  
+  // Gestisci i click sui bottoni
+  const btnConfirm = document.getElementById('btnPhoneMatchConfirm');
+  const btnCancel = document.getElementById('btnPhoneMatchCancel');
+  
+  // Rimuovi vecchi listener per evitare duplicati
+  const newBtnConfirm = btnConfirm.cloneNode(true);
+  const newBtnCancel = btnCancel.cloneNode(true);
+  btnConfirm.parentNode.replaceChild(newBtnConfirm, btnConfirm);
+  btnCancel.parentNode.replaceChild(newBtnCancel, btnCancel);
+  
+  newBtnConfirm.addEventListener('click', function() {
+    const bsModal = bootstrap.Modal.getInstance(modal);
+    if (bsModal) bsModal.hide();
+    if (onConfirm) onConfirm();
+  });
+  
+  newBtnCancel.addEventListener('click', function() {
+    const bsModal = bootstrap.Modal.getInstance(modal);
+    if (bsModal) bsModal.hide();
+    if (onCancel) onCancel();
+  });
+  
+  // Mostra il modal con z-index elevato per stare sopra al modal principale
+  modal.style.zIndex = 1060;
+  const backdrop = document.querySelector('.modal-backdrop');
+  if (backdrop) backdrop.style.zIndex = 1055;
+  
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+}
