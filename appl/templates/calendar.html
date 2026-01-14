@@ -2065,6 +2065,9 @@ function configureMobileModalButtons(modal, block) {
   if (isPaid) {
     const protoNote = getProtoFromOriginal('note');
     const protoCopia = getProtoFromOriginal('copia');
+    
+    // Verifica se il blocco ha un pacchetto associato
+    const hasPacchetto = block.hasAttribute('data-pacchetto-seduta-id') || block.hasAttribute('data-pacchetto-id');
 
     let btnNote = protoNote ? protoNote.cloneNode(true) : document.createElement('button');
     btnNote.classList.add('btn','mobile-popup-btn');
@@ -2080,14 +2083,46 @@ function configureMobileModalButtons(modal, block) {
 
     table.innerHTML = '';
     const tr = document.createElement('tr');
-    const td1 = document.createElement('td');
-    td1.style.width = '50%'; td1.style.padding = '4px';
-    td1.appendChild(btnNote);
-    const td2 = document.createElement('td');
-    td2.style.width = '50%'; td2.style.padding = '4px';
-    td2.appendChild(btnCopia);
-    tr.appendChild(td1);
-    tr.appendChild(td2);
+    
+    if (hasPacchetto) {
+      // Se c'è un pacchetto, mostra 3 bottoni: NOTE, COPIA, PACCHETTO
+      const pacchettoId = block.getAttribute('data-pacchetto-id');
+      
+      let btnPacchetto = document.createElement('button');
+      btnPacchetto.classList.add('btn','mobile-popup-btn');
+      btnPacchetto.setAttribute('data-action','vai-pacchetto');
+      btnPacchetto.style.display = '';
+      btnPacchetto.textContent = '📦';
+      btnPacchetto.onclick = function() {
+        if (pacchettoId) {
+          window.location.href = '/pacchetti/detail/' + pacchettoId;
+        }
+      };
+      
+      const td1 = document.createElement('td');
+      td1.style.width = '33.33%'; td1.style.padding = '4px';
+      td1.appendChild(btnNote);
+      const td2 = document.createElement('td');
+      td2.style.width = '33.33%'; td2.style.padding = '4px';
+      td2.appendChild(btnCopia);
+      const td3 = document.createElement('td');
+      td3.style.width = '33.33%'; td3.style.padding = '4px';
+      td3.appendChild(btnPacchetto);
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+      tr.appendChild(td3);
+    } else {
+      // Altrimenti solo NOTE e COPIA (comportamento originale)
+      const td1 = document.createElement('td');
+      td1.style.width = '50%'; td1.style.padding = '4px';
+      td1.appendChild(btnNote);
+      const td2 = document.createElement('td');
+      td2.style.width = '50%'; td2.style.padding = '4px';
+      td2.appendChild(btnCopia);
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+    }
+    
     table.appendChild(tr);
     return;
   }
