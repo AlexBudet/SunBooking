@@ -1317,8 +1317,13 @@ body:not(.quarter-55) .appointment-block {
     color: #888 !important;
 }
 
-.appointment-block.status-2 .popup-buttons .btn-popup:not(.copia):not(.nota) {
+.appointment-block.status-2 .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto) {
     display: none !important;
+}
+
+/* Mostra esplicitamente il bottone vai-pacchetto per appuntamenti pagati collegati a pacchetti */
+.appointment-block.status-2 .popup-buttons .btn-popup.vai-pacchetto {
+    display: inline-flex !important;
 }
 
 /* Modifica il selettore esistente aggiungendo :not(.status-2) per escludere i blocchi in stato 2 */
@@ -2100,6 +2105,11 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup
   width: 100% !important;
 }
 
+/* TOUCH: per status-2 mostra SOLO .copia, .nota e .vai-pacchetto */
+body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto) {
+  display: none !important;
+}
+
 /* TOUCH: OFF -> top bar solo su click, con opacity visibile */
 body.touch-ui .appointment-block.note-off .popup-buttons {
   display: none !important;
@@ -2131,8 +2141,13 @@ body.touch-ui .appointment-block.active-popup .popup-buttons-bottom {
   gap: var(--pb-gap, 3px);
 }
 
-/* Stato=2: consenti copia e nota, nascondi il resto (6 colonne uguali già impostate sopra) */
-body.touch-ui .appointment-block[data-status="2"] .popup-buttons .btn-popup:not(.copia):not(.nota) {
+/* TOUCH: mostra esplicitamente .vai-pacchetto per status-2 */
+body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup.vai-pacchetto {
+  display: inline-flex !important;
+}
+
+/* Stato=2: consenti copia, nota e vai-pacchetto; nascondi il resto */
+body.touch-ui .appointment-block[data-status="2"] .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto) {
   display: none !important;
 }
 

@@ -307,6 +307,30 @@ function _filterOffTopBarButtons(topBar) {
   ).forEach(btn => { btn.style.display = 'none'; });
 }
 
+function _filterStatus2TopBarButtons(topBar) {
+  console.log('=== FILTRO STATUS-2 CHIAMATO ===');
+  const allButtons = topBar.querySelectorAll('.btn-popup');
+  console.log('Bottoni totali trovati:', allButtons.length);
+  
+  allButtons.forEach(btn => {
+    const classList = Array.from(btn.classList).join(' ');
+    const hasVaiPacchetto = btn.classList.contains('vai-pacchetto');
+    console.log('Bottone:', classList, '| vai-pacchetto?', hasVaiPacchetto);
+    
+    if (btn.classList.contains('copia') || 
+        btn.classList.contains('nota') || 
+        btn.classList.contains('vai-pacchetto')) {
+      btn.style.setProperty('display', 'inline-flex', 'important');
+      btn.style.setProperty('visibility', 'visible', 'important');
+      console.log('  -> MOSTRATO');
+    } else {
+      btn.style.setProperty('display', 'none', 'important');
+      btn.style.setProperty('visibility', 'hidden', 'important');
+      console.log('  -> NASCOSTO');
+    }
+  });
+}
+
 function ensureTopBarForTouch(block) {
   let topBar = block.querySelector('.popup-buttons');
   const isOff = block.classList.contains('note-off');
@@ -419,6 +443,14 @@ cut.style.display = 'inline-flex';
       if (el.closest('.popup-buttons') !== topBar) el.style.display = 'none';
     });
 
+    return;
+  }
+
+  // Per blocchi STATUS-2 (pagati): la topBar esiste già nel DOM con i bottoni renderizzati da Jinja
+  // Non fare nulla qui, il filtering verrà fatto nel click handler
+  const status = block.getAttribute('data-status');
+  if (status === '2') {
+    console.log('ensureTopBarForTouch: blocco status-2, topBar già presente nel DOM');
     return;
   }
 }
@@ -572,6 +604,10 @@ function ensureBottomBar(block) {
 }
 
 function initTouchOnBlock(block){
+  const status = block.getAttribute('data-status');
+  const apptId = block.getAttribute('data-appointment-id');
+  console.log('>>> initTouchOnBlock chiamato per blocco', apptId, 'status:', status, '_touchToggleBound?', block._touchToggleBound);
+  
   ensureTopBarForTouch(block);
   ensureBottomBar(block);
 
@@ -587,37 +623,49 @@ function initTouchOnBlock(block){
     block.style.zIndex = '100';
   }
 
+  console.log('>>> Sto per aggiungere listener? _touchToggleBound:', block._touchToggleBound);
   if (!block._touchToggleBound) {
     block.addEventListener('click', (e) => {
+      console.log('=== CLICK SU BLOCCO ===', 'status:', block.getAttribute('data-status'));
+      
       // BLOCCA se in modalità copia (solo COPIA visibile)
       if (block.hasAttribute('data-copia-mode')) {
+        console.log('>>> BLOCCO IN MODALITA\' COPIA, esco');
         e.stopPropagation();
         return;
       }
       
       // Pulsanti popup: lascia la gestione originale
-      if (e.target.closest('.btn-popup')) return;
+      if (e.target.closest('.btn-popup')) {
+        console.log('>>> CLICK SU BOTTONE POPUP, esco');
+        return;
+      }
 
       const isTouchUI = document.body.classList.contains('touch-ui');
       const isPaid = String(block.getAttribute('data-status')) === '2';
       const clientLink = e.target.closest?.('.client-info-link') || null;
+      
+      console.log('>>> isTouchUI:', isTouchUI, 'isPaid:', isPaid, 'clientLink:', !!clientLink);
 
-      // Click sul nome cliente in stato 2 (pagato): apri modal, non chiudere popup
-      if (isTouchUI && isPaid && clientLink) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+// Click sul nome cliente in stato 2 (pagato): apri modal, non chiudere popup
+if (isTouchUI && isPaid && clientLink) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
 
-        // Attiva il blocco se non lo è ancora (mostra eventuali barre top; bottom bar già nascosta per stato 2)
-        if (!block.classList.contains('active-popup')) {
-          closeAllPopups();
-          block.classList.add('active-popup');
-          block.style.zIndex = '9400';
-          const topBar = block.querySelector('.popup-buttons');
-          const bottomBar = block.querySelector('.popup-buttons-bottom');
-          if (topBar) topBar.style.zIndex = '9410';
-          if (bottomBar) bottomBar.style.zIndex = '9410';
-        }
+  // Attiva il blocco se non lo è ancora (mostra eventuali barre top; bottom bar già nascosta per stato 2)
+  if (!block.classList.contains('active-popup')) {
+    closeAllPopups();
+    block.classList.add('active-popup');
+    block.style.zIndex = '9400';
+    const topBar = block.querySelector('.popup-buttons');
+    const bottomBar = block.querySelector('.popup-buttons-bottom');
+    if (topBar) {
+      topBar.style.zIndex = '9410';
+      _filterStatus2TopBarButtons(topBar);
+    }
+    if (bottomBar) bottomBar.style.zIndex = '9410';
+  }
 
         // Apri modal info cliente robustamente
         const cid = block.getAttribute('data-client-id') || clientLink.getAttribute('data-client-id') || '';
@@ -635,17 +683,38 @@ function initTouchOnBlock(block){
         return;
       }
 
-      // Click sul resto del blocco: toggle popup
-      const wasActive = block.classList.contains('active-popup');
-      closeAllPopups();
-      if (!wasActive) {
-        block.classList.add('active-popup');
-        block.style.zIndex = '11940';
-        const topBar = block.querySelector('.popup-buttons');
-        const bottomBar = block.querySelector('.popup-buttons-bottom');
-        if (topBar) topBar.style.zIndex = '11950';
-        if (bottomBar) bottomBar.style.zIndex = '11950';
-      }
+// Click sul resto del blocco: toggle popup
+console.log('>>> CLICK CORPO BLOCCO, isPaid?', isPaid, 'status:', block.getAttribute('data-status'));
+const wasActive = block.classList.contains('active-popup');
+closeAllPopups();
+if (!wasActive) {
+  console.log('>>> Blocco NON era attivo, lo attivo ora');
+  block.classList.add('active-popup');
+  block.style.zIndex = '11940';
+  const topBar = block.querySelector('.popup-buttons');
+  const bottomBar = block.querySelector('.popup-buttons-bottom');
+  console.log('>>> topBar trovata?', !!topBar);
+  if (topBar) {
+    const buttons = topBar.querySelectorAll('.btn-popup');
+    console.log('>>> Bottoni nella topBar:', buttons.length);
+    buttons.forEach(btn => {
+      console.log('  - Bottone classi:', Array.from(btn.classList).join(' '));
+    });
+    topBar.style.zIndex = '11950';
+    topBar.style.display = 'flex';
+    if (isPaid) {
+      console.log('>>> È STATUS-2, chiamo filtro...');
+      _filterStatus2TopBarButtons(topBar);
+    }
+  } else {
+    console.log('>>> ERRORE: topBar NON TROVATA!');
+  }
+  if (bottomBar) {
+    bottomBar.style.zIndex = '11950';
+  }
+} else {
+  console.log('>>> Blocco GIA\' attivo, chiudo tutto');
+}
     }, true);
 
     block._touchToggleBound = true;
@@ -653,13 +722,6 @@ function initTouchOnBlock(block){
 }
 
 document.addEventListener('DOMContentLoaded', function(){
-  // applica classe body (in caso di arrivo diretto in agenda)
-  document.body.classList.add('touch-ui');
-
-  // Disabilita hover e abilita solo click per my-spia
-  injectTouchMySpiaCSS();
-  
-  document.querySelectorAll('.appointment-block').forEach(initTouchOnBlock);
 
     // Rimuovi i tooltip Bootstrap su tutti i bottoni già presenti
   normalizeTooltips(document);
