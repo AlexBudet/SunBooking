@@ -10615,111 +10615,115 @@ document.addEventListener('DOMContentLoaded', function () {
 //   MODAL DI CONFRONTO PER MATCH SOLO CELLULARE
 // =============================================================
 function showPhoneOnlyMatchModal(bookingData, existingClientData, onConfirm, onCancel) {
-  // Crea il modal dinamicamente
-  const modalId = 'PhoneOnlyMatchModal';
-  let modal = document.getElementById(modalId);
+  // Trova il modal WebAppointments e i suoi elementi
+  const webModal = document.getElementById('WebAppointmentsModal');
+  const tableContainer = webModal.querySelector('.web-appt-table-container');
+  const dateNav = webModal.querySelector('#webApptDateNav');
   
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = modalId;
-    modal.className = 'modal fade';
-    modal.tabIndex = -1;
-    modal.setAttribute('aria-labelledby', modalId + 'Label');
-    modal.setAttribute('aria-hidden', 'true');
+  // Nascondi tabella e navigazione data
+  if (tableContainer) tableContainer.style.display = 'none';
+  if (dateNav) dateNav.style.display = 'none';
+  
+  // Crea o mostra il container del form di associazione
+  let formContainer = webModal.querySelector('#phoneMatchFormContainer');
+  
+  if (!formContainer) {
+    formContainer = document.createElement('div');
+    formContainer.id = 'phoneMatchFormContainer';
+    formContainer.style.padding = '20px';
     
-    modal.innerHTML = `
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header bg-warning text-dark">
-            <h5 class="modal-title" id="${modalId}Label">
-              <span style="font-size: 1.3em;">⚠️</span> 
-              Conferma Associazione - Match Cellulare
-            </h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <p class="mb-3">
-              <strong>Il cellulare corrisponde ma nome/cognome sono diversi.</strong><br>
-              Vuoi associare questo appuntamento al cliente esistente?
-            </p>
-            <div class="row">
-              <div class="col-6">
-                <div class="card">
-                  <div class="card-header bg-light">
-                    <strong>📋 Dati Prenotazione</strong>
-                  </div>
-                  <div class="card-body">
-                    <p><strong>Nome:</strong> <span id="bookingNome"></span></p>
-                    <p><strong>Cognome:</strong> <span id="bookingCognome"></span></p>
-                    <p><strong>Cellulare:</strong> <span id="bookingCellulare"></span></p>
-                  </div>
-                </div>
-              </div>
-              <div class="col-6">
-                <div class="card">
-                  <div class="card-header bg-primary text-white">
-                    <strong>👤 Cliente in Rubrica</strong>
-                  </div>
-                  <div class="card-body">
-                    <p><strong>Nome:</strong> <span id="existingNome"></span></p>
-                    <p><strong>Cognome:</strong> <span id="existingCognome"></span></p>
-                    <p><strong>Cellulare:</strong> <span id="existingCellulare"></span></p>
-                  </div>
-                </div>
-              </div>
+    formContainer.innerHTML = `
+      <div class="alert alert-warning" role="alert">
+        <h5 class="alert-heading">
+          <span style="font-size: 1.3em;">⚠️</span> 
+          Conferma Associazione - Match Cellulare
+        </h5>
+        <p class="mb-0">
+          <strong>Il cellulare corrisponde ma nome/cognome sono diversi.</strong><br>
+          Vuoi associare questo appuntamento al cliente esistente?
+        </p>
+      </div>
+      
+      <div class="row mt-4">
+        <div class="col-6">
+          <div class="card">
+            <div class="card-header bg-light">
+              <strong>📋 Dati Prenotazione</strong>
+            </div>
+            <div class="card-body">
+              <p><strong>Nome:</strong> <span id="bookingNome"></span></p>
+              <p><strong>Cognome:</strong> <span id="bookingCognome"></span></p>
+              <p><strong>Cellulare:</strong> <span id="bookingCellulare"></span></p>
             </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" id="btnPhoneMatchCancel">
-              Annulla
-            </button>
-            <button type="button" class="btn btn-primary" id="btnPhoneMatchConfirm">
-              Associa
-            </button>
+        </div>
+        <div class="col-6">
+          <div class="card">
+            <div class="card-header bg-primary text-white">
+              <strong>👤 Cliente in Rubrica</strong>
+            </div>
+            <div class="card-body">
+              <p><strong>Nome:</strong> <span id="existingNome"></span></p>
+              <p><strong>Cognome:</strong> <span id="existingCognome"></span></p>
+              <p><strong>Cellulare:</strong> <span id="existingCellulare"></span></p>
+            </div>
           </div>
         </div>
       </div>
+      
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button type="button" class="btn btn-secondary" id="btnPhoneMatchCancel">
+          Annulla
+        </button>
+        <button type="button" class="btn btn-primary" id="btnPhoneMatchConfirm">
+          Associa Cliente
+        </button>
+      </div>
     `;
     
-    document.body.appendChild(modal);
+    // Inserisci dopo il modal-body del WebAppointmentsModal
+    const modalBody = webModal.querySelector('.modal-body');
+    if (modalBody) {
+      modalBody.appendChild(formContainer);
+    }
+  } else {
+    formContainer.style.display = 'block';
   }
   
-  // Popola i dati nel modal
-  document.getElementById('bookingNome').textContent = bookingData.nome || '-';
-  document.getElementById('bookingCognome').textContent = bookingData.cognome || '-';
-  document.getElementById('bookingCellulare').textContent = bookingData.cellulare || '-';
+  // Popola i dati
+  formContainer.querySelector('#bookingNome').textContent = bookingData.nome || '-';
+  formContainer.querySelector('#bookingCognome').textContent = bookingData.cognome || '-';
+  formContainer.querySelector('#bookingCellulare').textContent = bookingData.cellulare || '-';
   
-  document.getElementById('existingNome').textContent = existingClientData.nome || '-';
-  document.getElementById('existingCognome').textContent = existingClientData.cognome || '-';
-  document.getElementById('existingCellulare').textContent = existingClientData.cellulare || '-';
+  formContainer.querySelector('#existingNome').textContent = existingClientData.nome || '-';
+  formContainer.querySelector('#existingCognome').textContent = existingClientData.cognome || '-';
+  formContainer.querySelector('#existingCellulare').textContent = existingClientData.cellulare || '-';
   
   // Gestisci i click sui bottoni
-  const btnConfirm = document.getElementById('btnPhoneMatchConfirm');
-  const btnCancel = document.getElementById('btnPhoneMatchCancel');
+  const btnConfirm = formContainer.querySelector('#btnPhoneMatchConfirm');
+  const btnCancel = formContainer.querySelector('#btnPhoneMatchCancel');
   
-  // Rimuovi vecchi listener per evitare duplicati
+  // Rimuovi vecchi listener
   const newBtnConfirm = btnConfirm.cloneNode(true);
   const newBtnCancel = btnCancel.cloneNode(true);
   btnConfirm.parentNode.replaceChild(newBtnConfirm, btnConfirm);
   btnCancel.parentNode.replaceChild(newBtnCancel, btnCancel);
   
   newBtnConfirm.addEventListener('click', function() {
-    const bsModal = bootstrap.Modal.getInstance(modal);
-    if (bsModal) bsModal.hide();
+    // Nascondi form e mostra tabella
+    formContainer.style.display = 'none';
+    if (tableContainer) tableContainer.style.display = 'block';
+    if (dateNav) dateNav.style.display = 'flex';
+    
     if (onConfirm) onConfirm();
   });
   
   newBtnCancel.addEventListener('click', function() {
-    const bsModal = bootstrap.Modal.getInstance(modal);
-    if (bsModal) bsModal.hide();
+    // Nascondi form e mostra tabella
+    formContainer.style.display = 'none';
+    if (tableContainer) tableContainer.style.display = 'block';
+    if (dateNav) dateNav.style.display = 'flex';
+    
     if (onCancel) onCancel();
   });
-  
-  // Mostra il modal con z-index elevato per stare sopra al modal principale
-  modal.style.zIndex = 1060;
-  const backdrop = document.querySelector('.modal-backdrop');
-  if (backdrop) backdrop.style.zIndex = 1055;
-  
-  const bsModal = new bootstrap.Modal(modal);
-  bsModal.show();
 }

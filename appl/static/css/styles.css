@@ -3254,6 +3254,12 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   pointer-events: none !important;
 }
 
+/* Nascondi backdrop solo per modal specifici che non lo necessitano, MA NON per WebAppointmentsModal */
+.modal-backdrop.fade,
+.modal-backdrop.show {
+  z-index: 13999 !important; /* Subito sotto WebAppointmentsModal (14000) */
+}
+
 /* Blocca eventuale overlay generico rimasto con z-index simile */
 body > .modal-backdrop {
   background: transparent !important;
