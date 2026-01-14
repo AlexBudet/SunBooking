@@ -472,16 +472,16 @@ function safeFocusNoScroll(el) {
 }
 
 // Template disclaimer di default
-const defaultDisclaimerTemplate = `CONSENSO INFORMATO PER TRATTAMENTI ESTETICI
+const defaultDisclaimerTemplate = `**CONSENSO INFORMATO PER TRATTAMENTI ESTETICI**
 
-Io sottoscritto/a {cliente_nome} {cliente_cognome}, 
-in data {data_odierna}, dichiaro di aver ricevuto informazioni complete relative al pacchetto "{pacchetto_nome}" che prevede i seguenti trattamenti:
+Io sottoscritto/a **{cliente_nome} {cliente_cognome}**, 
+in data {data_odierna}, dichiaro di aver ricevuto informazioni complete relative al pacchetto che prevede i seguenti trattamenti:
 
 {pacchetto_servizi}
 
-Numero totale sedute: {sedute_totali}
-Valore pacchetto da listino: € {importo_totale_lordo}
-Importo totale pacchetto in promo: € {importo_totale}
+*Numero totale sedute:* {sedute_totali}
+*Valore pacchetto da listino:* € {importo_totale_lordo}
+*Importo totale pacchetto in promo:* € {importo_totale}
 
 INDICAZIONI E CONTROINDICAZIONI DEI TRATTAMENTI:
 {disclaimers_servizi}
@@ -498,7 +498,8 @@ Indirizzo: {centro_indirizzo}
 
 Data: {data_odierna}
 
-_______________________________
+
+-------------------------------
 Firma del cliente`;
 
 // =============== GIORNI ABBANDONO ===============
@@ -570,7 +571,7 @@ function applyDisclaimerFormat(format) {
       replacement = selectedText.split('\n').map(line => line.trim() ? `${counter++}. ${line}` : line).join('\n');
       break;
     case 'line':
-      replacement = '\n___________________________\n';
+      replacement = '\n-------------------------------\n';
       break;
     default:
       replacement = selectedText;
@@ -871,9 +872,15 @@ function insertVariable(variable) {
   updatePreview();
 }
 
-// Aggiorna anteprima template
 function updatePreview() {
-  const template = document.getElementById('whatsappTemplate').value;
+  const templateEl = document.getElementById('whatsappTemplate');
+  const previewEl = document.getElementById('templatePreview');
+  
+  if (!templateEl || !previewEl) {
+    return; // Elementi non presenti nella pagina, ignora
+  }
+  
+  const template = templateEl.value;
   const preview = template
     .replace('{cliente_nome}', 'Maria Rossi')
     .replace('{pacchetto_nome}', '10 Pressoterapia + 5 Massaggio')
@@ -886,9 +893,8 @@ function updatePreview() {
     .replace('{prossima_seduta}', '15 Gen 2026 ore 10:00')
     .replace('{centro_nome}', 'Beauty Center');
   
-  document.getElementById('templatePreview').textContent = preview;
+  previewEl.textContent = preview;
 }
-
 // Salva template WhatsApp
 async function saveWhatsappTemplate() {
   const template = document.getElementById('whatsappTemplate').value;

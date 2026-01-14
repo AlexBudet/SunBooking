@@ -9837,25 +9837,33 @@ function loadWebAppointments(date, search) {
           // Vero se la sessione è già associata al client matchato
           const isAssociatedToMatchedClient = matchClienteId && String(clientId ?? '') === String(matchClienteId);
 
-          if (matchCliente && isPlaceholder) {
-            // Mostra ❓ solo quando esiste un match e il blocco è ancora placeholder/booking
+          // NUOVO: mostra ❓ anche per casi no-match se è placeholder
+          if (isPlaceholder) {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.title = 'Associa';
+
+            // Rimuovi padding Bootstrap per non allargare la riga
+            btn.style.padding = '0';
+            btn.style.border = 'none';
+            btn.style.background = 'none';
             
-            // NEW: determina colore icona in base a match_type
+            // Determina classe e tipo in base al match
             if (matchType === 'phone_only') {
               btn.className = 'btn btn-link btn-associa-phone';
               btn.dataset.matchType = 'phone_only';
-            } else {
+            } else if (matchType === 'full') {
               btn.className = 'btn btn-link btn-associa';
               btn.dataset.matchType = 'full';
+            } else {
+              // NO MATCH - nuovo caso
+              btn.className = 'btn btn-link btn-associa-no-match';
+              btn.dataset.matchType = 'no_match';
             }
             
             if (Array.isArray(session?.ids) && session.ids[0] != null) {
               btn.dataset.appointmentId = String(session.ids[0]);
             }
-            // NEW: porta tutti gli appuntamenti della sessione
             if (Array.isArray(session?.ids) && session.ids.length > 0) {
               btn.dataset.appointmentIds = session.ids.join(',');
             }
@@ -9864,9 +9872,12 @@ function loadWebAppointments(date, search) {
             btn.dataset.clientCognome = (session.cognome || '');
             btn.dataset.clientCellulare = (session.cellulare || '');
             
-            // Salva anche i dati del cliente matchato per il modal di confronto
+            // Estrai email dalla nota (4° elemento in matchParts array)
+            const matchParts = (session.match_cliente || '').split(' - ');
+            btn.dataset.clientEmail = matchParts[3] || '';
+                      
+            // Salva dati cliente matchato per confronto (solo se phone_only)
             if (matchType === 'phone_only' && session.match_cliente) {
-              const matchParts = session.match_cliente.split(' - ');
               const matchNameParts = matchParts[0]?.split(' ') || [];
               btn.dataset.matchNome = matchNameParts[0] || '';
               btn.dataset.matchCognome = matchNameParts.slice(1).join(' ') || '';
@@ -9875,11 +9886,26 @@ function loadWebAppointments(date, search) {
             
             const icon = document.createElement('span');
             icon.textContent = '❓';
-            // Rosso per match completo, giallo per match solo telefono
-            icon.style.color = (matchType === 'phone_only') ? '#ffc107' : '#d32f2f';
-            icon.style.fontSize = '1.6em';
+            icon.style.fontSize = '1.2em';
+            icon.style.display = 'inline-block';
+            
+            // Applica colori: rosso per full match, giallo per phone-only, grigio per no-match
+            // IMPORTANTE: usa !important per sovrascrivere gli stili Bootstrap btn-link
+            if (matchType === 'phone_only') {
+              btn.style.color = '#ffc107 !important';
+              icon.style.color = '#ffc107 !important';
+            } else if (matchType === 'full') {
+              btn.style.color = '#d32f2f !important';
+              icon.style.color = '#d32f2f !important';
+            } else {
+              // no-match: grigio
+              btn.style.color = '#999 !important';
+              icon.style.color = '#999 !important';
+            }
+            
             btn.appendChild(icon);
             tdBtn.appendChild(btn);
+
           } else if (matchCliente && isAssociatedToMatchedClient) {
             // Mostra 🟢 se c'è un match e l'appuntamento è già associato al client trovato
             const span = document.createElement('span');
@@ -9981,41 +10007,39 @@ if (tdAppt.textContent.trim()) {
 })();
 
       // Per ogni bottone "Associa", aggiungi listener per la richiesta al backend
-      document.querySelectorAll('.btn-associa, .btn-associa-phone').forEach(btn => {
+      document.querySelectorAll('.btn-associa-no-match').forEach(btn => {
         btn.addEventListener('click', async function () {
-          const matchType = btn.dataset.matchType || 'full';
+          const appointmentId = btn.dataset.appointmentId;
+          const bookingData = {
+            nome: btn.dataset.clientNome || '',
+            cognome: btn.dataset.clientCognome || '',
+            cellulare: btn.dataset.clientCellulare || '',
+            email: btn.dataset.clientEmail || ''
+          };
           
-          // Se è match solo cellulare, mostra modal di confronto
-          if (matchType === 'phone_only') {
-            const bookingData = {
-              nome: btn.dataset.clientNome || '',
-              cognome: btn.dataset.clientCognome || '',
-              cellulare: btn.dataset.clientCellulare || ''
-            };
-            
-            const existingClientData = {
-              nome: btn.dataset.matchNome || '',
-              cognome: btn.dataset.matchCognome || '',
-              cellulare: btn.dataset.matchCellulare || ''
-            };
-            
-            // Mostra modal di confronto
-            showPhoneOnlyMatchModal(bookingData, existingClientData, async function() {
-              // Utente ha confermato: procedi con associazione
-              await performAssociation(btn);
-            }, function() {
-              // Utente ha annullato: non fare nulla
-              console.log('Associazione annullata dall\'utente');
+          // Cerca cliente simile nel database
+          const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+          
+          try {
+            const response = await fetch('/calendar/api/find-similar-client', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+              },
+              body: JSON.stringify(bookingData)
             });
             
-            return; // Esci qui per match phone_only
+            const data = await response.json();
+            const similarClient = data.match;
+            
+            // Mostra form di scelta dentro il modal WebAppointments
+            showNoMatchForm(bookingData, similarClient, appointmentId);
+            
+          } catch (err) {
+            console.error('Errore ricerca cliente simile:', err);
+            alert('Errore durante la ricerca del cliente');
           }
-          
-          // Match completo: conferma standard
-          if (!window.confirm('Vuoi associare questo appuntamento al cliente selezionato?')) return;
-          
-          // Procedi con associazione per match completo
-          await performAssociation(btn);
         });
       });
       
@@ -10726,4 +10750,225 @@ function showPhoneOnlyMatchModal(bookingData, existingClientData, onConfirm, onC
     
     if (onCancel) onCancel();
   });
+}
+
+// =============================================================
+//   FORM PER ASSOCIAZIONE/CREAZIONE CLIENTE (NO MATCH)
+// =============================================================
+function showNoMatchForm(bookingData, similarClient, appointmentId) {
+  // Trova il modal WebAppointments e i suoi elementi
+  const webModal = document.getElementById('WebAppointmentsModal');
+  const tableContainer = webModal.querySelector('.web-appt-table-container');
+  const dateNav = webModal.querySelector('#webApptDateNav');
+  
+  // Nascondi tabella e navigazione data
+  if (tableContainer) tableContainer.style.display = 'none';
+  if (dateNav) dateNav.style.display = 'none';
+  
+  // Crea o mostra il container del form
+  let formContainer = webModal.querySelector('#noMatchFormContainer');
+  
+  if (!formContainer) {
+    formContainer = document.createElement('div');
+    formContainer.id = 'noMatchFormContainer';
+    formContainer.style.padding = '20px';
+    
+    const modalBody = webModal.querySelector('.modal-body');
+    if (modalBody) {
+      modalBody.appendChild(formContainer);
+    }
+  } else {
+    formContainer.style.display = 'block';
+  }
+  
+    // Costruisci HTML del form
+  let similarClientHTML = '';
+  if (similarClient) {
+    // Capitalizza i dati del cliente simile
+    const simNome = window.capitalizeName(similarClient.nome || '');
+    const simCognome = window.capitalizeName(similarClient.cognome || '');
+    
+    // Determina l'emoji in base al punteggio
+    let scoreEmoji = '👎'; // pollice verso il basso (default < 60)
+    if (similarClient.score >= 80) {
+      scoreEmoji = '👍'; // pollice verso l'alto
+    } else if (similarClient.score >= 60) {
+      scoreEmoji = '😐'; // faccina interdetta
+    }
+    
+    similarClientHTML = `
+      <div class="card">
+        <div class="card-header bg-info text-white">
+          <strong>🔍 Cliente Simile Trovato</strong>
+        </div>
+        <div class="card-body">
+          <p><strong>Nome:</strong> ${simNome || '-'}</p>
+          <p><strong>Cognome:</strong> ${simCognome || '-'}</p>
+          <p><strong>Cellulare:</strong> ${similarClient.cellulare || '-'}</p>
+          <p><strong>Email:</strong> ${similarClient.email || '-'}</p>
+          <p style="font-size: 0.9em; color: #666;">
+            Punteggio somiglianza: ${similarClient.score} ${scoreEmoji}
+          </p>
+        </div>
+      </div>
+    `;
+  } else {
+    similarClientHTML = `
+      <div class="alert alert-warning">
+        <strong>⚠️ Nessun cliente simile trovato nel database</strong>
+      </div>
+    `;
+  }
+  
+  // Capitalizza i dati della prenotazione
+  const bookNome = window.capitalizeName(bookingData.nome || '');
+  const bookCognome = window.capitalizeName(bookingData.cognome || '');
+  
+  formContainer.innerHTML = `
+    <div class="alert alert-info mb-3">
+      <h5 class="alert-heading">
+        <span style="font-size: 1.3em;">❓</span> 
+        Nessuna Corrispondenza Esatta
+      </h5>
+      <p class="mb-0">
+        Non è stato trovato un cliente con nome, cognome e cellulare corrispondenti.<br>
+        Scegli come procedere:
+      </p>
+    </div>
+    
+    <div class="row mb-4">
+      <div class="col-6">
+        <div class="card">
+          <div class="card-header bg-light">
+            <strong>📋 Dati Prenotazione</strong>
+          </div>
+          <div class="card-body">
+            <p><strong>Nome:</strong> ${bookNome || '-'}</p>
+            <p><strong>Cognome:</strong> ${bookCognome || '-'}</p>
+            <p><strong>Cellulare:</strong> ${bookingData.cellulare || '-'}</p>
+            <p><strong>Email:</strong> ${bookingData.email || '-'}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-6">
+        ${similarClientHTML}
+      </div>
+    </div>
+    
+    <div class="d-flex justify-content-end gap-2">
+      <button type="button" class="btn btn-secondary" id="btnNoMatchEsci">
+        Esci
+      </button>
+      ${similarClient ? `
+        <button type="button" class="btn btn-primary" id="btnNoMatchAssocia" data-client-id="${similarClient.id}">
+          Associa a Cliente
+        </button>
+      ` : ''}
+      <button type="button" class="btn btn-success" id="btnNoMatchCrea">
+        Crea Nuovo Cliente
+      </button>
+    </div>
+  `;
+  
+  // Gestisci i click sui bottoni
+  const btnEsci = formContainer.querySelector('#btnNoMatchEsci');
+  const btnAssocia = formContainer.querySelector('#btnNoMatchAssocia');
+  const btnCrea = formContainer.querySelector('#btnNoMatchCrea');
+  
+  btnEsci.addEventListener('click', function() {
+    formContainer.style.display = 'none';
+    if (tableContainer) tableContainer.style.display = 'block';
+    if (dateNav) dateNav.style.display = 'flex';
+  });
+  
+  if (btnAssocia) {
+    btnAssocia.addEventListener('click', async function() {
+      const clientId = this.dataset.clientId;
+      await associaClienteBooking(appointmentId, clientId);
+      
+      // Nascondi form e ricarica tabella
+      formContainer.style.display = 'none';
+      if (tableContainer) tableContainer.style.display = 'block';
+      if (dateNav) dateNav.style.display = 'flex';
+      
+      // Ricarica la tabella
+      const currentDate = document.getElementById('webApptDate')?.value || new Date().toISOString().split('T')[0];
+      loadWebAppointments(currentDate, '');
+    });
+  }
+  
+  btnCrea.addEventListener('click', async function() {
+    await creaClienteDaBooking(bookingData, appointmentId);
+    
+    // Nascondi form e ricarica tabella
+    formContainer.style.display = 'none';
+    if (tableContainer) tableContainer.style.display = 'block';
+    if (dateNav) dateNav.style.display = 'flex';
+    
+    // Ricarica la tabella
+    const currentDate = document.getElementById('webApptDate')?.value || new Date().toISOString().split('T')[0];
+    loadWebAppointments(currentDate, '');
+  });
+}
+
+// Helper: associa cliente esistente
+async function associaClienteBooking(appointmentId, clientId) {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+  
+  try {
+    const response = await fetch('/calendar/api/associa-cliente-booking', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({
+        appointment_id: appointmentId,
+        client_id: clientId
+      })
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+      alert('Cliente associato con successo!');
+    } else {
+      alert('Errore: ' + (result.error || 'Associazione fallita'));
+    }
+  } catch (err) {
+    console.error('Errore associazione:', err);
+    alert('Errore durante l\'associazione del cliente');
+  }
+}
+
+// Helper: crea nuovo cliente e associa
+async function creaClienteDaBooking(bookingData, appointmentId) {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+  
+  try {
+    // 1. Crea il cliente
+    const createResponse = await fetch('/calendar/api/create-client-from-booking', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify(bookingData)
+    });
+    
+    const createResult = await createResponse.json();
+    
+    if (!createResult.success) {
+      alert('Errore creazione cliente: ' + (createResult.error || 'Creazione fallita'));
+      return;
+    }
+    
+    const newClientId = createResult.client.id;
+    
+    // 2. Associa il cliente appena creato
+    await associaClienteBooking(appointmentId, newClientId);
+    
+  } catch (err) {
+    console.error('Errore creazione cliente:', err);
+    alert('Errore durante la creazione del cliente');
+  }
 }

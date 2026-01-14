@@ -25,6 +25,12 @@ def validate_pdf(file_data):
     kind = filetype.guess(file_data)
     return kind is not None and kind.mime == 'application/pdf'
 
+def capitalize_name(name):
+    """Normalizza un nome: prima lettera maiuscola, resto minuscolo per ogni parola"""
+    if not name:
+        return name
+    return ' '.join(word.capitalize() for word in name.split())
+
 pacchetti_bp = Blueprint('pacchetti', __name__)
 
 def aggiungi_history(pacchetto, azione):
@@ -245,8 +251,8 @@ def api_clienti():
     
     return jsonify([{
         'id': c.id,
-        'nome': c.cliente_nome,
-        'cognome': c.cliente_cognome,
+        'nome': capitalize_name(c.cliente_nome),
+        'cognome': capitalize_name(c.cliente_cognome),
         'cellulare': c.cliente_cellulare
     } for c in clients])
 
@@ -262,7 +268,7 @@ def api_servizi():
     ).limit(50).all()
     return jsonify([{
         'id': s.id,
-        'nome': s.servizio_nome,
+        'nome': capitalize_name(s.servizio_nome),
         'categoria': s.servizio_categoria.value,
         'prezzo': s.servizio_prezzo
     } for s in servizi])
@@ -283,7 +289,7 @@ def api_operatori():
     ).limit(50).all()
     return jsonify([{
         'id': o.id,
-        'nome': f"{o.user_nome}"
+        'nome': capitalize_name(o.user_nome)
     } for o in operatori])
 
 @pacchetti_bp.route('/api/pacchetti', methods=['GET'])
