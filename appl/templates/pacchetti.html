@@ -414,7 +414,15 @@
                     <!-- Costo totale scontato (auto-calcolato) -->
                     <div class="mb-3">
                         <label for="costoTotaleScontato" class="form-label">Costo Totale Scontato</label>
-                        <input type="number" class="form-control" id="costoTotaleScontato" step="0.01" readonly>
+                        <div class="d-flex align-items-center">
+                            <input type="number" class="form-control" id="costoTotaleScontato" step="0.01" readonly style="flex: 1;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="prezzoRoundDownModal"
+                                    data-bs-toggle="tooltip" data-bs-placement="top" title="Arrotonda il prezzo per difetto"
+                                    style="display: none;">↓</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="prezzoRoundUpModal"
+                                    data-bs-toggle="tooltip" data-bs-placement="top" title="Arrotonda il prezzo per eccesso"
+                                    style="display: none;">↑</button>
+                        </div>
                     </div>
 
                     <!-- Riepilogo sedute (visibile solo con Sedute Omaggio) -->
@@ -505,6 +513,7 @@
     let operatoriSelezionati = [];
     let nomePacchetto = '';
     let promoSalvate = []; // Array delle promo caricate da settings
+    let arrotondamentoManuale = null; // 'floor', 'ceil', o null
 
     // Variabili per ordinamento
     let currentSort = { field: 'data_sottoscrizione', direction: 'desc' };
@@ -630,6 +639,7 @@ function toggleScontoFields() {
         }
     }
     
+    arrotondamentoManuale = null; // Reset arrotondamento quando cambia tipo sconto
     updateCostoScontato();
     updateRiepilogo();
 }
@@ -820,7 +830,36 @@ function generateSeduteOmaggioRows() {
             scontato = totale;
         }
         
+        // Applica arrotondamento manuale se presente
+        if (arrotondamentoManuale === 'floor') {
+            scontato = Math.floor(scontato);
+        } else if (arrotondamentoManuale === 'ceil') {
+            scontato = Math.ceil(scontato);
+        }
+        
         document.getElementById('costoTotaleScontato').value = scontato.toFixed(2);
+        
+        // Mostra/nascondi bottoni arrotondamento se ci sono decimali diversi da .00
+        // (controlla il valore PRIMA dell'arrotondamento manuale)
+        const totalePreArrotondamento = tipo === 'Percentuale' 
+            ? (parseFloat(document.getElementById('scontoPercentuale').value) > 0 
+                ? totale * (1 - Math.min(Math.max(parseFloat(document.getElementById('scontoPercentuale').value) || 0, 0), 100) / 100)
+                : totale)
+            : totale;
+        
+        const hasDecimals = (totalePreArrotondamento * 100) % 100 !== 0;
+        const btnRoundDown = document.getElementById('prezzoRoundDownModal');
+        const btnRoundUp = document.getElementById('prezzoRoundUpModal');
+        
+        if (btnRoundDown && btnRoundUp) {
+            if (hasDecimals && totalePreArrotondamento > 0 && arrotondamentoManuale === null) {
+                btnRoundDown.style.display = '';
+                btnRoundUp.style.display = '';
+            } else {
+                btnRoundDown.style.display = 'none';
+                btnRoundUp.style.display = 'none';
+            }
+        }
     }
 
     // Carica dropdown clienti
@@ -1232,6 +1271,7 @@ tooltips.forEach(el => new bootstrap.Tooltip(el));
         };
         serviziSelezionati.push(service);
         
+        arrotondamentoManuale = null; // Reset arrotondamento quando si aggiunge servizio
         updateServiziList();
         updateCostoTotale();
         updateNomePacchetto();
@@ -1276,6 +1316,7 @@ function updateServiziList() {
 // Rimuovi servizio
 function removeService(index) {
     serviziSelezionati.splice(index, 1);
+    arrotondamentoManuale = null; // Reset arrotondamento quando si rimuove servizio
     updateServiziList();
     updateCostoTotale();
     updateNomePacchetto();
@@ -1313,15 +1354,46 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         this.value = maxOmaggi;
     }
     
+    arrotondamentoManuale = null; // Reset arrotondamento quando cambiano le sedute omaggio
     generateSeduteOmaggioRows();
     updateCostoScontato();
 });
 
     // Event listener per percentuale sconto
-    document.getElementById('scontoPercentuale').addEventListener('input', updateCostoScontato);
+    document.getElementById('scontoPercentuale').addEventListener('input', function() {
+        arrotondamentoManuale = null; // Reset arrotondamento quando cambia la percentuale
+        updateCostoScontato();
+    });
+
+    // Listener per arrotondamento prezzo scontato nel modal
+    const prezzoRoundDownModal = document.getElementById('prezzoRoundDownModal');
+    const prezzoRoundUpModal = document.getElementById('prezzoRoundUpModal');
+
+    if (prezzoRoundDownModal) {
+        prezzoRoundDownModal.addEventListener('click', function() {
+            arrotondamentoManuale = 'floor';
+            updateCostoScontato(); // Ricalcola applicando l'arrotondamento per difetto
+        });
+    }
+
+    if (prezzoRoundUpModal) {
+        prezzoRoundUpModal.addEventListener('click', function() {
+            arrotondamentoManuale = 'ceil';
+            updateCostoScontato(); // Ricalcola applicando l'arrotondamento per eccesso
+        });
+    }
+
+    // Lock globale per salvare pacchetto
+    let savePacchettoLock = false;
 
     // Salva pacchetto
     async function savePacchetto() {
+        // Protezione contro click multipli
+        if (savePacchettoLock) {
+            console.log('Salvataggio pacchetto già in corso, operazione ignorata');
+            return;
+        }
+
         const tipo = document.getElementById('scontoTipo').value;
         
         // Costruisci array servizi finali
@@ -1362,33 +1434,56 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         const method = id ? 'PUT' : 'POST';
         const url = id ? `/pacchetti/api/pacchetti/${id}` : '/pacchetti/api/pacchetti';
 
-    try {
-        const response = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-            body: JSON.stringify(data)
-        });
+        // Attiva il lock
+        savePacchettoLock = true;
 
-        if (response.ok) {
-            const result = await response.json();
-            // Chiudi l'offcanvas invece del modal
-            const offcanvasElement = document.getElementById('pacchettoOffcanvas');
-            const offcanvasInstance = bootstrap.Offcanvas.getInstance(offcanvasElement);
-            if (offcanvasInstance) {
-                offcanvasInstance.hide();
-            }
-            
-            // Redirect alla pagina dettaglio del pacchetto
-            const pacchettoId = id || result.id;
-            window.location.href = `/pacchetti/detail/${pacchettoId}`;
-        } else {
-            alert('Errore nel salvataggio');
+        // Disabilita visivamente il pulsante Salva
+        const btnSalva = document.querySelector('#pacchettoOffcanvas .btn-primary');
+        const originalText = btnSalva ? btnSalva.textContent : '';
+        if (btnSalva) {
+            btnSalva.disabled = true;
+            btnSalva.textContent = 'Salvataggio...';
         }
-    } catch (error) {
-        console.error('Errore:', error);
-        alert('Errore nel salvataggio');
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                // Chiudi l'offcanvas invece del modal
+                const offcanvasElement = document.getElementById('pacchettoOffcanvas');
+                const offcanvasInstance = bootstrap.Offcanvas.getInstance(offcanvasElement);
+                if (offcanvasInstance) {
+                    offcanvasInstance.hide();
+                }
+                
+                // Redirect alla pagina dettaglio del pacchetto
+                const pacchettoId = id || result.id;
+                window.location.href = `/pacchetti/detail/${pacchettoId}`;
+            } else {
+                alert('Errore nel salvataggio');
+                // Rilascia il lock in caso di errore
+                savePacchettoLock = false;
+                if (btnSalva) {
+                    btnSalva.disabled = false;
+                    btnSalva.textContent = originalText;
+                }
+            }
+        } catch (error) {
+            console.error('Errore salvataggio pacchetto:', error);
+            alert('Errore nel salvataggio');
+            // Rilascia il lock in caso di errore
+            savePacchettoLock = false;
+            if (btnSalva) {
+                btnSalva.disabled = false;
+                btnSalva.textContent = originalText;
+            }
+        }
     }
-}
 
     // Delete pacchetto
     async function deletePacchetto(id) {

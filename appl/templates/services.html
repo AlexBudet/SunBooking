@@ -552,10 +552,30 @@ function attachEditorToolbarListeners() {
   toolbarListenersAttached = true;
 }
 
+  // Lock globale per salvataggio info servizio
+  let saveServiceInfoLock = false;
+
   async function saveServiceInfo() {
+    // Protezione contro click multipli
+    if (saveServiceInfoLock) {
+      console.log('Salvataggio info servizio già in corso, operazione ignorata');
+      return;
+    }
+
     if (!currentServiceId) return;
     const editor = document.getElementById('serviceInfoEditor');
     const html = editor.innerHTML.trim();
+
+    // Attiva il lock
+    saveServiceInfoLock = true;
+
+    // Disabilita visivamente il pulsante SALVA
+    const btnSalva = document.getElementById('serviceInfoSaveBtn');
+    const originalText = btnSalva ? btnSalva.textContent : '';
+    if (btnSalva) {
+      btnSalva.disabled = true;
+      btnSalva.textContent = 'Salvataggio...';
+    }
 
     try {
       // Usa url_for per gestire correttamente prefissi e percorsi
@@ -587,6 +607,12 @@ function attachEditorToolbarListeners() {
     } catch (e) {
       alert(e.message);
       console.error(e);
+      // Rilascia il lock in caso di errore
+      saveServiceInfoLock = false;
+      if (btnSalva) {
+        btnSalva.disabled = false;
+        btnSalva.textContent = originalText;
+      }
     }
   }
 </script>

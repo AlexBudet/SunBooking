@@ -866,7 +866,16 @@ document.addEventListener('DOMContentLoaded', function() {
     bootstrap.Modal.getOrCreateInstance(modalEl).show();
   }, true);
 
+  // LOCK per evitare doppi invii dello scontrino lotteria
+  let lotteriaInvioLock = false;
+
   document.getElementById('lotteria_invia').addEventListener('click', function() {
+    // Protezione contro click multipli
+    if (lotteriaInvioLock) {
+      console.log('Invio scontrino lotteria già in corso, click ignorato');
+      return;
+    }
+    
     const lotteria = document.getElementById('lotteria_codice').value.trim();
     
     // Trova le righe dei servizi attuali
@@ -914,6 +923,15 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     if (hasError) return;
+
+    // Attiva il lock PRIMA della chiamata fetch
+    lotteriaInvioLock = true;
+
+    // Disabilita visivamente il pulsante
+    const btnLotteriaInvia = document.getElementById('lotteria_invia');
+    const originalText = btnLotteriaInvia.textContent;
+    btnLotteriaInvia.disabled = true;
+    btnLotteriaInvia.textContent = 'Invio in corso...';
     
     const cliente_id = document.getElementById('clientSearchInputCassa').dataset.selectedClient || null;
     const operatore_id = document.getElementById('operatorSelectInput').dataset.selectedOperator || null;
@@ -948,34 +966,73 @@ document.addEventListener('DOMContentLoaded', function() {
       } else {
         location.reload();
       }
+    })
+    .catch(error => {
+      console.error('Errore invio scontrino lotteria:', error);
+      alert('Errore durante l\'invio dello scontrino. Riprova.');
+      // Rilascia il lock in caso di errore
+      lotteriaInvioLock = false;
+      btnLotteriaInvia.disabled = false;
+      btnLotteriaInvia.textContent = originalText;
     });
   }); // chiude lotteria_invia listener
 
 }); // chiude DOMContentLoaded
 </script>
 <script>
-document.getElementById('btnAnnullaScontrino').addEventListener('click', function(e) {
+// Lock globale per chiusura giornaliera
+let chiusuraGiornalieraLock = false;
+
+document.getElementById('btnChiusuraGiornaliera').addEventListener('click', function(e) {
   e.preventDefault();
-  if (!confirm("Vuoi davvero annullare l'ultimo scontrino fiscale?")) return;
-  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-  fetch('/cassa/annulla-ultimo-scontrino', {
+  
+  // Protezione contro click multipli
+  if (chiusuraGiornalieraLock) {
+    console.log('Chiusura giornaliera già in corso, operazione ignorata');
+    return;
+  }
+  
+  if (!confirm("Vuoi davvero stampare la chiusura giornaliera?")) return;
+
+  // Attiva il lock
+  chiusuraGiornalieraLock = true;
+
+  const btn = this;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Invio...';
+
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+  fetch('/cassa/chiusura-giornaliera', {
     method: 'POST',
-    headers: {
-      'X-CSRFToken': csrfToken
-    }
+    headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
   })
-  .then(res => res.json())
-  .then(data => {
-    if (data.error) {
-      alert("Errore: " + data.error);
-    } else {
-      // Mostra solo il messaggio semplice
-      alert("Scontrino annullato!");
-      location.reload();
-    }
+  .then(async res => {
+    let raw = '';
+    try { raw = await res.text(); } catch(_) {}
+
+    // Prova a parse JSON ma senza mai bloccare UX
+    let data = {};
+    try { data = JSON.parse(raw); } catch(_) {}
+
+    console.log('[CHIUSURA GIORNALIERA] HTTP:', res.status, 'RAW:', raw);
+    console.log('[CHIUSURA GIORNALIERA] Parsed:', data);
+
+    // Mostra sempre successo (nessun popup errore)
+    alert("Chiusura giornaliera inviata! Controlla gli scontrini stampati.");
   })
   .catch(err => {
-    alert("Errore di rete: " + err);
+    console.warn('[CHIUSURA GIORNALIERA] Errore rete (ignorato per policy):', err);
+    alert("Chiusura giornaliera inviata! Controlla gli scontrini stampati.");
+  })
+  .finally(() => {
+    // Rilascia il lock dopo un delay di sicurezza (10 secondi)
+    setTimeout(() => {
+      chiusuraGiornalieraLock = false;
+    }, 10000);
+    btn.disabled = false;
+    btn.textContent = originalText;
   });
 });
 </script>
