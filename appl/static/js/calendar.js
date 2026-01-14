@@ -10042,6 +10042,33 @@ if (tdAppt.textContent.trim()) {
           }
         });
       });
+
+      document.querySelectorAll('.btn-associa').forEach(btn => {
+        btn.addEventListener('click', () => performAssociation(btn));
+      });
+
+      document.querySelectorAll('.btn-associa-phone').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const bookingData = {
+            nome: btn.dataset.clientNome || '',
+            cognome: btn.dataset.clientCognome || '',
+            cellulare: btn.dataset.clientCellulare || '',
+            email: btn.dataset.clientEmail || ''
+          };
+          const existingClientData = {
+            nome: btn.dataset.matchNome || '',
+            cognome: btn.dataset.matchCognome || '',
+            cellulare: btn.dataset.matchCellulare || ''
+          };
+
+          showPhoneOnlyMatchModal(
+            bookingData,
+            existingClientData,
+            () => performAssociation(btn),
+            () => {}
+          );
+        });
+      });
       
       // Funzione helper per eseguire l'associazione (evita duplicazione codice)
       async function performAssociation(btn) {
