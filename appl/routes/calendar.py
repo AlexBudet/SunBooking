@@ -2360,3 +2360,128 @@ def get_service_by_name():
         "prezzo": service.servizio_prezzo,
         "colore": getattr(service, 'colore', None)
     })
+
+@calendar_bp.route('/api/find-similar-client', methods=['POST'])
+def find_similar_client():
+    """
+    Trova il cliente più simile in database basandosi su nome/cognome/cellulare.
+    Ritorna il miglior match o None.
+    """
+    data = request.get_json()
+    nome = (data.get('nome') or '').strip().lower()
+    cognome = (data.get('cognome') or '').strip().lower()
+    cellulare = (data.get('cellulare') or '').strip()
+    
+    if not nome and not cognome and not cellulare:
+        return jsonify({'match': None}), 200
+    
+    # Query per trovare clienti simili
+    query = db.session.query(Client).filter(Client.is_deleted == False)
+    
+    # Lista di candidati con punteggio
+    candidates = []
+    
+    for client in query.all():
+        score = 0
+        client_nome = (client.cliente_nome or '').strip().lower()
+        client_cognome = (client.cliente_cognome or '').strip().lower()
+        client_cell = (client.cliente_cellulare or '').strip()
+        
+        # Punteggio per nome (almeno 2 caratteri in comune)
+        if nome and client_nome:
+            common_chars = set(nome) & set(client_nome)
+            if len(common_chars) >= 2:
+                score += len(common_chars) * 2
+                # Bonus se inizia con stessa lettera
+                if nome[0] == client_nome[0]:
+                    score += 5
+        
+        # Punteggio per cognome (almeno 2 caratteri in comune)
+        if cognome and client_cognome:
+            common_chars = set(cognome) & set(client_cognome)
+            if len(common_chars) >= 2:
+                score += len(common_chars) * 2
+                # Bonus se inizia con stessa lettera
+                if cognome[0] == client_cognome[0]:
+                    score += 5
+        
+        # Punteggio per cellulare parziale (almeno 4 cifre consecutive)
+        if cellulare and client_cell:
+            # Normalizza (solo numeri)
+            import re
+            norm_search = re.sub(r'\D', '', cellulare)
+            norm_client = re.sub(r'\D', '', client_cell)
+            
+            # Cerca sottosequenza comune
+            if len(norm_search) >= 4:
+                for i in range(len(norm_search) - 3):
+                    substr = norm_search[i:i+4]
+                    if substr in norm_client:
+                        score += 10
+        
+        if score > 0:
+            candidates.append({
+                'client': client,
+                'score': score
+            })
+    
+    # Ordina per punteggio decrescente
+    candidates.sort(key=lambda x: x['score'], reverse=True)
+    
+    if not candidates:
+        return jsonify({'match': None}), 200
+    
+    # Ritorna il migliore
+    best = candidates[0]['client']
+    return jsonify({
+        'match': {
+            'id': best.id,
+            'nome': best.cliente_nome or '',
+            'cognome': best.cliente_cognome or '',
+            'cellulare': best.cliente_cellulare or '',
+            'email': best.cliente_email or '',
+            'score': candidates[0]['score']
+        }
+    }), 200
+
+
+@calendar_bp.route('/api/create-client-from-booking', methods=['POST'])
+def create_client_from_booking():
+    """
+    Crea un nuovo cliente dai dati della prenotazione online.
+    """
+    data = request.get_json() or {}
+    nome = (data.get('nome') or '').strip()
+    cognome = (data.get('cognome') or '').strip()
+    cellulare = (data.get('cellulare') or '').strip()
+    email = (data.get('email') or '').strip()
+    
+    if not nome or not cognome:
+        return jsonify({'success': False, 'error': 'Nome e cognome obbligatori'}), 400
+    
+    try:
+        # Crea nuovo cliente
+        new_client = Client(
+            cliente_nome=nome,
+            cliente_cognome=cognome,
+            cliente_cellulare=cellulare,
+            cliente_email=email,
+            is_deleted=False
+        )
+        db.session.add(new_client)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'client': {
+                'id': new_client.id,
+                'nome': new_client.cliente_nome,
+                'cognome': new_client.cliente_cognome,
+                'cellulare': new_client.cliente_cellulare,
+                'email': new_client.cliente_email
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500

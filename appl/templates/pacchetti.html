@@ -242,6 +242,17 @@
 .table thead th.sortable.desc i {
   opacity: 1;
 }
+
+/* Bottone aggiungi cliente quadrato verde */
+.btn-add-client-square {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    font-size: 1.5rem;
+    line-height: 1;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
 /* Nascondi colonne sotto 1200px */
 @media (max-width: 1200px) {
   .hide-mobile {
@@ -336,7 +347,17 @@
                     <!-- Cliente (ricerca come in calendar.js) -->
                     <div class="mb-3">
                         <label for="clientSearch" class="form-label">Cliente</label>
-                        <input type="text" class="form-control" id="clientSearch" placeholder="Cerca cliente..." autocomplete="off">
+                        <div class="d-flex align-items-center gap-2">
+                            <input type="text" class="form-control" id="clientSearch" placeholder="Cerca cliente..." autocomplete="off" style="flex: 1;">
+                            <button type="button" 
+                                    class="btn btn-outline-success btn-add-client-square" 
+                                    data-bs-toggle="tooltip" 
+                                    data-bs-placement="top" 
+                                    title="Aggiungi nuovo cliente"
+                                    onclick="openAddClientModalPacchetti()">
+                                +
+                            </button>
+                        </div>
                         <div id="clientDropdown" class="dropdown-menu"></div>
                         <input type="hidden" id="client_id" required>
                     </div>
@@ -450,6 +471,32 @@
             <button type="button" class="btn btn-primary" onclick="savePacchetto()">Salva</button>
         </div>
     </div>
+</div>
+
+<!-- Modal per aggiungere nuovo cliente -->
+<div class="modal fade" id="AddClientModalPacchetti" tabindex="-1" aria-labelledby="AddClientModalPacchettiLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="AddClientModalPacchettiLabel">Aggiungi Nuovo Cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="AddClientFormPacchetti">
+          <div class="mb-3">
+            <input type="text" class="form-control" id="cliente_nome_pacchetti" name="cliente_nome" required placeholder="Nome">
+          </div>
+          <div class="mb-3">
+            <input type="text" class="form-control" id="cliente_cognome_pacchetti" name="cliente_cognome" required placeholder="Cognome">
+          </div>
+          <div class="mb-3">
+            <input type="text" class="form-control" id="cliente_cellulare_pacchetti" name="cliente_cellulare" required placeholder="Cellulare">
+          </div>
+          <button type="submit" class="btn btn-primary">Salva Cliente</button>
+        </form>        
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1378,6 +1425,76 @@ function deselezionaOperatori() {
     if (!select) return;
     Array.from(select.options).forEach(o => o.selected = false);
 }
+
+// Funzione per aprire il modal di aggiunta cliente
+function openAddClientModalPacchetti() {
+    const modalElement = document.getElementById('AddClientModalPacchetti');
+    if (!modalElement) {
+        console.error("Elemento '#AddClientModalPacchetti' non trovato nel DOM.");
+        return;
+    }
+    
+    const modal = new bootstrap.Modal(modalElement);
+    modal.show();
+    
+    // Reset del form
+    document.getElementById('AddClientFormPacchetti').reset();
+}
+
+// Handler per il submit del form di aggiunta cliente
+document.addEventListener('DOMContentLoaded', function() {
+    const addClientForm = document.getElementById('AddClientFormPacchetti');
+    if (addClientForm) {
+        addClientForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const nome = document.getElementById('cliente_nome_pacchetti').value.trim();
+            const cognome = document.getElementById('cliente_cognome_pacchetti').value.trim();
+            const cellulare = document.getElementById('cliente_cellulare_pacchetti').value.trim();
+            
+            if (!nome || !cognome || !cellulare) {
+                alert('Tutti i campi sono obbligatori');
+                return;
+            }
+            
+            try {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                const response = await fetch('/clients/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        cliente_nome: nome,
+                        cliente_cognome: cognome,
+                        cliente_cellulare: cellulare
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Chiudi il modal
+                    const modalElement = document.getElementById('AddClientModalPacchetti');
+                    const modal = bootstrap.Modal.getInstance(modalElement);
+                    if (modal) modal.hide();
+                    
+                    // Popola il campo di ricerca con il nuovo cliente
+                    document.getElementById('clientSearch').value = `${nome} ${cognome}`;
+                    document.getElementById('client_id').value = data.client_id;
+                    
+                    alert('Cliente aggiunto con successo!');
+                } else {
+                    alert('Errore: ' + (data.message || 'Impossibile aggiungere il cliente'));
+                }
+            } catch (error) {
+                console.error('Errore durante l\'aggiunta del cliente:', error);
+                alert('Errore durante l\'aggiunta del cliente');
+            }
+        });
+    }
+});
 </script>
 
 <script>

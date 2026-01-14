@@ -2519,15 +2519,21 @@ function generaPdfPacchetto(stampaDiretta = false) {
   }
 }
 
-// Funzione per generare il PDF del Disclaimer / Consenso Informato
+
+  const { jsPDF } = window.jspdf;
+  
 async function generaDisclaimerPdf(stampaDiretta = false) {
+  console.log('=== INIZIO generaDisclaimerPdf ===');
   const { jsPDF } = window.jspdf;
   
   // Recupera il template disclaimer e i dati dal server
   let templateData;
   try {
-    const response = await fetch(`/settings/api/pacchetti/${pacchettoId}/disclaimer_data`);
+    // CACHE BUSTING: aggiungi timestamp per forzare ricaricamento
+    const cacheBuster = `?_=${Date.now()}`;
+    const response = await fetch(`/settings/api/pacchetti/${pacchettoId}/disclaimer_data${cacheBuster}`);
     templateData = await response.json();
+    console.log('DEBUG templateData ricevuto:', templateData);
     if (!templateData.success) {
       alert('❌ Errore nel recupero dei dati disclaimer');
       return;
@@ -2539,8 +2545,10 @@ async function generaDisclaimerPdf(stampaDiretta = false) {
   }
   
   // Dati cliente dal template Jinja
-  const clienteNome = "{{ pacchetto.client_nome|escapejs }}".split(' ')[0] || '';
-  const clienteCognome = "{{ pacchetto.client_nome|escapejs }}".split(' ').slice(1).join(' ') || '';
+  const fullName = "{{ pacchetto.client_nome|escapejs }}".trim();
+  const nameParts = fullName.split(' ');
+  const clienteNome = nameParts[0] || '';
+  const clienteCognome = nameParts.slice(1).join(' ').trim() || '';
   const clienteCellulare = "{{ pacchetto.client_cellulare|escapejs if pacchetto.client_cellulare else '—' }}";
   const programmaNome = "{{ pacchetto.nome|escapejs }}";
   const dataOdierna = new Date().toLocaleDateString('it-IT');
@@ -2616,25 +2624,253 @@ Firma del cliente`;
   const lineHeight = 1.5;
   
   doc.setFontSize(fontSize);
-  doc.setFont('helvetica', 'normal');
   
-  // Dividi il testo in righe e gestisci le pagine
-  const allLines = disclaimerText.split('\n');
-  
-  allLines.forEach(paragraph => {
-    const lines = doc.splitTextToSize(paragraph, maxWidth);
+  // Funzione helper per parsare e renderizzare testo con formattazione markdown
+  function parseAndRenderLine(line, xPos, yPos) {
+    // Regex per trovare i marker: **bold**, *italic*, __underline__
+    const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(__(.+?)__)|([^*_]+)/g;
+    let match;
+    let currentX = xPos;
     
-    lines.forEach(line => {
-      // Controlla se serve nuova pagina
-      if (yPos + fontSize * lineHeight > pageHeight - margin) {
-        doc.addPage();
-        yPos = margin;
+    while ((match = regex.exec(line)) !== null) {
+      if (match[1]) {
+        // Grassetto: **text**
+        doc.setFont('helvetica', 'bold');
+        doc.text(match[2], currentX, yPos);
+        currentX += doc.getTextWidth(match[2]);
+        doc.setFont('helvetica', 'normal');
+      } else if (match[3]) {
+        // Corsivo: *text*
+        doc.setFont('helvetica', 'italic');
+        doc.text(match[4], currentX, yPos);
+        currentX += doc.getTextWidth(match[4]);
+        doc.setFont('helvetica', 'normal');
+      } else if (match[5]) {
+        // Sottolineato: __text__ (simulato con normale + linea sotto)
+        const text = match[6];
+        const textWidth = doc.getTextWidth(text);
+        doc.text(text, currentX, yPos);
+        doc.setLineWidth(0.5);
+        doc.line(currentX, yPos + 1, currentX + textWidth, yPos + 1);
+        currentX += textWidth;
+      } else if (match[7]) {
+        // Testo normale
+        doc.text(match[7], currentX, yPos);
+        currentX += doc.getTextWidth(match[7]);
+      }
+    }
+    
+    return currentX;
+  }
+  
+// Funzione helper per parsare singola linea con formattazione inline
+function renderFormattedLine(text, xPos, yPos, maxWidth) {
+  console.log('=== renderFormattedLine chiamata ===');
+  console.log('Input text:', text);
+  const segments = [];
+  
+  // Parsing manuale per gestire correttamente tutti i marker
+  let i = 0;
+  let currentText = '';
+  
+  while (i < text.length) {
+    // Controlla grassetto **
+    if (text[i] === '*' && text[i + 1] === '*') {
+      // Salva eventuale testo normale precedente
+      if (currentText) {
+        segments.push({ text: currentText, style: 'normal' });
+        currentText = '';
       }
       
-      doc.text(line, margin, yPos);
-      yPos += fontSize * lineHeight;
+      // Cerca la chiusura **
+      let endIdx = text.indexOf('**', i + 2);
+      if (endIdx !== -1) {
+        const boldText = text.substring(i + 2, endIdx);
+        segments.push({ text: boldText, style: 'bold' });
+        i = endIdx + 2;
+        continue;
+      }
+    }
+    
+    // Controlla sottolineato __
+    if (text[i] === '_' && text[i + 1] === '_') {
+      // Salva eventuale testo normale precedente
+      if (currentText) {
+        segments.push({ text: currentText, style: 'normal' });
+        currentText = '';
+      }
+      
+      // Cerca la chiusura __
+      let endIdx = text.indexOf('__', i + 2);
+      if (endIdx !== -1) {
+        const underlineText = text.substring(i + 2, endIdx);
+        segments.push({ text: underlineText, style: 'underline' });
+        i = endIdx + 2;
+        continue;
+      }
+    }
+    
+    // Controlla corsivo * (ma NON **)
+    // IMPORTANTE: il corsivo può essere solo all'INIZIO o alla FINE della riga
+    if (text[i] === '*' && text[i + 1] !== '*') {
+      // Se siamo all'inizio della riga e c'è un asterisco di chiusura
+      if (i === 0 && text.indexOf('*', 1) !== -1) {
+        const endIdx = text.indexOf('*', i + 1);
+        // Assicurati che non sia **
+        if (endIdx !== -1 && text[endIdx + 1] !== '*') {
+          const italicText = text.substring(i + 1, endIdx);
+          segments.push({ text: italicText, style: 'italic' });
+          i = endIdx + 1;
+          continue;
+        }
+      }
+      // Se siamo alla fine e c'è un asterisco di apertura prima
+      else if (i === text.length - 1 && text.lastIndexOf('*', i - 1) !== -1) {
+        const startIdx = text.lastIndexOf('*', i - 1);
+        if (startIdx !== -1 && (startIdx === 0 || text[startIdx - 1] !== '*')) {
+          // Aggiungi il testo prima dell'asterisco
+          if (currentText) {
+            segments.push({ text: currentText, style: 'normal' });
+            currentText = '';
+          }
+          const italicText = text.substring(startIdx + 1, i);
+          segments.push({ text: italicText, style: 'italic' });
+          i++;
+          continue;
+        }
+      }
+    }
+    
+    // Altrimenti aggiungi carattere normale
+    currentText += text[i];
+    i++;
+  }
+  
+  // Aggiungi eventuale testo rimanente
+  if (currentText) {
+    segments.push({ text: currentText, style: 'normal' });
+  }
+  
+  // Se non ci sono segmenti, tratta come testo normale
+  if (segments.length === 0) {
+    segments.push({ text: text, style: 'normal' });
+  }
+  
+  console.log('DEBUG segments generati:', segments);
+  
+  // Ora wrappa considerando la larghezza massima
+  let currentLine = '';
+  let currentLineSegments = [];
+  
+  segments.forEach((segment, segIdx) => {
+    const words = segment.text.split(' ');
+    
+    words.forEach((word, wordIdx) => {
+      const testText = currentLine + (currentLine ? ' ' : '') + word;
+      
+      // Calcola larghezza con lo stile appropriato
+      doc.setFont('helvetica', segment.style === 'bold' ? 'bold' : segment.style === 'italic' ? 'italic' : 'normal');
+      const testWidth = doc.getTextWidth(testText);
+      
+      if (testWidth > maxWidth && currentLine) {
+        // Stampa la linea corrente e vai a capo
+        renderSegmentsOnLine(currentLineSegments, xPos, yPos);
+        yPos += fontSize * lineHeight;
+        
+        // Controlla se serve nuova pagina
+        if (yPos + fontSize * lineHeight > pageHeight - margin) {
+          doc.addPage();
+          yPos = margin;
+        }
+        
+        currentLine = word;
+        currentLineSegments = [{ text: word, style: segment.style }];
+      } else {
+        currentLine = testText;
+        if (currentLineSegments.length > 0 && currentLineSegments[currentLineSegments.length - 1].style === segment.style) {
+          // Aggiungi allo stesso segmento se lo stile è uguale
+          currentLineSegments[currentLineSegments.length - 1].text += (currentLineSegments[currentLineSegments.length - 1].text ? ' ' : '') + word;
+        } else {
+          currentLineSegments.push({ 
+            text: (currentLine && wordIdx === 0 && currentLineSegments.length > 0 ? ' ' : '') + word,
+            style: segment.style 
+          });
+        }
+      }
+      
+      // Aggiungi spazio dopo la parola se non è l'ultima del segmento
+      if (wordIdx < words.length - 1) {
+        if (currentLineSegments.length > 0) {
+          currentLineSegments[currentLineSegments.length - 1].text += ' ';
+        }
+        currentLine += ' ';
+      }
     });
+    
+    // Aggiungi spazio tra segmenti se non siamo all'ultimo segmento
+    if (segIdx < segments.length - 1 && currentLineSegments.length > 0) {
+      currentLineSegments[currentLineSegments.length - 1].text += ' ';
+      currentLine += ' ';
+    }
   });
+  
+  // Stampa l'ultima linea
+  if (currentLine) {
+    renderSegmentsOnLine(currentLineSegments, xPos, yPos);
+    yPos += fontSize * lineHeight;
+  }
+  
+  return yPos;
+}
+
+// Helper per renderizzare segmenti su una singola linea
+function renderSegmentsOnLine(segments, xPos, yPos) {
+  let currentX = xPos;
+  
+  segments.forEach(seg => {
+    if (seg.style === 'bold') {
+      doc.setFont('helvetica', 'bold');
+      doc.text(seg.text, currentX, yPos);
+      currentX += doc.getTextWidth(seg.text);
+    } else if (seg.style === 'italic') {
+      doc.setFont('helvetica', 'italic');
+      doc.text(seg.text, currentX, yPos);
+      currentX += doc.getTextWidth(seg.text);
+    } else if (seg.style === 'underline') {
+      doc.setFont('helvetica', 'normal');
+      const textWidth = doc.getTextWidth(seg.text);
+      doc.text(seg.text, currentX, yPos);
+      doc.setLineWidth(0.5);
+      doc.line(currentX, yPos + 1, currentX + textWidth, yPos + 1);
+      currentX += textWidth;
+    } else {
+      doc.setFont('helvetica', 'normal');
+      doc.text(seg.text, currentX, yPos);
+      currentX += doc.getTextWidth(seg.text);
+    }
+  });
+  
+  doc.setFont('helvetica', 'normal');
+}
+
+// Dividi il testo in paragrafi e processa ciascuno
+const allParagraphs = disclaimerText.split('\n');
+
+allParagraphs.forEach(paragraph => {
+  // Controlla se serve nuova pagina prima di iniziare il paragrafo
+  if (yPos + fontSize * lineHeight > pageHeight - margin) {
+    doc.addPage();
+    yPos = margin;
+  }
+  
+  if (paragraph.trim() === '') {
+    // Linea vuota: aggiungi spazio
+    yPos += fontSize * lineHeight;
+  } else {
+    // Renderizza il paragrafo con formattazione
+    yPos = renderFormattedLine(paragraph, margin, yPos, maxWidth);
+  }
+});
   
   // Salva o stampa
   const clienteFullName = `${clienteNome} ${clienteCognome}`.trim().replace(/\s+/g, '_');
@@ -2647,6 +2883,7 @@ Firma del cliente`;
     doc.save(nomeFile);
   }
 }
+
 // Espone la funzione globalmente per onclick inline
 window.generaDisclaimerPdf = generaDisclaimerPdf;
 
