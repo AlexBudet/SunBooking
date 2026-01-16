@@ -650,6 +650,44 @@ function showPendingModal(key) {
       }
     }
   });
+
+  // === ANNULLA ULTIMO SCONTRINO ===
+  document.getElementById('btnAnnullaScontrino').addEventListener('click', function(e) {
+    e.preventDefault();
+    
+    if (!confirm('Sei sicuro di voler ANNULLARE l\'ultimo scontrino fiscale emesso?\n\nQuesta operazione invierà uno storno alla stampante RCH.')) {
+      return;
+    }
+    
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    
+    // Mostra spinner
+    window.showRchSpinner && window.showRchSpinner();
+    
+    fetch('/cassa/annulla-ultimo-scontrino', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      }
+    })
+    .then(res => res.json().then(data => ({ status: res.status, data })))
+    .then(({ status, data }) => {
+      window.hideRchSpinner && window.hideRchSpinner();
+      
+      if (status === 200 && data.status === 'ok') {
+        alert(`Scontrino annullato con successo!\nProgressivo storno: ${data.progressivo}`);
+        // Opzionale: ricarica la pagina o aggiorna la UI
+      } else {
+        alert(`Errore durante l'annullamento: ${data.error || 'Errore sconosciuto'}`);
+      }
+    })
+    .catch(err => {
+      window.hideRchSpinner && window.hideRchSpinner();
+      alert('Errore di rete durante l\'annullamento: ' + err.message);
+    });
+  });
+
 });
 
 // Funzione per aggiornare il totale
@@ -1521,3 +1559,4 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+

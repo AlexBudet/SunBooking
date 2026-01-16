@@ -666,6 +666,7 @@ def send_to_rch():
 
 @cassa_bp.route('/cassa/registro-scontrini')
 def registro_scontrini():
+    # 1. Determina il giorno da visualizzare
     data_str = request.args.get('data')
     if data_str:
         try:
@@ -674,72 +675,81 @@ def registro_scontrini():
             giorno = date.today()
     else:
         giorno = date.today()
-    # --- FILTRO IN BASE AL RUOLO ---
+
+    # 2. Ottieni utente e ruolo
     user_id = session.get("user_id")
     user = db.session.get(User, user_id)
-    if user and user.ruolo.value == "user":
+    user_role = user.ruolo.value if user else None
+
+    # 3. Carica scontrini del giorno (filtro per ruolo)
+    giorno_start = datetime.combine(giorno, datetime.min.time())
+    giorno_end = datetime.combine(giorno, datetime.max.time())
+    
+    if user_role == "user":
         scontrini = Receipt.query.filter(
             Receipt.is_fiscale == True,
-            Receipt.created_at >= datetime.combine(giorno, datetime.min.time()),
-            Receipt.created_at <= datetime.combine(giorno, datetime.max.time())
+            Receipt.created_at >= giorno_start,
+            Receipt.created_at <= giorno_end
         ).order_by(Receipt.created_at.asc()).all()
     else:
         scontrini = Receipt.query.filter(
-            Receipt.created_at >= datetime.combine(giorno, datetime.min.time()),
-            Receipt.created_at <= datetime.combine(giorno, datetime.max.time())
+            Receipt.created_at >= giorno_start,
+            Receipt.created_at <= giorno_end
         ).order_by(Receipt.created_at.asc()).all()
 
+    # 4. Normalizza i dati di ogni scontrino
     for s in scontrini:
         s.is_fiscale = bool(s.is_fiscale)
-        # NEW: Converti voci da stringa JSON a lista, come in api_receipt_detail
-        voci = s.voci
-        if isinstance(voci, str):
+        if isinstance(s.voci, str):
             try:
-                s.voci = json.loads(voci)
+                s.voci = json.loads(s.voci)
             except Exception:
                 s.voci = []
         if s.voci is None:
             s.voci = []
+        s.display_numero_progressivo = s.numero_progressivo
+        s.annullato = False
 
-    # --- NEW: Calcola display_numero_progressivo per mostrare STORNO <orig> sui reverse receipts ---
-    # assumiamo scontrini ordinati asc per created_at come arriba
-    # pre-imposta display al numero reale
+    # 5. Separa scontrini positivi (originali) e negativi (storni)
+    storni = [s for s in scontrini if s.is_fiscale and s.total_amount is not None and float(s.total_amount) < 0]
+    positivi = [s for s in scontrini if s.is_fiscale and s.total_amount is not None and float(s.total_amount) > 0]
+
+    # 6. Per ogni storno, trova lo scontrino originale corrispondente
+    progressivi_stornati = set()
+    
+    for storno in storni:
+        candidati = [
+            p for p in positivi
+            if (
+                p.operatore_id == storno.operatore_id
+                and p.cliente_id == storno.cliente_id
+                and abs(float(p.total_amount) - abs(float(storno.total_amount))) < 0.01
+                and p.created_at < storno.created_at
+            )
+        ]
+        
+        if candidati:
+            originale = max(candidati, key=lambda x: x.created_at)
+            storno.display_numero_progressivo = f"STORNO {originale.numero_progressivo}"
+            if originale.numero_progressivo:
+                progressivi_stornati.add(str(originale.numero_progressivo))
+        else:
+            storno.display_numero_progressivo = f"STORNO {storno.numero_progressivo}"
+
+    # 7. Marca come "annullato" SOLO gli scontrini il cui progressivo è stato stornato
     for s in scontrini:
-        try:
-            s.display_numero_progressivo = s.numero_progressivo
-        except Exception:
-            s.display_numero_progressivo = s.numero_progressivo
+        if s.is_fiscale and s.total_amount is not None and float(s.total_amount) > 0:
+            if s.numero_progressivo and str(s.numero_progressivo) in progressivi_stornati:
+                s.annullato = True
 
-    # per ogni scontrino negativo (storno), trova il positivo antecedente che corrisponde
-    negativos = [r for r in scontrini if (r.total_amount is not None and float(r.total_amount) < 0) and r.is_fiscale]
-    positivos = [r for r in scontrini if (r.total_amount is not None and float(r.total_amount) > 0) and r.is_fiscale]
-
-    for neg in negativos:
-        try:
-            # criteri: stesso operatore e cliente (se presenti), importo opposto e creato prima dello storno
-            cand = [
-                p for p in positivos
-                if (
-                    (p.operatore_id == neg.operatore_id)
-                    and (p.cliente_id == neg.cliente_id)
-                    and (abs(float(p.total_amount) - abs(float(neg.total_amount))) < 0.001)
-                    and (p.created_at < neg.created_at)
-                )
-            ]
-            if cand:
-                # prendi l'originale più recente prima dello storno
-                orig = max(cand, key=lambda x: x.created_at)
-                neg.display_numero_progressivo = f"STORNO {orig.numero_progressivo}"
-            else:
-                # fallback: mostra STORNO e il progressivo registrato sullo storno (se disponibile)
-                neg.display_numero_progressivo = f"STORNO {neg.numero_progressivo}"
-        except Exception:
-            neg.display_numero_progressivo = f"STORNO {neg.numero_progressivo}"
-
-    # Passa il ruolo al template
-    user_role = user.ruolo.value if user else None
-
-    return render_template('registro_scontrini.html', scontrini=scontrini, giorno=giorno, user_role=user_role, date_today=date.today())
+    # 8. Render template
+    return render_template(
+        'registro_scontrini.html',
+        scontrini=scontrini,
+        giorno=giorno,
+        user_role=user_role,
+        date_today=date.today()
+    )
 
 @cassa_bp.route('/cassa/api/receipt/<int:receipt_id>')
 def api_receipt_detail(receipt_id):

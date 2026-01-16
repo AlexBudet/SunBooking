@@ -1317,6 +1317,14 @@ body:not(.quarter-55) .appointment-block {
     color: #888 !important;
 }
 
+/* NUOVO: Forza il colore del testo anche su elementi figli per status-2 */
+.appointment-block.status-2 .appointment-content,
+.appointment-block.status-2 .client-info-link,
+.appointment-block.status-2 .client-name,
+.appointment-block.status-2 p {
+    color: #888 !important;
+}
+
 .appointment-block.status-2 .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto) {
     display: none !important;
 }
@@ -3300,7 +3308,7 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
 }
 
 #MobilePopupButtonsModal .modal-content {
-  background: linear-gradient(to bottom right, rgb(255, 218, 235), rgb(255, 238, 245)) !important;
+  background: linear-gradient(to bottom right, rgb(255, 246, 250), rgb(255, 252, 253)) !important;
 }
 
 #MobilePopupButtonsModal .modal-header {
