@@ -7340,35 +7340,12 @@ function updateBlinkForBlock(block) {
         return;
     }
 
-    // Trova tutti i blocchi contigui per questo cliente e questa data
-    const clientId = block.getAttribute('data-client-id');
-    const date = block.getAttribute('data-date') || selectedDate;
-    const allBlocks = Array.from(document.querySelectorAll('.appointment-block'))
-        .filter(b => b.getAttribute('data-client-id') === clientId && (b.getAttribute('data-date') || selectedDate) === date);
-
-    // Ordina per orario di inizio
-    allBlocks.sort((a, b) => getBlockStartTime(a) - getBlockStartTime(b));
-
-    // Trova il gruppo contiguo a cui appartiene il blocco corrente
+    // Usa getRelevantBlocks per trovare tutti i blocchi contigui (inclusi quelli sovrapposti nella stessa cella)
     let group = [];
-    let found = false;
-    for (let i = 0; i < allBlocks.length; i++) {
-        if (allBlocks[i] === block) found = true;
-        if (group.length === 0) group.push(allBlocks[i]);
-        else {
-            const prev = group[group.length - 1];
-            const prevEnd = getBlockEndTime(prev);
-            const currStart = getBlockStartTime(allBlocks[i]);
-            if (currStart === prevEnd) {
-                group.push(allBlocks[i]);
-            } else if (allBlocks[i] === block) {
-                // Se il blocco corrente non è contiguo a quelli precedenti, inizia un nuovo gruppo
-                group = [allBlocks[i]];
-            }
-        }
-        if (found && (i === allBlocks.length - 1 || getBlockStartTime(allBlocks[i + 1]) !== getBlockEndTime(allBlocks[i]))) {
-            break;
-        }
+    if (typeof getRelevantBlocks === 'function') {
+        group = getRelevantBlocks(block);
+    } else {
+        group = [block];
     }
 
     // Calcola l'intervallo totale del gruppo
@@ -7387,7 +7364,7 @@ function updateBlinkForBlock(block) {
             block.style.backgroundSize = '';
         }
     } else if (blockStatus === 1) {
-        // Se ora è PRIMA della fine del gruppo → spia attiva, altrimenti blinking
+        // Se ora è PRIMA della fine del gruppo → spia attiva (gialla), altrimenti blinking (rossa)
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
         if (nowMinutes < groupEnd) {
             spia.classList.add('active');
@@ -9688,6 +9665,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const v = (this.value || '').toString();
         const dateEl = dateInput;
 
+        // ECCEZIONE: "?" è un comando speciale per mostrare i pending
+        const isSpecialCommand = v.trim() === '?';
+
         // visual behaviour: store and disable date when >=3
         if (v.trim().length >= 3) {
           if (dateEl && dateEl.dataset._storedDate === undefined) dateEl.dataset._storedDate = dateEl.value || '';
@@ -9712,6 +9692,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // debounce fetches
         if (window._webApptSearchDebounce) clearTimeout(window._webApptSearchDebounce);
         window._webApptSearchDebounce = setTimeout(function() {
+          // ECCEZIONE: "?" lancia subito la ricerca pending
+          if (isSpecialCommand) {
+            loadWebAppointments('', '?');
+            return;
+          }
           // if user typed >=3 chars -> perform search fetch (search only)
           if (v.trim().length >= 3) {
             loadWebAppointments('', v.trim());
@@ -9745,11 +9730,20 @@ function loadWebAppointments(date, search) {
 
   // Costruzione dei parametri per la richiesta GET al backend
   const params = new URLSearchParams();
+  
+  // CASO SPECIALE: "?" mostra solo appuntamenti non ancora associati
+  const isShowPending = search && String(search).trim() === '?';
+  
   // Sempre inviare `search` se presente (ricerca globale). Solo se search è vuoto inviare la date.
-  if (search && String(search).trim().length > 0) {
+  if (search && String(search).trim().length > 0 && !isShowPending) {
     params.append('search', String(search).trim());
-  } else {
+  } else if (!isShowPending) {
     params.append('date', date);
+  }
+  
+  // Se è "?", aggiungi parametro speciale per filtrare solo i pending
+  if (isShowPending) {
+    params.append('pending_only', '1');
   }
 
   // Fetch dei dati dal backend (endpoint per appuntamenti online)
@@ -9842,11 +9836,6 @@ function loadWebAppointments(date, search) {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.title = 'Associa';
-
-            // Rimuovi padding Bootstrap per non allargare la riga
-            btn.style.padding = '0';
-            btn.style.border = 'none';
-            btn.style.background = 'none';
             
             // Determina classe e tipo in base al match
             if (matchType === 'phone_only') {
@@ -9886,22 +9875,8 @@ function loadWebAppointments(date, search) {
             
             const icon = document.createElement('span');
             icon.textContent = '❓';
-            icon.style.fontSize = '1.2em';
+            icon.fontSize = '1.2em';
             icon.style.display = 'inline-block';
-            
-            // Applica colori: rosso per full match, giallo per phone-only, grigio per no-match
-            // IMPORTANTE: usa !important per sovrascrivere gli stili Bootstrap btn-link
-            if (matchType === 'phone_only') {
-              btn.style.color = '#ffc107 !important';
-              icon.style.color = '#ffc107 !important';
-            } else if (matchType === 'full') {
-              btn.style.color = '#d32f2f !important';
-              icon.style.color = '#d32f2f !important';
-            } else {
-              // no-match: grigio
-              btn.style.color = '#999 !important';
-              icon.style.color = '#999 !important';
-            }
             
             btn.appendChild(icon);
             tdBtn.appendChild(btn);
@@ -10741,13 +10716,13 @@ function showPhoneOnlyMatchModal(bookingData, existingClientData, onConfirm, onC
     formContainer.style.display = 'block';
   }
   
-  // Popola i dati
-  formContainer.querySelector('#bookingNome').textContent = bookingData.nome || '-';
-  formContainer.querySelector('#bookingCognome').textContent = bookingData.cognome || '-';
+  // Popola i dati (con capitalizzazione)
+  formContainer.querySelector('#bookingNome').textContent = window.capitalizeName(bookingData.nome || '') || '-';
+  formContainer.querySelector('#bookingCognome').textContent = window.capitalizeName(bookingData.cognome || '') || '-';
   formContainer.querySelector('#bookingCellulare').textContent = bookingData.cellulare || '-';
   
-  formContainer.querySelector('#existingNome').textContent = existingClientData.nome || '-';
-  formContainer.querySelector('#existingCognome').textContent = existingClientData.cognome || '-';
+  formContainer.querySelector('#existingNome').textContent = window.capitalizeName(existingClientData.nome || '') || '-';
+  formContainer.querySelector('#existingCognome').textContent = window.capitalizeName(existingClientData.cognome || '') || '-';
   formContainer.querySelector('#existingCellulare').textContent = existingClientData.cellulare || '-';
   
   // Gestisci i click sui bottoni
@@ -10999,3 +10974,16 @@ async function creaClienteDaBooking(bookingData, appointmentId) {
     alert('Errore durante la creazione del cliente');
   }
 }
+
+// =============================================================
+//   PULSANTE HELP PRENOTAZIONI WEB
+// =============================================================
+document.addEventListener('DOMContentLoaded', function() {
+    const helpBtn = document.getElementById('btnWebApptHelp');
+    if (helpBtn) {
+        helpBtn.addEventListener('click', function() {
+            const helpModal = new bootstrap.Modal(document.getElementById('WebApptHelpModal'));
+            helpModal.show();
+        });
+    }
+});

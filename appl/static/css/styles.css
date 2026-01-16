@@ -81,7 +81,7 @@ display: none
 }
 
 .tooltip {
-    z-index: 12500 !important;
+    z-index: 15500 !important;
     opacity: 1;
 }
 
@@ -1571,6 +1571,54 @@ body:not(.quarter-55) .appointment-block {
   line-height: 1 !important;
   display: inline-block;
   vertical-align: middle;
+}
+
+/* =================================================
+   PULSANTE ASSOCIA (❓) - EFFETTO CLICCABILE
+   ================================================= */
+#webApptTable .btn-associa,
+#webApptTable .btn-associa-phone,
+#webApptTable .btn-associa-no-match {
+  padding: 0 !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: 16px !important;
+  width: 16px !important;
+  line-height: 1 !important;
+  vertical-align: middle !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none !important;
+  background: none !important;
+}
+
+#webApptTable .btn-associa span,
+#webApptTable .btn-associa-phone span,
+#webApptTable .btn-associa-no-match span {
+  line-height: 1 !important;
+  display: inline-block;
+  vertical-align: middle;
+  cursor: pointer;
+  animation: blink-question 1.5s infinite;
+}
+
+#webApptTable .btn-associa:hover span,
+#webApptTable .btn-associa-phone:hover span,
+#webApptTable .btn-associa-no-match:hover span {
+    transform: scale(1.4);
+    filter: drop-shadow(0 0 6px #ffc107) drop-shadow(0 0 10px #ffc107);
+    animation: none;
+}
+
+#webApptTable th:nth-child(3) {
+    text-align: center;
+}
+
+@keyframes blink-question {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
 }
 /* ********STILI DI CASSA.HTML********* */
 .service-bar-btn {

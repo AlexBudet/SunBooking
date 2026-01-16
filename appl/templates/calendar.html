@@ -121,7 +121,9 @@
   <!-- Pulsante Web: AGGIUNGI QUI -->
 <button id="btnWebInformatica"
         class="btn btn-outline-secondary"
-        title="Web"
+        title="<b>PRENOTAZIONI DA WEB</b><br><br>Clicca per gestire le prenotazioni online"
+        data-bs-toggle="tooltip"
+        data-bs-html="true"
         style="margin-left: 12px; font-size: 1.4em; background: #fff; border-radius: 6px; padding: 2px 16px; cursor: pointer;">
   🌐
     <!-- BADGE DI NOTIFICA -->
@@ -292,7 +294,10 @@
       <i class="bi bi-palette"></i>
     </button>
     {% if appt.pacchetto_seduta %}
-    <button type="button" class="btn-popup pagamento vai-pacchetto" title="Vai al pacchetto" data-bs-toggle="tooltip"
+    <button type="button" class="btn-popup pagamento vai-pacchetto" 
+            title="<b>VAI AL PACCHETTO</b>. <br><br>PS: per mettere in grigio il blocco seleziona Seduta Effettuata nella schermata del pacchetto" 
+            data-bs-toggle="tooltip"
+            data-bs-html="true"
             data-appointment-id="{{ appt.id }}"
             data-pacchetto-id="{{ appt.pacchetto_seduta.pacchetto_id }}">
       <i class="bi bi-box-seam"></i>
@@ -699,6 +704,11 @@
   <button class="btn btn-outline-secondary" id="webApptNext">&gt;</button>
   <!-- Campo ricerca -->
   <input type="text" id="webApptSearch" class="form-control ms-3" style="max-width: 260px;" placeholder="Cerca per nome cliente...">
+    <!-- PULSANTE HELP -->
+  <button type="button" class="btn btn-outline-info ms-auto" id="btnWebApptHelp" 
+          style="font-weight: bold; font-size: 20px; border-radius: 50%; width: 38px; height: 38px; padding: 0;">
+    ?
+  </button>
 </div>
         <!-- Tabella risultati -->
        <div class="web-appt-table-container">
@@ -719,6 +729,68 @@
         </div>
       </div>
     </div><div class="form-group position-relative"></div>
+  </div>
+</div>
+
+<!-- Modal Help Prenotazioni Web -->
+<div class="modal fade" id="WebApptHelpModal" tabindex="-1" aria-labelledby="WebApptHelpModalLabel" aria-hidden="true" style="z-index: 15000;">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="WebApptHelpModalLabel">ℹ️ Guida Prenotazioni Web</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <h6><strong>Colonna "Match Cliente"</strong></h6>
+        <table class="table table-sm">
+          <tr>
+            <td style="width:50px; text-align:center;"><strong>Sì</strong></td>
+            <td>Match completo: nome, cognome e cellulare corrispondono a un cliente esistente.</td>
+          </tr>
+          <tr>
+            <td style="text-align:center; font-size:1.3em;">📱</td>
+            <td>Match solo cellulare: il numero corrisponde ma nome o cognome sono diversi.</td>
+          </tr>
+          <tr>
+            <td style="text-align:center;"><strong>No</strong></td>
+            <td>Nessun match: il cliente non è presente in rubrica.</td>
+          </tr>
+        </table>
+        
+        <hr>
+        
+        <h6><strong>Colonna "Associa"</strong></h6>
+        <table class="table table-sm">
+          <tr>
+            <td style="width:50px; text-align:center; font-size:1.2em;">❓</td>
+            <td>Clicca per associare la prenotazione a un cliente esistente o crearne uno nuovo.</td>
+          </tr>
+          <tr>
+            <td style="text-align:center; font-size:1.2em;">🟢</td>
+            <td>Prenotazione già associata correttamente a un cliente.</td>
+          </tr>
+        </table>
+        
+        <hr>
+
+        <h6><strong>Ricerca rapida</strong></h6>
+        <table class="table table-sm">
+          <tr>
+            <td style="width:50px; text-align:center; font-weight:bold; font-size:1.1em;">?</td>
+            <td>Digita <strong>?</strong> nel campo di ricerca per visualizzare <u>tutte le prenotazioni ancora da associare</u> (indipendentemente dalla data).</td>
+          </tr>
+        </table>
+        
+        <hr>
+        
+        <p class="text-muted mb-0" style="font-size: 0.9em;">
+          <strong>Suggerimento:</strong> Le prenotazioni con ❓ richiedono un'azione manuale per essere associate al cliente corretto.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+      </div>
+    </div>
   </div>
 </div>
 

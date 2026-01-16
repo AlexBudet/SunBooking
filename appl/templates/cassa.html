@@ -423,47 +423,6 @@ async function addInitialServizi(list) {
   });
 </script>
 <script>
-document.getElementById('btnChiusuraGiornaliera').addEventListener('click', function(e) {
-  e.preventDefault();
-  if (!confirm("Vuoi davvero stampare la chiusura giornaliera?")) return;
-
-  const btn = this;
-  const originalText = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Invio...';
-
-  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-
-  fetch('/cassa/chiusura-giornaliera', {
-    method: 'POST',
-    headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
-  })
-  .then(async res => {
-    let raw = '';
-    try { raw = await res.text(); } catch(_) {}
-
-    // Prova a parse JSON ma senza mai bloccare UX
-    let data = {};
-    try { data = JSON.parse(raw); } catch(_) {}
-
-    console.log('[CHIUSURA GIORNALIERA] HTTP:', res.status, 'RAW:', raw);
-    console.log('[CHIUSURA GIORNALIERA] Parsed:', data);
-
-    // Mostra sempre successo (nessun popup errore)
-    alert("Chiusura giornaliera inviata! Controlla gli scontrini stampati.");
-  })
-  .catch(err => {
-    console.warn('[CHIUSURA GIORNALIERA] Errore rete (ignorato per policy):', err);
-    alert("Chiusura giornaliera inviata! Controlla gli scontrini stampati.");
-  })
-  .finally(() => {
-    btn.disabled = false;
-    btn.textContent = originalText;
-  });
-});
-</script>
-
-<script>
   document.getElementById('btnRegistroDGFE').addEventListener('click', function(e) {
   e.preventDefault();
   const modal = new bootstrap.Modal(document.getElementById('modalRegistroDGFE'));
