@@ -785,9 +785,14 @@ def heatmap_appuntamenti():
     # Nuovo parametro giorni con default 10
     giorni_param = request.args.get("giorni", 10, type=int)
     
-    giorni = [data_rif - timedelta(days=i) for i in reversed(range(giorni_param))]
+    # Costruisci lista giorni dal più vecchio (indice 0) al più recente (indice n-1)
+    data_inizio = data_rif - timedelta(days=giorni_param - 1)
+    giorni = [data_inizio + timedelta(days=i) for i in range(giorni_param)]
     giorni_label = [g.strftime('%d/%m') for g in giorni]
     ore = [f"{h:02d}" for h in range(8, 21)]
+
+    # Crea mappa data -> indice Y
+    data_to_y = {g.date(): i for i, g in enumerate(giorni)}
 
     # FILTRA: escludi appuntamenti OFF (client/service null o dummy)
     results = (
@@ -799,8 +804,8 @@ def heatmap_appuntamenti():
         .join(Client, Appointment.client_id == Client.id)
         .join(Service, Appointment.service_id == Service.id)
         .filter(
-            Appointment.start_time >= data_rif - timedelta(days=giorni_param),  # Usa giorni_param
-            Appointment.start_time <= data_rif,
+            Appointment.start_time >= datetime.combine(data_inizio.date(), datetime.min.time()),
+            Appointment.start_time <= datetime.combine(data_rif.date(), datetime.max.time()),
             Client.cliente_nome.isnot(None),
             Client.cliente_cognome.isnot(None),
             Service.servizio_nome.isnot(None),
@@ -818,9 +823,9 @@ def heatmap_appuntamenti():
 
     valori = []
     for row in results:
-        y = (data_rif.date() - row.giorno).days
+        y = data_to_y.get(row.giorno)
         x = int(row.ora) - 8
-        if 0 <= x < len(ore) and 0 <= y < giorni_param:  # Aggiungi controllo y
+        if y is not None and 0 <= x < len(ore):
             valori.append({'x': x, 'y': y, 'v': row.count})
 
     operatori_totali = Operator.query.filter_by(is_deleted=False, is_visible=True).count()
@@ -847,11 +852,16 @@ def heatmap_incassi():
     user_id = session.get("user_id")
     user = db.session.get(User, user_id)
 
-    giorni = [data_rif - timedelta(days=i) for i in reversed(range(giorni_param))]
+    # Costruisci lista giorni dal più vecchio (indice 0) al più recente (indice n-1)
+    data_inizio = data_rif - timedelta(days=giorni_param - 1)
+    giorni = [data_inizio + timedelta(days=i) for i in range(giorni_param)]
     giorni_label = [g.strftime('%d/%m') for g in giorni]
     ore = [f"{h:02d}" for h in range(8, 21)]
 
-    # QUERY AGGREGATA invece di query per ogni cella
+    # Crea mappa data -> indice Y
+    data_to_y = {g.date(): i for i, g in enumerate(giorni)}
+
+    # QUERY AGGREGATA
     query = (
         db.session.query(
             func.date(Receipt.created_at).label('giorno'),
@@ -859,8 +869,8 @@ def heatmap_incassi():
             func.sum(Receipt.total_amount).label('totale')
         )
         .filter(
-            Receipt.created_at >= data_rif - timedelta(days=giorni_param),
-            Receipt.created_at <= data_rif
+            Receipt.created_at >= datetime.combine(data_inizio.date(), datetime.min.time()),
+            Receipt.created_at <= datetime.combine(data_rif.date(), datetime.max.time())
         )
     )
     
@@ -881,10 +891,10 @@ def heatmap_incassi():
     valori = []
     max_incasso = 0
     for row in results:
-        y = (data_rif.date() - row.giorno).days
+        y = data_to_y.get(row.giorno)
         x = int(row.ora) - 8
         incasso = float(row.totale or 0)
-        if 0 <= x < len(ore) and 0 <= y < giorni_param:
+        if y is not None and 0 <= x < len(ore):
             valori.append({'x': x, 'y': y, 'v': incasso})
             if incasso > max_incasso:
                 max_incasso = incasso
