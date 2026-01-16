@@ -389,9 +389,17 @@ document.addEventListener('DOMContentLoaded', function() {
   </ul>
 </div>
 
+<!-- HEATMAP APPUNTAMENTI - circa riga 393 -->
 <div class="tile-neumorphic tile-large" id="tile-heatmap-appuntamenti">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
-  <div class="tile-title">HEATMAP APPUNTAMENTI a 10 giorni</div>
+  <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
+    <span>HEATMAP APPUNTAMENTI</span>
+    <div class="btn-group btn-group-sm" role="group">
+      <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-app-periodo active" data-giorni="10">10 gg</button>
+      <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-app-periodo" data-giorni="30">30 gg</button>
+      <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-app-periodo" data-giorni="365">1 anno</button>
+    </div>
+  </div>
   <div id="heatmapAppuntamenti" style="width:100%;height:260px;"></div>
 </div>
 
@@ -403,9 +411,17 @@ document.addEventListener('DOMContentLoaded', function() {
  <button class="btn btn-flat" id="btnViewAgenda" style="margin-top: 5px; background-color: #eef0f4;">Scarica</button>
 </div>
 
+<!-- HEATMAP INCASSI - circa riga 414 -->
 <div class="tile-neumorphic tile-large" id="tile-heatmap-incassi">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
-  <div class="tile-title">HEATMAP INCASSI a 10 giorni</div>
+  <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
+    <span>HEATMAP INCASSI</span>
+    <div class="btn-group btn-group-sm" role="group">
+      <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-inc-periodo active" data-giorni="10">10 gg</button>
+      <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-inc-periodo" data-giorni="30">30 gg</button>
+      <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-inc-periodo" data-giorni="365">1 anno</button>
+    </div>
+  </div>
   <div id="heatmapIncassi" style="width:100%;height:260px;"></div>
 </div>
 
@@ -1504,6 +1520,9 @@ document.addEventListener("DOMContentLoaded", function() {
       triggerReportReload();
       aggiornaBtnOggi();
       aggiornaGiornoSettimana();
+      // Mantieni il periodo selezionato quando cambia la data
+      const giorniApp = $('.btn-heatmap-app-periodo.active').data('giorni') || 10;
+      const giorniInc = $('.btn-heatmap-inc-periodo.active').data('giorni') || 10;
       caricaHeatmapAppuntamenti(dateStr);
       caricaHeatmapIncassi(dateStr);
       aggiornaRiassuntoGiornaliero();
@@ -2232,209 +2251,197 @@ document.addEventListener('DOMContentLoaded', function() {
   window.BUSINESS_NAME = "{{ business_info.business_name|escapejs if business_info else '' }}";
 </script>
 <script>
-function caricaHeatmapAppuntamenti(dataRif) {
-  let url = '/api/heatmap_appuntamenti';
-  if (dataRif) {
-    url += `?data_rif=${encodeURIComponent(dataRif)}`;
-  }
-  fetch(url)
-    .then(r => r.json())
-    .then(data => {
-      const ore = [...data.ore];
-      const ultimaOra = parseInt(data.ore[data.ore.length - 1], 10) + 1;
-      ore.push(ultimaOra.toString().padStart(2, '0'));
+// Handler bottoni periodo Heatmap Appuntamenti
+$(document).on('click', '.btn-heatmap-app-periodo', function() {
+    // Rimuovi active SOLO dai bottoni dello stesso tile
+    $('#tile-heatmap-appuntamenti .btn-heatmap-app-periodo').removeClass('active');
+    $(this).addClass('active');
+    const giorni = $(this).data('giorni');
+    const dataRif = document.getElementById('reportDate').value || new Date().toISOString().slice(0, 10);
+    caricaHeatmapAppuntamenti(dataRif, giorni);
+});
 
-      const z = [];
-      for (let y = 0; y < data.giorni.length; y++) {
-        z[y] = [];
-        for (let x = 0; x < data.ore.length; x++) {
-          const cell = data.valori.find(v => v.x === x && v.y === y);
-          z[y][x] = cell ? cell.v : 0;
+// Handler bottoni periodo Heatmap Incassi
+$(document).on('click', '.btn-heatmap-inc-periodo', function() {
+    // Rimuovi active SOLO dai bottoni dello stesso tile
+    $('#tile-heatmap-incassi .btn-heatmap-inc-periodo').removeClass('active');
+    $(this).addClass('active');
+    const giorni = $(this).data('giorni');
+    const dataRif = document.getElementById('reportDate').value || new Date().toISOString().slice(0, 10);
+    caricaHeatmapIncassi(dataRif, giorni);
+});
+
+// Funzione caricaHeatmapAppuntamenti con tooltip e click
+function caricaHeatmapAppuntamenti(dataRif, giorni = 10) {
+    $.ajax({
+        url: '/api/heatmap_appuntamenti',
+        data: { data_rif: dataRif, giorni: giorni },
+        success: function(res) {
+            const z = [];
+            const customdata = [];
+            const numGiorni = res.giorni.length;
+            
+            for (let y = 0; y < numGiorni; y++) {
+                z.push(new Array(res.ore.length).fill(0));
+                customdata.push([]);
+                for (let x = 0; x < res.ore.length; x++) {
+                    // Calcola la data effettiva per questo punto
+                    const dataRifDate = dataRif ? new Date(dataRif) : new Date();
+                    const giorniIndietro = numGiorni - 1 - y;
+                    const dataEffettiva = new Date(dataRifDate);
+                    dataEffettiva.setDate(dataEffettiva.getDate() - giorniIndietro);
+                    const dataISO = dataEffettiva.toISOString().slice(0, 10);
+                    customdata[y].push({
+                        giorno: res.giorni[y],
+                        ora: res.ore[x],
+                        dataISO: dataISO
+                    });
+                }
+            }
+            
+            res.valori.forEach(function(v) {
+                if (v.y >= 0 && v.y < numGiorni && v.x >= 0 && v.x < res.ore.length) {
+                    z[v.y][v.x] = v.v;
+                }
+            });
+
+            // Adatta altezza in base ai giorni
+            let altezza = 260;
+            if (giorni === 30) altezza = 350;
+            if (giorni === 365) altezza = 420;
+            $('#heatmapAppuntamenti').css('height', altezza + 'px');
+
+            Plotly.newPlot('heatmapAppuntamenti', [{
+                z: z,
+                x: res.ore,
+                y: res.giorni,
+                customdata: customdata,
+                type: 'heatmap',
+                colorscale: [
+                    [0, 'white'],
+                    [0.5, '#ff66b2'],
+                    [1, '#cc0066']
+                ],
+                zmin: 0,
+                zmax: res.max_legend,
+                showscale: false,
+                hoverongaps: false,
+                hovertemplate: '<b>%{y}</b> ore %{x}:00<br>Appuntamenti: %{z}<extra></extra>'
+            }], {
+                margin: { t: 10, b: 40, l: 50, r: 10 },
+                xaxis: { 
+                    title: '', 
+                    tickfont: { size: 11 }, 
+                    dtick: giorni > 30 ? 2 : 1 
+                },
+                yaxis: { 
+                    title: '', 
+                    tickfont: { size: giorni > 30 ? 8 : 11 },
+                    dtick: giorni > 30 ? 7 : 1
+                },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)'
+            }, { responsive: true, displayModeBar: false });
+
+            // Click per andare al calendario
+            document.getElementById('heatmapAppuntamenti').on('plotly_click', function(data) {
+                const pt = data.points[0];
+                const cd = pt.customdata;
+                if (cd && cd.dataISO) {
+                    const ora = cd.ora;
+                    sessionStorage.setItem('scrollToHour', ora);
+                    sessionStorage.setItem('scrollToMinute', '00');
+                    window.location.href = `/calendar?date=${cd.dataISO}&ora=${ora}:00`;
+                }
+            });
         }
-        z[y].push(0);
-      }
-
-      // RIBALTA VERTICALMENTE I RISULTATI: Inverti l'ordine delle righe in z
-      z.reverse();
-
-      const trace = {
-        z: z,
-        x: ore,
-        y: data.giorni,
-        type: 'heatmap',
-        colorscale: [
-          [0, '#fff'],
-          [0.2, '#f8bbd0'],
-          [0.5, '#f06292'],
-          [0.8, '#e53935'],
-          [1, '#b71c1c']
-        ],
-        reversescale: false,
-        showscale: true,
-        zmin: 0,
-        zmax: data.max_legend,
-        hovertemplate: 'Giorno: %{y}<br>Ora: %{x}<br>Appuntamenti: %{z}<extra></extra>',
-        xgap: 0,
-        ygap: 0,
-        colorbar: {
-          outlinewidth: 0 
-        }
-      };
-
-      const layout = {
-        margin: {l: 70, r: 30, t: 50, b: 30},
-        xaxis: {
-          title: {
-            text: 'Ora',
-            standoff: 20
-          },
-          side: 'top',
-          type: 'category',
-          tickmode: 'array',
-          tickvals: ore,
-          ticktext: ore
-        },
-        yaxis: {autorange: 'reversed', type: 'category'},
-        height: 260
-      };
-
-      Plotly.newPlot('heatmapAppuntamenti', [trace], layout, {displayModeBar: false, responsive: true});
-
-      // CORREZIONE: Salva dataRif per il click handler
-      window.currentDataRifAppuntamenti = dataRif;
-
-      // Gestione click sulla heatmap
-      document.getElementById('heatmapAppuntamenti').on('plotly_click', function(eventData) {
-        if (eventData && eventData.points && eventData.points.length > 0) {
-          const punto = eventData.points[0];
-          const giorno = punto.y; // es: "23/05"
-          let ora = punto.x;  // es: "08"
-    // Assicurati che ora sia una stringa valida (es: "08")
-    if (typeof ora === 'number') {
-      // Se è indice, mappa all'ora corrispondente
-      const oreArray = ["08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"];
-      ora = oreArray[ora] || "08"; // fallback a 08 se fuori range
-    } else if (typeof ora === 'string' && ora.length === 2) {
-      // Ok, è già stringa come "08"
-    } else {
-      ora = "08"; // fallback
-    }
-
-    // Usa dataRif come stringa per evitare problemi di serializzazione
-    let dataRifStr = window.currentDataRifAppuntamenti;
-    if (!dataRifStr || typeof dataRifStr !== 'string') {
-      // Fallback a oggi se non disponibile
-      const oggi = new Date();
-      dataRifStr = oggi.toISOString().slice(0, 10);
-    }
-
-    const dataRifDate = new Date(dataRifStr);
-    if (isNaN(dataRifDate.getTime())) {
-      console.error("Data di riferimento non valida:", dataRifStr);
-      return; // Esci senza navigare
-    }
-
-    // Trova l'indice del giorno cliccato
-    const giornoIdx = data.giorni.indexOf(giorno);
-    if (giornoIdx === -1) {
-      console.error("Giorno non trovato:", giorno);
-      return;
-    }
-
-    // Calcola la data effettiva partendo da dataRif - (N giorni)
-    const giorniDaSottrarre = data.giorni.length - 1 - giornoIdx;
-    const dataClick = new Date(dataRifDate.getFullYear(), dataRifDate.getMonth(), dataRifDate.getDate() - giorniDaSottrarre);
-    if (isNaN(dataClick.getTime())) {
-      console.error("Data calcolata non valida");
-      return;
-    }
-
-          const yyyy = dataClick.getFullYear();
-          const mm = String(dataClick.getMonth() + 1).padStart(2, '0');
-          const dd = String(dataClick.getDate()).padStart(2, '0');
-          const dataStr = `${yyyy}-${mm}-${dd}`;
-
-    // Salva i parametri per lo scroll in sessionStorage (meccanismo esistente)
-    sessionStorage.setItem('scrollToDate', dataStr);
-    sessionStorage.setItem('scrollToHour', ora);
-    sessionStorage.setItem('scrollToMinute', '00'); // Default a 00 minuti
-
-          // Vai su calendar.html con parametri data e ora
-          window.location.href = `/calendar/?date=${dataStr}&hour=${ora}`;
-        }
-      });
-
     });
 }
 
-function caricaHeatmapIncassi(dataRif) {
-  let url = '/api/heatmap_incassi';
-  if (dataRif) {
-    url += `?data_rif=${encodeURIComponent(dataRif)}`;
-  }
-  fetch(url)
-    .then(r => r.json())
-    .then(data => {
-      const ore = [...data.ore];
-      const ultimaOra = parseInt(data.ore[data.ore.length - 1], 10) + 1;
-      ore.push(ultimaOra.toString().padStart(2, '0'));
+// Funzione caricaHeatmapIncassi con tooltip e click
+function caricaHeatmapIncassi(dataRif, giorni = 10) {
+    $.ajax({
+        url: '/api/heatmap_incassi',
+        data: { data_rif: dataRif, giorni: giorni },
+        success: function(res) {
+            const z = [];
+            const customdata = [];
+            const numGiorni = res.giorni.length;
+            
+            for (let y = 0; y < numGiorni; y++) {
+                z.push(new Array(res.ore.length).fill(0));
+                customdata.push([]);
+                for (let x = 0; x < res.ore.length; x++) {
+                    // Calcola la data effettiva per questo punto
+                    const dataRifDate = dataRif ? new Date(dataRif) : new Date();
+                    const giorniIndietro = numGiorni - 1 - y;
+                    const dataEffettiva = new Date(dataRifDate);
+                    dataEffettiva.setDate(dataEffettiva.getDate() - giorniIndietro);
+                    const dataISO = dataEffettiva.toISOString().slice(0, 10);
+                    customdata[y].push({
+                        giorno: res.giorni[y],
+                        ora: res.ore[x],
+                        dataISO: dataISO
+                    });
+                }
+            }
+            
+            res.valori.forEach(function(v) {
+                if (v.y >= 0 && v.y < numGiorni && v.x >= 0 && v.x < res.ore.length) {
+                    z[v.y][v.x] = v.v;
+                }
+            });
 
-      const z = [];
-      for (let y = 0; y < data.giorni.length; y++) {
-        z[y] = [];
-        for (let x = 0; x < data.ore.length; x++) {
-          const cell = data.valori.find(v => v.x === x && v.y === y);
-          z[y][x] = cell ? cell.v : 0;
+            // Adatta altezza in base ai giorni
+            let altezza = 260;
+            if (giorni === 30) altezza = 350;
+            if (giorni === 365) altezza = 420;
+            $('#heatmapIncassi').css('height', altezza + 'px');
+
+            Plotly.newPlot('heatmapIncassi', [{
+                z: z,
+                x: res.ore,
+                y: res.giorni,
+                customdata: customdata,
+                type: 'heatmap',
+                colorscale: [
+                    [0, 'white'],
+                    [0.5, '#66b3ff'],
+                    [1, '#0066cc']
+                ],
+                zmin: 0,
+                zmax: res.max_legend || 1000,
+                showscale: false,
+                hoverongaps: false,
+                hovertemplate: '<b>%{y}</b> ore %{x}:00<br>Incasso: € %{z:.2f}<extra></extra>'
+            }], {
+                margin: { t: 10, b: 40, l: 50, r: 10 },
+                xaxis: { 
+                    title: '', 
+                    tickfont: { size: 11 }, 
+                    dtick: giorni > 30 ? 2 : 1 
+                },
+                yaxis: { 
+                    title: '', 
+                    tickfont: { size: giorni > 30 ? 8 : 11 },
+                    dtick: giorni > 30 ? 7 : 1
+                },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)'
+            }, { responsive: true, displayModeBar: false });
+
+            // Click per andare al calendario
+            document.getElementById('heatmapIncassi').on('plotly_click', function(data) {
+                const pt = data.points[0];
+                const cd = pt.customdata;
+                if (cd && cd.dataISO) {
+                    const ora = cd.ora;
+                    sessionStorage.setItem('scrollToHour', ora);
+                    sessionStorage.setItem('scrollToMinute', '00');
+                    window.location.href = `/calendar?date=${cd.dataISO}&ora=${ora}:00`;
+                }
+            });
         }
-        z[y].push(0);
-      }
-
-const maxValue = data.max_legend || 0;
-const hasData = maxValue > 0;
-
-const trace = {
-  z: z,
-  x: ore,
-  y: data.giorni,
-  type: 'heatmap',
-  colorscale: [
-    [0, '#fff'],
-    [0.2, '#b2dfdb'],
-    [0.5, '#4dd0e1'],
-    [0.8, '#0097a7'],
-    [1, '#004d40']
-  ],
-  reversescale: false,
-  showscale: hasData, // **Nascondi la scala se non ci sono dati**
-  zmin: 0,
-  zmax: hasData ? maxValue : 1, // **Imposta zmax a 1 se tutti i valori sono 0**
-  hovertemplate: 'Giorno: %{y}<br>Ora: %{x}<br>Incasso: %{z:.2f}€<extra></extra>',
-  xgap: 0,
-  ygap: 0,
-  colorbar: {
-    outlinewidth: 0,
-    title: '€'
-  }
-};
-
-      const layout = {
-        margin: {l: 70, r: 30, t: 50, b: 30},
-        xaxis: {
-          title: {
-            text: 'Ora',
-            standoff: 20
-          },
-          side: 'top',
-          type: 'category',
-          tickmode: 'array',
-          tickvals: ore,
-          ticktext: ore
-        },
-        yaxis: {autorange: 'reversed', type: 'category'},
-        height: 260
-      };
-
-      Plotly.newPlot('heatmapIncassi', [trace], layout, {displayModeBar: false, responsive: true});
     });
 }
 
@@ -3636,9 +3643,10 @@ function caricaTopClienti(periodo) {
 document.addEventListener('DOMContentLoaded', function() {
   caricaTopClienti('mese');
   
-  document.querySelectorAll('.btn-top-clienti-periodo').forEach(btn => {
+  // Solo i bottoni DENTRO il tile top-clienti
+  document.querySelectorAll('#tile-top-clienti .btn-top-clienti-periodo').forEach(btn => {
     btn.addEventListener('click', function() {
-      document.querySelectorAll('.btn-top-clienti-periodo').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#tile-top-clienti .btn-top-clienti-periodo').forEach(b => b.classList.remove('active'));
       this.classList.add('active');
       caricaTopClienti(this.dataset.periodo);
     });
