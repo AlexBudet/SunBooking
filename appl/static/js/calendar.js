@@ -9260,6 +9260,9 @@ document.addEventListener('DOMContentLoaded', function() {
       block.style.color = '';
       const content = block.querySelector('.appointment-content');
       if (content) content.style.color = '';
+      // NUOVO: Rimuovi lo stile inline color anche dal link cliente
+      const clientLink = block.querySelector('.client-info-link');
+      if (clientLink) clientLink.style.color = '';
       // Rendi il cestino bianco
       const deleteBtn = block.querySelector('.delete-appointment-block i');
 if (deleteBtn) {
