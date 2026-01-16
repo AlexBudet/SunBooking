@@ -7,6 +7,30 @@
 .d-flex.align-items-center > button:hover {
   color: lightseagreen !important;
 }
+/* Highlight per la voce di menu attiva - Underline SOTTO la scritta */
+.nav-link.menu-link .menu-label {
+  position: relative;
+  display: inline-block;
+  }
+/* Highlight per la voce di menu attiva - Underline ATTACCATA al testo */
+.nav-link.menu-link.active .menu-label {
+  text-decoration: underline;
+  text-decoration-color: #ff729d;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+.nav-link.menu-link.active .menu-icon {
+  color: #ff5a8c !important;
+  filter: drop-shadow(0 0 6px rgb(255, 255, 255));
+  transform: scale(1.15);
+  transition: all 0.2s ease;
+}
+.nav-link.menu-link:hover .menu-label {
+  text-decoration: underline;
+  text-decoration-color: #7ca0b8;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
           </style>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -437,6 +461,48 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 })();
+</script>
+<script>
+// Evidenzia il menu attivo in base all'URL corrente
+document.addEventListener('DOMContentLoaded', function() {
+  const currentPath = window.location.pathname;
+  
+  const menuLinks = document.querySelectorAll('#mainMenu .nav-link.menu-link');
+  
+  menuLinks.forEach(function(link) {
+    const href = link.getAttribute('href');
+    if (!href) return;
+    
+    // Normalizza rimuovendo trailing slash
+    const hrefClean = href.replace(/\/$/, '');
+    const currentClean = currentPath.replace(/\/$/, '');
+    
+    // Match esatto
+    if (currentClean === hrefClean) {
+      link.classList.add('active');
+      return;
+    }
+    
+    // Per Tools: /s/3/settings/settings -> base è /s/3/settings
+    // Controlla se currentPath contiene la stessa sezione "settings"
+    const hrefParts = hrefClean.split('/');
+    const currentParts = currentClean.split('/');
+    
+    // Trova la sezione chiave (calendar, report, pacchetti, settings, ecc.)
+    // Cerchiamo se una parte significativa dell'href è presente nel currentPath
+    const keySegments = ['calendar', 'report', 'pacchetti', 'settings', 'cassa'];
+    
+    for (const seg of keySegments) {
+      const hrefHasSeg = hrefParts.includes(seg);
+      const currentHasSeg = currentParts.includes(seg);
+      
+      if (hrefHasSeg && currentHasSeg) {
+        link.classList.add('active');
+        return;
+      }
+    }
+  });
+});
 </script>
     {% block scripts %}{% endblock %}
 </body>

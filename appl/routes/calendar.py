@@ -1432,6 +1432,7 @@ def next_appointments_for_client(client_id):
 def online_appointments_by_booking_date():
     date_str = request.args.get('date')
     search = request.args.get('search', '').strip()
+    pending_only = request.args.get('pending_only', '').strip() == '1'
 
     query = Appointment.query.filter(
         Appointment.source == "web",
@@ -1441,7 +1442,23 @@ def online_appointments_by_booking_date():
         joinedload(Appointment.service)
     )
 
-    if search and len(search) >= 3:
+    # CASO SPECIALE: pending_only filtra solo appuntamenti con cliente "Booking Online"
+    if pending_only:
+        # Trova il client placeholder "Booking Online"
+        booking_client = Client.query.filter(
+            func.lower(Client.cliente_nome) == 'booking',
+            func.lower(Client.cliente_cognome) == 'online'
+        ).first()
+        
+        if booking_client:
+            appointments = (
+                query.filter(Appointment.client_id == booking_client.id)
+                .order_by(Appointment.created_at.desc())
+                .all()
+            )
+        else:
+            appointments = []
+    elif search and len(search) >= 3:
         pattern = f"%{search.lower()}%"
         raw_appointments = (
             query.join(Client, isouter=True)
@@ -2444,7 +2461,6 @@ def find_similar_client():
         }
     }), 200
 
-
 @calendar_bp.route('/api/create-client-from-booking', methods=['POST'])
 def create_client_from_booking():
     """
@@ -2460,12 +2476,25 @@ def create_client_from_booking():
         return jsonify({'success': False, 'error': 'Nome e cognome obbligatori'}), 400
     
     try:
+        # Funzione helper per dedurre il sesso dal nome (stessa logica del frontend)
+        def deduci_sesso(nome):
+            if not nome:
+                return "-"
+            nome_minuscolo = nome.lower()
+            if nome_minuscolo.endswith('o'):
+                return 'M'
+            elif nome_minuscolo.endswith('a'):
+                return 'F'
+            else:
+                return "-"
+        
         # Crea nuovo cliente
         new_client = Client(
             cliente_nome=nome,
             cliente_cognome=cognome,
             cliente_cellulare=cellulare,
             cliente_email=email,
+            cliente_sesso=deduci_sesso(nome),
             is_deleted=False
         )
         db.session.add(new_client)
