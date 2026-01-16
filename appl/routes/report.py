@@ -782,7 +782,10 @@ def heatmap_appuntamenti():
     else:
         data_rif = datetime.today()
 
-    giorni = [data_rif - timedelta(days=i) for i in reversed(range(10))]
+    # Nuovo parametro giorni con default 10
+    giorni_param = request.args.get("giorni", 10, type=int)
+    
+    giorni = [data_rif - timedelta(days=i) for i in reversed(range(giorni_param))]
     giorni_label = [g.strftime('%d/%m') for g in giorni]
     ore = [f"{h:02d}" for h in range(8, 21)]
 
@@ -796,7 +799,7 @@ def heatmap_appuntamenti():
         .join(Client, Appointment.client_id == Client.id)
         .join(Service, Appointment.service_id == Service.id)
         .filter(
-            Appointment.start_time >= data_rif - timedelta(days=10),
+            Appointment.start_time >= data_rif - timedelta(days=giorni_param),  # Usa giorni_param
             Appointment.start_time <= data_rif,
             Client.cliente_nome.isnot(None),
             Client.cliente_cognome.isnot(None),
@@ -817,7 +820,7 @@ def heatmap_appuntamenti():
     for row in results:
         y = (data_rif.date() - row.giorno).days
         x = int(row.ora) - 8
-        if 0 <= x < len(ore):
+        if 0 <= x < len(ore) and 0 <= y < giorni_param:  # Aggiungi controllo y
             valori.append({'x': x, 'y': y, 'v': row.count})
 
     operatori_totali = Operator.query.filter_by(is_deleted=False, is_visible=True).count()
@@ -838,28 +841,51 @@ def heatmap_incassi():
     else:
         data_rif = datetime.today()
 
+    # Nuovo parametro giorni con default 10
+    giorni_param = request.args.get("giorni", 10, type=int)
+
     user_id = session.get("user_id")
     user = db.session.get(User, user_id)
 
-    giorni = [data_rif - timedelta(days=i) for i in reversed(range(10))]
+    giorni = [data_rif - timedelta(days=i) for i in reversed(range(giorni_param))]
     giorni_label = [g.strftime('%d/%m') for g in giorni]
-    ore = [f"{h:02d}" for h in range(8, 21)]  # es: 08-20
+    ore = [f"{h:02d}" for h in range(8, 21)]
 
+    # QUERY AGGREGATA invece di query per ogni cella
+    query = (
+        db.session.query(
+            func.date(Receipt.created_at).label('giorno'),
+            func.extract('hour', Receipt.created_at).label('ora'),
+            func.sum(Receipt.total_amount).label('totale')
+        )
+        .filter(
+            Receipt.created_at >= data_rif - timedelta(days=giorni_param),
+            Receipt.created_at <= data_rif
+        )
+    )
+    
+    # Filtro fiscale solo per user
+    if user and user.ruolo.value == "user":
+        query = query.filter(Receipt.is_fiscale == True)
+    
+    results = (
+        query
+        .group_by(
+            func.date(Receipt.created_at),
+            func.extract('hour', Receipt.created_at)
+        )
+        .all()
+    )
+
+    # Costruisci la mappa dei valori
     valori = []
     max_incasso = 0
-    for y, giorno in enumerate(giorni):
-        for x, ora in enumerate(ore):
-            start = datetime.combine(giorno, datetime.min.time()).replace(hour=int(ora))
-            end = start + timedelta(hours=1)
-            query = db.session.query(func.sum(Receipt.total_amount)).filter(
-                Receipt.created_at >= start,
-                Receipt.created_at < end
-            )
-            # Filtro fiscale solo per user
-            if user and user.ruolo.value == "user":
-                query = query.filter(Receipt.is_fiscale == True)
-            incasso = query.scalar() or 0
-            valori.append({'x': x, 'y': y, 'v': float(incasso)})
+    for row in results:
+        y = (data_rif.date() - row.giorno).days
+        x = int(row.ora) - 8
+        incasso = float(row.totale or 0)
+        if 0 <= x < len(ore) and 0 <= y < giorni_param:
+            valori.append({'x': x, 'y': y, 'v': incasso})
             if incasso > max_incasso:
                 max_incasso = incasso
 
@@ -867,7 +893,7 @@ def heatmap_incassi():
         'giorni': giorni_label,
         'ore': ore,
         'valori': valori,
-        'max_legend': max_incasso
+        'max_legend': max_incasso if max_incasso > 0 else 1000
     })
 
 @report_bp.route('/api/next_appointments')
