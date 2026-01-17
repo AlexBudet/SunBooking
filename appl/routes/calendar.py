@@ -46,26 +46,26 @@ def append_new_client_marker(note_text):
     return NEW_CLIENT_MARKER.strip()
 
 def estrai_nome_cognome_cellulare(note):
-    nome = cognome = cellulare = ""
+    nome = cognome = cellulare = email = ""
     if note:
         m_nome = re.search(r'Nome:\s*([^,]+)', note, re.IGNORECASE)
         m_cognome = re.search(r'Cognome:\s*([^,]+)', note, re.IGNORECASE)
         m_cell = re.search(r'(Cellulare|Telefono):\s*([^\s,]+(?:\s+[^\s,]+)*)', note, re.IGNORECASE)
+        m_email = re.search(r'Email:\s*([^\s,]+)', note, re.IGNORECASE)
         if m_nome:
-            nome = m_nome.group(1).strip().lower()  # Aggiungi .lower()
+            nome = m_nome.group(1).strip().lower()
         if m_cognome:
-            cognome = m_cognome.group(1).strip().lower()  # Aggiungi .lower()
+            cognome = m_cognome.group(1).strip().lower()
         if m_cell:
             cellulare = m_cell.group(2).strip()
-            # Rimuovi tutti gli spazi
             cellulare = re.sub(r'\s+', '', cellulare)
-            # Se inizia con +39, rimuovi il prefisso
             if cellulare.startswith('+39'):
                 cellulare = cellulare[3:]
-            # Se dopo aver tolto il +39 c'è ancora uno 0 iniziale (es. +390...), toglilo
             if cellulare.startswith('0'):
                 cellulare = cellulare[1:]
-    return nome, cognome, cellulare
+        if m_email:
+            email = m_email.group(1).strip().lower()
+    return nome, cognome, cellulare, email
 
 def to_rome(dt):
     if dt is None:
@@ -1544,7 +1544,7 @@ def online_appointments_by_booking_date():
             grouped[session_id] = {
                 "booking_session_id": session_id,
                 "data_booking": to_rome(appt.created_at).strftime("%Y-%m-%d %H:%M"),
-                "nome": "", "cognome": "", "cellulare": "",
+                "nome": "", "cognome": "", "cellulare": "", "email": "",
                 "client_id": appt.client_id,
                 "note": appt.note,
                 "services": [],
@@ -1556,11 +1556,10 @@ def online_appointments_by_booking_date():
                 "placeholder_exists": False,
             }
 
-            nome, cognome, cellulare = estrai_nome_cognome_cellulare(appt.note)
+            nome, cognome, cellulare, email = estrai_nome_cognome_cellulare(appt.note)
             nome_norm = (nome or "").strip().lower()
             cognome_norm = (cognome or "").strip().lower()
             cellulare_norm = (cellulare or "").strip().lower()
-
             if not nome_norm:
                 nome_norm = "cliente"
             if not cognome_norm:
@@ -1569,6 +1568,7 @@ def online_appointments_by_booking_date():
             grouped[session_id]["nome"] = nome_norm
             grouped[session_id]["cognome"] = cognome_norm
             grouped[session_id]["cellulare"] = cellulare_norm
+            grouped[session_id]["email"] = (email or "").strip().lower()
 
             key = (nome_norm, cognome_norm, cellulare_norm)
             if key not in client_cache:

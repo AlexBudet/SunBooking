@@ -9864,9 +9864,8 @@ function loadWebAppointments(date, search) {
             btn.dataset.clientCognome = (session.cognome || '');
             btn.dataset.clientCellulare = (session.cellulare || '');
             
-            // Estrai email dalla nota (4° elemento in matchParts array)
-            const matchParts = (session.match_cliente || '').split(' - ');
-            btn.dataset.clientEmail = matchParts[3] || '';
+            // Usa email estratta dal backend
+            btn.dataset.clientEmail = (session.email || '');
                       
             // Salva dati cliente matchato per confronto (solo se phone_only)
             if (matchType === 'phone_only' && session.match_cliente) {
@@ -10969,8 +10968,61 @@ async function creaClienteDaBooking(bookingData, appointmentId) {
     
     const newClientId = createResult.client.id;
     
-    // 2. Associa il cliente appena creato
-    await associaClienteBooking(appointmentId, newClientId);
+    // 2. Associa il cliente appena creato (fetch diretto, non chiamiamo associaClienteBooking)
+    const assocResponse = await fetch('/calendar/api/associa-cliente-booking', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({
+        appointment_id: appointmentId,
+        client_id: newClientId
+      })
+    });
+    
+    const assocResult = await assocResponse.json();
+    
+    if (!assocResult.success) {
+      alert('Errore associazione: ' + (assocResult.error || 'Associazione fallita'));
+      return;
+    }
+    
+    alert('Cliente creato e associato con successo!');
+    
+    // 3. Flusso WhatsApp
+    try {
+      const whatsappData = {
+        client_id: newClientId,
+        client_name: `${bookingData.nome || ''} ${bookingData.cognome || ''}`.trim(),
+        data: assocResult.appointment_date || assocResult.date || '',
+        ora: assocResult.start_time || '',
+        appointment_id: appointmentId
+      };
+      
+      if (typeof chiediInvioWhatsappAuto === 'function' && typeof inviaWhatsappAutoSeRichiesto === 'function') {
+        let sendResult = false;
+        try { sendResult = await chiediInvioWhatsappAuto(); } catch { sendResult = false; }
+        if (sendResult === true) {
+          await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
+          alert('Messaggio WhatsApp inviato!');
+        } else if (sendResult !== 'back' && typeof chiediInvioWhatsappNavigator === 'function') {
+          const navSend = await chiediInvioWhatsappNavigator();
+          if (navSend === true) {
+            await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
+            alert('Messaggio WhatsApp inviato!');
+          }
+        }
+      } else if (typeof chiediInvioWhatsappNavigator === 'function' && typeof inviaWhatsappAutoSeRichiesto === 'function') {
+        const navSend = await chiediInvioWhatsappNavigator();
+        if (navSend === true) {
+          await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
+          alert('Messaggio WhatsApp inviato!');
+        }
+      }
+    } catch (whErr) {
+      console.warn('Errore flusso WhatsApp dopo creazione cliente:', whErr);
+    }
     
   } catch (err) {
     console.error('Errore creazione cliente:', err);
