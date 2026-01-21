@@ -1923,8 +1923,7 @@ body.touch-ui .appointment-block.active-popup .my-spia {
 }
 
 /* nascondi elementi non usabili su touch */
-body.touch-ui .appointment-block .btn-popup.whatsapp-btn:not(.touch-bottom-wa),       /* solo icona laterale */
-body.touch-ui .appointment-block .btn-popup.delete-appointment-block:not(.touch-top-delete) {
+body.touch-ui .appointment-block .btn-popup.whatsapp-btn:not(.touch-bottom-wa) {
   display: none !important;
 }
 
@@ -2171,17 +2170,6 @@ body.touch-ui .appointment-block.note-off .popup-buttons {
   display: none !important;
   opacity: 0 !important;
 }
-body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
-  display: flex !important;
-  opacity: 1 !important;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-/* TOUCH: consenti bottone Nota in alto sugli OFF (override del nascondi globale) */
-body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.nota.touch-top-note {
-  display: inline-flex !important;
-}
 
 /* TOUCH: nascondi SEMPRE per default; mostra solo su .active-popup */
 body.touch-ui .appointment-block:not(.active-popup) .popup-buttons,
@@ -2199,16 +2187,6 @@ body.touch-ui .appointment-block.active-popup .popup-buttons-bottom {
 
 /* TOUCH: mostra esplicitamente .vai-pacchetto per status-2 */
 body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup.vai-pacchetto {
-  display: inline-flex !important;
-}
-
-/* Stato=2: consenti copia, nota e vai-pacchetto; nascondi il resto */
-body.touch-ui .appointment-block[data-status="2"] .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto) {
-  display: none !important;
-}
-
-/* OFF: consenti “nota” in alto solo quando active (override al nascondi globale della nota top) */
-body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.nota.touch-top-note {
   display: inline-flex !important;
 }
 
@@ -2230,23 +2208,12 @@ body.touch-ui .appointment-block.off.active-popup .popup-buttons .btn-popup.nota
 }
 
 body.touch-ui .appointment-block.note-off .note-indicator,
-body.touch-ui .appointment-block.off .note-indicator {
+body.touch-ui .appointment-block.off .note-indicator,
+body.touch-ui .appointment-block.note-off .my-spia,
+body.touch-ui .appointment-block.off .my-spia {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
-}
-
-body.touch-ui .appointment-block.note-off.active-popup .popup-buttons,
-body.touch-ui .appointment-block.off.active-popup .popup-buttons {
-  display: grid !important;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: var(--pb-gap, 3px);
-}
-
-/* Touch-UI: mostra il bottone CUT in top bar per blocchi OFF quando il popup è aperto */
-body.touch-ui .appointment-block.note-off.active-popup .popup-buttons .btn-popup.touch-top-cut,
-body.touch-ui .appointment-block.off.active-popup .popup-buttons .btn-popup.touch-top-cut {
-  display: inline-flex !important;
 }
 
 /* Touch-UI: allinea i popup info cliente al livello dei popup-buttons */
@@ -2289,6 +2256,18 @@ body.touch-ui .appointment-block .popup-buttons-bottom .btn-popup.delete-appoint
   transform: scale(1.15); /* effetto coerente con altri pulsanti */
   box-shadow: 0 0 0 1px #fff, 0 0 6px rgba(255,56,56,.55);
 }
+
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
+  display: grid !important;
+  opacity: 1 !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 1px !important;
+}
+
+
+
+
+
 
 /* Desktop: larghezza > 1200px => colonne fisse, tutte uguali e proporzionali allo schermo */
 @media (min-width: 1201px) {
