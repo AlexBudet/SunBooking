@@ -1355,11 +1355,12 @@ def whatsapp():
 
             if msg_morning is not None:
                 business_info.whatsapp_message_morning = msg_morning
-                # PATCH: Salva le nuove impostazioni del reminder
-                business_info.whatsapp_morning_reminder_enabled = reminder_enabled
-                if reminder_time_str:
-                    business_info.whatsapp_morning_reminder_time = datetime.strptime(reminder_time_str, '%H:%M').time()
                 flash('Messaggio di reminder salvato con successo!', 'success')
+
+            # Aggiorna enabled/time SOLO se reminder_time è stato inviato
+            if reminder_time_str is not None and reminder_time_str != '':
+                business_info.whatsapp_morning_reminder_enabled = reminder_enabled
+                business_info.whatsapp_morning_reminder_time = datetime.strptime(reminder_time_str, '%H:%M').time()
 
         db.session.commit()
         return redirect(url_for('settings.whatsapp'))

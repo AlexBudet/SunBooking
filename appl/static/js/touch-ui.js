@@ -409,20 +409,23 @@ function ensureTopBarForTouch(block) {
     }
     note.style.display = 'inline-block';
 
-// TAGLIA / SPOSTA OFF (modalità touch-ui) — bottone dedicato alla touch-ui (no classe "taglia")
-let cut = topBar.querySelector('.btn-popup.touch-top-cut');
+// TAGLIA / SPOSTA OFF (modalità touch-ui) — bottone dedicato alla touch-ui
+let cut = topBar.querySelector('.btn-popup.taglia.touch-top-cut');
 if (!cut) {
   cut = document.createElement('button');
-  cut.className = 'btn-popup touch-top-cut';
+  cut.className = 'btn-popup taglia touch-top-cut'; 
   cut.title = 'Sposta blocco OFF';
   cut.appendChild(biIcon('scissors'));
-  cut.addEventListener('click', (e) => {
+  cut.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
+    e.preventDefault();
+    e.stopImmediatePropagation();
     startOffMove(block);
-  });
+    closeAllPopups();
+  }, true);
   topBar.appendChild(cut);
 }
-cut.style.display = 'inline-flex';
+cut.style.display = 'inline-block';
 
     // Filtra e mantieni nascosti i bottoni non consentiti
     _filterOffTopBarButtons(topBar);
@@ -573,25 +576,6 @@ function ensureBottomBar(block) {
     return;
   }
 
-  // Stato 0/1/...: assicurati che il delete “touch” esista o che l’esistente sia marcato correttamente
-  let delBtn = topBar.querySelector('.btn-popup.delete-appointment-block');
-  if (delBtn) {
-    delBtn.classList.add('touch-top-delete'); // evita che il CSS lo nasconda
-  } else {
-    delBtn = document.createElement('button');
-    delBtn.className = 'btn-popup delete-appointment-block touch-top-delete';
-    delBtn.title = 'Elimina appuntamento';
-    delBtn.appendChild(biIcon('trash'));
-    delBtn.addEventListener('click', function(e){
-      e.stopPropagation();
-      const id = block.getAttribute('data-appointment-id');
-      if (id && typeof window.deleteAppointment === 'function') {
-        window.deleteAppointment(id);
-      }
-    });
-    topBar.insertBefore(delBtn, topBar.firstChild);
-  }
-
   if (block.querySelector('.popup-buttons-bottom')) return;
 
   const bar = document.createElement('div');
@@ -706,6 +690,14 @@ if (!wasActive) {
       console.log('>>> È STATUS-2, chiamo filtro...');
       _filterStatus2TopBarButtons(topBar);
     }
+    // SCAPPATOIA: per blocchi OFF, marca il bottone CUT come "pronto"
+    const isOff = block.classList.contains('note-off') || block.classList.contains('off');
+    if (isOff) {
+      const cutBtn = topBar.querySelector('.btn-popup.touch-top-cut');
+      if (cutBtn) {
+        cutBtn._offCutReady = true;
+      }
+    }
   } else {
     console.log('>>> ERRORE: topBar NON TROVATA!');
   }
@@ -728,6 +720,10 @@ document.addEventListener('DOMContentLoaded', function(){
 
     // Inizializza la modalità touch per i blocchi in istituto (cassa.html)
   initMySpiaTouch(document);
+
+  if (document.body.classList.contains('touch-ui')) {
+    document.querySelectorAll('.appointment-block').forEach(initTouchOnBlock);
+  }
 
 // Observer per blocchi aggiunti dinamicamente
   const obs = new MutationObserver(muts => {
@@ -771,8 +767,8 @@ document.addEventListener('click', function (e) {
   // ===== SPOSTA BLOCCO OFF (touch-ui) =====
   let __offMovePayload = null;
 
-  function startOffMove(block) {
-    if (!block || !block.classList.contains('note-off')) return;
+function startOffMove(block) {
+  if (!block || (!block.classList.contains('note-off') && !block.classList.contains('off'))) return;
 
     // Evita doppia esecuzione se il bottone viene ri‑cliccato velocemente
     if (block._offMoveStarted) return;
