@@ -2249,10 +2249,18 @@ def send_whatsapp_auto():
             # Fallback: se non inizia con '+' o cifra, usa com'è
             numero_norm = raw
 
-        # Per Unipile: formato con + davanti
-        numero_pulito = numero_norm if numero_norm.startswith('+') else '+' + numero_norm
-        # Rimuovi spazi e caratteri non validi eccetto +
-        numero_pulito = '+' + re.sub(r'[^\d]', '', numero_pulito)
+        # Normalizzazione per Unipile: formato numero@s.whatsapp.net
+        numero_pulito = re.sub(r'\D', '', numero_norm)  # solo cifre
+        if numero_pulito.startswith('00'):
+            numero_pulito = numero_pulito[2:]
+        if not numero_pulito:
+            app.logger.error("[WHATSAPP] Numero vuoto dopo normalizzazione")
+            return jsonify({'error': 'Numero cliente non valido'}), 400
+        # Aggiungi prefisso 39 (senza +) se manca
+        if not numero_pulito.startswith('39') and len(numero_pulito) <= 10:
+            numero_pulito = '39' + numero_pulito
+        # Formato Unipile: numero@s.whatsapp.net
+        numero_whatsapp = f"{numero_pulito}@s.whatsapp.net"
         
         if len(numero_pulito) < 8:
             app.logger.error("[WHATSAPP] Numero troppo corto dopo normalizzazione: %s", numero_pulito)
@@ -2268,20 +2276,20 @@ def send_whatsapp_auto():
 
         headers = {
             "X-API-KEY": unipile_token,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
+            "accept": "application/json"
         }
 
-        # Payload per Unipile: crea una chat e invia messaggio
+        # Payload per Unipile: attendees_ids deve essere STRINGA, non array
         payload = {
             "account_id": unipile_account_id,
-            "attendees_ids": [numero_pulito],
+            "attendees_ids": numero_whatsapp,
             "text": messaggio
         }
 
         try:
             import requests
-            response = requests.post(send_url, json=payload, headers=headers, timeout=30)
+            # IMPORTANTE: usa data= (form-encoded) NON json=
+            response = requests.post(send_url, data=payload, headers=headers, timeout=30)
             app.logger.info("[WHATSAPP-UNIPILE] Response status=%s body=%s", response.status_code, response.text[:500] if response.text else "")
 
             if response.status_code in (200, 201, 202):
