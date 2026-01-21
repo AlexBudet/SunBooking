@@ -496,6 +496,185 @@ def service_description(service_id):
     service.servizio_descrizione = descr if descr else None
     db.session.commit()
     return jsonify({'ok': True})
+
+@settings_bp.route('/settings/download-listino', methods=['GET'])
+def download_listino():
+    """Genera e scarica il listino prezzi in formato TXT o PDF."""
+    from flask import make_response
+    from weasyprint import HTML
+    import io
+    import html
+    
+    format_type = request.args.get('format', 'txt').lower()
+    include_description = request.args.get('include_description', 'false').lower() == 'true'
+    
+    # Recupera tutti i servizi non eliminati, ordinati per categoria e sottocategoria
+    services = (Service.query
+        .filter(Service.is_deleted == False)
+        .filter(~(
+            or_(
+                func.lower(func.trim(Service.servizio_nome)) == "dummy",
+                func.lower(func.trim(Service.servizio_nome)) == "booking online"
+            )
+        ))
+        .options(joinedload(Service.servizio_sottocategoria))
+        .order_by(Service.servizio_categoria, Service.servizio_sottocategoria_id, Service.servizio_nome)
+        .all())
+    
+    # Organizza i servizi per categoria e sottocategoria
+    organized_services = {}
+    for service in services:
+        cat_name = service.servizio_categoria.value
+        subcat_name = service.servizio_sottocategoria.nome if service.servizio_sottocategoria else "Altro"
+        
+        if cat_name not in organized_services:
+            organized_services[cat_name] = {}
+        if subcat_name not in organized_services[cat_name]:
+            organized_services[cat_name][subcat_name] = []
+        
+        organized_services[cat_name][subcat_name].append(service)
+    
+    if format_type == 'txt':
+        # Recupera il nome del negozio
+        business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+        business_name = business_info.business_name if business_info and business_info.business_name else "LISTINO PREZZI"
+        
+        # Genera listino in formato TXT semplice
+        output = []
+        output.append(f"LISTINO PREZZI {business_name}")
+        output.append("")
+        
+        for categoria in sorted(organized_services.keys()):
+            output.append("")
+            output.append(f"CATEGORIA: {categoria.upper()}")
+            output.append("")
+            
+            for sottocategoria in sorted(organized_services[categoria].keys()):
+                output.append(f"SOTTOCATEGORIA: {sottocategoria.upper()}")
+                
+                for service in organized_services[categoria][sottocategoria]:
+                    prezzo_str = f"{int(service.servizio_prezzo)}€" if service.servizio_prezzo == int(service.servizio_prezzo) else f"{service.servizio_prezzo:.2f}€"
+                    
+                    line = f"{service.servizio_nome} {prezzo_str}"
+                    
+                    if include_description and service.servizio_descrizione:
+                        # Rimuove i tag HTML dalla descrizione per il TXT
+                        desc_clean = re.sub(r'<[^>]+>', '', service.servizio_descrizione)
+                        desc_clean = html.unescape(desc_clean).strip()
+                        if desc_clean:
+                            line += f" {desc_clean}"
+                    
+                    output.append(line)
+                
+                output.append("")
+        
+        content = "\n".join(output)
+        response = make_response(content)
+        response.headers['Content-Type'] = 'text/plain; charset=utf-8'
+        response.headers['Content-Disposition'] = 'attachment; filename=listino_prezzi.txt'
+        return response
+    
+    elif format_type == 'pdf':
+        # Genera listino in formato PDF usando HTML/CSS
+        html_content = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                @page {
+                    size: A4;
+                    margin: 2cm;
+                }
+                body {
+                    font-family: Arial, sans-serif;
+                    font-size: 11pt;
+                    line-height: 1.4;
+                }
+                h1 {
+                    text-align: center;
+                    font-size: 24pt;
+                    margin-bottom: 30px;
+                    border-bottom: 3px solid #333;
+                    padding-bottom: 10px;
+                }
+                .categoria {
+                    font-size: 16pt;
+                    font-weight: bold;
+                    margin-top: 25px;
+                    margin-bottom: 15px;
+                    background-color: #f0f0f0;
+                    padding: 10px;
+                    border-left: 5px solid #333;
+                }
+                .sottocategoria {
+                    font-size: 13pt;
+                    font-weight: bold;
+                    margin-top: 15px;
+                    margin-bottom: 10px;
+                    margin-left: 10px;
+                    color: #555;
+                }
+                .servizio {
+                    margin-left: 20px;
+                    margin-bottom: 12px;
+                }
+                .servizio-nome {
+                    font-size: 11pt;
+                    font-weight: normal;
+                }
+                .servizio-prezzo {
+                    font-weight: bold;
+                    color: #0066cc;
+                }
+                .servizio-descrizione {
+                    font-style: italic;
+                    color: #666;
+                    margin-left: 10px;
+                    margin-top: 5px;
+                    font-size: 10pt;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>LISTINO PREZZI</h1>
+        """
+        
+        for categoria in sorted(organized_services.keys()):
+            html_content += f'<div class="categoria">{html.escape(categoria.upper())}</div>'
+            
+            for sottocategoria in sorted(organized_services[categoria].keys()):
+                html_content += f'<div class="sottocategoria">{html.escape(sottocategoria.upper())}</div>'
+                
+                for service in organized_services[categoria][sottocategoria]:
+                    prezzo_str = f"€ {service.servizio_prezzo:.2f}" if service.servizio_prezzo != int(service.servizio_prezzo) else f"€ {int(service.servizio_prezzo)}"
+                    durata_str = f" ({service.servizio_durata} min)" if service.servizio_durata > 0 else ""
+                    
+                    html_content += '<div class="servizio">'
+                    html_content += f'<div class="servizio-nome">{html.escape(service.servizio_nome)}{html.escape(durata_str)} '
+                    html_content += f'<span class="servizio-prezzo">{html.escape(prezzo_str)}</span></div>'
+                    
+                    if include_description and service.servizio_descrizione:
+                        html_content += f'<div class="servizio-descrizione">{service.servizio_descrizione}</div>'
+                    
+                    html_content += '</div>'
+        
+        html_content += """
+        </body>
+        </html>
+        """
+        
+        # Genera PDF da HTML
+        pdf_file = HTML(string=html_content).write_pdf()
+        
+        response = make_response(pdf_file)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = 'attachment; filename=listino_prezzi.pdf'
+        return response
+    
+    else:
+        return jsonify({"error": "Formato non valido. Usa 'txt' o 'pdf'."}), 400
+
 # ===================== CLIENTS =====================
 @settings_bp.route('/settings/clients', methods=['GET'])
 def clients():
