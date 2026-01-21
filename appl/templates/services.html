@@ -180,6 +180,33 @@
     </table>
     <br><br><br>
 </div>
+
+  
+<!-- Sezione download listino prezzi -->
+<div class="mt-4 mb-4" style="width: 33%;">
+    <h4>Scarica Listino Prezzi</h4>
+    <div class="row align-items-center">
+        <div class="col-md-4">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="includeDescription">
+                <label class="form-check-label" for="includeDescription">
+                    Includi Descrizione Servizi
+                </label>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <button class="btn btn-success btn-block" onclick="downloadPriceList('txt')">
+                <i class="fas fa-file-alt"></i> Scarica TXT
+            </button>
+        </div>
+        <div class="col-md-4">
+            <button class="btn btn-danger btn-block" onclick="downloadPriceList('pdf')">
+                <i class="fas fa-file-pdf"></i> Scarica PDF
+            </button>
+        </div>
+    </div>
+</div>
+<br><br><br>
 </div>
 
 <!-- Popup per utenti user -->
@@ -615,5 +642,23 @@ function attachEditorToolbarListeners() {
       }
     }
   }
+</script>
+<script>
+function downloadPriceList(format) {
+    try {
+        const includeDescription = document.getElementById('includeDescription').checked;
+        const url = `/settings/settings/download-listino?format=${format}&include_description=${includeDescription}`;
+        console.log('Downloading price list:', url);
+        
+        // Apri il download in una nuova finestra/tab
+        window.open(url, '_blank');
+        
+        // Alternativa: usa window.location.href per download diretto
+        // window.location.href = url;
+    } catch (error) {
+        console.error('Error downloading price list:', error);
+        alert('Errore durante il download del listino: ' + error.message);
+    }
+}
 </script>
 {% endblock %}
