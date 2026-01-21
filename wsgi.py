@@ -43,12 +43,13 @@ def db_label(uri):
     except Exception:
         return "DB"
 
-def wbiztool_creds_for(idx: int):
+def unipile_creds_for(idx: int):
+    """Restituisce le credenziali Unipile per il tenant specificato."""
     s = str(idx)
     return {
-        "WBIZTOOL_API_KEY": os.getenv(f"WBIZTOOL_API_KEY{s}") or os.getenv("WBIZTOOL_API_KEY") or "",
-        "WBIZTOOL_CLIENT_ID": os.getenv(f"WBIZTOOL_CLIENT_ID{s}") or os.getenv("WBIZTOOL_CLIENT_ID") or "",
-        "WBIZTOOL_WHATSAPP_CLIENT_ID": os.getenv(f"WBIZTOOL_WHATSAPP_CLIENT_ID{s}") or os.getenv("WBIZTOOL_WHATSAPP_CLIENT_ID") or "",
+        "UNIPILE_DSN": os.getenv(f"UNIPILE_DSN{s}") or os.getenv("UNIPILE_DSN") or "",
+        "UNIPILE_ACCOUNT_ID": os.getenv(f"UNIPILE_ACCOUNT_ID{s}") or os.getenv("UNIPILE_ACCOUNT_ID") or "",
+        "UNIPILE_ACCESS_TOKEN": os.getenv(f"UNIPILE_ACCESS_TOKEN{s}") or os.getenv("UNIPILE_ACCESS_TOKEN") or "",
     }
 
 def with_request_env(app, per_request_env: dict):
@@ -128,8 +129,8 @@ for idx, uri in pool.items():
     @child.context_processor
     def inject_hide_cassa():
         return {'hide_cassa': True}
-
-    creds = wbiztool_creds_for(idx)
+    
+    creds = unipile_creds_for(idx)
     creds["HIDE_CASSA"] = "1"
 
     # Aggiungi la route mancante per client_info ai child

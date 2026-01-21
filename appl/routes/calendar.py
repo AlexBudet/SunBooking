@@ -15,7 +15,6 @@ import os
 from pytz import timezone as pytz_timezone
 from sqlalchemy import func, and_, or_
 from dotenv import load_dotenv
-from wbiztool_client import WbizToolClient
 
 cache = Cache(app, config={'CACHE_TYPE': 'simple'}) 
 
@@ -2214,25 +2213,14 @@ def send_whatsapp_auto():
     )
 
     try:
-        api_key = os.getenv("WBIZTOOL_API_KEY")
-        client_id_str = os.getenv("WBIZTOOL_CLIENT_ID")
-        whatsapp_client_id = os.getenv("WBIZTOOL_WHATSAPP_CLIENT_ID")
+        # ===== UNIPILE INTEGRATION =====
+        unipile_dsn = os.getenv("UNIPILE_DSN")
+        unipile_account_id = os.getenv("UNIPILE_ACCOUNT_ID")
+        unipile_token = os.getenv("UNIPILE_ACCESS_TOKEN")
 
-        if not api_key or not client_id_str or not whatsapp_client_id:
-            app.logger.error("[WHATSAPP] Configurazione WBIZ mancante: API_KEY/client_id/whatsapp_client non presenti")
+        if not unipile_dsn or not unipile_account_id or not unipile_token:
+            app.logger.error("[WHATSAPP] Configurazione UNIPILE mancante: DSN/ACCOUNT_ID/ACCESS_TOKEN non presenti")
             return jsonify({'error': 'Configurazione WhatsApp mancante sul server.'}), 500
-
-        try:
-            client_id_int = int(client_id_str)
-        except Exception:
-            app.logger.exception("[WHATSAPP] WBIZTOOL_CLIENT_ID non è un intero valido: %s", client_id_str)
-            return jsonify({'error': 'Configurazione client WBIZ non valida'}), 500
-
-        try:
-            whatsapp_client_int = int(whatsapp_client_id)
-        except Exception:
-            app.logger.exception("[WHATSAPP] WBIZTOOL_WHATSAPP_CLIENT_ID non è un intero valido: %s", whatsapp_client_id)
-            return jsonify({'error': 'Configurazione whatsapp client non valida'}), 500
 
         # Normalizzazione numero in base alle regole:
         # - Se inizia con '+': non modificare
@@ -2261,60 +2249,53 @@ def send_whatsapp_auto():
             # Fallback: se non inizia con '+' o cifra, usa com'è
             numero_norm = raw
 
-        # Per il provider: rimuovi non numerici, gestisci eventuale '00' all'inizio
-        numero_pulito = re.sub(r'\D', '', numero_norm or '')
-        if numero_pulito.startswith('00'):
-            numero_pulito = numero_pulito.lstrip('0')
-        if not numero_pulito:
-            app.logger.error("[WHATSAPP] Numero vuoto dopo normalizzazione")
+        # Per Unipile: formato con + davanti
+        numero_pulito = numero_norm if numero_norm.startswith('+') else '+' + numero_norm
+        # Rimuovi spazi e caratteri non validi eccetto +
+        numero_pulito = '+' + re.sub(r'[^\d]', '', numero_pulito)
+        
+        if len(numero_pulito) < 8:
+            app.logger.error("[WHATSAPP] Numero troppo corto dopo normalizzazione: %s", numero_pulito)
             return jsonify({'error': 'Numero cliente non valido'}), 400
 
-        # Ricava country_code: Italia = 39 se inizia con 39, altrimenti primi 2 numeri
-        country_code = '39' if numero_pulito.startswith('39') else numero_pulito[:2]
+        app.logger.info("[WHATSAPP-UNIPILE] preparing send: phone=%s account=%s msg_len=%d",
+                        numero_pulito, unipile_account_id, len(messaggio or ""))
 
-        app.logger.info("[WHATSAPP] preparing send: phone=%s country=%s whatsapp_client=%s msg_len=%d",
-                        numero_pulito, country_code, whatsapp_client_int, len(messaggio or ""))
+        # Costruisci l'URL per Unipile
+        # DSN format: api15.unipile.com:14552
+        unipile_base_url = f"https://{unipile_dsn}"
+        send_url = f"{unipile_base_url}/api/v1/chats"
+
+        headers = {
+            "X-API-KEY": unipile_token,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+
+        # Payload per Unipile: crea una chat e invia messaggio
+        payload = {
+            "account_id": unipile_account_id,
+            "attendees_ids": [numero_pulito],
+            "text": messaggio
+        }
 
         try:
-            client = WbizToolClient(api_key=api_key, client_id=client_id_int)
-        except Exception as e:
-            app.logger.exception("[WHATSAPP] Errore inizializzazione WbizToolClient")
-            return jsonify({'error': 'Errore inizializzazione client provider'}), 500
+            import requests
+            response = requests.post(send_url, json=payload, headers=headers, timeout=30)
+            app.logger.info("[WHATSAPP-UNIPILE] Response status=%s body=%s", response.status_code, response.text[:500] if response.text else "")
 
-        try:
-            response = client.send_message(
-                phone=numero_pulito,
-                msg=messaggio,
-                msg_type=0,
-                whatsapp_client=whatsapp_client_int,
-                country_code=country_code
-            )
-            app.logger.info("[WHATSAPP] WbizTool send_message returned: %s", repr(response))
-
-            if isinstance(response, dict):
-                if response.get("status") == 1:
-                    return jsonify({'success': True, 'wbiztool_response': response})
-                app.logger.error("[WHATSAPP] send failed, response=%s", repr(response))
-                return jsonify({'error': 'Invio fallito', 'details': response}), 500
-
-            resp_status = getattr(response, 'status_code', None)
-            resp_text = getattr(response, 'text', None) or getattr(response, 'content', None) or repr(response)
-            if resp_status is not None and 200 <= resp_status < 300:
-                return jsonify({'success': True, 'wbiztool_response': {'status_code': resp_status, 'body': resp_text}})
-            app.logger.error("[WHATSAPP] send failed http_status=%s body=%s", resp_status, resp_text)
-            return jsonify({'error': 'Invio fallito', 'http_status': resp_status, 'details': resp_text}), 500
+            if response.status_code in (200, 201, 202):
+                try:
+                    resp_json = response.json()
+                except Exception:
+                    resp_json = {"raw": response.text}
+                return jsonify({'success': True, 'unipile_response': resp_json})
+            else:
+                app.logger.error("[WHATSAPP-UNIPILE] send failed http_status=%s body=%s", response.status_code, response.text)
+                return jsonify({'error': 'Invio fallito', 'http_status': response.status_code, 'details': response.text}), 500
 
         except Exception as exc:
-            app.logger.exception("[WHATSAPP] Exception during client.send_message")
-            resp = getattr(exc, 'response', None)
-            try:
-                if resp is not None:
-                    body = getattr(resp, 'text', None) or getattr(resp, 'content', None)
-                    code = getattr(resp, 'status_code', None)
-                    app.logger.error("[WHATSAPP] HTTP error status=%s body=%s", code, body)
-                    return jsonify({'error': 'Invio fallito', 'http_status': code, 'details': body}), 500
-            except Exception:
-                pass
+            app.logger.exception("[WHATSAPP-UNIPILE] Exception during requests.post")
             return jsonify({'error': str(exc)}), 500
 
     except Exception as e:
