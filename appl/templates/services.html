@@ -643,22 +643,137 @@ function attachEditorToolbarListeners() {
     }
   }
 </script>
+<!-- jsPDF per generazione PDF lato client -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.0/jspdf.plugin.autotable.min.js"></script>
+
 <script>
 function downloadPriceList(format) {
     try {
         const includeDescription = document.getElementById('includeDescription').checked;
-        const url = `/settings/settings/download-listino?format=${format}&include_description=${includeDescription}`;
+        const url = `{{ url_for('settings.download_listino') }}?format=${format}&include_description=${includeDescription}`;
         console.log('Downloading price list:', url);
         
-        // Apri il download in una nuova finestra/tab
-        window.open(url, '_blank');
-        
-        // Alternativa: usa window.location.href per download diretto
-        // window.location.href = url;
+        if (format === 'txt') {
+            // TXT: download diretto
+            window.open(url, '_blank');
+        } else if (format === 'pdf') {
+            // PDF: genera lato client con jsPDF
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    generatePriceListPDF(data, includeDescription);
+                })
+                .catch(err => {
+                    console.error('Errore:', err);
+                    alert('Errore durante la generazione del PDF');
+                });
+        }
     } catch (error) {
         console.error('Error downloading price list:', error);
         alert('Errore durante il download del listino: ' + error.message);
     }
+}
+
+function generatePriceListPDF(data, includeDescription) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 50;
+    
+    // Titolo
+    doc.setFontSize(20);
+    doc.setFont(undefined, 'bold');
+    doc.text(`LISTINO PREZZI`, pageWidth / 2, y, { align: 'center' });
+    y += 20;
+    
+    doc.setFontSize(14);
+    doc.text(data.business_name || 'Centro', pageWidth / 2, y, { align: 'center' });
+    y += 30;
+    
+    // Per ogni categoria
+    for (const cat of data.categories) {
+        // Controlla se serve nuova pagina
+        if (y > 750) {
+            doc.addPage();
+            y = 50;
+        }
+        
+        // Nome categoria
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.setFillColor(240, 240, 240);
+        doc.rect(40, y - 12, pageWidth - 80, 18, 'F');
+        doc.text(cat.name, 45, y);
+        y += 25;
+        
+        for (const subcat of cat.subcategories) {
+            if (y > 750) {
+                doc.addPage();
+                y = 50;
+            }
+            
+            // Nome sottocategoria
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'bold');
+            doc.setTextColor(80, 80, 80);
+            doc.text(subcat.name, 50, y);
+            doc.setTextColor(0, 0, 0);
+            y += 18;
+            
+            // Servizi
+            for (const svc of subcat.services) {
+                if (y > 770) {
+                    doc.addPage();
+                    y = 50;
+                }
+                
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'normal');
+                
+                // Nome servizio + durata
+                let svcText = svc.nome;
+                if (svc.durata) svcText += ` ${svc.durata}`;
+                doc.text(svcText, 60, y);
+                
+                // Prezzo allineato a destra
+                doc.setFont(undefined, 'bold');
+                doc.setTextColor(0, 102, 204);
+                doc.text(svc.prezzo, pageWidth - 60, y, { align: 'right' });
+                doc.setTextColor(0, 0, 0);
+                y += 14;
+                
+                // Descrizione (se presente)
+                if (includeDescription && svc.descrizione) {
+                    doc.setFontSize(9);
+                    doc.setFont(undefined, 'italic');
+                    doc.setTextColor(100, 100, 100);
+                    
+                    // Wrap del testo descrizione
+                    const lines = doc.splitTextToSize(svc.descrizione, pageWidth - 140);
+                    for (const line of lines) {
+                        if (y > 770) {
+                            doc.addPage();
+                            y = 50;
+                        }
+                        doc.text(line, 70, y);
+                        y += 12;
+                    }
+                    doc.setTextColor(0, 0, 0);
+                }
+                
+                y += 4;
+            }
+            y += 8;
+        }
+        y += 10;
+    }
+    
+    // Salva il PDF
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
+    doc.save(`listino_prezzi_${dateStr}.pdf`);
 }
 </script>
 {% endblock %}

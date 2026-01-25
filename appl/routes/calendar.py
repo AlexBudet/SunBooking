@@ -12,6 +12,7 @@ import random
 import json
 import re
 import os
+import html
 from pytz import timezone as pytz_timezone
 from sqlalchemy import func, and_, or_
 from dotenv import load_dotenv
@@ -47,6 +48,9 @@ def append_new_client_marker(note_text):
 def estrai_nome_cognome_cellulare(note):
     nome = cognome = cellulare = email = ""
     if note:
+        # Decodifica le entità HTML prima di processare (es. &#39; -> ')
+        note = html.unescape(note)
+        
         m_nome = re.search(r'Nome:\s*([^,]+)', note, re.IGNORECASE)
         m_cognome = re.search(r'Cognome:\s*([^,]+)', note, re.IGNORECASE)
         m_cell = re.search(r'(Cellulare|Telefono):\s*([^\s,]+(?:\s+[^\s,]+)*)', note, re.IGNORECASE)

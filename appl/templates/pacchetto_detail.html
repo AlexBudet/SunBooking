@@ -3211,6 +3211,7 @@ async function caricaConsenso(input) {
   if (!input.files || !input.files[0]) return;
   
   const file = input.files[0];
+  const MAX_SIZE_MB = 5;  // Limite frontend (pre-compressione backend)
   
   // Validazione client-side
   if (!file.name.toLowerCase().endsWith('.pdf')) {
@@ -3219,11 +3220,28 @@ async function caricaConsenso(input) {
     return;
   }
   
-  if (file.size > 10 * 1024 * 1024) {
-    alert('⚠️ Il file è troppo grande. Massimo 10 MB.');
+  if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+    alert(`⚠️ Il file è troppo grande (${sizeMB} MB).\n\nMassimo consentito: ${MAX_SIZE_MB} MB.\n\nSuggerimenti:\n• Usa un PDF con immagini a risoluzione ridotta\n• Comprimi il PDF prima di caricarlo\n• Scansiona a 150 DPI invece di 300 DPI`);
     input.value = '';
     return;
   }
+  
+  // Mostra overlay di caricamento
+  const overlay = document.createElement('div');
+  overlay.id = 'uploadOverlay';
+  overlay.innerHTML = `
+    <div style="position:fixed; top:0; left:0; right:0; bottom:0; 
+                background:rgba(0,0,0,0.5); z-index:9999; 
+                display:flex; align-items:center; justify-content:center;">
+      <div style="background:white; padding:30px 50px; border-radius:10px; text-align:center; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <div class="spinner-border text-primary" style="width:3rem; height:3rem;" role="status"></div>
+        <p class="mt-3 mb-0" style="font-size:1.1rem;"><strong>Caricamento in corso...</strong></p>
+        <p class="text-muted mb-0" style="font-size:0.9rem;">Attendere prego</p>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
   
   const formData = new FormData();
   formData.append('file', file);
@@ -3240,7 +3258,8 @@ async function caricaConsenso(input) {
     const data = await response.json();
     
     if (data.success) {
-      alert('✅ Consenso caricato con successo!');
+      const sizeInfo = data.size_kb ? ` (${data.size_kb} KB)` : '';
+      alert(`✅ Consenso caricato con successo!${sizeInfo}`);
       consensoCaricato = true;
       aggiornaMenuConsenso(true, data.filename, data.upload_date);
     } else {
@@ -3249,6 +3268,10 @@ async function caricaConsenso(input) {
   } catch (error) {
     console.error('Errore upload:', error);
     alert('❌ Errore di connessione');
+  } finally {
+    // Rimuovi overlay
+    const overlayEl = document.getElementById('uploadOverlay');
+    if (overlayEl) overlayEl.remove();
   }
   
   // Reset input
