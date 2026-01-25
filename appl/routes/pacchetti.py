@@ -15,7 +15,8 @@ import json
 
 # Configurazione sicurezza upload
 ALLOWED_EXTENSIONS = {'pdf'}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_FILE_SIZE = 2 * 1024 * 1024  # 2 MB (ridotto da 10 MB)
+MAX_FILE_SIZE_PRE_COMPRESSION = 5 * 1024 * 1024  # 5 MB pre-compressione
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -24,6 +25,33 @@ def validate_pdf(file_data):
     """Verifica che il file sia effettivamente un PDF (magic bytes)"""
     kind = filetype.guess(file_data)
     return kind is not None and kind.mime == 'application/pdf'
+
+def compress_pdf(file_data):
+    """
+    Tenta di comprimere il PDF usando pikepdf (se disponibile).
+    Ritorna i dati compressi o gli originali se la compressione fallisce.
+    """
+    try:
+        import pikepdf
+        from io import BytesIO
+        
+        input_stream = BytesIO(file_data)
+        output_stream = BytesIO()
+        
+        with pikepdf.Pdf.open(input_stream) as pdf:
+            pdf.save(output_stream, compress_streams=True, object_stream_mode=pikepdf.ObjectStreamMode.generate)
+        
+        compressed = output_stream.getvalue()
+        # Usa compresso solo se effettivamente più piccolo
+        if len(compressed) < len(file_data):
+            return compressed
+        return file_data
+    except ImportError:
+        # pikepdf non installato, ritorna originale
+        return file_data
+    except Exception:
+        # Qualsiasi errore, ritorna originale
+        return file_data
 
 def capitalize_name(name):
     """Normalizza un nome: prima lettera maiuscola, resto minuscolo per ogni parola"""
@@ -1255,6 +1283,8 @@ def get_sedute_disponibili(pacchetto_id):
 @pacchetti_bp.route('/api/pacchetti/<int:id>/consenso', methods=['POST'])
 def upload_consenso(id):
     """Upload del consenso informato firmato (PDF)"""
+    from flask import current_app
+    
     pacchetto = Pacchetto.query.get_or_404(id)
     
     if 'file' not in request.files:
@@ -1270,14 +1300,31 @@ def upload_consenso(id):
     
     # Leggi il contenuto
     file_data = file.read()
+    original_size = len(file_data)
     
-    # Verifica dimensione
-    if len(file_data) > MAX_FILE_SIZE:
-        return jsonify({'success': False, 'error': 'File troppo grande. Max 10 MB.'}), 400
+    # Verifica dimensione PRIMA della compressione
+    if original_size > MAX_FILE_SIZE_PRE_COMPRESSION:
+        size_mb = round(original_size / (1024 * 1024), 1)
+        return jsonify({
+            'success': False, 
+            'error': f'File troppo grande ({size_mb} MB). Massimo 5 MB.'
+        }), 400
     
     # Verifica che sia realmente un PDF (magic bytes)
     if not validate_pdf(file_data):
         return jsonify({'success': False, 'error': 'Il file non è un PDF valido.'}), 400
+    
+    # Comprimi il PDF
+    file_data = compress_pdf(file_data)
+    compressed_size = len(file_data)
+    
+    # Verifica dimensione DOPO compressione
+    if compressed_size > MAX_FILE_SIZE:
+        size_mb = round(compressed_size / (1024 * 1024), 1)
+        return jsonify({
+            'success': False, 
+            'error': f'File troppo grande anche dopo compressione ({size_mb} MB). Riduci la risoluzione delle immagini nel PDF.'
+        }), 400
     
     # Sanitizza il nome file
     filename = secure_filename(file.filename)
@@ -1289,16 +1336,23 @@ def upload_consenso(id):
     
     try:
         db.session.commit()
+        
+        # Log compressione
+        if compressed_size < original_size:
+            savings = round((1 - compressed_size / original_size) * 100)
+            current_app.logger.info(f"Consenso pacchetto {id}: compresso da {original_size} a {compressed_size} bytes (-{savings}%)")
+        
         return jsonify({
             'success': True,
             'message': 'Consenso caricato con successo',
             'filename': filename,
-            'upload_date': pacchetto.consenso_pdf_data.strftime('%d/%m/%Y %H:%M')
+            'upload_date': pacchetto.consenso_pdf_data.strftime('%d/%m/%Y %H:%M'),
+            'size_kb': round(compressed_size / 1024)
         })
     except Exception as e:
         db.session.rollback()
+        current_app.logger.error(f"Errore upload consenso pacchetto {id}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
-
 
 @pacchetti_bp.route('/api/pacchetti/<int:id>/consenso', methods=['GET'])
 def download_consenso(id):

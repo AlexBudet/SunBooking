@@ -1,22 +1,22 @@
 [
   {
-    "nome": "Rosso Natale",
-    "hex": "#D6001C",
-    "descrizione": "Un rosso acceso che riscalda il cuor."
+    "nome": "Blu Notte Chic",
+    "hex": "#0A1A40",
+    "descrizione": "Elegante e intenso, perfetto inverno chic."
   },
   {
-    "nome": "Bordeaux Glam",
-    "hex": "#800020",
-    "descrizione": "Un classico che non passa di moda."
+    "nome": "Verde Salvia Soft",
+    "hex": "#9AAE9D",
+    "descrizione": "Tenue verde neutro, elegante e moderno."
   },
   {
-    "nome": "Verde Abete",
-    "hex": "#2E7D32",
-    "descrizione": "Un richiamo selvaggio ad una natura di charme."
+    "nome": "Latte White",
+    "hex": "#F5F5F5",
+    "descrizione": "Minimal e luminoso, colore dell'anno 2026."
   },
   {
-    "nome": "Golden Glow",
-    "hex": "#ECDE9B",
-    "descrizione": "Dorato con un tocco di magia glitter."
+    "nome": "Grigio Glacé",
+    "hex": "#B4BAC0",
+    "descrizione": "Grigio ghiacciato sofisticato, mood invernale."
   }
 ]

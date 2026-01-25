@@ -453,10 +453,36 @@ def send_to_rch():
         headers = {"Content-Type": "text/xml; charset=UTF-8"}
 
         try:
-            # Timeout più ampio ma non infinito (la stampante può “attendere carta”)
+            # NESSUN TIMEOUT BREVE: lascia che la richiesta resti appesa
+            # finché la stampante non completa (anche dopo cambio carta)
             resp_vendita = requests.post(
-                url, data=payload_vendita.encode("UTF-8"), headers=headers, timeout=30
+                url, data=payload_vendita.encode("UTF-8"), headers=headers, timeout=120
             )
+            current_app.logger.info("RCH risposta: %s", resp_vendita.text[:300] if resp_vendita.text else "(vuoto)")
+        except requests.exceptions.Timeout as exc:
+            # TIMEOUT = stampante in attesa (carta, coperchio aperto, ecc.)
+            current_app.logger.warning("RCH TIMEOUT - stampante in attesa: %s", str(exc))
+            if idempotency_key:
+                expected_total = round(sum(float(v.get("prezzo", 0)) for v in voci_fiscali), 2)
+                RCH_PENDING[idempotency_key] = {
+                    "payload_xml": payload_vendita,
+                    "cliente_id": cliente_id,
+                    "operatore_id": operatore_id,
+                    "voci": voci_fiscali,
+                    "created_ts": pytime.time(),
+                    "expected_total": expected_total,
+                    "giorno": datetime.now().strftime("%Y-%m-%d"),
+                    "line_count": len(voci_fiscali),
+                    "printer_ip": (BusinessInfo.query.first().printer_ip if BusinessInfo.query.first() else None)
+                }
+                return jsonify({
+                    "pending": True,
+                    "reason": "timeout",
+                    "message": "Stampante in attesa (cambio carta?). Risolvere e riprovare.",
+                    "idempotency_key": idempotency_key,
+                    "retry_after": 3
+                }), 202
+            return jsonify({"error": "Stampante in attesa. Controllare carta e riprovare."}), 502
         except Exception as exc:
             current_app.logger.warning("RCH non raggiungibile (network): %s", str(exc))
             if idempotency_key:

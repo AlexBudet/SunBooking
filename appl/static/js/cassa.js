@@ -134,6 +134,21 @@ fetch('/cassa/api/services?frequenti=1')
       });
   });
 
+    // Se ci sono servizi precompilati dal calendar, IGNORA il localStorage
+  // per evitare che si sommino voci vecchie a quelle nuove
+  if (window.SERVIZI_PRECOMPILATI && window.SERVIZI_PRECOMPILATI.length > 0) {
+    localStorage.removeItem('scontrinoServizi');
+    localStorage.removeItem('scontrinoCliente');
+    localStorage.removeItem('scontrinoOperatore');
+  }
+
+  // --- RIPRISTINA SERVIZI DAL LOCALSTORAGE AL CARICAMENTO ---
+  // Solo se NON ci sono servizi precompilati
+  if (!window.SERVIZI_PRECOMPILATI || window.SERVIZI_PRECOMPILATI.length === 0) {
+    let serviziSalvati = JSON.parse(localStorage.getItem('scontrinoServizi') || '[]');
+    serviziSalvati.forEach(servizio => aggiungiRigaServizio(servizio, false));
+  }
+
   // --- RIPRISTINA SERVIZI DAL LOCALSTORAGE AL CARICAMENTO ---
   let serviziSalvati = JSON.parse(localStorage.getItem('scontrinoServizi') || '[]');
   serviziSalvati.forEach(servizio => aggiungiRigaServizio(servizio, false));
@@ -346,6 +361,11 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
 
       // Modal attesa/retry
 function showPendingModal(key) {
+  // Nascondi lo spinner RCH prima di mostrare il modal
+  if (typeof window.hideRchSpinner === 'function') {
+    window.hideRchSpinner();
+  }
+
   if (document.getElementById('rchPendingModal')) return;
 
   const wrap = document.createElement('div');
@@ -358,6 +378,7 @@ function showPendingModal(key) {
   overlay.setAttribute('aria-modal', 'true');
   overlay.style.display = 'block';
   overlay.style.background = 'rgba(0,0,0,0.5)';
+  overlay.style.zIndex = '13000'; 
 
   const dialog = document.createElement('div');
   dialog.className = 'modal-dialog modal-dialog-centered';
@@ -468,33 +489,34 @@ function showPendingModal(key) {
     wrap.remove();
   });
 }
+
       async function fiscaleOkFinalize() {
-    // Non fiscali (grigi) se presenti
-    // Se ci sono voci non fiscali, salva Receipt non fiscale (NON invia a RCH)
-    let nonFiscaleResponse = null;
-    if (voci_non_fiscali.length > 0) {
-      const payloadNonFiscale = {
-        voci: voci_non_fiscali,
-        cliente_id,
-        operatore_id,
-        is_fiscale: false
-      };
-      const res = await fetch('/cassa/send-to-rch', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-        },
-        body: JSON.stringify(payloadNonFiscale)
-      });
-      nonFiscaleResponse = await res.json();
-    }
+        // 1. Nascondi lo spinner se visibile
+        if (typeof window.hideRchSpinner === 'function') {
+          window.hideRchSpinner();
+        }
 
-    showSuccessPopup('Pagamento registrato con successo!', 5000, () => {
-      window.location.href = '/cassa';
-    });
+        // 2. Se ci sono voci non fiscali (grigi), salva Receipt non fiscale
+        let nonFiscaleResponse = null;
+        if (voci_non_fiscali.length > 0) {
+          const payloadNonFiscale = {
+            voci: voci_non_fiscali,
+            cliente_id,
+            operatore_id,
+            is_fiscale: false
+          };
+          const res = await fetch('/cassa/send-to-rch', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+            },
+            body: JSON.stringify(payloadNonFiscale)
+          });
+          nonFiscaleResponse = await res.json();
+        }
 
-        // Aggiorna stati appuntamenti
+        // 3. Aggiorna stati appuntamenti
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
         const updatePromises = [];
         document.querySelectorAll('.scontrino-row').forEach(row => {
@@ -527,10 +549,28 @@ function showPendingModal(key) {
           });
         }
         await Promise.allSettled(updatePromises);
+
+        // 4. Pulisci gli ID originali
         if (window.originalAppointmentIds && typeof window.originalAppointmentIds.clear === 'function') {
           window.originalAppointmentIds.clear();
         }
+
+        // 5. Svuota lo pseudoscontrino (DOM + localStorage) PRIMA del popup
         resetScontrino(true);
+
+        // 6. Mostra popup successo e poi redirect (UNICO showSuccessPopup)
+        showSuccessPopup('Scontrino stampato con successo!', 3000, () => {
+          if (nonFiscaleResponse && nonFiscaleResponse.redirect_to_pacchetto) {
+            const url = `/pacchetti/detail/${nonFiscaleResponse.redirect_to_pacchetto}`;
+            if (nonFiscaleResponse.rata_importo_modificato) {
+              window.location.href = url + '?ricalcola_rate=1';
+            } else {
+              window.location.href = url;
+            }
+          } else {
+            window.location.href = '/cassa';
+          }
+        });
       }
 
       try {
@@ -545,11 +585,6 @@ function showPendingModal(key) {
         let data = null;
         try { data = await res.json(); } catch { data = null; }
 
-        if (res.status === 202 && data && data.pending) {
-          // Attesa stampante: mostra modal e interrompi flusso
-          showPendingModal(idempotencyKey);
-          return;
-        }
         if (!res.ok) {
           alert((data && data.error) || 'Errore durante la stampa fiscale!');
           return;

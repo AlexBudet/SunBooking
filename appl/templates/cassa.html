@@ -171,7 +171,13 @@
 
 <!-- Overlay spinner per attesa RCH (stile coerente con Report: spinner-border) -->
 <div id="rchSpinnerOverlay" aria-hidden="true" style="display:none; position:fixed; inset:0; background:rgba(255,255,255,0.65); z-index:12480; align-items:center; justify-content:center;">
-  <div class="spinner-border text-primary" role="status" aria-label="Attendere..."></div>
+  <div style="text-align:center;">
+    <div class="spinner-border text-primary" role="status" aria-label="Attendere..."></div>
+    <p style="margin-top:15px; font-size:16px; font-weight:500; color:#333;">
+      Stampa in corso...<br>
+      <small style="color:#666;">Se la stampante è in attesa (es. cambio carta), risolvere e attendere</small>
+    </p>
+  </div>
 </div>
 
 <style>
@@ -1023,6 +1029,34 @@ document.addEventListener('DOMContentLoaded', function () {
       }).observe(document.getElementById('mySpiaList') || document.body, { childList: true, subtree: true });
     }
   } catch (_) {}
+});
+</script>
+<script>
+// Svuota lo pseudoscontrino quando si esce dalla pagina cassa
+// (navigazione verso altre sezioni)
+window.addEventListener('beforeunload', function() {
+  // Rimuovi i dati dello pseudoscontrino dal localStorage
+  localStorage.removeItem('scontrinoServizi');
+  localStorage.removeItem('scontrinoCliente');
+  localStorage.removeItem('scontrinoOperatore');
+});
+
+// Alternativa più robusta: svuota quando si clicca su link esterni a cassa
+document.addEventListener('click', function(e) {
+  const link = e.target.closest('a');
+  if (!link) return;
+  
+  const href = link.getAttribute('href') || '';
+  // Se il link porta fuori da /cassa (ma non è un anchor o javascript)
+  if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+    const isCassaLink = href.includes('/cassa') || href === '';
+    if (!isCassaLink) {
+      // Svuota lo pseudoscontrino
+      localStorage.removeItem('scontrinoServizi');
+      localStorage.removeItem('scontrinoCliente');
+      localStorage.removeItem('scontrinoOperatore');
+    }
+  }
 });
 </script>
 <style>

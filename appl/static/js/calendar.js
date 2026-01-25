@@ -202,6 +202,37 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribut
 })();
 // === FINE GESTIONE SEDUTA DA PACCHETTO ===
 
+// === FUNZIONE HELPER: CONTROLLO DATA PASSATA CON WARNING ===
+/**
+ * Verifica se la data fornita è precedente alla data corrente.
+ * Se sì, mostra un confirm e restituisce una Promise che risolve a true se l'utente conferma.
+ * @param {string} dateStr - Data in formato YYYY-MM-DD
+ * @returns {Promise<boolean>} - true se si può procedere, false se annullato
+ */
+function isPastDateWithWarning(dateStr) {
+  return new Promise((resolve) => {
+    if (!dateStr) {
+      resolve(true);
+      return;
+    }
+    
+    // Normalizza la data a mezzanotte locale
+    const targetDate = new Date(dateStr + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (targetDate < today) {
+      const confirmed = confirm(
+        "Attenzione! Stai inserendo un appuntamento in una data precedente alla data corrente!\n\nSei sicuro di voler continuare?"
+      );
+      resolve(confirmed);
+    } else {
+      resolve(true);
+    }
+  });
+}
+window.isPastDateWithWarning = isPastDateWithWarning;
+
 // === BLOCCO: LOCK CLICK ESTERNI MODAL CREAZIONE APPUNTAMENTO ===
 function enableCreateApptModalLock(modalEl) {
   if (!modalEl || modalEl._createApptLockActive) return;
@@ -2363,7 +2394,7 @@ function chiediInvioWhatsappAuto() {
 }
 
 document.querySelectorAll('.selectable-cell').forEach(cell => {
-  cell.addEventListener('click', function(e) {
+  cell.addEventListener('click', async function(e) {
 
     // BLOCCO: se la cella è chiusa non fare nulla
     if (cell.classList.contains('calendar-closed')) {
@@ -2382,6 +2413,13 @@ document.querySelectorAll('.selectable-cell').forEach(cell => {
     if (window.pseudoBlocks && Array.isArray(window.pseudoBlocks) && window.pseudoBlocks.length > 0) {
       e.stopImmediatePropagation();
       e.preventDefault();
+      return;
+    }
+
+      // === CONTROLLO DATA PASSATA ===
+    const cellDate = cell.getAttribute('data-date') || selectedDate;
+    const canProceed = await isPastDateWithWarning(cellDate);
+    if (!canProceed) {
       return;
     }
 
@@ -2794,6 +2832,15 @@ document.addEventListener('mouseup', async function(e) {
   // Se la cella non è valida o è chiusa, annulla il drop
   if (!newCell || newCell.classList.contains('calendar-closed')) {
       revertToOldPosition(customDraggedBlock);
+      customDraggedBlock = null;
+      return;
+  }
+
+  // === CONTROLLO DATA PASSATA ===
+  const dropDate = newCell.getAttribute('data-date') || selectedDate;
+  const canProceed = await isPastDateWithWarning(dropDate);
+  if (!canProceed) {
+      await revertToOldPosition(customDraggedBlock);
       customDraggedBlock = null;
       return;
   }
@@ -5688,6 +5735,13 @@ function chiediInvioWhatsappNavigator() {
        // Disabilita subito gli highlight quando si piazzano pseudoblocchi
        if (typeof clearCalendarHighlights === 'function') clearCalendarHighlights();
 
+        // === CONTROLLO DATA PASSATA ===
+        const navCellDate = cell.getAttribute('data-date') || window.selectedAppointmentDate || new Date().toISOString().slice(0,10);
+        const canProceedNav = await isPastDateWithWarning(navCellDate);
+        if (!canProceedNav) {
+            return;
+        }
+
         // Controllo specifico per cliente mancante
         if (window.pseudoBlocks.some(blk => !blk.clientId)) {
             alert("Seleziona o aggiungi un cliente!");
@@ -5967,6 +6021,13 @@ if (blk.pacchettoSedutaId) {
 // ✅ Redirect DOPO aver atteso il fetch
 window.location.href = `${basePath}pacchetti/detail/${blk.pacchettoId}`;
 return;
+} else {
+    // Nessun pacchetto: ricarica la pagina per visualizzare l'appuntamento creato
+    // (sia per COPIA che per TAGLIA: dopo il popup WhatsApp serve un reload 
+    //  per aggiornare il calendario e rimuovere l'highlight dalla cella sorgente)
+    setTimeout(() => {
+        location.reload();
+    }, 100);
 }
 
   }).catch(err => {
@@ -9860,16 +9921,27 @@ function loadWebAppointments(date, search) {
               btn.dataset.appointmentIds = session.ids.join(',');
             }
             if (matchClienteId) btn.dataset.matchClienteId = String(matchClienteId);
-            btn.dataset.clientNome = (session.nome || '');
-            btn.dataset.clientCognome = (session.cognome || '');
-            btn.dataset.clientCellulare = (session.cellulare || '');
             
-            // Usa email estratta dal backend
-            btn.dataset.clientEmail = (session.email || '');
+            // Decodifica HTML entities (es. &#39; → ')
+            const decodeHtml = (s) => {
+              const t = document.createElement('textarea');
+              t.innerHTML = String(s || '');
+              return t.value;
+            };
+            
+            // Decodifica nome, cognome e cellulare del cliente prenotato
+            btn.dataset.clientNome = decodeHtml(session.nome || '');
+            btn.dataset.clientCognome = decodeHtml(session.cognome || '');
+            btn.dataset.clientCellulare = decodeHtml(session.cellulare || '');
+            
+            // Usa email estratta dal backend (decodificata)
+            btn.dataset.clientEmail = decodeHtml(session.email || '');
                       
             // Salva dati cliente matchato per confronto (solo se phone_only)
             if (matchType === 'phone_only' && session.match_cliente) {
-              const matchNameParts = matchParts[0]?.split(' ') || [];
+              const matchClienteDecoded = decodeHtml(session.match_cliente);
+              const matchParts = matchClienteDecoded.split(' - ');
+              const matchNameParts = (matchParts[0] || '').split(' ');
               btn.dataset.matchNome = matchNameParts[0] || '';
               btn.dataset.matchCognome = matchNameParts.slice(1).join(' ') || '';
               btn.dataset.matchCellulare = matchParts[1] || '';
@@ -10888,7 +10960,7 @@ function showNoMatchForm(bookingData, similarClient, appointmentId) {
   if (btnAssocia) {
     btnAssocia.addEventListener('click', async function() {
       const clientId = this.dataset.clientId;
-      await associaClienteBooking(appointmentId, clientId);
+      await associaClienteBooking(appointmentId, clientId, bookingData, similarClient);
       
       // Nascondi form e ricarica tabella
       formContainer.style.display = 'none';
@@ -10916,7 +10988,7 @@ function showNoMatchForm(bookingData, similarClient, appointmentId) {
 }
 
 // Helper: associa cliente esistente
-async function associaClienteBooking(appointmentId, clientId) {
+async function associaClienteBooking(appointmentId, clientId, bookingData, similarClient) {
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
   
   try {
@@ -10935,6 +11007,45 @@ async function associaClienteBooking(appointmentId, clientId) {
     const result = await response.json();
     if (result.success) {
       alert('Cliente associato con successo!');
+      
+      // Flusso WhatsApp dopo associazione
+      try {
+        const clientName = similarClient 
+          ? `${similarClient.nome || ''} ${similarClient.cognome || ''}`.trim()
+          : `${bookingData?.nome || ''} ${bookingData?.cognome || ''}`.trim();
+        
+        const whatsappData = {
+          client_id: clientId,
+          client_name: clientName,
+          data: result.appointment_date || result.date || bookingData?.data || '',
+          ora: result.start_time || bookingData?.ora || '',
+          appointment_id: appointmentId
+        };
+        
+        if (typeof chiediInvioWhatsappAuto === 'function' && typeof inviaWhatsappAutoSeRichiesto === 'function') {
+          let sendResult = false;
+          try { sendResult = await chiediInvioWhatsappAuto(); } catch { sendResult = false; }
+          if (sendResult === true) {
+            await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
+            alert('Messaggio WhatsApp inviato!');
+          } else if (sendResult !== 'back' && typeof chiediInvioWhatsappNavigator === 'function') {
+            const navSend = await chiediInvioWhatsappNavigator();
+            if (navSend === true) {
+              await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
+              alert('Messaggio WhatsApp inviato!');
+            }
+          }
+        } else if (typeof chiediInvioWhatsappNavigator === 'function' && typeof inviaWhatsappAutoSeRichiesto === 'function') {
+          const navSend = await chiediInvioWhatsappNavigator();
+          if (navSend === true) {
+            await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
+            alert('Messaggio WhatsApp inviato!');
+          }
+        }
+      } catch (whErr) {
+        console.warn('Errore flusso WhatsApp dopo associazione cliente:', whErr);
+      }
+      
     } else {
       alert('Errore: ' + (result.error || 'Associazione fallita'));
     }
