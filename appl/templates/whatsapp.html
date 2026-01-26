@@ -57,8 +57,6 @@
   .then(resp => resp.ok ? resp.json() : Promise.reject(resp))
   .then(json => {
     console.log('whatsapp_modal_disable saved:', json);
-    try { window._whatsappModalDisabledCache = null; } catch (e) {}
-    try { if (typeof _whatsappModalDisabledCache !== 'undefined') _whatsappModalDisabledCache = null; } catch(e){}
   })
   .catch(err => {
     console.error('Errore salvataggio impostazione WhatsApp', err);
