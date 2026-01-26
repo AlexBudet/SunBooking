@@ -2261,24 +2261,18 @@ function fetchWhatsappModalDisabled() {
   }
 
   const endpoint = window.apiWhatsappSettingUrl || '/settings/api/settings/whatsapp';
-  if (window._whatsappModalDisabledCache !== null) {
-    return Promise.resolve(window._whatsappModalDisabledCache);
-  }
   return fetch(endpoint, { method: 'GET', credentials: 'same-origin' })
     .then(resp => {
       if (!resp.ok) {
-        window._whatsappModalDisabledCache = false;
         return false;
       }
       return resp.json();
     })
     .then(json => {
       const disabled = !!(json && json.whatsapp_modal_disable);
-      window._whatsappModalDisabledCache = disabled;
       return disabled;
     })
     .catch(() => {
-      window._whatsappModalDisabledCache = false;
       return false;
     });
 }
