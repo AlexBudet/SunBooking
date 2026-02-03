@@ -1378,8 +1378,53 @@ def api_whatsapp_status():
                     business_info.unipile_account_id = None
                     db.session.commit()
         
-        # NON cercare tra tutti gli account Unipile (causa contaminazione multi-tenant)
-        # Se non c'è account_id nel DB, il tenant deve connettersi tramite QR code
+        
+        # Se siamo in polling (durante scansione QR), cerca account creati di recente
+        is_polling = request.args.get('polling', '').lower() == 'true'
+        if is_polling:
+            try:
+                list_url = f"{unipile_base_url}/api/v1/accounts"
+                list_resp = requests.get(list_url, headers=headers, timeout=15)
+                current_app.logger.info("[WHATSAPP-STATUS] Polling: ricerca nuovi account, status=%s", list_resp.status_code)
+                
+                if list_resp.status_code == 200:
+                    accounts_data = list_resp.json()
+                    items = accounts_data.get('items', [])
+                    
+                    from datetime import timezone
+                    now = datetime.now(timezone.utc)
+                    
+                    for acc in items:
+                        acc_type = acc.get('type', '').upper()
+                        if acc_type != 'WHATSAPP':
+                            continue
+                        
+                        created_at_str = acc.get('created_at', '')
+                        if created_at_str:
+                            try:
+                                created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                                age_seconds = (now - created_at).total_seconds()
+                                
+                                if age_seconds < 300:
+                                    acc_id = acc.get('id')
+                                    sources = acc.get('sources', [])
+                                    status = sources[0].get('status', '').upper() if sources else ''
+                                    
+                                    current_app.logger.info("[WHATSAPP-STATUS] Trovato account recente %s, status=%s, age=%ds", acc_id, status, int(age_seconds))
+                                    
+                                    if status in ('OK', 'CONNECTED', 'ACTIVE', 'READY'):
+                                        if business_info:
+                                            business_info.unipile_account_id = acc_id
+                                            db.session.commit()
+                                            current_app.logger.info("[WHATSAPP-STATUS] Salvato nuovo account %s nel DB", acc_id)
+                                        
+                                        result = _parse_account_status(acc, acc_id)
+                                        return jsonify(result)
+                            except Exception as parse_err:
+                                current_app.logger.warning("[WHATSAPP-STATUS] Errore parsing created_at: %s", parse_err)
+            except Exception as list_err:
+                current_app.logger.warning("[WHATSAPP-STATUS] Errore ricerca nuovo account: %s", list_err)
+        
         return jsonify({
             'status': 'not_connected',
             'connected': False,
