@@ -1326,6 +1326,315 @@ def whatsapp():
         saved_auto=saved_auto
     )
 
+@settings_bp.route('/api/whatsapp/status', methods=['GET'])
+def api_whatsapp_status():
+    """
+    Controlla lo stato della connessione WhatsApp per il tenant corrente.
+    Usa l'account_id salvato in DB, con fallback su .env per retrocompatibilità.
+    """
+    unipile_dsn = os.getenv("UNIPILE_DSN")
+    unipile_token = os.getenv("UNIPILE_ACCESS_TOKEN")
+    
+    # Leggi account_id SOLO da DB (no fallback su .env per evitare conflitti multi-tenant)
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    unipile_account_id = None
+    if business_info and business_info.unipile_account_id:
+        unipile_account_id = business_info.unipile_account_id
+    
+    current_app.logger.info("[WHATSAPP-STATUS] DSN=%s, AccountID=%s (from DB: %s)", 
+                            unipile_dsn, unipile_account_id, 
+                            bool(business_info and business_info.unipile_account_id))
+    
+    if not unipile_dsn or not unipile_token:
+        return jsonify({
+            'status': 'not_configured', 
+            'connected': False,
+            'error': 'Configurazione Unipile mancante'
+        }), 200
+
+    unipile_base_url = f"https://{unipile_dsn}"
+    headers = {
+        "X-API-KEY": unipile_token,
+        "accept": "application/json"
+    }
+    
+    try:
+        # Se abbiamo un account_id, proviamo con quello
+        if unipile_account_id:
+            status_url = f"{unipile_base_url}/api/v1/accounts/{unipile_account_id}"
+            r = requests.get(status_url, headers=headers, timeout=15)
+            current_app.logger.info("[WHATSAPP-STATUS] GET %s -> %s", status_url, r.status_code)
+            
+            if r.status_code == 200:
+                data = r.json()
+                result = _parse_account_status(data, unipile_account_id)
+                if result['connected']:
+                    return jsonify(result)
+                    
+            elif r.status_code == 404:
+                # Account non esiste più, rimuovilo dal DB
+                if business_info and business_info.unipile_account_id:
+                    current_app.logger.info("[WHATSAPP-STATUS] Account %s non esiste più, rimuovo da DB", unipile_account_id)
+                    business_info.unipile_account_id = None
+                    db.session.commit()
+        
+        # Non cercare tra tutti gli account (evita conflitti multi-tenant)
+        # Se non c'è account_id nel DB, significa che non è stato ancora connesso
+        return jsonify({
+            'status': 'not_connected',
+            'connected': False,
+            'message': 'Nessun account WhatsApp configurato per questo tenant'
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.exception("[WHATSAPP-STATUS] Exception")
+        return jsonify({
+            'status': 'error',
+            'connected': False,
+            'error': str(e)
+        }), 200
+
+
+def _parse_account_status(data, account_id):
+    """Helper per parsare lo stato di un account Unipile."""
+    sources = data.get('sources', [])
+    connection_status = 'unknown'
+    if sources and len(sources) > 0:
+        connection_status = sources[0].get('status', 'unknown')
+    
+    phone = data.get('name') or data.get('identifier') or ''
+    
+    if phone and phone.isdigit() and len(phone) > 10:
+        phone_display = f"+{phone[:2]} {phone[2:5]} {phone[5:8]} {phone[8:]}"
+    else:
+        phone_display = phone
+    
+    is_connected = connection_status.upper() in ('OK', 'CONNECTED', 'ACTIVE', 'READY')
+    
+    return {
+        'status': connection_status,
+        'connected': is_connected,
+        'phone': phone_display,
+        'phone_raw': phone,
+        'account_id': account_id,
+        'provider': data.get('type', 'WHATSAPP'),
+        'created_at': data.get('created_at')
+    }
+
+
+@settings_bp.route('/api/whatsapp/connect', methods=['POST'])
+def api_whatsapp_connect():
+    """
+    Genera il link hosted Unipile per connettere/riconnettere WhatsApp.
+    """
+    unipile_dsn = os.getenv("UNIPILE_DSN")
+    unipile_token = os.getenv("UNIPILE_ACCESS_TOKEN")
+    
+    # Leggi account_id da DB
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    unipile_account_id = None
+    if business_info and business_info.unipile_account_id:
+        unipile_account_id = business_info.unipile_account_id
+    
+    current_app.logger.info("[WHATSAPP-CONNECT] DSN=%s, AccountID=%s", unipile_dsn, unipile_account_id)
+    
+    if not unipile_dsn or not unipile_token:
+        return jsonify({'error': 'Configurazione Unipile mancante'}), 500
+
+    unipile_base_url = f"https://{unipile_dsn}"
+    headers = {
+        "X-API-KEY": unipile_token,
+        "accept": "application/json",
+        "content-type": "application/json"
+    }
+
+    try:
+        account_exists = False
+        account_connected = False
+        
+        # Se abbiamo un account_id, verifica se esiste ancora
+        if unipile_account_id:
+            status_url = f"{unipile_base_url}/api/v1/accounts/{unipile_account_id}"
+            status_resp = requests.get(status_url, headers=headers, timeout=15)
+            current_app.logger.info("[WHATSAPP-CONNECT] Check account %s: status=%s", unipile_account_id, status_resp.status_code)
+            
+            if status_resp.status_code == 200:
+                account_exists = True
+                data = status_resp.json()
+                sources = data.get('sources', [])
+                if sources and sources[0].get('status', '').upper() == 'OK':
+                    account_connected = True
+                    phone = data.get('name', '')
+                    if phone and phone.isdigit() and len(phone) > 10:
+                        phone = f"+{phone[:2]} {phone[2:5]} {phone[5:8]} {phone[8:]}"
+                    return jsonify({
+                        'already_connected': True,
+                        'status': 'OK',
+                        'phone': phone,
+                        'account_id': unipile_account_id
+                    })
+            elif status_resp.status_code == 404:
+                account_exists = False
+                # Rimuovi ID non valido dal DB
+                if business_info:
+                    business_info.unipile_account_id = None
+                    db.session.commit()
+                current_app.logger.info("[WHATSAPP-CONNECT] Account %s non esiste più, rimosso da DB", unipile_account_id)
+        
+        # Genera hosted link
+        connect_url = f"{unipile_base_url}/api/v1/hosted/accounts/link"
+        
+        from datetime import timezone
+        expires_dt = datetime.now(timezone.utc) + timedelta(hours=1)
+        expires_on = expires_dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        
+        if account_exists and not account_connected:
+            payload = {
+                "type": "reconnect",
+                "reconnect_account": unipile_account_id,
+                "api_url": unipile_base_url,
+                "expiresOn": expires_on
+            }
+            current_app.logger.info("[WHATSAPP-CONNECT] Usando RECONNECT")
+        else:
+            payload = {
+                "type": "create",
+                "providers": ["WHATSAPP"],
+                "api_url": unipile_base_url,
+                "expiresOn": expires_on
+            }
+            current_app.logger.info("[WHATSAPP-CONNECT] Usando CREATE")
+        
+        current_app.logger.info("[WHATSAPP-CONNECT] POST %s payload=%s", connect_url, payload)
+        resp = requests.post(connect_url, headers=headers, json=payload, timeout=30)
+        current_app.logger.info("[WHATSAPP-CONNECT] Response: %s %s", resp.status_code, resp.text[:500] if resp.text else "")
+        
+        if resp.status_code in (200, 201):
+            data = resp.json()
+            current_app.logger.info("[WHATSAPP-CONNECT] Response keys: %s", list(data.keys()))
+            
+            # Cerca l'URL in vari campi possibili
+            hosted_url = None
+            for key in ['url', 'hosted_link_url', 'link', 'hosted_auth_link_url']:
+                if data.get(key):
+                    hosted_url = data[key]
+                    break
+            
+            if not hosted_url and isinstance(data.get('object'), dict):
+                hosted_url = data['object'].get('url')
+            
+            # Cerca qualsiasi campo che contenga un URL Unipile
+            if not hosted_url:
+                for key, value in data.items():
+                    if isinstance(value, str) and 'unipile.com' in value:
+                        hosted_url = value
+                        break
+            
+            if hosted_url:
+                return jsonify({
+                    'hosted_url': hosted_url,
+                    'expires': data.get('expiresOn'),
+                    'is_new_account': not account_exists
+                })
+            else:
+                return jsonify({
+                    'error': 'URL non trovato nella risposta',
+                    'raw': data
+                }), 500
+        else:
+            return jsonify({
+                'error': f'Errore Unipile: {resp.status_code}', 
+                'detail': resp.text
+            }), 500
+            
+    except Exception as e:
+        current_app.logger.exception("[WHATSAPP-CONNECT] Exception")
+        return jsonify({'error': 'Eccezione interna', 'detail': str(e)}), 500
+
+
+@settings_bp.route('/api/whatsapp/disconnect', methods=['POST'])
+def api_whatsapp_disconnect():
+    """
+    Disconnette l'account WhatsApp corrente da Unipile.
+    """
+    unipile_dsn = os.getenv("UNIPILE_DSN")
+    unipile_token = os.getenv("UNIPILE_ACCESS_TOKEN")
+    
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    unipile_account_id = business_info.unipile_account_id if business_info else None
+    
+    current_app.logger.info("[WHATSAPP-DISCONNECT] DSN=%s, AccountID=%s", unipile_dsn, unipile_account_id)
+    
+    if not unipile_dsn or not unipile_token:
+        return jsonify({"error": "Configurazione Unipile mancante"}), 400
+
+    if not unipile_account_id:
+        return jsonify({"error": "Nessun account WhatsApp configurato"}), 400
+
+    unipile_base_url = f"https://{unipile_dsn}"
+    headers = {
+        "X-API-KEY": unipile_token,
+        "accept": "application/json"
+    }
+
+    try:
+        url = f"{unipile_base_url}/api/v1/accounts/{unipile_account_id}"
+        current_app.logger.info("[WHATSAPP-DISCONNECT] DELETE %s", url)
+        
+        resp = requests.delete(url, headers=headers, timeout=30)
+        current_app.logger.info("[WHATSAPP-DISCONNECT] Response: %s - %s", resp.status_code, resp.text[:500] if resp.text else "")
+        
+        if resp.status_code in (200, 204, 404):
+            # Rimuovi account_id dal DB
+            if business_info:
+                business_info.unipile_account_id = None
+                db.session.commit()
+                current_app.logger.info("[WHATSAPP-DISCONNECT] Rimosso account_id dal DB")
+            
+            return jsonify({"success": True, "message": "Account WhatsApp disconnesso"})
+        else:
+            return jsonify({
+                "error": "Errore durante la disconnessione",
+                "status_code": resp.status_code,
+                "detail": resp.text[:200] if resp.text else None
+            }), resp.status_code
+            
+    except Exception as e:
+        current_app.logger.exception("[WHATSAPP-DISCONNECT] Errore: %s", e)
+        return jsonify({"error": str(e)}), 500
+    
+@settings_bp.route('/api/whatsapp/save_account', methods=['POST'])
+def api_whatsapp_save_account():
+    """
+    Salva l'account_id Unipile nel database dopo una connessione riuscita.
+    Chiamato dal frontend dopo che il polling rileva status=OK.
+    """
+    data = request.get_json(silent=True) or {}
+    account_id = data.get('account_id')
+    
+    if not account_id:
+        return jsonify({"error": "account_id mancante"}), 400
+    
+    try:
+        business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+        if not business_info:
+            business_info = BusinessInfo(
+                business_name="",
+                opening_time=datetime.strptime("08:00", "%H:%M").time(),
+                closing_time=datetime.strptime("20:00", "%H:%M").time()
+            )
+            db.session.add(business_info)
+        
+        business_info.unipile_account_id = account_id
+        db.session.commit()
+        
+        current_app.logger.info("[WHATSAPP-SAVE] Salvato account_id=%s nel DB", account_id)
+        return jsonify({"success": True, "account_id": account_id})
+        
+    except Exception as e:
+        current_app.logger.exception("[WHATSAPP-SAVE] Errore: %s", e)
+        return jsonify({"error": str(e)}), 500
+
 #================= ACCOUNT ====================
 @settings_bp.route('/landing', methods=['GET', 'POST'])
 def settings_landing():

@@ -48,7 +48,6 @@ def unipile_creds_for(idx: int):
     s = str(idx)
     return {
         "UNIPILE_DSN": os.getenv(f"UNIPILE_DSN{s}") or os.getenv("UNIPILE_DSN") or "",
-        "UNIPILE_ACCOUNT_ID": os.getenv(f"UNIPILE_ACCOUNT_ID{s}") or os.getenv("UNIPILE_ACCOUNT_ID") or "",
         "UNIPILE_ACCESS_TOKEN": os.getenv(f"UNIPILE_ACCESS_TOKEN{s}") or os.getenv("UNIPILE_ACCESS_TOKEN") or "",
     }
 
