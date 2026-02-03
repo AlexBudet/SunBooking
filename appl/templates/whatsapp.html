@@ -514,7 +514,10 @@
   }
   
   function checkStatus(duringPolling) {
-    return fetch('{{ url_for("settings.api_whatsapp_status") }}', { credentials: 'same-origin' })
+    const statusUrl = duringPolling 
+      ? '{{ url_for("settings.api_whatsapp_status") }}?polling=true'
+      : '{{ url_for("settings.api_whatsapp_status") }}';
+    return fetch(statusUrl, { credentials: 'same-origin' })
       .then(r => r.json())
       .then(data => {
         console.log('[WhatsApp Status]', data, 'polling:', duringPolling);
