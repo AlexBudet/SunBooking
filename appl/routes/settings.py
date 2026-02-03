@@ -1378,38 +1378,8 @@ def api_whatsapp_status():
                     business_info.unipile_account_id = None
                     db.session.commit()
         
-        # Se non abbiamo account_id nel DB, cerca tra gli account Unipile
-        # e salva il primo trovato connesso (per recuperare connessioni già fatte)
-        try:
-            list_url = f"{unipile_base_url}/api/v1/accounts"
-            list_resp = requests.get(list_url, headers=headers, timeout=15)
-            current_app.logger.info("[WHATSAPP-STATUS] List accounts: %s", list_resp.status_code)
-            
-            if list_resp.status_code == 200:
-                accounts_data = list_resp.json()
-                items = accounts_data.get('items', [])
-                
-                for acc in items:
-                    acc_type = acc.get('type', '').upper()
-                    if acc_type != 'WHATSAPP':
-                        continue
-                    
-                    acc_id = acc.get('id')
-                    sources = acc.get('sources', [])
-                    status = sources[0].get('status', '').upper() if sources else ''
-                    
-                    if status in ('OK', 'CONNECTED', 'ACTIVE', 'READY'):
-                        # Trovato account connesso, salvalo nel DB
-                        if business_info:
-                            business_info.unipile_account_id = acc_id
-                            db.session.commit()
-                            current_app.logger.info("[WHATSAPP-STATUS] Trovato account connesso %s, salvato in DB", acc_id)
-                        
-                        result = _parse_account_status(acc, acc_id)
-                        return jsonify(result)
-        except Exception as list_err:
-            current_app.logger.warning("[WHATSAPP-STATUS] Errore lista account: %s", list_err)
-        
+        # NON cercare tra tutti gli account Unipile (causa contaminazione multi-tenant)
+        # Se non c'è account_id nel DB, il tenant deve connettersi tramite QR code
         return jsonify({
             'status': 'not_connected',
             'connected': False,
