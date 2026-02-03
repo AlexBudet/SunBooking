@@ -1394,6 +1394,19 @@ def api_whatsapp_status():
             'error': str(e)
         }), 200
 
+@settings_bp.route('/api/whatsapp/db_status', methods=['GET'])
+def api_whatsapp_db_status():
+    """
+    Ritorna lo stato dell'account_id salvato nel DB (senza chiamare Unipile).
+    Usato per sincronizzazione tra istanze webapp/on-premise.
+    """
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    account_id = business_info.unipile_account_id if business_info else None
+    
+    return jsonify({
+        'has_account': bool(account_id),
+        'account_id': account_id
+    })
 
 def _parse_account_status(data, account_id):
     """Helper per parsare lo stato di un account Unipile."""

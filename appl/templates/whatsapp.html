@@ -576,6 +576,44 @@
     }
   }
   
+  // Polling sul DB per sincronizzazione tra istanze (webapp/on-premise)
+  let dbSyncInterval = null;
+  let lastKnownAccountId = null;
+  
+  function startDbSync() {
+    // Controlla ogni 10 secondi se l'account_id nel DB è cambiato
+    dbSyncInterval = setInterval(() => {
+      if (isShowingIframe) return; // Non interferire durante connessione
+      
+      fetch('{{ url_for("settings.api_whatsapp_db_status") }}', { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => {
+          const currentAccountId = data.account_id || null;
+          
+          // Se l'account_id è cambiato, ricarica lo stato
+          if (currentAccountId !== lastKnownAccountId) {
+            console.log('[WhatsApp Sync] Account cambiato:', lastKnownAccountId, '->', currentAccountId);
+            lastKnownAccountId = currentAccountId;
+            
+            // Ricarica lo stato completo da Unipile
+            checkStatus(false).then(connected => {
+              if (!connected && !isShowingIframe) {
+                showNotConnected();
+              }
+            });
+          }
+        })
+        .catch(err => console.error('[WhatsApp Sync] Errore:', err));
+    }, 10000); // Ogni 10 secondi
+  }
+  
+  function stopDbSync() {
+    if (dbSyncInterval) {
+      clearInterval(dbSyncInterval);
+      dbSyncInterval = null;
+    }
+  }
+  
   async function requestConnect() {
     const token = document.querySelector('input[name="csrf_token"]')?.value || '';
     try {
@@ -661,7 +699,17 @@
   // Check status on page load
   checkStatus(false).then(connected => {
     if (!connected) showNotConnected();
+    // Salva l'account_id iniziale e avvia sync
+    fetch('{{ url_for("settings.api_whatsapp_db_status") }}', { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => {
+        lastKnownAccountId = data.account_id || null;
+        startDbSync();
+      });
   });
+  
+  // Ferma sync quando l'utente lascia la pagina
+  window.addEventListener('beforeunload', stopDbSync);
 })();
 </script>
 
