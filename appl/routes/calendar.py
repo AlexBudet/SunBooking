@@ -2219,8 +2219,11 @@ def send_whatsapp_auto():
     try:
         # ===== UNIPILE INTEGRATION =====
         unipile_dsn = os.getenv("UNIPILE_DSN")
-        unipile_account_id = os.getenv("UNIPILE_ACCOUNT_ID")
         unipile_token = os.getenv("UNIPILE_ACCESS_TOKEN")
+        
+        # Leggi account_id SOLO da DB (isolamento multi-tenant)
+        business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+        unipile_account_id = business_info.unipile_account_id if business_info else None
 
         if not unipile_dsn or not unipile_account_id or not unipile_token:
             app.logger.error("[WHATSAPP] Configurazione UNIPILE mancante: DSN/ACCOUNT_ID/ACCESS_TOKEN non presenti")
