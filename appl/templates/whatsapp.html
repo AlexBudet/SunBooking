@@ -1,31 +1,121 @@
 {% extends "settings.html" %}
 
 {% block settings_content %}
+
+<!-- ==================== HTML ==================== -->
+
 <div class="container mt-4" style="max-width:600px;">
-    <h3>Messaggio WhatsApp manuale</h3>
-    <form method="post" action="{{ url_for('settings.whatsapp') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="mb-3">
-            <label for="whatsapp_message" class="form-label">Da inviare manualmente tramite pulsante da calendario</label>
-            <textarea class="form-control" id="whatsapp_message" name="whatsapp_message" rows="5" required>{{ whatsapp_message or "Buongiorno {{nome}}, ecco un memo per il tuo appuntamento del {{data}} alle ore {{ora}}. Ci vediamo presto! Sun Booking" }}</textarea>
-            <div class="form-text">
-                Puoi usare le variabili:<br>
-                <code>{{"{{nome}}"}}</code> = nome cliente,
-                <code>{{"{{data}}"}}</code> = data appuntamento,
-                <code>{{"{{ora}}"}}</code> = orario appuntamento
-                <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
-            </div>
+
+  <h3><i class="bi bi-whatsapp text-success"></i> Connessione WhatsApp Business</h3>
+
+  <div id="whatsapp-connection-section" class="card mb-4">
+    <div class="card-body">
+      
+      <!-- Stato: Caricamento -->
+      <div id="loading-status" class="text-center py-4">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2 text-muted">Verifica connessione in corso...</p>
+      </div>
+      
+      <!-- Stato: Connesso -->
+      <div id="connected-status" style="display:none;">
+        <div class="d-flex align-items-center mb-3">
+          <div class="bg-success rounded-circle d-flex align-items-center justify-content-center me-3" 
+               style="width:48px; height:48px; min-width:48px;">
+            <i class="bi bi-check-lg text-white" style="font-size:1.5rem;"></i>
+          </div>
+          <div>
+            <h5 class="mb-0 text-success">WhatsApp Connesso</h5>
+            <p class="mb-0 text-muted" id="connected-phone"></p>
+          </div>
         </div>
-        <button type="submit" class="btn btn-success">Salva messaggio</button>
-    </form>
-</div>
+        <div class="alert alert-success">
+          <i class="bi bi-info-circle"></i> I messaggi WhatsApp vengono inviati automaticamente tramite questo account.
+        </div>
+        <div class="d-flex gap-2">
+          <button id="refresh-status-btn" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-clockwise"></i> Aggiorna stato
+          </button>
+          <button id="disconnect-whatsapp-btn" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-x-circle"></i> Disconnetti
+          </button>
+        </div>
+      </div>
+      
+      <!-- Stato: Non connesso -->
+      <div id="not-connected-status" style="display:none;">
+        <div class="d-flex align-items-center mb-3">
+          <div class="bg-warning rounded-circle d-flex align-items-center justify-content-center me-3" 
+               style="width:48px; height:48px; min-width:48px;">
+            <i class="bi bi-exclamation-triangle text-dark" style="font-size:1.3rem;"></i>
+          </div>
+          <div>
+            <h5 class="mb-0">WhatsApp non connesso</h5>
+            <p class="mb-0 text-muted">Collega il tuo WhatsApp Business per inviare messaggi automatici</p>
+          </div>
+        </div>
+        <button id="connect-whatsapp-btn" class="btn btn-success btn-lg">
+          <i class="bi bi-whatsapp"></i> Connetti WhatsApp
+        </button>
+      </div>
+      
+      <!-- Iframe per connessione -->
+      <div id="connect-iframe-container" style="display:none;">
+        <p class="text-muted mb-2">Scansiona il QR code con WhatsApp sul tuo telefono:</p>
+        <iframe id="connect-iframe" 
+                style="width:100%; height:500px; border:1px solid #dee2e6; border-radius:8px;"
+                allow="camera"></iframe>
+        <div class="mt-3">
+          <button id="cancel-connect-btn" class="btn btn-outline-secondary">Annulla</button>
+          <span id="connect-polling-status" class="ms-3 text-muted">In attesa di connessione...</span>
+        </div>
+      </div>
+      
+      <!-- Stato: Errore -->
+      <div id="error-status" style="display:none;">
+        <div class="alert alert-danger">
+          <i class="bi bi-x-circle"></i> <span id="error-message"></span>
+        </div>
+        <button id="retry-btn" class="btn btn-primary">Riprova</button>
+      </div>
+      
+    </div>
+  </div>
+
+</div><!-- fine container 1 -->
 
 <br>
 <hr>
+
 <div class="container mt-4" style="max-width:600px;">
-    <h3>WhatsApp automatico alla conferma dell'appuntamento</h3>
-<div class="container mt-3" style="max-width:600px;">
-  <!-- Toggle senza pulsante Salva: la modifica viene salvata immediatamente via JS -->
+
+  <h3>Messaggio WhatsApp manuale</h3>
+  <form method="post" action="{{ url_for('settings.whatsapp') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label for="whatsapp_message" class="form-label">Da inviare manualmente tramite pulsante da calendario</label>
+      <textarea class="form-control" id="whatsapp_message" name="whatsapp_message" rows="5" required>{{ whatsapp_message or "Buongiorno {{nome}}, ecco un memo per il tuo appuntamento del {{data}} alle ore {{ora}}. Ci vediamo presto! Sun Booking" }}</textarea>
+      <div class="form-text">
+        Puoi usare le variabili:<br>
+        <code>{{"{{nome}}"}}</code> = nome cliente,
+        <code>{{"{{data}}"}}</code> = data appuntamento,
+        <code>{{"{{ora}}"}}</code> = orario appuntamento
+        <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
+      </div>
+    </div>
+    <button type="submit" class="btn btn-success">Salva messaggio</button>
+  </form>
+
+</div><!-- fine container 2 -->
+
+<br>
+<hr>
+
+<div class="container mt-4" style="max-width:600px;">
+
+  <h3>WhatsApp automatico alla conferma dell'appuntamento</h3>
+
+  <!-- Toggle senza pulsante Salva -->
   <div class="form-check form-switch mb-3">
     <input class="form-check-input" type="checkbox" role="switch" id="whatsapp_modal_disable"
            {% if business_info and business_info.whatsapp_modal_disable %}checked{% endif %}>
@@ -33,10 +123,131 @@
       Non mostrare la richiesta di invio WhatsApp all'interno del modal di creazione appuntamento
     </label>
   </div>
-</div>
+
+  <form method="post" action="{{ url_for('settings.whatsapp') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label for="whatsapp_message_auto" class="form-label">Testo messaggio automatico</label>
+      <textarea class="form-control" id="whatsapp_message_auto" name="whatsapp_message_auto" rows="5" required>{{ whatsapp_message_auto or "Ciao {{nome}}, la tua prenotazione per il {{data}} alle ore {{ora}} è stata registrata! Grazie da Sun Booking." }}</textarea>
+      <div class="form-text">
+        Questo messaggio verrà inviato automaticamente via WhatsApp ogni volta che viene creato un appuntamento in calendario.<br>
+        Puoi usare le variabili:<br>
+        <code>{{"{{nome}}"}}</code> = nome cliente,
+        <code>{{"{{data}}"}}</code> = data appuntamento,
+        <code>{{"{{ora}}"}}</code> = orario appuntamento,
+        <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
+      </div>
+    </div>
+    <button type="submit" class="btn btn-success">Salva messaggio automatico</button>
+  </form>
+
+</div><!-- fine container 3 -->
+
+<br>
+<hr>
+
+<div class="container mt-4" style="max-width:600px;">
+  <br>
+  <h3>WhatsApp reminder giornaliero</h3>
+  <form id="morningReminderForm" method="post" action="{{ url_for('settings.whatsapp') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-check form-switch mb-3">
+      <input class="form-check-input" type="checkbox" role="switch" id="whatsapp_morning_reminder_enabled" name="whatsapp_morning_reminder_enabled" {% if business_info and business_info.whatsapp_morning_reminder_enabled %}checked{% endif %}>
+      <label class="form-check-label" for="whatsapp_morning_reminder_enabled">Attiva invio automatico reminder</label>
+    </div>
+    <div class="mb-3">
+      <label for="whatsapp_morning_reminder_time" class="form-label">Orario di invio giornaliero</label>
+      <input type="time" class="form-control" id="whatsapp_morning_reminder_time" name="whatsapp_morning_reminder_time" value="{{ business_info.whatsapp_morning_reminder_time.strftime('%H:%M') if business_info and business_info.whatsapp_morning_reminder_time else '08:00' }}">
+    </div>
+    <div class="mb-3">
+      <label for="whatsapp_message_morning" class="form-label">Testo messaggio reminder</label>
+      <textarea class="form-control" id="whatsapp_message_morning" name="whatsapp_message_morning" rows="5" required>{{ whatsapp_message_morning or "Ciao {{nome}}, la tua prenotazione per il {{data}} alle ore {{ora}} è stata registrata! Grazie da Sun Booking." }}</textarea>
+      <div class="form-text">
+        Questo messaggio verrà inviato automaticamente via WhatsApp secondo le impostazioni.<br>
+        Puoi usare le variabili:<br>
+        <code>{{"{{nome}}"}}</code> = nome cliente,
+        <code>{{"{{data}}"}}</code> = data appuntamento,
+        <code>{{"{{ora}}"}}</code> = orario appuntamento,
+        <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
+      </div>
+    </div>
+    <button type="submit" class="btn btn-success">Salva messaggio automatico</button>
+  </form>
+
+</div><!-- fine container 4 -->
+
+<br>
+<hr>
+
+<div class="container mt-4" style="max-width:600px;">
+  <h3>Memo turni operatori (WhatsApp)</h3>
+
+  <!-- Toggle e orario -->
+  <div class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" role="switch"
+           id="operator_whatsapp_notification_enabled"
+           {% if business_info and business_info.operator_whatsapp_notification_enabled %}checked{% endif %}>
+    <label class="form-check-label" for="operator_whatsapp_notification_enabled">
+      Attiva invio automatico memo turni agli operatori
+    </label>
+  </div>
+
+  <div class="mb-3">
+    <label for="operator_whatsapp_notification_time" class="form-label">Orario invio (giorno seguente)</label>
+    <input type="time" class="form-control" id="operator_whatsapp_notification_time"
+           value="{{ business_info.operator_whatsapp_notification_time.strftime('%H:%M') if business_info and business_info.operator_whatsapp_notification_time else '20:00' }}">
+    <div class="form-text">
+      All'orario impostato, vengono inviati i memo per i turni del giorno successivo.
+    </div>
+  </div>
+
+  <!-- Template messaggio operatori -->
+  <form id="operatorTemplateForm" method="post" action="{{ url_for('settings.whatsapp_per_operatori') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label for="operator_whatsapp_message_template" class="form-label">Template messaggio operatori</label>
+      <textarea id="operator_whatsapp_message_template" name="operator_whatsapp_message_template" class="form-control" rows="6">{{ business_info.operator_whatsapp_message_template or tpl_default }}</textarea>
+      <div class="form-text">
+        Variabili disponibili:<br>
+        <code>{{"{{operatore}}"}}</code>, <code>{{"{{data}}"}}</code>, <code>{{"{{ora_inizio}}"}}</code>, <code>{{"{{ora_fine}}"}}</code>,<code>{{"{{ora_primo_app}}"}}</code>, <code>{{"{{primo_app}}"}}</code>,<code>{{"{{sezione_pausa}}"}}</code>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-success">Salva template operatori</button>
+  </form>
+
+  <!-- Preview messaggi operatori (domani) -->
+  <div class="mt-3">
+    <button type="button" class="btn btn-outline-primary" id="previewOpsBtn">Preview (domani)</button>
+  </div>
+
+  <!-- Modal preview -->
+  <div class="modal fade" id="opsPreviewModal" tabindex="-1" aria-labelledby="opsPreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg" style="max-width: 80vw; height: 90vh;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="opsPreviewModalLabel">Anteprima messaggi operatori (domani)</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+        </div>
+        <div class="modal-body p-0" style="overflow: hidden;">
+          <div class="text-muted p-3">Caricamento…</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <br><br><br><br>
+
+</div><!-- fine container 5 -->
+
+
+<!-- ==================== SCRIPT JS ==================== -->
 
 <script>
 (function() {
+  // === Toggle whatsapp_modal_disable ===
   const cb = document.getElementById('whatsapp_modal_disable');
   if (!cb) return;
 
@@ -44,79 +255,29 @@
     const disabled = !!cb.checked;
     const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
-  const endpoint = "{{ url_for('settings.api_whatsapp_setting') }}";
-  fetch(endpoint, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': token
-    },
-    body: JSON.stringify({ whatsapp_modal_disable: disabled })
-  })
-  .then(resp => resp.ok ? resp.json() : Promise.reject(resp))
-  .then(json => {
-    console.log('whatsapp_modal_disable saved:', json);
-  })
-  .catch(err => {
-    console.error('Errore salvataggio impostazione WhatsApp', err);
-    cb.checked = !disabled;
-  });
+    const endpoint = "{{ url_for('settings.api_whatsapp_setting') }}";
+    fetch(endpoint, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': token
+      },
+      body: JSON.stringify({ whatsapp_modal_disable: disabled })
+    })
+    .then(resp => resp.ok ? resp.json() : Promise.reject(resp))
+    .then(json => {
+      console.log('whatsapp_modal_disable saved:', json);
+    })
+    .catch(err => {
+      console.error('Errore salvataggio impostazione WhatsApp', err);
+      cb.checked = !disabled;
+    });
   });
 })();
-</script>
-    <form method="post" action="{{ url_for('settings.whatsapp') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="mb-3">
-            <label for="whatsapp_message_auto" class="form-label">Testo messaggio automatico</label>
-            <textarea class="form-control" id="whatsapp_message_auto" name="whatsapp_message_auto" rows="5" required>{{ whatsapp_message_auto or "Ciao {{nome}}, la tua prenotazione per il {{data}} alle ore {{ora}} è stata registrata! Grazie da Sun Booking." }}</textarea>
-            <div class="form-text">
-                Questo messaggio verrà inviato automaticamente via WhatsApp ogni volta che viene creato un appuntamento in calendario.<br>
-                Puoi usare le variabili:<br>
-                <code>{{"{{nome}}"}}</code> = nome cliente,
-                <code>{{"{{data}}"}}</code> = data appuntamento,
-                <code>{{"{{ora}}"}}</code> = orario appuntamento,
-                <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
-            </div>
-        </div>
-        <button type="submit" class="btn btn-success">Salva messaggio automatico</button>
-    </form>
-</div>
 
-<br>
-<hr>
-
-<div class="container mt-4" style="max-width:600px;">
-    <br>
-    <h3>WhatsApp reminder giornaliero</h3>
-    <form id="morningReminderForm" method="post" action="{{ url_for('settings.whatsapp') }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <!--Aggiungi i nuovi controlli -->
-        <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" role="switch" id="whatsapp_morning_reminder_enabled" name="whatsapp_morning_reminder_enabled" {% if business_info and business_info.whatsapp_morning_reminder_enabled %}checked{% endif %}>
-            <label class="form-check-label" for="whatsapp_morning_reminder_enabled">Attiva invio automatico reminder</label>
-        </div>
-        <div class="mb-3">
-            <label for="whatsapp_morning_reminder_time" class="form-label">Orario di invio giornaliero</label>
-            <input type="time" class="form-control" id="whatsapp_morning_reminder_time" name="whatsapp_morning_reminder_time" value="{{ business_info.whatsapp_morning_reminder_time.strftime('%H:%M') if business_info and business_info.whatsapp_morning_reminder_time else '08:00' }}">
-        </div>
-        <div class="mb-3">
-            <label for="whatsapp_message_morning" class="form-label">Testo messaggio reminder</label>
-            <textarea class="form-control" id="whatsapp_message_morning" name="whatsapp_message_morning" rows="5" required>{{ whatsapp_message_morning or "Ciao {{nome}}, la tua prenotazione per il {{data}} alle ore {{ora}} è stata registrata! Grazie da Sun Booking." }}</textarea>
-            <div class="form-text">
-                Questo messaggio verrà inviato automaticamente via WhatsApp secondo le impostazioni.<br>
-                Puoi usare le variabili:<br>
-                <code>{{"{{nome}}"}}</code> = nome cliente,
-                <code>{{"{{data}}"}}</code> = data appuntamento,
-                <code>{{"{{ora}}"}}</code> = orario appuntamento,
-                <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
-            </div>
-        </div>
-        <button type="submit" class="btn btn-success">Salva messaggio automatico</button>
-    </form>
-</div>
-<script>
 (function () {
+  // === Morning reminder ===
   const cb = document.getElementById('whatsapp_morning_reminder_enabled');
   const timeInput = document.getElementById('whatsapp_morning_reminder_time');
   const msgTextarea = document.getElementById('whatsapp_message_morning');
@@ -142,7 +303,6 @@
     })
     .then(resp => {
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      // Rimosso alert di successo
     })
     .catch(err => {
       console.error('Errore salvataggio reminder', err);
@@ -151,17 +311,15 @@
     });
   }
 
-  // Salva immediatamente toggle e orario
   cb.addEventListener('change', () => {
-  if (!confirm('Confermi di voler ' + (cb.checked ? 'attivare' : 'disattivare') + ' l\'invio automatico reminder giornaliero?')) {
-    cb.checked = !cb.checked;
-    return;
-  }
-  saveReminder(cb.checked);
-});
+    if (!confirm('Confermi di voler ' + (cb.checked ? 'attivare' : 'disattivare') + ' l\'invio automatico reminder giornaliero?')) {
+      cb.checked = !cb.checked;
+      return;
+    }
+    saveReminder(cb.checked);
+  });
   if (timeInput) timeInput.addEventListener('change', () => saveReminder(cb.checked));
 
-  // Intercetta "Salva messaggio automatico" per inviare SOLO il testo
   const form = document.getElementById('morningReminderForm');
   if (form) {
     form.addEventListener('submit', function (e) {
@@ -193,194 +351,318 @@
     });
   }
 })();
-</script>
-<br>
-<hr>
-<div class="container mt-4" style="max-width:600px;">
-  <h3>Memo turni operatori (WhatsApp)</h3>
 
-  <!-- Toggle e orario: salvataggio immediato via JS -->
-  <div class="form-check form-switch mb-3">
-    <input class="form-check-input" type="checkbox" role="switch"
-           id="operator_whatsapp_notification_enabled"
-           {% if business_info and business_info.operator_whatsapp_notification_enabled %}checked{% endif %}>
-    <label class="form-check-label" for="operator_whatsapp_notification_enabled">
-      Attiva invio automatico memo turni agli operatori
-    </label>
-  </div>
-
-  <div class="mb-3">
-    <label for="operator_whatsapp_notification_time" class="form-label">Orario invio (giorno seguente)</label>
-    <input type="time" class="form-control" id="operator_whatsapp_notification_time"
-           value="{{ business_info.operator_whatsapp_notification_time.strftime('%H:%M') if business_info and business_info.operator_whatsapp_notification_time else '20:00' }}">
-    <div class="form-text">
-      All’orario impostato, vengono inviati i memo per i turni del giorno successivo.
-    </div>
-  </div>
-
-<script>
 (function() {
-    const enabledCb = document.getElementById('operator_whatsapp_notification_enabled');
-    const timeInput = document.getElementById('operator_whatsapp_notification_time');
-    if (!enabledCb || !timeInput) return;
+  // === Operator reminder ===
+  const enabledCb = document.getElementById('operator_whatsapp_notification_enabled');
+  const timeInput = document.getElementById('operator_whatsapp_notification_time');
+  if (!enabledCb || !timeInput) return;
 
-    function saveOperatorReminder(enabled, timeHHMM) {
-      const token = document.querySelector('input[name="csrf_token"]')?.value || '';
-      const params = new URLSearchParams();
-      params.set('csrf_token', token);
-      if (enabled) params.set('operator_whatsapp_notification_enabled', 'on');
-      if (timeHHMM) params.set('operator_whatsapp_notification_time', timeHHMM);
-      return fetch("{{ url_for('settings.whatsapp_per_operatori') }}", {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
-      })
-      .then(resp => { if (!resp.ok) throw new Error('HTTP ' + resp.status); })
-      .catch(err => {
-        console.error('Errore salvataggio impostazioni operatori', err);
-        enabledCb.checked = !enabled;
-        alert('Errore durante il salvataggio impostazioni operatori');
-      });
+  function saveOperatorReminder(enabled, timeHHMM) {
+    const token = document.querySelector('input[name="csrf_token"]')?.value || '';
+    const params = new URLSearchParams();
+    params.set('csrf_token', token);
+    if (enabled) params.set('operator_whatsapp_notification_enabled', 'on');
+    if (timeHHMM) params.set('operator_whatsapp_notification_time', timeHHMM);
+    return fetch("{{ url_for('settings.whatsapp_per_operatori') }}", {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    })
+    .then(resp => { if (!resp.ok) throw new Error('HTTP ' + resp.status); })
+    .catch(err => {
+      console.error('Errore salvataggio impostazioni operatori', err);
+      enabledCb.checked = !enabled;
+      alert('Errore durante il salvataggio impostazioni operatori');
+    });
+  }
+
+  enabledCb.addEventListener('change', () => {
+    if (!confirm('Confermi di voler ' + (enabledCb.checked ? 'attivare' : 'disattivare') + ' l\'invio automatico memo turni agli operatori?')) {
+      enabledCb.checked = !enabledCb.checked;
+      return;
     }
+    saveOperatorReminder(enabledCb.checked, timeInput.value);
+  });
+  timeInput.addEventListener('change', () => saveOperatorReminder(enabledCb.checked, timeInput.value));
+})();
 
-    enabledCb.addEventListener('change', () => {
-      console.log('Operator checkbox changed, checked:', enabledCb.checked);
-      if (!confirm('Confermi di voler ' + (enabledCb.checked ? 'attivare' : 'disattivare') + ' l\'invio automatico memo turni agli operatori?')) {
-        console.log('Confirm canceled');
-        enabledCb.checked = !enabledCb.checked;
+(function(){
+  // === Preview operatori ===
+  const previewBtn = document.getElementById('previewOpsBtn');
+  const modalEl = document.getElementById('opsPreviewModal');
+  
+  if (previewBtn && modalEl) {
+    const modalBody = modalEl.querySelector('.modal-body');
+
+    previewBtn.addEventListener('click', () => {
+      const bs = window.bootstrap || bootstrap;
+      if (!bs) {
+        console.error('Bootstrap non trovato!');
         return;
       }
-      console.log('Confirm accepted, saving...');
-      saveOperatorReminder(enabledCb.checked, timeInput.value);
+      
+      const modalInstance = bs.Modal.getOrCreateInstance(modalEl);
+      modalBody.innerHTML = '<div class="text-muted">Caricamento…</div>';
+      modalInstance.show();
+
+      const url = "{{ url_for('settings.preview_operator_notifications') }}?full=1";
+      fetch(url, { credentials: 'same-origin' })
+        .then(r => r.ok ? r.json() : Promise.reject(r))
+        .then(j => {
+          const items = Array.isArray(j.items) ? j.items : [];
+          if (!items.length) {
+            modalBody.textContent = 'Nessun operatore da notificare per domani.';
+          } else {
+            while (modalBody.firstChild) {
+              modalBody.removeChild(modalBody.firstChild);
+            }
+            
+            const listContainer = document.createElement('div');
+            listContainer.className = 'd-flex flex-column gap-3';
+            listContainer.style.maxHeight = '67vh';
+            listContainer.style.overflowY = 'auto';
+            listContainer.style.padding = '30px';
+            
+            items.forEach((it) => {
+              const itemDiv = document.createElement('div');
+              itemDiv.className = 'operator-item p-2 border rounded bg-light';
+              
+              const nameEl = document.createElement('div');
+              nameEl.className = 'fw-bold text-primary';
+              nameEl.textContent = (it.operatore || 'Operatore').trim();
+              itemDiv.appendChild(nameEl);
+              
+              const phoneEl = document.createElement('div');
+              phoneEl.className = 'small text-muted mb-2';
+              phoneEl.textContent = (it.phone || '').trim();
+              itemDiv.appendChild(phoneEl);
+              
+              const msgEl = document.createElement('div');
+              msgEl.className = 'text-break';
+              msgEl.style.whiteSpace = 'pre-wrap';
+              msgEl.textContent = (it.msg_full || it.msg || it.msg_preview || '').trim();
+              itemDiv.appendChild(msgEl);
+
+              listContainer.appendChild(itemDiv);
+            });
+            
+            modalBody.appendChild(listContainer);
+          }
+        })
+        .catch(e => {
+          console.error(e);
+          modalBody.textContent = 'Errore durante la costruzione della preview.';
+        });
     });
-    timeInput.addEventListener('change', () => saveOperatorReminder(enabledCb.checked, timeInput.value));
-  })();
+  }
+})();
+
+(function() {
+  // === Connessione WhatsApp Unipile (logica corretta) ===
+  const loadingEl = document.getElementById('loading-status');
+  const connectedEl = document.getElementById('connected-status');
+  const notConnectedEl = document.getElementById('not-connected-status');
+  const iframeContainer = document.getElementById('connect-iframe-container');
+  const errorEl = document.getElementById('error-status');
+  const connectBtn = document.getElementById('connect-whatsapp-btn');
+  const disconnectBtn = document.getElementById('disconnect-whatsapp-btn');
+  const cancelBtn = document.getElementById('cancel-connect-btn');
+  const refreshBtn = document.getElementById('refresh-status-btn');
+  const retryBtn = document.getElementById('retry-btn');
+  const iframe = document.getElementById('connect-iframe');
+  const connectedPhone = document.getElementById('connected-phone');
+  const pollingStatus = document.getElementById('connect-polling-status');
+  const errorMessage = document.getElementById('error-message');
+  
+  let pollingInterval = null;
+  let isShowingIframe = false;
+  
+  function hideAll() {
+    loadingEl.style.display = 'none';
+    connectedEl.style.display = 'none';
+    notConnectedEl.style.display = 'none';
+    iframeContainer.style.display = 'none';
+    errorEl.style.display = 'none';
+    isShowingIframe = false;
+  }
+  
+  function showConnected(phone) {
+    hideAll();
+    connectedPhone.textContent = phone ? `Numero: ${phone}` : 'Account WhatsApp Business';
+    connectedEl.style.display = 'block';
+  }
+  
+  function showNotConnected() {
+    hideAll();
+    notConnectedEl.style.display = 'block';
+  }
+  
+  function showIframe(url) {
+    hideAll();
+    iframe.src = url;
+    iframeContainer.style.display = 'block';
+    isShowingIframe = true;
+    startPolling();
+  }
+  
+  function showError(msg) {
+    hideAll();
+    errorMessage.textContent = msg;
+    errorEl.style.display = 'block';
+  }
+  
+  function checkStatus(duringPolling) {
+    return fetch('{{ url_for("settings.api_whatsapp_status") }}', { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => {
+        console.log('[WhatsApp Status]', data, 'polling:', duringPolling);
+        if (data.connected) {
+          // Salva account_id nel DB del tenant corrente
+          if (data.account_id) {
+            const token = document.querySelector('input[name="csrf_token"]')?.value || '';
+            fetch('{{ url_for("settings.api_whatsapp_save_account") }}', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 
+                'Content-Type': 'application/json',
+                'X-CSRFToken': token 
+              },
+              body: JSON.stringify({ account_id: data.account_id })
+            }).then(r => r.json()).then(res => {
+              console.log('[WhatsApp] Account salvato nel DB:', res);
+            }).catch(err => {
+              console.error('[WhatsApp] Errore salvataggio account:', err);
+            });
+          }
+          showConnected(data.phone);
+          stopPolling();
+          return true;
+        } else if (data.status === 'error' && !duringPolling) {
+          console.warn('Status error:', data.error);
+          return false;
+        } else {
+          return false;
+        }
+      })
+      .catch(e => {
+        console.error('Check status error:', e);
+        return false;
+      });
+  }
+  
+  function startPolling() {
+    stopPolling();
+    let attempts = 0;
+    pollingInterval = setInterval(async () => {
+      attempts++;
+      pollingStatus.textContent = `In attesa di connessione... (${attempts})`;
+      const connected = await checkStatus(true);
+      if (connected) {
+        stopPolling();
+      }
+      if (attempts > 120) {
+        stopPolling();
+        pollingStatus.textContent = 'Timeout. Riprova.';
+      }
+    }, 3000);
+  }
+  
+  function stopPolling() {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+    }
+  }
+  
+  async function requestConnect() {
+    const token = document.querySelector('input[name="csrf_token"]')?.value || '';
+    try {
+      const resp = await fetch('{{ url_for("settings.api_whatsapp_connect") }}', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRFToken': token }
+      });
+      const data = await resp.json();
+      console.log('[WhatsApp Connect]', data);
+      
+      if (data.error) {
+        showError(data.error + (data.detail ? ': ' + JSON.stringify(data.detail) : ''));
+        return;
+      }
+      
+      if (data.hosted_url) {
+        showIframe(data.hosted_url);
+      } else {
+        showError('Nessun URL di connessione ricevuto');
+      }
+    } catch (e) {
+      console.error('Connect error:', e);
+      showError('Errore di connessione: ' + e.message);
+    }
+  }
+  
+  async function requestDisconnect() {
+    if (!confirm('Sei sicuro di voler disconnettere WhatsApp?\n\nDovrai scansionare nuovamente il QR code per ricollegarlo.')) {
+      return;
+    }
+    
+    const token = document.querySelector('input[name="csrf_token"]')?.value || '';
+    hideAll();
+    loadingEl.style.display = 'block';
+    
+    try {
+      const resp = await fetch('{{ url_for("settings.api_whatsapp_disconnect") }}', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRFToken': token }
+      });
+      const data = await resp.json();
+      console.log('[WhatsApp Disconnect]', data);
+      
+      if (data.error) {
+        showError(data.error);
+        return;
+      }
+      
+      // Disconnesso con successo, mostra stato "non connesso"
+      showNotConnected();
+      
+    } catch (e) {
+      console.error('Disconnect error:', e);
+      showError('Errore durante la disconnessione: ' + e.message);
+    }
+  }
+  
+  // Event listeners
+  if (connectBtn) connectBtn.addEventListener('click', requestConnect);
+  if (disconnectBtn) disconnectBtn.addEventListener('click', requestDisconnect);
+  if (cancelBtn) cancelBtn.addEventListener('click', () => {
+    stopPolling();
+    iframe.src = '';
+    showNotConnected();
+  });
+  if (refreshBtn) refreshBtn.addEventListener('click', () => {
+    hideAll();
+    loadingEl.style.display = 'block';
+    checkStatus(false).then(connected => {
+      if (!connected) showNotConnected();
+    });
+  });
+  if (retryBtn) retryBtn.addEventListener('click', () => {
+    hideAll();
+    loadingEl.style.display = 'block';
+    checkStatus(false).then(connected => {
+      if (!connected) showNotConnected();
+    });
+  });
+  
+  // Check status on page load
+  checkStatus(false).then(connected => {
+    if (!connected) showNotConnected();
+  });
+})();
 </script>
 
-  <!-- Template messaggio operatori -->
-<form id="operatorTemplateForm" method="post" action="{{ url_for('settings.whatsapp_per_operatori') }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="mb-3">
-      <label for="operator_whatsapp_message_template" class="form-label">Template messaggio operatori</label>
-    <textarea id="operator_whatsapp_message_template" name="operator_whatsapp_message_template" class="form-control" rows="6">{{ business_info.operator_whatsapp_message_template or tpl_default }}</textarea>
-      <div class="form-text">
-        Variabili disponibili:<br>
-        <code>{{"{{operatore}}"}}</code>, <code>{{"{{data}}"}}</code>, <code>{{"{{ora_inizio}}"}}</code>, <code>{{"{{ora_fine}}"}}</code>,<code>{{"{{ora_primo_app}}"}}</code>, <code>{{"{{primo_app}}"}}</code>,<code>{{"{{sezione_pausa}}"}}</code>
-      </div>
-    </div>
-    <button type="submit" class="btn btn-success">Salva template operatori</button>
-  </form>
-
-  <!-- Preview messaggi operatori (domani) -->
-  <div class="mt-3">
-    <button type="button" class="btn btn-outline-primary" id="previewOpsBtn">Preview (domani)</button>
-  </div>
-
-<!-- Modal preview -->
-  <div class="modal fade" id="opsPreviewModal" tabindex="-1" aria-labelledby="opsPreviewModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable modal-lg" style="max-width: 80vw; height: 90vh;">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="opsPreviewModalLabel">Anteprima messaggi operatori (domani)</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
-        </div>
-        <div class="modal-body p-0" style="overflow: hidden;">
-          <!-- Contenuto caricato via JS -->
-          <div class="text-muted p-3">Caricamento…</div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-<br><br><br><br>
-  <script>
-  (function(){
-    const previewBtn = document.getElementById('previewOpsBtn');
-    const modalEl = document.getElementById('opsPreviewModal');
-    
-    if (previewBtn && modalEl) {
-      const modalBody = modalEl.querySelector('.modal-body');
-
-      previewBtn.addEventListener('click', () => {
-        // Recupera bootstrap dall'oggetto window o globale
-        const bs = window.bootstrap || bootstrap;
-        if (!bs) {
-            console.error('Bootstrap non trovato!');
-            return;
-        }
-        
-        const modalInstance = bs.Modal.getOrCreateInstance(modalEl);
-        
-        // Mostra subito il modal con loader
-        modalBody.innerHTML = '<div class="text-muted">Caricamento…</div>';
-        modalInstance.show();
-
-        // Chiede anteprima completa al backend
-        const url = "{{ url_for('settings.preview_operator_notifications') }}?full=1";
-        fetch(url, { credentials: 'same-origin' })
-          .then(r => r.ok ? r.json() : Promise.reject(r))
-          .then(j => {
-            const items = Array.isArray(j.items) ? j.items : [];
-            if (!items.length) {
-              modalBody.textContent = 'Nessun operatore da notificare per domani.';
-            } else {
-              // 1. Pulisce tutto il contenuto precedente
-              while (modalBody.firstChild) {
-                modalBody.removeChild(modalBody.firstChild);
-              }
-              
-              // 2. Crea UNICO contenitore per la lista che gestisce lo scroll internamente
-              const listContainer = document.createElement('div');
-              listContainer.className = 'd-flex flex-column gap-3';
-              // FORZA lo scroll su questo contenitore
-              listContainer.style.maxHeight = '67vh'; // Altezza massima esplicita
-              listContainer.style.overflowY = 'auto'; // Scroll verticale
-              listContainer.style.padding = '30px';   // Padding interno
-              
-              // 3. Popola il contenitore
-              items.forEach((it, index) => {
-                // Singolo blocco operatore
-                const itemDiv = document.createElement('div');
-                itemDiv.className = 'operator-item p-2 border rounded bg-light'; // Stile visivo per separare i blocchi
-                
-                // Nome
-                const nameEl = document.createElement('div');
-                nameEl.className = 'fw-bold text-primary';
-                nameEl.textContent = (it.operatore || 'Operatore').trim();
-                itemDiv.appendChild(nameEl);
-                
-                // Telefono
-                const phoneEl = document.createElement('div');
-                phoneEl.className = 'small text-muted mb-2';
-                phoneEl.textContent = (it.phone || '').trim();
-                itemDiv.appendChild(phoneEl);
-                
-                // Messaggio
-                const msgEl = document.createElement('div');
-                msgEl.className = 'text-break'; // Bootstrap class per spezzare parole lunghe
-                msgEl.style.whiteSpace = 'pre-wrap'; // Mantiene a capo
-                msgEl.textContent = (it.msg_full || it.msg || it.msg_preview || '').trim();
-                itemDiv.appendChild(msgEl);
-
-                // Aggiungi al contenitore principale
-                listContainer.appendChild(itemDiv);
-              });
-              
-              // 4. Inserisce il contenitore nel body
-              modalBody.appendChild(listContainer);
-            }
-          })
-          .catch(e => {
-            console.error(e);
-            modalBody.textContent = 'Errore durante la costruzione della preview.';
-          });
-      });
-    }
-  })();
-  </script>
-</div>
 {% endblock %}

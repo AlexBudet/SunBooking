@@ -282,6 +282,9 @@ class BusinessInfo(db.Model):
     new_client_delay_hours = db.Column(db.Integer, default=2)
     marketing_max_daily_sends = db.Column(db.Integer, default=30)
 
+    # Unipile WhatsApp Account ID (salvato dopo connessione)
+    unipile_account_id = db.Column(db.String(100), nullable=True)
+
     @property
     def closing_days_list(self):
         """Ritorna una lista di stringhe (es. ["Domenica","Sabato"]) se presente, altrimenti vuota."""
