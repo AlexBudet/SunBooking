@@ -1,44 +1,100 @@
-Cassa:
-- occhio dà errore di formato quando stampiamo scontrino con " ' " (per es Skin's)
+CALENDAR:
+- occhio a nomi servizio se troppe lettere alcune parti vanno oltre margine dx nei risultati di serviceSearch e serviceSearchNav
+- se ho blocchi contigui con my-spia, e taglio e sposto uno dei blocchi, dopo il release quel singolo blocco non è più con my-spia lampeggiante: correggere
+- pseudoblock navigator deve avere possibilità di AUTO-RIDURSI se copre celle attive che voglio utilizzare (tasto "riduci" e "ingrandisci"?)
+- modalità default: se taglio un blocco, sui blocchi contigui appare correttamente il popup button "taglia" ma a mouseover mostra ancora tutti gli altri popup-buttons!
+- se aggiorno un dato (nome cognome cell) da modal cliente, il nuovo dato dev'essere SUBITO VISIBILE una volta usciti da quel modal, per es
+- se un blocco è in stato 2, non deve MAI POTERSI ACCENDERE MY-SPIA (anche su touch-ui occhio), anche se un blocco contiguo è in my-spia
+- se copio un blocco in stato 2 in cui note c'era " ***NUOVO CLIENTE*** " allora SOLO IN QUESTO CASO la nota non deve essere copia-incollata (oppure trovare alternativa per segnalare nuovo cliente)
+- se per esempio pulisco cache e vengono quindi perse dalla memoria le credenziali, non deve aspettare un'operazione per dare errore, ma deve AUTOMATICAMENTE SLOGGARSI
+ 
+SETTINGS:
+- in Servizi/Utenti sezione visibile solo a owner: SEZIONI OSCURABILI DA PROFILO OWNER: 1) whatsapp, booking, marketing 2) pacchetti
+- in Clients.html bisogna far capire che cosa sono i campi (per es. data... che è compleanno)
 
-Report:
-- btn Clienti se popolato mostra modal dove contenuto straborda in basso, formattare nomi
-- tile migliori clienti dell'anno deve essere customizzabile (cambiare l'anno o impostare per mese?) e deve contare non solo appuntamenti in stato pagato, ma anche PAGAMENTI per quel cliente senza appuntamento (che ora non fa)
-
-Calendar:
-- quando associamo cliente booking online da "associa cliente" su blocco poi deve fare refresh e cambio colore
-- quando apro "associa cliente" da blocco source=web non ancora assegnato e non trova il cellulare, quando apriamo "+" deve pre-compilare i campi NOME, COGNOME e CELLULARE come da nota cliente su appuntamento online
-- verificare refresh di web app table, dopo associazione rimangono in rosso app da associare, devo fare refresh manuale per farli andare via!
-- ERRORE quando provo a fare "copia" su un blocco off da modalità touch-ui... mi dice "non puoi copiare blocco off nel navigator", me lo da da wsgi.py, VERIFICARE E CORREGGERE
-- PENSARE A WARNING DA APPLICARE A CERTI SERVIZI IN CASO DI APPUNTAMENTI SOVRAPPOSTI (per es. per quel servizio ho un solo macchinario, non posso farne due in contemporanea)
-
-Booking online:
-- far sì che cliente possa annullare solo prenotazioni fissate in date e ora SUCCESSIVE a datetime corrente
-
-Settings:
-- creare un campo extra da mostrare in pagina booking per eventuali warning (es: controllare spam e-mail se non si riceve codice)
-
-- WHATSAPP: VALUTARE PASSAGGIO A UNIPILE ?
+BOOKING:
+- OCCHIO AL CLICK SU INVIA CODICE, a volte lo prende al 3° click su mobile!!!
+- Aggiungere spazio per logo negozio (disattivabile, salvabile in db)
+- Aggiungere spazio per messaggio varie in homepage (disattivabile, salvabile in db)
 
 WEB APP:
-- uniformare stili dei modal di calendar (tutti sfondo rosa con gradiente?)
+- uniformare stili dei modal di calendar (sfondo rosa con gradiente? chiederei piuttosto con prompt come unfiromare all'AI)
 - verificare sicurezza globale codice
 - creare app per mobile
 
-WEB BOOKING:
-- opzionale: offrire la possibilità di PAGARE ONLINE gli appuntamenti
-- opzionale: mostrare descrizione per ogni servizio
+SITI:
+- creare touch-icon e manifest.json per SunExpressBeauty e terminare SunExpressBeauty
 
 GENERALE: 
-- fare un refresh automatico ogni tot minuti?
-- impostare logica per evitare multi-click in altri punti?
+- inserire più tooltip esplicativi (calendar, turni operatore, ecc)
+- controllare ATTENTAMENTE i refresh e aggiungerli dove servono! (per es se taglio e incollo blocchi in modalità touch-ui)
 - creare logging dei messaggi flask del terminale e da console?
+- creare wrapper per update via web
+- creare query AI e query vocale ...?
+
+SOLARIUM:
+- boxare l'app e mettere tutto su un solo server
+- invio whatsapp a cliente in automatico
+
+COMMERCIALIZZAZIONE:
+- scegliere LOGO E creare brand booklet con stili, font, icone ecc
+- scegliere provider per dominio sito e e-mail (e trasferire sunexpressbeauty e suncitybeauty)
+- creare sito e sezioni
+- creare tutorial e agentic AI bot per primo supporto tecnico
+
+
+
+
+
+
+UNIPILE_DSN=api15.unipile.com:14552
+UNIPILE_ACCESS_TOKEN=T+y/2c/b.0MQy6V+D5z86R+aCJtQFZ4Ht50m/fe8HXNALTSOO0ck=
+
+
+
+
+
 
 
 
 
 
 CORRETTI, DA VERIFICARE:
+- in Whatsapp, QR Code per connettere il proprio account a Unipile
+- mostrare avanzamento upload qndo si carica consenso informato, imporre limiti a grandezza file
+- testare storno scontrino con grande attenzione e delicatezza
+- testare messaggio di fine rotolo
+- se porto in cassa blocco o blocchi caricando pseudoscontrino, far sì che pseudoscontrino si svuoti automaticamente da altre voci precedentemente caricate
+- se apro nota da blocco off (in modalità touch-ui? verificare) ha z-index piu basso dello zoom navigator
+- se si crea un appuntamento (o si dragga) in una datetime PRECEDENTE alla datetime corrente, deve USCIRE UN WARNING
+- in Servizi aggiungere tasto per scaricare in pdf e/o testo il listno prezzi (con o senza descrizione servizi)
+- tab in heatmap per durate personalizzabili
+- in Settings/Operatori nascondere l'header tabella di troppo "Invia Memo Turni"
+- creare highlight sezione selezionata del menù di base.html
+- creare tooltip per web appt table e tasti con over nella colonna Associa
+- arricchire tooltip del popup button "vai a pacchetto" per blocchi correlati a seduta, che dica "per mettere il blocco in grigio, clicca e vai sul pacchetto, e indica seduta effettuata"
+- normalizzare nomi e cognomi nei modal di associazione
+- se clicco my-spia su blocchi contigui assegnati allo stesso cliente, e in questi blocchi contigui ci sono due blocchi sulla stessa cella (1/2 width) il my-spia per uno dei due NON PRENDE LE CARATTERISTICHE DEI BLOCCHI CONTIGUI ma DIVENTA ROSSO mentre gli altri sono gialli
+- impostare logica per evitare multi-click in altri punti
+- PACCHETTO: tasto per arrotondare totale scontato anche nel form di crea Pacchetto
+- non prende stile grassetto/corsivo quando salvo il pdf del disclaimer del pacchetto
+- aggiungere "+" per creare nuovo cliente nel form di crea pacchetti
+- formattati nomi in Pacchetti
+- pseudoblock navigator: ideale è che rimanga la "i" cliccabile nel campo cliente anche dopo che il cliente è stato selezionato da dropdown
+- nella tabella Web Appt aggiungiamo anche un altro tipo di associazione, quella solo via cellulare (previo popup che confronti dati del cliente che ha prenotato con dati del cliente salvato)
+- rigenerazione csrf-token blocca tutto se fermo per mezzora, aggiunto script in fondo a base.html
+- Report: a mouseover su KPI Tile mostra in che modo è calcolato quel dato
+- ERRORE quando provo a fare "copia" su un blocco off da modalità touch-ui... mi dice "non puoi copiare blocco off nel navigator", me lo da da wsgi.py, VERIFICARE E CORREGGERE
+- quando associamo cliente booking online da "associa cliente" su blocco poi deve fare refresh e cambio colore
+- booking: non deve poter fare cancellare al cliente appuntamento web fissato per orario precedente all'ora corrente
+- quando apro "associa cliente" da blocco source=web non ancora assegnato e non trova il cellulare, quando apriamo "+" deve pre-compilare i campi NOME, COGNOME e CELLULARE come da nota cliente su appuntamento online
+- verificare refresh di web app table, dopo associazione rimangono in rosso app da associare, devo fare refresh manuale per farli andare via!
+- Booking: far sì che cliente possa annullare solo prenotazioni fissate in date e ora SUCCESSIVE a datetime corrente
+- Report: btn Clienti se popolato mostra modal dove contenuto straborda in basso, formattare nomi
+- Report: tile migliori clienti dell'anno deve contare anche PAGAMENTI per quel cliente senza appuntamento (che ora non fa)
+- modificare da tag a nome il servizio nel memo whatsapp a operatrici
+- su iphome tabella sedute in pacchetto_detail.html non ha margine destro e straborda
+- Cassa: occhio dà errore di formato quando stampiamo scontrino con " ' " (per es Skin's)
 - deve dare popup di conferma dopo aggiunta nuovo servizio
 - template memo whatsapp, scrivere il primo servizio con "servizio_nome" invece che con "servizio_tag"
 - settings/Clienti: header tabella non sono ordinabili e danno errore al click
@@ -179,17 +235,15 @@ start.py
    SECRET_KEY=7jtGUeZejGItfvRMMgFFF0kFep71FA6hdgHU19iN1Q0
 
 git remote add origin https://github.com/AlexBudet/booking.git
+
+L'account Azure Communication Services è limitato a 10 messaggi di posta elettronica al minuto, 25 messaggi di posta elettronica in un'ora e 100 messaggi di posta elettronica al giorno. Se si verificano questi limiti e il volume di invio è superiore a questo, continuare con questa richiesta di supporto con il volume di posta desiderato per richiedere un aumento del limite.
 ---------------------------------------------------------
-AI (GEMINI KEY = AIzaSyBKhUZcOJ6r7_U1yaab2qLBzqY6kVjn8us) -> alternativa più economica con Azure? - implementare query ai in report
 Prompt per richieste ad AI (per esempio: trovami la prima disponibilità in pausa pranzo settimana prossima con Erika per un massaggio di un'ora -> va alla pagina e blinka le celle adatte)
 
 ALTRO:
-- Implementare logging di errori gratis ma professionale e funzionante
 - Verificare funzionamento LOTTERIA degli scontrini -> dà errore, verificare route
 
 REPORT: creare una sezione REPORT con le stats e una sezione HOME con tiles interattivi (meteo, oroscopo, news estetica, andamento del mercato, video del giorno, console comandi piu usati)
-- al click su alcuni tile (per esempio le heatmap) aprire modal in grande in cui si possano ottenere heatmap in base a filtri personalizzabili
-- click su info cliente da tile top clients
 
 CALENDAR... controllare:
 - Molto codice globale → rischio collisioni e listener duplicati.
@@ -199,8 +253,12 @@ CALENDAR... controllare:
 ( ... IN FUTURO CELLE DA 1/3 di QUARTER per APP di 20 MIN )
 
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+CALENDAR
+- PENSARE A WARNING DA APPLICARE A CERTI SERVIZI IN CASO DI APPUNTAMENTI SOVRAPPOSTI (per es. per quel servizio ho un solo macchinario, non posso farne due in contemporanea)
+- creare COLONNE WISHLIST da attivare in periodi di grande passaggio (automaticamente se colonne target si liberano parte un whatsapp a cliente)
 
-MODULI AGGIUNTIVI (occhio! fare in modo che da database i moduli aggiuntivi possano essere mostrati o nascosti in base a settaggio da pannello owner)
+WEB BOOKING
+- opzionale, offrire la possibilità di PAGARE ONLINE gli appuntamenti
 
 DASHBOARD
 - con news, sponsor (?), video, suggerimenti, oroscopo, meteo ecc ecc
@@ -208,9 +266,23 @@ DASHBOARD
 SOLARIUM -> tenere su applicazione separata!
 - integrazione SunBooking x monitor e ricaricabili solarium
 
+Settings/Booking:
+- creare un campo extra da mostrare in pagina booking per eventuali warning (es: controllare spam e-mail se non si riceve codice)
+
+Settings/Operatori:
+- migliorare UI per creare turni operatori
+
 PROMO e PACCHETTI
 - gift card (paghi in anticipo tot, hai gift card con +10% o +20%)
 - ricaricabili (come solarium, paghi 100 carichi 125 ecc)
 - raccolta punti (tot euro ogni tot euro spesi)
+
+GIFT CARD:
+dovremmo creare due TAB nella sezione pacchetti quando siamo su pacchetti.html
+la tab PACCHETTI e la tab GIFT CARD
+partiamo dalla definizione di GIFT CARD, che è molto simile a un pacchetto, la creazione avverà dal modal di creazione pacchetto ma occhio, seguimi:
+per creare una gift card associata a un cliente dev'essere SEMPLICEMENTE un'opzione ("Gift Card" da selezionare) a lato dei campi "servizi" e "n.servizi" in crea pacchetto che oscuri questi due campi! a quel punto verrà creata una gift card SENZA SERVIZI (ma per il resto un pacchetto), e creeremo giftcard_detail.html che sarà MOLTO SIMILE alla visualizzazione di un pacchetto appena creato, con la stessa logica di aggiornamento status, ma 
+1) se selezionato un importo (cioè per es. gift card da pagare 50 euro con rata, ma dal valore di 60 euro) in questo caso invece di una tabella seduta già creata, si creerà ogni riga ogni volta che si SELEZIONERA' UN SERVIZIO il cui prezzo andrà scalato dal totale residuo in gift card, servirà allora al posto del div PROGRAMMA un div SERVIZIO da scalare in cui da menù a a dropdown CON LOGICA UGUALE A selectServiceNav in Calendar.js si SELEZIONERA' un SERVIZIO IN DATABASE il cui prezzo (service.servizio_prezzo) sarà SCALATO dal CREDITO RESIDUO di quel pacchetto quando un determinato servizio sarà eseguito. In questo caso la tabella sedute si popolerà di volta in volta che un APPUNTAMENTO DI QUALSIASI TIPO SARA' CREATO
+2) se selezionate delle sedute (per es. gift card da pagare il prezzo di 5 sedute X ma che sarà composta da 6 sedute X) mostrare la tabella con le sedute esattamente come per i pacchetti (FINIRE DI SCRIVERE IL PROMPT)
 
 ...Proporre prezzi IVA INCLUSA!

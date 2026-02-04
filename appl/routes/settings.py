@@ -2201,12 +2201,20 @@ def _render_operator_msg(tpl: str, target: dict):
     pausa_section = ""
     if target.get("pausa_time"):
         pausa_section = f"Pausa alle {target.get('pausa_time')}"
+
+    # Sezione primo appuntamento condizionale
+    primo_app_section = ""
+    if target.get("primo_app_time") and target.get("primo_app_label"):
+        primo_app_section = f"Il primo impegno della giornata sarà alle {target.get('primo_app_time')} e sarà {target.get('primo_app_label')}"
+    else:
+        primo_app_section = "Per il momento domani non avrai appuntamenti"
     
     return (tpl
         .replace("{{operatore}}", target.get("operatore_nome", ""))
         .replace("{{data}}", data_it)
         .replace("{{ora_inizio}}", target.get("shift_start") or "OFF")
         .replace("{{ora_fine}}", target.get("shift_end") or "OFF")
+        .replace("{{sezione_primo_app}}", primo_app_section)
         .replace("{{ora_primo_app}}", target.get("primo_app_time") or "N/D")
         .replace("{{primo_app}}", target.get("primo_app_label") or "N/D")
         .replace("{{ora_pausa}}", target.get("pausa_time") or "")
@@ -2220,8 +2228,8 @@ def preview_operator_notifications():
     tpl_default = (
     "Ciao {{operatore}},\n\n"
     "Domani {{data}} il tuo turno sarà: {{ora_inizio}}-{{ora_fine}}\n\n"
-    "{{pausa_section}}"
-    "Il primo impegno della giornata sarà alle {{ora_primo_app}} e sarà {{primo_app}}\n\n"
+    "{{sezione_pausa}}"
+    "{{sezione_primo_app}}\n\n"
     "Buon lavoro!"
     )
     tpl = (getattr(bi, 'operator_whatsapp_message_template', '') or tpl_default)
