@@ -209,7 +209,8 @@
       <textarea id="operator_whatsapp_message_template" name="operator_whatsapp_message_template" class="form-control" rows="6">{{ business_info.operator_whatsapp_message_template or tpl_default }}</textarea>
       <div class="form-text">
         Variabili disponibili:<br>
-        <code>{{"{{operatore}}"}}</code>, <code>{{"{{data}}"}}</code>, <code>{{"{{ora_inizio}}"}}</code>, <code>{{"{{ora_fine}}"}}</code>,<code>{{"{{ora_primo_app}}"}}</code>, <code>{{"{{primo_app}}"}}</code>,<code>{{"{{sezione_pausa}}"}}</code>
+        <code>{{"{{operatore}}"}}</code>, <code>{{"{{data}}"}}</code>, <code>{{"{{ora_inizio}}"}}</code>, <code>{{"{{ora_fine}}"}}</code>, <code>{{"{{sezione_primo_app}}"}}</code>, <code>{{"{{sezione_pausa}}"}}</code><br>
+        <small class="text-muted">Variabili singole (se preferisci comporre manualmente): <code>{{"{{ora_primo_app}}"}}</code>, <code>{{"{{primo_app}}"}}</code></small>
       </div>
     </div>
     <button type="submit" class="btn btn-success">Salva template operatori</button>
