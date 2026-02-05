@@ -115,6 +115,196 @@ def ping_printer():
         current_app.logger.error("ping_printer: errore rete verso %s: %s", url, str(exc))
         return jsonify({"error": f"Errore comunicazione con la stampante: {str(exc)}"}), 502
 
+
+# ===================== LOGO NEGOZIO =====================
+@settings_bp.route('/settings/upload-logo', methods=['POST'])
+def upload_logo():
+    """
+    Upload e ottimizzazione logo negozio.
+    Accetta: PNG, JPEG, WebP, GIF, SVG
+    Salva: PNG (se trasparenza) o WebP (altrimenti), max 200px altezza
+    """
+    from PIL import Image
+    import io
+    
+    # Limite upload: 5MB
+    MAX_UPLOAD_SIZE = 5 * 1024 * 1024
+    # Altezza massima output
+    MAX_HEIGHT = 200
+    # Larghezza massima output
+    MAX_WIDTH = 400
+    # Qualità compressione WebP/JPEG
+    QUALITY = 85
+    
+    file = request.files.get('logo')
+    if not file or file.filename == '':
+        flash("Nessun file selezionato.", "error")
+        return redirect(url_for('settings.business_info'))
+    
+    # Verifica dimensione
+    file.seek(0, 2)  # Vai alla fine
+    file_size = file.tell()
+    file.seek(0)  # Torna all'inizio
+    
+    if file_size > MAX_UPLOAD_SIZE:
+        flash(f"File troppo grande. Massimo consentito: 5MB.", "error")
+        return redirect(url_for('settings.business_info'))
+    
+    # Estensioni ammesse
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
+    filename = file.filename.lower()
+    ext = filename.rsplit('.', 1)[-1] if '.' in filename else ''
+    
+    if ext not in allowed_extensions:
+        flash(f"Formato non supportato. Formati ammessi: PNG, JPEG, WebP, GIF, SVG.", "error")
+        return redirect(url_for('settings.business_info'))
+    
+    try:
+        # Caso speciale: SVG (salvato as-is)
+        if ext == 'svg':
+            svg_data = file.read()
+            # Verifica che sia effettivamente XML/SVG
+            if b'<svg' not in svg_data.lower():
+                flash("Il file SVG non sembra valido.", "error")
+                return redirect(url_for('settings.business_info'))
+            
+            business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+            if not business_info:
+                business_info = BusinessInfo(business_name="Negozio")
+                db.session.add(business_info)
+            
+            business_info.logo_image = svg_data
+            business_info.logo_mime_type = 'image/svg+xml'
+            business_info.logo_filename = file.filename
+            db.session.commit()
+            
+            flash("Logo SVG caricato con successo!", "success")
+            return redirect(url_for('settings.business_info'))
+        
+        # Immagini raster: elaborazione con Pillow
+        img = Image.open(file)
+        original_format = img.format
+        
+        # Verifica se ha trasparenza (alpha channel)
+        has_alpha = img.mode in ('RGBA', 'LA', 'PA') or \
+                    (img.mode == 'P' and 'transparency' in img.info)
+        
+        # Converti in RGBA se necessario per preservare trasparenza
+        if has_alpha and img.mode != 'RGBA':
+            img = img.convert('RGBA')
+        elif not has_alpha and img.mode not in ('RGB',):
+            img = img.convert('RGB')
+        
+        # Ridimensiona mantenendo le proporzioni
+        width, height = img.size
+        if height > MAX_HEIGHT or width > MAX_WIDTH:
+            # Calcola ratio per entrambi i limiti
+            ratio_h = MAX_HEIGHT / height
+            ratio_w = MAX_WIDTH / width
+            ratio = min(ratio_h, ratio_w)
+            
+            new_width = int(width * ratio)
+            new_height = int(height * ratio)
+            img = img.resize((new_width, new_height), Image.LANCZOS)
+        
+        # Salva in memoria
+        output = io.BytesIO()
+        
+        if has_alpha:
+            # Con trasparenza: salva come PNG
+            img.save(output, format='PNG', optimize=True)
+            mime_type = 'image/png'
+        else:
+            # Senza trasparenza: salva come WebP (più efficiente)
+            img.save(output, format='WEBP', quality=QUALITY, method=6)
+            mime_type = 'image/webp'
+        
+        output.seek(0)
+        image_data = output.read()
+        
+        # Verifica peso finale (warning se > 100KB)
+        if len(image_data) > 100 * 1024:
+            current_app.logger.warning(
+                "Logo salvato con peso > 100KB: %d bytes", len(image_data)
+            )
+        
+        # Salva in database
+        business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+        if not business_info:
+            business_info = BusinessInfo(business_name="Negozio")
+            db.session.add(business_info)
+        
+        business_info.logo_image = image_data
+        business_info.logo_mime_type = mime_type
+        business_info.logo_filename = file.filename
+        db.session.commit()
+        
+        flash("Logo caricato e ottimizzato con successo!", "success")
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error("Errore upload logo: %s", str(e))
+        flash(f"Errore durante l'elaborazione del logo: {str(e)}", "error")
+    
+    return redirect(url_for('settings.business_info'))
+
+
+@settings_bp.route('/settings/logo')
+def get_logo():
+    """Restituisce il logo salvato come immagine."""
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    
+    if not business_info or not business_info.logo_image:
+        # Restituisce un'immagine placeholder o 404
+        abort(404)
+    
+    from flask import Response
+    return Response(
+        business_info.logo_image,
+        mimetype=business_info.logo_mime_type or 'image/png',
+        headers={
+            'Cache-Control': 'public, max-age=86400',  # Cache 1 giorno
+            'Content-Disposition': f'inline; filename="{business_info.logo_filename or "logo"}"'
+        }
+    )
+
+
+@settings_bp.route('/settings/delete-logo', methods=['POST'])
+def delete_logo():
+    """Elimina il logo corrente."""
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    
+    if business_info:
+        business_info.logo_image = None
+        business_info.logo_mime_type = None
+        business_info.logo_filename = None
+        db.session.commit()
+        flash("Logo eliminato con successo.", "success")
+    
+    return redirect(url_for('settings.business_info'))
+
+
+@settings_bp.route('/settings/set-logo-visibility', methods=['POST'])
+def set_logo_visibility():
+    """Imposta la visibilità del logo nella pagina booking."""
+    try:
+        data = request.get_json(silent=True) or {}
+        visible = data.get('visible', True)
+        
+        business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+        if not business_info:
+            return jsonify({"ok": False, "error": "BusinessInfo non trovato"}), 404
+        
+        business_info.logo_visible_in_booking_page = bool(visible)
+        db.session.commit()
+        
+        return jsonify({"ok": True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error("Errore set_logo_visibility: %s", str(e))
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @settings_bp.route('/settings/business-info', methods=['GET'])
 def business_info():
     """Pagina delle informazioni aziendali."""
