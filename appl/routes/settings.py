@@ -595,7 +595,6 @@ def add_service():
 
         # Validazione: la durata è obbligatoria solo se NON è "prodotti"
         if not service_name or not service_price or not service_category:
-            print(f"Validazione fallita: nome={service_name}, prezzo={service_price}, categoria={service_category}")
             return redirect(url_for('settings.services'))
 
         # Imposta durata e visibilità per prodotti

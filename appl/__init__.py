@@ -185,7 +185,6 @@ def create_app(db_uri: str | None = None):
 
                 # controllo blocco account (minimo)
                 if username and is_account_locked(username):
-                    print(f"DEBUG: Account bloccato per {username}")
                     current_app.logger.warning("Account bloccato temporaneamente per username=%s", username)
                     flash('Troppi tentativi. Riprova più tardi.', 'danger')
                     return render_template('landing.html', login_attempts=None, reset_email=reset_email)
@@ -194,7 +193,6 @@ def create_app(db_uri: str | None = None):
                 valid = False
                 try:
                     user = User.query.filter_by(username=username).first() if username else None
-                    print(f"DEBUG: User trovato: {user is not None}")
                 except Exception:
                     # DB read error: rollback e fallimento silenzioso
                     try:
@@ -204,7 +202,6 @@ def create_app(db_uri: str | None = None):
                     user = None
 
                 if user:
-                    print(f"DEBUG: User ID: {user.id}, Password hash presente: {user.password is not None}")
                     try:
                         valid = False
                         try:

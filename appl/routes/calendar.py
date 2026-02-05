@@ -1335,7 +1335,6 @@ def set_no_show():
 @calendar_bp.route('/update_status/<int:appointment_id>', methods=['POST'])
 def update_status(appointment_id):
     data = request.get_json()
-    print("DEBUG update_status payload:", data)
     if not data or 'status' not in data:
         return jsonify({"error": "Parametro 'status' mancante"}), 400
 
@@ -1374,8 +1373,6 @@ def update_status(appointment_id):
 
     db.session.commit()
     appt = db.session.get(Appointment, appointment_id)  # Refresha dopo commit
-
-    print(f"UPDATE_STATUS: appointment_id={appointment_id}, new_status={new_status}, stato_in_db={appt.stato}")
 
     tooltips = {
         0: "Cliente non ancora arrivato",
