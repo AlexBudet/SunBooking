@@ -9,7 +9,6 @@ from sqlalchemy.orm import joinedload, selectinload
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN, ROUND_CEILING
 from datetime import datetime
 from werkzeug.utils import secure_filename
-from werkzeug.utils import secure_filename
 import filetype  # Sostituisce python-magic - nessuna dipendenza di sistema
 import json
 
@@ -1125,14 +1124,9 @@ def check_pacchetti_disponibili():
         risultati = []
         
         for pacchetto in pacchetti:
-            print(f"DEBUG: Pacchetto {pacchetto.id} - {pacchetto.nome}")
-            print(f"DEBUG: Sedute totali: {len(pacchetto.sedute)}")
             
             sedute_disponibili = []
             for seduta in pacchetto.sedute:
-                print(f"  - Seduta {seduta.id}: service_id={seduta.service_id}, stato={seduta.stato} (tipo: {type(seduta.stato)})")
-                print(f"    Confronto: {seduta.service_id} in {service_ids} = {seduta.service_id in service_ids}")
-                print(f"    Stato != Effettuata: {seduta.stato} != {SedutaStatus.Effettuata} = {seduta.stato != SedutaStatus.Effettuata}")
                 # Converti service_ids in interi per confronto corretto
                 service_ids_int = [int(sid) for sid in service_ids]
                 if seduta.service_id in service_ids_int and seduta.stato != SedutaStatus.Effettuata:
@@ -1157,7 +1151,6 @@ def check_pacchetti_disponibili():
         return jsonify(risultati), 200
         
     except Exception as e:
-        print(f"Errore check_pacchetti_disponibili: {str(e)}")
         return jsonify([]), 500
     
 @pacchetti_bp.route('/api/sedute/<int:seduta_id>/update-data', methods=['POST'])
@@ -1167,8 +1160,6 @@ def update_seduta_data(seduta_id):
         data = request.get_json()
         data_trattamento = data.get('data_trattamento')
         operatore_id = data.get('operatore_id')
-
-        print(f"DEBUG update_seduta_data: seduta_id={seduta_id}, data_trattamento={data_trattamento}")
         
         if not data_trattamento:
             return jsonify({'error': 'data_trattamento mancante'}), 400
@@ -1198,12 +1189,9 @@ def update_seduta_data(seduta_id):
         if operatore_id is not None:
             operatore_id_int = int(operatore_id) if operatore_id else None
             if seduta.operatore_id != operatore_id_int:
-                print(f"DEBUG: Cambio operatore da {seduta.operatore_id} a {operatore_id_int}")
                 seduta.operatore_id = operatore_id_int
-        
-        print(f"DEBUG: Salvando seduta.data_trattamento = {seduta.data_trattamento}")
+    
         db.session.commit()
-        print(f"DEBUG: Commit completato!")
         
         return jsonify({
             'success': True,
@@ -1214,9 +1202,6 @@ def update_seduta_data(seduta_id):
         
     except Exception as e:
         db.session.rollback()
-        print(f"Errore update_seduta_data: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     
 # Aggiungi questo endpoint dopo check_pacchetti_disponibili (circa riga 1078):
@@ -1276,7 +1261,6 @@ def get_sedute_disponibili(pacchetto_id):
         return jsonify(sedute_disponibili), 200
         
     except Exception as e:
-        print(f"Errore get_sedute_disponibili: {str(e)}")
         return jsonify([]), 500
     
 # ============ CONSENSO INFORMATO API ============
