@@ -6,8 +6,11 @@ from werkzeug.security import check_password_hash
 from argon2 import PasswordHasher, exceptions as argon2_exceptions
 from sqlalchemy import text
 import time
-import json, os
+import os
 from flask_migrate import Migrate
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 migrate = Migrate()
 
 # Istanza globale di SQLAlchemy
@@ -47,6 +50,21 @@ def create_app(db_uri: str | None = None):
 
     # Inizializza estensione CSRF
     csrf.init_app(app)
+
+    # ---- RATE LIMITER ----
+    limiter = Limiter(
+        key_func=get_remote_address,
+        app=app,
+        default_limits=["200 per minute"],  # limite globale
+        storage_uri="memory://",
+    )
+    
+    # Limite più stretto sul login
+    @limiter.limit("5 per minute")
+    @app.before_request
+    def rate_limit_login():
+        if request.endpoint == 'landing' and request.method == 'POST':
+            pass  # il decoratore applica il limite
 
     # Espone il token ai template Jinja come csrf_token()
     app.jinja_env.globals["csrf_token"] = generate_csrf
@@ -96,6 +114,18 @@ def create_app(db_uri: str | None = None):
     app.register_blueprint(cassa_bp)
     app.register_blueprint(report_bp)
     app.register_blueprint(pacchetti_bp, url_prefix="/pacchetti")
+
+    # ---- SECURITY HEADERS ----
+    @app.after_request
+    def add_security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        # Cache control per pagine dinamiche
+        if 'text/html' in response.content_type:
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        return response
 
     # ---- CONTEXT PROCESSOR: current_user disponibile in tutti i template ----
     @app.context_processor

@@ -77,16 +77,25 @@ def ping_printer():
     if not printer_ip:
         return jsonify({"error": "IP stampante non configurato"}), 400
 
-    # 2) Validazione IP minima (solo IPv4 non loopback)
+    # 2) Validazione IP: solo IPv4 privati (no loopback, no pubblici)
     try:
         ip_addr = ipaddress.ip_address(printer_ip)
     except ValueError:
         current_app.logger.warning("ping_printer: printer_ip non è un indirizzo IP valido: %s", printer_ip)
         return jsonify({"error": "IP stampante non valido"}), 400
 
-    if ip_addr.version != 4 or ip_addr.is_loopback:
-        current_app.logger.warning("ping_printer: IP non ammesso (IPv6/loopback): %s", printer_ip)
-        return jsonify({"error": "IP stampante non ammesso"}), 400
+    # Verifica che sia IPv4 privato
+    if ip_addr.version != 4:
+        current_app.logger.warning("ping_printer: IPv6 non supportato: %s", printer_ip)
+        return jsonify({"error": "Solo indirizzi IPv4 sono supportati"}), 400
+    
+    if ip_addr.is_loopback:
+        current_app.logger.warning("ping_printer: loopback non ammesso: %s", printer_ip)
+        return jsonify({"error": "Indirizzo loopback non ammesso"}), 400
+    
+    if not ip_addr.is_private:
+        current_app.logger.warning("ping_printer: IP pubblico non ammesso: %s", printer_ip)
+        return jsonify({"error": "Solo indirizzi IP di rete locale sono ammessi (192.168.x.x, 10.x.x.x, 172.16-31.x.x)"}), 400
 
     # 3) Unico test: semplice GET HTTP verso la porta configurata, timeout ~20 secondi
     remote = request.remote_addr or 'unknown'
