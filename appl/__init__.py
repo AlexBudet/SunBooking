@@ -151,7 +151,6 @@ def create_app(db_uri: str | None = None):
                 password = request.form.get('password', '')
 
                         # Log temporaneo per debug
-                print(f"DEBUG: Tentativo login - Username: {username}, Password length: {len(password)}")
                 current_app.logger.info(f"Tentativo login - Username: {username}")
 
                 # controllo blocco account (minimo)

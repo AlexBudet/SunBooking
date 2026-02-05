@@ -4,7 +4,7 @@
 
 {% block settings_content %}
 <div class="page-wide-90">
-<h3>&nbsp;Gestione Clienti</h3>
+<h3>Aggiungi Nuovo Cliente</h3>
 
 <style>
 @media (max-width: 1100px) {
@@ -129,7 +129,10 @@
         <!-- Data di nascita -->
         <div class="col-md-4">
             <label for="client_birthdate" class="visually-hidden">Data di nascita</label>
-            <input type="date" class="form-control" id="client_birthdate" name="client_birthdate">
+            <input type="text" class="form-control" id="client_birthdate" name="client_birthdate" 
+                   placeholder="Data di Compleanno" 
+                   onfocus="(this.type='date')" 
+                   onblur="if(!this.value)(this.type='text')">
         </div>
         <!-- Email -->
         <div class="col-md-4">
@@ -143,6 +146,8 @@
     </div>
 </form>
 
+<hr class="my-4">
+<h3>Cerca Clienti Registrati</h3>
 <!-- Cerca Cliente -->
 <div class="row mb-3">
     <div class="col-md-6">
