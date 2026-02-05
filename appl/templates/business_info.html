@@ -5,6 +5,74 @@
 <div class="container page-wide-90">
 <h3>&nbsp;Informazioni Aziendali</h3>
 
+<!-- Sezione Logo -->
+<div class="logo-section" style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
+    <h4 style="margin-top: 0;">Logo Negozio</h4>
+    
+    <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+        <!-- Anteprima logo corrente -->
+        <div class="logo-preview" style="min-width: 150px; text-align: center;">
+            {% if business_info and business_info.logo_image %}
+                <img src="{{ url_for('settings.get_logo') }}?t={{ range(1000000) | random }}" 
+                     alt="Logo negozio" 
+                     style="max-height: 100px; max-width: 200px; border: 1px solid #ccc; border-radius: 4px; background: #fff; padding: 5px;">
+                <br>
+                <small style="color: #666;">{{ business_info.logo_filename or 'logo' }}</small>
+            {% else %}
+                <div style="width: 150px; height: 80px; border: 2px dashed #ccc; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #999;">
+                    Nessun logo
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Form upload -->
+        {% if current_user.ruolo.value != 'user' %}
+        <div class="logo-upload">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+                <!-- Form upload -->
+                <form method="POST" action="{{ url_for('settings.upload_logo') }}" enctype="multipart/form-data" id="logoUploadForm" style="display: inline-flex; align-items: center; gap: 10px;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label for="logo_file" class="logo-btn logo-btn-primary">
+                        Seleziona file...
+                    </label>
+                    <input type="file" 
+                           name="logo" 
+                           id="logo_file" 
+                           accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                           style="display: none;">
+                    <span id="selectedFileName" style="color: #333; font-style: italic;"></span>
+                    <button type="submit" id="uploadLogoBtn" class="logo-btn logo-btn-success" style="display: none;">Carica Logo</button>
+                </form>
+                
+                {% if business_info and business_info.logo_image %}
+                <!-- Form elimina -->
+                <form method="POST" action="{{ url_for('settings.delete_logo') }}" style="display: inline;" 
+                      onsubmit="return confirm('Sei sicuro di voler eliminare il logo?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="logo-btn logo-btn-danger">Elimina Logo</button>
+                </form>
+                {% endif %}
+            </div>
+            
+            <small style="color: #666; display: block;">
+                Formati: PNG, JPEG, WebP, GIF, SVG • Max: 5MB • Verrà ridimensionato a max 200px di altezza
+            </small>
+            
+            <!-- Checkbox visibilità logo in booking -->
+            <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #ddd;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" 
+                           id="logoVisibleInBooking" 
+                           {% if business_info and business_info.logo_visible_in_booking_page %}checked{% endif %}>
+                    <span>Mostra logo nella pagina di prenotazione online</span>
+                </label>
+                <span id="logoVisibleStatus" style="margin-left: 28px; font-size: 0.85em; color: #666;"></span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
 <!-- Messaggi di errore/successo -->
 {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
@@ -224,7 +292,102 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endif %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Gestione selezione file logo
+    const fileInput = document.getElementById('logo_file');
+    const uploadBtn = document.getElementById('uploadLogoBtn');
+    const fileNameSpan = document.getElementById('selectedFileName');
+    
+    if (fileInput && uploadBtn && fileNameSpan) {
+        fileInput.addEventListener('change', function() {
+            if (this.files && this.files.length > 0) {
+                const fileName = this.files[0].name;
+                fileNameSpan.textContent = fileName;
+                uploadBtn.style.display = 'inline-block';
+            } else {
+                fileNameSpan.textContent = '';
+                uploadBtn.style.display = 'none';
+            }
+        });
+    }
+    
+    // Gestione checkbox visibilità logo in booking
+    const visibleCheckbox = document.getElementById('logoVisibleInBooking');
+    const visibleStatus = document.getElementById('logoVisibleStatus');
+    
+    if (visibleCheckbox && visibleStatus) {
+        visibleCheckbox.addEventListener('change', function() {
+            const isVisible = this.checked;
+            visibleStatus.style.color = '#666';
+            visibleStatus.textContent = 'Salvataggio...';
+            
+            const token = (document.querySelector('input[name="csrf_token"]')?.value) || '';
+            
+            fetch("{{ url_for('settings.set_logo_visibility') }}", {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': token
+                },
+                body: JSON.stringify({ visible: isVisible })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.ok) {
+                    visibleStatus.style.color = '#28a745';
+                    visibleStatus.textContent = 'Salvato!';
+                    setTimeout(() => { visibleStatus.textContent = ''; }, 2000);
+                } else {
+                    visibleStatus.style.color = '#dc3545';
+                    visibleStatus.textContent = data.error || 'Errore nel salvataggio';
+                }
+            })
+            .catch(() => {
+                visibleStatus.style.color = '#dc3545';
+                visibleStatus.textContent = 'Errore di connessione';
+            });
+        });
+    }
+});
+</script>
 <style>
+      /* Stili bottoni logo */
+    .logo-btn {
+        display: inline-block;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: normal;
+        text-decoration: none;
+        line-height: 1.4;
+        vertical-align: middle;
+    }
+    .logo-btn-primary {
+        background: #007bff;
+        color: white;
+    }
+    .logo-btn-primary:hover {
+        background: #0056b3;
+    }
+    .logo-btn-danger {
+        background: #dc3545;
+        color: white;
+    }
+    .logo-btn-danger:hover {
+        background: #c82333;
+    }
+    .logo-btn-success {
+        background: #28a745;
+        color: white;
+    }
+    .logo-btn-success:hover {
+        background: #218838;
+    }
+    
     table {
       border-collapse: separate;
       border-spacing: 8px 4px;
