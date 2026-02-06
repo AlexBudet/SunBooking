@@ -449,6 +449,38 @@ cut.style.display = 'inline-block';
     return;
   }
 
+    // TOUCH-UI: blocchi disable-popup (cliente eliminato) -> crea pulsante DELETE nella topBar
+  const isDisablePopup = block.classList.contains('disable-popup');
+  if (isDisablePopup) {
+    // Nascondi tutti i bottoni esistenti
+    topBar.querySelectorAll('.btn-popup').forEach(btn => (btn.style.display = 'none'));
+    
+    // Crea o trova il pulsante delete
+    let del = topBar.querySelector('.btn-popup.delete-appointment-block');
+    if (!del) {
+      del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn-popup delete-appointment-block';
+      del.title = 'Elimina appuntamento';
+      del.setAttribute('data-appointment-id', block.getAttribute('data-appointment-id') || '');
+      del.appendChild(biIcon('trash'));
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = block.getAttribute('data-appointment-id');
+        if (id && typeof window.deleteAppointment === 'function') window.deleteAppointment(id);
+        closeAllPopups();
+      });
+      topBar.appendChild(del);
+    }
+    del.style.display = 'inline-flex';
+    
+    // Nascondi my-spia
+    const mySpia = block.querySelector('.my-spia');
+    if (mySpia) mySpia.style.display = 'none';
+    
+    return;
+  }
+
   // Per blocchi STATUS-2 (pagati): la topBar esiste già nel DOM con i bottoni renderizzati da Jinja
   // Non fare nulla qui, il filtering verrà fatto nel click handler
   const status = block.getAttribute('data-status');

@@ -1,6 +1,6 @@
 # appl/__init__.py
 from flask_wtf.csrf import CSRFProtect, generate_csrf
-from flask import Flask, current_app, render_template, request, redirect, url_for, session, flash
+from flask import Flask, current_app, jsonify, render_template, request, redirect, url_for, session, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash
 from argon2 import PasswordHasher, exceptions as argon2_exceptions
@@ -209,16 +209,13 @@ def create_app(db_uri: str | None = None):
                             if ph.check_needs_rehash(user.password):
                                 user.password = ph.hash(password)
                                 db.session.commit()
-                            print(f"DEBUG: Password valida Argon2id: {valid}")
                         except (argon2_exceptions.VerifyMismatchError, argon2_exceptions.InvalidHash):
                             # Non è Argon2id, prova hash legacy
                             valid = check_password_hash(user.password, password)
-                            print(f"DEBUG: Password valida legacy: {valid}")
                             if valid:
                                 user.password = ph.hash(password)
                                 db.session.commit()
                     except Exception as e:
-                        print(f"DEBUG: Errore verifica password: {e}")
                         try:
                             db.session.rollback()
                         except Exception:
@@ -226,7 +223,6 @@ def create_app(db_uri: str | None = None):
                         valid = False
 
                 if valid:
-                    print(f"DEBUG: Login OK per {username}")
                     # login OK
                     reset_login_attempts(username)
                     session.clear()
@@ -239,13 +235,10 @@ def create_app(db_uri: str | None = None):
                         pass
                     try:
                         redirect_url = url_for('calendar.calendar_home')
-                        print(f"DEBUG: Redirect URL: {redirect_url}")
                         return redirect(redirect_url)
                     except Exception as e:
-                        print(f"DEBUG: Errore url_for: {e}")
                         return f"Errore redirect: {e}", 500
                 else:
-                    print(f"DEBUG: Login fallito per {username}")
                     # login fallito: registra tentativo senza esporre contatore
                     record_login_failure(username)
                     current_app.logger.warning("Login fallito per username=%s", username)
@@ -273,12 +266,17 @@ def create_app(db_uri: str | None = None):
     def require_login():
         allowed_endpoints = {'landing', 'healthz', 'static', 'ping'}
         ep = request.endpoint or ''
-        print(f"DEBUG: require_login - Endpoint: {ep}, user_id in session: {'user_id' in session}")
         if (ep not in allowed_endpoints) and ('user_id' not in session):
-            print(f"DEBUG: Redirect to landing")
+            # Se è una richiesta AJAX/fetch, restituisci 401 JSON
+            is_ajax = (
+                request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
+                request.accept_mimetypes.best == 'application/json' or
+                request.content_type == 'application/json' or
+                '/api/' in request.path
+            )
+            if is_ajax:
+                return jsonify({'error': 'session_expired', 'message': 'Sessione scaduta'}), 401
             return redirect(url_for('landing'))
-        else:
-            print(f"DEBUG: Accesso permesso a {ep}")
 
     # ---- PING: verifica raggiungibilità dell'app (non tocca il DB) ----
     @app.get("/ping")

@@ -91,6 +91,7 @@
          style="border: 1px dashed #ccc; padding: 5px; min-height: 40px;">
     </div>
     <button id="clearNavigatorBtn" class="clear-navigator-btn" onclick="clearNavigator()">Svuota</button>
+    <button type="button" id="navigatorToggleBtn" class="navigator-toggle-btn" onclick="toggleNavigator()" title="Collassa Navigator">−</button>
   </div>
 </div>
 <!-- NAVIGAZIONE CALENDARIO -->
@@ -272,7 +273,6 @@
                       {% endif %}
                  >
 <div class="popup-buttons">
-  {% if not appt.client.is_deleted %}
     <button type="button"
             class="btn-popup delete-appointment-block"
             title="Elimina appuntamento"
@@ -281,6 +281,7 @@
             onclick="if(window.deleteAppointment) window.deleteAppointment('{{ appt.id }}')">
       <i class="bi bi-trash"></i>
     </button>
+  {% if not appt.client.is_deleted %}
     <button type="button" class="btn-popup sposta" title="Togli e sposta" data-bs-toggle="tooltip"
             data-appointment-id="{{ appt.id }}">
       <i class="bi bi-scissors"></i>
@@ -390,7 +391,11 @@
    style="margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;"></i>
 {% endif %}
 {% if appt.client and appt.client.is_deleted %}
-    <a href="javascript:void(0)" title="assegnare nuovo cliente o eliminare">?</a>
+    <a href="javascript:void(0)" 
+       data-bs-toggle="tooltip" 
+       data-bs-placement="top" 
+       title="Clicca per assegnare cliente" 
+       class="assign-client-link">?</a>
   {% elif appt.client and appt.client.cliente_nome|lower == 'dummy' and appt.client.cliente_cognome|lower == 'dummy' and appt.note %}
     <span class="off-title">{{ appt.note }}</span>
   {% else %}
