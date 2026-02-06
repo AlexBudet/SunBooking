@@ -802,14 +802,6 @@ td {
   z-index: 12000 !important;
 }
 
-/* NON nascondiamo TUTTA la sezione popup-buttons, ma solo i pulsanti “extra” */
-.appointment-block.disable-popup .popup-buttons .sposta,
-.appointment-block.disable-popup .popup-buttons .pagamento,
-.appointment-block.disable-popup .popup-buttons .nota,
-.appointment-block.disable-popup .popup-buttons .aggiungi-servizi {
-    display: flex !important;
-}
-
 .btn-popup {
     background: rgba(0, 0, 0, 1);
     color: #fff;
@@ -962,6 +954,40 @@ td {
     display: flex !important; /* Solo per my-spia attiva */
 }
 
+/* NON nascondiamo TUTTA la sezione popup-buttons, ma solo i pulsanti “extra” */
+.appointment-block.disable-popup .popup-buttons .sposta,
+.appointment-block.disable-popup .popup-buttons .pagamento,
+.appointment-block.disable-popup .popup-buttons .nota,
+.appointment-block.disable-popup .popup-buttons .aggiungi-servizi,
+.appointment-block.disable-popup .popup-buttons .my-spia {
+    display: flex !important;
+}
+
+/* Nascondi elementi inutili nei blocchi con cliente eliminato */
+.appointment-block.disable-popup .whatsapp-btn,
+.appointment-block.disable-popup .my-spia,
+.appointment-block.disable-popup .no-show-button {
+  display: none !important;
+}
+
+/* DEFAULT: nascondi anche delete per disable-popup */
+body:not(.touch-ui) .appointment-block.disable-popup .popup-buttons .delete-appointment-block {
+  display: none !important;
+}
+
+/* TOUCH-UI: mostra delete per disable-popup quando attivo */
+body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons {
+  display: flex !important;
+}
+body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .delete-appointment-block {
+  display: inline-flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  flex: 0 0 16.6667% !important;
+  max-width: 16.6667% !important;
+  width: 16.6667% !important;
+}
+
 #DeleteOrNoShowModal .modal-dialog { max-width: 460px !important; }
 #DeleteOrNoShowModal .modal-content { min-height: 260px; }
 #DeleteOrNoShowModal .modal-body { min-height: 160px; }
@@ -1037,10 +1063,73 @@ td {
 
 .clear-navigator-btn {
     display: none;
+    padding: 2px 8px;
+    border-radius: 5px;
+    border: 2px solid #383838;
+    background-color: #fff;
+    color: #5e5e5e;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: all 0.2s ease;
+}
+
+.clear-navigator-btn:hover {
+    background-color: #7c7c7c;
+    color: #fff;
 }
 
 .appointmentNavigator.open .clear-navigator-btn {
     display: inline-block;
+}
+
+/* Pulsante toggle per collassare/espandere il navigator */
+.navigator-toggle-btn {
+    display: none;
+    margin-left: 10px;
+    width: 26px;
+    height: 26px;
+    border-radius: 5px;
+    border: 2px solid #383838;
+    background-color: #fff;
+    color: #5e5e5e;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 11000;
+    text-align: center;
+    line-height: 18px;
+    vertical-align: middle;
+    transition: all 0.2s ease;
+}
+
+.navigator-toggle-btn:hover {
+    background-color: #7c7c7c;
+    color: #fff;
+}
+
+/* Stato collassato del navigator */
+.appointmentNavigator.collapsed {
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    height: 40px !important;
+    padding: 5px;
+    overflow: hidden;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+/* Quando è collassato, nascondi tutto il contenuto tranne il pulsante toggle */
+.appointmentNavigator.collapsed > *:not(.navigator-toggle-btn) {
+    display: none !important;
+}
+
+/* Quando è collassato, mostra solo il pulsante toggle centrato */
+.appointmentNavigator.collapsed .navigator-toggle-btn {
+    display: block;
+    margin: 0 auto;
 }
 
 /* Imposta il container dei pseudo-blocchi per sfruttare l'intera larghezza del navigator */
@@ -2600,6 +2689,8 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
         overflow: hidden !important;
     }
 
+
+
     /* Azzeramento spazio riservato dalla lista servizi selezionati */
     #selectedServicesList {
         min-height: 0 !important;
@@ -3287,11 +3378,11 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
 }
 
 #MobilePopupButtonsModal .modal-content {
-  background: linear-gradient(to bottom right, rgb(255, 246, 250), rgb(255, 252, 253)) !important;
+  background: #fff !important;
 }
 
 #MobilePopupButtonsModal .modal-header {
-  background: rgb(255, 249, 251) !important;  /* Rosa più scuro per l'header, regola a piacere */
+  background: #fff !important;
 }
 
 .modal-backdrop,

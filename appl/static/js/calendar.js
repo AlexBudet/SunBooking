@@ -119,6 +119,42 @@ window.capitalizeName = capitalizeName;
 // DICHIARAZIONE csrfToken SPOSTATA QUI (prima era dopo la funzione checkPendingSedutaFromPacchetto)
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
+// === GESTIONE SESSIONE SCADUTA ===
+// Intercetta tutte le chiamate fetch e controlla se la sessione è scaduta
+(function setupSessionExpiryHandler() {
+  const originalFetch = window.fetch;
+  window.fetch = async function(...args) {
+    try {
+      const response = await originalFetch.apply(this, args);
+      if (response.status === 401) {
+        const cloned = response.clone();
+        try {
+          const data = await cloned.json();
+          if (data.error === 'session_expired') {
+            alert('Sessione scaduta. Verrai reindirizzato alla pagina di login.');
+            window.location.href = '/';
+            return response;
+          }
+        } catch (e) {}
+      }
+      return response;
+    } catch (err) {
+      throw err;
+    }
+  };
+
+  // Controllo periodico sessione ogni 60 secondi
+  setInterval(async function() {
+    try {
+      const resp = await originalFetch('/ping', { credentials: 'same-origin' });
+      if (resp.status === 401) {
+        alert('Sessione scaduta. Verrai reindirizzato alla pagina di login.');
+        window.location.href = '/';
+      }
+    } catch (e) {}
+  }, 60000);
+})();
+
 // === GESTIONE SEDUTA DA PACCHETTO ===
 // Controlla se stiamo arrivando da pacchetto_detail per creare una seduta
 (function checkPendingSedutaFromPacchetto() {
@@ -1988,6 +2024,53 @@ pseudoBlock.appendChild(document.createTextNode(' ' + String(serviceDuration) + 
 
   document.getElementById('serviceSearchInput').value = '';
 }
+
+/**
+ * Toggle per collassare/espandere il Navigator
+ * Permette di nascondere il navigator quando copre le celle del calendario
+ */
+function toggleNavigator() {
+    const navigator = document.getElementById('appointmentNavigator');
+    const toggleBtn = document.getElementById('navigatorToggleBtn');
+    
+    if (navigator.classList.contains('collapsed')) {
+        // Espandi
+        navigator.classList.remove('collapsed');
+        toggleBtn.textContent = '−'; // segno meno
+        toggleBtn.title = 'Collassa Navigator';
+        // Salva stato in localStorage
+        localStorage.setItem('navigatorCollapsed', 'false');
+    } else {
+        // Collassa
+        navigator.classList.add('collapsed');
+        toggleBtn.textContent = '+'; // segno più
+        toggleBtn.title = 'Espandi Navigator';
+        // Salva stato in localStorage
+        localStorage.setItem('navigatorCollapsed', 'true');
+    }
+}
+window.toggleNavigator = toggleNavigator;
+
+/**
+ * Ripristina lo stato del Navigator all'avvio della pagina
+ */
+function restoreNavigatorState() {
+    const savedState = localStorage.getItem('navigatorCollapsed');
+    if (savedState === 'true') {
+        const navigator = document.getElementById('appointmentNavigator');
+        const toggleBtn = document.getElementById('navigatorToggleBtn');
+        if (navigator && toggleBtn) {
+            navigator.classList.add('collapsed');
+            toggleBtn.textContent = '+';
+            toggleBtn.title = 'Espandi Navigator';
+        }
+    }
+}
+
+// Chiama restoreNavigatorState al caricamento della pagina
+document.addEventListener('DOMContentLoaded', function() {
+    restoreNavigatorState();
+});
 
 // =============================================================
 //   MODAL PER GESTIONE TURNI (CALENDAR.HTML)
@@ -4342,7 +4425,22 @@ document.querySelectorAll('.appointment-block').forEach(block => {
       clearTimeout(block.hidePopupTimeout);
       block.hidePopupTimeout = null;
     }
+    // Non attivare popup per blocchi con cliente eliminato
+    if (block.classList.contains('disable-popup')) return;
     block.classList.add('active-popup');
+    // === SOLO TAGLIA MODE: se ci sono pseudoBlocks, mostra SOLO il bottone TAGLIA ===
+    if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+      const popupButtons = block.querySelector('.popup-buttons');
+      if (popupButtons) {
+        popupButtons.querySelectorAll('.btn-popup').forEach(btn => {
+          if (btn.classList.contains('taglia') || btn.classList.contains('sposta')) {
+            btn.style.display = '';
+          } else {
+            btn.style.display = 'none';
+          }
+        });
+      }
+    }
   });
   block.addEventListener('mouseleave', function() {
     if (block.hidePopupTimeout) {
@@ -4351,7 +4449,12 @@ document.querySelectorAll('.appointment-block').forEach(block => {
     }
     block.classList.remove('active-popup');
     
-    // ✅ NUOVO: Pulisci gli stili inline applicati dal JS (taglia/copia contigui)
+    // In "solo taglia mode": non toccare nulla, esci subito
+    if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+      return;
+    }
+
+    // Pulisci gli stili inline applicati dal JS (taglia/copia contigui)
     const tb = block.querySelector('.popup-buttons');
     const bb = block.querySelector('.popup-buttons-bottom');
     if (tb) {
@@ -4366,7 +4469,6 @@ document.querySelectorAll('.appointment-block').forEach(block => {
       bb.style.removeProperty('visibility');
       bb.style.removeProperty('pointer-events');
     }
-    // Pulisci stili inline dei singoli bottoni
     block.querySelectorAll('.popup-buttons .btn-popup').forEach(btn => {
       btn.style.removeProperty('display');
       btn.style.removeProperty('visibility');
@@ -4386,7 +4488,23 @@ document.querySelectorAll('.popup-buttons').forEach(popup => {
       clearTimeout(block.hidePopupTimeout);
       block.hidePopupTimeout = null;
     }
-    if (block) block.classList.add('active-popup');
+    if (block) {
+      block.classList.add('active-popup');
+
+      // SOLO TAGLIA MODE: se ci sono pseudoBlocks, mostra SOLO il bottone TAGLIA
+      if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+        const popupButtons = block.querySelector('.popup-buttons');
+        if (popupButtons) {
+          popupButtons.querySelectorAll('.btn-popup').forEach(btn => {
+            if (btn.classList.contains('taglia') || btn.classList.contains('sposta')) {
+              btn.style.display = '';
+            } else {
+              btn.style.display = 'none';
+            }
+          });
+        }
+      }
+    }
   });
   popup.addEventListener('mouseleave', function() {
     const block = this.closest('.appointment-block');
@@ -4396,8 +4514,13 @@ document.querySelectorAll('.popup-buttons').forEach(popup => {
     }
     if (block) {
       block.classList.remove('active-popup');
-      
-      // ✅ NUOVO: Stessa pulizia stili inline
+
+      // NON pulire stili se siamo in "solo taglia mode"
+      if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+        return;
+      }
+
+      // Stessa pulizia stili inline
       const tb = block.querySelector('.popup-buttons');
       const bb = block.querySelector('.popup-buttons-bottom');
       if (tb) {
@@ -6941,6 +7064,13 @@ document.addEventListener('click', function(e) {
 const baseBlock = mySpiaElement.closest('.appointment-block');
 if (!baseBlock) return;
 
+// === NUOVO: Blocca completamente i blocchi in stato 2 (pagato) ===
+const baseStatus = parseInt(baseBlock.getAttribute('data-status') || '0', 10);
+if (baseStatus === 2) {
+  console.log("Blocco in stato PAGATO (2): operazione non consentita");
+  return; // Non fare nulla se il blocco è pagato
+}
+
 // PATCH: includi anche blocchi nella stessa cella con lo stesso cliente
 const cell = baseBlock.closest('.selectable-cell');
 let blocksInCell = [];
@@ -6954,13 +7084,18 @@ if (cell) {
     const bNome = b.getAttribute('data-client-nome');
     const bCognome = b.getAttribute('data-client-cognome');
     const bClientName = `${bNome || ''} ${bCognome || ''}`.trim();
+    // === NUOVO: escludi blocchi in stato 2 (pagato) dalla selezione ===
+    const bStatus = parseInt(b.getAttribute('data-status') || '0', 10);
+    if (bStatus === 2) return false;
     return (bClientId && bClientId === clientId) || (bClientName && bClientName === clientName);
   });
 }
 
 // Unisci con i blocchi contigui classici
 const contiguousBlocks = getRelevantBlocks(baseBlock);
-const groupBlocks = Array.from(new Set([...blocksInCell, ...contiguousBlocks]));
+// === NUOVO: filtra via i blocchi in stato 2 anche dai contigui ===
+const groupBlocks = Array.from(new Set([...blocksInCell, ...contiguousBlocks]))
+  .filter(b => parseInt(b.getAttribute('data-status') || '0', 10) !== 2);
 
   // Verifica che la data selezionata sia quella odierna
   let now = new Date();
@@ -7107,6 +7242,10 @@ function getRelevantBlocks(baseBlock) {
   const candidates = allBlocks.filter(b => {
     const bDate = b.getAttribute('data-date') || selectedDate || '';
     if (String(bDate) !== String(baseDate)) return false;
+
+    // === NUOVO: escludi blocchi in stato 2 (pagato) dai blocchi contigui ===
+    const bStatus = parseInt(b.getAttribute('data-status') || '0', 10);
+    if (bStatus === 2) return false;
 
     // escludi placeholder booking genericamente vuoti
     const bNome = (b.getAttribute('data-client-nome') || '').toString().trim().toLowerCase();
@@ -8149,6 +8288,11 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
       clearNavigatorBtn.style.display = 'none';
   }
 
+  const navigatorToggleBtn = document.getElementById('navigatorToggleBtn');
+  if (navigatorToggleBtn) {
+      navigatorToggleBtn.style.display = 'none';
+  }
+
   // Rimuovi i dati dal localStorage relativi SOLO al navigator
   try {
     localStorage.removeItem('selectedClientIdNav');
@@ -8283,7 +8427,13 @@ async function copyAsNewPseudoBlock(block, isCut = false) {
   const serviceName = block.getAttribute('data-service-name') || block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent || "Servizio";
   const duration = parseInt(block.getAttribute('data-duration'), 10) || 15;
   const color = block.getAttribute('data-colore') || '#FFFFFF';
-  const note = block.getAttribute('data-note') || '';
+  let note = block.getAttribute('data-note') || '';
+  const status = parseInt(block.getAttribute('data-status') || '0', 10);
+  
+  // Se il blocco è in stato 2 (pagato) e la nota contiene "***NUOVO CLIENTE***", non copiare la nota
+  if (status === 2 && note.includes('***NUOVO CLIENTE***')) {
+    note = '';
+  }
   
   // *** Dati pacchetto ***
   const pacchettoSedutaId = block.getAttribute('data-pacchetto-seduta-id');
@@ -8301,7 +8451,8 @@ async function copyAsNewPseudoBlock(block, isCut = false) {
       duration: duration,
       color: color,
       fontColor: computeFontColor(color),
-      note: note
+      note: note,
+      status: status  
     });
     window.commonPseudoBlockColor = color;
     renderPseudoBlocksList();
@@ -8382,6 +8533,7 @@ async function copyAsNewPseudoBlock(block, isCut = false) {
     color: color,
     fontColor: computeFontColor(color),
     note: note,
+    status: status,
     // Relazione pacchetto
     pacchettoSedutaId: finalSedutaId,
     pacchettoId: finalPacchettoId,
@@ -9161,6 +9313,9 @@ function openAppointmentNavigator() {
 
   const clearNavigatorBtn = document.getElementById('clearNavigatorBtn');
   if (clearNavigatorBtn) clearNavigatorBtn.style.display = 'inline-block';
+
+  const navigatorToggleBtn = document.getElementById('navigatorToggleBtn');
+  if (navigatorToggleBtn) navigatorToggleBtn.style.display = 'inline-block';
 
   const nav = document.getElementById('appointmentNavigator');
   if (nav && !nav.dataset.listenersAdded) {
@@ -11147,3 +11302,19 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Click su "?" in blocchi con cliente eliminato → apri modal riassegnazione
+document.addEventListener('click', function(e) {
+  const block = e.target.closest('.appointment-block.disable-popup');
+  if (!block) return;
+  const link = e.target.closest('.client-name a');
+  if (!link) return;
+  
+  e.preventDefault();
+  e.stopPropagation();
+  
+  const appointmentId = block.getAttribute('data-appointment-id');
+  if (appointmentId && typeof window.openModifyPopup === 'function') {
+    window.openModifyPopup(appointmentId);
+  }
+}, true);
