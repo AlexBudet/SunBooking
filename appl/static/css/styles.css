@@ -1065,7 +1065,7 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     display: none;
     padding: 2px 8px;
     border-radius: 5px;
-    border: 2px solid #383838;
+    border: 1px solid #383838;
     background-color: #fff;
     color: #5e5e5e;
     font-size: 16px;
@@ -1087,11 +1087,10 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
 /* Pulsante toggle per collassare/espandere il navigator */
 .navigator-toggle-btn {
     display: none;
-    margin-left: 10px;
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
     border-radius: 5px;
-    border: 2px solid #383838;
+    border: 1px solid #383838;
     background-color: #fff;
     color: #5e5e5e;
     font-size: 16px;
@@ -1099,7 +1098,7 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     cursor: pointer;
     z-index: 11000;
     text-align: center;
-    line-height: 18px;
+    line-height: 16px;
     vertical-align: middle;
     transition: all 0.2s ease;
 }
