@@ -2461,6 +2461,7 @@ def pacchetti_settings():
     """Pagina impostazioni pacchetti - promo e template WhatsApp."""
     business_info = BusinessInfo.query.first()
     template = getattr(business_info, 'whatsapp_template_pacchetti', None) if business_info else None
+    template_prepagate = getattr(business_info, 'whatsapp_template_prepagate', None) if business_info else None
     disclaimer = getattr(business_info, 'whatsapp_template_pacchetti_disclaimer', None) if business_info else None
     giorni = getattr(business_info, 'pacchetti_giorni_abbandono', 90) if business_info else 90
     
@@ -2473,6 +2474,7 @@ def pacchetti_settings():
     
     return render_template('pacchetti_settings.html', 
                            whatsapp_template=template,
+                           whatsapp_template_prepagate=template_prepagate,
                            disclaimer_template=disclaimer,
                            giorni_abbandono=giorni,
                            servizi=servizi)
@@ -2505,6 +2507,35 @@ def api_save_whatsapp_template_pacchetti():
     db.session.commit()
     
     return jsonify({'success': True, 'message': 'Template salvato con successo'})
+
+@settings_bp.route('/api/pacchetti/whatsapp_template_prepagate', methods=['GET'])
+def api_get_whatsapp_template_prepagate():
+    """Restituisce il template WhatsApp per carte prepagate."""
+    business_info = BusinessInfo.query.first()
+    template = getattr(business_info, 'whatsapp_template_prepagate', None) if business_info else None
+    return jsonify({'template': template or ''})
+
+@settings_bp.route('/api/pacchetti/whatsapp_template_prepagate', methods=['POST'])
+def api_save_whatsapp_template_prepagate():
+    """Salva il template WhatsApp per carte prepagate."""
+    data = request.get_json(silent=True) or {}
+    template = data.get('template', '').strip()
+    
+    business_info = BusinessInfo.query.first()
+    if not business_info:
+        business_info = BusinessInfo(
+            business_name="Centro",
+            opening_time=datetime.strptime("08:00", "%H:%M").time(),
+            closing_time=datetime.strptime("20:00", "%H:%M").time(),
+            active_opening_time=datetime.strptime("08:00", "%H:%M").time(),
+            active_closing_time=datetime.strptime("20:00", "%H:%M").time()
+        )
+        db.session.add(business_info)
+    
+    business_info.whatsapp_template_prepagate = template if template else None
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Template prepagate salvato con successo'})
 
 @settings_bp.route('/api/pacchetti/giorni_abbandono', methods=['POST'])
 def api_save_giorni_abbandono():

@@ -29,7 +29,8 @@ def cassa():
     pacchetto_id_param = request.args.get('pacchetto_id')
     prepagata_id = request.args.get('prepagata_id')  # Pagamento carta prepagata
     ricarica_prepagata_id = request.args.get('ricarica_prepagata_id')  # Ricarica carta prepagata
-    ricarica_importo = request.args.get('importo')
+    ricarica_importo = request.args.get('importo')  # Importo da pagare
+    ricarica_credito = request.args.get('credito')  # Credito effettivo da caricare (può essere > importo con bonus)
     ricarica_descrizione = request.args.get('descrizione', 'Ricarica')
     servizi = []
 
@@ -67,15 +68,19 @@ def cassa():
                     client_id = pacchetto.client_id
                     client_name = f"{pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}"
                 
+                # Credito da caricare: se specificato usa quello, altrimenti usa l'importo pagato
+                credito_da_caricare = float(ricarica_credito) if ricarica_credito else importo
+                
                 servizi = [{
                     'id': None,
                     'nome': clean_str(f"Ricarica Prepagata - {ricarica_descrizione}"),
-                    'prezzo': importo,
+                    'prezzo': importo,  # Importo da pagare in cassa
                     'categoria': 'Estetica',
                     'is_fiscale': True,
                     'metodo_pagamento': 'contanti',
                     'ricarica_prepagata_id': pacchetto.id,
                     'ricarica_importo': importo,
+                    'ricarica_credito': credito_da_caricare,  # Credito effettivo da caricare
                     'ricarica_descrizione': ricarica_descrizione
                 }]
         except Exception as e:
@@ -353,6 +358,7 @@ def api_services():
                 "prezzo": s.servizio_prezzo,
                 "categoria": clean_str(s.servizio_categoria.value) if s.servizio_categoria else "",
                 "sottocategoria": clean_str(s.servizio_sottocategoria.nome) if s.servizio_sottocategoria else "",
+                "sottocategoria_id": s.servizio_sottocategoria_id,
                 "is_prodotti": (
                     s.servizio_sottocategoria and clean_str(s.servizio_sottocategoria.nome.lower()) == "prodotti"
                 )
@@ -736,11 +742,13 @@ def send_to_rch():
                 pacchetto = Pacchetto.query.get(int(ricarica_prepagata_id))
                 if pacchetto and pacchetto.tipo.value == 'prepagata':
                     importo = Decimal(str(v.get('ricarica_importo', 0)))
+                    # Usa ricarica_credito se presente (include eventuali bonus), altrimenti usa importo
+                    credito_da_caricare = Decimal(str(v.get('ricarica_credito', importo)))
                     descrizione = v.get('ricarica_descrizione', 'Ricarica')
                     
-                    # Aggiorna credito residuo
+                    # Aggiorna credito residuo con il credito effettivo (può includere bonus)
                     vecchio_saldo = pacchetto.credito_residuo or Decimal('0')
-                    nuovo_saldo = vecchio_saldo + importo
+                    nuovo_saldo = vecchio_saldo + credito_da_caricare
                     pacchetto.credito_residuo = nuovo_saldo
                     
                     # Se era in Preventivo, attivala
