@@ -2,7 +2,7 @@
 import json
 from flask import Blueprint, render_template, request, jsonify
 from appl import db
-from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo
+from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo, PacchettoTipo, MovimentoPrepagata
 from sqlalchemy import func, or_, and_
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload, selectinload
@@ -340,6 +340,10 @@ def api_pacchetti():
         pacchetti_query = pacchetti_query.filter(Pacchetto.nome.ilike(f'%{query_nome}%'))
     if query_cliente_id.isdigit():
         pacchetti_query = pacchetti_query.filter(Pacchetto.client_id == int(query_cliente_id))
+    if query_nome:
+        pacchetti_query = pacchetti_query.filter(Pacchetto.nome.ilike(f'%{query_nome}%'))
+    if query_cliente_id.isdigit():
+        pacchetti_query = pacchetti_query.filter(Pacchetto.client_id == int(query_cliente_id))
     elif query_cliente:
         pacchetti_query = pacchetti_query.filter(
             or_(
@@ -349,6 +353,24 @@ def api_pacchetti():
         )
     if query_status:
         pacchetti_query = pacchetti_query.filter(Pacchetto.status == PacchettoStatus[query_status])
+    
+    # Filtro per tipo (servizi o prepagata)
+    tipo_filtro = request.args.get('tipo')
+    if tipo_filtro:
+        if tipo_filtro == 'servizi':
+            pacchetti_query = pacchetti_query.filter(Pacchetto.tipo == PacchettoTipo.Servizi)
+        elif tipo_filtro == 'prepagata':
+            pacchetti_query = pacchetti_query.filter(Pacchetto.tipo == PacchettoTipo.Prepagata)
+    
+    pacchetti = pacchetti_query.all()
+    
+    # Filtro per tipo (servizi o prepagata)
+    tipo_filtro = request.args.get('tipo')
+    if tipo_filtro:
+        if tipo_filtro == 'servizi':
+            pacchetti_query = pacchetti_query.filter(Pacchetto.tipo == PacchettoTipo.Servizi)
+        elif tipo_filtro == 'prepagata':
+            pacchetti_query = pacchetti_query.filter(Pacchetto.tipo == PacchettoTipo.Prepagata)
     
     pacchetti = pacchetti_query.all()
 
@@ -379,13 +401,19 @@ def api_pacchetti():
             'client_id': p.client_id,
             'client_nome': f"{p.client.cliente_nome} {p.client.cliente_cognome}",
             'nome': p.nome,
+            'tipo': p.tipo.value if p.tipo else 'servizi',
             'data_sottoscrizione': p.data_sottoscrizione.isoformat() if p.data_sottoscrizione else None,
             'note': p.note,
             'status': p.status.value,
             'costo_totale_lordo': float(p.costo_totale_lordo),
             'costo_totale_scontato': float(p.costo_totale_scontato) if p.costo_totale_scontato else None,
-            'operatori_preferiti': operatori_pref,  # ✅ MANTENUTO!
-            'sedute': sedute_info,                   # ✅ MANTENUTO!
+            'credito_iniziale': float(p.credito_iniziale) if p.credito_iniziale else None,
+            'saldo_attuale': float(p.credito_residuo) if p.credito_residuo else None,
+            'beneficiario_nome': p.beneficiario_nome,
+            'data_scadenza': p.data_scadenza.isoformat() if p.data_scadenza else None,
+            'credito_residuo': float(p.credito_residuo) if p.credito_residuo else None,
+            'operatori_preferiti': operatori_pref,
+            'sedute': sedute_info,
             'tutte_rate_pagate': tutte_rate_pagate
         })
     return jsonify(result)
@@ -397,11 +425,20 @@ def api_create_pacchetto():
     if not data:
         return jsonify({'error': 'Dati mancanti'}), 400
     
-    # Validazione base
-    required = ['client_id', 'servizi', 'costo_totale', 'sconto_tipo', 'pagamento_tipo', 'nome']
-    for r in required:
-        if r not in data:
-            return jsonify({'error': f'Campo {r} obbligatorio'}), 400
+    # Determina il tipo di pacchetto
+    tipo_pacchetto = data.get('tipo', 'servizi')
+    
+    # Validazione base diversa per tipo
+    if tipo_pacchetto == 'prepagata':
+        required = ['client_id', 'credito_iniziale']
+        for r in required:
+            if r not in data:
+                return jsonify({'error': f'Campo {r} obbligatorio'}), 400
+    else:
+        required = ['client_id', 'servizi', 'costo_totale', 'sconto_tipo', 'pagamento_tipo', 'nome']
+        for r in required:
+            if r not in data:
+                return jsonify({'error': f'Campo {r} obbligatorio'}), 400
     
     client = Client.query.get(data['client_id'])
     if not client:
@@ -411,22 +448,58 @@ def api_create_pacchetto():
     raw_status = str(data.get('status') or '').strip()
     if raw_status:
         try:
-            status_enum = PacchettoStatus[raw_status]          # nome: es. "Preventivo"
+            status_enum = PacchettoStatus[raw_status]
         except KeyError:
             try:
-                status_enum = PacchettoStatus(raw_status)      # value: es. "preventivo"
+                status_enum = PacchettoStatus(raw_status)
             except ValueError:
                 status_enum = PacchettoStatus.Preventivo
     else:
         status_enum = PacchettoStatus.Preventivo
     if status_enum == PacchettoStatus.Eliminato:
-        status_enum = PacchettoStatus.Preventivo  # non consentito in creazione
-
+        status_enum = PacchettoStatus.Preventivo
+    
+    # CARTA PREPAGATA
+    if tipo_pacchetto == 'prepagata':
+        credito = Decimal(str(data['credito_iniziale']))
+        
+        pacchetto = Pacchetto(
+            client_id=data['client_id'],
+            nome=data.get('nome', 'Carta Prepagata'),
+            data_sottoscrizione=datetime.now().date(),
+            status=PacchettoStatus.Attivo,
+            tipo=PacchettoTipo.Prepagata,
+            credito_iniziale=credito,
+            credito_residuo=credito,
+            beneficiario_nome=data.get('beneficiario_nome'),
+            data_scadenza=datetime.strptime(data['data_scadenza'], '%Y-%m-%d').date() if data.get('data_scadenza') else None,
+            costo_totale_lordo=credito,
+            costo_totale_scontato=credito
+        )
+        db.session.add(pacchetto)
+        db.session.flush()
+        
+        # Registra movimento iniziale di ricarica
+        movimento = MovimentoPrepagata(
+            pacchetto_id=pacchetto.id,
+            tipo_movimento='ricarica',
+            importo=credito,
+            saldo_dopo=credito,
+            descrizione='Caricamento iniziale'
+        )
+        db.session.add(movimento)
+        
+        aggiungi_history(pacchetto, f"Creata Carta Prepagata con credito €{credito:.2f}")
+        db.session.commit()
+        return jsonify({'id': pacchetto.id, 'message': 'Carta Prepagata creata'}), 201
+    
+    # PACCHETTO SERVIZI (logica esistente)
     pacchetto = Pacchetto(
         client_id=data['client_id'],
         nome=data['nome'],
         data_sottoscrizione=datetime.now().date(),
         status=status_enum,
+        tipo=PacchettoTipo.Servizi,
         costo_totale_lordo=data['costo_totale'],
         costo_totale_scontato=data.get('costo_scontato')
     )
@@ -805,17 +878,36 @@ def pacchetto_detail(id):
         'numero_rate': pagamento.numero_rate if pagamento else 1
     } if pagamento else None
 
+    # Prepara movimenti prepagata se è una carta prepagata
+    movimenti_prepagata = []
+    if pacchetto.tipo == PacchettoTipo.Prepagata:
+        for m in pacchetto.movimenti_prepagata:
+            movimenti_prepagata.append({
+                'id': m.id,
+                'tipo': m.tipo_movimento,
+                'importo': float(m.importo),
+                'saldo_dopo': float(m.saldo_dopo),
+                'descrizione': m.descrizione,
+                'data': m.data_movimento.strftime('%d/%m/%Y %H:%M') if m.data_movimento else None
+            })
+
     return render_template('pacchetto_detail.html', pacchetto={
         'id': pacchetto.id,
         'client_id': pacchetto.client_id,
         'client_nome': f"{pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}" if pacchetto.client else '',
         'client_cellulare': pacchetto.client.cliente_cellulare if pacchetto.client else '',
         'nome': pacchetto.nome,
+        'tipo': pacchetto.tipo.value if pacchetto.tipo else 'Servizi',
         'data_sottoscrizione': data_fmt,
         'note': pacchetto.note,
         'status': pacchetto.status.value,
         'costo_totale_lordo': float(pacchetto.costo_totale_lordo),
         'costo_totale_scontato': float(pacchetto.costo_totale_scontato) if pacchetto.costo_totale_scontato else None,
+        'credito_iniziale': float(pacchetto.credito_iniziale) if pacchetto.credito_iniziale else None,
+        'credito_residuo': float(pacchetto.credito_residuo) if pacchetto.credito_residuo else None,
+        'data_scadenza': pacchetto.data_scadenza.strftime('%d/%m/%Y') if pacchetto.data_scadenza else None,
+        'beneficiario_nome': pacchetto.beneficiario_nome,
+        'movimenti_prepagata': movimenti_prepagata,
         'totale_rate_pagate': totale_rate_pagate,
         'totale_rate_non_pagate': totale_rate_non_pagate,
         'rate_disallineate': rate_disallineate,
@@ -1394,3 +1486,144 @@ def consenso_info(id):
             'success': True,
             'has_consenso': False
         })
+    
+# ============ CARTA PREPAGATA API ============
+@pacchetti_bp.route('/api/pacchetti/<int:id>/ricarica', methods=['POST'])
+def api_ricarica_prepagata(id):
+    """Ricarica una carta prepagata con un importo aggiuntivo"""
+    pacchetto = Pacchetto.query.get_or_404(id)
+    
+    # Verifica che sia una carta prepagata
+    if pacchetto.tipo != PacchettoTipo.Prepagata:
+        return jsonify({'success': False, 'error': 'Questo pacchetto non è una carta prepagata'}), 400
+    
+    data = request.get_json()
+    if not data or 'importo' not in data:
+        return jsonify({'success': False, 'error': 'Importo mancante'}), 400
+    
+    try:
+        importo = Decimal(str(data['importo']))
+        if importo <= 0:
+            return jsonify({'success': False, 'error': 'L\'importo deve essere positivo'}), 400
+    except:
+        return jsonify({'success': False, 'error': 'Importo non valido'}), 400
+    
+    # Aggiorna credito
+    vecchio_saldo = pacchetto.credito_residuo or Decimal('0')
+    nuovo_saldo = vecchio_saldo + importo
+    pacchetto.credito_residuo = nuovo_saldo
+    pacchetto.credito_iniziale = (pacchetto.credito_iniziale or Decimal('0')) + importo
+    
+    # Registra movimento
+    movimento = MovimentoPrepagata(
+        pacchetto_id=pacchetto.id,
+        tipo_movimento='ricarica',
+        importo=importo,
+        saldo_dopo=nuovo_saldo,
+        descrizione=data.get('descrizione', 'Ricarica manuale')
+    )
+    db.session.add(movimento)
+    
+    # History
+    aggiungi_history(pacchetto, f"Ricarica €{importo:.2f} - Nuovo saldo €{nuovo_saldo:.2f}")
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Ricarica di €{importo:.2f} effettuata',
+        'credito_residuo': float(nuovo_saldo),
+        'credito_iniziale': float(pacchetto.credito_iniziale)
+    })
+
+
+@pacchetti_bp.route('/api/pacchetti/<int:id>/utilizza', methods=['POST'])
+def api_utilizza_prepagata(id):
+    """Scala credito da una carta prepagata (chiamato dalla cassa)"""
+    pacchetto = Pacchetto.query.get_or_404(id)
+    
+    # Verifica che sia una carta prepagata
+    if pacchetto.tipo != PacchettoTipo.Prepagata:
+        return jsonify({'success': False, 'error': 'Questo pacchetto non è una carta prepagata'}), 400
+    
+    data = request.get_json()
+    if not data or 'importo' not in data:
+        return jsonify({'success': False, 'error': 'Importo mancante'}), 400
+    
+    try:
+        importo = Decimal(str(data['importo']))
+        if importo <= 0:
+            return jsonify({'success': False, 'error': 'L\'importo deve essere positivo'}), 400
+    except:
+        return jsonify({'success': False, 'error': 'Importo non valido'}), 400
+    
+    # Verifica credito sufficiente
+    credito_attuale = pacchetto.credito_residuo or Decimal('0')
+    if importo > credito_attuale:
+        return jsonify({
+            'success': False, 
+            'error': f'Credito insufficiente. Disponibile: €{credito_attuale:.2f}'
+        }), 400
+    
+    # Verifica scadenza
+    if pacchetto.data_scadenza and pacchetto.data_scadenza < datetime.now().date():
+        return jsonify({'success': False, 'error': 'Carta prepagata scaduta'}), 400
+    
+    # Scala credito
+    nuovo_saldo = credito_attuale - importo
+    pacchetto.credito_residuo = nuovo_saldo
+    
+    # Se credito esaurito, segna come Completato
+    if nuovo_saldo <= 0:
+        pacchetto.status = PacchettoStatus.Completato
+    
+    # Registra movimento
+    movimento = MovimentoPrepagata(
+        pacchetto_id=pacchetto.id,
+        tipo_movimento='utilizzo',
+        importo=importo,
+        saldo_dopo=nuovo_saldo,
+        descrizione=data.get('descrizione', 'Pagamento in cassa')
+    )
+    db.session.add(movimento)
+    
+    # History
+    aggiungi_history(pacchetto, f"Utilizzo €{importo:.2f} - Saldo residuo €{nuovo_saldo:.2f}")
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Scalati €{importo:.2f} dalla carta',
+        'credito_residuo': float(nuovo_saldo),
+        'carta_esaurita': nuovo_saldo <= 0
+    })
+
+
+@pacchetti_bp.route('/api/prepagate-cliente/<int:client_id>', methods=['GET'])
+def api_prepagate_cliente(client_id):
+    """Restituisce le carte prepagate attive di un cliente (per la cassa)"""
+    prepagate = Pacchetto.query.filter(
+        Pacchetto.client_id == client_id,
+        Pacchetto.tipo == PacchettoTipo.Prepagata,
+        Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo]),
+        Pacchetto.credito_residuo > 0
+    ).all()
+    
+    risultati = []
+    oggi = datetime.now().date()
+    
+    for p in prepagate:
+        # Salta carte scadute
+        if p.data_scadenza and p.data_scadenza < oggi:
+            continue
+        
+        risultati.append({
+            'id': p.id,
+            'nome': p.nome,
+            'credito_residuo': float(p.credito_residuo),
+            'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None,
+            'beneficiario': p.beneficiario_nome
+        })
+    
+    return jsonify(risultati)
