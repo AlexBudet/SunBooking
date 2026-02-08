@@ -1,3 +1,4 @@
+from decimal import Decimal
 import json
 import html, re, time as pytime
 from flask import Blueprint, app, render_template, jsonify, request, session, abort, current_app
@@ -25,10 +26,109 @@ def cassa():
     servizi_json = request.args.get('servizi')
     appointments_json = request.args.get('appointments')
     rata_id = request.args.get('rata_id')
+    pacchetto_id_param = request.args.get('pacchetto_id')
+    prepagata_id = request.args.get('prepagata_id')  # Pagamento carta prepagata
+    ricarica_prepagata_id = request.args.get('ricarica_prepagata_id')  # Ricarica carta prepagata
+    ricarica_importo = request.args.get('importo')
+    ricarica_descrizione = request.args.get('descrizione', 'Ricarica')
     servizi = []
 
+    # Se prepagata_id presente, carica la carta prepagata da pagare
+    if prepagata_id:
+        try:
+            pacchetto = Pacchetto.query.get(int(prepagata_id))
+            if pacchetto and pacchetto.tipo.value == 'prepagata' and pacchetto.status == PacchettoStatus.Preventivo:
+                # Cliente
+                if pacchetto.client:
+                    client_id = pacchetto.client_id
+                    client_name = f"{pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}"
+                
+                servizi = [{
+                    'id': None,
+                    'nome': clean_str(f"Carta Prepagata - {pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}"),
+                    'prezzo': float(pacchetto.credito_iniziale),
+                    'categoria': 'Estetica',
+                    'is_fiscale': True,
+                    'metodo_pagamento': 'contanti',
+                    'prepagata_id': pacchetto.id
+                }]
+        except Exception as e:
+            current_app.logger.error(f"Errore caricamento prepagata {prepagata_id}: {e}")
+
+    # Se ricarica_prepagata_id presente, carica la ricarica da pagare
+    if ricarica_prepagata_id and ricarica_importo:
+        try:
+            pacchetto = Pacchetto.query.get(int(ricarica_prepagata_id))
+            if pacchetto and pacchetto.tipo.value == 'prepagata':
+                importo = float(ricarica_importo)
+                
+                # Cliente
+                if pacchetto.client:
+                    client_id = pacchetto.client_id
+                    client_name = f"{pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}"
+                
+                servizi = [{
+                    'id': None,
+                    'nome': clean_str(f"Ricarica Prepagata - {ricarica_descrizione}"),
+                    'prezzo': importo,
+                    'categoria': 'Estetica',
+                    'is_fiscale': True,
+                    'metodo_pagamento': 'contanti',
+                    'ricarica_prepagata_id': pacchetto.id,
+                    'ricarica_importo': importo,
+                    'ricarica_descrizione': ricarica_descrizione
+                }]
+        except Exception as e:
+            current_app.logger.error(f"Errore caricamento ricarica prepagata {ricarica_prepagata_id}: {e}")
+
+    # Se pacchetto_id presente (pagamento pacchetto intero), carica tutte le rate non pagate
+    if pacchetto_id_param:
+        try:
+            pacchetto = Pacchetto.query.get(int(pacchetto_id_param))
+            if pacchetto and pacchetto.status == PacchettoStatus.Preventivo:
+                # Cliente
+                if pacchetto.client:
+                    client_id = pacchetto.client_id
+                    client_name = f"{pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}"
+                
+                # Operatore preferito (primo se presente)
+                if pacchetto.preferred_operators:
+                    first_op = pacchetto.preferred_operators[0]
+                    operator_id = first_op.id
+                    operator_name = f"{first_op.user_nome} {first_op.user_cognome}"
+                
+                # Determina categoria dal primo servizio del pacchetto
+                categoria = "Estetica"  # default
+                if pacchetto.sedute:
+                    first_seduta = pacchetto.sedute[0] if pacchetto.sedute else None
+                    if first_seduta and first_seduta.service:
+                        categoria = first_seduta.service.servizio_categoria.value
+                
+                # Carica tutte le rate non pagate come righe separate
+                rate_non_pagate = PacchettoRata.query.filter_by(
+                    pacchetto_id=pacchetto.id, 
+                    is_pagata=False
+                ).order_by(PacchettoRata.id).all()
+                
+                rate_ordinate = PacchettoRata.query.filter_by(pacchetto_id=pacchetto.id).order_by(PacchettoRata.id).all()
+                
+                for rata in rate_non_pagate:
+                    numero_rata = next((i+1 for i, r in enumerate(rate_ordinate) if r.id == rata.id), 1)
+                    servizi.append({
+                        'id': None,
+                        'nome': clean_str(f"Rata {numero_rata} - {pacchetto.nome}"),
+                        'prezzo': float(rata.importo),
+                        'categoria': clean_str(categoria),
+                        'is_fiscale': True,
+                        'metodo_pagamento': 'contanti',
+                        'rata_id': rata.id,
+                        'pacchetto_id': pacchetto.id
+                    })
+        except Exception as e:
+            current_app.logger.error(f"Errore caricamento pacchetto {pacchetto_id_param}: {e}")
+    
     # Se rata_id presente, carica dati dalla rata del pacchetto
-    if rata_id:
+    elif rata_id:
         try:
             rata = PacchettoRata.query.get(int(rata_id))
             if rata and not rata.is_pagata:
@@ -629,6 +729,64 @@ def send_to_rch():
     pacchetto_ids_modificati = set()  # Per tracciare i pacchetti con rate modificate
     
     for v in voci:
+        # Gestione ricarica carta prepagata
+        ricarica_prepagata_id = v.get('ricarica_prepagata_id')
+        if ricarica_prepagata_id:
+            try:
+                pacchetto = Pacchetto.query.get(int(ricarica_prepagata_id))
+                if pacchetto and pacchetto.tipo.value == 'prepagata':
+                    importo = Decimal(str(v.get('ricarica_importo', 0)))
+                    descrizione = v.get('ricarica_descrizione', 'Ricarica')
+                    
+                    # Aggiorna credito residuo
+                    vecchio_saldo = pacchetto.credito_residuo or Decimal('0')
+                    nuovo_saldo = vecchio_saldo + importo
+                    pacchetto.credito_residuo = nuovo_saldo
+                    
+                    # Se era in Preventivo, attivala
+                    if pacchetto.status == PacchettoStatus.Preventivo:
+                        pacchetto.status = PacchettoStatus.Attivo
+                    
+                    # Registra movimento di ricarica
+                    from appl.models import MovimentoPrepagata
+                    movimento = MovimentoPrepagata(
+                        pacchetto_id=pacchetto.id,
+                        tipo_movimento='ricarica',
+                        importo=importo,
+                        saldo_dopo=nuovo_saldo,
+                        descrizione=descrizione
+                    )
+                    db.session.add(movimento)
+                    db.session.commit()
+                    current_app.logger.info(f"Ricarica prepagata {ricarica_prepagata_id}: +€{importo:.2f}, nuovo saldo €{nuovo_saldo:.2f}")
+            except Exception as e:
+                current_app.logger.error(f"Errore ricarica prepagata {ricarica_prepagata_id}: {e}")
+
+        # Gestione pagamento carta prepagata
+        prepagata_id = v.get('prepagata_id')
+        if prepagata_id:
+            try:
+                pacchetto = Pacchetto.query.get(int(prepagata_id))
+                if pacchetto and pacchetto.tipo.value == 'prepagata':
+                    credito = pacchetto.credito_iniziale
+                    pacchetto.credito_residuo = credito
+                    pacchetto.status = PacchettoStatus.Attivo
+                    
+                    # Registra movimento iniziale di ricarica
+                    from appl.models import MovimentoPrepagata
+                    movimento = MovimentoPrepagata(
+                        pacchetto_id=pacchetto.id,
+                        tipo_movimento='ricarica',
+                        importo=credito,
+                        saldo_dopo=credito,
+                        descrizione='Caricamento iniziale (pagamento)'
+                    )
+                    db.session.add(movimento)
+                    db.session.commit()
+                    current_app.logger.info(f"Prepagata {prepagata_id} attivata con credito €{credito:.2f}")
+            except Exception as e:
+                current_app.logger.error(f"Errore attivazione prepagata {prepagata_id}: {e}")
+
         rata_id = v.get('rata_id')
         if rata_id:
             try:

@@ -463,14 +463,16 @@ def api_create_pacchetto():
     if tipo_pacchetto == 'prepagata':
         credito = Decimal(str(data['credito_iniziale']))
         
+        # La prepagata nasce in stato Preventivo con credito_residuo a 0
+        # Il credito verrà attivato solo dopo il pagamento in cassa
         pacchetto = Pacchetto(
             client_id=data['client_id'],
             nome=data.get('nome', 'Carta Prepagata'),
             data_sottoscrizione=datetime.now().date(),
-            status=PacchettoStatus.Attivo,
+            status=PacchettoStatus.Preventivo,
             tipo=PacchettoTipo.Prepagata,
             credito_iniziale=credito,
-            credito_residuo=credito,
+            credito_residuo=Decimal('0'),  # Sarà caricato dopo il pagamento
             beneficiario_nome=data.get('beneficiario_nome'),
             data_scadenza=datetime.strptime(data['data_scadenza'], '%Y-%m-%d').date() if data.get('data_scadenza') else None,
             costo_totale_lordo=credito,
@@ -479,15 +481,7 @@ def api_create_pacchetto():
         db.session.add(pacchetto)
         db.session.flush()
         
-        # Registra movimento iniziale di ricarica
-        movimento = MovimentoPrepagata(
-            pacchetto_id=pacchetto.id,
-            tipo_movimento='ricarica',
-            importo=credito,
-            saldo_dopo=credito,
-            descrizione='Caricamento iniziale'
-        )
-        db.session.add(movimento)
+        # NON registrare movimento iniziale qui - sarà fatto dopo il pagamento
         
         aggiungi_history(pacchetto, f"Creata Carta Prepagata con credito €{credito:.2f}")
         db.session.commit()

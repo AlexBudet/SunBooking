@@ -67,13 +67,195 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
     if (!name) return name || '';
     return String(name).toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
   }
-  window.capitalizeName = capitalizeName;  // Rendi globale se serve altrove
+  window.capitalizeName = capitalizeName;
+
+  // Carica le carte prepagate attive di un cliente
+  function caricaPrepagateCliente(clientId, nomeCliente) {
+    if (!clientId) {
+      window.clientePrepagate = [];
+      aggiornaOpzioniPrepagata();
+      return;
+    }
+    fetch(`/pacchetti/api/prepagate-cliente/${clientId}`)
+      .then(res => res.json())
+      .then(prepagate => {
+        window.clientePrepagate = Array.isArray(prepagate) ? prepagate : [];
+        console.log('Prepagate caricate:', window.clientePrepagate);
+        aggiornaOpzioniPrepagata();
+        
+        // Mostra modal se ci sono prepagate attive
+        if (window.clientePrepagate.length > 0 && nomeCliente) {
+          mostraModalPrepagate(window.clientePrepagate, nomeCliente);
+        }
+      })
+      .catch((err) => {
+        console.error('Errore caricamento prepagate:', err);
+        window.clientePrepagate = [];
+        aggiornaOpzioniPrepagata();
+      });
+  }
+  window.caricaPrepagateCliente = caricaPrepagateCliente;
+
+  // Aggiorna tutte le select per mostrare/nascondere opzione prepagata
+  function aggiornaOpzioniPrepagata() {
+    const haPrepagate = window.clientePrepagate && window.clientePrepagate.length > 0;
+    document.querySelectorAll('.scontrino-row select[name="metodo_pagamento[]"]').forEach(sel => {
+      let optPrepagata = sel.querySelector('option[value="prepagata"]');
+      if (haPrepagate) {
+        if (!optPrepagata) {
+          optPrepagata = document.createElement('option');
+          optPrepagata.value = 'prepagata';
+          optPrepagata.textContent = 'Prepagata';
+          sel.appendChild(optPrepagata);
+        }
+      } else {
+        if (optPrepagata) {
+          if (sel.value === 'prepagata') sel.value = 'pos';
+          optPrepagata.remove();
+        }
+      }
+    });
+  }
+  window.aggiornaOpzioniPrepagata = aggiornaOpzioniPrepagata;
+
+  // Calcola il saldo totale disponibile delle prepagate
+  function getSaldoTotalePrepagata() {
+    if (!window.clientePrepagate || window.clientePrepagate.length === 0) return 0;
+    return window.clientePrepagate.reduce((sum, p) => sum + (p.credito_residuo || 0), 0);
+  }
+
+  // Calcola quanto è già assegnato a prepagata nelle righe
+  function getTotaleAssegnatoPrepagata() {
+    let totale = 0;
+    document.querySelectorAll('.scontrino-row').forEach(row => {
+      const metodo = row.querySelector('select')?.value;
+      if (metodo === 'prepagata') {
+        const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
+        totale += prezzo;
+      }
+    });
+    return totale;
+  }
+
+  // Verifica se si può assegnare prepagata a una riga
+  function verificaSaldoPrepagata(prezzoRiga, selectElement) {
+    const saldoDisponibile = getSaldoTotalePrepagata();
+    const giàAssegnato = getTotaleAssegnatoPrepagata();
+    // Sottrai il prezzo della riga corrente se già era prepagata (per ricalcolo corretto)
+    const row = selectElement.closest('.scontrino-row');
+    const vecchioMetodo = row?.dataset?.vecchioMetodo || 'pos';
+    const prezzoGiàContato = (vecchioMetodo === 'prepagata') ? prezzoRiga : 0;
+    
+    const nuovoTotale = giàAssegnato - prezzoGiàContato + prezzoRiga;
+    
+    if (nuovoTotale > saldoDisponibile) {
+      const residuo = saldoDisponibile - (giàAssegnato - prezzoGiàContato);
+      const mancante = prezzoRiga - residuo;
+      
+      alert(
+        `⚠️ Saldo prepagata insufficiente!\n\n` +
+        `Saldo disponibile: € ${saldoDisponibile.toFixed(2)}\n` +
+        `Già assegnato ad altre righe: € ${(giàAssegnato - prezzoGiàContato).toFixed(2)}\n` +
+        `Residuo utilizzabile: € ${Math.max(0, residuo).toFixed(2)}\n\n` +
+        `Importo riga: € ${prezzoRiga.toFixed(2)}\n` +
+        `Mancante: € ${mancante.toFixed(2)}\n\n` +
+        `Suggerimento: riduci l'importo a € ${Math.max(0, residuo).toFixed(2)} ` +
+        `oppure paga la differenza con un altro metodo.`
+      );
+      return false;
+    }
+    return true;
+  }
+  window.verificaSaldoPrepagata = verificaSaldoPrepagata;
+
+  // Mostra modal informativo quando il cliente ha carte prepagate
+  function mostraModalPrepagate(prepagate, nomeCliente) {
+    // Rimuovi eventuale modal esistente
+    const existing = document.getElementById('prepagateInfoModal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'prepagateInfoModal';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#fff;padding:20px 30px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-width:450px;width:90%;position:relative;';
+
+    // Pulsante X per chiudere
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.cssText = 'position:absolute;top:10px;right:15px;background:none;border:none;font-size:24px;cursor:pointer;color:#666;';
+    closeBtn.onclick = () => overlay.remove();
+    modal.appendChild(closeBtn);
+
+    // Icona carta prepagata
+    const iconDiv = document.createElement('div');
+    iconDiv.innerHTML = '<i class="bi bi-credit-card-fill" style="font-size:40px;color:#0d6efd;"></i>';
+    iconDiv.style.textAlign = 'center';
+    iconDiv.style.marginBottom = '15px';
+    modal.appendChild(iconDiv);
+
+    // Titolo
+    const title = document.createElement('h5');
+    title.style.cssText = 'margin:0 0 15px;text-align:center;font-weight:600;';
+    title.textContent = `${nomeCliente} ha carte prepagate attive!`;
+    modal.appendChild(title);
+
+    // Lista delle prepagate
+    const lista = document.createElement('div');
+    lista.style.cssText = 'max-height:200px;overflow-y:auto;';
+    
+    prepagate.forEach(p => {
+      const item = document.createElement('div');
+      item.style.cssText = 'padding:10px;margin-bottom:8px;background:#f8f9fa;border-radius:8px;border-left:4px solid #0d6efd;';
+      
+      const saldo = document.createElement('div');
+      saldo.style.cssText = 'font-size:1.1em;font-weight:600;color:#198754;';
+      saldo.textContent = `Saldo: € ${p.credito_residuo.toFixed(2)}`;
+      item.appendChild(saldo);
+      
+      if (p.beneficiario && p.beneficiario !== nomeCliente) {
+        const benef = document.createElement('div');
+        benef.style.cssText = 'font-size:0.85em;color:#666;';
+        benef.textContent = `Beneficiario: ${p.beneficiario}`;
+        item.appendChild(benef);
+      }
+      
+      if (p.data_scadenza) {
+        const scad = document.createElement('div');
+        scad.style.cssText = 'font-size:0.85em;color:#666;';
+        scad.textContent = `Scadenza: ${p.data_scadenza}`;
+        item.appendChild(scad);
+      }
+      
+      lista.appendChild(item);
+    });
+    modal.appendChild(lista);
+
+    // Nota
+    const nota = document.createElement('p');
+    nota.style.cssText = 'margin:15px 0 0;font-size:0.9em;color:#666;text-align:center;';
+    nota.innerHTML = 'Puoi selezionare <b>"Prepagata"</b> come metodo di pagamento per ogni riga.';
+    modal.appendChild(nota);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Chiudi cliccando fuori dal modal
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+  }
 
   // MEMORIZZA gli appointment_id originali portati in cassa (set globale)
   window.originalAppointmentIds = window.originalAppointmentIds || new Set();
 
   // Flag per modifiche (inizialmente false)
   window.hasModifications = false;
+
+  // Prepagate attive del cliente selezionato
+  window.clientePrepagate = [];
 
   if (window.SERVIZI_PRECOMPILATI && window.SERVIZI_PRECOMPILATI.length > 0) {
     localStorage.removeItem('scontrinoServizi');
@@ -209,11 +391,12 @@ serviceInput.addEventListener('input', function () {
           item.className = 'dropdown-item';
           item.textContent = `${capitalizeName(c.nome)} ${capitalizeName(c.cognome)}`;
           item.onclick = function () {
-            clientInput.value = `${capitalizeName(c.nome)} ${capitalizeName(c.cognome)}`;
+            window.settingClientProgrammatically = true;
+            const nomeCompleto = `${capitalizeName(c.nome)} ${capitalizeName(c.cognome)}`;
+            clientInput.value = nomeCompleto;
             clientInput.dataset.selectedClient = c.id;
             clientDropdown.style.display = 'none';
-            // Forza trigger evento input per listener modifiche
-            clientInput.dispatchEvent(new Event('input'));
+            caricaPrepagateCliente(c.id, nomeCompleto);
           };
           clientDropdown.appendChild(item);
         });
@@ -310,6 +493,9 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
     const voci_fiscali = [];
     let  voci_non_fiscali = [];
 
+    // Raccogliamo prima tutte le voci con i loro prezzi originali
+    const vociConPrepagata = [];
+    
     rows.forEach(row => {
       const isGrigia = row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc';
       const nome = row.querySelector('.flex-grow-1')?.textContent.trim() || '';
@@ -320,19 +506,32 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       const appointment_id = row.dataset.appointmentId || null;
       const rata_id = row.dataset.rataId || null;
       const pacchetto_id = row.dataset.pacchettoId || null;
+      
+      // Se metodo è prepagata, salviamo il prezzo originale e imposteremo a 0 dopo lo scalamento
+      const isPrepagata = (metodo === 'prepagata');
+      
       const voce = {
         servizio_id,
         nome,
-        prezzo,
+        prezzo: isPrepagata ? 0 : prezzo, // Se prepagata, prezzo a 0 per registro scontrini
+        prezzo_originale: prezzo, // Conserviamo il prezzo originale per lo scalamento
         sconto_riga,
         tipo: 'service',
         metodo_pagamento: metodo,
-        is_fiscale: !isGrigia
+        // IMPORTANTE: Le voci pagate con prepagata NON sono fiscali (già pagate/scalate)
+        is_fiscale: isPrepagata ? false : !isGrigia
       };
       if (appointment_id) voce.appointment_id = appointment_id;
       if (rata_id) voce.rata_id = parseInt(rata_id);
       if (pacchetto_id) voce.pacchetto_id = parseInt(pacchetto_id);
-      if (isGrigia) {
+      
+      if (isPrepagata) {
+        vociConPrepagata.push({ voce, prezzo });
+      }
+      
+      // Se pagato con prepagata, va sempre nei non fiscali (registro con prezzo 0)
+      // Altrimenti, segue la logica normale (grigio = non fiscale, chiaro = fiscale)
+      if (isPrepagata || isGrigia) {
         voci_non_fiscali.push(voce);
       } else {
         voci_fiscali.push(voce);
@@ -342,6 +541,45 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
     const cliente_id = document.getElementById('clientSearchInputCassa').dataset.selectedClient || null;
     const operatore_id = document.getElementById('operatorSelectInput').dataset.selectedOperator || null;
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    
+    // ========== GESTIONE PAGAMENTO CON PREPAGATA ==========
+    // Se ci sono voci pagate con prepagata, scala il credito dalla carta
+    if (vociConPrepagata.length > 0 && window.clientePrepagate && window.clientePrepagate.length > 0) {
+      const totalePrepagata = vociConPrepagata.reduce((sum, v) => sum + v.prezzo, 0);
+      const prepagata = window.clientePrepagate[0]; // Usiamo la prima carta disponibile
+      
+      try {
+        const scalaturaRes = await fetch(`/pacchetti/api/pacchetti/${prepagata.id}/utilizza`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+          },
+          body: JSON.stringify({
+            importo: totalePrepagata,
+            descrizione: vociConPrepagata.map(v => v.voce.nome).join(', ')
+          })
+        });
+        
+        const scalaturaData = await scalaturaRes.json();
+        
+        if (!scalaturaRes.ok || !scalaturaData.success) {
+          alert(`Errore scalamento prepagata: ${scalaturaData.error || 'Errore sconosciuto'}`);
+          stampaLock = false;
+          return;
+        }
+        
+        console.log(`Scalati €${totalePrepagata.toFixed(2)} dalla prepagata. Nuovo saldo: €${scalaturaData.credito_residuo.toFixed(2)}`);
+        
+        // Aggiorna il saldo locale della prepagata
+        prepagata.credito_residuo = scalaturaData.credito_residuo;
+        
+      } catch (err) {
+        alert('Errore durante lo scalamento della prepagata: ' + err.message);
+        stampaLock = false;
+        return;
+      }
+    }
 
     // Se ci sono voci fiscali, invia a RCH e salva Receipt fiscale
     if (voci_fiscali.length > 0) {
@@ -985,6 +1223,16 @@ function aggiungiRigaServizio(servizio, salva = true) {
       if (scontoPerc > 100) scontoPerc = 100;
     }
     sconto.value = scontoPerc;
+    
+    // Se il metodo è prepagata e il nuovo prezzo supera il saldo, avvisa
+    if (selectPay.value === 'prepagata') {
+      const saldoDisponibile = typeof getSaldoTotalePrepagata === 'function' ? getSaldoTotalePrepagata() : 0;
+      const altreRighe = getTotaleAssegnatoPrepagata() - nuovoPrezzo;
+      if (nuovoPrezzo + altreRighe > saldoDisponibile) {
+        console.warn('Attenzione: prezzo modificato supera saldo prepagata disponibile');
+      }
+    }
+    
     aggiornaTotale();
     aggiornaSubtotaliPagamenti();
   });
@@ -998,14 +1246,34 @@ function aggiungiRigaServizio(servizio, salva = true) {
     aggiornaSubtotaliPagamenti();
   });
 
+  // Salva il metodo precedente per controlli
+  row.dataset.vecchioMetodo = 'pos';
+
   // Cambia icona al cambio select
   selectPay.addEventListener('change', function () {
-    if (selectPay.value === 'pos') payIcon.className = 'bi bi-calculator ms-2';
-    else if (selectPay.value === 'cash') payIcon.className = 'bi bi-cash ms-2';
-    else if (selectPay.value === 'bank') payIcon.className = 'bi bi-bank ms-2';
+    const nuovoMetodo = selectPay.value;
+    const vecchioMetodo = row.dataset.vecchioMetodo || 'pos';
+    
+    // Se si seleziona prepagata, verifica il saldo
+    if (nuovoMetodo === 'prepagata') {
+      const prezzoRiga = parseFloat(prezzo.value) || 0;
+      if (!verificaSaldoPrepagata(prezzoRiga, selectPay)) {
+        // Ripristina il metodo precedente
+        selectPay.value = vecchioMetodo;
+        return;
+      }
+    }
+    
+    // Aggiorna il metodo salvato
+    row.dataset.vecchioMetodo = nuovoMetodo;
+    
+    if (nuovoMetodo === 'pos') payIcon.className = 'bi bi-calculator ms-2';
+    else if (nuovoMetodo === 'cash') payIcon.className = 'bi bi-cash ms-2';
+    else if (nuovoMetodo === 'bank') payIcon.className = 'bi bi-bank ms-2';
+    else if (nuovoMetodo === 'prepagata') payIcon.className = 'bi bi-credit-card ms-2';
 
     // Se NON è cash, la riga torna bianca subito
-    if (selectPay.value !== 'cash') {
+    if (nuovoMetodo !== 'cash') {
       row.style.background = '#fff';
     }
     aggiornaSubtotaliPagamenti();
@@ -1030,6 +1298,11 @@ function aggiungiRigaServizio(servizio, salva = true) {
   container.appendChild(row);
   aggiornaTotale();
   aggiornaSubtotaliPagamenti();
+  
+  // Aggiorna opzione prepagata se il cliente ha carte prepagate
+  if (typeof window.aggiornaOpzioniPrepagata === 'function') {
+    window.aggiornaOpzioniPrepagata();
+  }
 
   // Se stiamo gestendo blocchi da calendar, l'aggiunta di una riga extra è una modifica
   if (!servizio.appointment_id && window.originalAppointmentIds && window.originalAppointmentIds.size > 0) {
@@ -1082,6 +1355,7 @@ function aggiornaMetodoPagamentoGlobale(tipo) {
         if (tipo === 'pos') icon.className = 'bi bi-calculator ms-2';
         else if (tipo === 'cash') icon.className = 'bi bi-cash ms-2';
         else if (tipo === 'bank') icon.className = 'bi bi-bank ms-2';
+        else if (tipo === 'prepagata') icon.className = 'bi bi-credit-card ms-2';
       }
     }
     // Se il metodo NON è cash, la riga torna bianca
@@ -1228,7 +1502,7 @@ document.getElementById('reset-scontrino').addEventListener('click', () => {
 // Funzione per mostrare i subtotali pagamenti se ci sono più tipi
 function aggiornaSubtotaliPagamenti() {
   const rows = document.querySelectorAll('.scontrino-row');
-  let subtotali = { pos: 0, cash: 0, bank: 0 };
+  let subtotali = { pos: 0, cash: 0, bank: 0, prepagata: 0 };
   rows.forEach(row => {
     const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
     const metodo = row.querySelector('select')?.value || 'cash';
@@ -1261,6 +1535,14 @@ function aggiornaSubtotaliPagamenti() {
       div.appendChild(document.createTextNode('- subtotale BANK: '));
       const b = document.createElement('b');
       b.textContent = `€ ${subtotali.bank.toFixed(2)}`;
+      div.appendChild(b);
+      subtotaliDiv.appendChild(div);
+    }
+    if (subtotali.prepagata > 0) {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode('- subtotale PREPAGATA: '));
+      const b = document.createElement('b');
+      b.textContent = `€ ${subtotali.prepagata.toFixed(2)}`;
       div.appendChild(b);
       subtotaliDiv.appendChild(div);
     }
