@@ -1,8 +1,9 @@
 # appl/routes/pacchetti.py
 import json
 from flask import Blueprint, render_template, request, jsonify
+from flask_login import current_user
 from appl import db
-from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo, PacchettoTipo, MovimentoPrepagata
+from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo, PacchettoTipo, MovimentoPrepagata, Subcategory
 from sqlalchemy import func, or_, and_
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload, selectinload
@@ -224,6 +225,9 @@ def pacchetti_home():
     business_info = BusinessInfo.query.first()
     giorni_abbandono = business_info.pacchetti_giorni_abbandono if business_info and business_info.pacchetti_giorni_abbandono else 90
 
+    # Carica sottocategorie per vincoli prepagata
+    sottocategorie = Subcategory.query.filter_by(is_deleted=False).order_by(Subcategory.nome).all()
+    
     return render_template('pacchetti.html',
                            pacchetti=pacchetti_data,
                            clienti=clienti_data,
@@ -231,7 +235,8 @@ def pacchetti_home():
                            operatori=operatori_data,
                            status_options=status_options,
                            current_filter_status=filter_status,
-                           giorni_abbandono=giorni_abbandono)
+                           giorni_abbandono=giorni_abbandono,
+                           sottocategorie=sottocategorie)
 
 @pacchetti_bp.route('/api/clienti', methods=['GET'])
 def api_clienti():
@@ -475,8 +480,9 @@ def api_create_pacchetto():
             credito_residuo=Decimal('0'),  # Sarà caricato dopo il pagamento
             beneficiario_nome=data.get('beneficiario_nome'),
             data_scadenza=datetime.strptime(data['data_scadenza'], '%Y-%m-%d').date() if data.get('data_scadenza') else None,
-            costo_totale_lordo=credito,
-            costo_totale_scontato=credito
+            costo_totale_lordo=Decimal(str(data.get('importo_pagamento', credito))),  # Importo da pagare
+            costo_totale_scontato=Decimal(str(data.get('importo_pagamento', credito))),  # Importo da pagare
+            vincoli_utilizzo=data.get('vincoli_utilizzo')
         )
         db.session.add(pacchetto)
         db.session.flush()
@@ -901,18 +907,19 @@ def pacchetto_detail(id):
         'credito_residuo': float(pacchetto.credito_residuo) if pacchetto.credito_residuo else None,
         'data_scadenza': pacchetto.data_scadenza.strftime('%d/%m/%Y') if pacchetto.data_scadenza else None,
         'beneficiario_nome': pacchetto.beneficiario_nome,
+        'vincoli_utilizzo': pacchetto.vincoli_utilizzo,
         'movimenti_prepagata': movimenti_prepagata,
         'totale_rate_pagate': totale_rate_pagate,
         'totale_rate_non_pagate': totale_rate_non_pagate,
-        'rate_disallineate': rate_disallineate,
         'differenza_rate': differenza_rate,
+        'rate_disallineate': rate_disallineate,
         'operatori': operatori,
         'all_operatori': all_operatori,
         'sedute': sedute,
         'rate': rate,
         'sconto': sconto_dict,
         'pagamento': pagamento_dict
-    })
+    }, sottocategorie=Subcategory.query.filter_by(is_deleted=False).order_by(Subcategory.nome).all())
 
 @pacchetti_bp.route('/api/pacchetti/<int:id>/sedute/ordine', methods=['POST'])
 def api_update_sedute_ordine(id):
@@ -955,6 +962,41 @@ def api_update_pacchetto_note(id):
 
     db.session.commit()
     return jsonify({'message': 'Note aggiornate', 'note': pacchetto.note})
+
+@pacchetti_bp.route('/api/pacchetti/<int:id>/vincoli', methods=['PUT'])
+def api_update_pacchetto_vincoli(id):
+    """Aggiorna i vincoli di utilizzo di una carta prepagata (solo admin/owner)."""
+    
+    # Verifica permessi
+    if not current_user or current_user.ruolo.value not in ['admin', 'owner']:
+        return jsonify({'error': 'Permessi insufficienti'}), 403
+    
+    pacchetto = Pacchetto.query.get_or_404(id)
+    
+    # Solo per prepagate
+    if pacchetto.tipo != PacchettoTipo.Prepagata:
+        return jsonify({'error': 'I vincoli sono applicabili solo alle carte prepagate'}), 400
+    
+    payload = request.get_json() or {}
+    vincoli = payload.get('vincoli_utilizzo')
+    
+    # Validazione vincoli
+    if vincoli is not None:
+        tipo = vincoli.get('tipo')
+        if tipo not in ['tutti', 'categoria', 'sottocategoria', 'servizi']:
+            return jsonify({'error': 'Tipo vincolo non valido'}), 400
+        if tipo == 'categoria' and not vincoli.get('categoria'):
+            return jsonify({'error': 'Categoria non specificata'}), 400
+        if tipo == 'sottocategoria' and not vincoli.get('sottocategoria_id'):
+            return jsonify({'error': 'Sottocategoria non specificata'}), 400
+        if tipo == 'servizi' and not vincoli.get('servizi_ids'):
+            return jsonify({'error': 'Servizi non specificati'}), 400
+    
+    pacchetto.vincoli_utilizzo = vincoli
+    aggiungi_history(pacchetto, f"Modificati vincoli utilizzo: {vincoli}")
+    db.session.commit()
+    
+    return jsonify({'message': 'Vincoli aggiornati', 'vincoli_utilizzo': pacchetto.vincoli_utilizzo})
 
 @pacchetti_bp.route('/api/pacchetti/<int:id>/sedute/<int:seduta_id>', methods=['PUT'])
 def api_update_seduta(id, seduta_id):
@@ -1617,7 +1659,8 @@ def api_prepagate_cliente(client_id):
             'nome': p.nome,
             'credito_residuo': float(p.credito_residuo),
             'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None,
-            'beneficiario': p.beneficiario_nome
+            'beneficiario': p.beneficiario_nome,
+            'vincoli_utilizzo': p.vincoli_utilizzo
         })
     
     return jsonify(risultati)

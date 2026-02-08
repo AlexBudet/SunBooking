@@ -99,14 +99,40 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
   // Aggiorna tutte le select per mostrare/nascondere opzione prepagata
   function aggiornaOpzioniPrepagata() {
     const haPrepagate = window.clientePrepagate && window.clientePrepagate.length > 0;
-    document.querySelectorAll('.scontrino-row select[name="metodo_pagamento[]"]').forEach(sel => {
+    document.querySelectorAll('.scontrino-row').forEach(row => {
+      const sel = row.querySelector('select[name="metodo_pagamento[]"]');
+      if (!sel) return;
+      
       let optPrepagata = sel.querySelector('option[value="prepagata"]');
+      
       if (haPrepagate) {
-        if (!optPrepagata) {
-          optPrepagata = document.createElement('option');
-          optPrepagata.value = 'prepagata';
-          optPrepagata.textContent = 'Prepagata';
-          sel.appendChild(optPrepagata);
+        // Recupera info servizio dalla riga
+        const servizioId = row.dataset.servizioId ? parseInt(row.dataset.servizioId) : null;
+        const categoria = row.dataset.categoria || null;
+        const sottocategoriaId = row.dataset.sottocategoriaId ? parseInt(row.dataset.sottocategoriaId) : null;
+        
+        const servizioInfo = {
+          id: servizioId,
+          categoria: categoria,
+          sottocategoria_id: sottocategoriaId
+        };
+        
+        // Verifica se il servizio è compatibile con i vincoli
+        const compatibile = verificaVincoliPrepagata(servizioInfo);
+        
+        if (compatibile) {
+          if (!optPrepagata) {
+            optPrepagata = document.createElement('option');
+            optPrepagata.value = 'prepagata';
+            optPrepagata.textContent = 'Prepagata';
+            sel.appendChild(optPrepagata);
+          }
+        } else {
+          // Servizio non compatibile: rimuovi opzione prepagata
+          if (optPrepagata) {
+            if (sel.value === 'prepagata') sel.value = 'pos';
+            optPrepagata.remove();
+          }
         }
       } else {
         if (optPrepagata) {
@@ -117,6 +143,45 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
     });
   }
   window.aggiornaOpzioniPrepagata = aggiornaOpzioniPrepagata;
+
+  // Verifica se un servizio è compatibile con i vincoli della prepagata
+  function verificaVincoliPrepagata(servizio) {
+    if (!window.clientePrepagate || window.clientePrepagate.length === 0) return false;
+    
+    // Controlla se almeno una prepagata consente il servizio
+    for (const prepagata of window.clientePrepagate) {
+      const vincoli = prepagata.vincoli_utilizzo;
+      
+      // Se non ci sono vincoli o tipo è "tutti", il servizio è consentito
+      if (!vincoli || vincoli.tipo === 'tutti') {
+        return true;
+      }
+      
+      // Vincolo per categoria
+      if (vincoli.tipo === 'categoria') {
+        if (servizio.categoria === vincoli.categoria) {
+          return true;
+        }
+      }
+      
+      // Vincolo per sottocategoria
+      if (vincoli.tipo === 'sottocategoria') {
+        if (servizio.sottocategoria_id === vincoli.sottocategoria_id) {
+          return true;
+        }
+      }
+      
+      // Vincolo per servizi specifici
+      if (vincoli.tipo === 'servizi') {
+        if (vincoli.servizi_ids && vincoli.servizi_ids.includes(servizio.id)) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+  window.verificaVincoliPrepagata = verificaVincoliPrepagata;
 
   // Calcola il saldo totale disponibile delle prepagate
   function getSaldoTotalePrepagata() {
@@ -1098,6 +1163,8 @@ function aggiungiRigaServizio(servizio, salva = true) {
   row.className = 'd-flex align-items-center border scontrino-row mb-1';
   row.style.background = '#fff';
   row.dataset.servizioId = servizio.id || '';
+  row.dataset.categoria = servizio.categoria || '';
+  row.dataset.sottocategoriaId = servizio.sottocategoria_id || '';
 
   // Se la riga proviene da un appuntamento del calendar, memorizza l'id originale
   if (servizio.appointment_id) {

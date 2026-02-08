@@ -449,10 +449,43 @@
 
                     <!-- SEZIONE CARTA PREPAGATA (nascosta di default) -->
                     <div id="sezionePrepagataCampi" style="display: none;">
+                        <!-- Importo che il cliente paga -->
                         <div class="mb-3">
-                            <label for="creditoIniziale" class="form-label">Importo da Caricare (€)</label>
-                            <input type="number" class="form-control" id="creditoIniziale" step="0.01" min="0" placeholder="es. 100.00">
+                            <label for="importoPagamento" class="form-label">Importo da Pagare (€)</label>
+                            <input type="number" class="form-control" id="importoPagamento" step="0.01" min="0" placeholder="es. 100.00" onchange="calcolaCreditoTotale()">
+                            <small class="text-muted">L'importo che andrà in cassa</small>
                         </div>
+                        
+                        <!-- Tipo bonus -->
+                        <div class="mb-3">
+                            <label class="form-label">Bonus / Sconto</label>
+                            <div class="input-group">
+                                <select class="form-select" id="tipoBonusPrepagata" style="max-width: 140px;" onchange="calcolaCreditoTotale()">
+                                    <option value="nessuno">Nessun bonus</option>
+                                    <option value="euro">Bonus in €</option>
+                                    <option value="percentuale">Bonus in %</option>
+                                </select>
+                                <input type="number" class="form-control" id="valoreBonusPrepagata" step="0.01" min="0" placeholder="0" onchange="calcolaCreditoTotale()" style="display: none;">
+                                <select class="form-select" id="arrotondamentoBonusPrepagata" style="max-width: 120px; display: none;" onchange="calcolaCreditoTotale()">
+                                    <option value="nessuno">Nessuno</option>
+                                    <option value="difetto">Difetto</option>
+                                    <option value="eccesso">Eccesso</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Credito totale (calcolato) -->
+                        <div class="mb-3">
+                            <label for="creditoTotaleCalcolato" class="form-label">Credito Totale (€)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="creditoTotaleCalcolato" step="0.01" min="0" readonly style="background-color: #e9ecef; font-weight: bold;">
+                                <button type="button" class="btn btn-outline-secondary" onclick="sbloccaCreditoManuale()" title="Modifica manualmente">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                            </div>
+                            <small class="text-muted" id="creditoCalcoloInfo">Importo + Bonus = Credito disponibile per il cliente</small>
+                        </div>
+                        
                         <div class="mb-3">
                             <label for="beneficiarioNome" class="form-label">Beneficiario (opzionale)</label>
                             <input type="text" class="form-control" id="beneficiarioNome" placeholder="Se diverso dal cliente">
@@ -461,6 +494,45 @@
                         <div class="mb-3">
                             <label for="dataScadenzaPrepagata" class="form-label">Data Scadenza (opzionale)</label>
                             <input type="date" class="form-control" id="dataScadenzaPrepagata">
+                        </div>
+                        
+                        <!-- Vincoli utilizzo prepagata -->
+                        <div class="mb-3">
+                            <label class="form-label">Utilizzo consentito</label>
+                            <select class="form-select" id="vincoloTipo" onchange="toggleVincoliFields()">
+                                <option value="tutti">Tutti i servizi</option>
+                                <option value="categoria">Solo una categoria</option>
+                                <option value="sottocategoria">Solo una sottocategoria</option>
+                                <option value="servizi">Solo servizi specifici</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Campo categoria -->
+                        <div class="mb-3" id="vincoloCategoriaField" style="display: none;">
+                            <label for="vincoloCategoria" class="form-label">Categoria</label>
+                            <select class="form-select" id="vincoloCategoria">
+                                <option value="Solarium">Solarium</option>
+                                <option value="Estetica">Estetica</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Campo sottocategoria -->
+                        <div class="mb-3" id="vincoloSottocategoriaField" style="display: none;">
+                            <label for="vincoloSottocategoria" class="form-label">Sottocategoria</label>
+                            <select class="form-select" id="vincoloSottocategoria">
+                                <option value="">-- Seleziona --</option>
+                                {% for sc in sottocategorie %}
+                                <option value="{{ sc.id }}">{{ sc.nome }} ({{ sc.categoria.value }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <!-- Campo servizi multipli -->
+                        <div class="mb-3" id="vincoloServiziField" style="display: none;">
+                            <label class="form-label">Servizi consentiti</label>
+                            <input type="text" class="form-control mb-2" id="vincoloServizioSearch" placeholder="Cerca servizio..." autocomplete="off">
+                            <div id="vincoloServizioDropdown" class="dropdown-menu" style="position: relative; width: 100%;"></div>
+                            <ul id="vincoloServiziList" class="list-group mt-2"></ul>
                         </div>
                     </div>
 
@@ -656,6 +728,158 @@
             });
         });
     });
+
+    // ============ VINCOLI UTILIZZO PREPAGATA ============
+    let vincoloServiziSelezionati = [];
+    
+    function toggleVincoliFields() {
+        const tipo = document.getElementById('vincoloTipo').value;
+        document.getElementById('vincoloCategoriaField').style.display = tipo === 'categoria' ? 'block' : 'none';
+        document.getElementById('vincoloSottocategoriaField').style.display = tipo === 'sottocategoria' ? 'block' : 'none';
+        document.getElementById('vincoloServiziField').style.display = tipo === 'servizi' ? 'block' : 'none';
+    }
+    
+    function aggiungiVincoloServizio(service) {
+        if (vincoloServiziSelezionati.some(s => s.id === service.id)) return;
+        vincoloServiziSelezionati.push({ id: service.id, nome: service.nome });
+        aggiornaListaVincoloServizi();
+    }
+    
+    function rimuoviVincoloServizio(serviceId) {
+        vincoloServiziSelezionati = vincoloServiziSelezionati.filter(s => s.id !== serviceId);
+        aggiornaListaVincoloServizi();
+    }
+    
+    function aggiornaListaVincoloServizi() {
+        const list = document.getElementById('vincoloServiziList');
+        list.innerHTML = '';
+        vincoloServiziSelezionati.forEach(service => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            li.innerHTML = `${service.nome} <button type="button" class="btn btn-sm btn-outline-danger" onclick="rimuoviVincoloServizio(${service.id})"><i class="bi bi-x"></i></button>`;
+            list.appendChild(li);
+        });
+    }
+    
+    function getVincoliUtilizzo() {
+        const tipo = document.getElementById('vincoloTipo').value;
+        if (tipo === 'tutti') return null;
+        const vincoli = { tipo: tipo };
+        if (tipo === 'categoria') {
+            vincoli.categoria = document.getElementById('vincoloCategoria').value;
+        } else if (tipo === 'sottocategoria') {
+            vincoli.sottocategoria_id = parseInt(document.getElementById('vincoloSottocategoria').value);
+        } else if (tipo === 'servizi') {
+            vincoli.servizi_ids = vincoloServiziSelezionati.map(s => s.id);
+        }
+        return vincoli;
+    }
+    
+    // Ricerca servizi per vincoli
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('vincoloServizioSearch');
+        const dropdown = document.getElementById('vincoloServizioDropdown');
+        if (searchInput) {
+            searchInput.addEventListener('input', async function() {
+                const query = this.value.trim();
+                if (query.length < 2) { dropdown.style.display = 'none'; return; }
+                try {
+                    const response = await fetch(`/cassa/api/services?q=${encodeURIComponent(query)}`);
+                    const services = await response.json();
+                    dropdown.innerHTML = '';
+                    services.forEach(service => {
+                        if (vincoloServiziSelezionati.some(s => s.id === service.id)) return;
+                        const item = document.createElement('button');
+                        item.type = 'button';
+                        item.className = 'dropdown-item';
+                        item.textContent = `${service.nome} (€${service.prezzo.toFixed(2)})`;
+                        item.onclick = function() {
+                            aggiungiVincoloServizio(service);
+                            dropdown.style.display = 'none';
+                            searchInput.value = '';
+                        };
+                        dropdown.appendChild(item);
+                    });
+                    dropdown.style.display = services.length ? 'block' : 'none';
+                } catch (error) { console.error('Errore ricerca servizi:', error); }
+            });
+        }
+    });
+
+    // ============ CALCOLO BONUS PREPAGATA ============
+    let creditoManualeSbloccato = false;
+    
+    function calcolaCreditoTotale() {
+        if (creditoManualeSbloccato) return; // Non ricalcolare se sbloccato manualmente
+        
+        const importoPagamento = parseFloat(document.getElementById('importoPagamento').value) || 0;
+        const tipoBonus = document.getElementById('tipoBonusPrepagata').value;
+        const valoreBonus = parseFloat(document.getElementById('valoreBonusPrepagata').value) || 0;
+        const arrotondamento = document.getElementById('arrotondamentoBonusPrepagata').value;
+        
+        let creditoTotale = importoPagamento;
+        let bonusCalcolato = 0;
+        
+        if (tipoBonus === 'euro') {
+            bonusCalcolato = valoreBonus;
+            creditoTotale = importoPagamento + bonusCalcolato;
+        } else if (tipoBonus === 'percentuale' && valoreBonus > 0) {
+            bonusCalcolato = importoPagamento * (valoreBonus / 100);
+            
+            // Arrotondamento
+            if (arrotondamento === 'difetto') {
+                bonusCalcolato = Math.floor(bonusCalcolato);
+            } else if (arrotondamento === 'eccesso') {
+                bonusCalcolato = Math.ceil(bonusCalcolato);
+            }
+            
+            creditoTotale = importoPagamento + bonusCalcolato;
+        }
+        
+        document.getElementById('creditoTotaleCalcolato').value = creditoTotale.toFixed(2);
+        
+        // Aggiorna info
+        if (bonusCalcolato > 0) {
+            document.getElementById('creditoCalcoloInfo').textContent = 
+                `€${importoPagamento.toFixed(2)} + €${bonusCalcolato.toFixed(2)} bonus = €${creditoTotale.toFixed(2)} credito`;
+        } else {
+            document.getElementById('creditoCalcoloInfo').textContent = 
+                'Importo + Bonus = Credito disponibile per il cliente';
+        }
+        
+        // Mostra/nascondi campi bonus
+        const valoreBonusInput = document.getElementById('valoreBonusPrepagata');
+        const arrotondamentoSelect = document.getElementById('arrotondamentoBonusPrepagata');
+        
+        if (tipoBonus === 'nessuno') {
+            valoreBonusInput.style.display = 'none';
+            arrotondamentoSelect.style.display = 'none';
+        } else if (tipoBonus === 'euro') {
+            valoreBonusInput.style.display = 'block';
+            valoreBonusInput.placeholder = 'Bonus €';
+            arrotondamentoSelect.style.display = 'none';
+        } else if (tipoBonus === 'percentuale') {
+            valoreBonusInput.style.display = 'block';
+            valoreBonusInput.placeholder = 'Bonus %';
+            arrotondamentoSelect.style.display = 'block';
+        }
+    }
+    
+    function sbloccaCreditoManuale() {
+        const input = document.getElementById('creditoTotaleCalcolato');
+        if (creditoManualeSbloccato) {
+            // Riblocca e ricalcola
+            creditoManualeSbloccato = false;
+            input.readOnly = true;
+            input.style.backgroundColor = '#e9ecef';
+            calcolaCreditoTotale();
+        } else {
+            // Sblocca per modifica manuale
+            creditoManualeSbloccato = true;
+            input.readOnly = false;
+            input.style.backgroundColor = '#fff';
+        }
+    }
 
     // Carica promo salvate
     async function loadPromoSalvate() {
@@ -1322,13 +1546,24 @@ tooltips.forEach(el => new bootstrap.Tooltip(el));
     }
 
     // Apri modal aggiunta
-    function openAddModal() {
+    function openAddModal(tipo = 'servizi') {
         document.getElementById('pacchettoId').value = '';
-        document.getElementById('offcanvasTitle').textContent = 'Crea Nuovo Pacchetto';
         document.getElementById('statusDiv').style.display = 'none';
         resetForm();
         loadClienti();
         loadOperatori();
+        
+        // Se tipo è prepagata, attiva direttamente quel tab
+        if (tipo === 'prepagata') {
+            document.getElementById('tipoPrepagata').checked = true;
+            toggleTipoPacchetto('prepagata');
+            document.getElementById('offcanvasTitle').textContent = 'Crea Carta Prepagata';
+        } else {
+            document.getElementById('tipoServizi').checked = true;
+            toggleTipoPacchetto('servizi');
+            document.getElementById('offcanvasTitle').textContent = 'Crea Nuovo Pacchetto';
+        }
+        
         new bootstrap.Offcanvas(document.getElementById('pacchettoOffcanvas')).show();
     }
     // Ricerca cliente nel modal
@@ -1660,9 +1895,15 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         
         if (tipoPacchetto === 'prepagata') {
             // CARTA PREPAGATA
-            const creditoIniziale = parseFloat(document.getElementById('creditoIniziale').value);
-            if (!creditoIniziale || creditoIniziale <= 0) {
-                alert('Inserisci un importo valido per la carta prepagata');
+            const importoPagamento = parseFloat(document.getElementById('importoPagamento').value);
+            const creditoTotale = parseFloat(document.getElementById('creditoTotaleCalcolato').value);
+            
+            if (!importoPagamento || importoPagamento <= 0) {
+                alert('Inserisci un importo da pagare valido');
+                return;
+            }
+            if (!creditoTotale || creditoTotale <= 0) {
+                alert('Il credito totale deve essere maggiore di zero');
                 return;
             }
             
@@ -1670,15 +1911,17 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
                 client_id: document.getElementById('client_id').value,
                 tipo: 'prepagata',
                 nome: 'Carta Prepagata',
-                credito_iniziale: creditoIniziale,
+                credito_iniziale: creditoTotale,  // Credito effettivo disponibile
+                importo_pagamento: importoPagamento,  // Quanto paga il cliente
                 beneficiario_nome: document.getElementById('beneficiarioNome').value.trim() || null,
                 data_scadenza: document.getElementById('dataScadenzaPrepagata').value || null,
-                costo_totale: creditoIniziale,
+                costo_totale: importoPagamento,  // Importo per la cassa
                 servizi: [],
                 sconto_tipo: '',
                 pagamento_tipo: 'saldo',
                 numero_rate: 1,
-                operatori: []
+                operatori: [],
+                vincoli_utilizzo: getVincoliUtilizzo()
             };
         } else {
             // PACCHETTO SERVIZI (logica esistente)
@@ -1781,6 +2024,8 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
             await fetch(`/pacchetti/api/pacchetti/${id}`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } });
             loadPacchetti();
+            loadPrepagate();
+            location.reload();
         }
     }
 
@@ -1804,12 +2049,29 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         document.getElementById('seduteOmaggioContainer').innerHTML = '';
         
         // Reset campi prepagata
-        document.getElementById('creditoIniziale').value = '';
+        document.getElementById('importoPagamento').value = '';
+        document.getElementById('tipoBonusPrepagata').value = 'nessuno';
+        document.getElementById('valoreBonusPrepagata').value = '';
+        document.getElementById('valoreBonusPrepagata').style.display = 'none';
+        document.getElementById('arrotondamentoBonusPrepagata').value = 'nessuno';
+        document.getElementById('arrotondamentoBonusPrepagata').style.display = 'none';
+        document.getElementById('creditoTotaleCalcolato').value = '';
+        creditoManualeSbloccato = false;
+        document.getElementById('creditoTotaleCalcolato').readOnly = true;
+        document.getElementById('creditoTotaleCalcolato').style.backgroundColor = '#e9ecef';
         document.getElementById('beneficiarioNome').value = '';
         document.getElementById('dataScadenzaPrepagata').value = '';
         document.getElementById('sezioneServiziCampi').style.display = 'block';
         document.getElementById('sezionePrepagataCampi').style.display = 'none';
         document.getElementById('tipoServizi').checked = true;
+        
+        // Reset vincoli prepagata
+        document.getElementById('vincoloTipo').value = 'tutti';
+        document.getElementById('vincoloCategoriaField').style.display = 'none';
+        document.getElementById('vincoloSottocategoriaField').style.display = 'none';
+        document.getElementById('vincoloServiziField').style.display = 'none';
+        vincoloServiziSelezionati = [];
+        document.getElementById('vincoloServiziList').innerHTML = '';
         
         updateServiziList();
         updateCostoTotale();

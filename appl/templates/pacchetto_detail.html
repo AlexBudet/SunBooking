@@ -559,17 +559,24 @@ display: none;
         </div>
         {% endif %}
         <div class="row text-center">
-          <div class="col-4">
+          <div class="col-3">
+            <div class="small opacity-75">Importo Pagato</div>
+            <div class="fs-5 fw-bold">€{{ '%.2f'|format(pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo or 0) }}</div>
+          </div>
+          <div class="col-3">
             <div class="small opacity-75">Credito Iniziale</div>
-            <div class="fs-4 fw-bold">€{{ '%.2f'|format(pacchetto.credito_iniziale or 0) }}</div>
+            <div class="fs-5 fw-bold">€{{ '%.2f'|format(pacchetto.credito_iniziale or 0) }}</div>
+            {% if pacchetto.credito_iniziale and pacchetto.costo_totale_scontato and pacchetto.credito_iniziale > pacchetto.costo_totale_scontato %}
+            <div class="small text-success">+€{{ '%.2f'|format(pacchetto.credito_iniziale - pacchetto.costo_totale_scontato) }} bonus</div>
+            {% endif %}
           </div>
-          <div class="col-4">
+          <div class="col-3">
             <div class="small opacity-75">Credito Residuo</div>
-            <div class="fs-2 fw-bold" id="creditoResiduo">€{{ '%.2f'|format(pacchetto.credito_residuo or 0) }}</div>
+            <div class="fs-4 fw-bold" id="creditoResiduo">€{{ '%.2f'|format(pacchetto.credito_residuo or 0) }}</div>
           </div>
-          <div class="col-4">
+          <div class="col-3">
             <div class="small opacity-75">Scadenza</div>
-            <div class="fs-4 fw-bold">{{ pacchetto.data_scadenza or 'Nessuna' }}</div>
+            <div class="fs-5 fw-bold">{{ pacchetto.data_scadenza or 'Nessuna' }}</div>
           </div>
         </div>
         {% if pacchetto.beneficiario_nome %}
@@ -577,6 +584,25 @@ display: none;
           <small class="opacity-75">Beneficiario:</small> <strong>{{ pacchetto.beneficiario_nome }}</strong>
         </div>
         {% endif %}
+        
+        <!-- Vincoli utilizzo -->
+        <div class="text-center mt-2" id="vincoliUtilizzoDisplay">
+          <small class="opacity-75">Utilizzo consentito:</small>
+          {% if not pacchetto.vincoli_utilizzo or pacchetto.vincoli_utilizzo.tipo == 'tutti' %}
+            <strong>Tutti i servizi</strong>
+          {% elif pacchetto.vincoli_utilizzo.tipo == 'categoria' %}
+            <strong>Solo {{ pacchetto.vincoli_utilizzo.categoria }}</strong>
+          {% elif pacchetto.vincoli_utilizzo.tipo == 'sottocategoria' %}
+            <strong>Solo sottocategoria ID {{ pacchetto.vincoli_utilizzo.sottocategoria_id }}</strong>
+          {% elif pacchetto.vincoli_utilizzo.tipo == 'servizi' %}
+            <strong>Solo {{ pacchetto.vincoli_utilizzo.servizi_ids|length }} servizi specifici</strong>
+          {% endif %}
+          {% if current_user and current_user.ruolo.value in ['admin', 'owner'] %}
+          <button type="button" class="btn btn-sm btn-outline-light ms-2" onclick="apriModalVincoli()" title="Modifica vincoli">
+            <i class="bi bi-pencil"></i>
+          </button>
+          {% endif %}
+        </div>
       </div>
 
       <!-- Storico Movimenti -->
@@ -864,14 +890,49 @@ display: none;
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
       </div>
       <div class="modal-body">
+        <!-- Importo che il cliente paga -->
         <div class="mb-3">
-          <label for="importoRicarica" class="form-label">Importo da ricaricare</label>
+          <label for="importoRicarica" class="form-label">Importo da Pagare (€)</label>
           <div class="input-group">
             <span class="input-group-text">€</span>
             <input type="number" class="form-control form-control-lg text-center" id="importoRicarica" 
-                   min="1" step="1" placeholder="50" autofocus>
+                   min="1" step="1" placeholder="50" autofocus onchange="calcolaCreditoRicarica()">
+          </div>
+          <small class="text-muted">L'importo che andrà in cassa</small>
+        </div>
+        
+        <!-- Tipo bonus -->
+        <div class="mb-3">
+          <label class="form-label">Bonus / Sconto</label>
+          <div class="input-group">
+            <select class="form-select" id="tipoBonusRicarica" style="max-width: 130px;" onchange="calcolaCreditoRicarica()">
+              <option value="nessuno">Nessuno</option>
+              <option value="euro">Bonus €</option>
+              <option value="percentuale">Bonus %</option>
+            </select>
+            <input type="number" class="form-control" id="valoreBonusRicarica" step="0.01" min="0" placeholder="0" onchange="calcolaCreditoRicarica()" style="display: none;">
+            <select class="form-select" id="arrotondamentoRicarica" style="max-width: 100px; display: none;" onchange="calcolaCreditoRicarica()">
+              <option value="nessuno">—</option>
+              <option value="difetto">↓</option>
+              <option value="eccesso">↑</option>
+            </select>
           </div>
         </div>
+        
+        <!-- Credito da caricare (calcolato) -->
+        <div class="mb-3">
+          <label for="creditoRicaricaCalcolato" class="form-label">Credito da Caricare</label>
+          <div class="input-group">
+            <span class="input-group-text">€</span>
+            <input type="number" class="form-control form-control-lg text-center fw-bold" id="creditoRicaricaCalcolato" 
+                   step="0.01" readonly style="background-color: #d4edda;">
+            <button type="button" class="btn btn-outline-secondary" onclick="sbloccaCreditoRicaricaManuale()" title="Modifica manualmente">
+              <i class="bi bi-pencil"></i>
+            </button>
+          </div>
+          <small class="text-muted" id="creditoRicaricaInfo">Importo + Bonus</small>
+        </div>
+        
         <div class="mb-3">
           <label for="descrizioneRicarica" class="form-label">Descrizione (opzionale)</label>
           <input type="text" class="form-control" id="descrizioneRicarica" placeholder="Es: Ricarica compleanno">
@@ -889,6 +950,65 @@ display: none;
     </div>
   </div>
 </div>
+
+<!-- Modal Modifica Vincoli Utilizzo -->
+{% if current_user and current_user.ruolo.value in ['admin', 'owner'] %}
+<div class="modal fade" id="modalVincoli" tabindex="-1" aria-labelledby="modalVincoliLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalVincoliLabel">
+          <i class="bi bi-sliders"></i> Modifica Vincoli Utilizzo
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Tipo vincolo</label>
+          <select class="form-select" id="modalVincoloTipo" onchange="toggleModalVincoliFields()">
+            <option value="tutti">Tutti i servizi</option>
+            <option value="categoria">Solo una categoria</option>
+            <option value="sottocategoria">Solo una sottocategoria</option>
+            <option value="servizi">Solo servizi specifici</option>
+          </select>
+        </div>
+        
+        <div class="mb-3" id="modalVincoloCategoriaField" style="display: none;">
+          <label class="form-label">Categoria</label>
+          <select class="form-select" id="modalVincoloCategoria">
+            <option value="Solarium">Solarium</option>
+            <option value="Estetica">Estetica</option>
+          </select>
+        </div>
+        
+        <div class="mb-3" id="modalVincoloSottocategoriaField" style="display: none;">
+          <label class="form-label">Sottocategoria</label>
+          <select class="form-select" id="modalVincoloSottocategoria">
+            <option value="">-- Seleziona --</option>
+            {% for sc in sottocategorie %}
+            <option value="{{ sc.id }}">{{ sc.nome }} ({{ sc.categoria.value }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        
+        <div class="mb-3" id="modalVincoloServiziField" style="display: none;">
+          <label class="form-label">Servizi consentiti</label>
+          <input type="text" class="form-control mb-2" id="modalVincoloServizioSearch" placeholder="Cerca servizio...">
+          <div id="modalVincoloServizioDropdown" class="dropdown-menu" style="position: relative; width: 100%;"></div>
+          <ul id="modalVincoloServiziList" class="list-group mt-2"></ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" onclick="salvaVincoli()">
+          <i class="bi bi-save"></i> Salva
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endif %}
 
 {% endblock %}
@@ -899,6 +1019,141 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute
 const pacchettoId = {{ pacchetto.id }};
 const operatori = {{ pacchetto.all_operatori | tojson }};
 const tipoPacchetto = '{{ pacchetto.tipo or "servizi" }}';
+const vincoliAttuali = {{ pacchetto.vincoli_utilizzo | tojson | default('null', true) }};
+
+// ============ GESTIONE VINCOLI UTILIZZO ============
+let modalVincoloServiziSelezionati = [];
+
+function apriModalVincoli() {
+  const modal = new bootstrap.Modal(document.getElementById('modalVincoli'));
+  
+  // Popola con valori attuali
+  if (vincoliAttuali && vincoliAttuali.tipo) {
+    document.getElementById('modalVincoloTipo').value = vincoliAttuali.tipo;
+    toggleModalVincoliFields();
+    
+    if (vincoliAttuali.tipo === 'categoria') {
+      document.getElementById('modalVincoloCategoria').value = vincoliAttuali.categoria || 'Solarium';
+    } else if (vincoliAttuali.tipo === 'sottocategoria') {
+      document.getElementById('modalVincoloSottocategoria').value = vincoliAttuali.sottocategoria_id || '';
+    } else if (vincoliAttuali.tipo === 'servizi' && vincoliAttuali.servizi_ids) {
+      // Carica i servizi selezionati - richiede fetch per avere i nomi
+      caricaServiziVincoli(vincoliAttuali.servizi_ids);
+    }
+  } else {
+    document.getElementById('modalVincoloTipo').value = 'tutti';
+    toggleModalVincoliFields();
+  }
+  
+  modal.show();
+}
+
+function toggleModalVincoliFields() {
+  const tipo = document.getElementById('modalVincoloTipo').value;
+  document.getElementById('modalVincoloCategoriaField').style.display = tipo === 'categoria' ? 'block' : 'none';
+  document.getElementById('modalVincoloSottocategoriaField').style.display = tipo === 'sottocategoria' ? 'block' : 'none';
+  document.getElementById('modalVincoloServiziField').style.display = tipo === 'servizi' ? 'block' : 'none';
+}
+
+async function caricaServiziVincoli(serviziIds) {
+  modalVincoloServiziSelezionati = [];
+  for (const id of serviziIds) {
+    try {
+      const resp = await fetch(`/cassa/api/services?id=${id}`);
+      const data = await resp.json();
+      if (data && data.length > 0) {
+        modalVincoloServiziSelezionati.push({ id: data[0].id, nome: data[0].nome });
+      }
+    } catch (e) { console.error(e); }
+  }
+  aggiornaModalListaVincoloServizi();
+}
+
+function aggiungiModalVincoloServizio(service) {
+  if (modalVincoloServiziSelezionati.some(s => s.id === service.id)) return;
+  modalVincoloServiziSelezionati.push({ id: service.id, nome: service.nome });
+  aggiornaModalListaVincoloServizi();
+}
+
+function rimuoviModalVincoloServizio(serviceId) {
+  modalVincoloServiziSelezionati = modalVincoloServiziSelezionati.filter(s => s.id !== serviceId);
+  aggiornaModalListaVincoloServizi();
+}
+
+function aggiornaModalListaVincoloServizi() {
+  const list = document.getElementById('modalVincoloServiziList');
+  list.innerHTML = '';
+  modalVincoloServiziSelezionati.forEach(service => {
+    const li = document.createElement('li');
+    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+    li.innerHTML = `${service.nome} <button type="button" class="btn btn-sm btn-outline-danger" onclick="rimuoviModalVincoloServizio(${service.id})"><i class="bi bi-x"></i></button>`;
+    list.appendChild(li);
+  });
+}
+
+async function salvaVincoli() {
+  const tipo = document.getElementById('modalVincoloTipo').value;
+  let vincoli = null;
+  
+  if (tipo !== 'tutti') {
+    vincoli = { tipo: tipo };
+    if (tipo === 'categoria') {
+      vincoli.categoria = document.getElementById('modalVincoloCategoria').value;
+    } else if (tipo === 'sottocategoria') {
+      vincoli.sottocategoria_id = parseInt(document.getElementById('modalVincoloSottocategoria').value);
+    } else if (tipo === 'servizi') {
+      vincoli.servizi_ids = modalVincoloServiziSelezionati.map(s => s.id);
+    }
+  }
+  
+  try {
+    const resp = await fetch(`/pacchetti/api/pacchetti/${pacchettoId}/vincoli`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ vincoli_utilizzo: vincoli })
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      bootstrap.Modal.getInstance(document.getElementById('modalVincoli')).hide();
+      location.reload();
+    } else {
+      alert('Errore: ' + (data.error || 'Errore sconosciuto'));
+    }
+  } catch (e) {
+    alert('Errore di connessione');
+  }
+}
+
+// Ricerca servizi nel modal vincoli
+document.addEventListener('DOMContentLoaded', function() {
+  const searchInput = document.getElementById('modalVincoloServizioSearch');
+  const dropdown = document.getElementById('modalVincoloServizioDropdown');
+  if (searchInput) {
+    searchInput.addEventListener('input', async function() {
+      const query = this.value.trim();
+      if (query.length < 2) { dropdown.style.display = 'none'; return; }
+      try {
+        const response = await fetch(`/cassa/api/services?q=${encodeURIComponent(query)}`);
+        const services = await response.json();
+        dropdown.innerHTML = '';
+        services.forEach(service => {
+          if (modalVincoloServiziSelezionati.some(s => s.id === service.id)) return;
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'dropdown-item';
+          item.textContent = `${service.nome} (€${service.prezzo.toFixed(2)})`;
+          item.onclick = function() {
+            aggiungiModalVincoloServizio(service);
+            dropdown.style.display = 'none';
+            searchInput.value = '';
+          };
+          dropdown.appendChild(item);
+        });
+        dropdown.style.display = services.length ? 'block' : 'none';
+      } catch (error) { console.error(error); }
+    });
+  }
+});
 
 // ============ VAI IN CASSA (pagamento prepagata) ============
 document.addEventListener('DOMContentLoaded', function() {
@@ -952,12 +1207,86 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ============ FUNZIONI CARTA PREPAGATA ============
+let creditoRicaricaManualeSbloccato = false;
+
 function apriModalRicarica() {
   const modal = new bootstrap.Modal(document.getElementById('modalRicarica'));
   document.getElementById('importoRicarica').value = '';
+  document.getElementById('tipoBonusRicarica').value = 'nessuno';
+  document.getElementById('valoreBonusRicarica').value = '';
+  document.getElementById('valoreBonusRicarica').style.display = 'none';
+  document.getElementById('arrotondamentoRicarica').value = 'nessuno';
+  document.getElementById('arrotondamentoRicarica').style.display = 'none';
+  document.getElementById('creditoRicaricaCalcolato').value = '';
+  creditoRicaricaManualeSbloccato = false;
+  document.getElementById('creditoRicaricaCalcolato').readOnly = true;
+  document.getElementById('creditoRicaricaCalcolato').style.backgroundColor = '#d4edda';
   document.getElementById('descrizioneRicarica').value = '';
   modal.show();
   setTimeout(() => document.getElementById('importoRicarica').focus(), 300);
+}
+
+function calcolaCreditoRicarica() {
+  if (creditoRicaricaManualeSbloccato) return;
+  
+  const importo = parseFloat(document.getElementById('importoRicarica').value) || 0;
+  const tipoBonus = document.getElementById('tipoBonusRicarica').value;
+  const valoreBonus = parseFloat(document.getElementById('valoreBonusRicarica').value) || 0;
+  const arrotondamento = document.getElementById('arrotondamentoRicarica').value;
+  
+  let creditoTotale = importo;
+  let bonusCalcolato = 0;
+  
+  if (tipoBonus === 'euro') {
+    bonusCalcolato = valoreBonus;
+    creditoTotale = importo + bonusCalcolato;
+  } else if (tipoBonus === 'percentuale' && valoreBonus > 0) {
+    bonusCalcolato = importo * (valoreBonus / 100);
+    if (arrotondamento === 'difetto') bonusCalcolato = Math.floor(bonusCalcolato);
+    else if (arrotondamento === 'eccesso') bonusCalcolato = Math.ceil(bonusCalcolato);
+    creditoTotale = importo + bonusCalcolato;
+  }
+  
+  document.getElementById('creditoRicaricaCalcolato').value = creditoTotale.toFixed(2);
+  
+  // Aggiorna info
+  if (bonusCalcolato > 0) {
+    document.getElementById('creditoRicaricaInfo').textContent = 
+      `€${importo.toFixed(2)} + €${bonusCalcolato.toFixed(2)} bonus`;
+  } else {
+    document.getElementById('creditoRicaricaInfo').textContent = 'Importo + Bonus';
+  }
+  
+  // Mostra/nascondi campi bonus
+  const valoreBonusInput = document.getElementById('valoreBonusRicarica');
+  const arrotondamentoSelect = document.getElementById('arrotondamentoRicarica');
+  
+  if (tipoBonus === 'nessuno') {
+    valoreBonusInput.style.display = 'none';
+    arrotondamentoSelect.style.display = 'none';
+  } else if (tipoBonus === 'euro') {
+    valoreBonusInput.style.display = 'block';
+    valoreBonusInput.placeholder = 'Bonus €';
+    arrotondamentoSelect.style.display = 'none';
+  } else if (tipoBonus === 'percentuale') {
+    valoreBonusInput.style.display = 'block';
+    valoreBonusInput.placeholder = 'Bonus %';
+    arrotondamentoSelect.style.display = 'block';
+  }
+}
+
+function sbloccaCreditoRicaricaManuale() {
+  const input = document.getElementById('creditoRicaricaCalcolato');
+  if (creditoRicaricaManualeSbloccato) {
+    creditoRicaricaManualeSbloccato = false;
+    input.readOnly = true;
+    input.style.backgroundColor = '#d4edda';
+    calcolaCreditoRicarica();
+  } else {
+    creditoRicaricaManualeSbloccato = true;
+    input.readOnly = false;
+    input.style.backgroundColor = '#fff';
+  }
 }
 
 function vaiInCassaRicarica() {
@@ -993,10 +1322,14 @@ function vaiInCassaRicarica() {
   // Chiudi modal
   bootstrap.Modal.getInstance(document.getElementById('modalRicarica')).hide();
   
+  // Prendi importo da pagare e credito da caricare
+  const creditoDaCaricare = parseFloat(document.getElementById('creditoRicaricaCalcolato').value) || importo;
+  
   // Vai in cassa con parametri ricarica
   const params = new URLSearchParams({
     ricarica_prepagata_id: pacchettoId,
-    importo: importo,
+    importo: importo,  // Importo da pagare in cassa
+    credito: creditoDaCaricare,  // Credito effettivo da caricare
     descrizione: descrizione || 'Ricarica'
   });
   window.location.href = '/cassa?' + params.toString();
@@ -3265,8 +3598,28 @@ document.getElementById('btnWhatsapp').addEventListener('click', async function(
     return;
   }
   
-  // Template di default
-  const defaultTemplate = `Ciao {cliente_nome}! 👋
+  // Template di default (diverso per prepagata e pacchetto normale)
+  const isPrepagata = tipoPacchetto === 'prepagata';
+  
+  // Variabili specifiche per prepagata
+  const creditoResiduo = {{ pacchetto.credito_residuo|default(0, true) }};
+  const creditoIniziale = {{ pacchetto.credito_iniziale|default(0, true) }};
+  const dataScadenza = "{{ pacchetto.data_scadenza.strftime('%d/%m/%Y') if pacchetto.data_scadenza else '—' }}";
+  const beneficiario = "{{ pacchetto.beneficiario_nome|default(pacchetto.client_nome, true)|escapejs }}";
+  
+  const defaultTemplate = isPrepagata 
+    ? `Ciao {cliente_nome}! 👋
+
+Ecco il riepilogo della tua Carta Prepagata "{carta_nome}":
+
+💳 Credito residuo: €{credito_residuo}
+💰 Credito iniziale: €{credito_iniziale}
+📅 Scadenza: {data_scadenza}
+👤 Beneficiario: {beneficiario}
+
+Ti aspettiamo! 💆‍♀️
+{centro_nome}`
+    : `Ciao {cliente_nome}! 👋
 
 Ecco il riepilogo del tuo pacchetto "{pacchetto_nome}":
 
@@ -3277,8 +3630,12 @@ Ti aspettiamo! 💆‍♀️
 {centro_nome}`;
   
   try {
-    // Recupera solo il template WhatsApp (endpoint che sicuramente esiste)
-    const templateResp = await fetch('/settings/api/pacchetti/whatsapp_template');
+    // Recupera il template WhatsApp appropriato in base al tipo pacchetto
+    const isPrepagata = tipoPacchetto === 'prepagata';
+    const templateEndpoint = isPrepagata 
+      ? '/settings/api/pacchetti/whatsapp_template_prepagate'
+      : '/settings/api/pacchetti/whatsapp_template';
+    const templateResp = await fetch(templateEndpoint);
     let template = defaultTemplate;
     let centroNome = 'Centro Estetico';
     
@@ -3302,10 +3659,11 @@ Ti aspettiamo! 💆‍♀️
       console.warn('Impossibile recuperare nome centro, uso default');
     }
     
-    // Sostituisci le variabili
+    // Sostituisci le variabili (supporta sia pacchetto che prepagata)
     const messaggio = template
       .replace(/{cliente_nome}/g, clienteNome || '')
       .replace(/{pacchetto_nome}/g, pacchettoNome || '')
+      .replace(/{carta_nome}/g, pacchettoNome || '')
       .replace(/{sedute_effettuate}/g, seduteEffettuate)
       .replace(/{sedute_totali}/g, seduteTotali)
       .replace(/{rate_pagate}/g, ratePagate)
@@ -3313,6 +3671,10 @@ Ti aspettiamo! 💆‍♀️
       .replace(/{importo_pagato}/g, importoPagato.toFixed(2))
       .replace(/{importo_totale}/g, importoTotale.toFixed(2))
       .replace(/{prossima_seduta}/g, prossimaSeduta)
+      .replace(/{credito_residuo}/g, creditoResiduo.toFixed(2))
+      .replace(/{credito_iniziale}/g, creditoIniziale.toFixed(2))
+      .replace(/{data_scadenza}/g, dataScadenza)
+      .replace(/{beneficiario}/g, beneficiario)
       .replace(/{centro_nome}/g, centroNome);
     
     // Copia negli appunti

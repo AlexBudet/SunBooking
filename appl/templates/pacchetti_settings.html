@@ -200,6 +200,60 @@ Ti aspettiamo! 💆‍♀️
   </div>
 </div>
 
+<!-- Sezione Template WhatsApp Prepagate -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="bi bi-credit-card"></i> Template WhatsApp Carta Prepagata</h5>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Configura il messaggio da inviare ai clienti con il riepilogo della loro carta prepagata.
+        </p>
+
+        <div class="mb-3">
+          <label class="form-label">Variabili disponibili:</label>
+          <div>
+            <span class="variable-tag" onclick="insertVariablePrepagate('{cliente_nome}')">Nome Cliente</span>
+            <span class="variable-tag" onclick="insertVariablePrepagate('{carta_nome}')">Nome Carta</span>
+            <span class="variable-tag" onclick="insertVariablePrepagate('{beneficiario}')">Beneficiario</span>
+            <span class="variable-tag" onclick="insertVariablePrepagate('{credito_residuo}')">Credito Residuo</span>
+            <span class="variable-tag" onclick="insertVariablePrepagate('{credito_iniziale}')">Credito Iniziale</span>
+            <span class="variable-tag" onclick="insertVariablePrepagate('{data_scadenza}')">Data Scadenza</span>
+            <span class="variable-tag" onclick="insertVariablePrepagate('{centro_nome}')">Nome Centro</span>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="whatsappTemplatePrepagate" class="form-label">Testo del messaggio:</label>
+          <textarea class="form-control" id="whatsappTemplatePrepagate" rows="8" placeholder="Scrivi il template del messaggio...">{{ whatsapp_template_prepagate or 'Ciao {cliente_nome}! 👋
+
+Ecco il riepilogo della tua Carta Prepagata "{carta_nome}":
+
+💳 Credito residuo: €{credito_residuo}
+💰 Credito iniziale: €{credito_iniziale}
+📅 Scadenza: {data_scadenza}
+👤 Beneficiario: {beneficiario}
+
+Ti aspettiamo! 💆‍♀️
+{centro_nome}' }}</textarea>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button class="btn btn-success flex-grow-1" onclick="saveWhatsappTemplatePrepagate()">
+            <i class="bi bi-save"></i> Salva Template Prepagate
+          </button>
+          <button class="btn btn-outline-secondary" onclick="resetToDefaultPrepagate()" title="Ripristina testo predefinito">
+            <i class="bi bi-arrow-counterclockwise"></i> Default
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- NUOVA SEZIONE: Disclaimer Servizi -->
 <div class="row mb-4">
   <div class="col-12">
@@ -913,6 +967,58 @@ async function saveWhatsappTemplate() {
     
     if (data.success) {
       alert('✅ Template salvato con successo!');
+    } else {
+      alert('❌ Errore nel salvataggio: ' + (data.error || 'Errore sconosciuto'));
+    }
+  } catch (error) {
+    console.error('Errore:', error);
+    alert('❌ Errore di connessione');
+  }
+}
+
+// ============ FUNZIONI PER TEMPLATE PREPAGATE ============
+function insertVariablePrepagate(variable) {
+  const textarea = document.getElementById('whatsappTemplatePrepagate');
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  textarea.value = text.substring(0, start) + variable + text.substring(end);
+  textarea.focus();
+  textarea.setSelectionRange(start + variable.length, start + variable.length);
+}
+
+function resetToDefaultPrepagate() {
+  const defaultTemplate = `Ciao {cliente_nome}! 👋
+
+Ecco il riepilogo della tua Carta Prepagata "{carta_nome}":
+
+💳 Credito residuo: €{credito_residuo}
+💰 Credito iniziale: €{credito_iniziale}
+📅 Scadenza: {data_scadenza}
+👤 Beneficiario: {beneficiario}
+
+Ti aspettiamo! 💆‍♀️
+{centro_nome}`;
+  document.getElementById('whatsappTemplatePrepagate').value = defaultTemplate;
+}
+
+async function saveWhatsappTemplatePrepagate() {
+  const template = document.getElementById('whatsappTemplatePrepagate').value;
+  
+  try {
+    const response = await fetch('/settings/api/pacchetti/whatsapp_template_prepagate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({ template: template })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      alert('✅ Template Prepagate salvato con successo!');
     } else {
       alert('❌ Errore nel salvataggio: ' + (data.error || 'Errore sconosciuto'));
     }
