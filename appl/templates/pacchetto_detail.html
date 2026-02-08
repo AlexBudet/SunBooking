@@ -545,6 +545,19 @@ display: none;
     <div class="flex-fill">
       <!-- Riepilogo Credito -->
       <div class="neomorphic-div" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+        {% set prepagata_non_pagata = pacchetto.status.value == 'preventivo' or (pacchetto.credito_residuo or 0) == 0 %}
+        {% if prepagata_non_pagata and (pacchetto.credito_iniziale or 0) > 0 %}
+        <!-- Banner pagamento richiesto -->
+        <div class="alert alert-warning text-dark mb-3 d-flex align-items-center justify-content-between" style="border-radius: 8px;">
+          <div>
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Carta non ancora attivata.</strong> Procedi al pagamento per attivarla.
+          </div>
+          <button type="button" class="btn btn-success" id="btnVaiInCassaPrepagata">
+            <i class="bi bi-cash-stack me-1"></i> Vai in Cassa
+          </button>
+        </div>
+        {% endif %}
         <div class="row text-center">
           <div class="col-4">
             <div class="small opacity-75">Credito Iniziale</div>
@@ -585,13 +598,13 @@ display: none;
             <td>{{ m.data }}</td>
             <td>
               {% if m.tipo == 'ricarica' %}
-                <span class="badge bg-success"><i class="bi bi-plus-circle"></i> Ricarica</span>
+                <span class="badge bg-success">Ricarica</span>
               {% else %}
-                <span class="badge bg-warning text-dark"><i class="bi bi-dash-circle"></i> Utilizzo</span>
+                <span class="badge bg-warning text-dark">Utilizzo</span>
               {% endif %}
             </td>
             <td class="text-end fw-bold {% if m.tipo == 'ricarica' %}text-success{% else %}text-warning{% endif %}">
-              {% if m.tipo == 'ricarica' %}+{% else %}-{% endif %}€{{ '%.2f'|format(m.importo) }}
+              €{{ '%.2f'|format(m.importo) }}
             </td>
             <td class="text-end">€{{ '%.2f'|format(m.saldo_dopo) }}</td>
             <td>{{ m.descrizione or '—' }}</td>
@@ -693,7 +706,17 @@ display: none;
 {% set tutte_rate_pagate = pacchetto.rate|length > 0 and pacchetto.rate|selectattr('is_pagata', 'false')|list|length == 0 %}
 
   <div class="neomorphic-div programma-card pagamento-div status-{{ pacchetto.status|lower }}{% if tutte_rate_pagate %} pagato-tutto{% endif %}" style="width: 51.5%; margin-left: 16%;">
-  <h5><b>PAGAMENTO</b></h5>
+  <h5 class="d-flex align-items-center justify-content-between">
+    <b>PAGAMENTO</b>
+    {% set status_value = pacchetto.status.value|lower if pacchetto.status.value else pacchetto.status.name|lower %}
+    {% if status_value == 'preventivo' and not tutte_rate_pagate %}
+    <button type="button" class="btn btn-success btn-sm" id="btnVaiInCassa"
+            data-bs-toggle="tooltip" data-bs-placement="top" 
+            title="Vai in cassa per pagare tutte le rate del pacchetto">
+      <i class="bi bi-cash-stack me-1"></i> Vai in Cassa
+    </button>
+    {% endif %}
+  </h5>
 <div class="d-flex flex-wrap align-items-center gap-3">
   <div class="me-3">
     <div class="small text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="Prezzo di listino senza sconti">Costo totale lordo</div>
@@ -859,8 +882,8 @@ display: none;
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-        <button type="button" class="btn btn-success" onclick="eseguiRicarica()">
-          <i class="bi bi-check-lg"></i> Ricarica
+        <button type="button" class="btn btn-success" onclick="vaiInCassaRicarica()">
+          <i class="bi bi-cash-stack"></i> Vai in Cassa
         </button>
       </div>
     </div>
@@ -877,6 +900,57 @@ const pacchettoId = {{ pacchetto.id }};
 const operatori = {{ pacchetto.all_operatori | tojson }};
 const tipoPacchetto = '{{ pacchetto.tipo or "servizi" }}';
 
+// ============ VAI IN CASSA (pagamento prepagata) ============
+document.addEventListener('DOMContentLoaded', function() {
+  const btnVaiInCassaPrepagata = document.getElementById('btnVaiInCassaPrepagata');
+  if (btnVaiInCassaPrepagata) {
+    btnVaiInCassaPrepagata.addEventListener('click', function() {
+      {% if hide_cassa or config.get('HIDE_CASSA') %}
+      const backdrop = document.createElement('div');
+      backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      backdrop.innerHTML = `
+        <div style="background:#fff;padding:24px 32px;border-radius:12px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+          <div style="font-size:2rem;margin-bottom:12px;">⚠️</div>
+          <div style="font-size:1.1rem;margin-bottom:16px;">Funzione non disponibile in questa versione</div>
+          <button onclick="this.closest('div').parentElement.remove()" class="btn btn-primary">OK</button>
+        </div>
+      `;
+      document.body.appendChild(backdrop);
+      backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+      return;
+      {% endif %}
+      // Redirect alla cassa con prepagata_id
+      window.location.href = '/cassa?prepagata_id=' + pacchettoId;
+    });
+  }
+});
+
+// ============ VAI IN CASSA (pagamento pacchetto intero) ============
+document.addEventListener('DOMContentLoaded', function() {
+  const btnVaiInCassa = document.getElementById('btnVaiInCassa');
+  if (btnVaiInCassa) {
+    btnVaiInCassa.addEventListener('click', function() {
+      {% if hide_cassa or config.get('HIDE_CASSA') %}
+      // Mostra popup elegante invece di procedere
+      const backdrop = document.createElement('div');
+      backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      backdrop.innerHTML = `
+        <div style="background:#fff;padding:24px 32px;border-radius:12px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.2);">
+          <div style="font-size:2rem;margin-bottom:12px;">⚠️</div>
+          <div style="font-size:1.1rem;margin-bottom:16px;">Funzione non disponibile in questa versione</div>
+          <button onclick="this.closest('div').parentElement.remove()" class="btn btn-primary">OK</button>
+        </div>
+      `;
+      document.body.appendChild(backdrop);
+      backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+      return;
+      {% endif %}
+      // Redirect alla cassa con pacchetto_id
+      window.location.href = '/cassa?pacchetto_id=' + pacchettoId;
+    });
+  }
+});
+
 // ============ FUNZIONI CARTA PREPAGATA ============
 function apriModalRicarica() {
   const modal = new bootstrap.Modal(document.getElementById('modalRicarica'));
@@ -884,6 +958,48 @@ function apriModalRicarica() {
   document.getElementById('descrizioneRicarica').value = '';
   modal.show();
   setTimeout(() => document.getElementById('importoRicarica').focus(), 300);
+}
+
+function vaiInCassaRicarica() {
+  const importo = parseFloat(document.getElementById('importoRicarica').value);
+  const descrizione = document.getElementById('descrizioneRicarica').value.trim();
+  
+  if (!importo || importo <= 0) {
+    alert('Inserisci un importo valido');
+    return;
+  }
+  
+  {% if hide_cassa or config.get('HIDE_CASSA') %}
+  // Chiudi prima il modal Bootstrap se aperto
+  const modalRicarica = document.getElementById('modalRicarica');
+  if (modalRicarica) {
+    const bsModal = bootstrap.Modal.getInstance(modalRicarica);
+    if (bsModal) bsModal.hide();
+  }
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;';
+  backdrop.innerHTML = `
+    <div style="background:#fff;padding:24px 32px;border-radius:12px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.2);z-index:100000;">
+      <div style="font-size:2rem;margin-bottom:12px;">⚠️</div>
+      <div style="font-size:1.1rem;margin-bottom:16px;">Funzione non disponibile in questa versione</div>
+      <button onclick="this.closest('div').parentElement.remove()" class="btn btn-primary">OK</button>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+  return;
+  {% endif %}
+  
+  // Chiudi modal
+  bootstrap.Modal.getInstance(document.getElementById('modalRicarica')).hide();
+  
+  // Vai in cassa con parametri ricarica
+  const params = new URLSearchParams({
+    ricarica_prepagata_id: pacchettoId,
+    importo: importo,
+    descrizione: descrizione || 'Ricarica'
+  });
+  window.location.href = '/cassa?' + params.toString();
 }
 
 async function eseguiRicarica() {
@@ -927,7 +1043,7 @@ async function eseguiRicarica() {
     console.error('Errore ricarica:', error);
     alert('Errore di connessione');
   }
-}
+ }
 
 // Mostra messaggio se arrivati da calendar dopo aver fissato una seduta
 (function checkPacchettoSedutaMessage() {
@@ -1315,9 +1431,10 @@ document.addEventListener('DOMContentLoaded', function () {
   populateNStar();
 
   // Auto-genera rate se non esistono
+  const numeroRateInput = document.getElementById('numeroRate');
   const rateEsistenti = document.querySelectorAll('.rate-table tbody tr[data-rata-id]').length;
-  if (rateEsistenti === 0) {
-    const numeroRate = parseInt(document.getElementById('numeroRate').value) || 1;
+  if (numeroRateInput && rateEsistenti === 0) {
+    const numeroRate = parseInt(numeroRateInput.value) || 1;
     fetch(`/pacchetti/api/pacchetti/${pacchettoId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
@@ -2011,7 +2128,9 @@ document.addEventListener('click', function(e) {
 });
 
 // Pulsante CALCOLA per numero rate (con conferma se ci sono rate pagate)
-document.getElementById('btnCalcolaRate').addEventListener('click', function() {
+const btnCalcolaRate = document.getElementById('btnCalcolaRate');
+if (btnCalcolaRate) {
+  btnCalcolaRate.addEventListener('click', function() {
   const newNumRate = parseInt(document.getElementById('numeroRate').value) || 1;
   
   // Prima verifica se ci sono rate pagate
@@ -2042,7 +2161,8 @@ document.getElementById('btnCalcolaRate').addEventListener('click', function() {
         }
       });
     });
-});
+  });
+}
 
 // Rounding buttons (mantieni questi ma rimuovi location.reload automatico)
 document.addEventListener('click', function (e) {

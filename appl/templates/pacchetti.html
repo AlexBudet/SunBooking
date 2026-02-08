@@ -330,7 +330,7 @@
                 </div>
                 <div class="col-md-2">
                   <button class="btn btn-primary" onclick="openAddModal('servizi')"
-                          data-bs-toggle="tooltip" data-bs-placement="top" title="Crea un nuovo pacchetto/programma per un cliente">Nuovo Pacchetto</button>
+                          data-bs-toggle="tooltip" data-bs-placement="top" title="Crea un nuovo pacchetto/programma per un cliente">+ Nuovo Pacchetto</button>
                 </div>
               </div>
             </div>
@@ -1084,7 +1084,11 @@ function generateSeduteOmaggioRows() {
         
         sorted.forEach(p => {
             const tr = document.createElement('tr');
-            const statusKey = (p.saldo_attuale > 0) ? 'attivo' : 'completato';
+            // Usa lo status reale dal backend, fallback alla logica saldo
+            const statusRaw = (p.status ?? p.status_value ?? '').toLowerCase();
+            const statusKey = statusRaw === 'preventivo' ? 'preventivo' 
+                            : (p.saldo_attuale > 0) ? 'attivo' 
+                            : 'completato';
             tr.classList.add(`status-${statusKey}`);
             tr.style.cursor = 'pointer';
             tr.onclick = () => { window.location.href = '/pacchetti/detail/' + p.id; };
@@ -1095,10 +1099,10 @@ function generateSeduteOmaggioRows() {
             tr.innerHTML = `
                 <td><b>${p.client_nome}</b></td>
                 <td>${beneficiario}</td>
-                <td>€${(p.credito_iniziale || 0).toFixed(2)}</td>
-                <td><strong>€${(p.saldo_attuale || 0).toFixed(2)}</strong></td>
-                <td>${scadenza}</td>
                 <td>${formatDataIt(p.data_sottoscrizione)}</td>
+                <td class="hide-mobile">€${(p.credito_iniziale || 0).toFixed(2)}</td>
+                <td><strong>€${(p.saldo_attuale || 0).toFixed(2)}</strong></td>
+                <td class="hide-mobile">${scadenza}</td>
                 ${userRuolo !== 'user' ? `
                 <td class="actions hide-mobile">
                     <button type="button" class="btn btn-danger btn-sm btn-xxs"
