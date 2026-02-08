@@ -280,58 +280,132 @@
 <div class="page-wide-90">
     <h2>Pacchetti</h2>
     
-    <!-- Campo di ricerca -->
-<div class="mb-3">
-  <div class="row">
-    <div class="col-md-3">
-      <input type="text" class="form-control" id="searchCliente" placeholder="Cerca per cliente" autocomplete="off"
-             data-bs-toggle="tooltip" data-bs-placement="top" title="Cerca un cliente per nome, cognome o cellulare">
-      <div id="searchClienteDropdown" class="dropdown-menu"></div>
+    <!-- Tab Navigation -->
+    <ul class="nav nav-tabs mb-3" id="pacchettiTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-servizi" data-bs-toggle="tab" data-bs-target="#panel-servizi" 
+                    type="button" role="tab" aria-controls="panel-servizi" aria-selected="true">
+                <i class="bi bi-box-seam me-1"></i> Pacchetti Servizi
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-prepagate" data-bs-toggle="tab" data-bs-target="#panel-prepagate" 
+                    type="button" role="tab" aria-controls="panel-prepagate" aria-selected="false">
+                <i class="bi bi-credit-card me-1"></i> Carte Prepagate
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="pacchettiTabsContent">
+        
+        <!-- ========== TAB PACCHETTI SERVIZI ========== -->
+        <div class="tab-pane fade show active" id="panel-servizi" role="tabpanel" aria-labelledby="tab-servizi">
+            <!-- Campo di ricerca Pacchetti -->
+            <div class="mb-3">
+              <div class="row">
+                <div class="col-md-3">
+                  <input type="text" class="form-control" id="searchCliente" placeholder="Cerca per cliente" autocomplete="off"
+                         data-bs-toggle="tooltip" data-bs-placement="top" title="Cerca un cliente per nome, cognome o cellulare">
+                  <div id="searchClienteDropdown" class="dropdown-menu"></div>
+                </div>
+                <div class="col-md-3">
+                  <input type="text" class="form-control" id="searchProgramma" placeholder="Cerca per programma" autocomplete="off"
+                         data-bs-toggle="tooltip" data-bs-placement="top" title="Il nome del programma è composto dai servizi inclusi (es: '10 Massaggio + 5 Pressoterapia')">
+                  <div id="searchProgrammaDropdown" class="dropdown-menu"></div>
+                </div>
+                <div class="col-md-2">
+                       <select class="form-control" id="searchStatus"
+                          data-bs-toggle="tooltip" data-bs-placement="top" data-bs-html="true" 
+                          title="Filtra i pacchetti per stato:<br><br>🟡 <b>Preventivo</b><br>Pacchetto creato ma non iniziato<br><br>🔵 <b>Attivo</b><br>Pacchetto con almeno una seduta effettuata o una rata pagata<br><br>⚫ <b>Completato</b><br>Pacchetto completato e pagato<br><br>🔴 <b>Abbandonato</b><br>Pacchetto non aggiornato da almeno {{ giorni_abbandono }} giorni<br>">
+                    <option value="">Tutti gli status</option>
+                    <option value="Preventivo">Preventivo</option>
+                    <option value="Attivo">Attivo</option>
+                    <option value="Completato">Completato</option>
+                    <option value="Abbandonato">Abbandonato</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <button class="btn btn-secondary" onclick="searchPacchetti()">Cerca</button>
+                </div>
+                <div class="col-md-2">
+                  <button class="btn btn-primary" onclick="openAddModal('servizi')"
+                          data-bs-toggle="tooltip" data-bs-placement="top" title="Crea un nuovo pacchetto/programma per un cliente">Nuovo Pacchetto</button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Tabella Pacchetti Servizi -->
+            <table class="table" id="tabellaServizi">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-sort="client_nome">Cliente <i class="bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-sort="nome">Pacchetto <i class="bi bi-arrow-down-up"></i></th>
+                        <th class="sortable" data-sort="data_sottoscrizione">Creato il <i class="bi bi-arrow-down-up"></i></th>
+                        <th class="sortable hide-mobile" data-sort="costo_totale_lordo">Da Listino <i class="bi bi-arrow-down-up"></i></th>
+                        <th class="sortable hide-mobile" data-sort="costo_totale_scontato">Scontato <i class="bi bi-arrow-down-up"></i></th>
+                        {% if current_user and current_user.ruolo.value != 'user' %}
+                        <th class="hide-mobile">Azioni</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody id="pacchettiTable">
+                    <!-- Popolato via JS -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- ========== TAB CARTE PREPAGATE ========== -->
+        <div class="tab-pane fade" id="panel-prepagate" role="tabpanel" aria-labelledby="tab-prepagate">
+            <!-- Campo di ricerca Prepagate -->
+            <div class="mb-3">
+              <div class="row">
+                <div class="col-md-4">
+                  <input type="text" class="form-control" id="searchClientePrepagata" placeholder="Cerca per cliente" autocomplete="off"
+                         data-bs-toggle="tooltip" data-bs-placement="top" title="Cerca un cliente per nome, cognome o cellulare">
+                  <div id="searchClientePrepagataDropdown" class="dropdown-menu"></div>
+                </div>
+                <div class="col-md-2">
+                       <select class="form-control" id="searchStatusPrepagata">
+                    <option value="">Tutti gli status</option>
+                    <option value="Preventivo">Preventivo</option>
+                    <option value="Attivo">Attivo</option>
+                    <option value="Completato">Completato</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <button class="btn btn-secondary" onclick="searchPrepagate()">Cerca</button>
+                </div>
+                <div class="col-md-4 text-end">
+                  <button class="btn btn-success" onclick="openAddModal('prepagata')"
+                          data-bs-toggle="tooltip" data-bs-placement="top" title="Crea una nuova carta prepagata / gift card">
+                      <i class="bi bi-plus-lg me-1"></i> Nuova Carta Prepagata
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Tabella Carte Prepagate -->
+            <table class="table" id="tabellaPrepagate">
+                <thead>
+                    <tr>
+                        <th class="sortable-prep" data-sort="client_nome">Cliente <i class="bi bi-arrow-down-up"></i></th>
+                        <th class="sortable-prep" data-sort="beneficiario_nome">Beneficiario <i class="bi bi-arrow-down-up"></i></th>
+                        <th class="sortable-prep" data-sort="data_sottoscrizione">Creata il <i class="bi bi-arrow-down-up"></i></th>
+                        <th class="sortable-prep hide-mobile" data-sort="credito_iniziale">Credito Iniziale <i class="bi bi-arrow-down-up"></i></th>
+                        <th class="sortable-prep" data-sort="credito_residuo">Saldo <i class="bi bi-arrow-down-up"></i></th>
+                        <th class="sortable-prep hide-mobile" data-sort="data_scadenza">Scadenza <i class="bi bi-arrow-down-up"></i></th>
+                        {% if current_user and current_user.ruolo.value != 'user' %}
+                        <th class="hide-mobile">Azioni</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody id="prepagateTable">
+                    <!-- Popolato via JS -->
+                </tbody>
+            </table>
+        </div>
     </div>
-    <div class="col-md-3">
-      <input type="text" class="form-control" id="searchProgramma" placeholder="Cerca per programma" autocomplete="off"
-             data-bs-toggle="tooltip" data-bs-placement="top" title="Il nome del programma è composto dai servizi inclusi (es: '10 Massaggio + 5 Pressoterapia')">
-      <div id="searchProgrammaDropdown" class="dropdown-menu"></div>
-    </div>
-    <div class="col-md-2">
-           <select class="form-control" id="searchStatus"
-              data-bs-toggle="tooltip" data-bs-placement="top" data-bs-html="true" 
-              title="Filtra i pacchetti per stato:<br><br>🟡 <b>Preventivo</b><br>Pacchetto creato ma non iniziato<br><br>🔵 <b>Attivo</b><br>Pacchetto con almeno una seduta effettuata o una rata pagata<br><br>⚫ <b>Completato</b><br>Pacchetto completato e pagato<br><br>🔴 <b>Abbandonato</b><br>Pacchetto non aggiornato da almeno {{ giorni_abbandono }} giorni<br>"
-        <option value="">Tutti gli status</option>
-        <option value="Preventivo">Preventivo</option>
-        <option value="Attivo">Attivo</option>
-        <option value="Completato">Completato</option>
-        <option value="Abbandonato">Abbandonato</option>
-      </select>
-    </div>
-    <div class="col-md-2">
-      <button class="btn btn-secondary" onclick="searchPacchetti()">Cerca</button>
-    </div>
-    <div class="col-md-2">
-      <button class="btn btn-primary" onclick="openAddModal()"
-              data-bs-toggle="tooltip" data-bs-placement="top" title="Crea un nuovo pacchetto/programma per un cliente">Crea Nuovo Pacchetto</button>
-    </div>
-  </div>
-</div>
-    
-    <!-- Tabella risultati -->
-    <table class="table">
-        <thead>
-            <tr>
-                <th class="sortable" data-sort="client_nome">Cliente <i class="bi bi-arrow-down-up"></i></th>
-                <th class="sortable" data-sort="nome">Pacchetto <i class="bi bi-arrow-down-up"></i></th>
-                <th class="sortable" data-sort="data_sottoscrizione">Creato il <i class="bi bi-arrow-down-up"></i></th>
-                <th class="sortable hide-mobile" data-sort="costo_totale_lordo">Da Listino <i class="bi bi-arrow-down-up"></i></th>
-                <th class="sortable hide-mobile" data-sort="costo_totale_scontato">Scontato <i class="bi bi-arrow-down-up"></i></th>
-                {% if current_user and current_user.ruolo.value != 'user' %}
-                <th class="hide-mobile">Azioni</th>
-                {% endif %}
-            </tr>
-        </thead>
-        <tbody id="pacchettiTable">
-            <!-- Popolato via JS -->
-        </tbody>
-    </table>
 </div>
 
 <!-- Modal per aggiungere/modificare pacchetto -->
@@ -344,6 +418,17 @@
                 <form id="pacchettoForm">
                     <input type="hidden" id="pacchettoId">
                     
+                    <!-- Tipo Pacchetto -->
+                    <div class="mb-3">
+                        <label class="form-label">Tipo</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="tipoPacchetto" id="tipoServizi" value="servizi" checked>
+                            <label class="btn btn-outline-primary" for="tipoServizi">Pacchetto Servizi</label>
+                            <input type="radio" class="btn-check" name="tipoPacchetto" id="tipoPrepagata" value="prepagata">
+                            <label class="btn btn-outline-success" for="tipoPrepagata">Carta Prepagata</label>
+                        </div>
+                    </div>
+
                     <!-- Cliente (ricerca come in calendar.js) -->
                     <div class="mb-3">
                         <label for="clientSearch" class="form-label">Cliente</label>
@@ -361,7 +446,26 @@
                         <div id="clientDropdown" class="dropdown-menu"></div>
                         <input type="hidden" id="client_id" required>
                     </div>
-                    
+
+                    <!-- SEZIONE CARTA PREPAGATA (nascosta di default) -->
+                    <div id="sezionePrepagataCampi" style="display: none;">
+                        <div class="mb-3">
+                            <label for="creditoIniziale" class="form-label">Importo da Caricare (€)</label>
+                            <input type="number" class="form-control" id="creditoIniziale" step="0.01" min="0" placeholder="es. 100.00">
+                        </div>
+                        <div class="mb-3">
+                            <label for="beneficiarioNome" class="form-label">Beneficiario (opzionale)</label>
+                            <input type="text" class="form-control" id="beneficiarioNome" placeholder="Se diverso dal cliente">
+                            <small class="text-muted">Lascia vuoto se il beneficiario è il cliente stesso</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="dataScadenzaPrepagata" class="form-label">Data Scadenza (opzionale)</label>
+                            <input type="date" class="form-control" id="dataScadenzaPrepagata">
+                        </div>
+                    </div>
+
+                    <!-- SEZIONE SERVIZI (visibile di default) -->
+                    <div id="sezioneServiziCampi">
                     <!-- Servizi (ricerca come in calendar.js) -->
                     <div class="mb-3">
                         <label class="form-label">Servizi</label>
@@ -461,6 +565,7 @@
                                     onclick="deselezionaOperatori()">Deseleziona</button>
                         </div>
                     </div>
+                    </div><!-- fine sezioneServiziCampi -->
                     
                     <!-- Status (solo per edit) -->
                     <div class="mb-3" id="statusDiv">
@@ -514,12 +619,43 @@
     let nomePacchetto = '';
     let promoSalvate = []; // Array delle promo caricate da settings
     let arrotondamentoManuale = null; // 'floor', 'ceil', o null
+    let tipoPacchettoCorrente = 'servizi'; // 'servizi' o 'prepagata'
 
     // Variabili per ordinamento
     let currentSort = { field: 'data_sottoscrizione', direction: 'desc' };
     let pacchettiData = []; // Cache dei dati per ordinamento client-side
+    
+    // Variabili per tab Carte Prepagate
+    let currentSortPrepagate = { field: 'data_sottoscrizione', direction: 'desc' };
+    let prepagateData = []; // Cache dei dati prepagate
 
     const userRuolo = '{{ current_user.ruolo.value if current_user else "user" }}';
+
+    // Toggle tra Pacchetto Servizi e Carta Prepagata
+    function toggleTipoPacchetto(tipo) {
+        tipoPacchettoCorrente = tipo;
+        const sezioneServizi = document.getElementById('sezioneServiziCampi');
+        const sezionePrepagata = document.getElementById('sezionePrepagataCampi');
+        
+        if (tipo === 'prepagata') {
+            sezioneServizi.style.display = 'none';
+            sezionePrepagata.style.display = 'block';
+            document.getElementById('offcanvasTitle').textContent = 'Crea Carta Prepagata';
+        } else {
+            sezioneServizi.style.display = 'block';
+            sezionePrepagata.style.display = 'none';
+            document.getElementById('offcanvasTitle').textContent = 'Crea Nuovo Pacchetto';
+        }
+    }
+
+    // Event listener per i radio button tipo pacchetto
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('input[name="tipoPacchetto"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                toggleTipoPacchetto(this.value);
+            });
+        });
+    });
 
     // Carica promo salvate
     async function loadPromoSalvate() {
@@ -647,8 +783,10 @@ function toggleScontoFields() {
     // Init - aggiorna per caricare le promo
     document.addEventListener('DOMContentLoaded', () => {
         loadPacchetti();
+        loadPrepagate();
         loadPromoSalvate();
         setupSorting();
+        setupSortingPrepagate();
 
         // Inizializza tutti i tooltip Bootstrap
         document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
@@ -890,12 +1028,86 @@ function generateSeduteOmaggioRows() {
         });
     }
 
-    // Carica pacchetti
+    // Carica pacchetti servizi
     async function loadPacchetti(params = {}) {
+        params.tipo = 'servizi';
         const query = new URLSearchParams(params).toString();
         const response = await fetch(`/pacchetti/api/pacchetti?${query}`);
-        pacchettiData = await response.json(); // Salva in cache
+        pacchettiData = await response.json();
         renderPacchetti();
+    }
+
+    // Carica carte prepagate
+    async function loadPrepagate(params = {}) {
+        params.tipo = 'prepagata';
+        const query = new URLSearchParams(params).toString();
+        const response = await fetch(`/pacchetti/api/pacchetti?${query}`);
+        prepagateData = await response.json();
+        renderPrepagate();
+    }
+
+    // Renderizza carte prepagate
+    function renderPrepagate() {
+        const tbody = document.getElementById('prepagateTable');
+        tbody.innerHTML = '';
+        
+        const sorted = [...prepagateData].sort((a, b) => {
+            let valA = a[currentSortPrepagate.field];
+            let valB = b[currentSortPrepagate.field];
+            
+            if (valA == null) valA = '';
+            if (valB == null) valB = '';
+            
+            if (currentSortPrepagate.field === 'saldo_attuale' || currentSortPrepagate.field === 'credito_iniziale') {
+                valA = parseFloat(valA) || 0;
+                valB = parseFloat(valB) || 0;
+            } else if (currentSortPrepagate.field === 'data_sottoscrizione' || currentSortPrepagate.field === 'data_scadenza') {
+                valA = valA ? new Date(valA).getTime() : 0;
+                valB = valB ? new Date(valB).getTime() : 0;
+            } else if (typeof valA === 'string') {
+                valA = valA.toLowerCase();
+                valB = valB.toLowerCase();
+            }
+            
+            if (valA < valB) return currentSortPrepagate.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return currentSortPrepagate.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        function formatDataIt(iso) {
+            if (!iso) return '';
+            const [yyyy, mm, dd] = iso.split('T')[0].split('-');
+            const mesi = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'];
+            const nomeMese = mesi[parseInt(mm, 10) - 1] || '';
+            return `${dd} ${nomeMese} ${yyyy}`;
+        }
+        
+        sorted.forEach(p => {
+            const tr = document.createElement('tr');
+            const statusKey = (p.saldo_attuale > 0) ? 'attivo' : 'completato';
+            tr.classList.add(`status-${statusKey}`);
+            tr.style.cursor = 'pointer';
+            tr.onclick = () => { window.location.href = '/pacchetti/detail/' + p.id; };
+            
+            const beneficiario = p.beneficiario_nome || p.client_nome;
+            const scadenza = p.data_scadenza ? formatDataIt(p.data_scadenza) : 'Nessuna';
+            
+            tr.innerHTML = `
+                <td><b>${p.client_nome}</b></td>
+                <td>${beneficiario}</td>
+                <td>€${(p.credito_iniziale || 0).toFixed(2)}</td>
+                <td><strong>€${(p.saldo_attuale || 0).toFixed(2)}</strong></td>
+                <td>${scadenza}</td>
+                <td>${formatDataIt(p.data_sottoscrizione)}</td>
+                ${userRuolo !== 'user' ? `
+                <td class="actions hide-mobile">
+                    <button type="button" class="btn btn-danger btn-sm btn-xxs"
+                            onclick="event.stopPropagation(); deletePacchetto(${p.id})">Elimina</button>
+                </td>
+                ` : ''}
+            `;
+            tbody.appendChild(tr);
+        });
     }
 
     // Ordina e renderizza i pacchetti
@@ -1032,6 +1244,49 @@ tooltips.forEach(el => new bootstrap.Tooltip(el));
                 renderPacchetti();
             });
         });
+    }
+
+    // Gestione ordinamento per tab Prepagate
+    function setupSortingPrepagate() {
+        document.querySelectorAll('#tabellaPrepagate thead th.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const field = th.dataset.sort;
+                
+                if (currentSortPrepagate.field === field) {
+                    currentSortPrepagate.direction = currentSortPrepagate.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    currentSortPrepagate.field = field;
+                    currentSortPrepagate.direction = 'asc';
+                }
+                
+                document.querySelectorAll('#tabellaPrepagate thead th.sortable').forEach(t => {
+                    t.classList.remove('asc', 'desc');
+                });
+                th.classList.add(currentSortPrepagate.direction);
+                
+                renderPrepagate();
+            });
+        });
+    }
+
+    // Ricerca prepagate
+    function searchPrepagate() {
+        const clienteInput = document.getElementById('searchClientePrepagata');
+        const statusSelect = document.getElementById('searchStatusPrepagata');
+        
+        const params = {};
+        
+        if (statusSelect && statusSelect.value) {
+            params.status = statusSelect.value;
+        }
+        
+        if (clienteInput && clienteInput.dataset.clientId) {
+            params.cliente_id = clienteInput.dataset.clientId;
+        } else if (clienteInput && clienteInput.value.trim()) {
+            params.cliente = clienteInput.value.trim();
+        }
+        
+        loadPrepagate(params);
     }
 
     // Ricerca pacchetti con filtri concatenati
@@ -1394,40 +1649,71 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
             return;
         }
 
-        const tipo = document.getElementById('scontoTipo').value;
+        // Determina il tipo di pacchetto
+        const tipoPacchetto = document.querySelector('input[name="tipoPacchetto"]:checked').value;
         
-        // Costruisci array servizi finali
-        const serviziFinali = serviziSelezionati.map(s => ({ 
-            id: s.id, 
-            quantita: s.quantita, 
-            omaggio: false 
-        }));
+        let data;
         
-        // Aggiungi sedute omaggio se applicabile (anche per promo salvate di tipo sedute_omaggio)
-        if (tipo === 'Ogni_N_Omaggio' || (tipo.startsWith('promo_') && seduteOmaggio.length > 0)) {
-            seduteOmaggio.forEach(s => {
-                serviziFinali.push({ 
-                    id: s.serviceId, 
-                    quantita: 1, 
-                    omaggio: true 
+        if (tipoPacchetto === 'prepagata') {
+            // CARTA PREPAGATA
+            const creditoIniziale = parseFloat(document.getElementById('creditoIniziale').value);
+            if (!creditoIniziale || creditoIniziale <= 0) {
+                alert('Inserisci un importo valido per la carta prepagata');
+                return;
+            }
+            
+            data = {
+                client_id: document.getElementById('client_id').value,
+                tipo: 'prepagata',
+                nome: 'Carta Prepagata',
+                credito_iniziale: creditoIniziale,
+                beneficiario_nome: document.getElementById('beneficiarioNome').value.trim() || null,
+                data_scadenza: document.getElementById('dataScadenzaPrepagata').value || null,
+                costo_totale: creditoIniziale,
+                servizi: [],
+                sconto_tipo: '',
+                pagamento_tipo: 'saldo',
+                numero_rate: 1,
+                operatori: []
+            };
+        } else {
+            // PACCHETTO SERVIZI (logica esistente)
+            const tipo = document.getElementById('scontoTipo').value;
+            
+            // Costruisci array servizi finali
+            const serviziFinali = serviziSelezionati.map(s => ({ 
+                id: s.id, 
+                quantita: s.quantita, 
+                omaggio: false 
+            }));
+            
+            // Aggiungi sedute omaggio se applicabile (anche per promo salvate di tipo sedute_omaggio)
+            if (tipo === 'Ogni_N_Omaggio' || (tipo.startsWith('promo_') && seduteOmaggio.length > 0)) {
+                seduteOmaggio.forEach(s => {
+                    serviziFinali.push({ 
+                        id: s.serviceId, 
+                        quantita: 1, 
+                        omaggio: true 
+                    });
                 });
-            });
-        }
+            }
 
-        const data = {
-            client_id: document.getElementById('client_id').value,
-            nome: nomePacchetto,
-            servizi: serviziFinali,
-            costo_totale: parseFloat(document.getElementById('costoTotale').value),
-            sconto_tipo: tipo,
-            sconto_valore: tipo === 'Percentuale' 
-                ? (parseFloat(document.getElementById('scontoPercentuale').value) || null)
-                : (parseInt(document.getElementById('numeroSeduteOmaggio').value) || null),
-            pagamento_tipo: 'saldo', // Sempre saldo, le rate si gestiscono nel dettaglio
-            numero_rate: 1,
-            operatori: Array.from(document.getElementById('operatoriSelect').selectedOptions).map(o => parseInt(o.value)),
-            costo_scontato: parseFloat(document.getElementById('costoTotaleScontato').value) || null
-        };
+            data = {
+                client_id: document.getElementById('client_id').value,
+                tipo: 'servizi',
+                nome: nomePacchetto,
+                servizi: serviziFinali,
+                costo_totale: parseFloat(document.getElementById('costoTotale').value),
+                sconto_tipo: tipo,
+                sconto_valore: tipo === 'Percentuale' 
+                    ? (parseFloat(document.getElementById('scontoPercentuale').value) || null)
+                    : (parseInt(document.getElementById('numeroSeduteOmaggio').value) || null),
+                pagamento_tipo: 'saldo',
+                numero_rate: 1,
+                operatori: Array.from(document.getElementById('operatoriSelect').selectedOptions).map(o => parseInt(o.value)),
+                costo_scontato: parseFloat(document.getElementById('costoTotaleScontato').value) || null
+            };
+        }
 
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
         const id = document.getElementById('pacchettoId').value;
@@ -1500,6 +1786,7 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         serviziSelezionati = [];
         seduteOmaggio = [];
         nomePacchetto = '';
+        tipoPacchettoCorrente = 'servizi';
         document.getElementById('clientSearch').value = '';
         document.getElementById('serviceSearch').value = '';
         document.getElementById('clientDropdown').style.display = 'none';
@@ -1511,6 +1798,15 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         document.getElementById('scontoOmaggioFields').style.display = 'none';
         document.getElementById('riepilogoSeduteDiv').style.display = 'none';
         document.getElementById('seduteOmaggioContainer').innerHTML = '';
+        
+        // Reset campi prepagata
+        document.getElementById('creditoIniziale').value = '';
+        document.getElementById('beneficiarioNome').value = '';
+        document.getElementById('dataScadenzaPrepagata').value = '';
+        document.getElementById('sezioneServiziCampi').style.display = 'block';
+        document.getElementById('sezionePrepagataCampi').style.display = 'none';
+        document.getElementById('tipoServizi').checked = true;
+        
         updateServiziList();
         updateCostoTotale();
     }

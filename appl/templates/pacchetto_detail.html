@@ -532,9 +532,99 @@ display: none;
 </div>
 
   <div class="neomorphic-div programma-card status-{{ pacchetto.status|lower }}">
+    {% if pacchetto.tipo == 'prepagata' %}
+    <h5><b>CARTA PREPAGATA:</b> {{ pacchetto.nome }}</h5>
+    {% else %}
     <h5><b>PROGRAMMA:</b> {{ pacchetto.nome }}</h5>
+    {% endif %}
   </div>
 
+{% if pacchetto.tipo == 'prepagata' %}
+  <!-- ========== SEZIONE CARTA PREPAGATA ========== -->
+  <div class="d-flex mt-4">
+    <div class="flex-fill">
+      <!-- Riepilogo Credito -->
+      <div class="neomorphic-div" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+        <div class="row text-center">
+          <div class="col-4">
+            <div class="small opacity-75">Credito Iniziale</div>
+            <div class="fs-4 fw-bold">€{{ '%.2f'|format(pacchetto.credito_iniziale or 0) }}</div>
+          </div>
+          <div class="col-4">
+            <div class="small opacity-75">Credito Residuo</div>
+            <div class="fs-2 fw-bold" id="creditoResiduo">€{{ '%.2f'|format(pacchetto.credito_residuo or 0) }}</div>
+          </div>
+          <div class="col-4">
+            <div class="small opacity-75">Scadenza</div>
+            <div class="fs-4 fw-bold">{{ pacchetto.data_scadenza or 'Nessuna' }}</div>
+          </div>
+        </div>
+        {% if pacchetto.beneficiario_nome %}
+        <div class="text-center mt-2">
+          <small class="opacity-75">Beneficiario:</small> <strong>{{ pacchetto.beneficiario_nome }}</strong>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Storico Movimenti -->
+      <h5 class="mt-4 mb-3"><i class="bi bi-clock-history"></i> Storico Movimenti</h5>
+      <table class="table table-sm table-hover" id="movimentiTable">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Tipo</th>
+            <th class="text-end">Importo</th>
+            <th class="text-end">Saldo</th>
+            <th>Descrizione</th>
+            <th>Operatore</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in pacchetto.movimenti_prepagata %}
+          <tr class="{% if m.tipo == 'ricarica' %}table-success{% else %}table-warning{% endif %}">
+            <td>{{ m.data }}</td>
+            <td>
+              {% if m.tipo == 'ricarica' %}
+                <span class="badge bg-success"><i class="bi bi-plus-circle"></i> Ricarica</span>
+              {% else %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-dash-circle"></i> Utilizzo</span>
+              {% endif %}
+            </td>
+            <td class="text-end fw-bold {% if m.tipo == 'ricarica' %}text-success{% else %}text-warning{% endif %}">
+              {% if m.tipo == 'ricarica' %}+{% else %}-{% endif %}€{{ '%.2f'|format(m.importo) }}
+            </td>
+            <td class="text-end">€{{ '%.2f'|format(m.saldo_dopo) }}</td>
+            <td>{{ m.descrizione or '—' }}</td>
+            <td>{{ m.operatore or '—' }}</td>
+          </tr>
+          {% endfor %}
+          {% if pacchetto.movimenti_prepagata|length == 0 %}
+          <tr><td colspan="6" class="text-center text-muted">Nessun movimento registrato</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+
+      <!-- Pulsante Ricarica -->
+      <div class="text-center mt-3">
+        <button class="btn btn-success btn-lg" onclick="apriModalRicarica()">
+          <i class="bi bi-plus-circle"></i> Ricarica Carta
+        </button>
+      </div>
+    </div>
+
+    <div class="ms-3" style="width: 300px;">
+      <textarea id="noteEditor" class="form-control" rows="10"
+                placeholder="Appunti interni sulla carta (salvati automaticamente)"
+                spellcheck="false"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off">{{ pacchetto.note or '' }}</textarea>
+    </div>
+  </div>
+  </div>
+
+{% else %}
+  <!-- ========== SEZIONE PACCHETTO SERVIZI (ORIGINALE) ========== -->
   <div class="d-flex mt-4">
     <div class="flex-fill">
       <table class="table table-sm" id="seduteTable">
@@ -578,7 +668,7 @@ display: none;
   </tr>
   {% endfor %}
   {% if pacchetto.sedute|length == 0 %}
-  <tr><td colspan="5">Nessuna seduta</td></tr>aggiornaStatiSedute
+  <tr><td colspan="5">Nessuna seduta</td></tr>
   {% endif %}
 </tbody>
       </table>
@@ -593,7 +683,9 @@ display: none;
     </div>
   </div>
   </div>
+{% endif %}
 
+{% if pacchetto.tipo != 'prepagata' %}
 {% set sedute_with_date = pacchetto.sedute | selectattr('data_trattamento') %}
 {% set first_seduta = sedute_with_date | first if sedute_with_date else none %}
 {% set first_date = first_seduta.data_trattamento if first_seduta else none %}
@@ -734,7 +826,48 @@ display: none;
 {% endif %}
 </div>
   </div>
+{% endif %}
   <br><br>
+
+<!-- Modal Ricarica Carta Prepagata -->
+{% if pacchetto.tipo == 'prepagata' %}
+<div class="modal fade" id="modalRicarica" tabindex="-1" aria-labelledby="modalRicaricaLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title" id="modalRicaricaLabel">
+          <i class="bi bi-plus-circle"></i> Ricarica Carta
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="importoRicarica" class="form-label">Importo da ricaricare</label>
+          <div class="input-group">
+            <span class="input-group-text">€</span>
+            <input type="number" class="form-control form-control-lg text-center" id="importoRicarica" 
+                   min="1" step="1" placeholder="50" autofocus>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label for="descrizioneRicarica" class="form-label">Descrizione (opzionale)</label>
+          <input type="text" class="form-control" id="descrizioneRicarica" placeholder="Es: Ricarica compleanno">
+        </div>
+        <div class="text-center text-muted">
+          Saldo attuale: <strong id="saldoAttualeModal">€{{ '%.2f'|format(pacchetto.credito_residuo or 0) }}</strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-success" onclick="eseguiRicarica()">
+          <i class="bi bi-check-lg"></i> Ricarica
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 {% block scripts %}
 <script>
@@ -742,6 +875,59 @@ display: none;
 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 const pacchettoId = {{ pacchetto.id }};
 const operatori = {{ pacchetto.all_operatori | tojson }};
+const tipoPacchetto = '{{ pacchetto.tipo or "servizi" }}';
+
+// ============ FUNZIONI CARTA PREPAGATA ============
+function apriModalRicarica() {
+  const modal = new bootstrap.Modal(document.getElementById('modalRicarica'));
+  document.getElementById('importoRicarica').value = '';
+  document.getElementById('descrizioneRicarica').value = '';
+  modal.show();
+  setTimeout(() => document.getElementById('importoRicarica').focus(), 300);
+}
+
+async function eseguiRicarica() {
+  const importo = parseFloat(document.getElementById('importoRicarica').value);
+  const descrizione = document.getElementById('descrizioneRicarica').value.trim();
+  
+  if (!importo || importo <= 0) {
+    alert('Inserisci un importo valido');
+    return;
+  }
+  
+  try {
+    const response = await fetch(`/pacchetti/api/pacchetti/${pacchettoId}/ricarica`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({
+        importo: importo,
+        descrizione: descrizione || 'Ricarica manuale'
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      // Chiudi modal
+      bootstrap.Modal.getInstance(document.getElementById('modalRicarica')).hide();
+      
+      // Aggiorna UI
+      document.getElementById('creditoResiduo').textContent = `€${data.credito_residuo.toFixed(2)}`;
+      
+      // Ricarica pagina per aggiornare storico movimenti
+      alert(`Ricarica di €${importo.toFixed(2)} effettuata con successo!`);
+      location.reload();
+    } else {
+      alert('Errore: ' + (data.error || 'Ricarica non riuscita'));
+    }
+  } catch (error) {
+    console.error('Errore ricarica:', error);
+    alert('Errore di connessione');
+  }
+}
 
 // Mostra messaggio se arrivati da calendar dopo aver fissato una seduta
 (function checkPacchettoSedutaMessage() {
