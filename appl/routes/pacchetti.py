@@ -1,9 +1,8 @@
 # appl/routes/pacchetti.py
 import json
-from flask import Blueprint, render_template, request, jsonify
-from flask_login import current_user
+from flask import Blueprint, render_template, request, jsonify, session
 from appl import db
-from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo, PacchettoTipo, MovimentoPrepagata, Subcategory
+from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo, PacchettoTipo, MovimentoPrepagata, Subcategory, User
 from sqlalchemy import func, or_, and_
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload, selectinload
@@ -12,6 +11,12 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import filetype  # Sostituisce python-magic - nessuna dipendenza di sistema
 import json
+
+def get_current_user():
+    """Ritorna l'utente loggato dalla sessione."""
+    user_id = session.get('user_id')
+    return db.session.get(User, user_id) if user_id else None
+
 
 # Configurazione sicurezza upload
 ALLOWED_EXTENSIONS = {'pdf'}
@@ -968,6 +973,7 @@ def api_update_pacchetto_vincoli(id):
     """Aggiorna i vincoli di utilizzo di una carta prepagata (solo admin/owner)."""
     
     # Verifica permessi
+    current_user = get_current_user()
     if not current_user or current_user.ruolo.value not in ['admin', 'owner']:
         return jsonify({'error': 'Permessi insufficienti'}), 403
     
