@@ -182,23 +182,23 @@
 
     <input type="checkbox" id="wednesday" name="closing_days" value="Wednesday" 
         {% if 'Wednesday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-        <label for="tuesday">Mercoledì</label>
+        <label for="wednesday">Mercoledì</label>
 
     <input type="checkbox" id="thursday" name="closing_days" value="Thursday" 
         {% if 'Thursday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-  <label for="tuesday">Giovedì</label>
+  <label for="thursday">Giovedì</label>
 
     <input type="checkbox" id="friday" name="closing_days" value="Friday" 
         {% if 'Friday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-  <label for="tuesday">Venerdì</label>
+  <label for="friday">Venerdì</label>
 
     <input type="checkbox" id="saturday" name="closing_days" value="Saturday" 
         {% if 'Saturday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-  <label for="tuesday">Sabato</label>
+  <label for="saturday">Sabato</label>
 
     <input type="checkbox" id="sunday" name="closing_days" value="Sunday" 
         {% if 'Sunday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-        <label for="tuesday">Domenica</label>
+        <label for="sunday">Domenica</label>
 
     <button type="submit">Salva Impostazioni</button>
 </form>
@@ -211,19 +211,61 @@
   </td>
 </tr>
 <br><br>
+<tr>
+  <td><label for="zoomNavigatorEnabled">Zoom Navigator:</label></td>
+  <td>
+    <input type="checkbox" id="zoomNavigatorEnabled" checked>
+    <small style="margin-left:8px; color:#666;">Mostra controlli zoom (+/−) nell'agenda (su questo computer)</small>
+  </td>
+</tr>
+<br><br>
+<tr>
+  <td><label for="refreshButtonEnabled">Tasto Refresh:</label></td>
+  <td>
+    <input type="checkbox" id="refreshButtonEnabled" checked>
+    <small style="margin-left:8px; color:#666;">Mostra pulsante aggiorna pagina nella barra di navigazione (su questo computer)</small>
+  </td>
+</tr>
+<br><br><br>
 </div>
 <script>
   // Inizializza checkbox da localStorage e salva alla modifica
   (function(){
     try {
+      // Touch UI
       const key = 'sun_touch_ui';
       const el = document.getElementById('touchUiEnabled');
-      if (!el) return;
-      el.checked = (localStorage.getItem(key) === '1');
-      el.addEventListener('change', () => {
-        localStorage.setItem(key, el.checked ? '1' : '0');
-        alert('Impostazione salvata. Ricarica l\'agenda per applicare la modalità touch.');
-      });
+      if (el) {
+        el.checked = (localStorage.getItem(key) === '1');
+        el.addEventListener('change', () => {
+          localStorage.setItem(key, el.checked ? '1' : '0');
+          alert('Impostazione salvata. Ricarica l\'agenda per applicare la modalità touch.');
+        });
+      }
+      
+      // Zoom Navigator (default: visibile)
+      const zoomKey = 'sun_zoom_navigator';
+      const zoomEl = document.getElementById('zoomNavigatorEnabled');
+      if (zoomEl) {
+        const zoomVal = localStorage.getItem(zoomKey);
+        zoomEl.checked = (zoomVal === null || zoomVal === '1');
+        zoomEl.addEventListener('change', () => {
+          localStorage.setItem(zoomKey, zoomEl.checked ? '1' : '0');
+          alert('Impostazione salvata. Ricarica l\'agenda per applicare.');
+        });
+      }
+      
+      // Refresh Button (default: visibile)
+      const refreshKey = 'sun_refresh_button';
+      const refreshEl = document.getElementById('refreshButtonEnabled');
+      if (refreshEl) {
+        const refreshVal = localStorage.getItem(refreshKey);
+        refreshEl.checked = (refreshVal === null || refreshVal === '1');
+        refreshEl.addEventListener('change', () => {
+          localStorage.setItem(refreshKey, refreshEl.checked ? '1' : '0');
+          alert('Impostazione salvata. Ricarica la pagina per applicare.');
+        });
+      }
     } catch(e) {}
   })();
 </script>
