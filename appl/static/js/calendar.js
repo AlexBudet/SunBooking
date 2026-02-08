@@ -2037,14 +2037,16 @@ function toggleNavigator() {
         // Espandi
         navigator.classList.remove('collapsed');
         toggleBtn.textContent = '−'; // segno meno
-        toggleBtn.title = 'Collassa Navigator';
+        toggleBtn.title = 'Riduci';
+        toggleBtn.setAttribute('data-bs-original-title', 'Collassa');
         // Salva stato in localStorage
         localStorage.setItem('navigatorCollapsed', 'false');
     } else {
         // Collassa
         navigator.classList.add('collapsed');
         toggleBtn.textContent = '+'; // segno più
-        toggleBtn.title = 'Espandi Navigator';
+        toggleBtn.title = 'Espandi';
+        toggleBtn.setAttribute('data-bs-original-title', 'Espandi');
         // Salva stato in localStorage
         localStorage.setItem('navigatorCollapsed', 'true');
     }
@@ -8286,11 +8288,6 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
   const clearNavigatorBtn = document.getElementById('clearNavigatorBtn');
   if (clearNavigatorBtn) {
       clearNavigatorBtn.style.display = 'none';
-  }
-
-  const navigatorToggleBtn = document.getElementById('navigatorToggleBtn');
-  if (navigatorToggleBtn) {
-      navigatorToggleBtn.style.display = 'none';
   }
 
   // Rimuovi i dati dal localStorage relativi SOLO al navigator

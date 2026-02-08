@@ -84,6 +84,13 @@
             <span class="menu-label">Esci</span>
         </a>
     </li>
+    <button id="btnRefreshPage"
+        class="btn btn-outline-secondary"
+        title="Ricarica pagina"
+        onclick="location.reload()"
+        style="margin-left: 8px; font-size: 1.4em; background: transparent; border-radius: 6px; padding: 2px 16px; cursor: pointer;">
+  <i class="bi bi-arrow-clockwise"></i>
+</button>
 </ul>
             </nav>
         </div>
@@ -460,6 +467,20 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   });
+})();
+</script>
+<script>
+// Nascondi pulsante Refresh se disabilitato in Settings
+(function(){
+  try {
+    var refreshVal = localStorage.getItem('sun_refresh_button');
+    if (refreshVal === '0') {
+      document.addEventListener('DOMContentLoaded', function(){
+        var btn = document.getElementById('btnRefreshPage');
+        if (btn) btn.style.display = 'none';
+      });
+    }
+  } catch(e) {}
 })();
 </script>
 <script>

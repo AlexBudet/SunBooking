@@ -264,4 +264,4 @@ def select_db(idx):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5050"))
     print(f"Avvio server su http://127.0.0.1:{port}/landing-web")
-    serve(application, host='127.0.0.1', port=port)
+    serve(application, host='127.0.0.1', port=port, threads=16)

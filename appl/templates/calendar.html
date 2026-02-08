@@ -90,8 +90,8 @@
     <div id="selectedServicesList"
          style="border: 1px dashed #ccc; padding: 5px; min-height: 40px;">
     </div>
-    <button id="clearNavigatorBtn" class="clear-navigator-btn" onclick="clearNavigator()">Svuota</button>
-    <button type="button" id="navigatorToggleBtn" class="navigator-toggle-btn" onclick="toggleNavigator()" title="Collassa Navigator">−</button>
+    <button id="clearNavigatorBtn" class="clear-navigator-btn" onclick="clearNavigator()" data-bs-toggle="tooltip" data-bs-trigger="hover" title="Svuota i campi e resetta">Svuota</button>
+    <button type="button" id="navigatorToggleBtn" class="navigator-toggle-btn" onclick="toggleNavigator()" data-bs-toggle="tooltip" data-bs-trigger="hover" title="Riduci">−</button>
   </div>
 </div>
 <!-- NAVIGAZIONE CALENDARIO -->
@@ -125,7 +125,7 @@
         title="<b>PRENOTAZIONI DA WEB</b><br><br>Clicca per gestire le prenotazioni online"
         data-bs-toggle="tooltip"
         data-bs-html="true"
-        style="margin-left: 12px; font-size: 1.4em; background: #fff; border-radius: 6px; padding: 2px 16px; cursor: pointer;">
+        style="margin-left: 12px; font-size: 1.4em; background: #fff; border-radius: 6px; padding: 2px 8px; cursor: pointer;">
   🌐
     <!-- BADGE DI NOTIFICA -->
   <span id="webApptBadge" 
@@ -1943,6 +1943,19 @@ document.addEventListener('DOMContentLoaded', function() {
       if (localStorage.getItem('sun_touch_ui') === '1') {
         document.addEventListener('DOMContentLoaded', function(){
           document.body.classList.add('touch-ui');
+        });
+      }
+    } catch(e) {}
+  })();
+  
+  // Nascondi Zoom Navigator se disabilitato in Settings
+  (function(){
+    try {
+      var zoomVal = localStorage.getItem('sun_zoom_navigator');
+      if (zoomVal === '0') {
+        document.addEventListener('DOMContentLoaded', function(){
+          var nav = document.getElementById('quarterNavigator');
+          if (nav) nav.style.display = 'none';
         });
       }
     } catch(e) {}

@@ -120,6 +120,11 @@ def cassa():
     giorno = date.today()
     businessinfo = db.session.get(BusinessInfo, 1)
 
+    # Aggiungi ruolo utente per mostrare/nascondere console RCH
+    user_id = session.get("user_id")
+    user = db.session.get(User, user_id)
+    user_role = user.ruolo.value if user else None
+
     return render_template(
         'cassa.html',
         client_id=client_id,
@@ -128,7 +133,8 @@ def cassa():
         operator_name=operator_name,
         servizi=servizi,
         giorno=giorno,
-        businessinfo=businessinfo
+        businessinfo=businessinfo,
+        user_role=user_role
     )
 
 @cassa_bp.route('/cassa/api/operators')
@@ -1549,3 +1555,207 @@ def rch_retry():
     IDEMPOTENCY_STORE[key] = result
     RCH_PENDING.pop(key, None)
     return jsonify(result), 200
+
+# ========================================
+# CONSOLE RCH - Route per sblocco manuale
+# ========================================
+
+@cassa_bp.route('/cassa/rch-console/status', methods=['GET'])
+def rch_console_status():
+    """Query stato stampante RCH"""
+    business = BusinessInfo.query.first()
+    if not business or not business.printer_ip:
+        return jsonify({"error": "IP stampante non configurato"}), 400
+    
+    ip = business.printer_ip
+    url = f"http://{ip}/service.cgi"
+    headers = {"Content-Type": "text/xml; charset=UTF-8"}
+    
+    # Codici RCH che indicano stato OK (non errore)
+    # 0 = OK, 20 = Idle/pronta, 99 = operazione completata
+    RCH_OK_CODES = {0, 20, 99}
+    # Codici che indicano documento aperto
+    RCH_DOC_OPEN_CODES = {2, 3, 4}
+    
+    try:
+        # Query stato con C453
+        payload = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C453/$0</cmd></Service>'
+        resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=8)
+        
+        result = {
+            "printer_ip": ip,
+            "status": "ok",
+            "error_code": None,
+            "error_message": None,
+            "document_open": False,
+            "last_z": None,
+            "last_doc": None,
+            "raw_response": resp.text[:500]
+        }
+        
+        # Parse errorCode
+        m_err = re.search(r'<errorCode>(\d+)</errorCode>', resp.text)
+        if m_err:
+            code = int(m_err.group(1))
+            result["error_code"] = code
+            
+            if code in RCH_OK_CODES:
+                result["status"] = "ok"
+                result["error_message"] = None
+            elif code in RCH_DOC_OPEN_CODES:
+                result["status"] = "warning"
+                result["document_open"] = True
+                result["error_message"] = "Documento fiscale aperto"
+            else:
+                result["status"] = "warning"
+                result["error_message"] = f"Codice stato: {code}"
+        
+        # Parse lastZ e lastDocF
+        m_z = re.search(r'<lastZ>(\d+)</lastZ>', resp.text)
+        m_doc = re.search(r'<lastDocF>(\d+)</lastDocF>', resp.text)
+        if m_z:
+            result["last_z"] = int(m_z.group(1))
+        if m_doc:
+            result["last_doc"] = int(m_doc.group(1))
+        
+        return jsonify(result)
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Timeout - stampante non risponde", "printer_ip": ip}), 504
+    except Exception as e:
+        return jsonify({"error": str(e), "printer_ip": ip}), 500
+
+@cassa_bp.route('/cassa/rch-console/send-cl', methods=['POST'])
+def rch_console_send_cl():
+    """Invia comando CL (C3 + C1) - equivale a premere tasto CL"""
+    business = BusinessInfo.query.first()
+    if not business or not business.printer_ip:
+        return jsonify({"error": "IP stampante non configurato"}), 400
+    
+    ip = business.printer_ip
+    url = f"http://{ip}/service.cgi"
+    headers = {"Content-Type": "text/xml; charset=UTF-8"}
+    
+    results = []
+    commands = ["=C3", "=C1"]
+    
+    for cmd in commands:
+        try:
+            payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
+            resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=10)
+            success = '<errorCode>0</errorCode>' in resp.text or resp.status_code == 200
+            results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
+            pytime.sleep(0.3)
+        except Exception as e:
+            results.append({"cmd": cmd, "success": False, "error": str(e)})
+    
+    return jsonify({"results": results})
+
+
+@cassa_bp.route('/cassa/rch-console/full-reset', methods=['POST'])
+def rch_console_full_reset():
+    """Reset completo: C99 → C10 → C3 → T5/$0 → C3 → C1"""
+    business = BusinessInfo.query.first()
+    if not business or not business.printer_ip:
+        return jsonify({"error": "IP stampante non configurato"}), 400
+    
+    ip = business.printer_ip
+    url = f"http://{ip}/service.cgi"
+    headers = {"Content-Type": "text/xml; charset=UTF-8"}
+    
+    results = []
+    commands = ["=C99", "=C10", "=C3", "=T5/$0", "=C3", "=C1"]
+    
+    for cmd in commands:
+        try:
+            payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
+            resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15)
+            success = '<errorCode>0</errorCode>' in resp.text or resp.status_code == 200
+            results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
+            pytime.sleep(0.5)
+        except Exception as e:
+            results.append({"cmd": cmd, "success": False, "error": str(e)})
+    
+    return jsonify({"results": results})
+
+
+@cassa_bp.route('/cassa/rch-console/close-document', methods=['POST'])
+def rch_console_close_document():
+    """Chiude documento aperto con importo e metodo specificati"""
+    data = request.get_json(force=True) or {}
+    importo = float(data.get("importo", 0))
+    metodo = data.get("metodo", "contanti")
+    
+    business = BusinessInfo.query.first()
+    if not business or not business.printer_ip:
+        return jsonify({"error": "IP stampante non configurato"}), 400
+    
+    ip = business.printer_ip
+    url = f"http://{ip}/service.cgi"
+    headers = {"Content-Type": "text/xml; charset=UTF-8"}
+    
+    results = []
+    
+    # Determina comando pagamento
+    if importo <= 0:
+        pay_cmd = "=T5/$0"
+    else:
+        cents = int(round(importo * 100))
+        if metodo == "pos":
+            pay_cmd = f"=T3/${cents}"
+        elif metodo == "bank":
+            pay_cmd = f"=T2/${cents}"
+        else:
+            pay_cmd = f"=T1/${cents}"
+    
+    commands = [pay_cmd, "=C3", "=C1"]
+    
+    for cmd in commands:
+        try:
+            payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
+            resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15)
+            success = '<errorCode>0</errorCode>' in resp.text or resp.status_code == 200
+            results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
+            pytime.sleep(0.3)
+        except Exception as e:
+            results.append({"cmd": cmd, "success": False, "error": str(e)})
+    
+    all_success = all(r.get("success") for r in results)
+    return jsonify({"success": all_success, "results": results})
+
+
+@cassa_bp.route('/cassa/rch-console/send-raw', methods=['POST'])
+def rch_console_send_raw():
+    """Invia comando raw alla stampante"""
+    data = request.get_json(force=True) or {}
+    command = (data.get("command") or "").strip()
+    
+    if not command:
+        return jsonify({"error": "Comando vuoto"}), 400
+    
+    # Aggiungi = se non presente
+    if not command.startswith("="):
+        command = "=" + command
+    
+    business = BusinessInfo.query.first()
+    if not business or not business.printer_ip:
+        return jsonify({"error": "IP stampante non configurato"}), 400
+    
+    ip = business.printer_ip
+    url = f"http://{ip}/service.cgi"
+    headers = {"Content-Type": "text/xml; charset=UTF-8"}
+    
+    try:
+        payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{command}</cmd></Service>'
+        resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15)
+        
+        m_err = re.search(r'<errorCode>(\d+)</errorCode>', resp.text)
+        error_code = int(m_err.group(1)) if m_err else None
+        
+        return jsonify({
+            "success": error_code == 0 or error_code is None,
+            "error_code": error_code,
+            "response": resp.text[:500],
+            "command_sent": command
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
