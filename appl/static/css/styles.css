@@ -893,11 +893,33 @@ td {
 
 @media (max-width: 768px) {
     .modal-dialog {
-        max-width: 95%; /* Usa il 95% dello schermo */
+        max-width: 95%;
+        margin: 1rem auto;
     }
 
+    .modal-content {
+        border-radius: 16px;
+    }
+
+    .modal-header {
+        border-radius: 16px 16px 0 0;
+        padding: 0.875rem 1.15rem;
+    }
+    
     .modal-body {
-        max-height: 60vh; /* Limita altezza per viewport più piccole */
+        max-height: 60vh;
+        padding: 1rem 1.15rem;
+    }
+    
+    .modal-footer {
+        border-radius: 0 0 16px 16px;
+        padding: 0.75rem 1.15rem;
+    }
+    
+    .modal-footer .btn,
+    .modal-body .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
     }
 }
 /* Aggiunta popup buttons per appointment block */
