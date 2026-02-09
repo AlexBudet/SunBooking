@@ -1186,33 +1186,41 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     position: fixed;
     top: 0px;
     right: 5px;
-    width: 23vw;           /* proporzionale alla larghezza della pagina */
-    max-width: 400px;      /* limite massimo per schermi grandi */
-    min-width: 220px;      /* limite minimo per schermi piccoli */
-    padding: 10px;
-    background-color: #fff;
+    width: 23vw;
+    max-width: 400px;
+    min-width: 220px;
+    padding: 12px;
+    background: linear-gradient(180deg, #ffffff 0%, #fdfbfc 100%);
     z-index: 10999;
     font-size: 14px;
     box-sizing: border-box;
+    border-radius: 0 0 18px 18px;
+    box-shadow: 0 8px 32px rgba(135, 100, 124, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(135, 100, 124, 0.1);
+    border-top: none;
 }
 
 .clear-navigator-btn {
     display: none;
-    padding: 2px 8px;
-    border-radius: 5px;
-    border: 1px solid #383838;
-    background-color: #fff;
-    color: #5e5e5e;
-    font-size: 16px;
-    font-weight: bold;
+    padding: 4px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(135, 100, 124, 0.25);
+    background: #f5f0f3;
+    color: #87647c;
+    font-size: 14px;
+    font-weight: 600;
     cursor: pointer;
     vertical-align: middle;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
 .clear-navigator-btn:hover {
-    background-color: #7c7c7c;
+    background: linear-gradient(135deg, #dc6b7f 0%, #c55a6d 100%);
     color: #fff;
+    border-color: transparent;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(220, 107, 127, 0.3);
 }
 
 .appointmentNavigator.open .clear-navigator-btn {
@@ -1222,25 +1230,28 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
 /* Pulsante toggle per collassare/espandere il navigator */
 .navigator-toggle-btn {
     display: none;
-    width: 30px;
-    height: 30px;
-    border-radius: 5px;
-    border: 1px solid #383838;
-    background-color: #fff;
-    color: #5e5e5e;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    border: 1px solid rgba(135, 100, 124, 0.25);
+    background: linear-gradient(135deg, #f8e8f0 0%, #f0e4eb 100%);
+    color: #87647c;
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
     z-index: 11000;
     text-align: center;
-    line-height: 16px;
+    line-height: 30px;
     vertical-align: middle;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
 .navigator-toggle-btn:hover {
-    background-color: #7c7c7c;
+    background: linear-gradient(135deg, #b8809d 0%, #a06b88 100%);
     color: #fff;
+    border-color: transparent;
+    transform: scale(1.05);
 }
 
 #btnRefreshPage {
@@ -1253,14 +1264,15 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
 
 /* Stato collassato del navigator */
 .appointmentNavigator.collapsed {
-    width: 40px !important;
-    min-width: 40px !important;
-    max-width: 40px !important;
-    height: 40px !important;
+    width: 42px !important;
+    min-width: 42px !important;
+    max-width: 42px !important;
+    height: 42px !important;
     padding: 5px;
     overflow: hidden;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(135, 100, 124, 0.25);
+    background: linear-gradient(135deg, #f8e8f0 0%, #f0e4eb 100%);
 }
 
 /* Quando è collassato, nascondi tutto il contenuto tranne il pulsante toggle */
@@ -1276,35 +1288,55 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
 
 /* Imposta il container dei pseudo-blocchi per sfruttare l'intera larghezza del navigator */
 #pseudoBlockContainer {
-    width: 100%; /* usa tutta la larghezza del container genitore */
+    width: 100%;
     white-space: nowrap;
     overflow-x: auto;
-    border: 1px solid #b8b8b8;
-    padding: 5px;
+    border: 1px solid rgba(135, 100, 124, 0.2);
+    border-radius: 12px;
+    padding: 8px;
+    background: #fdfbfc;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .pseudo-block {
-    border: 1px solid #ccc;
-    margin-bottom: 5px; /* opzionale, per separare i blocchi */
-    padding: 5px; /* se necessario */
-    color: black;
-    background-color: #f5f5f5;
-    font-size: 15px !important; 
+    border: 1px solid rgba(135, 100, 124, 0.2);
+    border-radius: 10px;
+    margin-bottom: 6px;
+    padding: 8px 10px;
+    color: #444;
+    background: linear-gradient(180deg, #ffffff 0%, #f8f5f7 100%);
+    font-size: 14px !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: all 0.15s ease;
 }
 
-/* Aggiungi questo codice al tuo file styles.css */
+.pseudo-block:hover {
+    border-color: rgba(135, 100, 124, 0.35);
+    box-shadow: 0 3px 8px rgba(135, 100, 124, 0.12);
+}
+
 .pseudo-block button {
-    color: red;
+    color: #dc6b7f;
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 15px !important; 
-  }
+    font-size: 14px !important;
+    padding: 2px 6px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
 
-  /* Stile per evidenziare il pseudoblocco selezionato */
+.pseudo-block button:hover {
+    background: rgba(220, 107, 127, 0.1);
+    color: #c55a6d;
+}
+
 .pseudo-block.selected {
-    border: 2px solid #007bff; /* Bordino blu */
-    background-color: rgba(0, 123, 255, 0.1); /* Sfondo leggermente blu */
+    border: 2px solid #b8809d !important;
+    background: linear-gradient(180deg, #f8e8f0 0%, #f0e4eb 100%) !important;
+    box-shadow: 0 4px 12px rgba(184, 128, 157, 0.2) !important;
+    outline: 2px solid rgba(184, 128, 157, 0.4);
+    outline-offset: 2px;
 }
 
   .appointment-block .note-indicator {
@@ -1365,15 +1397,53 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
 #serviceResultsNav .dropdown-item,
 #clientResultsNav .dropdown-item,
 #selectedServicesList .pseudo-block {
-    font-size: 1.15em;      /* oppure scegli la dimensione che preferisci */
-    font-family: Arial, Helvetica, sans-serif;    /* eredita dal campo input */
-    line-height: 1.15em;
+    font-size: 1.15em;
+    font-family: Arial, Helvetica, sans-serif;
+    line-height: 1.3em;
+    /* Eredita stile glamour dal navigator */
+    border: 1px solid rgba(135, 100, 124, 0.2);
+    border-radius: 10px;
+    margin-bottom: 6px;
+    padding: 8px 10px;
+    color: #444;
+    background: linear-gradient(180deg, #ffffff 0%, #f8f5f7 100%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: all 0.15s ease;
+}
+
+#selectedServicesList .pseudo-block:hover {
+    border-color: rgba(135, 100, 124, 0.35);
+    box-shadow: 0 3px 8px rgba(135, 100, 124, 0.12);
 }
 
 /* Rendi anche i pulsanti X coerenti */
 #selectedServicesList .pseudo-block button,
 #selectedServicesList .pseudo-block .delete-btn {
-    font-size: 1em;
+    font-size: 0.95em;
+    color: #dc6b7f;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+#selectedServicesList .pseudo-block button:hover,
+#selectedServicesList .pseudo-block .delete-btn:hover {
+    background: rgba(220, 107, 127, 0.1);
+    color: #c55a6d;
+}
+
+/* Container lista servizi nel modal */
+#selectedServicesList {
+    border: 1px solid rgba(135, 100, 124, 0.15);
+    border-radius: 12px;
+    padding: 8px;
+    background: #fdfbfc;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
+    max-height: 200px;
+    overflow-y: auto;
 }
 
 .client-info-btn {
