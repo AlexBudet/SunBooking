@@ -85,6 +85,46 @@ display: none
     opacity: 1;
 }
 
+/* Tooltip inner: stile glamour */
+.tooltip-inner {
+    background: linear-gradient(135deg, #4a3d46 0%, #3a2f35 100%);
+    color: #fff;
+    font-size: 0.875rem;
+    padding: 8px 12px;
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    max-width: 280px;
+    text-align: left;
+    line-height: 1.4;
+}
+
+/* Freccia tooltip */
+.tooltip .tooltip-arrow::before {
+    border-top-color: #4a3d46 !important;
+    border-bottom-color: #4a3d46 !important;
+}
+
+.bs-tooltip-top .tooltip-arrow::before {
+    border-top-color: #4a3d46 !important;
+}
+
+.bs-tooltip-bottom .tooltip-arrow::before {
+    border-bottom-color: #3a2f35 !important;
+}
+
+.bs-tooltip-start .tooltip-arrow::before {
+    border-left-color: #4a3d46 !important;
+}
+
+.bs-tooltip-end .tooltip-arrow::before {
+    border-right-color: #4a3d46 !important;
+}
+
+/* Animazione fade-in più smooth */
+.tooltip.fade {
+    transition: opacity 0.2s ease-in-out;
+}
+
 .modal-backdrop {
     z-index: 12400; /* Sfondo del modal */
 }
@@ -327,7 +367,7 @@ display: none
   }
 
 td {
-    border: 1px solid #ddd;
+    border: 1px solid rgba(135, 100, 124, 0.12);
     text-align: left;
 }
 
@@ -367,6 +407,12 @@ td {
     text-shadow: 0.5px 0.5px 0.5px rgba(139, 139, 139, 0.4); /* Aggiunge ombra nera con opacità 0.4 */
 }
 
+.calendar-table thead th a:hover {
+    background: rgb(255, 255, 255);
+    color: #b81b7e50;
+    text-decoration: none;
+}
+
 .calendar-table thead th a.solarium {
     color: rgb(83, 132, 175) !important;  /* Mantieni il colore blu se desiderato */
 }
@@ -385,10 +431,15 @@ td {
     height: var(--quarter-px);
     overflow: visible !important;
     position: relative !important;
+    transition: background-color 0.12s ease;
+}
+
+.selectable-cell:not(.calendar-closed):hover {
+    background-color: rgba(248, 232, 240, 0.6) !important;
 }
 
 .selectable-cell.highlight.selectable-cell.highlight {
-    background-color: rgba(0, 123, 255, 0.2);
+    background-color: rgba(184, 128, 157, 0.2);
 }
 
   .selectable-cell.cut-source {
@@ -431,26 +482,35 @@ td {
 }
 
 .hour-cell {
-    background-color: #f5f5f5;
+    background: linear-gradient(180deg, #f8f5f7 0%, #f3f0f2 100%);
     font-weight: bold;
     position: relative;
     text-align: right;
     padding-right: 4px;
     vertical-align: top;
+    color: #87647c;
+    border-bottom: 1px solid rgba(135, 100, 124, 0.15);
 }
 
 .hour-cell ~ td:not(.calendar-closed) {
-    background-color: #f5f5f5;
-  }
+    background: linear-gradient(180deg, #fdfbfc 0%, #f9f7f8 100%);
+}
+
+/* Forza hover visibile anche sulle celle delle ore piene */
+.hour-cell ~ td.selectable-cell:not(.calendar-closed):hover {
+    background-color: rgba(248, 232, 240, 0.7) !important;
+    background-image: none !important;
+}
 
 .quarter-cell {
     background-color: #ffffff;
-    border-top: 1px dashed #ddd;
+    border-top: 1px dashed rgba(135, 100, 124, 0.12);
     font-size: 12px !important;
     position: relative;
     text-align: right;
     padding-right: 5px;
     vertical-align: top;
+    color: #999;
 }
 
 .quarter-cell ~ td:not(.calendar-closed) {
@@ -461,7 +521,7 @@ td {
 .appointment-block {
     display: flex;
     flex-direction: column;
-    justify-content: space-between; /* Posiziona la drag-handle in alto e la resize-handle in fondo */
+    justify-content: space-between;
     z-index: 1;
     width: 100%;
     box-sizing: border-box;
@@ -474,8 +534,20 @@ td {
     text-align: center;
     text-overflow: ellipsis;
     padding: 0px;
-    border-radius: 8px;
+    border-radius: 12px;
     background-color: rgba(66, 133, 244, 0.9);
+    box-shadow: 0 3px 10px rgba(135, 100, 124, 0.18), 0 1px 3px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.appointment-block:hover {
+    transform: scale(1.015);
+    box-shadow: 0 6px 20px rgba(135, 100, 124, 0.25), 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.appointment-block:active {
+    transform: scale(0.99);
 }
 
 /* Variabili e layout della barra popup sopra al blocco */
@@ -762,15 +834,15 @@ td {
   }
 
 .calendar-closed {
-    background-color: #f4f4f4;
+    background-color: #f9f7f8;
     background-image: repeating-linear-gradient(
-        150deg,
-        #dadada 0px,
-        #dadada 5px,
-        #eeeeee 5px,
-        #eeeeee 10px
+        135deg,
+        rgba(135, 100, 124, 0.06) 0px,
+        rgba(135, 100, 124, 0.06) 4px,
+        transparent 4px,
+        transparent 8px
     );
-    border: 1px solid #dadada; /* stesso colore della trama */
+    border: 1px solid rgba(135, 100, 124, 0.1);
     box-sizing: border-box;
 }
 
@@ -781,13 +853,19 @@ td {
 
 .calendar-navigation {
     display: inline-flex;
-    align-items: center;  /* allinea verticalmente */
-    gap: 6px;            /* distanza orizzontale tra i controlli */
+    align-items: center;
+    gap: 8px;
     position: fixed;
     top: 60;
     left: 0;
     z-index: 11999;
-  }
+    background: linear-gradient(180deg, #ffffff 0%, #fdfbfc 100%);
+    padding: 6px 12px;
+    border-radius: 0 0 14px 14px;
+    box-shadow: 0 4px 16px rgba(135, 100, 124, 0.12);
+    border: 1px solid rgba(135, 100, 124, 0.08);
+    border-top: none;
+}
 
   /* Posiziona il pulsante "Crea blocco OFF" in basso a destra del modal, a 6px dal fondo */
 #createBlockOff,
@@ -816,22 +894,38 @@ td {
 #dayOfWeek,
 #reportDayOfWeek {
     display: inline-block;
-    width: 55px;
-    min-width: 38px;
+    width: auto;
+    min-width: 40px;
     text-align: center;
-    font-size: 1.2em;
-    font-weight: 600;
-    color: #1976d2;
-    margin-left: 8px;
+    font-size: 1.1em;
+    font-weight: 700;
+    color: #87647c;
+    margin-left: 6px;
     text-transform: uppercase;
+    background: transparent;
+    padding: 0;
+    border: none;
+    letter-spacing: 0.05em;
 }
   /* Le frecce avanti/indietro */
-  .calendar-navigation .arrow-nav {
-    font-size: 1.5rem;       /* più grandi del normale */
-    color: #777;             /* grigio scuro */
-    text-decoration: none;   /* rimuove sottolineatura */
-    padding: 0 6px;          /* un po' di spazio orizzontale */
-  }
+.calendar-navigation .arrow-nav {
+    font-size: 1.3rem;
+    color: #87647c;
+    text-decoration: none;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #fff9fc 0%, #fffbfd 100%);
+    border-radius: 10px;
+    transition: background 0.15s ease, color 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.calendar-navigation .arrow-nav:hover {
+    background: linear-gradient(135deg, #b8809d 0%, #a06b88 100%);
+    color: #fff;
+}
   
   .calendar-date-container {
     display: inline-flex;
@@ -849,10 +943,18 @@ td {
 .calendar-navigation .calendar-date-input,
 .calendar-date-input {
     width: auto !important;
-    padding: 1px;
-    color: #000 !important;
+    padding: 6px 10px;
+    color: #444 !important;
     background-color: #fff !important;
-    border: 1px solid #ccc;
+    border: 1px solid rgba(135, 100, 124, 0.2);
+    border-radius: 10px;
+    font-size: 0.95rem;
+}
+
+.calendar-navigation .calendar-date-input:focus,
+.calendar-date-input:focus {
+    border-color: #b8809d;
+    outline: none;
 }
 
 /* Overlay per mostrare la data formattata, allineato a sinistra */
@@ -870,19 +972,32 @@ td {
 }
 
   /* Pulsante “Vai a OGGI”: sfondo bianco, testo grigio scuro */
-  .calendar-navigation .btn-today {
+.calendar-navigation .btn-today {
     display: inline-block;
-    background-color: #fff;
-    color: #333;            /* grigio scuro per il testo */
-    font-size: 0.9rem;      /* leggermente più piccolo di 1rem */
-    border: 1px solid #ccc; /* contorno grigio chiaro */
-    padding: 5px 5px;       /* dimensioni compatte */
-    text-decoration: none;  /* niente sottolineatura */
-    border-radius: 4px;     /* bordi leggermente arrotondati */
-  }
-  .calendar-navigation .btn-today:hover {
-    background-color: #fcf1f7; /* leggera evidenziazione al hover */
-  }  
+    background: linear-gradient(135deg, #faf3f9 0%, #f0e4eb 100%);
+    color: #87647c;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: none;
+    padding: 6px 14px;
+    text-decoration: none;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: background 0.15s ease, color 0.15s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.calendar-navigation .btn-today:hover {
+    background: linear-gradient(135deg, #b8809d 0%, #a06b88 100%);
+    color: #fff;
+}  
+
+#btnWebInformatica:hover {
+    background: linear-gradient(135deg, #e4d1db 0%, #ecd7e3 100%);
+    border-color: transparent;
+    color: #fff;
+}
 
   .calendar-fullwidth {
     position: relative;
@@ -893,15 +1008,18 @@ td {
 
 @media (max-width: 768px) {
     .modal-dialog {
-        max-width: 95%;
-        margin: 1rem auto;
+        max-width: calc(100% - 6px);
+        margin: 0 3px;
     }
 
     .modal-content {
         border-radius: 16px;
+        border: 1px solid rgba(135, 100, 124, 0.4);
     }
 
     .modal-header {
+        background: linear-gradient(135deg, #f8e8f0 0%, #f0e4eb 100%);
+        border-bottom: 1px solid rgba(135, 100, 124, 0.15);
         border-radius: 16px 16px 0 0;
         padding: 0.875rem 1.15rem;
     }
@@ -1543,16 +1661,14 @@ body.quarter-55 .appointment-block .note-indicator {
 }
 
 .arrow-nav {
-    font-size: 2em;    /* aumenta la dimensione della freccia */
-    font-weight: bold;    /* opzionale: la rende più spessa */
-    padding: 0 12px;      /* opzionale: più spazio ai lati */
-    line-height: 1;       /* allinea meglio verticalmente */
-  }
+    font-size: 1.3rem;
+    font-weight: normal;
+    padding: 6px 12px;
+    line-height: 1;
+}
 
-  .arrow-nav:hover {
-    color:#2c2c2c;
-    font-size: 1.5em;
-    box-shadow:#ff288ce6 0px 0px 5px;
+.arrow-nav:hover {
+    color: #fff;
 }
 
   #dayOfWeek {
@@ -2979,24 +3095,25 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
       display: none !important;
   }
 
-  /* Forza i modal di calendar a occupare il 95% dello schermo su mobile */
+  /* Modal calendar su mobile: spazio dai bordi e altezza auto */
   #CreateAppointmentModal .modal-dialog,
   #EditAppointmentModal .modal-dialog,
   #AddClientModal .modal-dialog,
   #ClientInfoModal .modal-dialog {
-    width: 95vw !important;
-    max-width: 95vw !important;
+    width: calc(100% - 6px) !important;
+    max-width: calc(100% - 6px) !important;
     height: auto !important;
     max-height: none !important;
-    margin: 2.5vh 2.5vw !important; /* Margine sinistro/destro 2.5vw per centrare e occupare 95% width */
+    margin: 10px 3px !important;
   }
 
   #CreateAppointmentModal .modal-content,
   #EditAppointmentModal .modal-content,
   #AddClientModal .modal-content,
   #ClientInfoModal .modal-content {
-    height: 100% !important;
-    max-height: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    border: 1px solid rgba(135, 100, 124, 0.5);
   }
 
   #CreateAppointmentModal .modal-body,
@@ -3004,7 +3121,8 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
   #AddClientModal .modal-body,
   #ClientInfoModal .modal-body {
     overflow-y: auto !important;
-    max-height: calc(95vh - 120px) !important; /* Lascia spazio per header/footer */
+    max-height: 70vh !important;
+    height: auto !important;
   }
 
   body:not(.force-popup-buttons) .appointment-block:hover .popup-buttons,
@@ -3058,6 +3176,28 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
   .appointment-block .client-info-link {
     pointer-events: none !important;
   }
+
+  /* Popup info cliente - stile glamour coerente */
+#clientInfoPopup,
+#clientHistoryPopup {
+    background: linear-gradient(135deg, #4a3d46 0%, #3a2f35 100%) !important;
+    border: 1px solid rgba(135, 100, 124, 0.3) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+    color: #fff !important;
+    padding: 10px 14px !important;
+    font-size: 0.9rem;
+}
+
+#clientInfoPopup a,
+#clientHistoryPopup a {
+    color: #f0c8dc !important;
+}
+
+#clientInfoPopup a:hover,
+#clientHistoryPopup a:hover {
+    color: #fff !important;
+}
 
 /* --- OVERRIDE: in touch-ui non nascondere il bottone "nota" nella top bar --- */
 body.touch-ui .appointment-block .popup-buttons .btn-popup.nota {
@@ -3616,7 +3756,8 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
 }
 
 #MobilePopupButtonsModal .modal-header {
-  background: #fff !important;
+  background: linear-gradient(135deg, #f8e8f0 0%, #f0e4eb 100%) !important;
+  border-bottom: 1px solid rgba(135, 100, 124, 0.15);
 }
 
 .modal-backdrop,
@@ -3647,13 +3788,29 @@ body > .modal-backdrop {
   content: none !important;
 }
 
-  #CreateAppointmentModal .modal-dialog {
-    height: 84vh !important;
-    max-height: 90vh !important;
-  }
   #CreateAppointmentModal .modal-content {
     height: 100% !important;
     max-height: 100% !important;
+  }
+
+  /* CreateAppointmentModal: altezza auto per adattarsi al contenuto */
+  #CreateAppointmentModal .modal-body,
+  #CreateAppointmentModalBody {
+    height: auto !important;
+    min-height: unset !important;
+    max-height: 75vh !important;
+    overflow-y: auto;
+  }
+
+  #CreateAppointmentModal .modal-dialog {
+    height: auto !important;
+    min-height: unset !important;
+  }
+
+  /* Stile modal header uniforme su mobile */
+  .modal .modal-header {
+    background: linear-gradient(135deg, #f8e8f0 0%, #f0e4eb 100%) !important;
+    border-bottom: 1px solid rgba(135, 100, 124, 0.15) !important;
   }
 }
 
@@ -3669,6 +3826,8 @@ body > .modal-backdrop {
     }
     
     .modal-header {
+        background: linear-gradient(135deg, #f8e8f0 0%, #f0e4eb 100%);
+        border-bottom: 1px solid rgba(135, 100, 124, 0.15);
         border-radius: 14px 14px 0 0;
         padding: 0.875rem 1rem;
     }
@@ -3688,4 +3847,14 @@ body > .modal-backdrop {
         flex: 1 1 auto;
         min-width: 45%;
     }
+}
+
+/* Forza header glamour su tutti i modal */
+#EditAppointmentModal .modal-header,
+#AddClientModal .modal-header,
+#CreateAppointmentModal .modal-header,
+#ClientInfoModal .modal-header,
+#EditApptNoteModal .modal-header {
+    background: linear-gradient(135deg, #f8e8f0 0%, #f0e4eb 100%) !important;
+    border-bottom: 1px solid rgba(135, 100, 124, 0.15) !important;
 }
