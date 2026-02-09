@@ -1,36 +1,30 @@
-CALENDAR:
-- occhio a nomi servizio se troppe lettere alcune parti vanno oltre margine dx nei risultati di serviceSearch e serviceSearchNav
-- se ho blocchi contigui con my-spia, e taglio e sposto uno dei blocchi, dopo il release quel singolo blocco non è più con my-spia lampeggiante: correggere
-- pseudoblock navigator deve avere possibilità di AUTO-RIDURSI se copre celle attive che voglio utilizzare (tasto "riduci" e "ingrandisci"?)
-- modalità default: se taglio un blocco, sui blocchi contigui appare correttamente il popup button "taglia" ma a mouseover mostra ancora tutti gli altri popup-buttons!
-- se aggiorno un dato (nome cognome cell) da modal cliente, il nuovo dato dev'essere SUBITO VISIBILE una volta usciti da quel modal, per es
-- se un blocco è in stato 2, non deve MAI POTERSI ACCENDERE MY-SPIA (anche su touch-ui occhio), anche se un blocco contiguo è in my-spia
-- se copio un blocco in stato 2 in cui note c'era " ***NUOVO CLIENTE*** " allora SOLO IN QUESTO CASO la nota non deve essere copia-incollata (oppure trovare alternativa per segnalare nuovo cliente)
-- se per esempio pulisco cache e vengono quindi perse dalla memoria le credenziali, non deve aspettare un'operazione per dare errore, ma deve AUTOMATICAMENTE SLOGGARSI
- 
+CALENDAR
+- dopo associazione cliente da web appt table, aggiornare calendar ma RESTARE nella table (non chiuderla)
+- copia-incolla del blocco prende anche lo stato, è ok, ma copia da blocco in stato 2 (pagato) invece deve poi incollare in stato default! 
+- aggiungere location.reload dopo eliminazione o resize blocchi
+
+CASSA
+- provare console RCH per sblocco
+- testare prepagate (anche in calendar)
+- se porto in cassa cliente con prepagata da calendar, non visualizza popup e non scala credito da prepagata
+- se porto in cassa prepagata con "vai in cassa" e cambio importo scontrino, non si capisce se la dà come pagata o no
+- se indico un beneficiario per prepagata, va associato da database e la prepagata va associata a lui
+
 SETTINGS:
 - in Servizi/Utenti sezione visibile solo a owner: SEZIONI OSCURABILI DA PROFILO OWNER: 1) whatsapp, booking, marketing 2) pacchetti
-- in Clients.html bisogna far capire che cosa sono i campi (per es. data... che è compleanno)
-
-BOOKING:
-- OCCHIO AL CLICK SU INVIA CODICE, a volte lo prende al 3° click su mobile!!!
-- Aggiungere spazio per logo negozio (disattivabile, salvabile in db)
-- Aggiungere spazio per messaggio varie in homepage (disattivabile, salvabile in db)
+- serve gestione migliore della connettività a whatsapp/unipile in caso piu client siano collegati!
 
 WEB APP:
-- uniformare stili dei modal di calendar (sfondo rosa con gradiente? chiederei piuttosto con prompt come unfiromare all'AI)
-- verificare sicurezza globale codice
-- creare app per mobile
+- creare app per mobile (serve logo per creare icona!)
 
 SITI:
 - creare touch-icon e manifest.json per SunExpressBeauty e terminare SunExpressBeauty
 
 GENERALE: 
 - inserire più tooltip esplicativi (calendar, turni operatore, ecc)
-- controllare ATTENTAMENTE i refresh e aggiungerli dove servono! (per es se taglio e incollo blocchi in modalità touch-ui)
 - creare logging dei messaggi flask del terminale e da console?
 - creare wrapper per update via web
-- creare query AI e query vocale ...?
+- creare icona! (dopo aver ricevuto il logo)
 
 SOLARIUM:
 - boxare l'app e mettere tutto su un solo server
@@ -38,13 +32,8 @@ SOLARIUM:
 
 COMMERCIALIZZAZIONE:
 - scegliere LOGO E creare brand booklet con stili, font, icone ecc
-- scegliere provider per dominio sito e e-mail (e trasferire sunexpressbeauty e suncitybeauty)
-- creare sito e sezioni
+- creare sito e sezioni per commercializzazione
 - creare tutorial e agentic AI bot per primo supporto tecnico
-
-
-
-
 
 
 UNIPILE_DSN=api15.unipile.com:14552
@@ -60,6 +49,21 @@ UNIPILE_ACCESS_TOKEN=T+y/2c/b.0MQy6V+D5z86R+aCJtQFZ4Ht50m/fe8HXNALTSOO0ck=
 
 
 CORRETTI, DA VERIFICARE:
+- associare eventualmente solo certi servizi (o certe categorie, tipo prepagata lampade) alle prepagate
+- adattare pulsanti in pacchetto_detail/prepagate
+- fare in modo di andare in cassa.html per pagamento prepagate
+- ZOOM NAVIGATOR in Calendar e tasto Refresh in Base, possono essere disattivati/attivati da Settings/Business_Info
+- pseudoblock navigator deve avere possibilità di AUTO-RIDURSI se copre celle attive che voglio utilizzare (tasto "riduci" e "ingrandisci"?)
+- controllare blocco con cliente eliminato ("?" invece di nome e cognome), se si elimina cliente con appuntamento in calendar mostrare warning
+- se per esempio pulisco cache e vengono quindi perse dalla memoria le credenziali, non deve aspettare un'operazione per dare errore, ma deve AUTOMATICAMENTE SLOGGARSI
+- se copio un blocco in stato 2 in cui note c'era " ***NUOVO CLIENTE*** " allora SOLO IN QUESTO CASO la nota non deve essere copia-incollata
+- se un blocco è in stato 2 (pagato), non deve MAI POTERSI ACCENDERE MY-SPIA (anche su touch-ui occhio), anche se un blocco contiguo è in my-spia
+- se aggiorno un dato (nome cognome cell) da modal cliente, il nuovo dato dev'essere SUBITO VISIBILE una volta usciti da quel modal
+- modalità default: se taglio un blocco, sui blocchi contigui appare correttamente il popup button "taglia" ma a mouseover mostra ancora tutti gli altri popup-buttons!
+- se ho blocchi contigui con my-spia, e taglio e sposto uno dei blocchi, dopo il release quel singolo blocco non è più con my-spia lampeggiante: correggere
+- in Clients.html bisogna far capire che cosa sono i campi (per es. data... che è compleanno)
+- Aggiungere spazio per logo negozio (disattivabile, salvabile in db)
+- OCCHIO AL CLICK SU INVIA CODICE, a volte lo prende al 3° click su mobile!!!
 - in Whatsapp, QR Code per connettere il proprio account a Unipile
 - mostrare avanzamento upload qndo si carica consenso informato, imporre limiti a grandezza file
 - testare storno scontrino con grande attenzione e delicatezza
@@ -266,23 +270,14 @@ DASHBOARD
 SOLARIUM -> tenere su applicazione separata!
 - integrazione SunBooking x monitor e ricaricabili solarium
 
-Settings/Booking:
-- creare un campo extra da mostrare in pagina booking per eventuali warning (es: controllare spam e-mail se non si riceve codice)
-
 Settings/Operatori:
 - migliorare UI per creare turni operatori
 
 PROMO e PACCHETTI
-- gift card (paghi in anticipo tot, hai gift card con +10% o +20%)
-- ricaricabili (come solarium, paghi 100 carichi 125 ecc)
 - raccolta punti (tot euro ogni tot euro spesi)
 
-GIFT CARD:
-dovremmo creare due TAB nella sezione pacchetti quando siamo su pacchetti.html
-la tab PACCHETTI e la tab GIFT CARD
-partiamo dalla definizione di GIFT CARD, che è molto simile a un pacchetto, la creazione avverà dal modal di creazione pacchetto ma occhio, seguimi:
-per creare una gift card associata a un cliente dev'essere SEMPLICEMENTE un'opzione ("Gift Card" da selezionare) a lato dei campi "servizi" e "n.servizi" in crea pacchetto che oscuri questi due campi! a quel punto verrà creata una gift card SENZA SERVIZI (ma per il resto un pacchetto), e creeremo giftcard_detail.html che sarà MOLTO SIMILE alla visualizzazione di un pacchetto appena creato, con la stessa logica di aggiornamento status, ma 
-1) se selezionato un importo (cioè per es. gift card da pagare 50 euro con rata, ma dal valore di 60 euro) in questo caso invece di una tabella seduta già creata, si creerà ogni riga ogni volta che si SELEZIONERA' UN SERVIZIO il cui prezzo andrà scalato dal totale residuo in gift card, servirà allora al posto del div PROGRAMMA un div SERVIZIO da scalare in cui da menù a a dropdown CON LOGICA UGUALE A selectServiceNav in Calendar.js si SELEZIONERA' un SERVIZIO IN DATABASE il cui prezzo (service.servizio_prezzo) sarà SCALATO dal CREDITO RESIDUO di quel pacchetto quando un determinato servizio sarà eseguito. In questo caso la tabella sedute si popolerà di volta in volta che un APPUNTAMENTO DI QUALSIASI TIPO SARA' CREATO
-2) se selezionate delle sedute (per es. gift card da pagare il prezzo di 5 sedute X ma che sarà composta da 6 sedute X) mostrare la tabella con le sedute esattamente come per i pacchetti (FINIRE DI SCRIVERE IL PROMPT)
+- creare un software tastiera virtuale per RCH
+
+- creare query AI e query vocale ...?
 
 ...Proporre prezzi IVA INCLUSA!

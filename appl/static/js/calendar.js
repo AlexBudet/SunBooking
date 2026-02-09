@@ -8425,7 +8425,14 @@ async function copyAsNewPseudoBlock(block, isCut = false) {
   const duration = parseInt(block.getAttribute('data-duration'), 10) || 15;
   const color = block.getAttribute('data-colore') || '#FFFFFF';
   let note = block.getAttribute('data-note') || '';
-  const status = parseInt(block.getAttribute('data-status') || '0', 10);
+  let status = parseInt(block.getAttribute('data-status') || '0', 10);
+  
+  // Se COPIA (non taglia) da blocco in stato 2 (pagato), resetta lo stato a 0
+  // L'appuntamento copiato deve partire come "da confermare", non come "pagato"
+  if (!isCut && status === 2) {
+    status = 0;
+    console.log('📋 COPIA da stato 2 (pagato): status resettato a 0');
+  }
   
   // Se il blocco è in stato 2 (pagato) e la nota contiene "***NUOVO CLIENTE***", non copiare la nota
   if (status === 2 && note.includes('***NUOVO CLIENTE***')) {
