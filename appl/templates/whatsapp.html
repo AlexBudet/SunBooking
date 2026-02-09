@@ -8,6 +8,7 @@
 
   <h3><i class="bi bi-whatsapp text-success"></i> Connessione WhatsApp Business</h3>
 
+  {% if not config.get('HIDE_CASSA') %}
   <div id="whatsapp-connection-section" class="card mb-4">
     <div class="card-body">
       
@@ -81,6 +82,11 @@
       
     </div>
   </div>
+  {% else %}
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> La connessione WhatsApp tramite QR code è disponibile solo nella versione desktop locale.
+  </div>
+  {% endif %}
 
 </div><!-- fine container 1 -->
 
