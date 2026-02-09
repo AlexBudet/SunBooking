@@ -95,22 +95,157 @@ display: none
 }
 
 .modal-dialog {
-    max-width: 700px; /* Regola la larghezza massima */
-    margin: 1.75rem auto; /* Centra il modal */
+    max-width: 700px;
+    margin: 1.75rem auto;
     z-index: 12510;
+    /* Animazione smooth all'apertura */
+    transform: scale(0.95);
+    opacity: 0;
+    transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+}
+
+.modal.show .modal-dialog {
+    transform: scale(1);
+    opacity: 1;
 }
 
 .modal-content {
-    border-radius: 8px; /* Bordo arrotondato per estetica */
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5); /* Ombreggiatura */
+    border-radius: 18px; /* Angoli più morbidi e glamour */
+    box-shadow: 0 12px 40px rgba(135, 100, 124, 0.25), 0 4px 12px rgba(0, 0, 0, 0.1); /* Ombra rosa/viola soft */
     overflow: visible !important;
     z-index: 12520;
+    border: none; /* Rimuove bordo Bootstrap */
+    background: linear-gradient(180deg, #ffffff 0%, #fdfbfc 100%); /* Sfumatura rosata delicata */
+}
+
+.modal-header {
+    background: linear-gradient(135deg, #f8e8f0 0%, #f0e4eb 100%); /* Rosa cipria sfumato */
+    border-bottom: 1px solid rgba(135, 100, 124, 0.15);
+    border-radius: 18px 18px 0 0;
+    padding: 1rem 1.25rem;
+}
+
+.modal-title {
+    color: #87647c; /* Viola/rosa brand */
+    font-weight: 600;
+    font-size: 1.1rem;
+    letter-spacing: 0.02em;
+}
+
+.modal-header .btn-close {
+    background-color: rgba(135, 100, 124, 0.1);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    opacity: 0.7;
+    transition: opacity 0.15s, background-color 0.15s;
+}
+
+.modal-header .btn-close:hover {
+    opacity: 1;
+    background-color: rgba(135, 100, 124, 0.2);
 }
 
 .modal-body {    
     overflow: visible !important;
-    max-height: 70vh; /* Limita altezza massima a 70% della viewport */
-    padding: 1rem;
+    max-height: 70vh;
+    padding: 1.25rem 1.5rem;
+    font-size: 0.95rem;
+    color: #444;
+    line-height: 1.5;
+}
+
+.modal-footer {
+    background: #fdfbfc;
+    border-top: 1px solid rgba(135, 100, 124, 0.1);
+    border-radius: 0 0 18px 18px;
+    padding: 0.875rem 1.25rem;
+    gap: 0.5rem;
+}
+
+/* Pulsanti modal: stile moderno e coerente */
+.modal-footer .btn,
+.modal-body .btn {
+    border-radius: 10px;
+    font-weight: 500;
+    padding: 0.5rem 1.25rem;
+    font-size: 0.9rem;
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.modal-footer .btn-primary,
+.modal-body .btn-primary {
+    background: linear-gradient(135deg, #b8809d 0%, #a06b88 100%);
+    border: none;
+    color: #fff;
+}
+
+.modal-footer .btn-primary:hover,
+.modal-body .btn-primary:hover {
+    background: linear-gradient(135deg, #a06b88 0%, #8d5a76 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(135, 100, 124, 0.3);
+}
+
+.modal-footer .btn-secondary,
+.modal-body .btn-secondary {
+    background: #f5f0f3;
+    border: 1px solid rgba(135, 100, 124, 0.2);
+    color: #666;
+}
+
+.modal-footer .btn-secondary:hover,
+.modal-body .btn-secondary:hover {
+    background: #ebe5e9;
+    color: #444;
+}
+
+.modal-footer .btn-danger,
+.modal-body .btn-danger {
+    background: linear-gradient(135deg, #dc6b7f 0%, #c55a6d 100%);
+    border: none;
+}
+
+.modal-footer .btn-danger:hover,
+.modal-body .btn-danger:hover {
+    background: linear-gradient(135deg, #c55a6d 0%, #b04a5d 100%);
+}
+
+/* Input nei modal: stile coerente glamour */
+.modal-body .form-control,
+.modal-body .form-select,
+.modal-body input[type="text"],
+.modal-body input[type="number"],
+.modal-body input[type="date"],
+.modal-body input[type="time"],
+.modal-body textarea,
+.modal-body select {
+    border-radius: 10px;
+    border: 1px solid rgba(135, 100, 124, 0.25);
+    padding: 0.6rem 0.9rem;
+    font-size: 0.95rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    background: #fff;
+}
+
+.modal-body .form-control:focus,
+.modal-body .form-select:focus,
+.modal-body input:focus,
+.modal-body textarea:focus,
+.modal-body select:focus {
+    border-color: #b8809d;
+    box-shadow: 0 0 0 3px rgba(184, 128, 157, 0.15);
+    outline: none;
+}
+
+.modal-body label,
+.modal-body .form-label {
+    font-weight: 500;
+    color: #5a4a54;
+    margin-bottom: 0.4rem;
+    font-size: 0.875rem;
 }
 
 .close {
@@ -3428,4 +3563,37 @@ body > .modal-backdrop {
     height: 100% !important;
     max-height: 100% !important;
   }
+}
+
+/* Mobile: modal full-width con angoli adattati */
+@media (max-width: 576px) {
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100% - 1rem);
+    }
+    
+    .modal-content {
+        border-radius: 14px;
+    }
+    
+    .modal-header {
+        border-radius: 14px 14px 0 0;
+        padding: 0.875rem 1rem;
+    }
+    
+    .modal-body {
+        padding: 1rem;
+        max-height: 65vh;
+    }
+    
+    .modal-footer {
+        border-radius: 0 0 14px 14px;
+        padding: 0.75rem 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .modal-footer .btn {
+        flex: 1 1 auto;
+        min-width: 45%;
+    }
 }
