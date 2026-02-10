@@ -98,12 +98,6 @@ display: none
     line-height: 1.4;
 }
 
-/* Freccia tooltip */
-.tooltip .tooltip-arrow::before {
-    border-top-color: #4a3d46 !important;
-    border-bottom-color: #4a3d46 !important;
-}
-
 .bs-tooltip-top .tooltip-arrow::before {
     border-top-color: #4a3d46 !important;
 }
@@ -439,7 +433,15 @@ td {
 }
 
 .selectable-cell.highlight.selectable-cell.highlight {
-    background-color: rgba(184, 128, 157, 0.2);
+    background-color: rgba(248, 232, 240, 0.6) !important;
+    position: relative;
+    z-index: 19000 !important;
+}
+
+.hour-cell ~ td.selectable-cell.highlight {
+    background-color: rgba(248, 232, 240, 0.6) !important;
+    background-image: none !important;
+    z-index: 19000 !important;
 }
 
   .selectable-cell.cut-source {
@@ -1872,28 +1874,46 @@ body:not(.quarter-55) .appointment-block {
 
 .btn-add-client-nav {
   position: absolute !important;
-  right: -6px !important;           /* negativo per "esterno" rispetto al wrapper */
+  right: 4px !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
-  padding: 0 !important;
   }
 
-  .btn-add-client-square,
-  .btn-add-client-nav {
-  width: 34px;
-  height: 34px;
-  min-width: 26px;
-  border-radius: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.btn-add-client-square {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  padding: 0 !important;
+  border-radius: 4px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   background-color: #28a745 !important;
   color: #fff !important;
-  border: none;
-  font-size: 18px;
-  line-height: 1;
+  border: none !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.btn-add-client-square:hover {
+  background-color: #218838 !important;
+}
+
+/* Allineamento verticale pulsante + con campo input */
+.client-search-row {
+  align-items: center !important;
+}
+
+#clientSearchInputContainer {
+  display: flex;
+  align-items: center;
 }
 
   #WebAppointmentsModal .modal-body { 
@@ -3123,6 +3143,9 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
     overflow-y: auto !important;
     max-height: 70vh !important;
     height: auto !important;
+    padding-bottom: 20px;
+    padding-bottom: var(--modal-extra-padding, 20px);
+    transition: padding-bottom 0.15s ease-out;
   }
 
   body:not(.force-popup-buttons) .appointment-block:hover .popup-buttons,
