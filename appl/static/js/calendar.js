@@ -10416,8 +10416,15 @@ try {
   console.warn('Errore flusso WhatsApp dopo associazione:', whErr);
 }
 
-// Ricarica la pagina per forzare aggiornamento UI dopo associazione
-location.reload();
+// Aggiorna il calendario senza chiudere la web appointments table
+if (typeof fetchCalendarData === 'function') {
+  fetchCalendarData();
+}
+// Aggiorna anche la tabella web appointments
+if (typeof loadWebAppointments === 'function') {
+  const currentDate = document.getElementById('webApptDate')?.value || selectedDate;
+  loadWebAppointments(currentDate);
+}
 
             } else {
               // Mostra errore
@@ -11322,3 +11329,44 @@ document.addEventListener('click', function(e) {
     window.openModifyPopup(appointmentId);
   }
 }, true);
+
+/* =========================================================
+   MOBILE: Espande modal-body quando dropdown servizi è aperto
+   ========================================================= */
+(function initServiceDropdownExpander() {
+  if (!window.matchMedia('(max-width: 1199.98px)').matches) return;
+  
+  const observer = new MutationObserver(function() {
+    const serviceResults = document.getElementById('serviceResults');
+    const modalBody = serviceResults ? serviceResults.closest('.modal-body') : null;
+    if (!modalBody) return;
+    
+    if (serviceResults.style.display === 'block' && serviceResults.children.length > 0) {
+      const dropdownHeight = serviceResults.offsetHeight || 200;
+      modalBody.style.setProperty('--modal-extra-padding', (dropdownHeight + 40) + 'px');
+      
+      setTimeout(function() {
+        serviceResults.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 50);
+    } else {
+      modalBody.style.setProperty('--modal-extra-padding', '20px');
+    }
+  });
+  
+  document.addEventListener('DOMContentLoaded', function() {
+    const checkServiceResults = function() {
+      const el = document.getElementById('serviceResults');
+      if (el) {
+        observer.observe(el, { attributes: true, attributeFilter: ['style'], childList: true });
+      }
+    };
+    
+    checkServiceResults();
+    
+    document.body.addEventListener('shown.bs.modal', function(e) {
+      if (e.target.id === 'CreateAppointmentModal') {
+        setTimeout(checkServiceResults, 100);
+      }
+    });
+  });
+})();
