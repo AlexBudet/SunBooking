@@ -266,7 +266,11 @@ function checkForUpdates() {
       btn.textContent = 'Controlla aggiornamenti';
       
       if (data.error) {
-        alert('Errore: ' + data.error);
+        if (data.no_release) {
+          alert('Nessun aggiornamento disponibile al momento.');
+        } else {
+          alert(data.error);
+        }
         return;
       }
       
