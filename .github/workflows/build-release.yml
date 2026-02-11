@@ -34,13 +34,30 @@ jobs:
     - name: Build Tosca.exe
       run: |
         pyinstaller --noconfirm --onefile --windowed --name "Tosca" ^
-          --add-data "appl/templates;appl/templates" ^
-          --add-data "appl/static;appl/static" ^
+          --add-data "appl;appl" ^
+          --hidden-import appl ^
+          --hidden-import appl.routes ^
+          --hidden-import appl.routes.calendar ^
+          --hidden-import appl.routes.cassa ^
+          --hidden-import appl.routes.clients ^
+          --hidden-import appl.routes.main_routes ^
+          --hidden-import appl.routes.operators ^
+          --hidden-import appl.routes.pacchetti ^
+          --hidden-import appl.routes.report ^
+          --hidden-import appl.routes.services ^
+          --hidden-import appl.routes.settings ^
+          --hidden-import appl.models ^
+          --hidden-import appl.forms ^
           --hidden-import sqlalchemy ^
+          --hidden-import sqlalchemy.orm ^
+          --hidden-import sqlalchemy.sql ^
           --hidden-import flask ^
+          --hidden-import flask.json ^
           --hidden-import psycopg2 ^
+          --hidden-import psycopg2.extensions ^
           --hidden-import dotenv ^
           --hidden-import werkzeug ^
+          --hidden-import werkzeug.security ^
           --hidden-import jinja2 ^
           --hidden-import flask_wtf ^
           --hidden-import flask_sqlalchemy ^
@@ -50,9 +67,11 @@ jobs:
           --hidden-import waitress ^
           --hidden-import multiprocessing ^
           --hidden-import gender_guesser ^
+          --hidden-import gender_guesser.detector ^
           --hidden-import wtforms ^
           --hidden-import flask_login ^
           --hidden-import blinker ^
+          --collect-submodules appl ^
           start.py
       shell: cmd
     
