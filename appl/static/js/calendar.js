@@ -6712,6 +6712,13 @@ new bootstrap.Tooltip(noShowBtn, {
                 }
                 // Aggiorna eventuali attribute utili per debugging/visual
                 modalEl.setAttribute('data-appointment-id', appointmentId);
+                
+                // Nascondi tutti gli elementi del blocco per evitare conflitti z-index
+                block.querySelectorAll('.popup-buttons, .btn-popup, .drag-handle, .resize-handle, .my-spia, .no-show-button').forEach(el => {
+                    el.style.display = 'none';
+                });
+                block.classList.add('modal-open-hide');
+                
                 window.__DeleteOrNoShow_modal_instance.show();
                 return;
             }
@@ -10902,6 +10909,22 @@ document.addEventListener('DOMContentLoaded', function () {
   if (btnCancel) btnCancel.addEventListener('click', function () {
     window.__deleteOrNoShow_current = null;
     try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {}
+  });
+
+  // Ripristina gli elementi del blocco quando il modal si chiude
+  modalEl.addEventListener('hidden.bs.modal', function() {
+    const ctx = window.__deleteOrNoShow_current || {};
+    const blockSelector = ctx.blockSelector;
+    if (blockSelector) {
+      const block = document.querySelector(blockSelector);
+      if (block) {
+        block.querySelectorAll('.popup-buttons, .btn-popup, .drag-handle, .resize-handle, .my-spia, .no-show-button').forEach(el => {
+          el.style.display = '';
+        });
+        block.classList.remove('modal-open-hide');
+      }
+    }
+    window.__deleteOrNoShow_current = null;
   });
 });
 
