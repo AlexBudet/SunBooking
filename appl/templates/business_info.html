@@ -203,22 +203,23 @@
     <button type="submit">Salva Impostazioni</button>
 </form>
 <br>
-<tr>
-  <td><label for="touchUiEnabled">Touch-screen:</label></td>
-  <td>
-    <input type="checkbox" id="touchUiEnabled">
-    <small style="margin-left:8px; color:#666;">Abilita interfaccia touch per i blocchi agenda (su questo computer)</small>
-  </td>
-</tr>
-<br><br>
-<tr>
-  <td><label for="zoomNavigatorEnabled">Zoom Navigator:</label></td>
-  <td>
-    <input type="checkbox" id="zoomNavigatorEnabled" checked>
-    <small style="margin-left:8px; color:#666;">Mostra controlli zoom (+/−) nell'agenda (su questo computer)</small>
-  </td>
-</tr>
-<br><br>
+<div class="desktop-only-setting" style="display: flex; gap: 8px; align-items: center;">
+  <label for="touchUiEnabled">Touch-screen:</label>
+  <input type="checkbox" id="touchUiEnabled">
+  <small style="margin-left:8px; color:#666;">Abilita interfaccia touch per i blocchi agenda (su questo computer)</small>
+</div>
+<br>
+<div class="desktop-only-setting" style="display: flex; gap: 8px; align-items: center;">
+  <label for="zoomNavigatorEnabled">Zoom Navigator:</label>
+  <input type="checkbox" id="zoomNavigatorEnabled" checked>
+  <small style="margin-left:8px; color:#666;">Mostra controlli zoom (+/−) nell'agenda (su questo computer)</small>
+</div>
+<style>
+  @media (max-width: 1200px) {
+    .desktop-only-setting { display: none !important; }
+  }
+</style>
+<br>
 <tr>
   <td><label for="refreshButtonEnabled">Tasto Refresh:</label></td>
   <td>
@@ -228,6 +229,138 @@
 </tr>
 <br><br><br>
 </div>
+
+<!-- Sezione Aggiornamenti -->
+<div class="desktop-only-setting" style="margin-top: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
+  <h5 style="margin-bottom: 15px;">Aggiornamenti App</h5>
+  <div id="updateStatus" style="margin-bottom: 15px;">
+    <span id="currentVersion">Versione attuale: -</span>
+  </div>
+  <button type="button" id="btnCheckUpdate" class="btn btn-primary" onclick="checkForUpdates()">
+    Controlla aggiornamenti
+  </button>
+  <button type="button" id="btnDownloadUpdate" class="btn btn-success" style="display:none;" onclick="downloadUpdate()">
+    Scarica aggiornamento
+  </button>
+  <button type="button" id="btnApplyUpdate" class="btn btn-warning" style="display:none;" onclick="applyUpdate()">
+    Installa e riavvia
+  </button>
+  <div id="updateInfo" style="margin-top: 15px; display:none;">
+    <strong>Nuova versione: <span id="remoteVersion"></span></strong>
+    <div id="releaseNotes" style="margin-top:10px; padding:10px; background:#fff; border:1px solid #ccc; border-radius:4px; max-height:200px; overflow-y:auto;"></div>
+  </div>
+</div>
+
+<script>
+let updateData = null;
+
+function checkForUpdates() {
+  const btn = document.getElementById('btnCheckUpdate');
+  btn.disabled = true;
+  btn.textContent = 'Controllo in corso...';
+  
+  fetch('/settings/api/check-update')
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false;
+      btn.textContent = 'Controlla aggiornamenti';
+      
+      if (data.error) {
+        alert('Errore: ' + data.error);
+        return;
+      }
+      
+      document.getElementById('currentVersion').textContent = 'Versione attuale: ' + (data.local_version || 'sconosciuta');
+      
+      if (data.has_update && data.download_url) {
+        updateData = data;
+        document.getElementById('updateInfo').style.display = 'block';
+        document.getElementById('remoteVersion').textContent = data.remote_version + ' (' + data.release_name + ')';
+        document.getElementById('releaseNotes').innerHTML = data.release_notes ? data.release_notes.replace(/\n/g, '<br>') : 'Nessuna nota di rilascio.';
+        document.getElementById('btnDownloadUpdate').style.display = 'inline-block';
+        document.getElementById('btnApplyUpdate').style.display = 'none';
+      } else if (!data.has_update) {
+        alert('Nessun aggiornamento disponibile. Sei già alla versione più recente!');
+      } else {
+        alert('Aggiornamento disponibile ma file non trovato. Contatta il supporto.');
+      }
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = 'Controlla aggiornamenti';
+      alert('Errore di connessione: ' + err);
+    });
+}
+
+function downloadUpdate() {
+  if (!updateData || !updateData.download_url) return;
+  
+  const btn = document.getElementById('btnDownloadUpdate');
+  btn.disabled = true;
+  btn.textContent = 'Download in corso...';
+  
+  fetch('/settings/api/download-update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      download_url: updateData.download_url,
+      remote_version: updateData.remote_version
+    })
+  })
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false;
+      
+      if (data.error) {
+        btn.textContent = 'Scarica aggiornamento';
+        alert('Errore: ' + data.error);
+        return;
+      }
+      
+      btn.style.display = 'none';
+      document.getElementById('btnApplyUpdate').style.display = 'inline-block';
+      alert('Download completato! Backup creato: ' + data.backup_name + '\n\nClicca "Installa e riavvia" per completare.');
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = 'Scarica aggiornamento';
+      alert('Errore download: ' + err);
+    });
+}
+
+function applyUpdate() {
+  if (!confirm('L\'app verrà chiusa e riavviata con la nuova versione.\n\nContinuare?')) return;
+  
+  const btn = document.getElementById('btnApplyUpdate');
+  btn.disabled = true;
+  btn.textContent = 'Installazione...';
+  
+  fetch('/settings/api/apply-update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'}
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        btn.disabled = false;
+        btn.textContent = 'Installa e riavvia';
+        alert('Errore: ' + data.error);
+        return;
+      }
+      
+      if (data.shutdown) {
+        alert('Aggiornamento in corso. L\'app si chiuderà e si riavvierà automaticamente.');
+        window.close();
+      }
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = 'Installa e riavvia';
+      alert('Errore: ' + err);
+    });
+}
+</script>
+
 <script>
   // Inizializza checkbox da localStorage e salva alla modifica
   (function(){

@@ -1,0 +1,68 @@
+name: Build and Release Tosca.exe
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.2.3)'
+        required: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build Tosca.exe
+      run: |
+        pyinstaller --noconfirm --onefile --windowed --name "Tosca" ^
+          --add-data "appl/templates;appl/templates" ^
+          --add-data "appl/static;appl/static" ^
+          --hidden-import sqlalchemy ^
+          --hidden-import flask ^
+          --hidden-import psycopg2 ^
+          --hidden-import dotenv ^
+          --hidden-import werkzeug ^
+          --hidden-import jinja2 ^
+          --hidden-import flask_wtf ^
+          --hidden-import flask_sqlalchemy ^
+          --hidden-import requests ^
+          --hidden-import pandas ^
+          --hidden-import openpyxl ^
+          --hidden-import waitress ^
+          --hidden-import multiprocessing ^
+          --hidden-import gender_guesser ^
+          --hidden-import wtforms ^
+          --hidden-import flask_login ^
+          --hidden-import blinker ^
+          start.py
+      shell: cmd
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Tosca
+        path: dist/Tosca.exe
+    
+    - name: Upload to Release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/Tosca.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

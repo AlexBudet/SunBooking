@@ -2054,6 +2054,24 @@ function toggleNavigator() {
 window.toggleNavigator = toggleNavigator;
 
 /**
+ * Espande il Navigator se è in stato collassato
+ */
+function expandNavigatorIfCollapsed() {
+    const navigator = document.getElementById('appointmentNavigator');
+    const toggleBtn = document.getElementById('navigatorToggleBtn');
+    if (navigator && navigator.classList.contains('collapsed')) {
+        navigator.classList.remove('collapsed');
+        if (toggleBtn) {
+            toggleBtn.textContent = '−';
+            toggleBtn.title = 'Riduci';
+            toggleBtn.setAttribute('data-bs-original-title', 'Collassa');
+        }
+        localStorage.setItem('navigatorCollapsed', 'false');
+    }
+}
+window.expandNavigatorIfCollapsed = expandNavigatorIfCollapsed;
+
+/**
  * Ripristina lo stato del Navigator all'avvio della pagina
  */
 function restoreNavigatorState() {
@@ -3959,6 +3977,11 @@ document.addEventListener('click', function(e) {
     } else if (typeof copyAsNewPseudoBlock === 'function') {
       copyAsNewPseudoBlock(block);
     }
+
+    // Espandi Navigator se collassato
+    if (typeof window.expandNavigatorIfCollapsed === 'function') {
+      window.expandNavigatorIfCollapsed();
+    }
     
     // Marca come processato
     block.setAttribute('data-copia-mode-done', '1');
@@ -4032,6 +4055,11 @@ document.addEventListener('click', function(e) {
     window.copyAsNewPseudoBlock(block);
   } else if (typeof copyAsNewPseudoBlock === 'function') {
     copyAsNewPseudoBlock(block);
+  }
+
+  // Espandi Navigator se collassato
+  if (typeof window.expandNavigatorIfCollapsed === 'function') {
+    window.expandNavigatorIfCollapsed();
   }
 
   // === CHIUDI TUTTO SUL BLOCCO CORRENTE ===
@@ -4144,6 +4172,11 @@ function onCutClick(e) {
 
   // TAGLIA
   cutAsNewPseudoBlock(block);
+
+  // Espandi Navigator se collassato
+  if (typeof window.expandNavigatorIfCollapsed === 'function') {
+    window.expandNavigatorIfCollapsed();
+  }
 
   // --- LOGICA CONTIGUI (TOUCH & DESKTOP) ---
   // Chiudi il popup del blocco appena tagliato (se era aperto)
@@ -6832,6 +6865,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function openAddServicesModal(block) {
+    // Espandi Navigator se collassato
+    if (typeof window.expandNavigatorIfCollapsed === 'function') {
+        window.expandNavigatorIfCollapsed();
+    }
+
     // 1) Recupera gli attributi dal blocco
     const clientId = block.getAttribute("data-client-id") || "";
     const nome = block.getAttribute("data-client-nome") || "";

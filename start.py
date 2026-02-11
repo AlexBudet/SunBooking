@@ -1,6 +1,5 @@
-import os, sys, time, socket, subprocess, multiprocessing
+import os, sys, time, socket, subprocess, multiprocessing, shutil, requests, zipfile, tempfile
 from waitress import serve
-from appl import create_app, db
 from dotenv import load_dotenv
 
 # CWD accanto allo script/exe
@@ -11,6 +10,103 @@ else:
 
 # Carica .env accanto allo script/exe
 load_dotenv(dotenv_path=os.path.join(os.getcwd(), '.env'))
+
+# ============ AUTO-UPDATE DA GITHUB ============
+GITHUB_REPO = "AlexBudet/SunBooking"  # <-- MODIFICA CON IL TUO REPO
+GITHUB_BRANCH = "main"
+VERSION_FILE = os.path.join(os.getcwd(), ".version")
+UPDATE_ENABLED = os.getenv("AUTO_UPDATE", "1") == "1"
+
+def get_local_version():
+    if os.path.exists(VERSION_FILE):
+        with open(VERSION_FILE, "r") as f:
+            return f.read().strip()
+    return None
+
+def get_remote_version():
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/commits/{GITHUB_BRANCH}"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            return resp.json().get("sha", "")[:12]
+    except Exception as e:
+        print(f"[AutoUpdate] Errore controllo versione: {e}")
+    return None
+
+def download_and_apply_update():
+    try:
+        print("[AutoUpdate] Scarico aggiornamento...")
+        zip_url = f"https://github.com/{GITHUB_REPO}/archive/refs/heads/{GITHUB_BRANCH}.zip"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = os.path.join(tmpdir, "update.zip")
+            resp = requests.get(zip_url, timeout=60, stream=True)
+            with open(zip_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(tmpdir)
+            
+            # Trova la cartella estratta (es. repo-main/)
+            extracted = [d for d in os.listdir(tmpdir) if os.path.isdir(os.path.join(tmpdir, d))]
+            if not extracted:
+                print("[AutoUpdate] Nessuna cartella trovata nello zip")
+                return False
+            
+            src_dir = os.path.join(tmpdir, extracted[0])
+            dest_dir = os.getcwd()
+            
+            # Copia i file (escludi .env, .version, eventuali file locali)
+            exclude = {".env", ".version", "browser-profile", "__pycache__", ".git"}
+            for item in os.listdir(src_dir):
+                if item in exclude:
+                    continue
+                s = os.path.join(src_dir, item)
+                d = os.path.join(dest_dir, item)
+                if os.path.isdir(s):
+                    if os.path.exists(d):
+                        shutil.rmtree(d)
+                    shutil.copytree(s, d)
+                else:
+                    shutil.copy2(s, d)
+            
+            print("[AutoUpdate] Aggiornamento applicato!")
+            return True
+    except Exception as e:
+        print(f"[AutoUpdate] Errore durante aggiornamento: {e}")
+        return False
+
+def save_version(version):
+    with open(VERSION_FILE, "w") as f:
+        f.write(version)
+
+def check_and_update():
+    if not UPDATE_ENABLED:
+        return
+    
+    local_ver = get_local_version()
+    remote_ver = get_remote_version()
+    
+    if not remote_ver:
+        print("[AutoUpdate] Impossibile verificare aggiornamenti")
+        return
+    
+    if local_ver == remote_ver:
+        print(f"[AutoUpdate] Versione attuale: {local_ver}")
+        return
+    
+    print(f"[AutoUpdate] Nuova versione disponibile: {remote_ver} (locale: {local_ver})")
+    if download_and_apply_update():
+        save_version(remote_ver)
+        print("[AutoUpdate] Riavvio necessario per completare l'aggiornamento...")
+        # Riavvia lo script
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+# Esegui controllo aggiornamenti all'avvio
+check_and_update()
+# ============ FINE AUTO-UPDATE ============
+
+from appl import create_app, db
 
 # Crea app
 db_uri = os.getenv('SQLALCHEMY_DATABASE_URI')
