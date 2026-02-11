@@ -3354,13 +3354,19 @@ def apply_update():
         # 5. Aggiorna .version
         # 6. Riavvia l'app
         
+        # Ottieni il path del profilo browser usato dall'app
+        browser_profile = os.path.join(os.getenv('LOCALAPPDATA', ''), 'SunBooking', 'browser-profile')
+        
         batch_content = f'''@echo off
 chcp 65001 >nul
 
 rem Attendi che l'app invii la risposta
 timeout /t 2 /nobreak >nul
 
-rem Forza la chiusura del processo (incluso webview Chrome)
+rem Chiudi le finestre Chrome/Edge che usano il profilo SunBooking
+for /f "tokens=2" %%i in ('wmic process where "commandline like '%%SunBooking%%browser-profile%%'" get processid 2^>nul ^| findstr /r "[0-9]"') do taskkill /F /PID %%i >nul 2>&1
+
+rem Fallback: chiudi Tosca.exe
 taskkill /F /IM "{exe_name}" >nul 2>&1
 timeout /t 1 /nobreak >nul
 
