@@ -3357,28 +3357,38 @@ def apply_update():
         # Ottieni il path del profilo browser usato dall'app
         browser_profile = os.path.join(os.getenv('LOCALAPPDATA', ''), 'SunBooking', 'browser-profile')
         
+        # Leggi il PID del browser salvato
+        browser_pid_file = os.path.join(appdata_dir, '.browser_pid')
+        browser_pid = ""
+        try:
+            if os.path.exists(browser_pid_file):
+                with open(browser_pid_file, 'r') as f:
+                    browser_pid = f.read().strip()
+        except:
+            pass
+        
         batch_content = f'''@echo off
 chcp 65001 >nul
 
 rem Attendi che l'app invii la risposta
 timeout /t 2 /nobreak >nul
 
-rem Chiudi Tosca.exe PRIMA (questo termina il server)
+rem Chiudi il browser usando il PID salvato
+if exist "{browser_pid_file}" (
+    set /p BROWSER_PID=<"{browser_pid_file}"
+    taskkill /F /PID %BROWSER_PID% /T >nul 2>&1
+)
+
+rem Chiudi Tosca.exe
 taskkill /F /IM "{exe_name}" >nul 2>&1
 timeout /t 1 /nobreak >nul
 
-rem Trova e chiudi il processo Chrome/Edge che ha il profilo SunBooking nella user-data-dir
-rem Usa WMIC per cercare nella command line
+rem Fallback: cerca processi Chrome/Edge con SunBooking nella command line
 for /f "skip=1 tokens=1" %%p in ('wmic process where "name='chrome.exe' and commandline like '%%SunBooking%%'" get processid 2^>nul') do (
-    taskkill /F /PID %%p >nul 2>&1
+    taskkill /F /PID %%p /T >nul 2>&1
 )
 for /f "skip=1 tokens=1" %%p in ('wmic process where "name='msedge.exe' and commandline like '%%SunBooking%%'" get processid 2^>nul') do (
-    taskkill /F /PID %%p >nul 2>&1
-)
-
-rem Fallback finale: killa chrome.exe che ascolta su 127.0.0.1:5050
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5050" ^| findstr "ESTABLISHED"') do (
-    taskkill /F /PID %%a >nul 2>&1
+    taskkill /F /PID %%p /T >nul 2>&1
 )
 timeout /t 1 /nobreak >nul
 
