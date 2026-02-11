@@ -338,7 +338,7 @@ function downloadUpdate() {
 }
 
 function applyUpdate() {
-  if (!confirm('L\'app verrà chiusa e riavviata con la nuova versione.\n\nContinuare?')) return;
+  if (!confirm('Verrà installata la nuova versione.\n\nContinuare?')) return;
   
   const btn = document.getElementById('btnApplyUpdate');
   btn.disabled = true;
@@ -362,10 +362,9 @@ function applyUpdate() {
         return;
       }
       
-      if (data.shutdown) {
-        alert('Aggiornamento in corso. L\'app si chiuderà e si riavvierà automaticamente.');
-        window.close();
-      }
+      btn.textContent = 'Aggiornamento completato!';
+      btn.style.backgroundColor = '#28a745';
+      alert('L\'AGGIORNAMENTO È PRONTO!\n\nCHIUDI L\'ATTUALE FINESTRA E RIAVVIA TOSCA');
     })
     .catch(err => {
       btn.disabled = false;

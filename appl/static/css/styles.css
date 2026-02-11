@@ -81,13 +81,13 @@ display: none
 }
 
 .tooltip {
-    z-index: 15500 !important;
+    z-index: 19500 !important;
     opacity: 1;
 }
 
 /* Tooltip inner: stile glamour */
 .tooltip-inner {
-    background: linear-gradient(135deg, #4a3d46 0%, #3a2f35 100%);
+    background: linear-gradient(135deg, #181316 0%, #1a1417 100%);
     color: #fff;
     font-size: 0.875rem;
     padding: 8px 12px;
@@ -120,18 +120,18 @@ display: none
 }
 
 .modal-backdrop {
-    z-index: 12400; /* Sfondo del modal */
+    z-index: 20000; /* Sfondo del modal */
 }
 
 .modal {
-    z-index: 12500; /* Priorità al modal rispetto allo sfondo */
+    z-index: 20010; /* Priorità al modal rispetto allo sfondo */
     overflow: visible !important;
 }
 
 .modal-dialog {
     max-width: 700px;
     margin: 1.75rem auto;
-    z-index: 12510;
+    z-index: 20020;
     /* Animazione smooth all'apertura */
     transform: scale(0.95);
     opacity: 0;
@@ -147,7 +147,7 @@ display: none
     border-radius: 18px; /* Angoli più morbidi e glamour */
     box-shadow: 0 12px 40px rgba(135, 100, 124, 0.25), 0 4px 12px rgba(0, 0, 0, 0.1); /* Ombra rosa/viola soft */
     overflow: visible !important;
-    z-index: 12520;
+    z-index: 20030;
     border: none; /* Rimuove bordo Bootstrap */
     background: linear-gradient(180deg, #ffffff 0%, #fdfbfc 100%); /* Sfumatura rosata delicata */
 }
@@ -660,35 +660,6 @@ td {
 
 .appointment-block.dragging .popup-buttons {
     display: none !important;
-}
-
-/* Nascondi tutti gli elementi del blocco quando è aperto un modal - MASSIMA PRIORITA */
-.appointment-block.modal-open-hide,
-.appointment-block.modal-open-hide:hover,
-.appointment-block.modal-open-hide:focus,
-.appointment-block.modal-open-hide:active {
-    pointer-events: none !important;
-}
-.appointment-block.modal-open-hide .popup-buttons,
-.appointment-block.modal-open-hide .popup-buttons-bottom,
-.appointment-block.modal-open-hide .btn-popup,
-.appointment-block.modal-open-hide .drag-handle,
-.appointment-block.modal-open-hide .resize-handle,
-.appointment-block.modal-open-hide .my-spia,
-.appointment-block.modal-open-hide .no-show-button,
-.appointment-block.modal-open-hide .delete-appointment-block,
-.appointment-block.modal-open-hide:hover .popup-buttons,
-.appointment-block.modal-open-hide:hover .popup-buttons-bottom,
-.appointment-block.modal-open-hide:hover .btn-popup,
-.appointment-block.modal-open-hide:hover .drag-handle,
-.appointment-block.modal-open-hide:hover .resize-handle,
-.appointment-block.modal-open-hide:hover .my-spia,
-.appointment-block.modal-open-hide:hover .no-show-button,
-.appointment-block.modal-open-hide:hover .delete-appointment-block {
-    display: none !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-    opacity: 0 !important;
 }
 
 /* Mostra i popup se il blocco è in hover (solo se non disabilitato) o se è attivo, oppure se il mouse è sopra i pulsanti */
