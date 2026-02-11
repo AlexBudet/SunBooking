@@ -3187,10 +3187,23 @@ def marketing_delete_template(template_id):
 def check_update():
     """Controlla se c'è una nuova versione disponibile su GitHub Releases."""
     try:
-        # Versione locale (dal file .version o embedded)
-        version_file = os.path.join(os.getcwd(), '.version')
-        local_version = None
-        if os.path.exists(version_file):
+        # Versione locale (dal file .version in AppData)
+        appdata_dir = os.path.join(os.getenv('LOCALAPPDATA', os.getcwd()), 'SunBooking')
+        os.makedirs(appdata_dir, exist_ok=True)
+        version_file = os.path.join(appdata_dir, '.version')
+        
+        # Se non esiste in AppData, prova nella cartella exe (prima installazione)
+        if not os.path.exists(version_file):
+            fallback_version = os.path.join(os.getcwd(), '.version')
+            if os.path.exists(fallback_version):
+                with open(fallback_version, 'r') as f:
+                    local_version = f.read().strip()
+                # Copia in AppData per le prossime volte
+                with open(version_file, 'w') as f:
+                    f.write(local_version)
+            else:
+                local_version = None
+        else:
             with open(version_file, 'r') as f:
                 local_version = f.read().strip()
         
@@ -3328,12 +3341,13 @@ def apply_update():
         # 5. Riavvia l'app
         # 6. Cancella se stesso
         
-        batch_path = os.path.join(exe_dir, "_update.bat")
+        batch_path = os.path.join(appdata_dir, "_update.bat")
+        version_file = os.path.join(appdata_dir, ".version")
         batch_content = f'''@echo off
 timeout /t 2 /nobreak >nul
 move "{current_exe}" "{backup_path}"
 copy "{new_exe_temp}" "{current_exe}"
-echo {remote_version} > "{os.path.join(exe_dir, '.version')}"
+echo {remote_version} > "{version_file}"
 del "{update_info_path}"
 start "" "{current_exe}"
 del "%~f0"
