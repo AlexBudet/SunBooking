@@ -3248,7 +3248,9 @@ def download_update():
             return jsonify({"error": "Aggiornamento disponibile solo per versione .exe"}), 400
         
         exe_dir = os.path.dirname(current_exe)
-        backup_dir = os.path.join(exe_dir, BACKUP_FOLDER)
+        # Usa AppData per i backup (evita problemi di permessi in Program Files)
+        appdata_dir = os.path.join(os.getenv('LOCALAPPDATA', exe_dir), 'SunBooking')
+        backup_dir = os.path.join(appdata_dir, BACKUP_FOLDER)
         os.makedirs(backup_dir, exist_ok=True)
         
         # Trova il prossimo numero di backup
@@ -3279,7 +3281,7 @@ def download_update():
             "remote_version": remote_version
         }
         
-        update_info_path = os.path.join(exe_dir, ".pending_update")
+        update_info_path = os.path.join(appdata_dir, ".pending_update")
         import json
         with open(update_info_path, 'w') as f:
             json.dump(update_info, f)
@@ -3303,7 +3305,8 @@ def apply_update():
             return jsonify({"error": "Disponibile solo per versione .exe"}), 400
         
         exe_dir = os.path.dirname(sys.executable)
-        update_info_path = os.path.join(exe_dir, ".pending_update")
+        appdata_dir = os.path.join(os.getenv('LOCALAPPDATA', exe_dir), 'SunBooking')
+        update_info_path = os.path.join(appdata_dir, ".pending_update")
         
         if not os.path.exists(update_info_path):
             return jsonify({"error": "Nessun aggiornamento in sospeso"}), 400
