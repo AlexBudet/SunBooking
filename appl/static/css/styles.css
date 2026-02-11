@@ -662,6 +662,20 @@ td {
     display: none !important;
 }
 
+/* Nascondi tutti gli elementi del blocco quando è aperto un modal */
+.appointment-block.modal-open-hide .popup-buttons,
+.appointment-block.modal-open-hide .popup-buttons-bottom,
+.appointment-block.modal-open-hide .btn-popup,
+.appointment-block.modal-open-hide .drag-handle,
+.appointment-block.modal-open-hide .resize-handle,
+.appointment-block.modal-open-hide .my-spia,
+.appointment-block.modal-open-hide .no-show-button,
+.appointment-block.modal-open-hide .delete-appointment-block {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
 /* Mostra i popup se il blocco è in hover (solo se non disabilitato) o se è attivo, oppure se il mouse è sopra i pulsanti */
 .appointment-block:hover:not(.disable-popup) .popup-buttons,
 .appointment-block.active-popup .popup-buttons,
