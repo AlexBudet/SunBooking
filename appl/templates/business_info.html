@@ -303,9 +303,14 @@ function downloadUpdate() {
   btn.disabled = true;
   btn.textContent = 'Download in corso...';
   
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+  
   fetch('/settings/api/download-update', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken
+    },
     body: JSON.stringify({
       download_url: updateData.download_url,
       remote_version: updateData.remote_version
@@ -339,9 +344,14 @@ function applyUpdate() {
   btn.disabled = true;
   btn.textContent = 'Installazione...';
   
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+  
   fetch('/settings/api/apply-update', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'}
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken
+    }
   })
     .then(r => r.json())
     .then(data => {
