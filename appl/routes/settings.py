@@ -1,5 +1,8 @@
 # app/routes/settings.py
 import re
+import sys
+import shutil
+import tempfile
 from sqlalchemy import and_
 from sqlalchemy.orm import joinedload
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -14,6 +17,11 @@ from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pa
 
 # Blueprint per le rotte delle impostazioni
 settings_bp = Blueprint('settings', __name__, template_folder='../templates')
+
+# ===================== AUTO-UPDATE CONFIG =====================
+GITHUB_REPO = "AlexBudet/SunBooking"
+APP_EXE_NAME = "Tosca.exe"
+BACKUP_FOLDER = "ToscaBackups"
 
 def format_name(name):
     """
@@ -3172,3 +3180,176 @@ def marketing_delete_template(template_id):
     db.session.delete(template)
     db.session.commit()
     return jsonify({'success': True})
+
+# ===================== AUTO-UPDATE ROUTES =====================
+
+@settings_bp.route('/api/check-update', methods=['GET'])
+def check_update():
+    """Controlla se c'è una nuova versione disponibile su GitHub Releases."""
+    try:
+        # Versione locale (dal file .version o embedded)
+        version_file = os.path.join(os.getcwd(), '.version')
+        local_version = None
+        if os.path.exists(version_file):
+            with open(version_file, 'r') as f:
+                local_version = f.read().strip()
+        
+        # Ultima release da GitHub
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        resp = requests.get(url, timeout=10)
+        
+        if resp.status_code != 200:
+            return jsonify({"error": "Impossibile contattare GitHub", "status_code": resp.status_code}), 500
+        
+        release_data = resp.json()
+        remote_version = release_data.get("tag_name", "")
+        release_name = release_data.get("name", remote_version)
+        release_notes = release_data.get("body", "")
+        published_at = release_data.get("published_at", "")
+        
+        # Cerca l'asset Tosca.exe
+        download_url = None
+        for asset in release_data.get("assets", []):
+            if asset.get("name") == APP_EXE_NAME:
+                download_url = asset.get("browser_download_url")
+                break
+        
+        has_update = local_version != remote_version if local_version else True
+        
+        return jsonify({
+            "has_update": has_update,
+            "local_version": local_version,
+            "remote_version": remote_version,
+            "release_name": release_name,
+            "release_notes": release_notes,
+            "published_at": published_at,
+            "download_url": download_url
+        })
+    except Exception as e:
+        current_app.logger.error(f"check_update error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route('/api/download-update', methods=['POST'])
+def download_update():
+    """Scarica la nuova versione e prepara l'aggiornamento."""
+    try:
+        data = request.get_json() or {}
+        download_url = data.get("download_url")
+        remote_version = data.get("remote_version")
+        
+        if not download_url:
+            return jsonify({"error": "URL download mancante"}), 400
+        
+        # Determina il percorso dell'exe corrente
+        if getattr(sys, 'frozen', False):
+            current_exe = sys.executable
+        else:
+            return jsonify({"error": "Aggiornamento disponibile solo per versione .exe"}), 400
+        
+        exe_dir = os.path.dirname(current_exe)
+        backup_dir = os.path.join(exe_dir, BACKUP_FOLDER)
+        os.makedirs(backup_dir, exist_ok=True)
+        
+        # Trova il prossimo numero di backup
+        existing_backups = [f for f in os.listdir(backup_dir) if f.startswith("ToscaBKP")]
+        next_num = len(existing_backups) + 1
+        backup_name = f"ToscaBKP{next_num}.exe"
+        backup_path = os.path.join(backup_dir, backup_name)
+        
+        # Scarica il nuovo exe in una cartella temporanea
+        temp_dir = tempfile.mkdtemp()
+        new_exe_temp = os.path.join(temp_dir, APP_EXE_NAME)
+        
+        current_app.logger.info(f"Downloading update from {download_url}")
+        resp = requests.get(download_url, timeout=120, stream=True)
+        
+        if resp.status_code != 200:
+            return jsonify({"error": f"Download fallito: {resp.status_code}"}), 500
+        
+        with open(new_exe_temp, 'wb') as f:
+            for chunk in resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        # Salva info per il completamento (verrà eseguito allo shutdown)
+        update_info = {
+            "current_exe": current_exe,
+            "backup_path": backup_path,
+            "new_exe_temp": new_exe_temp,
+            "remote_version": remote_version
+        }
+        
+        update_info_path = os.path.join(exe_dir, ".pending_update")
+        import json
+        with open(update_info_path, 'w') as f:
+            json.dump(update_info, f)
+        
+        return jsonify({
+            "success": True,
+            "message": "Download completato. Riavvia l'app per completare l'aggiornamento.",
+            "backup_name": backup_name
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"download_update error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@settings_bp.route('/api/apply-update', methods=['POST'])
+def apply_update():
+    """Applica l'aggiornamento e riavvia."""
+    try:
+        if not getattr(sys, 'frozen', False):
+            return jsonify({"error": "Disponibile solo per versione .exe"}), 400
+        
+        exe_dir = os.path.dirname(sys.executable)
+        update_info_path = os.path.join(exe_dir, ".pending_update")
+        
+        if not os.path.exists(update_info_path):
+            return jsonify({"error": "Nessun aggiornamento in sospeso"}), 400
+        
+        import json
+        with open(update_info_path, 'r') as f:
+            update_info = json.load(f)
+        
+        current_exe = update_info["current_exe"]
+        backup_path = update_info["backup_path"]
+        new_exe_temp = update_info["new_exe_temp"]
+        remote_version = update_info["remote_version"]
+        
+        # Crea uno script batch che:
+        # 1. Aspetta che l'app si chiuda
+        # 2. Rinomina il vecchio exe in backup
+        # 3. Copia il nuovo exe
+        # 4. Aggiorna .version
+        # 5. Riavvia l'app
+        # 6. Cancella se stesso
+        
+        batch_path = os.path.join(exe_dir, "_update.bat")
+        batch_content = f'''@echo off
+timeout /t 2 /nobreak >nul
+move "{current_exe}" "{backup_path}"
+copy "{new_exe_temp}" "{current_exe}"
+echo {remote_version} > "{os.path.join(exe_dir, '.version')}"
+del "{update_info_path}"
+start "" "{current_exe}"
+del "%~f0"
+'''
+        
+        with open(batch_path, 'w') as f:
+            f.write(batch_content)
+        
+        # Avvia lo script batch e termina l'app
+        import subprocess
+        subprocess.Popen([batch_path], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        
+        # Segnala che l'app deve chiudersi
+        return jsonify({
+            "success": True,
+            "message": "Aggiornamento in corso. L'app si riavvierà automaticamente.",
+            "shutdown": True
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"apply_update error: {e}")
+        return jsonify({"error": str(e)}), 500
