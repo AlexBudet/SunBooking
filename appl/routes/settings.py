@@ -3333,130 +3333,110 @@ def apply_update():
         new_exe_temp = update_info["new_exe_temp"]
         remote_version = update_info["remote_version"]
         
-        # Ottieni il PID del processo corrente
-        current_pid = os.getpid()
-        
-        # Crea uno script batch che:
-        # 1. Aspetta che il processo corrente termini
-        # 2. Rinomina il vecchio exe in backup
-        # 3. Copia il nuovo exe
-        # 4. Aggiorna .version
-        # 5. Riavvia l'app
-        # 6. Cancella se stesso
+        # Verifica che il file scaricato esista
+        if not os.path.exists(new_exe_temp):
+            return jsonify({"error": f"File aggiornamento non trovato: {new_exe_temp}"}), 400
         
         batch_path = os.path.join(appdata_dir, "_update.bat")
         version_file = os.path.join(appdata_dir, ".version")
         
-        # Script PowerShell wrapper per elevazione UAC (se necessario)
-        ps_script_path = os.path.join(appdata_dir, "_update.ps1")
+        # Verifica se l'exe è in una cartella protetta (Program Files)
+        needs_elevation = 'program files' in exe_dir.lower() or 'programmi' in exe_dir.lower()
+        
+        # Ottieni il nome del processo exe (senza path)
+        exe_name = os.path.basename(current_exe)
+        
+        # Script batch SILENZIOSO che:
+        # 1. Aspetta 2 secondi
+        # 2. Killa il processo exe (chiude anche il webview)
+        # 3. Tenta di spostare il vecchio exe (con retry silenziosi)
+        # 4. Copia il nuovo exe
+        # 5. Aggiorna .version
+        # 6. Riavvia l'app
         
         batch_content = f'''@echo off
 chcp 65001 >nul
-echo ================================================
-echo   SunBooking Update - Attendere prego...
-echo ================================================
-echo.
 
-echo [1/5] Attendo chiusura applicazione...
+rem Attendi che l'app invii la risposta
+timeout /t 2 /nobreak >nul
 
-:waitloop
-tasklist /FI "PID eq {current_pid}" 2>NUL | find /I "{current_pid}" >NUL
-if not errorlevel 1 (
-    timeout /t 1 /nobreak >nul
-    goto waitloop
-)
+rem Forza la chiusura del processo (incluso webview Chrome)
+taskkill /F /IM "{exe_name}" >nul 2>&1
+timeout /t 1 /nobreak >nul
 
-echo [2/5] Applicazione chiusa. Creo backup...
+rem Riprova fino a 10 volte se il file è bloccato (silenzioso)
+set RETRY=0
+:retry_move
+set /a RETRY+=1
 
-rem Backup del vecchio exe
-move /Y "{current_exe}" "{backup_path}"
+move /Y "{current_exe}" "{backup_path}" >nul 2>&1
 if errorlevel 1 (
-    echo.
-    echo ERRORE: Impossibile creare backup.
-    echo Potrebbe essere necessario eseguire come Amministratore.
-    echo.
+    if %RETRY% LSS 10 (
+        timeout /t 1 /nobreak >nul
+        goto retry_move
+    )
+    rem Fallito dopo 10 tentativi - mostra errore
+    echo ERRORE: Impossibile aggiornare. Chiudi l'applicazione manualmente.
     pause
     exit /b 1
 )
 
-echo [3/5] Backup creato. Installo nuova versione...
-
-rem Copia del nuovo exe
-copy /Y "{new_exe_temp}" "{current_exe}"
+rem Copia il nuovo exe
+copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
 if errorlevel 1 (
-    echo.
+    rem Ripristina backup
+    move /Y "{backup_path}" "{current_exe}" >nul 2>&1
     echo ERRORE: Impossibile copiare il nuovo exe.
-    echo Ripristino backup...
-    move /Y "{backup_path}" "{current_exe}"
     pause
     exit /b 1
 )
-
-echo [4/5] Nuova versione installata. Aggiorno registro...
 
 rem Aggiorna versione
 echo {remote_version}> "{version_file}"
 
 rem Rimuovi file temporanei
-del "{update_info_path}" 2>nul
-rmdir /s /q "{os.path.dirname(new_exe_temp)}" 2>nul
-
-echo [5/5] Aggiornamento completato!
-echo.
-echo Riavvio l'applicazione in 3 secondi...
-timeout /t 3 /nobreak >nul
+del "{update_info_path}" >nul 2>&1
+rmdir /s /q "{os.path.dirname(new_exe_temp)}" >nul 2>&1
 
 rem Avvia la nuova versione
 start "" "{current_exe}"
 
-rem Cancella questo script
-del "{ps_script_path}" 2>nul
+rem Auto-elimina questo script
 (goto) 2>nul & del "%~f0"
 '''
         
         with open(batch_path, 'w', encoding='utf-8') as f:
             f.write(batch_content)
         
-        # Crea uno script PowerShell per elevare i privilegi se necessario
-        # Verifica se l'exe è in una cartella protetta (Program Files)
-        needs_elevation = 'program files' in exe_dir.lower()
+        import subprocess
         
         if needs_elevation:
-            ps_content = f'''
-$batchPath = "{batch_path}"
-Start-Process cmd.exe -ArgumentList "/c", "`"$batchPath`"" -Verb RunAs -Wait
+            # Crea script VBS per elevazione UAC
+            vbs_path = os.path.join(appdata_dir, "_update_elevated.vbs")
+            vbs_content = f'''Set UAC = CreateObject("Shell.Application")
+UAC.ShellExecute "cmd.exe", "/c ""{batch_path}""", "", "runas", 0
 '''
-            with open(ps_script_path, 'w', encoding='utf-8') as f:
-                f.write(ps_content)
+            with open(vbs_path, 'w', encoding='utf-8') as f:
+                f.write(vbs_content)
             
-            # Avvia PowerShell con elevazione UAC
-            import subprocess
+            # Avvia VBS (che chiederà UAC e poi esegue il batch)
             subprocess.Popen(
-                ['powershell', '-ExecutionPolicy', 'Bypass', '-File', ps_script_path],
+                ['wscript', vbs_path],
                 creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
                 close_fds=True
             )
         else:
-            # Cartella non protetta, esegui direttamente
-            import subprocess
+            # Cartella non protetta, esegui batch nascosto
             subprocess.Popen(
                 ['cmd', '/c', batch_path],
                 creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
                 close_fds=True
             )
         
-        # Restituisci la risposta e poi termina l'app
-        import threading
-        def shutdown_app():
-            import time
-            time.sleep(1)  # Attendi che la risposta venga inviata
-            os._exit(0)  # Termina il processo in modo forzato
-        
-        threading.Thread(target=shutdown_app, daemon=True).start()
-        
+        # Non serve più os._exit() - il batch farà taskkill
         return jsonify({
             "success": True,
-            "message": "Aggiornamento in corso. L'app si riavvierà automaticamente.",
+            "message": "Aggiornamento in corso...",
             "shutdown": True
         })
         

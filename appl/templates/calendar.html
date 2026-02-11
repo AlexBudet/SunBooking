@@ -118,7 +118,7 @@
     <a href="{{ url_for('calendar.calendar_home', date=day_after_str) }}" class="arrow-nav arrow-right">&gt;</a>
     <!-- Pulsante per tornare a oggi: visualizza solo se la data corrente non è quella odierna -->
     {% if selected_date_str != today_str %}
-    &nbsp;<a href="{{ url_for('calendar.calendar_home', date=today_str) }}" class="btn-today">Vai a OGGI</a>
+    &nbsp;<a href="{{ url_for('calendar.calendar_home', date=today_str) }}" class="btn-today" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Torna sulla pagina agenda di oggi">Vai a OGGI</a>
     {% endif %}
   <!-- Pulsante Web: AGGIUNGI QUI -->
 <button id="btnWebInformatica"
@@ -190,7 +190,7 @@
       <!-- 6: VAI A OGGI -->
       <td class="cell-today">
       {% if selected_date_str != today_str %}
-        <a class="btn-today" href="{{ url_for('calendar.calendar_home', date=today_str) }}" id="btnTodayCalendar">Vai a OGGI</a>
+        <a class="btn-today" href="{{ url_for('calendar.calendar_home', date=today_str) }}" id="btnTodayCalendar" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Torna sulla pagina agenda di oggi">Vai a OGGI</a>
       {% endif %}
       </td>
     </tr>

@@ -6596,33 +6596,6 @@ if (colore) {
   const dragHandle = document.createElement('div');
   dragHandle.className = 'drag-handle';
   block.appendChild(dragHandle);
-
-  // Tooltip su drag-handle dopo 2 secondi di hover
-  let dragHandleTooltipTimer = null;
-  let dragHandleTooltipInstance = null;
-  dragHandle.addEventListener('mouseenter', function() {
-    dragHandleTooltipTimer = setTimeout(() => {
-      if (!dragHandleTooltipInstance) {
-        dragHandle.setAttribute('data-bs-toggle', 'tooltip');
-        dragHandle.setAttribute('data-bs-placement', 'top');
-        dragHandle.setAttribute('title', 'Tieni premuto e trascina per riposizionare il blocco appuntamento');
-        dragHandleTooltipInstance = new bootstrap.Tooltip(dragHandle, { trigger: 'manual', container: 'body' });
-      }
-      dragHandleTooltipInstance.show();
-    }, 2000);
-  });
-  dragHandle.addEventListener('mouseleave', function() {
-    clearTimeout(dragHandleTooltipTimer);
-    if (dragHandleTooltipInstance) {
-      dragHandleTooltipInstance.hide();
-    }
-  });
-  dragHandle.addEventListener('mousedown', function() {
-    clearTimeout(dragHandleTooltipTimer);
-    if (dragHandleTooltipInstance) {
-      dragHandleTooltipInstance.hide();
-    }
-  });
   
   const contentDiv = document.createElement('div');
   contentDiv.className = 'appointment-content';
@@ -6696,33 +6669,6 @@ new bootstrap.Tooltip(noShowBtn, {
   const resizeHandle = document.createElement('div');
   resizeHandle.className = 'resize-handle';
   block.appendChild(resizeHandle);
-
-  // Tooltip su resize-handle dopo 2 secondi di hover
-  let resizeHandleTooltipTimer = null;
-  let resizeHandleTooltipInstance = null;
-  resizeHandle.addEventListener('mouseenter', function() {
-    resizeHandleTooltipTimer = setTimeout(() => {
-      if (!resizeHandleTooltipInstance) {
-        resizeHandle.setAttribute('data-bs-toggle', 'tooltip');
-        resizeHandle.setAttribute('data-bs-placement', 'bottom');
-        resizeHandle.setAttribute('title', 'Tieni premuto e trascina in alto o in basso per cambiare la durata del blocco appuntamento');
-        resizeHandleTooltipInstance = new bootstrap.Tooltip(resizeHandle, { trigger: 'manual', container: 'body' });
-      }
-      resizeHandleTooltipInstance.show();
-    }, 2000);
-  });
-  resizeHandle.addEventListener('mouseleave', function() {
-    clearTimeout(resizeHandleTooltipTimer);
-    if (resizeHandleTooltipInstance) {
-      resizeHandleTooltipInstance.hide();
-    }
-  });
-  resizeHandle.addEventListener('mousedown', function() {
-    clearTimeout(resizeHandleTooltipTimer);
-    if (resizeHandleTooltipInstance) {
-      resizeHandleTooltipInstance.hide();
-    }
-  });
   
   if (!block.classList.contains('note-off')) {
     // Crea il pulsante cestino
