@@ -71,6 +71,10 @@ jobs:
           --hidden-import wtforms ^
           --hidden-import flask_login ^
           --hidden-import blinker ^
+          --hidden-import argon2 ^
+          --hidden-import argon2.low_level ^
+          --hidden-import argon2._ffi ^
+          --hidden-import cffi ^
           --collect-submodules appl ^
           start.py
       shell: cmd
