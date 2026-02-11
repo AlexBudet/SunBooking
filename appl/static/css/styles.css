@@ -662,7 +662,13 @@ td {
     display: none !important;
 }
 
-/* Nascondi tutti gli elementi del blocco quando è aperto un modal */
+/* Nascondi tutti gli elementi del blocco quando è aperto un modal - MASSIMA PRIORITA */
+.appointment-block.modal-open-hide,
+.appointment-block.modal-open-hide:hover,
+.appointment-block.modal-open-hide:focus,
+.appointment-block.modal-open-hide:active {
+    pointer-events: none !important;
+}
 .appointment-block.modal-open-hide .popup-buttons,
 .appointment-block.modal-open-hide .popup-buttons-bottom,
 .appointment-block.modal-open-hide .btn-popup,
@@ -670,10 +676,19 @@ td {
 .appointment-block.modal-open-hide .resize-handle,
 .appointment-block.modal-open-hide .my-spia,
 .appointment-block.modal-open-hide .no-show-button,
-.appointment-block.modal-open-hide .delete-appointment-block {
+.appointment-block.modal-open-hide .delete-appointment-block,
+.appointment-block.modal-open-hide:hover .popup-buttons,
+.appointment-block.modal-open-hide:hover .popup-buttons-bottom,
+.appointment-block.modal-open-hide:hover .btn-popup,
+.appointment-block.modal-open-hide:hover .drag-handle,
+.appointment-block.modal-open-hide:hover .resize-handle,
+.appointment-block.modal-open-hide:hover .my-spia,
+.appointment-block.modal-open-hide:hover .no-show-button,
+.appointment-block.modal-open-hide:hover .delete-appointment-block {
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
+    opacity: 0 !important;
 }
 
 /* Mostra i popup se il blocco è in hover (solo se non disabilitato) o se è attivo, oppure se il mouse è sopra i pulsanti */
