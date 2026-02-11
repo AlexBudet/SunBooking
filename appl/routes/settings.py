@@ -3317,7 +3317,8 @@ def apply_update():
         if not getattr(sys, 'frozen', False):
             return jsonify({"error": "Disponibile solo per versione .exe"}), 400
         
-        exe_dir = os.path.dirname(sys.executable)
+        current_exe = sys.executable  # L'exe attualmente in esecuzione
+        exe_dir = os.path.dirname(current_exe)
         appdata_dir = os.path.join(os.getenv('LOCALAPPDATA', exe_dir), 'SunBooking')
         update_info_path = os.path.join(appdata_dir, ".pending_update")
         
@@ -3328,13 +3329,15 @@ def apply_update():
         with open(update_info_path, 'r') as f:
             update_info = json.load(f)
         
-        current_exe = update_info["current_exe"]
         backup_path = update_info["backup_path"]
         new_exe_temp = update_info["new_exe_temp"]
         remote_version = update_info["remote_version"]
         
+        # Ottieni il PID del processo corrente
+        current_pid = os.getpid()
+        
         # Crea uno script batch che:
-        # 1. Aspetta che l'app si chiuda
+        # 1. Aspetta che il processo corrente termini
         # 2. Rinomina il vecchio exe in backup
         # 3. Copia il nuovo exe
         # 4. Aggiorna .version
@@ -3343,24 +3346,114 @@ def apply_update():
         
         batch_path = os.path.join(appdata_dir, "_update.bat")
         version_file = os.path.join(appdata_dir, ".version")
+        
+        # Script PowerShell wrapper per elevazione UAC (se necessario)
+        ps_script_path = os.path.join(appdata_dir, "_update.ps1")
+        
         batch_content = f'''@echo off
-timeout /t 2 /nobreak >nul
-move "{current_exe}" "{backup_path}"
-copy "{new_exe_temp}" "{current_exe}"
-echo {remote_version} > "{version_file}"
-del "{update_info_path}"
+chcp 65001 >nul
+echo ================================================
+echo   SunBooking Update - Attendere prego...
+echo ================================================
+echo.
+
+echo [1/5] Attendo chiusura applicazione...
+
+:waitloop
+tasklist /FI "PID eq {current_pid}" 2>NUL | find /I "{current_pid}" >NUL
+if not errorlevel 1 (
+    timeout /t 1 /nobreak >nul
+    goto waitloop
+)
+
+echo [2/5] Applicazione chiusa. Creo backup...
+
+rem Backup del vecchio exe
+move /Y "{current_exe}" "{backup_path}"
+if errorlevel 1 (
+    echo.
+    echo ERRORE: Impossibile creare backup.
+    echo Potrebbe essere necessario eseguire come Amministratore.
+    echo.
+    pause
+    exit /b 1
+)
+
+echo [3/5] Backup creato. Installo nuova versione...
+
+rem Copia del nuovo exe
+copy /Y "{new_exe_temp}" "{current_exe}"
+if errorlevel 1 (
+    echo.
+    echo ERRORE: Impossibile copiare il nuovo exe.
+    echo Ripristino backup...
+    move /Y "{backup_path}" "{current_exe}"
+    pause
+    exit /b 1
+)
+
+echo [4/5] Nuova versione installata. Aggiorno registro...
+
+rem Aggiorna versione
+echo {remote_version}> "{version_file}"
+
+rem Rimuovi file temporanei
+del "{update_info_path}" 2>nul
+rmdir /s /q "{os.path.dirname(new_exe_temp)}" 2>nul
+
+echo [5/5] Aggiornamento completato!
+echo.
+echo Riavvio l'applicazione in 3 secondi...
+timeout /t 3 /nobreak >nul
+
+rem Avvia la nuova versione
 start "" "{current_exe}"
-del "%~f0"
+
+rem Cancella questo script
+del "{ps_script_path}" 2>nul
+(goto) 2>nul & del "%~f0"
 '''
         
-        with open(batch_path, 'w') as f:
+        with open(batch_path, 'w', encoding='utf-8') as f:
             f.write(batch_content)
         
-        # Avvia lo script batch e termina l'app
-        import subprocess
-        subprocess.Popen([batch_path], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        # Crea uno script PowerShell per elevare i privilegi se necessario
+        # Verifica se l'exe è in una cartella protetta (Program Files)
+        needs_elevation = 'program files' in exe_dir.lower()
         
-        # Segnala che l'app deve chiudersi
+        if needs_elevation:
+            ps_content = f'''
+$batchPath = "{batch_path}"
+Start-Process cmd.exe -ArgumentList "/c", "`"$batchPath`"" -Verb RunAs -Wait
+'''
+            with open(ps_script_path, 'w', encoding='utf-8') as f:
+                f.write(ps_content)
+            
+            # Avvia PowerShell con elevazione UAC
+            import subprocess
+            subprocess.Popen(
+                ['powershell', '-ExecutionPolicy', 'Bypass', '-File', ps_script_path],
+                creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                close_fds=True
+            )
+        else:
+            # Cartella non protetta, esegui direttamente
+            import subprocess
+            subprocess.Popen(
+                ['cmd', '/c', batch_path],
+                creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                close_fds=True
+            )
+        
+        # Restituisci la risposta e poi termina l'app
+        import threading
+        def shutdown_app():
+            import time
+            time.sleep(1)  # Attendi che la risposta venga inviata
+            os._exit(0)  # Termina il processo in modo forzato
+        
+        threading.Thread(target=shutdown_app, daemon=True).start()
+        
         return jsonify({
             "success": True,
             "message": "Aggiornamento in corso. L'app si riavvierà automaticamente.",
