@@ -3363,10 +3363,13 @@ chcp 65001 >nul
 rem Attendi che l'app invii la risposta
 timeout /t 2 /nobreak >nul
 
-rem Chiudi le finestre Chrome/Edge che usano il profilo SunBooking
-for /f "tokens=2" %%i in ('wmic process where "commandline like '%%SunBooking%%browser-profile%%'" get processid 2^>nul ^| findstr /r "[0-9]"') do taskkill /F /PID %%i >nul 2>&1
+rem Chiudi Chrome/Edge con profilo SunBooking usando PowerShell
+powershell -Command "Get-Process chrome,msedge -ErrorAction SilentlyContinue | Where-Object {{$_.CommandLine -like '*SunBooking*browser-profile*'}} | Stop-Process -Force -ErrorAction SilentlyContinue"
 
-rem Fallback: chiudi Tosca.exe
+rem Fallback: chiudi tutti i chrome/edge che usano la porta 5050
+powershell -Command "Get-NetTCPConnection -LocalPort 5050 -ErrorAction SilentlyContinue | ForEach-Object {{Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue}}"
+
+rem Chiudi Tosca.exe
 taskkill /F /IM "{exe_name}" >nul 2>&1
 timeout /t 1 /nobreak >nul
 
