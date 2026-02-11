@@ -3363,14 +3363,23 @@ chcp 65001 >nul
 rem Attendi che l'app invii la risposta
 timeout /t 2 /nobreak >nul
 
-rem Chiudi Chrome/Edge con profilo SunBooking usando PowerShell
-powershell -Command "Get-Process chrome,msedge -ErrorAction SilentlyContinue | Where-Object {{$_.CommandLine -like '*SunBooking*browser-profile*'}} | Stop-Process -Force -ErrorAction SilentlyContinue"
-
-rem Fallback: chiudi tutti i chrome/edge che usano la porta 5050
-powershell -Command "Get-NetTCPConnection -LocalPort 5050 -ErrorAction SilentlyContinue | ForEach-Object {{Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue}}"
-
-rem Chiudi Tosca.exe
+rem Chiudi Tosca.exe PRIMA (questo termina il server)
 taskkill /F /IM "{exe_name}" >nul 2>&1
+timeout /t 1 /nobreak >nul
+
+rem Trova e chiudi il processo Chrome/Edge che ha il profilo SunBooking nella user-data-dir
+rem Usa WMIC per cercare nella command line
+for /f "skip=1 tokens=1" %%p in ('wmic process where "name='chrome.exe' and commandline like '%%SunBooking%%'" get processid 2^>nul') do (
+    taskkill /F /PID %%p >nul 2>&1
+)
+for /f "skip=1 tokens=1" %%p in ('wmic process where "name='msedge.exe' and commandline like '%%SunBooking%%'" get processid 2^>nul') do (
+    taskkill /F /PID %%p >nul 2>&1
+)
+
+rem Fallback finale: killa chrome.exe che ascolta su 127.0.0.1:5050
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5050" ^| findstr "ESTABLISHED"') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
 timeout /t 1 /nobreak >nul
 
 rem Riprova fino a 10 volte se il file è bloccato (silenzioso)
