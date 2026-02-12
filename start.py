@@ -44,6 +44,9 @@ root_logger.addHandler(console_handler)
 logger = logging.getLogger('SunBooking')
 logger.info(f"=== SunBooking avviato === Log: {LOG_FILE}")
 
+# Silenzia warning inutili di Waitress queue
+logging.getLogger('waitress.queue').setLevel(logging.ERROR)
+
 from appl import create_app, db
 
 # Crea app
@@ -70,7 +73,7 @@ def start_server():
         app.logger.handlers = []
         app.logger.addHandler(file_handler)
         app.logger.addHandler(console_handler)
-        app.logger.setLevel(logging.DEBUG)
+        app.logger.setLevel(logging.WARNING)
         
         # Log Waitress
         waitress_logger = logging.getLogger('waitress')
