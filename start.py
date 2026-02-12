@@ -1,4 +1,6 @@
 import os, sys, time, socket, subprocess, multiprocessing, shutil, requests, zipfile, tempfile
+import logging
+from logging.handlers import RotatingFileHandler
 from waitress import serve
 from dotenv import load_dotenv
 
@@ -10,6 +12,37 @@ else:
 
 # Carica .env accanto allo script/exe
 load_dotenv(dotenv_path=os.path.join(os.getcwd(), '.env'))
+
+# Setup logging su file
+LOG_DIR = os.path.join(os.getenv('LOCALAPPDATA', os.getcwd()), 'SunBooking', 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, 'sunbooking.log')
+
+# Formatter comune
+log_formatter = logging.Formatter(
+    '%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# Handler con rotazione (5MB max, 3 backup)
+file_handler = RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
+file_handler.setFormatter(log_formatter)
+file_handler.setLevel(logging.DEBUG)
+
+# Console handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setFormatter(log_formatter)
+console_handler.setLevel(logging.INFO)
+
+# Root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.DEBUG)
+root_logger.addHandler(file_handler)
+root_logger.addHandler(console_handler)
+
+# Logger per l'app
+logger = logging.getLogger('SunBooking')
+logger.info(f"=== SunBooking avviato === Log: {LOG_FILE}")
 
 from appl import create_app, db
 
@@ -33,9 +66,21 @@ PORT = 5050
 
 def start_server():
     try:
+        # Configura logging Flask dentro il processo server
+        app.logger.handlers = []
+        app.logger.addHandler(file_handler)
+        app.logger.addHandler(console_handler)
+        app.logger.setLevel(logging.DEBUG)
+        
+        # Log Waitress
+        waitress_logger = logging.getLogger('waitress')
+        waitress_logger.addHandler(file_handler)
+        waitress_logger.setLevel(logging.INFO)
+        
+        logger.info(f"Server Waitress in ascolto su 127.0.0.1:{PORT}")
         serve(app, host='127.0.0.1', port=PORT)
     except Exception as e:
-        print(f"Errore serve(): {e}")
+        logger.exception(f"Errore serve(): {e}")
         raise
 
 def wait_for_server(port, timeout=15):
@@ -80,31 +125,34 @@ def launch_app_window(url: str):
 if __name__ == "__main__":
     multiprocessing.freeze_support()
 
-    # Avvia server in PROCESSO separato (killabile)
-    server_proc = multiprocessing.Process(target=start_server, daemon=True)
-    server_proc.start()
-
-    print(f"Avvio server su http://127.0.0.1:{PORT} ...")
-    if not wait_for_server(PORT, 20):
-        print("Server non avviato (controlla .env/DB).")
-        if server_proc.is_alive():
-            server_proc.terminate()
-        sys.exit(1)
-
-    print("Apro finestra app…")
-    proc = launch_app_window(f"http://127.0.0.1:{PORT}")
     try:
-        if proc:
-            proc.wait()  # Quando chiudi la finestra, esce qui
-        else:
-            # Fallback: nessun handle al browser → tieni vivo finché non viene chiuso esternamente
-            while True:
-                time.sleep(3600)
-    finally:
-        # Chiudi server e termina il processo principale
-        try:
+        # Avvia server in PROCESSO separato (killabile)
+        server_proc = multiprocessing.Process(target=start_server, daemon=True)
+        server_proc.start()
+
+        logger.info(f"Avvio server su http://127.0.0.1:{PORT} ...")
+        if not wait_for_server(PORT, 20):
+            logger.error("Server non avviato (controlla .env/DB).")
             if server_proc.is_alive():
                 server_proc.terminate()
-                server_proc.join(timeout=5)
+            sys.exit(1)
+
+        logger.info("Apro finestra app...")
+        proc = launch_app_window(f"http://127.0.0.1:{PORT}")
+        try:
+            if proc:
+                proc.wait()
+            else:
+                while True:
+                    time.sleep(3600)
         finally:
-            os._exit(0)
+            logger.info("Chiusura applicazione...")
+            try:
+                if server_proc.is_alive():
+                    server_proc.terminate()
+                    server_proc.join(timeout=5)
+            finally:
+                os._exit(0)
+    except Exception as e:
+        logger.exception(f"Errore fatale: {e}")
+        sys.exit(1)
