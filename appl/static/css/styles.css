@@ -42,8 +42,12 @@ header {
     top: 0;
     left: 0;
     width: 100%;
-    z-index: 10999;
+    z-index: 22000;
     text-align: center;
+}
+
+body.modal-open header {
+    z-index: 1 !important;
 }
 
 header h1, header nav {
@@ -81,7 +85,7 @@ display: none
 }
 
 .tooltip {
-    z-index: 19500 !important;
+    z-index: 22001 !important;
     opacity: 1;
 }
 
@@ -386,8 +390,8 @@ td {
 .calendar-table thead th {
     position: sticky;
     top: 72px; /* mantiene il valore già usato; adattalo se necessario */
-    z-index: 10000;
-    background: #F0F0F0 !important;   /* evita ereditarietà trasparente */
+    z-index: 20000;
+    background: #f8f8f8 !important;
     text-align: center !important;    /* centra contenuto dell'header */
     vertical-align: middle !important;
 }
@@ -1689,8 +1693,9 @@ body.quarter-55 .appointment-block .note-indicator {
   }
 
 .calendar-table th:first-child,
+.calendar-table th:last-child,
 .calendar-table {
-    background: #f8f8f8 !important; /* colore di sfondo diverso per la prima colonna */
+    background: #f8f8f8 !important;
 }
 
 .calendar-table th.operator-header {
@@ -2906,8 +2911,8 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
   .calendar-table thead th {
     position: sticky !important;
     top: auto !important;
-    z-index: 12000 !important;         /* sopra le celle e sopra la calendar-table stessa */
-    background: #ffffff !important;    /* copre ciò che sta sotto */
+    z-index: 20000 !important;         /* sopra le celle e sopra la calendar-table stessa */
+    background: #ffffff !important;
   }
 
     /* Titoli header (nomi operatori) più piccoli e centrati su schermi piccoli */
@@ -2939,7 +2944,7 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
             + var(--calendar-nav-margin-bottom)
         ) !important; /* stesso offset degli altri header sticky */
         left: 0 !important;
-        z-index: 11980 !important; /* più alto delle altre celle sticky (adatta se serve) */
+        z-index: 20001 !important; /* più alto delle altre celle sticky (adatta se serve) */
         background: #fff !important;
         box-shadow: 2px 0 6px rgba(0,0,0,0.06) !important;
         /* assicura dimensioni coerenti */
@@ -2955,7 +2960,7 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
     .calendar-table td:first-child {
         position: sticky !important; /* mantiene left stickiness */
         left: 0 !important;
-        z-index: 11979 !important; /* leggermente sotto l'intestazione ma sopra le altre celle */
+        z-index: 20001 !important; /* leggermente sotto l'intestazione ma sopra le altre celle */
         background: #fff !important;
         box-sizing: border-box !important;
     }
