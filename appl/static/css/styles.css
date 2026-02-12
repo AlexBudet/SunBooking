@@ -1328,12 +1328,12 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     position: fixed;
     top: 0px;
     right: 5px;
-    width: 23vw;
-    max-width: 400px;
-    min-width: 220px;
+    width: 27vw;
+    max-width: 28vw;
+    min-width: 25vw;
     padding: 6px 12px;
     background: linear-gradient(180deg, #ffffff 0%, #fdfbfc 100%);
-    z-index: 10999;
+    z-index: 23001;
     font-size: 14px;
     box-sizing: border-box;
     border-radius: 0 0 14px 14px;
@@ -1381,7 +1381,7 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
-    z-index: 11000;
+    z-index: 23020;
     text-align: center;
     line-height: 30px;
     vertical-align: middle;
