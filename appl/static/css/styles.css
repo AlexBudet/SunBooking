@@ -1617,13 +1617,13 @@ button.client-info-btn {
 }
 
 #AddClientModal {
-    z-index: 16000 !important;
+    z-index: 24000 !important;
 }
 #AddClientModal .modal-dialog {
-    z-index: 16001 !important;
+    z-index: 24001 !important;
 }
 #AddClientModal .modal-content {
-    z-index: 16002 !important;
+    z-index: 24002 !important;
 }
 
 #ClientInfoModal .modal-dialog {
