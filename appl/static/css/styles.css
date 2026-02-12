@@ -1342,6 +1342,14 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     border-top: none;
 }
 
+/* Quando un modal è visibile, il navigator va sotto per non coprirlo */
+body.modal-open .appointmentNavigator {
+    z-index: 1 !important;
+}
+body.modal-open #quarterNavigator {
+    z-index: 1 !important;
+}
+
 .clear-navigator-btn {
     display: none;
     padding: 4px 12px;
@@ -3796,7 +3804,7 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
 /* Nascondi backdrop solo per modal specifici che non lo necessitano, MA NON per WebAppointmentsModal */
 .modal-backdrop.fade,
 .modal-backdrop.show {
-  z-index: 13999 !important; /* Subito sotto WebAppointmentsModal (14000) */
+  z-index: 24999 !important; /* Subito sotto WebAppointmentsModal (25000) */
 }
 
 /* Blocca eventuale overlay generico rimasto con z-index simile */

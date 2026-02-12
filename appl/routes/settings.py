@@ -3370,51 +3370,10 @@ def apply_update():
         batch_content = f'''@echo off
 chcp 65001 >nul
 
-rem Attendi che l'app invii la risposta
-timeout /t 2 /nobreak >nul
-
-rem Chiudi il browser usando il PID salvato
-if exist "{browser_pid_file}" (
-    set /p BROWSER_PID=<"{browser_pid_file}"
-    taskkill /F /PID %BROWSER_PID% /T >nul 2>&1
-)
-
-rem Chiudi Tosca.exe
-taskkill /F /IM "{exe_name}" >nul 2>&1
-timeout /t 1 /nobreak >nul
-
-rem Fallback: cerca processi Chrome/Edge con SunBooking nella command line
-for /f "skip=1 tokens=1" %%p in ('wmic process where "name='chrome.exe' and commandline like '%%SunBooking%%'" get processid 2^>nul') do (
-    taskkill /F /PID %%p /T >nul 2>&1
-)
-for /f "skip=1 tokens=1" %%p in ('wmic process where "name='msedge.exe' and commandline like '%%SunBooking%%'" get processid 2^>nul') do (
-    taskkill /F /PID %%p /T >nul 2>&1
-)
-timeout /t 1 /nobreak >nul
-
-rem Riprova fino a 10 volte se il file è bloccato (silenzioso)
-set RETRY=0
-:retry_move
-set /a RETRY+=1
-
-move /Y "{current_exe}" "{backup_path}" >nul 2>&1
-if errorlevel 1 (
-    if %RETRY% LSS 10 (
-        timeout /t 1 /nobreak >nul
-        goto retry_move
-    )
-    rem Fallito dopo 10 tentativi - mostra errore
-    echo ERRORE: Impossibile aggiornare. Chiudi l'applicazione manualmente.
-    pause
-    exit /b 1
-)
-
-rem Copia il nuovo exe
+rem Copia il nuovo exe sopra al vecchio (l'exe non e' in uso perche' l'utente chiudera' dopo)
 copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
 if errorlevel 1 (
-    rem Ripristina backup
-    move /Y "{backup_path}" "{current_exe}" >nul 2>&1
-    echo ERRORE: Impossibile copiare il nuovo exe.
+    echo ERRORE: Impossibile copiare il nuovo exe. Potrebbe essere in uso.
     pause
     exit /b 1
 )
@@ -3425,9 +3384,6 @@ echo {remote_version}> "{version_file}"
 rem Rimuovi file temporanei
 del "{update_info_path}" >nul 2>&1
 rmdir /s /q "{os.path.dirname(new_exe_temp)}" >nul 2>&1
-
-rem Avvia la nuova versione
-start "" "{current_exe}"
 
 rem Auto-elimina questo script
 (goto) 2>nul & del "%~f0"
