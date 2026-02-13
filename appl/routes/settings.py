@@ -3245,72 +3245,64 @@ def check_update():
 
 @settings_bp.route('/api/download-update', methods=['POST'])
 def download_update():
-    """Scarica la nuova versione con progresso via SSE e prepara l'aggiornamento."""
-    data = request.get_json() or {}
-    download_url = data.get("download_url")
-    remote_version = data.get("remote_version")
+    """Scarica la nuova versione e prepara l'aggiornamento."""
+    try:
+        data = request.get_json() or {}
+        download_url = data.get("download_url")
+        remote_version = data.get("remote_version")
 
-    if not download_url:
-        return jsonify({"error": "URL download mancante"}), 400
+        if not download_url:
+            return jsonify({"error": "URL download mancante"}), 400
 
-    if not getattr(sys, 'frozen', False):
-        return jsonify({"error": "Aggiornamento disponibile solo per versione .exe"}), 400
+        if not getattr(sys, 'frozen', False):
+            return jsonify({"error": "Aggiornamento disponibile solo per versione .exe"}), 400
 
-    current_exe = sys.executable
-    exe_dir = os.path.dirname(current_exe)
-    appdata_dir = os.path.join(os.getenv('LOCALAPPDATA', exe_dir), 'SunBooking')
-    backup_dir = os.path.join(appdata_dir, BACKUP_FOLDER)
-    os.makedirs(backup_dir, exist_ok=True)
+        current_exe = sys.executable
+        exe_dir = os.path.dirname(current_exe)
+        appdata_dir = os.path.join(os.getenv('LOCALAPPDATA', exe_dir), 'SunBooking')
+        backup_dir = os.path.join(appdata_dir, BACKUP_FOLDER)
+        os.makedirs(backup_dir, exist_ok=True)
 
-    existing_backups = [f for f in os.listdir(backup_dir) if f.startswith("ToscaBKP")]
-    next_num = len(existing_backups) + 1
-    backup_name = f"ToscaBKP{next_num}.exe"
-    backup_path = os.path.join(backup_dir, backup_name)
+        existing_backups = [f for f in os.listdir(backup_dir) if f.startswith("ToscaBKP")]
+        next_num = len(existing_backups) + 1
+        backup_name = f"ToscaBKP{next_num}.exe"
+        backup_path = os.path.join(backup_dir, backup_name)
 
-    temp_dir = tempfile.mkdtemp()
-    new_exe_temp = os.path.join(temp_dir, APP_EXE_NAME)
+        temp_dir = tempfile.mkdtemp()
+        new_exe_temp = os.path.join(temp_dir, APP_EXE_NAME)
 
-    def generate():
-        import json as _json
-        try:
-            current_app.logger.info(f"Downloading update from {download_url}")
-            resp = requests.get(download_url, timeout=300, stream=True)
+        current_app.logger.info(f"Downloading update from {download_url}")
+        resp = requests.get(download_url, timeout=300, stream=True)
 
-            if resp.status_code != 200:
-                yield f"data: {_json.dumps({'error': f'Download fallito: {resp.status_code}'})}\n\n"
-                return
+        if resp.status_code != 200:
+            return jsonify({"error": f"Download fallito: {resp.status_code}"}), 500
 
-            total = int(resp.headers.get('content-length', 0))
-            downloaded = 0
+        with open(new_exe_temp, 'wb') as f:
+            for chunk in resp.iter_content(chunk_size=8192):
+                f.write(chunk)
 
-            with open(new_exe_temp, 'wb') as f:
-                for chunk in resp.iter_content(chunk_size=65536):
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total > 0:
-                        pct = int(downloaded * 100 / total)
-                    else:
-                        pct = -1
-                    yield f"data: {_json.dumps({'progress': pct, 'downloaded': downloaded, 'total': total})}\n\n"
+        # Salva info per il completamento
+        update_info = {
+            "current_exe": current_exe,
+            "backup_path": backup_path,
+            "new_exe_temp": new_exe_temp,
+            "remote_version": remote_version
+        }
 
-            # Salva info per il completamento
-            update_info = {
-                "current_exe": current_exe,
-                "backup_path": backup_path,
-                "new_exe_temp": new_exe_temp,
-                "remote_version": remote_version
-            }
-            update_info_path = os.path.join(appdata_dir, ".pending_update")
-            with open(update_info_path, 'w') as f:
-                _json.dump(update_info, f)
+        update_info_path = os.path.join(appdata_dir, ".pending_update")
+        import json
+        with open(update_info_path, 'w') as f:
+            json.dump(update_info, f)
 
-            yield f"data: {_json.dumps({'done': True, 'backup_name': backup_name})}\n\n"
+        return jsonify({
+            "success": True,
+            "message": "Download completato.",
+            "backup_name": backup_name
+        })
 
-        except Exception as e:
-            current_app.logger.error(f"download_update error: {e}")
-            yield f"data: {_json.dumps({'error': str(e)})}\n\n"
-
-    return current_app.response_class(generate(), mimetype='text/event-stream')
+    except Exception as e:
+        current_app.logger.error(f"download_update error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @settings_bp.route('/api/apply-update', methods=['POST'])

@@ -49,6 +49,9 @@ header {
 body.modal-open header {
     z-index: 1 !important;
 }
+body.modal-open .calendar-navigation {
+    z-index: 1 !important;
+}
 
 header h1, header nav {
     margin: 0;
@@ -864,7 +867,7 @@ td {
     position: fixed;
     top: 60;
     left: 0;
-    z-index: 11999;
+    z-index: 22001;
     background: linear-gradient(180deg, #ffffff 0%, #fdfbfc 100%);
     padding: 6px 12px;
     border-radius: 0 0 14px 14px;
