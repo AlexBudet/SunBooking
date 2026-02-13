@@ -3357,7 +3357,7 @@ def apply_update():
         if not getattr(sys, 'frozen', False):
             return jsonify({"error": "Disponibile solo per versione .exe"}), 400
         
-        current_exe = sys.executable  # L'exe attualmente in esecuzione
+        current_exe = sys.executable  # L'exe attualmente in esecuzione (path reale)
         exe_dir = os.path.dirname(current_exe)
         appdata_dir = os.path.join(os.getenv('LOCALAPPDATA', exe_dir), 'SunBooking')
         update_info_path = os.path.join(appdata_dir, ".pending_update")
@@ -3372,6 +3372,12 @@ def apply_update():
         backup_path = update_info["backup_path"]
         new_exe_temp = update_info["new_exe_temp"]
         remote_version = update_info["remote_version"]
+        
+        # Log per debug: mostra dove l'exe sta girando e dove verrà copiato
+        current_app.logger.info(f"[UPDATER] sys.executable = {current_exe}")
+        current_app.logger.info(f"[UPDATER] exe_dir = {exe_dir}")
+        current_app.logger.info(f"[UPDATER] new_exe_temp = {new_exe_temp}")
+        current_app.logger.info(f"[UPDATER] target copy = {current_exe}")
         
         # Verifica che il file scaricato esista
         if not os.path.exists(new_exe_temp):
@@ -3407,8 +3413,15 @@ def apply_update():
         except:
             pass
         
+        log_file = os.path.join(appdata_dir, "_update.log")
+        
         batch_content = f'''@echo off
 chcp 65001 >nul
+
+echo [%date% %time%] UPDATER START > "{log_file}"
+echo [%date% %time%] current_exe = {current_exe} >> "{log_file}"
+echo [%date% %time%] new_exe_temp = {new_exe_temp} >> "{log_file}"
+echo [%date% %time%] backup_path = {backup_path} >> "{log_file}"
 
 rem Aspetta che il processo exe si chiuda (massimo 60 secondi)
 set RETRIES=0
@@ -3416,8 +3429,9 @@ set RETRIES=0
 tasklist /FI "IMAGENAME eq {exe_name}" 2>nul | find /I "{exe_name}" >nul
 if not errorlevel 1 (
     set /A RETRIES+=1
+    echo [%date% %time%] Attesa chiusura processo... tentativo %RETRIES% >> "{log_file}"
     if %RETRIES% GEQ 30 (
-        echo Timeout: il processo non si e' chiuso. Tentativo forzato...
+        echo [%date% %time%] Timeout, forzo chiusura >> "{log_file}"
         taskkill /F /IM "{exe_name}" >nul 2>&1
         timeout /t 3 /nobreak >nul
         goto COPY_FILE
@@ -3427,25 +3441,47 @@ if not errorlevel 1 (
 )
 
 :COPY_FILE
+echo [%date% %time%] Processo chiuso, procedo con copia >> "{log_file}"
+
+rem Backup del vecchio exe
+copy /Y "{current_exe}" "{backup_path}" >nul 2>&1
+if errorlevel 1 (
+    echo [%date% %time%] WARN: backup fallito >> "{log_file}"
+) else (
+    echo [%date% %time%] Backup creato: {backup_path} >> "{log_file}"
+)
+
 rem Copia il nuovo exe sopra al vecchio
 copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
 if errorlevel 1 (
-    rem Secondo tentativo dopo breve attesa
+    echo [%date% %time%] Primo tentativo copia FALLITO, riprovo... >> "{log_file}"
     timeout /t 3 /nobreak >nul
     copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
     if errorlevel 1 (
-        echo ERRORE: Impossibile copiare il nuovo exe.
+        echo [%date% %time%] ERRORE CRITICO: copia fallita anche al 2o tentativo >> "{log_file}"
         pause
         exit /b 1
     )
 )
 
+echo [%date% %time%] Copia completata con successo >> "{log_file}"
+
+rem Verifica che il file copiato esista e abbia dimensione > 0
+if not exist "{current_exe}" (
+    echo [%date% %time%] ERRORE: file target non esiste dopo copia! >> "{log_file}"
+    pause
+    exit /b 1
+)
+
 rem Aggiorna versione
 echo {remote_version}> "{version_file}"
+echo [%date% %time%] Versione aggiornata a {remote_version} >> "{log_file}"
 
 rem Rimuovi file temporanei
 del "{update_info_path}" >nul 2>&1
 rmdir /s /q "{os.path.dirname(new_exe_temp)}" >nul 2>&1
+
+echo [%date% %time%] UPDATER COMPLETATO >> "{log_file}"
 
 rem Auto-elimina questo script
 (goto) 2>nul & del "%~f0"
