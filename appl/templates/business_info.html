@@ -315,17 +315,27 @@ function startUpdate() {
   btnUpdate.textContent = 'Download in corso...';
   btnCheck.style.display = 'none';
 
-  /* Mostra barra di progresso */
+  /* Mostra barra di progresso animata */
   const progressContainer = document.getElementById('downloadProgressContainer');
   const progressBar = document.getElementById('downloadProgressBar');
   const progressLabel = document.getElementById('downloadProgressLabel');
   progressContainer.style.display = 'block';
   progressBar.style.width = '0%';
-  progressLabel.textContent = 'Download: 0%';
+  progressLabel.textContent = 'Download in corso...';
+
+  /* Animazione barra indeterminata durante il download */
+  let fakeProgress = 0;
+  const progressInterval = setInterval(function() {
+    if (fakeProgress < 90) {
+      fakeProgress += Math.random() * 3;
+      if (fakeProgress > 90) fakeProgress = 90;
+      progressBar.style.width = Math.round(fakeProgress) + '%';
+      progressLabel.textContent = 'Download: ' + Math.round(fakeProgress) + '%';
+    }
+  }, 500);
 
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
-  /* Avvia download con SSE per il progresso */
   fetch('/settings/api/download-update', {
     method: 'POST',
     headers: {
@@ -337,63 +347,33 @@ function startUpdate() {
       remote_version: updateData.remote_version
     })
   })
-  .then(response => {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    .then(r => r.json())
+    .then(data => {
+      clearInterval(progressInterval);
 
-    function readChunk() {
-      return reader.read().then(({ done, value }) => {
-        if (done) return;
-        buffer += decoder.decode(value, { stream: true });
+      if (data.error) {
+        btnUpdate.disabled = false;
+        btnUpdate.textContent = 'Aggiorna ora';
+        btnCheck.style.display = 'inline-block';
+        progressContainer.style.display = 'none';
+        alert('Errore: ' + data.error);
+        return;
+      }
 
-        /* Processa ogni riga SSE nel buffer */
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const msg = JSON.parse(line.substring(6));
-
-            if (msg.error) {
-              btnUpdate.disabled = false;
-              btnUpdate.textContent = 'Aggiorna ora';
-              btnCheck.style.display = 'inline-block';
-              progressContainer.style.display = 'none';
-              alert('Errore: ' + msg.error);
-              return;
-            }
-
-            if (msg.progress !== undefined && msg.progress >= 0) {
-              progressBar.style.width = msg.progress + '%';
-              progressLabel.textContent = 'Download: ' + msg.progress + '%';
-            }
-
-            if (msg.done) {
-              progressBar.style.width = '100%';
-              progressLabel.textContent = 'Download completato! Installazione in corso...';
-              btnUpdate.textContent = 'Installazione in corso...';
-              /* Avvia automaticamente l'installazione */
-              applyUpdateAutomatic();
-              return;
-            }
-          } catch (e) {
-            /* ignora righe non parsabili */
-          }
-        }
-        return readChunk();
-      });
-    }
-    return readChunk();
-  })
-  .catch(err => {
-    btnUpdate.disabled = false;
-    btnUpdate.textContent = 'Aggiorna ora';
-    btnCheck.style.display = 'inline-block';
-    progressContainer.style.display = 'none';
-    alert('Errore download: ' + err);
-  });
+      /* Download completato, avvia installazione automatica */
+      progressBar.style.width = '100%';
+      progressLabel.textContent = 'Download completato! Installazione in corso...';
+      btnUpdate.textContent = 'Installazione in corso...';
+      applyUpdateAutomatic();
+    })
+    .catch(err => {
+      clearInterval(progressInterval);
+      btnUpdate.disabled = false;
+      btnUpdate.textContent = 'Aggiorna ora';
+      btnCheck.style.display = 'inline-block';
+      progressContainer.style.display = 'none';
+      alert('Errore download: ' + err);
+    });
 }
 
 /* Installazione automatica post-download */

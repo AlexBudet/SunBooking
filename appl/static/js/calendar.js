@@ -2865,6 +2865,8 @@ document.querySelectorAll('.appointment-block').forEach(block => {
         dragHandle.style.cursor = 'grab'; // Indica la cliccabilità del drag-handle
         dragHandle.addEventListener('mousedown', function(e) {
           customDragging = true;
+          window._isDraggingBlock = true;
+          if (typeof window.clearCalendarHighlights === 'function') window.clearCalendarHighlights();
           // Se il blocco fa parte di un macro‑blocco, usiamo il contenitore del gruppo
           var macroBlock = block.closest('.macro-block');
           if (macroBlock) {
@@ -2914,6 +2916,7 @@ document.addEventListener('mousemove', function(e) {
 document.addEventListener('mouseup', async function(e) {
   if (!customDragging) return;
   customDragging = false;
+  window._isDraggingBlock = false;
   if (!wasDragged) return;
 
   // Nascondi temporaneamente l'elemento per individuare la cella sottostante
@@ -3541,6 +3544,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function stopResize() {
+    window._isResizingBlock = false;
     if (!currentBlock) return;
     currentBlock.classList.remove('resizing');
 
@@ -3653,6 +3657,9 @@ document.querySelectorAll('.selectable-cell').forEach(cell => {
       if (!e.target.classList.contains('resize-handle')) return;
       e.preventDefault();
       e.stopPropagation();
+
+      window._isResizingBlock = true;
+      if (typeof window.clearCalendarHighlights === 'function') window.clearCalendarHighlights();
 
       currentBlock = e.target.parentElement;
       startY       = e.clientY;
@@ -7969,6 +7976,8 @@ document.addEventListener('DOMContentLoaded', function() {
 // Aggiungi highlight alle celle selezionabili al passaggio del mouse
 document.querySelectorAll('.selectable-cell:not(.calendar-closed)').forEach(cell => {
   cell.addEventListener('mouseenter', (e) => {
+    // Blocca highlight durante drag o resize di un blocco appuntamento
+    if (window._isDraggingBlock || window._isResizingBlock) return;
     // usa la funzione helper per applicare l'highlight (gestisce pseudo‑blocchi)
     if (typeof window.applyHighlightToCell === 'function') {
       window.applyHighlightToCell(cell);
@@ -7999,6 +8008,8 @@ document.querySelectorAll('.selectable-cell:not(.calendar-closed)').forEach(cell
 
 // Delegato: mostra l'highlight sopra i blocchi esistenti (escludendo .note-off)
 document.addEventListener('mouseenter', function(e) {
+  // Blocca highlight durante drag o resize
+  if (window._isDraggingBlock || window._isResizingBlock) return;
   // FIX: Verifica che e.target sia un elemento valido e supporti .closest
   if (!e.target || typeof e.target.closest !== 'function') return;
 
