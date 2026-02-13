@@ -48,6 +48,12 @@ header {
 
 body.modal-open header {
     z-index: 1 !important;
+    pointer-events: none !important;
+    opacity: 0.5 !important;
+    transition: opacity 0.2s;
+}
+body.modal-open .modal-backdrop {
+    z-index: 24000 !important;
 }
 body.modal-open .calendar-navigation {
     z-index: 1 !important;
@@ -195,6 +201,11 @@ display: none
     font-size: 0.95rem;
     color: #444;
     line-height: 1.5;
+}
+
+.modal-body-shifts {
+    overflow-y: auto !important;
+    max-height: 73vh;
 }
 
 .modal-footer {

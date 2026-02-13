@@ -404,16 +404,17 @@ function applyUpdateAutomatic() {
       btnUpdate.textContent = 'Aggiornamento completato!';
       btnUpdate.style.backgroundColor = '#28a745';
 
-      alert('AGGIORNAMENTO INSTALLATO CON SUCCESSO!\n\nL\'applicazione verrà chiusa.\nRiavviare il sistema per completare.');
+      alert('AGGIORNAMENTO INSTALLATO CON SUCCESSO!\n\nL\'applicazione verrà chiusa.\nRiavviare il computer per completare.');
 
-      /* Chiudi automaticamente l'applicazione */
+      /* Chiudi l'applicazione: invia shutdown al server Flask, poi chiudi la finestra */
+      fetch('/settings/api/shutdown', { method: 'POST', headers: {'X-CSRFToken': csrfToken} }).catch(function(){});
       try {
         window.close();
       } catch(e) {}
-      /* Fallback: se window.close non funziona, naviga a about:blank */
+      /* Fallback: se window.close non funziona */
       setTimeout(function() {
         window.location.href = 'about:blank';
-      }, 500);
+      }, 1000);
     })
     .catch(err => {
       btnUpdate.disabled = false;

@@ -548,6 +548,51 @@ def delete_operator(operator_id):
     
     return redirect(url_for('settings.operators'))
 
+# ===================== SHIFT PRESETS =====================
+@settings_bp.route('/api/shift-presets', methods=['GET'])
+def get_shift_presets():
+    """Restituisce i preset turno salvati in business_info."""
+    import json
+    biz = BusinessInfo.query.first()
+    if not biz or not biz.shift_presets:
+        return jsonify([])
+    try:
+        return jsonify(json.loads(biz.shift_presets))
+    except Exception:
+        return jsonify([])
+
+@settings_bp.route('/api/shift-presets', methods=['POST'])
+def save_shift_presets():
+    """Salva l'intero array di preset turno in business_info."""
+    import json
+    biz = BusinessInfo.query.first()
+    if not biz:
+        return jsonify({"error": "BusinessInfo non trovata"}), 404
+    data = request.json  # array di preset
+    if not isinstance(data, list):
+        return jsonify({"error": "Formato non valido, atteso array"}), 400
+    biz.shift_presets = json.dumps(data, ensure_ascii=False)
+    db.session.commit()
+    return jsonify({"message": "Preset salvati", "count": len(data)}), 200
+
+@settings_bp.route('/api/shift-presets/<int:index>', methods=['DELETE'])
+def delete_shift_preset(index):
+    """Elimina un singolo preset per indice."""
+    import json
+    biz = BusinessInfo.query.first()
+    if not biz:
+        return jsonify({"error": "BusinessInfo non trovata"}), 404
+    try:
+        presets = json.loads(biz.shift_presets or '[]')
+    except Exception:
+        presets = []
+    if index < 0 or index >= len(presets):
+        return jsonify({"error": "Indice non valido"}), 404
+    removed = presets.pop(index)
+    biz.shift_presets = json.dumps(presets, ensure_ascii=False)
+    db.session.commit()
+    return jsonify({"message": "Preset eliminato", "removed": removed}), 200
+
 # ===================== SERVICES =====================
 @settings_bp.route('/settings/services', methods=['GET'])
 def services():
@@ -3365,12 +3410,34 @@ def apply_update():
         batch_content = f'''@echo off
 chcp 65001 >nul
 
-rem Copia il nuovo exe sopra al vecchio (l'exe non e' in uso perche' l'utente chiudera' dopo)
+rem Aspetta che il processo exe si chiuda (massimo 60 secondi)
+set RETRIES=0
+:WAIT_LOOP
+tasklist /FI "IMAGENAME eq {exe_name}" 2>nul | find /I "{exe_name}" >nul
+if not errorlevel 1 (
+    set /A RETRIES+=1
+    if %RETRIES% GEQ 30 (
+        echo Timeout: il processo non si e' chiuso. Tentativo forzato...
+        taskkill /F /IM "{exe_name}" >nul 2>&1
+        timeout /t 3 /nobreak >nul
+        goto COPY_FILE
+    )
+    timeout /t 2 /nobreak >nul
+    goto WAIT_LOOP
+)
+
+:COPY_FILE
+rem Copia il nuovo exe sopra al vecchio
 copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
 if errorlevel 1 (
-    echo ERRORE: Impossibile copiare il nuovo exe. Potrebbe essere in uso.
-    pause
-    exit /b 1
+    rem Secondo tentativo dopo breve attesa
+    timeout /t 3 /nobreak >nul
+    copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
+    if errorlevel 1 (
+        echo ERRORE: Impossibile copiare il nuovo exe.
+        pause
+        exit /b 1
+    )
 )
 
 rem Aggiorna versione
@@ -3422,3 +3489,14 @@ UAC.ShellExecute "cmd.exe", "/c ""{batch_path}""", "", "runas", 0
     except Exception as e:
         current_app.logger.error(f"apply_update error: {e}")
         return jsonify({"error": str(e)}), 500
+    
+@settings_bp.route('/api/shutdown', methods=['POST'])
+def shutdown_app():
+    """Chiude l'applicazione Flask per permettere l'aggiornamento."""
+    import threading
+    def _shutdown():
+        import time
+        time.sleep(1)
+        os._exit(0)
+    threading.Thread(target=_shutdown, daemon=True).start()
+    return jsonify({"success": True, "message": "Chiusura in corso..."})
