@@ -226,14 +226,14 @@ document.addEventListener('DOMContentLoaded', toggleTipoFields);
 });
     </script>
 <!-- Modal per la gestione dei turni per operatore dalla pagina settings -->
-<div class="modal" id="OperatorShiftsModalSettings" data-operator-id="" data-date="" tabindex="-1" aria-labelledby="ShiftsModalSettingsLabel" aria-hidden="true">
+<div class="modal" id="OperatorShiftsModalSettings" data-operator-id="" data-date="" tabindex="-1" aria-labelledby="ShiftsModalSettingsLabel" aria-hidden="true" style="z-index:25000;">
     <div class="modal-dialog modal-xl custom-modal-width">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="ShiftsModalSettingsLabel">Gestione Turni per&nbsp&nbsp&nbsp&nbsp&nbsp</h5><H2><span id="modalOperatorNameSettings"></span></H2>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body modal-body-shifts">
    
           <!-- Impostazioni turno su più giorni -->
           <div class="mb-3">
@@ -251,12 +251,13 @@ document.addEventListener('DOMContentLoaded', toggleTipoFields);
   <!-- Tabella pianificazione settimanale turni -->
 <table class="table table-bordered text-center align-middle" style="table-layout: fixed; width: 100%; margin-bottom: 0;">
     <colgroup>
-      <col style="width:16.66%">
-      <col style="width:16.66%">
-      <col style="width:16.66%">
-      <col style="width:16.66%">
-      <col style="width:16.66%">
-      <col style="width:16.66%">
+      <col style="width:13%">
+      <col style="width:15%">
+      <col style="width:15%">
+      <col style="width:15%">
+      <col style="width:13%">
+      <col style="width:14%">
+      <col style="width:15%">
     </colgroup>
     <thead class="table-light">
       <tr>
@@ -266,6 +267,7 @@ document.addEventListener('DOMContentLoaded', toggleTipoFields);
         <th>ORA PAUSA</th>
         <th>DURATA PAUSA</th>
         <th></th>
+        <th style="width:120px; text-align:center;">Azioni</th>
       </tr>
     </thead>
     <tbody>
@@ -279,6 +281,12 @@ document.addEventListener('DOMContentLoaded', toggleTipoFields);
           <input type="checkbox" id="mondayOff" onchange="toggleDayOff('monday')">
           <label for="mondayOff" class="ms-1">Non di turno</label>
         </td>
+        <td class="text-center text-nowrap">
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Salva come preset" onclick="openSavePresetModal('monday')"><i class="bi bi-floppy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" title="Carica preset" onclick="openLoadPresetModal('monday')"><i class="bi bi-folder2-open"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-success py-0 px-1" title="Copia" onclick="copyDayRow('monday')"><i class="bi bi-copy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-warning py-0 px-1 btn-paste-day" title="Incolla" onclick="pasteDayRow('monday')" style="display:none;"><i class="bi bi-clipboard-plus"></i></button>
+        </td>
       </tr>
       <tr>
         <td><strong>Martedì</strong></td>
@@ -289,6 +297,12 @@ document.addEventListener('DOMContentLoaded', toggleTipoFields);
         <td class="text-center">
           <input type="checkbox" id="tuesdayOff" onchange="toggleDayOff('tuesday')">
           <label for="tuesdayOff" class="ms-1">Non di turno</label>
+        </td>
+        <td class="text-center text-nowrap">
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Salva come preset" onclick="openSavePresetModal('tuesday')"><i class="bi bi-floppy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" title="Carica preset" onclick="openLoadPresetModal('tuesday')"><i class="bi bi-folder2-open"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-success py-0 px-1" title="Copia" onclick="copyDayRow('tuesday')"><i class="bi bi-copy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-warning py-0 px-1 btn-paste-day" title="Incolla" onclick="pasteDayRow('tuesday')" style="display:none;"><i class="bi bi-clipboard-plus"></i></button>
         </td>
       </tr>
       <tr>
@@ -301,6 +315,12 @@ document.addEventListener('DOMContentLoaded', toggleTipoFields);
           <input type="checkbox" id="wednesdayOff" onchange="toggleDayOff('wednesday')">
           <label for="wednesdayOff" class="ms-1">Non di turno</label>
         </td>
+        <td class="text-center text-nowrap">
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Salva come preset" onclick="openSavePresetModal('wednesday')"><i class="bi bi-floppy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" title="Carica preset" onclick="openLoadPresetModal('wednesday')"><i class="bi bi-folder2-open"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-success py-0 px-1" title="Copia" onclick="copyDayRow('wednesday')"><i class="bi bi-copy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-warning py-0 px-1 btn-paste-day" title="Incolla" onclick="pasteDayRow('wednesday')" style="display:none;"><i class="bi bi-clipboard-plus"></i></button>
+        </td>
       </tr>
       <tr>
         <td><strong>Giovedì</strong></td>
@@ -311,6 +331,12 @@ document.addEventListener('DOMContentLoaded', toggleTipoFields);
         <td class="text-center">
           <input type="checkbox" id="thursdayOff" onchange="toggleDayOff('thursday')">
           <label for="thursdayOff" class="ms-1">Non di turno</label>
+        </td>
+        <td class="text-center text-nowrap">
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Salva come preset" onclick="openSavePresetModal('thursday')"><i class="bi bi-floppy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" title="Carica preset" onclick="openLoadPresetModal('thursday')"><i class="bi bi-folder2-open"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-success py-0 px-1" title="Copia" onclick="copyDayRow('thursday')"><i class="bi bi-copy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-warning py-0 px-1 btn-paste-day" title="Incolla" onclick="pasteDayRow('thursday')" style="display:none;"><i class="bi bi-clipboard-plus"></i></button>
         </td>
       </tr>
       <tr>
@@ -323,6 +349,12 @@ document.addEventListener('DOMContentLoaded', toggleTipoFields);
           <input type="checkbox" id="fridayOff" onchange="toggleDayOff('friday')">
           <label for="fridayOff" class="ms-1">Non di turno</label>
         </td>
+        <td class="text-center text-nowrap">
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Salva come preset" onclick="openSavePresetModal('friday')"><i class="bi bi-floppy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" title="Carica preset" onclick="openLoadPresetModal('friday')"><i class="bi bi-folder2-open"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-success py-0 px-1" title="Copia" onclick="copyDayRow('friday')"><i class="bi bi-copy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-warning py-0 px-1 btn-paste-day" title="Incolla" onclick="pasteDayRow('friday')" style="display:none;"><i class="bi bi-clipboard-plus"></i></button>
+        </td>
       </tr>
       <tr>
         <td><strong>Sabato</strong></td>
@@ -333,6 +365,12 @@ document.addEventListener('DOMContentLoaded', toggleTipoFields);
         <td class="text-center">
           <input type="checkbox" id="saturdayOff" onchange="toggleDayOff('saturday')">
           <label for="saturdayOff" class="ms-1">Non di turno</label>
+        </td>
+        <td class="text-center text-nowrap">
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Salva come preset" onclick="openSavePresetModal('saturday')"><i class="bi bi-floppy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" title="Carica preset" onclick="openLoadPresetModal('saturday')"><i class="bi bi-folder2-open"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-success py-0 px-1" title="Copia" onclick="copyDayRow('saturday')"><i class="bi bi-copy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-warning py-0 px-1 btn-paste-day" title="Incolla" onclick="pasteDayRow('saturday')" style="display:none;"><i class="bi bi-clipboard-plus"></i></button>
         </td>
       </tr>
       <tr>
@@ -345,13 +383,20 @@ document.addEventListener('DOMContentLoaded', toggleTipoFields);
           <input type="checkbox" id="sundayOff" onchange="toggleDayOff('sunday')">
           <label for="sundayOff" class="ms-1">Non di turno</label>
         </td>
+        <td class="text-center text-nowrap">
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" title="Salva come preset" onclick="openSavePresetModal('sunday')"><i class="bi bi-floppy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" title="Carica preset" onclick="openLoadPresetModal('sunday')"><i class="bi bi-folder2-open"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-success py-0 px-1" title="Copia" onclick="copyDayRow('sunday')"><i class="bi bi-copy"></i></button>
+          <button type="button" class="btn btn-sm btn-outline-warning py-0 px-1 btn-paste-day" title="Incolla" onclick="pasteDayRow('sunday')" style="display:none;"><i class="bi bi-clipboard-plus"></i></button>
+        </td>
       </tr>
     </tbody>
   </table>
   </div>
-  <button class="btn btn-primary mt-2" onclick="saveMultiDayShiftSettings()">Salva Turno Multi</button>
-  <button id="copyMultiDayShiftSettingsBtn" class="btn btn-secondary mt-2" style="display:none;" onclick="copyMultiDayShiftSettings()">Copia Turno</button>
-  <button id="pasteMultiDayShiftSettingsBtn" class="btn btn-secondary mt-2" style="display:none;" onclick="pasteMultiDayShiftSettings()">Incolla Turno</button>
+  <button id="btnSaveMultiShift" class="btn btn-primary mt-2" onclick="saveMultiDayShiftSettings()">Scrivi i Turni in Agenda!</button>
+  <button id="copyMultiDayShiftSettingsBtn" class="btn btn-secondary mt-2" style="display:none;" onclick="copyMultiDayShiftSettings()">Copia Turno Settimanale</button>
+  <button id="pasteMultiDayShiftSettingsBtn" class="btn btn-secondary mt-2" style="display:none;" onclick="pasteMultiDayShiftSettings()">Incolla Turno Settimanale</button>
+<br><br><br><br>
 </div>
       </div>
     </div>
@@ -494,6 +539,12 @@ function saveMultiDayShiftSettings() {
     const startDate = document.getElementById('shiftStartDateSettings').value;
     const endDate = document.getElementById('shiftEndDateSettings').value;
 
+    // Mostra spinner
+    var _btn = document.getElementById('btnSaveMultiShift');
+    var _btnText = _btn.innerHTML;
+    _btn.disabled = true;
+    _btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Salvataggio…';
+
     // Raccoglie i dati per ciascun giorno
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const shifts = {};
@@ -544,6 +595,8 @@ function saveMultiDayShiftSettings() {
         return response.json();
     })
     .then(data => {
+    document.getElementById('btnSaveMultiShift').disabled = false;
+    document.getElementById('btnSaveMultiShift').innerHTML = 'Scrivi i Turni in Agenda!';
     alert('Turni salvati in calendario');
     const modalEl = document.getElementById('OperatorShiftsModalSettings');
     
@@ -582,6 +635,8 @@ function saveMultiDayShiftSettings() {
 })
 
     .catch(error => {
+        document.getElementById('btnSaveMultiShift').disabled = false;
+        document.getElementById('btnSaveMultiShift').innerHTML = 'Scrivi i Turni in Agenda!';
         console.error('Errore:', error);
         alert(error.message);
     });
@@ -690,6 +745,253 @@ function toggleDayOff(day) {
         breakStartEl.style.backgroundColor = "";
         breakDurationEl.style.backgroundColor = "";
     }
+}
+</script>
+
+<!-- Modal Salva Preset Turno -->
+<div class="modal fade" id="ShiftPresetSaveModal" tabindex="-1" aria-labelledby="ShiftPresetSaveModalLabel" aria-hidden="true" style="z-index:27000;">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="ShiftPresetSaveModalLabel"><i class="bi bi-floppy"></i>&nbsp; Salva Preset Turno</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body py-2">
+        <div id="presetSaveSummary" class="mb-2 text-muted small"></div>
+        <input type="text" id="presetSaveName" class="form-control form-control-sm" placeholder="Nome preset (es. Turno lungo)" maxlength="40">
+      </div>
+      <div class="modal-footer py-1">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="confirmSavePreset()">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop fade" id="shiftPresetSaveBackdrop" style="display:none; z-index:26999;"></div>
+
+<!-- Modal Carica Preset Turno -->
+<div class="modal fade" id="ShiftPresetLoadModal" tabindex="-1" aria-labelledby="ShiftPresetLoadModalLabel" aria-hidden="true" style="z-index:27000;">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="ShiftPresetLoadModalLabel"><i class="bi bi-folder2-open"></i>&nbsp; Carica Preset Turno</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body py-2">
+        <div id="presetLoadList"></div>
+        <div id="presetLoadEmpty" class="text-muted small text-center py-3" style="display:none;">Nessun preset salvato.</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop fade" id="shiftPresetLoadBackdrop" style="display:none; z-index:26999;"></div>
+
+<script>
+/* ====== PRESET TURNO GIORNALIERO ====== */
+
+var _presetTargetDay = null;      // giorno su cui agire (es. 'monday')
+var _copiedDayShift = null;       // clipboard copia/incolla rapido
+var _cachedPresets = null;        // cache locale dei preset dal DB
+
+// --- Lettura dal DB (con cache) ---
+function _getShiftPresets(callback) {
+    if (_cachedPresets !== null) {
+        callback(_cachedPresets);
+        return;
+    }
+    fetch('/api/shift-presets')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            _cachedPresets = Array.isArray(data) ? data : [];
+            callback(_cachedPresets);
+        })
+        .catch(function() {
+            _cachedPresets = [];
+            callback(_cachedPresets);
+        });
+}
+
+// --- Scrittura su DB (e aggiorna cache) ---
+function _setShiftPresets(arr, callback) {
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    fetch('/api/shift-presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify(arr)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function() {
+        _cachedPresets = arr;
+        if (callback) callback();
+    })
+    .catch(function(e) {
+        console.error('Errore salvataggio preset:', e);
+        alert('Errore durante il salvataggio del preset.');
+    });
+}
+
+// --- Leggi i 4 valori da una riga giorno ---
+function _readDayRow(day) {
+    return {
+        start: document.getElementById(day + 'Start').value,
+        end: document.getElementById(day + 'End').value,
+        breakStart: document.getElementById(day + 'BreakStart').value,
+        breakDuration: document.getElementById(day + 'BreakDuration').value
+    };
+}
+
+// --- Scrivi i 4 valori su una riga giorno ---
+function _writeDayRow(day, data) {
+    document.getElementById(day + 'Start').value = data.start || '';
+    document.getElementById(day + 'End').value = data.end || '';
+    document.getElementById(day + 'BreakStart').value = data.breakStart || '';
+    document.getElementById(day + 'BreakDuration').value = data.breakDuration || '';
+    // Se il giorno era "off", deseleziona la checkbox
+    var offEl = document.getElementById(day + 'Off');
+    if (offEl && offEl.checked) {
+        offEl.checked = false;
+        toggleDayOff(day);
+    }
+}
+
+// --- Formatta un riepilogo leggibile ---
+function _formatPresetSummary(data) {
+    var s = data.start + ' – ' + data.end;
+    if (data.breakStart && data.breakDuration) {
+        s += ', pausa ' + data.breakStart + ' (' + data.breakDuration + ' min)';
+    }
+    return s;
+}
+
+/* ====== SALVA PRESET (modal) ====== */
+
+function openSavePresetModal(day) {
+    var data = _readDayRow(day);
+    if (!data.start || !data.end) {
+        alert('Compila almeno Inizio e Fine turno prima di salvare.');
+        return;
+    }
+    _presetTargetDay = day;
+    document.getElementById('presetSaveSummary').textContent = _formatPresetSummary(data);
+    document.getElementById('presetSaveName').value = '';
+    var modal = new bootstrap.Modal(document.getElementById('ShiftPresetSaveModal'), { backdrop: false });
+    modal.show();
+}
+
+function confirmSavePreset() {
+    var nameEl = document.getElementById('presetSaveName');
+    var name = (nameEl.value || '').trim();
+    if (!name) {
+        alert('Inserisci un nome per il preset.');
+        nameEl.focus();
+        return;
+    }
+    var data = _readDayRow(_presetTargetDay);
+
+    _getShiftPresets(function(presets) {
+        // Controlla duplicati
+        var existIdx = -1;
+        for (var i = 0; i < presets.length; i++) {
+            if (presets[i].name.toLowerCase() === name.toLowerCase()) { existIdx = i; break; }
+        }
+        if (existIdx >= 0) {
+            if (!confirm('Un preset "' + name + '" esiste già. Sovrascriverlo?')) return;
+            presets[existIdx] = { name: name, start: data.start, end: data.end, breakStart: data.breakStart, breakDuration: data.breakDuration };
+        } else {
+            presets.push({ name: name, start: data.start, end: data.end, breakStart: data.breakStart, breakDuration: data.breakDuration });
+        }
+        _setShiftPresets(presets, function() {
+            var modal = bootstrap.Modal.getInstance(document.getElementById('ShiftPresetSaveModal'));
+            if (modal) modal.hide();
+        });
+    });
+}
+
+/* ====== CARICA PRESET (modal) ====== */
+
+function openLoadPresetModal(day) {
+    _presetTargetDay = day;
+    _getShiftPresets(function(presets) {
+        var listEl = document.getElementById('presetLoadList');
+        var emptyEl = document.getElementById('presetLoadEmpty');
+        listEl.innerHTML = '';
+
+        if (presets.length === 0) {
+            emptyEl.style.display = '';
+        } else {
+            emptyEl.style.display = 'none';
+            presets.forEach(function(p, idx) {
+                var row = document.createElement('div');
+                row.className = 'd-flex align-items-center justify-content-between border-bottom py-2';
+                row.style.cursor = 'pointer';
+
+                var info = document.createElement('div');
+                info.className = 'flex-grow-1';
+                info.innerHTML = '<strong>' + _escHtml(p.name) + '</strong><br><small class="text-muted">' + _formatPresetSummary(p) + '</small>';
+                info.addEventListener('click', (function(preset) {
+                    return function() {
+                        _writeDayRow(_presetTargetDay, preset);
+                        var modal = bootstrap.Modal.getInstance(document.getElementById('ShiftPresetLoadModal'));
+                        if (modal) modal.hide();
+                    };
+                })(p));
+
+                var delBtn = document.createElement('button');
+                delBtn.type = 'button';
+                delBtn.className = 'btn btn-sm btn-outline-danger ms-2 py-0 px-1';
+                delBtn.title = 'Elimina preset';
+                delBtn.innerHTML = '<i class="bi bi-trash"></i>';
+                delBtn.addEventListener('click', (function(index, currentPresets) {
+                    return function(e) {
+                        e.stopPropagation();
+                        if (confirm('Eliminare il preset "' + currentPresets[index].name + '"?')) {
+                            currentPresets.splice(index, 1);
+                            _setShiftPresets(currentPresets, function() {
+                                openLoadPresetModal(_presetTargetDay);
+                            });
+                        }
+                    };
+                })(idx, presets));
+
+                row.appendChild(info);
+                row.appendChild(delBtn);
+                listEl.appendChild(row);
+            });
+        }
+        var modal = new bootstrap.Modal(document.getElementById('ShiftPresetLoadModal'), { backdrop: false });
+        modal.show();
+    });
+}
+
+/* ====== COPIA / INCOLLA RAPIDO ====== */
+
+function copyDayRow(day) {
+    var data = _readDayRow(day);
+    if (!data.start || !data.end) {
+        alert('Compila almeno Inizio e Fine turno prima di copiare.');
+        return;
+    }
+    _copiedDayShift = data;
+    // Mostra tutti i bottoni Incolla
+    document.querySelectorAll('.btn-paste-day').forEach(function(btn) {
+        btn.style.display = '';
+    });
+}
+
+function pasteDayRow(day) {
+    if (!_copiedDayShift) {
+        alert('Nessun turno copiato.');
+        return;
+    }
+    _writeDayRow(day, _copiedDayShift);
+}
+
+/* ====== UTILITY ====== */
+
+function _escHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
 }
 </script>
 <script>
@@ -907,6 +1209,20 @@ document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
         });
     }
+
+    // Quando i sub-modal preset si chiudono, il modal turni è ancora aperto:
+    // ri-forza body.modal-open per mantenere l'header in background
+    ['ShiftPresetSaveModal', 'ShiftPresetLoadModal'].forEach(function(id) {
+        var subModal = document.getElementById(id);
+        if (subModal) {
+            subModal.addEventListener('hidden.bs.modal', function () {
+                var parentModal = document.getElementById('OperatorShiftsModalSettings');
+                if (parentModal && parentModal.classList.contains('show')) {
+                    document.body.classList.add('modal-open');
+                }
+            });
+        }
+    });
 });
 </script>
 <style>
