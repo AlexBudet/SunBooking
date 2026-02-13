@@ -239,12 +239,20 @@
   <button type="button" id="btnCheckUpdate" class="btn btn-primary" onclick="checkForUpdates()">
     Controlla aggiornamenti
   </button>
-  <button type="button" id="btnDownloadUpdate" class="btn btn-success" style="display:none;" onclick="downloadUpdate()">
-    Scarica aggiornamento
+  <!-- Pulsante unico: scarica + installa -->
+  <button type="button" id="btnUpdateNow" class="btn btn-success" style="display:none;" onclick="startUpdate()">
+    Aggiorna ora
   </button>
-  <button type="button" id="btnApplyUpdate" class="btn btn-warning" style="display:none;" onclick="applyUpdate()">
-    Installa e riavvia
-  </button>
+  <!-- Barra di progresso download -->
+  <div id="downloadProgressContainer" style="display:none; margin-top:15px;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+      <span id="downloadProgressLabel" style="font-weight:bold;">Download: 0%</span>
+    </div>
+    <div style="width:100%; background:#e0e0e0; border-radius:6px; height:22px; overflow:hidden;">
+      <div id="downloadProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg,#28a745,#20c997); transition:width 0.2s; border-radius:6px;"></div>
+    </div>
+  </div>
+  <!-- Info aggiornamento disponibile -->
   <div id="updateInfo" style="margin-top: 15px; display:none;">
     <strong>Nuova versione: <span id="remoteVersion"></span></strong>
     <div id="releaseNotes" style="margin-top:10px; padding:10px; background:#fff; border:1px solid #ccc; border-radius:4px; max-height:200px; overflow-y:auto;"></div>
@@ -258,13 +266,13 @@ function checkForUpdates() {
   const btn = document.getElementById('btnCheckUpdate');
   btn.disabled = true;
   btn.textContent = 'Controllo in corso...';
-  
+
   fetch('/settings/api/check-update')
     .then(r => r.json())
     .then(data => {
       btn.disabled = false;
       btn.textContent = 'Controlla aggiornamenti';
-      
+
       if (data.error) {
         if (data.no_release) {
           alert('Nessun aggiornamento disponibile al momento.');
@@ -273,16 +281,16 @@ function checkForUpdates() {
         }
         return;
       }
-      
+
       document.getElementById('currentVersion').textContent = 'Versione attuale: ' + (data.local_version || 'sconosciuta');
-      
+
       if (data.has_update && data.download_url) {
         updateData = data;
         document.getElementById('updateInfo').style.display = 'block';
         document.getElementById('remoteVersion').textContent = data.remote_version + ' (' + data.release_name + ')';
         document.getElementById('releaseNotes').innerHTML = data.release_notes ? data.release_notes.replace(/\n/g, '<br>') : 'Nessuna nota di rilascio.';
-        document.getElementById('btnDownloadUpdate').style.display = 'inline-block';
-        document.getElementById('btnApplyUpdate').style.display = 'none';
+        /* Mostra pulsante unico */
+        document.getElementById('btnUpdateNow').style.display = 'inline-block';
       } else if (!data.has_update) {
         alert('Nessun aggiornamento disponibile. Sei già alla versione più recente!');
       } else {
@@ -296,15 +304,28 @@ function checkForUpdates() {
     });
 }
 
-function downloadUpdate() {
+/* Flusso unico: conferma -> download con progresso -> installazione automatica -> popup riavvio -> chiusura app */
+function startUpdate() {
   if (!updateData || !updateData.download_url) return;
-  
-  const btn = document.getElementById('btnDownloadUpdate');
-  btn.disabled = true;
-  btn.textContent = 'Download in corso...';
-  
+  if (!confirm('Verrà scaricata e installata la nuova versione.\n\nContinuare?')) return;
+
+  const btnUpdate = document.getElementById('btnUpdateNow');
+  const btnCheck = document.getElementById('btnCheckUpdate');
+  btnUpdate.disabled = true;
+  btnUpdate.textContent = 'Download in corso...';
+  btnCheck.style.display = 'none';
+
+  /* Mostra barra di progresso */
+  const progressContainer = document.getElementById('downloadProgressContainer');
+  const progressBar = document.getElementById('downloadProgressBar');
+  const progressLabel = document.getElementById('downloadProgressLabel');
+  progressContainer.style.display = 'block';
+  progressBar.style.width = '0%';
+  progressLabel.textContent = 'Download: 0%';
+
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-  
+
+  /* Avvia download con SSE per il progresso */
   fetch('/settings/api/download-update', {
     method: 'POST',
     headers: {
@@ -316,36 +337,71 @@ function downloadUpdate() {
       remote_version: updateData.remote_version
     })
   })
-    .then(r => r.json())
-    .then(data => {
-      btn.disabled = false;
-      
-      if (data.error) {
-        btn.textContent = 'Scarica aggiornamento';
-        alert('Errore: ' + data.error);
-        return;
-      }
-      
-      btn.style.display = 'none';
-      document.getElementById('btnApplyUpdate').style.display = 'inline-block';
-      alert('Download completato! Backup creato: ' + data.backup_name + '\n\nClicca "Installa e riavvia" per completare.');
-    })
-    .catch(err => {
-      btn.disabled = false;
-      btn.textContent = 'Scarica aggiornamento';
-      alert('Errore download: ' + err);
-    });
+  .then(response => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    function readChunk() {
+      return reader.read().then(({ done, value }) => {
+        if (done) return;
+        buffer += decoder.decode(value, { stream: true });
+
+        /* Processa ogni riga SSE nel buffer */
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const msg = JSON.parse(line.substring(6));
+
+            if (msg.error) {
+              btnUpdate.disabled = false;
+              btnUpdate.textContent = 'Aggiorna ora';
+              btnCheck.style.display = 'inline-block';
+              progressContainer.style.display = 'none';
+              alert('Errore: ' + msg.error);
+              return;
+            }
+
+            if (msg.progress !== undefined && msg.progress >= 0) {
+              progressBar.style.width = msg.progress + '%';
+              progressLabel.textContent = 'Download: ' + msg.progress + '%';
+            }
+
+            if (msg.done) {
+              progressBar.style.width = '100%';
+              progressLabel.textContent = 'Download completato! Installazione in corso...';
+              btnUpdate.textContent = 'Installazione in corso...';
+              /* Avvia automaticamente l'installazione */
+              applyUpdateAutomatic();
+              return;
+            }
+          } catch (e) {
+            /* ignora righe non parsabili */
+          }
+        }
+        return readChunk();
+      });
+    }
+    return readChunk();
+  })
+  .catch(err => {
+    btnUpdate.disabled = false;
+    btnUpdate.textContent = 'Aggiorna ora';
+    btnCheck.style.display = 'inline-block';
+    progressContainer.style.display = 'none';
+    alert('Errore download: ' + err);
+  });
 }
 
-function applyUpdate() {
-  if (!confirm('Verrà installata la nuova versione.\n\nContinuare?')) return;
-  
-  const btn = document.getElementById('btnApplyUpdate');
-  btn.disabled = true;
-  btn.textContent = 'Installazione...';
-  
+/* Installazione automatica post-download */
+function applyUpdateAutomatic() {
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-  
+  const btnUpdate = document.getElementById('btnUpdateNow');
+  const progressLabel = document.getElementById('downloadProgressLabel');
+
   fetch('/settings/api/apply-update', {
     method: 'POST',
     headers: {
@@ -356,19 +412,33 @@ function applyUpdate() {
     .then(r => r.json())
     .then(data => {
       if (data.error) {
-        btn.disabled = false;
-        btn.textContent = 'Installa e riavvia';
+        btnUpdate.disabled = false;
+        btnUpdate.textContent = 'Aggiorna ora';
+        progressLabel.textContent = 'Errore installazione';
         alert('Errore: ' + data.error);
         return;
       }
-      
-      btn.textContent = 'Aggiornamento completato!';
-      btn.style.backgroundColor = '#28a745';
-      alert('L\'AGGIORNAMENTO È STATO INSTALLATO!\n\nCHIUDI L\'ATTUALE FINESTRA E RIAVVIA IL COMPUTER');
+
+      /* Installazione completata — popup di riavvio */
+      progressLabel.textContent = 'Installazione completata!';
+      btnUpdate.textContent = 'Aggiornamento completato!';
+      btnUpdate.style.backgroundColor = '#28a745';
+
+      alert('AGGIORNAMENTO INSTALLATO CON SUCCESSO!\n\nL\'applicazione verrà chiusa.\nRiavviare il sistema per completare.');
+
+      /* Chiudi automaticamente l'applicazione */
+      try {
+        window.close();
+      } catch(e) {}
+      /* Fallback: se window.close non funziona, naviga a about:blank */
+      setTimeout(function() {
+        window.location.href = 'about:blank';
+      }, 500);
     })
     .catch(err => {
-      btn.disabled = false;
-      btn.textContent = 'Installa e riavvia';
+      btnUpdate.disabled = false;
+      btnUpdate.textContent = 'Aggiorna ora';
+      progressLabel.textContent = 'Errore installazione';
       alert('Errore: ' + err);
     });
 }
