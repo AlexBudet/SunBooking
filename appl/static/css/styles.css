@@ -854,15 +854,15 @@ td {
   }
 
 .calendar-closed {
-    background-color: #f9f7f8;
+    background-color: #f0eced;
     background-image: repeating-linear-gradient(
         135deg,
-        rgba(135, 100, 124, 0.06) 0px,
-        rgba(135, 100, 124, 0.06) 4px,
+        rgba(135, 100, 124, 0.15) 0px,
+        rgba(135, 100, 124, 0.15) 4px,
         transparent 4px,
         transparent 8px
     );
-    border: 1px solid rgba(135, 100, 124, 0.1);
+    border: 1px solid rgba(135, 100, 124, 0.2);
     box-sizing: border-box;
 }
 
