@@ -399,28 +399,28 @@ function applyUpdateAutomatic() {
         return;
       }
 
-      /* Installazione completata — popup di riavvio */
-      progressLabel.textContent = 'Installazione completata!';
-      btnUpdate.textContent = 'Aggiornamento completato!';
+      /* Il batch è stato lanciato e farà: kill processo + copia + riavvio */
+      progressLabel.textContent = 'Aggiornamento avviato! L\'app si chiuderà automaticamente...';
+      btnUpdate.textContent = 'Chiusura in corso...';
       btnUpdate.style.backgroundColor = '#28a745';
 
-      alert('AGGIORNAMENTO INSTALLATO CON SUCCESSO!\n\nL\'applicazione verrà chiusa.\nRiavviare il computer per completare.');
-
-      /* Chiudi l'applicazione: invia shutdown al server Flask, poi chiudi la finestra */
-      fetch('/settings/api/shutdown', { method: 'POST', headers: {'X-CSRFToken': csrfToken} }).catch(function(){});
-      try {
-        window.close();
-      } catch(e) {}
-      /* Fallback: se window.close non funziona */
-      setTimeout(function() {
-        window.location.href = 'about:blank';
-      }, 1000);
+      /* Non serve alert bloccante: il batch farà taskkill e chiuderà tutto.
+         Mostriamo solo un messaggio e aspettiamo che il batch faccia il suo lavoro. */
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#f0f0f0;">' +
+        '<div style="text-align:center;font-family:sans-serif;">' +
+        '<h2>Aggiornamento in corso...</h2>' +
+        '<p>L\'applicazione si chiuderà automaticamente e si riavvierà con la nuova versione.</p>' +
+        '<p style="color:#888;margin-top:20px;">Se la finestra non si chiude entro 30 secondi, chiuderla manualmente.</p>' +
+        '</div></div>';
     })
     .catch(err => {
-      btnUpdate.disabled = false;
-      btnUpdate.textContent = 'Aggiorna ora';
-      progressLabel.textContent = 'Errore installazione';
-      alert('Errore: ' + err);
+      /* Se la fetch fallisce potrebbe essere perché il server è già stato killato dal batch — è OK */
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#f0f0f0;">' +
+        '<div style="text-align:center;font-family:sans-serif;">' +
+        '<h2>Aggiornamento in corso...</h2>' +
+        '<p>L\'applicazione si sta chiudendo per completare l\'aggiornamento.</p>' +
+        '<p style="color:#888;margin-top:20px;">Se la finestra non si chiude entro 30 secondi, chiuderla manualmente.</p>' +
+        '</div></div>';
     });
 }
 </script>
