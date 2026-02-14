@@ -53,7 +53,7 @@ body.modal-open header {
     transition: opacity 0.2s;
 }
 body.modal-open .modal-backdrop {
-    z-index: 24000 !important;
+    z-index: 24500 !important;
 }
 body.modal-open .calendar-navigation {
     z-index: 1 !important;
@@ -133,11 +133,11 @@ display: none
 }
 
 .modal-backdrop {
-    z-index: 20000; /* Sfondo del modal */
+    z-index: 24500; /* Sfondo del modal */
 }
 
 .modal {
-    z-index: 20010; /* Priorità al modal rispetto allo sfondo */
+    z-index: 24510; /* Priorità al modal rispetto allo sfondo */
     overflow: visible !important;
 }
 
@@ -1349,7 +1349,7 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     width: 27vw;
     max-width: 28vw;
     min-width: 25vw;
-    padding: 6px 12px;
+    padding: 6px 12px 1px 12px;
     background: linear-gradient(180deg, #ffffff 0%, #fdfbfc 100%);
     z-index: 23001;
     font-size: 14px;
@@ -3188,7 +3188,7 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
   }
 
 #MobilePopupButtonsModal {
-  z-index: 20000 !important;
+  z-index: 25000 !important;
 }
 #MobilePopupButtonsModal .modal-dialog {
   max-width: 95vw !important;
@@ -3810,28 +3810,13 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
   border-bottom: 1px solid rgba(135, 100, 124, 0.15);
 }
 
-.modal-backdrop,
-.modal-backdrop.fade,
-.modal-backdrop.show,
+/* Nascondi backdrop SOLO per MobilePopupButtonsModal (non serve sfondo scuro) */
 #MobilePopupButtonsModal + .modal-backdrop {
   background: transparent !important;
   opacity: 0 !important;
-  display: none !important;
   pointer-events: none !important;
 }
 
-/* Nascondi backdrop solo per modal specifici che non lo necessitano, MA NON per WebAppointmentsModal */
-.modal-backdrop.fade,
-.modal-backdrop.show {
-  z-index: 24999 !important; /* Subito sotto WebAppointmentsModal (25000) */
-}
-
-/* Blocca eventuale overlay generico rimasto con z-index simile */
-body > .modal-backdrop {
-  background: transparent !important;
-  opacity: 0 !important;
-  display: none !important;
-}
 /* Se il wrapper .modal crea alone per colore ereditato */
 #MobilePopupButtonsModal::before,
 #MobilePopupButtonsModal::after {
