@@ -59,6 +59,10 @@ body.modal-open .calendar-navigation {
     z-index: 1 !important;
 }
 
+body.modal-open .calendar-fullwidth {
+    z-index: 0 !important;
+    position: relative;
+}
 header h1, header nav {
     margin: 0;
     line-height: 70px;
@@ -1349,7 +1353,7 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     width: 27vw;
     max-width: 28vw;
     min-width: 25vw;
-    padding: 6px 12px 1px 12px;
+    padding: 6px 12px 2px 12px;
     background: linear-gradient(180deg, #ffffff 0%, #fdfbfc 100%);
     z-index: 23001;
     font-size: 14px;
@@ -1643,13 +1647,13 @@ button.client-info-btn {
 }
 
 #AddClientModal {
-    z-index: 24000 !important;
+    z-index: 26000 !important;
 }
 #AddClientModal .modal-dialog {
-    z-index: 24001 !important;
+    z-index: 26001 !important;
 }
 #AddClientModal .modal-content {
-    z-index: 24002 !important;
+    z-index: 26002 !important;
 }
 
 #ClientInfoModal .modal-dialog {
@@ -1657,8 +1661,13 @@ button.client-info-btn {
   margin: 1.5rem auto;
 }
 #ClientInfoModal {
-  z-index: 21500; /* sicurezza: davanti ad altri overlay */
+  z-index: 25005; /* sicurezza: davanti ad altri overlay */
 }
+
+#ClientInfoMobileModal {
+  z-index: 25005 !important;
+}
+
 #ClientInfoModal .modal-content {
   box-shadow: 0 12px 30px rgba(0,0,0,0.35);
 }
@@ -1861,15 +1870,17 @@ body:not(.quarter-55) .appointment-block {
 }
 
 #EditAppointmentModal .results-dropdown {
+  top: 100%;
   width: 97% !important;
   max-width: 100% !important;
 }
 
   #CreateAppointmentModal .results-dropdown {
     position: absolute;
+    top: 100%;
     left: 0;
     right: 0;
-    width: 100% !important; 
+    width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box;
   }
@@ -1941,6 +1952,7 @@ body:not(.quarter-55) .appointment-block {
 #clientSearchInputContainer {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
 }
 
   #WebAppointmentsModal .modal-body { 

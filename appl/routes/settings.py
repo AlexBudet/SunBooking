@@ -3357,7 +3357,7 @@ def apply_update():
         if not getattr(sys, 'frozen', False):
             return jsonify({"error": "Disponibile solo per versione .exe"}), 400
         
-        current_exe = sys.executable  # L'exe attualmente in esecuzione (path reale)
+        current_exe = sys.executable
         exe_dir = os.path.dirname(current_exe)
         appdata_dir = os.path.join(os.getenv('LOCALAPPDATA', exe_dir), 'SunBooking')
         update_info_path = os.path.join(appdata_dir, ".pending_update")
@@ -3373,47 +3373,25 @@ def apply_update():
         new_exe_temp = update_info["new_exe_temp"]
         remote_version = update_info["remote_version"]
         
-        # Log per debug: mostra dove l'exe sta girando e dove verrà copiato
         current_app.logger.info(f"[UPDATER] sys.executable = {current_exe}")
         current_app.logger.info(f"[UPDATER] exe_dir = {exe_dir}")
         current_app.logger.info(f"[UPDATER] new_exe_temp = {new_exe_temp}")
         current_app.logger.info(f"[UPDATER] target copy = {current_exe}")
         
-        # Verifica che il file scaricato esista
         if not os.path.exists(new_exe_temp):
             return jsonify({"error": f"File aggiornamento non trovato: {new_exe_temp}"}), 400
         
         batch_path = os.path.join(appdata_dir, "_update.bat")
         version_file = os.path.join(appdata_dir, ".version")
         
-        # Verifica se l'exe è in una cartella protetta (Program Files)
         needs_elevation = 'program files' in exe_dir.lower() or 'programmi' in exe_dir.lower()
         
-        # Ottieni il nome del processo exe (senza path)
         exe_name = os.path.basename(current_exe)
         
-        # Script batch SILENZIOSO che:
-        # 1. Aspetta 2 secondi
-        # 2. Killa il processo exe (chiude anche il webview)
-        # 3. Tenta di spostare il vecchio exe (con retry silenziosi)
-        # 4. Copia il nuovo exe
-        # 5. Aggiorna .version
-        # 6. Riavvia l'app
-        
-        # Ottieni il path del profilo browser usato dall'app
-        browser_profile = os.path.join(os.getenv('LOCALAPPDATA', ''), 'SunBooking', 'browser-profile')
-        
-        # Leggi il PID del browser salvato
-        browser_pid_file = os.path.join(appdata_dir, '.browser_pid')
-        browser_pid = ""
-        try:
-            if os.path.exists(browser_pid_file):
-                with open(browser_pid_file, 'r') as f:
-                    browser_pid = f.read().strip()
-        except:
-            pass
-        
         log_file = os.path.join(appdata_dir, "_update.log")
+        
+        # Trova il browser-profile usato per chiudere anche le finestre del browser
+        browser_profile = os.path.join(os.getenv('LOCALAPPDATA', ''), 'SunBooking', 'browser-profile')
         
         batch_content = f'''@echo off
 chcp 65001 >nul
@@ -3423,27 +3401,42 @@ echo [%date% %time%] current_exe = {current_exe} >> "{log_file}"
 echo [%date% %time%] new_exe_temp = {new_exe_temp} >> "{log_file}"
 echo [%date% %time%] backup_path = {backup_path} >> "{log_file}"
 
-rem Aspetta che il processo exe si chiuda (massimo 60 secondi)
+rem === FASE 1: Forza chiusura di TUTTO (exe + browser) ===
+echo [%date% %time%] Forzo chiusura processo {exe_name} >> "{log_file}"
+taskkill /F /IM "{exe_name}" >nul 2>&1
+
+rem Chiudi anche eventuali finestre browser collegate al profilo SunBooking
+rem (Chrome/Edge con --user-data-dir del profilo SunBooking)
+wmic process where "commandline like '%%SunBooking%%browser-profile%%'" call terminate >nul 2>&1
+
+rem Attendi che il file exe sia sbloccato (massimo 30 tentativi = ~30 secondi)
 set RETRIES=0
-:WAIT_LOOP
-tasklist /FI "IMAGENAME eq {exe_name}" 2>nul | find /I "{exe_name}" >nul
+:WAIT_UNLOCK
+set /A RETRIES+=1
+echo [%date% %time%] Verifica lock file... tentativo %RETRIES% >> "{log_file}"
+
+rem Prova a rinominare il file per verificare che sia sbloccato
+ren "{current_exe}" "{exe_name}" >nul 2>&1
 if not errorlevel 1 (
-    set /A RETRIES+=1
-    echo [%date% %time%] Attesa chiusura processo... tentativo %RETRIES% >> "{log_file}"
-    if %RETRIES% GEQ 30 (
-        echo [%date% %time%] Timeout, forzo chiusura >> "{log_file}"
-        taskkill /F /IM "{exe_name}" >nul 2>&1
-        timeout /t 3 /nobreak >nul
-        goto COPY_FILE
-    )
-    timeout /t 2 /nobreak >nul
-    goto WAIT_LOOP
+    echo [%date% %time%] File sbloccato >> "{log_file}"
+    goto COPY_FILE
 )
+
+if %RETRIES% GEQ 30 (
+    echo [%date% %time%] ERRORE: impossibile sbloccare {current_exe} dopo 30 tentativi >> "{log_file}"
+    echo ERRORE: il file {exe_name} risulta ancora bloccato.
+    echo Chiudi manualmente tutti i processi e riprova.
+    pause
+    exit /b 1
+)
+
+timeout /t 1 /nobreak >nul
+goto WAIT_UNLOCK
 
 :COPY_FILE
 echo [%date% %time%] Processo chiuso, procedo con copia >> "{log_file}"
 
-rem Backup del vecchio exe
+rem === FASE 2: Backup del vecchio exe ===
 copy /Y "{current_exe}" "{backup_path}" >nul 2>&1
 if errorlevel 1 (
     echo [%date% %time%] WARN: backup fallito >> "{log_file}"
@@ -3451,14 +3444,15 @@ if errorlevel 1 (
     echo [%date% %time%] Backup creato: {backup_path} >> "{log_file}"
 )
 
-rem Copia il nuovo exe sopra al vecchio
+rem === FASE 3: Copia il nuovo exe sopra al vecchio ===
 copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
 if errorlevel 1 (
-    echo [%date% %time%] Primo tentativo copia FALLITO, riprovo... >> "{log_file}"
+    echo [%date% %time%] Primo tentativo copia FALLITO, riprovo tra 3s... >> "{log_file}"
     timeout /t 3 /nobreak >nul
     copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
     if errorlevel 1 (
         echo [%date% %time%] ERRORE CRITICO: copia fallita anche al 2o tentativo >> "{log_file}"
+        echo ERRORE: impossibile copiare il nuovo file. Contattare assistenza.
         pause
         exit /b 1
     )
@@ -3466,20 +3460,24 @@ if errorlevel 1 (
 
 echo [%date% %time%] Copia completata con successo >> "{log_file}"
 
-rem Verifica che il file copiato esista e abbia dimensione > 0
+rem Verifica che il file copiato esista
 if not exist "{current_exe}" (
     echo [%date% %time%] ERRORE: file target non esiste dopo copia! >> "{log_file}"
     pause
     exit /b 1
 )
 
-rem Aggiorna versione
+rem === FASE 4: Aggiorna versione ===
 echo {remote_version}> "{version_file}"
 echo [%date% %time%] Versione aggiornata a {remote_version} >> "{log_file}"
 
-rem Rimuovi file temporanei
+rem === FASE 5: Pulizia file temporanei ===
 del "{update_info_path}" >nul 2>&1
 rmdir /s /q "{os.path.dirname(new_exe_temp)}" >nul 2>&1
+
+rem === FASE 6: Riavvia l'app ===
+echo [%date% %time%] Riavvio applicazione: {current_exe} >> "{log_file}"
+start "" "{current_exe}"
 
 echo [%date% %time%] UPDATER COMPLETATO >> "{log_file}"
 
@@ -3493,29 +3491,29 @@ rem Auto-elimina questo script
         import subprocess
         
         if needs_elevation:
-            # Crea script VBS per elevazione UAC
+            # Crea script VBS per elevazione UAC con quoting corretto
             vbs_path = os.path.join(appdata_dir, "_update_elevated.vbs")
+            # Escape delle virgolette per VBS: raddoppia le virgolette nel path
+            batch_path_escaped = batch_path.replace('"', '""')
             vbs_content = f'''Set UAC = CreateObject("Shell.Application")
-UAC.ShellExecute "cmd.exe", "/c ""{batch_path}""", "", "runas", 0
+UAC.ShellExecute "cmd.exe", "/c """"{batch_path_escaped}""""", "", "runas", 0
 '''
             with open(vbs_path, 'w', encoding='utf-8') as f:
                 f.write(vbs_content)
             
-            # Avvia VBS (che chiederà UAC e poi esegue il batch)
             subprocess.Popen(
                 ['wscript', vbs_path],
                 creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
                 close_fds=True
             )
         else:
-            # Cartella non protetta, esegui batch nascosto
             subprocess.Popen(
                 ['cmd', '/c', batch_path],
                 creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
                 close_fds=True
             )
         
-        # Non serve più os._exit() - il batch farà taskkill
+        # Il batch farà taskkill, non serve os._exit() qui
         return jsonify({
             "success": True,
             "message": "Aggiornamento in corso...",
