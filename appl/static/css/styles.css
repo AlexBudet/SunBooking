@@ -516,7 +516,7 @@ td {
     border-bottom: 1px solid rgba(135, 100, 124, 0.15);
 }
 
-.hour-cell ~ td:not(.calendar-closed) {
+.hour-cell ~ td:not(.calendar-closed):not(.highlight):not(.cut-source) {
     background: linear-gradient(180deg, #fdfbfc 0%, #f9f7f8 100%);
 }
 
@@ -673,28 +673,15 @@ td {
   line-height: 1 !important;
 }
 
-/* Mantieni visibilità come da logica esistente */
-.appointment-block:hover:not(.disable-popup) .popup-buttons,
-.appointment-block.active-popup .popup-buttons,
-.appointment-block .popup-buttons:hover {
+/* Mantieni visibilità come da logica esistente — escludi cut-mode dove JS usa flex */
+.appointment-block:hover:not(.disable-popup):not(.cut-mode-active) .popup-buttons,
+.appointment-block.active-popup:not(.cut-mode-active) .popup-buttons,
+.appointment-block:not(.cut-mode-active) .popup-buttons:hover {
   display: grid !important;
 }
 
 .appointment-block.dragging .popup-buttons {
     display: none !important;
-}
-
-/* Mostra i popup se il blocco è in hover (solo se non disabilitato) o se è attivo, oppure se il mouse è sopra i pulsanti */
-.appointment-block:hover:not(.disable-popup) .popup-buttons,
-.appointment-block.active-popup .popup-buttons,
-.appointment-block .popup-buttons:hover {
-    display: flex;
-}
-
-.appointment-block:hover .popup-buttons,
-.appointment-block.active-popup .popup-buttons,
-.appointment-block .popup-buttons:hover {
-    display: flex;
 }
 
 /* Aggiunta di una classe per il contenuto centrale non cliccabile */
@@ -1994,6 +1981,15 @@ body:not(.quarter-55) .appointment-block {
     color: #dc3596;
     font-size: 1.4rem;
     line-height: 1;
+}
+
+/* TAGLIA MODE: nascondi TUTTO tranne forbici quando pseudoBlocks è attivo */
+body.pseudo-active .appointment-block .btn-popup.whatsapp-btn,
+body.pseudo-active .appointment-block:hover .btn-popup.whatsapp-btn,
+body.pseudo-active .appointment-block.active-popup .btn-popup.whatsapp-btn {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 @keyframes dropArrowBounce {
