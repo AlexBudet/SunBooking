@@ -4469,6 +4469,7 @@ document.querySelectorAll('.appointment-block').forEach(block => {
     block.classList.add('active-popup');
     // === SOLO TAGLIA MODE: se ci sono pseudoBlocks, mostra SOLO il bottone TAGLIA ===
     if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+      block.classList.add('cut-mode-active');
       const popupButtons = block.querySelector('.popup-buttons');
       if (popupButtons) {
         popupButtons.querySelectorAll('.btn-popup').forEach(btn => {
@@ -4487,6 +4488,7 @@ document.querySelectorAll('.appointment-block').forEach(block => {
       block.hidePopupTimeout = null;
     }
     block.classList.remove('active-popup');
+    block.classList.remove('cut-mode-active');
     
     // In "solo taglia mode": non toccare nulla, esci subito
     if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
@@ -8016,6 +8018,9 @@ document.addEventListener('mouseenter', function(e) {
   const blk = e.target.closest('.appointment-block:not(.note-off)');
   if (!blk) return;
 
+  // Se ci sono pseudoBlocks (blocco tagliato), NON applicare highlight: la freccia drop-arrow è gestita altrove
+  if (window.pseudoBlocks && window.pseudoBlocks.length > 0) return;
+
   // Rimuovi highlight-side dalla riga (come era prima)
   const cell = blk.closest('.selectable-cell');
   if (cell && cell.parentElement) {
@@ -10473,6 +10478,10 @@ if (typeof loadWebAppointments === 'function') {
   const currentDate = document.getElementById('webApptDate')?.value || selectedDate;
   loadWebAppointments(currentDate);
 }
+// Aggiorna il badge/counter delle notifiche web
+if (typeof checkPendingWebAppointments === 'function') {
+  checkPendingWebAppointments();
+}
 
             } else {
               // Mostra errore
@@ -10538,10 +10547,14 @@ document.addEventListener('DOMContentLoaded', function() {
   // =============================================================
   const modalEl = document.getElementById(MODAL_ID);
   if (modalEl) {
-    modalEl.addEventListener('hidden.bs.modal', spegniIcona); // Spegni quando si chiude
+    modalEl.addEventListener('hidden.bs.modal', function() {
+      spegniIcona();
+      // Aggiorna il badge/counter alla chiusura del modal
+      if (typeof checkPendingWebAppointments === 'function') {
+        checkPendingWebAppointments();
+      }
+    });
   }
-  // Se vuoi spegnere anche quando il modal viene chiuso:
-  document.getElementById(MODAL_ID).addEventListener('hidden.bs.modal', spegniIcona);
 });
 
 document.getElementById('EditAppointmentModal').addEventListener('shown.bs.modal', function () {
@@ -10791,17 +10804,37 @@ document.addEventListener('mouseenter', function(e) {
     
     // Se non è un blocco, oppure è un blocco OFF (note-off), ignora
     if (!block || block.classList.contains('note-off')) return;
-    
-    // Se ha già l'indicatore, ignora
-    if (block.querySelector('.appointment-drop-arrow')) return;
 
-    // Crea l'indicatore
-    const arrow = document.createElement('div');
-    arrow.className = 'appointment-drop-arrow';
-    arrow.innerHTML = '<i class="bi bi-arrow-down"></i>';
-    
-    block.appendChild(arrow);
-}, true); // Use capture per intercettare prima
+    // Posiziona la freccia sul quarter dove si trova il mouse
+    const _updateArrowPosition = function(ev) {
+        const blockRect = block.getBoundingClientRect();
+        const quarterHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--quarter-px')) || 60;
+        const relativeY = ev.clientY - blockRect.top;
+        // Calcola in quale quarter (slot) del blocco si trova il mouse
+        const quarterIndex = Math.floor(relativeY / quarterHeight);
+        const topPx = (quarterIndex * quarterHeight) + (quarterHeight / 2);
+
+        // Rimuovi freccia precedente
+        const oldArrow = block.querySelector('.appointment-drop-arrow');
+        if (oldArrow) oldArrow.remove();
+
+        // Crea la freccia posizionata nel quarter corrente
+        const arrow = document.createElement('div');
+        arrow.className = 'appointment-drop-arrow';
+        arrow.innerHTML = '<i class="bi bi-arrow-down"></i>';
+        arrow.style.top = topPx + 'px';
+        arrow.style.left = '85%';
+        arrow.style.transform = 'translate(-45%, -50%)';
+        block.appendChild(arrow);
+    };
+
+    // Aggiorna subito
+    _updateArrowPosition(e);
+
+    // Aggiorna mentre il mouse si muove dentro il blocco
+    block._dropArrowMoveHandler = function(ev) { _updateArrowPosition(ev); };
+    block.addEventListener('mousemove', block._dropArrowMoveHandler);
+}, true);
 
 document.addEventListener('mouseleave', function(e) {
     if (!e.target || typeof e.target.closest !== 'function') return;
@@ -10812,6 +10845,11 @@ document.addEventListener('mouseleave', function(e) {
     const arrow = block.querySelector('.appointment-drop-arrow');
     if (arrow) {
         arrow.remove();
+    }
+    // Rimuovi il listener mousemove
+    if (block._dropArrowMoveHandler) {
+        block.removeEventListener('mousemove', block._dropArrowMoveHandler);
+        delete block._dropArrowMoveHandler;
     }
 }, true);
 

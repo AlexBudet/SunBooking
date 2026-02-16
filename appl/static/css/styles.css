@@ -1123,8 +1123,8 @@ td {
   display: none;
 }
 
-.appointment-block:hover:not(.disable-popup) .btn-popup.whatsapp-btn,
-.appointment-block.active-popup .btn-popup.whatsapp-btn {
+.appointment-block:hover:not(.disable-popup):not(.cut-mode-active) .btn-popup.whatsapp-btn,
+.appointment-block.active-popup:not(.cut-mode-active) .btn-popup.whatsapp-btn {
   display: inline-flex !important; /* visibile solo su hover/active */
 }
   
@@ -1353,7 +1353,7 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     width: 27vw;
     max-width: 28vw;
     min-width: 25vw;
-    padding: 6px 12px 2px 12px;
+    padding: 6px 12px 4px 12px;
     background: linear-gradient(180deg, #ffffff 0%, #fdfbfc 100%);
     z-index: 23001;
     font-size: 14px;
@@ -1575,7 +1575,7 @@ body.modal-open #quarterNavigator {
     /* Eredita stile glamour dal navigator */
     border: 1px solid rgba(135, 100, 124, 0.2);
     border-radius: 10px;
-    margin-bottom: 6px;
+    margin-bottom: 3px;
     padding: 8px 10px;
     color: #444;
     background: linear-gradient(180deg, #ffffff 0%, #f8f5f7 100%);
@@ -1812,8 +1812,8 @@ body:not(.quarter-55) .appointment-block {
 }
 
 /* Modifica il selettore esistente aggiungendo :not(.status-2) per escludere i blocchi in stato 2 */
-.appointment-block:hover:not(.disable-popup):not(.status-2) .btn-popup.whatsapp-btn,
-.appointment-block.active-popup:not(.status-2) .btn-popup.whatsapp-btn {
+.appointment-block:hover:not(.disable-popup):not(.status-2):not(.cut-mode-active) .btn-popup.whatsapp-btn,
+.appointment-block.active-popup:not(.status-2):not(.cut-mode-active) .btn-popup.whatsapp-btn {
   display: inline-flex !important;
 }
 
@@ -1977,10 +1977,7 @@ body:not(.quarter-55) .appointment-block {
 /* Indicatore di drop su blocco appuntamento (quando c'è uno pseudoblocco attivo) */
 .appointment-drop-arrow {
     position: absolute;
-    top: 55%;
-    left: 85%;
-    transform: translate(-45%, -15%);
-    z-index: 9999; /* Superiore al blocco */
+    z-index: 9999;
     width: 26px;
     height: 26px;
     background-color: rgba(255, 242, 247, 0.9);
@@ -1989,7 +1986,7 @@ body:not(.quarter-55) .appointment-block {
     align-items: center;
     justify-content: center;
     box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-    pointer-events: none; /* Lascia passare i click al blocco sottostante */
+    pointer-events: none;
     animation: dropArrowBounce 1s infinite ease-in-out;
 }
 
