@@ -4479,16 +4479,22 @@ document.querySelectorAll('.appointment-block').forEach(block => {
     }
     block.classList.add('active-popup');
     if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
-      const popupButtons = block.querySelector('.popup-buttons');
-      if (popupButtons) {
-        popupButtons.querySelectorAll('.btn-popup').forEach(btn => {
-          if (btn.classList.contains('taglia') || btn.classList.contains('sposta')) {
-            btn.style.display = '';
-          } else {
-            btn.style.display = 'none';
-          }
-        });
-      }
+      block.style.zIndex = '11940';
+      const tb = block.querySelector('.popup-buttons');
+      if (tb) tb.style.setProperty('display', 'flex', 'important');
+      // Mostra SOLO il bottone .sposta (forbici originale), nascondi tutti gli altri
+      block.querySelectorAll('.btn-popup').forEach(btn => {
+        if (btn.classList.contains('sposta')) {
+          btn.style.setProperty('display', 'inline-flex', 'important');
+          btn.style.setProperty('flex', '0 0 16.6667%', 'important');
+          btn.style.setProperty('width', '16.6667%', 'important');
+          btn.style.setProperty('max-width', '16.6667%', 'important');
+          btn.style.setProperty('visibility', 'visible', 'important');
+          btn.style.setProperty('pointer-events', 'auto', 'important');
+        } else {
+          btn.style.setProperty('display', 'none', 'important');
+        }
+      });
     }
   });
   block.addEventListener('mouseleave', function(evt) {
@@ -4507,11 +4513,11 @@ document.querySelectorAll('.appointment-block').forEach(block => {
     block.classList.remove('active-popup');
     block.classList.remove('cut-mode-active');
     
-    // In "solo taglia mode": pulisci solo gli stili inline dei btn-popup, poi esci
+    // In "solo taglia mode": nascondi popup-buttons e resetta zIndex
     if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
-      block.querySelectorAll('.popup-buttons .btn-popup').forEach(btn => {
-        btn.style.removeProperty('display');
-      });
+      block.style.zIndex = '';
+      const tb = block.querySelector('.popup-buttons');
+      if (tb) tb.style.setProperty('display', 'none', 'important');
       return;
     }
 
@@ -4555,20 +4561,6 @@ document.querySelectorAll('.popup-buttons').forEach(popup => {
         block.classList.add('cut-mode-active');
       }
       block.classList.add('active-popup');
-
-      // SOLO TAGLIA MODE: se ci sono pseudoBlocks, mostra SOLO il bottone TAGLIA
-      if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
-        const popupButtons = block.querySelector('.popup-buttons');
-        if (popupButtons) {
-          popupButtons.querySelectorAll('.btn-popup').forEach(btn => {
-            if (btn.classList.contains('taglia') || btn.classList.contains('sposta')) {
-              btn.style.display = '';
-            } else {
-              btn.style.display = 'none';
-            }
-          });
-        }
-      }
     }
   });
   popup.addEventListener('mouseleave', function() {
@@ -4581,7 +4573,7 @@ document.querySelectorAll('.popup-buttons').forEach(popup => {
       block.classList.remove('active-popup');
       block.classList.remove('cut-mode-active');
 
-      // NON pulire stili se siamo in "solo taglia mode"
+      // In taglia mode: solo classi, niente pulizia stili (lo fa block.mouseleave)
       if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
         return;
       }
@@ -5595,6 +5587,7 @@ function renderPseudoBlocksList() {
   if (!container) return;
 
   if (!Array.isArray(window.pseudoBlocks) || window.pseudoBlocks.length === 0) {
+    document.body.classList.remove('pseudo-active');
     container.style.display = 'none';
     // Rimuovi i dati dal localStorage
     localStorage.removeItem('selectedClientIdNav');
@@ -5606,6 +5599,8 @@ function renderPseudoBlocksList() {
     container.innerHTML = '';
     return;
   }
+
+  document.body.classList.add('pseudo-active');
 
   if (!window.commonPseudoBlockColor && window.pseudoBlocks.length > 0) {
     window.commonPseudoBlockColor = window.pseudoBlocks[0].color;
@@ -8007,6 +8002,10 @@ document.querySelectorAll('.selectable-cell:not(.calendar-closed)').forEach(cell
     if (cell.classList.contains('calendar-closed')) return;
     // Blocca highlight durante drag o resize di un blocco appuntamento
     if (window._isDraggingBlock || window._isResizingBlock) return;
+    // Blocca highlight celle quando ci sono pseudoBlocks (cut/copy mode) — la drop-arrow è gestita altrove
+    if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+      if (cell.querySelector('.appointment-block')) return;
+    }
     // usa la funzione helper per applicare l'highlight (gestisce pseudo‑blocchi)
     if (typeof window.applyHighlightToCell === 'function') {
       window.applyHighlightToCell(cell);
@@ -10826,11 +10825,19 @@ document.addEventListener('mouseenter', function(e) {
     // Verifica se c'è uno pseudoblocco nel navigator (operazione di cut/copy/new in corso)
     if (!window.pseudoBlocks || window.pseudoBlocks.length === 0) return;
 
+    // NON attivare la drop-arrow se il mouse è sui popup-buttons o btn-popup
+    if (e.target.closest('.popup-buttons') || e.target.closest('.popup-buttons-bottom') || e.target.closest('.btn-popup')) return;
+
     // Trova il blocco appuntamento
     const block = e.target.closest('.appointment-block');
     
     // Se non è un blocco, oppure è un blocco OFF (note-off), ignora
     if (!block || block.classList.contains('note-off')) return;
+
+    // Ignora se il mouse è fuori dai confini geometrici del blocco (es. zona popup sopra)
+    const blockRect = block.getBoundingClientRect();
+    if (e.clientY < blockRect.top || e.clientY > blockRect.bottom ||
+        e.clientX < blockRect.left || e.clientX > blockRect.right) return;
 
     // Posiziona la freccia sul quarter dove si trova il mouse
     const _updateArrowPosition = function(ev) {
@@ -10858,8 +10865,16 @@ document.addEventListener('mouseenter', function(e) {
     // Aggiorna subito
     _updateArrowPosition(e);
 
+    // Rimuovi handler precedente per evitare accumulo
+    if (block._dropArrowMoveHandler) {
+        block.removeEventListener('mousemove', block._dropArrowMoveHandler);
+    }
     // Aggiorna mentre il mouse si muove dentro il blocco
-    block._dropArrowMoveHandler = function(ev) { _updateArrowPosition(ev); };
+    block._dropArrowMoveHandler = function(ev) {
+        // Non aggiornare freccia se il mouse è sui popup-buttons
+        if (ev.target.closest('.popup-buttons') || ev.target.closest('.popup-buttons-bottom') || ev.target.closest('.btn-popup')) return;
+        _updateArrowPosition(ev);
+    };
     block.addEventListener('mousemove', block._dropArrowMoveHandler);
 }, true);
 

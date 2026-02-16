@@ -3439,7 +3439,15 @@ $form.Controls.Add($sublabel)
 # Timer per auto-chiusura: controlla se il file segnale esiste
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 500
+$script:closeCountdown = 0
 $timer.Add_Tick({
+    if ($script:closeCountdown -gt 0) {
+        $script:closeCountdown--
+        if ($script:closeCountdown -le 0) {
+            $form.Close()
+        }
+        return
+    }
     if (Test-Path "$env:LOCALAPPDATA\SunBooking\_update_done.flag") {
         Remove-Item "$env:LOCALAPPDATA\SunBooking\_update_done.flag" -Force -ErrorAction SilentlyContinue
         $label.Text = "Aggiornamento completato!"
@@ -3447,8 +3455,7 @@ $timer.Add_Tick({
         $progress.Style = "Continuous"
         $progress.Value = 100
         $form.Refresh()
-        Start-Sleep -Milliseconds 800
-        $form.Close()
+        $script:closeCountdown = 3
     }
 })
 $timer.Start()
@@ -3558,16 +3565,17 @@ echo 1> "{os.path.join(appdata_dir, '_post_update')}"
 
 rem === FASE 7: Riavvia app ===
 echo [%date% %time%] Riavvio applicazione: {current_exe} >> "{log_file}"
-start "" /D "{exe_dir}" "{current_exe}"
+cd /d "{exe_dir}"
+start "SunBooking" "{current_exe}"
 
-rem === FASE 8: Attendi che il server sia pronto, poi segnala la chiusura della finestra progresso ===
+rem === FASE 8: Attendi che il server sia pronto (max 30 sec) ===
 echo [%date% %time%] Attendo server pronto su porta {PORT}... >> "{log_file}"
 set WAIT_SERVER=0
 :WAIT_SERVER_LOOP
 set /A WAIT_SERVER+=1
-powershell -NoProfile -Command "try {{ $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', {PORT}); $c.Close(); exit 0 }} catch {{ exit 1 }}" >nul 2>&1
-if not errorlevel 1 (
-    echo [%date% %time%] Server pronto >> "{log_file}"
+powershell -NoProfile -Command "try {{ $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', {PORT}); $c.Close(); [System.Environment]::Exit(0) }} catch {{ [System.Environment]::Exit(1) }}" >nul 2>&1
+if "%ERRORLEVEL%"=="0" (
+    echo [%date% %time%] Server pronto dopo %WAIT_SERVER% tentativi >> "{log_file}"
     goto SERVER_READY
 )
 if %WAIT_SERVER% GEQ 30 (
