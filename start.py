@@ -54,8 +54,11 @@ db_uri = os.getenv('SQLALCHEMY_DATABASE_URI')
 try:
     app = create_app(db_uri)
 except Exception as e:
-    print(f"Errore create_app: {e}")
-    input("Premi Invio per chiudere...")
+    logger.error(f"Errore create_app: {e}")
+    try:
+        input("Premi Invio per chiudere...")
+    except (RuntimeError, EOFError, OSError):
+        time.sleep(5)
     sys.exit(1)
 
 # SECRET_KEY
@@ -140,8 +143,19 @@ if __name__ == "__main__":
                 server_proc.terminate()
             sys.exit(1)
 
-        logger.info("Apro finestra app...")
-        proc = launch_app_window(f"http://127.0.0.1:{PORT}")
+        # Se siamo in post-update, il browser è già aperto: non aprirne un altro
+        post_update_flag = os.path.join(os.getenv('LOCALAPPDATA', os.getcwd()), 'SunBooking', '_post_update')
+        is_post_update = os.path.exists(post_update_flag)
+        if is_post_update:
+            logger.info("Post-update rilevato: il browser è già aperto, non ne apro un altro")
+            try:
+                os.remove(post_update_flag)
+            except Exception:
+                pass
+            proc = None
+        else:
+            logger.info("Apro finestra app...")
+            proc = launch_app_window(f"http://127.0.0.1:{PORT}")
         try:
             if proc:
                 proc.wait()

@@ -1,7 +1,6 @@
 # app/routes/settings.py
 import re
 import sys
-import shutil
 import tempfile
 from sqlalchemy import and_
 from sqlalchemy.orm import joinedload
@@ -22,6 +21,8 @@ settings_bp = Blueprint('settings', __name__, template_folder='../templates')
 GITHUB_REPO = "AlexBudet/SunBooking"
 APP_EXE_NAME = "Tosca.exe"
 BACKUP_FOLDER = "ToscaBackups"
+
+PORT = 5050
 
 def format_name(name):
     """
@@ -3396,6 +3397,75 @@ def apply_update():
         # Nome temporaneo per rinominare il vecchio exe prima di copiare
         old_exe_renamed = os.path.join(exe_dir, f"{exe_name}.old")
         
+        # Script PowerShell per la finestra di progresso
+        ps_progress_path = os.path.join(appdata_dir, "_update_progress.ps1")
+        ps_progress_content = r'''
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "SunBooking - Aggiornamento"
+$form.Size = New-Object System.Drawing.Size(420, 160)
+$form.StartPosition = "CenterScreen"
+$form.FormBorderStyle = "FixedDialog"
+$form.MaximizeBox = $false
+$form.MinimizeBox = $false
+$form.TopMost = $true
+$form.BackColor = [System.Drawing.Color]::FromArgb(245, 240, 248)
+
+$label = New-Object System.Windows.Forms.Label
+$label.Text = "Aggiornamento in corso..."
+$label.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+$label.ForeColor = [System.Drawing.Color]::FromArgb(100, 30, 120)
+$label.AutoSize = $true
+$label.Location = New-Object System.Drawing.Point(20, 20)
+$form.Controls.Add($label)
+
+$progress = New-Object System.Windows.Forms.ProgressBar
+$progress.Style = "Marquee"
+$progress.MarqueeAnimationSpeed = 30
+$progress.Size = New-Object System.Drawing.Size(370, 28)
+$progress.Location = New-Object System.Drawing.Point(20, 55)
+$form.Controls.Add($progress)
+
+$sublabel = New-Object System.Windows.Forms.Label
+$sublabel.Text = "Non chiudere questa finestra"
+$sublabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$sublabel.ForeColor = [System.Drawing.Color]::FromArgb(120, 120, 120)
+$sublabel.AutoSize = $true
+$sublabel.Location = New-Object System.Drawing.Point(20, 95)
+$form.Controls.Add($sublabel)
+
+# Timer per auto-chiusura: controlla se il file segnale esiste
+$timer = New-Object System.Windows.Forms.Timer
+$timer.Interval = 500
+$timer.Add_Tick({
+    if (Test-Path "$env:LOCALAPPDATA\SunBooking\_update_done.flag") {
+        Remove-Item "$env:LOCALAPPDATA\SunBooking\_update_done.flag" -Force -ErrorAction SilentlyContinue
+        $label.Text = "Aggiornamento completato!"
+        $sublabel.Text = "Riavvio in corso..."
+        $progress.Style = "Continuous"
+        $progress.Value = 100
+        $form.Refresh()
+        Start-Sleep -Milliseconds 800
+        $form.Close()
+    }
+})
+$timer.Start()
+
+# Chiudi comunque dopo 120 secondi
+$timeoutTimer = New-Object System.Windows.Forms.Timer
+$timeoutTimer.Interval = 120000
+$timeoutTimer.Add_Tick({ $form.Close() })
+$timeoutTimer.Start()
+
+$form.ShowDialog() | Out-Null
+'''
+        with open(ps_progress_path, 'w', encoding='utf-8') as f:
+            f.write(ps_progress_content)
+        
+        done_flag = os.path.join(appdata_dir, "_update_done.flag")
+        
         batch_content = f'''@echo off
 chcp 65001 >nul
 
@@ -3404,41 +3474,32 @@ echo [%date% %time%] current_exe = {current_exe} >> "{log_file}"
 echo [%date% %time%] new_exe_temp = {new_exe_temp} >> "{log_file}"
 echo [%date% %time%] backup_path = {backup_path} >> "{log_file}"
 
-rem === FASE 1: Forza chiusura di TUTTO (exe + browser + processi figli) ===
+rem === FASE 0: Mostra finestra di progresso ===
+start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{ps_progress_path}"
+
+rem === FASE 1: Chiudi SOLO il processo exe (il browser resta aperto) ===
 echo [%date% %time%] Forzo chiusura processo {exe_name} e figli >> "{log_file}"
 taskkill /F /T /IM "{exe_name}" >nul 2>&1
 
-rem Chiudi anche eventuali finestre browser collegate al profilo SunBooking
-taskkill /F /FI "IMAGENAME eq chrome.exe" /FI "WINDOWTITLE eq *SunBooking*" >nul 2>&1
-taskkill /F /FI "IMAGENAME eq msedge.exe" /FI "WINDOWTITLE eq *SunBooking*" >nul 2>&1
-rem Fallback PowerShell per browser con profilo SunBooking (compatibile Win10 e Win11)
-powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object {{ $_.CommandLine -like '*SunBooking*browser-profile*' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}" >nul 2>&1
-
-rem Piccola attesa per completare la chiusura
-timeout /t 2 /nobreak >nul
+rem Breve attesa per rilascio file
+timeout /t 1 /nobreak >nul
 
 rem === FASE 2: Attendi che il file exe sia sbloccato ===
-rem Best practice: rinominare il vecchio exe (Windows lo permette anche subito dopo kill)
-rem poi copiare il nuovo col nome originale, cosi' non c'e' conflitto di lock
 set RETRIES=0
 :WAIT_UNLOCK
 set /A RETRIES+=1
-echo [%date% %time%] Tentativo sblocco %RETRIES%: rinomino vecchio exe >> "{log_file}"
+echo [%date% %time%] Tentativo sblocco %RETRIES% >> "{log_file}"
 
-rem Elimina eventuale .old residuo
 del "{old_exe_renamed}" >nul 2>&1
-
-rem Prova a rinominare il vecchio exe in .old (verifica che sia sbloccato)
 move /Y "{current_exe}" "{old_exe_renamed}" >nul 2>&1
 if not errorlevel 1 (
     echo [%date% %time%] Vecchio exe rinominato in .old >> "{log_file}"
     goto DO_COPY
 )
 
-if %RETRIES% GEQ 30 (
-    echo [%date% %time%] ERRORE: impossibile sbloccare {current_exe} dopo 30 tentativi >> "{log_file}"
-    echo ERRORE: il file {exe_name} risulta ancora bloccato.
-    echo Chiudi manualmente tutti i processi e riprova.
+if %RETRIES% GEQ 20 (
+    echo [%date% %time%] ERRORE: impossibile sbloccare dopo 20 tentativi >> "{log_file}"
+    echo done> "{done_flag}"
     pause
     exit /b 1
 )
@@ -3449,7 +3510,7 @@ goto WAIT_UNLOCK
 :DO_COPY
 echo [%date% %time%] File sbloccato, procedo >> "{log_file}"
 
-rem === FASE 3: Backup del vecchio exe (dal file rinominato) ===
+rem === FASE 3: Backup ===
 copy /Y "{old_exe_renamed}" "{backup_path}" >nul 2>&1
 if errorlevel 1 (
     echo [%date% %time%] WARN: backup fallito >> "{log_file}"
@@ -3457,16 +3518,16 @@ if errorlevel 1 (
     echo [%date% %time%] Backup creato: {backup_path} >> "{log_file}"
 )
 
-rem === FASE 4: Copia il nuovo exe col nome originale (percorso ora libero) ===
+rem === FASE 4: Copia il nuovo exe ===
 copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
 if errorlevel 1 (
-    echo [%date% %time%] Primo tentativo copia FALLITO, riprovo tra 3s... >> "{log_file}"
-    timeout /t 3 /nobreak >nul
+    echo [%date% %time%] Primo tentativo copia FALLITO, riprovo... >> "{log_file}"
+    timeout /t 2 /nobreak >nul
     copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
     if errorlevel 1 (
-        echo [%date% %time%] ERRORE CRITICO: copia fallita, ripristino vecchio exe >> "{log_file}"
+        echo [%date% %time%] ERRORE CRITICO: ripristino vecchio exe >> "{log_file}"
         move /Y "{old_exe_renamed}" "{current_exe}" >nul 2>&1
-        echo ERRORE: impossibile copiare il nuovo file. Vecchio exe ripristinato.
+        echo done> "{done_flag}"
         pause
         exit /b 1
     )
@@ -3474,28 +3535,51 @@ if errorlevel 1 (
 
 echo [%date% %time%] Copia completata con successo >> "{log_file}"
 
-rem Verifica che il file copiato esista
 if not exist "{current_exe}" (
     echo [%date% %time%] ERRORE: file target non esiste dopo copia! >> "{log_file}"
     move /Y "{old_exe_renamed}" "{current_exe}" >nul 2>&1
+    echo done> "{done_flag}"
     pause
     exit /b 1
 )
 
-rem Elimina il vecchio exe rinominato
 del "{old_exe_renamed}" >nul 2>&1
 
 rem === FASE 5: Aggiorna versione ===
 echo {remote_version}> "{version_file}"
 echo [%date% %time%] Versione aggiornata a {remote_version} >> "{log_file}"
 
-rem === FASE 6: Pulizia file temporanei ===
+rem === FASE 6: Pulizia ===
 del "{update_info_path}" >nul 2>&1
 rmdir /s /q "{os.path.dirname(new_exe_temp)}" >nul 2>&1
 
-rem === FASE 7: Riavvia l'app ===
+rem === FASE 6b: Segnala post-update per non aprire un secondo browser ===
+echo 1> "{os.path.join(appdata_dir, '_post_update')}"
+
+rem === FASE 7: Riavvia app ===
 echo [%date% %time%] Riavvio applicazione: {current_exe} >> "{log_file}"
-start "" "{current_exe}"
+start "" /D "{exe_dir}" "{current_exe}"
+
+rem === FASE 8: Attendi che il server sia pronto, poi segnala la chiusura della finestra progresso ===
+echo [%date% %time%] Attendo server pronto su porta {PORT}... >> "{log_file}"
+set WAIT_SERVER=0
+:WAIT_SERVER_LOOP
+set /A WAIT_SERVER+=1
+powershell -NoProfile -Command "try {{ $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', {PORT}); $c.Close(); exit 0 }} catch {{ exit 1 }}" >nul 2>&1
+if not errorlevel 1 (
+    echo [%date% %time%] Server pronto >> "{log_file}"
+    goto SERVER_READY
+)
+if %WAIT_SERVER% GEQ 30 (
+    echo [%date% %time%] Timeout attesa server >> "{log_file}"
+    goto SERVER_READY
+)
+timeout /t 1 /nobreak >nul
+goto WAIT_SERVER_LOOP
+
+:SERVER_READY
+rem Segnala alla finestra progresso di chiudersi
+echo done> "{done_flag}"
 
 echo [%date% %time%] UPDATER COMPLETATO >> "{log_file}"
 
