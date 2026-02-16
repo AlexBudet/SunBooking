@@ -275,10 +275,10 @@ function enableCreateApptModalLock(modalEl) {
   const handler = (e) => {
     const t = e.target;
     if (modalEl.contains(t)) return;
-    // Ignora click su/dentro qualsiasi altro modal aperto
-    const otherModal = t.closest('.modal.show');
-    if (otherModal && otherModal !== modalEl) return;
-    // Ignora se c'è un altro modal aperto nel DOM (es. AddClientModal in chiusura)
+    // Ignora click dentro qualsiasi altro modal (aperto o in chiusura)
+    const anyModal = t.closest('.modal');
+    if (anyModal && anyModal !== modalEl) return;
+    // Ignora se c'è un altro modal aperto nel DOM (anche in fase di chiusura)
     const anyOtherModalOpen = document.querySelector('.modal.show:not(#' + modalEl.id + ')');
     if (anyOtherModalOpen) return;
     // Ignora click sul backdrop di Bootstrap
