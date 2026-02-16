@@ -3393,6 +3393,9 @@ def apply_update():
         # Trova il browser-profile usato per chiudere anche le finestre del browser
         browser_profile = os.path.join(os.getenv('LOCALAPPDATA', ''), 'SunBooking', 'browser-profile')
         
+        # Nome temporaneo per rinominare il vecchio exe prima di copiare
+        old_exe_renamed = os.path.join(exe_dir, f"{exe_name}.old")
+        
         batch_content = f'''@echo off
 chcp 65001 >nul
 
@@ -3401,25 +3404,35 @@ echo [%date% %time%] current_exe = {current_exe} >> "{log_file}"
 echo [%date% %time%] new_exe_temp = {new_exe_temp} >> "{log_file}"
 echo [%date% %time%] backup_path = {backup_path} >> "{log_file}"
 
-rem === FASE 1: Forza chiusura di TUTTO (exe + browser) ===
-echo [%date% %time%] Forzo chiusura processo {exe_name} >> "{log_file}"
-taskkill /F /IM "{exe_name}" >nul 2>&1
+rem === FASE 1: Forza chiusura di TUTTO (exe + browser + processi figli) ===
+echo [%date% %time%] Forzo chiusura processo {exe_name} e figli >> "{log_file}"
+taskkill /F /T /IM "{exe_name}" >nul 2>&1
 
 rem Chiudi anche eventuali finestre browser collegate al profilo SunBooking
-rem (Chrome/Edge con --user-data-dir del profilo SunBooking)
-wmic process where "commandline like '%%SunBooking%%browser-profile%%'" call terminate >nul 2>&1
+taskkill /F /FI "IMAGENAME eq chrome.exe" /FI "WINDOWTITLE eq *SunBooking*" >nul 2>&1
+taskkill /F /FI "IMAGENAME eq msedge.exe" /FI "WINDOWTITLE eq *SunBooking*" >nul 2>&1
+rem Fallback PowerShell per browser con profilo SunBooking (compatibile Win10 e Win11)
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object {{ $_.CommandLine -like '*SunBooking*browser-profile*' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}" >nul 2>&1
 
-rem Attendi che il file exe sia sbloccato (massimo 30 tentativi = ~30 secondi)
+rem Piccola attesa per completare la chiusura
+timeout /t 2 /nobreak >nul
+
+rem === FASE 2: Attendi che il file exe sia sbloccato ===
+rem Best practice: rinominare il vecchio exe (Windows lo permette anche subito dopo kill)
+rem poi copiare il nuovo col nome originale, cosi' non c'e' conflitto di lock
 set RETRIES=0
 :WAIT_UNLOCK
 set /A RETRIES+=1
-echo [%date% %time%] Verifica lock file... tentativo %RETRIES% >> "{log_file}"
+echo [%date% %time%] Tentativo sblocco %RETRIES%: rinomino vecchio exe >> "{log_file}"
 
-rem Prova a rinominare il file per verificare che sia sbloccato
-ren "{current_exe}" "{exe_name}" >nul 2>&1
+rem Elimina eventuale .old residuo
+del "{old_exe_renamed}" >nul 2>&1
+
+rem Prova a rinominare il vecchio exe in .old (verifica che sia sbloccato)
+move /Y "{current_exe}" "{old_exe_renamed}" >nul 2>&1
 if not errorlevel 1 (
-    echo [%date% %time%] File sbloccato >> "{log_file}"
-    goto COPY_FILE
+    echo [%date% %time%] Vecchio exe rinominato in .old >> "{log_file}"
+    goto DO_COPY
 )
 
 if %RETRIES% GEQ 30 (
@@ -3433,26 +3446,27 @@ if %RETRIES% GEQ 30 (
 timeout /t 1 /nobreak >nul
 goto WAIT_UNLOCK
 
-:COPY_FILE
-echo [%date% %time%] Processo chiuso, procedo con copia >> "{log_file}"
+:DO_COPY
+echo [%date% %time%] File sbloccato, procedo >> "{log_file}"
 
-rem === FASE 2: Backup del vecchio exe ===
-copy /Y "{current_exe}" "{backup_path}" >nul 2>&1
+rem === FASE 3: Backup del vecchio exe (dal file rinominato) ===
+copy /Y "{old_exe_renamed}" "{backup_path}" >nul 2>&1
 if errorlevel 1 (
     echo [%date% %time%] WARN: backup fallito >> "{log_file}"
 ) else (
     echo [%date% %time%] Backup creato: {backup_path} >> "{log_file}"
 )
 
-rem === FASE 3: Copia il nuovo exe sopra al vecchio ===
+rem === FASE 4: Copia il nuovo exe col nome originale (percorso ora libero) ===
 copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
 if errorlevel 1 (
     echo [%date% %time%] Primo tentativo copia FALLITO, riprovo tra 3s... >> "{log_file}"
     timeout /t 3 /nobreak >nul
     copy /Y "{new_exe_temp}" "{current_exe}" >nul 2>&1
     if errorlevel 1 (
-        echo [%date% %time%] ERRORE CRITICO: copia fallita anche al 2o tentativo >> "{log_file}"
-        echo ERRORE: impossibile copiare il nuovo file. Contattare assistenza.
+        echo [%date% %time%] ERRORE CRITICO: copia fallita, ripristino vecchio exe >> "{log_file}"
+        move /Y "{old_exe_renamed}" "{current_exe}" >nul 2>&1
+        echo ERRORE: impossibile copiare il nuovo file. Vecchio exe ripristinato.
         pause
         exit /b 1
     )
@@ -3463,19 +3477,23 @@ echo [%date% %time%] Copia completata con successo >> "{log_file}"
 rem Verifica che il file copiato esista
 if not exist "{current_exe}" (
     echo [%date% %time%] ERRORE: file target non esiste dopo copia! >> "{log_file}"
+    move /Y "{old_exe_renamed}" "{current_exe}" >nul 2>&1
     pause
     exit /b 1
 )
 
-rem === FASE 4: Aggiorna versione ===
+rem Elimina il vecchio exe rinominato
+del "{old_exe_renamed}" >nul 2>&1
+
+rem === FASE 5: Aggiorna versione ===
 echo {remote_version}> "{version_file}"
 echo [%date% %time%] Versione aggiornata a {remote_version} >> "{log_file}"
 
-rem === FASE 5: Pulizia file temporanei ===
+rem === FASE 6: Pulizia file temporanei ===
 del "{update_info_path}" >nul 2>&1
 rmdir /s /q "{os.path.dirname(new_exe_temp)}" >nul 2>&1
 
-rem === FASE 6: Riavvia l'app ===
+rem === FASE 7: Riavvia l'app ===
 echo [%date% %time%] Riavvio applicazione: {current_exe} >> "{log_file}"
 start "" "{current_exe}"
 
