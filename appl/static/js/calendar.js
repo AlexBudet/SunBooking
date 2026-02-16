@@ -498,6 +498,7 @@ if (typeof window.applyHighlightToCell !== 'function') {
 
   function applyHighlightToCell(cell) {
     if (!cell) return;
+    if (cell.classList.contains('calendar-closed')) return;
     window.clearCalendarHighlights();
 
     // se esistono pseudo-blocchi, evidenzia intervallo basato sulla durata totale
@@ -551,7 +552,7 @@ if (typeof window.applyHighlightToCell !== 'function') {
   function refreshHighlightForHover() {
     const el = document.elementFromPoint(__lastMouseX || 0, __lastMouseY || 0);
     const cell = el ? el.closest('.selectable-cell') : null;
-    if (cell) applyHighlightToCell(cell);
+    if (cell && !cell.classList.contains('calendar-closed')) applyHighlightToCell(cell);
     else window.clearCalendarHighlights();
   }
   window.refreshHighlightForHover = refreshHighlightForHover;
@@ -7978,6 +7979,8 @@ document.addEventListener('DOMContentLoaded', function() {
 // Aggiungi highlight alle celle selezionabili al passaggio del mouse
 document.querySelectorAll('.selectable-cell:not(.calendar-closed)').forEach(cell => {
   cell.addEventListener('mouseenter', (e) => {
+    // Blocca highlight su celle non attive (operatore non di turno, negozio chiuso)
+    if (cell.classList.contains('calendar-closed')) return;
     // Blocca highlight durante drag o resize di un blocco appuntamento
     if (window._isDraggingBlock || window._isResizingBlock) return;
     // usa la funzione helper per applicare l'highlight (gestisce pseudo‑blocchi)
