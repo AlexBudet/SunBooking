@@ -4473,10 +4473,12 @@ document.querySelectorAll('.appointment-block').forEach(block => {
     }
     // Non attivare popup per blocchi con cliente eliminato
     if (block.classList.contains('disable-popup')) return;
-    block.classList.add('active-popup');
-    // === SOLO TAGLIA MODE: se ci sono pseudoBlocks, mostra SOLO il bottone TAGLIA ===
+    // === SOLO TAGLIA MODE: se ci sono pseudoBlocks, aggiungi cut-mode-active PRIMA di active-popup ===
     if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
       block.classList.add('cut-mode-active');
+    }
+    block.classList.add('active-popup');
+    if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
       const popupButtons = block.querySelector('.popup-buttons');
       if (popupButtons) {
         popupButtons.querySelectorAll('.btn-popup').forEach(btn => {
@@ -4489,16 +4491,27 @@ document.querySelectorAll('.appointment-block').forEach(block => {
       }
     }
   });
-  block.addEventListener('mouseleave', function() {
+  block.addEventListener('mouseleave', function(evt) {
     if (block.hidePopupTimeout) {
       clearTimeout(block.hidePopupTimeout);
       block.hidePopupTimeout = null;
     }
+    // Se il mouse sta andando verso il popup-buttons dello STESSO blocco, non rimuovere nulla
+    const related = evt.relatedTarget;
+    if (related) {
+      const relBlock = related.closest('.appointment-block');
+      if (relBlock === block && (related.closest('.popup-buttons') || related.closest('.popup-buttons-bottom'))) {
+        return;
+      }
+    }
     block.classList.remove('active-popup');
     block.classList.remove('cut-mode-active');
     
-    // In "solo taglia mode": non toccare nulla, esci subito
+    // In "solo taglia mode": pulisci solo gli stili inline dei btn-popup, poi esci
     if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+      block.querySelectorAll('.popup-buttons .btn-popup').forEach(btn => {
+        btn.style.removeProperty('display');
+      });
       return;
     }
 
@@ -4537,6 +4550,10 @@ document.querySelectorAll('.popup-buttons').forEach(popup => {
       block.hidePopupTimeout = null;
     }
     if (block) {
+      // Aggiungi cut-mode-active PRIMA di active-popup per bloccare CSS whatsapp
+      if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+        block.classList.add('cut-mode-active');
+      }
       block.classList.add('active-popup');
 
       // SOLO TAGLIA MODE: se ci sono pseudoBlocks, mostra SOLO il bottone TAGLIA
@@ -4562,6 +4579,7 @@ document.querySelectorAll('.popup-buttons').forEach(popup => {
     }
     if (block) {
       block.classList.remove('active-popup');
+      block.classList.remove('cut-mode-active');
 
       // NON pulire stili se siamo in "solo taglia mode"
       if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {

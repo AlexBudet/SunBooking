@@ -164,9 +164,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function applyOfflineState() {
     if (window._offlineOrDbDown) {
+      window._wasOffline = true;
       if (offlineModal) { offlineModal.show(); }
     } else {
       try { if (offlineModal) { offlineModal.hide(); } } catch (_) {}
+      // Se eravamo offline e ora siamo tornati online, reload per riallineare lo stato
+      if (window._wasOffline) {
+        window._wasOffline = false;
+        setTimeout(function() { location.reload(); }, 500);
+      }
     }
   }
 
