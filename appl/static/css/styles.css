@@ -49,7 +49,7 @@ header {
 body.modal-open header {
     z-index: 1 !important;
     pointer-events: none !important;
-    opacity: 0.5 !important;
+    opacity: 1 !important;
     transition: opacity 0.2s;
 }
 body.modal-open .modal-backdrop {
@@ -1860,6 +1860,11 @@ body:not(.quarter-55) .appointment-block {
   top: 100%;
   width: 97% !important;
   max-width: 100% !important;
+}
+
+#CreateAppointmentModal .form-group:has(#serviceResults),
+#EditAppointmentModal .form-group:has(#serviceResults) {
+  position: relative;
 }
 
   #CreateAppointmentModal .results-dropdown {

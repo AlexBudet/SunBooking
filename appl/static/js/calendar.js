@@ -1788,9 +1788,19 @@ function handleClientSearch(query) {
   if (query.length < 3) {
     resultsContainer.innerHTML = '';
     resultsContainer.style.display = 'none';
+    // Se campo cliente svuotato E nessun pseudo-blocco, ripristina tasto OFF
+    if (query.length === 0) {
+      const clientId = document.getElementById('client_id');
+      if (clientId) clientId.value = '';
+      const pseudoContainer = document.getElementById('pseudoBlockContainer');
+      const hasPseudo = pseudoContainer && pseudoContainer.querySelectorAll('.pseudo-block').length > 0;
+      if (!hasPseudo) {
+        const btnOff = document.getElementById('btnCreateBlockOff');
+        if (btnOff) btnOff.style.display = '';
+      }
+    }
     return;
   }
-
   fetch(`/calendar/api/search-clients/${encodeURIComponent(query)}`)
     .then(r => {
       if (!r.ok) throw new Error('Network response not ok: ' + r.status);
@@ -1913,6 +1923,10 @@ function selectClient(clientId, fullName) {
   if (input) input.value = fullName;
   if (hidden) hidden.value = clientId;
   if (results) results.style.display = 'none';
+
+  // Nascondi "Crea blocco OFF" quando un cliente è selezionato
+  const btnOff = document.getElementById('btnCreateBlockOff');
+  if (btnOff) btnOff.style.display = 'none';
   
   // Aggiungi icona info accanto al campo clientSearchInput (STESSO STILE DEL DROPDOWN)
   if (input) {
@@ -1975,6 +1989,10 @@ function selectService(serviceId, serviceName, serviceDuration) {
   document.getElementById('serviceResults').style.display = 'none';
   document.getElementById('duration').value = serviceDuration;
 
+  // Nascondi "Crea blocco OFF" quando un servizio è selezionato
+  const btnOff = document.getElementById('btnCreateBlockOff');
+  if (btnOff) btnOff.style.display = 'none';
+
   // --- AGGIUNGI UN NUOVO PSEUDOBLOCCO (NON SOVRASCRIVERE) ---
   var pseudoContainer = document.getElementById('pseudoBlockContainer');
   if (!pseudoContainer) return;
@@ -2023,6 +2041,14 @@ pseudoBlock.appendChild(document.createTextNode(' ' + String(serviceDuration) + 
       // Se non ci sono più pseudoblocchi, resetta il colore globale
       if (pseudoContainer.querySelectorAll('.pseudo-block').length === 0) {
         window.firstPseudoBlockColor = null;
+        // Se anche il campo cliente è vuoto, ripristina il tasto OFF
+        const clientInput = document.getElementById('clientSearchInput');
+        const clientId = document.getElementById('client_id');
+        const clientEmpty = (!clientInput || clientInput.value.trim() === '') && (!clientId || clientId.value === '' || clientId.value === '0');
+        if (clientEmpty) {
+          const btnOff = document.getElementById('btnCreateBlockOff');
+          if (btnOff) btnOff.style.display = '';
+        }
       }
   });
   pseudoBlock.appendChild(deleteBtn);
@@ -3675,99 +3701,6 @@ document.querySelectorAll('.selectable-cell').forEach(cell => {
       document.addEventListener('mousemove', resizeBlock);
       document.addEventListener('mouseup',   stopResize);
   });
-
-    document.addEventListener('DOMContentLoaded', function () {
-        const clientSearchInput = document.getElementById('clientSearchInput');
-        const clientSearchResults = document.getElementById('clientSearchResults');
-        const serviceSearchInput = document.getElementById('serviceSearchInput');
-        const serviceSearchResults = document.getElementById('serviceSearchResults');
-
-        // Funzione per gestire la ricerca dei clienti
-        function clientHandleSearch(query) {
-            if (query.length >= 3) {
-                fetch(`/calendar/api/search-clients/${query}`)
-                    .then((response) => response.json())
-                    .then((data) => {
-                        clientSearchResults.innerHTML = ''; // Pulisci risultati precedenti
-                        if (data.length > 0) {
-                            clientSearchResults.style.display = 'block';
-                            data.forEach((client) => {
-                                const resultItem = document.createElement('div');
-                                resultItem.className = 'dropdown-item';
-                                resultItem.textContent = `${client.name} (${client.phone || 'N/A'})`;
-                                resultItem.dataset.clientId = client.id;
-                                resultItem.addEventListener('click', function () {
-                                    clientSearchInput.value = client.name;
-                                    clientSearchResults.style.display = 'none';
-                                    const clientSelect = document.getElementById('client');
-                                    if (clientSelect) {
-                                        clientSelect.value = client.id;
-                                    }
-                                });
-                                clientSearchResults.appendChild(resultItem);
-                            });
-                        } else {
-                            clientSearchResults.style.display = 'none';
-                        }
-                    })
-                    .catch((error) =>
-                        console.error('Errore durante la ricerca dei clienti:', error)
-                    );
-            } else {
-                clientSearchResults.style.display = 'none';
-            }
-        }
-    
-        
-        // Funzione per gestire la ricerca dei servizi
-        function serviceHandleSearch(query) {
-            if (query.length >= 3) {
-                fetch(`/calendar/api/search-services/${query}`)
-                    .then((response) => response.json())
-                    .then((data) => {
-                        serviceSearchResults.innerHTML = ''; // Pulisci risultati precedenti
-                        if (data.length > 0) {
-                            serviceSearchResults.style.display = 'block';
-                            data.forEach((service) => {
-                                const resultItem = document.createElement('div');
-                                resultItem.className = 'dropdown-item';
-                                resultItem.textContent = `${service.name} (${service.duration} min, €${service.price})`;
-                                resultItem.dataset.serviceId = service.id;
-                                resultItem.addEventListener('click', function () {
-                                    serviceSearchInput.value = service.name;
-                                    serviceSearchResults.style.display = 'none';
-                                    const serviceSelect = document.getElementById('service');
-                                    if (serviceSelect) {
-                                        serviceSelect.value = service.id;
-                                    }
-                                });
-                                serviceSearchResults.appendChild(resultItem);
-                            });
-                        } else {
-                            serviceSearchResults.style.display = 'none';
-                        }
-                    })
-                    .catch((error) =>
-                        console.error('Errore durante la ricerca dei servizi:', error)
-                    );
-            } else {
-                serviceSearchResults.style.display = 'none';
-            }
-        }
-        
-        // Event listeners per le ricerche
-        clientSearchInput.addEventListener('keyup', function () {
-            console.log('Keyup catturato', this.value);
-            const query = this.value.trim();
-            clientHandleSearch(query);
-        });
-
-        serviceSearchInput.addEventListener('keyup', function () {
-            console.log('Keyup catturato', this.value);
-            const query = this.value.trim();
-            serviceHandleSearch(query);
-        });
-    });
 });
 
 window.handleClientSearch = handleClientSearch;
@@ -4482,9 +4415,11 @@ document.querySelectorAll('.appointment-block').forEach(block => {
       block.style.zIndex = '11940';
       const tb = block.querySelector('.popup-buttons');
       if (tb) tb.style.setProperty('display', 'flex', 'important');
-      // Mostra SOLO il bottone .sposta (forbici originale), nascondi tutti gli altri
+      // Determina se siamo in taglia o copia: se esistono celle cut-source → taglia, altrimenti → copia
+      const isCutMode = !!document.querySelector('.selectable-cell.cut-source');
+      const targetClass = isCutMode ? 'sposta' : 'copia';
       block.querySelectorAll('.btn-popup').forEach(btn => {
-        if (btn.classList.contains('sposta')) {
+        if (btn.classList.contains(targetClass)) {
           btn.style.setProperty('display', 'inline-flex', 'important');
           btn.style.setProperty('flex', '0 0 16.6667%', 'important');
           btn.style.setProperty('width', '16.6667%', 'important');
