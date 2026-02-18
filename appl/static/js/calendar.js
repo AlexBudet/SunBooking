@@ -1920,7 +1920,7 @@ function selectClient(clientId, fullName) {
   const input = modal ? modal.querySelector('#clientSearchInput') : document.getElementById('clientSearchInput');
   const hidden = modal ? modal.querySelector('#client_id') : document.getElementById('client_id');
   const results = modal ? modal.querySelector('#clientResults') : document.getElementById('clientResults');
-  if (input) input.value = fullName;
+  if (input) input.value = capitalizeName(fullName);
   if (hidden) hidden.value = clientId;
   if (results) results.style.display = 'none';
 
@@ -5021,7 +5021,7 @@ function selectClientNav(clientId, fullName) {
   // chiudi dropdown
   const input = document.getElementById('clientSearchInputNav');
   const resultsContainer = document.getElementById('clientResultsNav');
-  input.value = fullName;
+  input.value = capitalizeName(fullName);
   resultsContainer.style.display = 'none';
   
   // Aggiungi icona info accanto al campo Navigator (STESSO STILE DEL DROPDOWN)
