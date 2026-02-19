@@ -10667,18 +10667,52 @@ document.addEventListener('click', function(e) {
   try { delBtn.onclick = null; } catch(_) {}
   try { delBtn.removeAttribute('onclick'); } catch(_) {}
 
+  // Determina se ci sono blocchi contigui
+  var contiguousIds = [];
+  if (block && typeof getRelevantBlocks === 'function') {
+    try {
+      var relevantBlocks = getRelevantBlocks(block);
+      if (Array.isArray(relevantBlocks) && relevantBlocks.length > 1) {
+        contiguousIds = relevantBlocks.map(function(b) {
+          return b.getAttribute('data-appointment-id');
+        }).filter(function(aid) { return aid && aid !== id; });
+      }
+    } catch(_) {}
+  }
+
   // Apri il modal DeleteOrNoShow se disponibile
   const modalEl = document.getElementById('DeleteOrNoShowModal');
   if (modalEl && typeof bootstrap !== 'undefined') {
-    // salva contesto e mostra il modal
-    window.__deleteOrNoShow_current = { appointmentId: id, sourceElement: delBtn };
-    window.__DeleteOrNoShow_modal_instance = window.__DeleteOrNoShow_modal_instance || new bootstrap.Modal(modalEl, { backdrop: 'static' });
-    try { window.__DeleteOrNoShow_modal_instance.show(); } catch (e) { console.warn('show DeleteOrNoShow failed', e); }
-  } else {
-    // Fallback: se non ci sono modal/Bootstrap disponibili, chiamare la funzione esistente
-    if (typeof window.deleteAppointment === 'function') {
-      window.deleteAppointment(id);
+    // salva contesto: includi gli ID contigui
+    window.__deleteOrNoShow_current = {
+      appointmentId: id,
+      sourceElement: delBtn,
+      contiguousIds: contiguousIds
+    };
+
+    // Mostra/nascondi il bottone "Elimina tutti" in base alla presenza di contigui
+    var btnDeleteAll = modalEl.querySelector('#deleteOrNoShowBtn-delete-all');
+    if (btnDeleteAll) {
+      if (contiguousIds.length > 0) {
+        btnDeleteAll.style.display = '';
+        // Aggiorna testo con il conteggio totale (blocco corrente + contigui)
+        btnDeleteAll.textContent = 'Elimina tutti per questo cliente (' + (contiguousIds.length + 1) + ' blocchi)';
+      } else {
+        btnDeleteAll.style.display = 'none';
+      }
     }
+
+    // Aggiorna il testo del primo bottone: se ci sono contigui, specifica "solo questo"
+    var btnDeleteSingle = modalEl.querySelector('#deleteOrNoShowBtn-delete');
+    if (btnDeleteSingle) {
+      btnDeleteSingle.textContent = contiguousIds.length > 0 ? 'Elimina solo questo servizio' : 'Elimina il blocco';
+    }
+
+    window.__DeleteOrNoShow_modal_instance = window.__DeleteOrNoShow_modal_instance || new bootstrap.Modal(modalEl, { backdrop: 'static' });
+    try { window.__DeleteOrNoShow_modal_instance.show(); } catch (e) { console.warn('DeleteOrNoShowModal show error', e); }
+  } else {
+    // Fallback: se non ci sono modal/Bootstrap disponibili
+    if (typeof window.deleteAppointment === 'function') window.deleteAppointment(id);
   }
 }, true);
 
@@ -10898,41 +10932,104 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Inizializza il modal DeleteOrNoShow e collega i pulsanti (solo una volta)
 // Inizializza il modal DeleteOrNoShow e collega i pulsanti (solo una volta)
+// Inizializza il modal DeleteOrNoShow e collega i pulsanti (solo una volta)
 document.addEventListener('DOMContentLoaded', function () {
   const modalEl = document.getElementById('DeleteOrNoShowModal');
   if (!modalEl || typeof bootstrap === 'undefined') return;
 
   const btnDelete = modalEl.querySelector('#deleteOrNoShowBtn-delete');
+  const btnDeleteAll = modalEl.querySelector('#deleteOrNoShowBtn-delete-all');
   const btnNoShow = modalEl.querySelector('#deleteOrNoShowBtn-noshow');
   const btnCancel = modalEl.querySelector('#deleteOrNoShowBtn-cancel');
 
+  // Elimina solo questo blocco (logica originale)
   if (btnDelete) btnDelete.addEventListener('click', function () {
-    const ctx = window.__deleteOrNoShow_current || {};
-    const appointmentId = ctx.appointmentId;
-    if (!appointmentId) { try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {} return; }
-    btnDelete.disabled = true;
-    deleteAppointment(appointmentId)
-      .then(() => { try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {} window.__deleteOrNoShow_current = null; })
-      .catch(err => { console.error('Eliminazione fallita:', err); alert('Eliminazione fallita: ' + (err.message || err)); })
-      .finally(() => { btnDelete.disabled = false; });
+    var ctx = window.__deleteOrNoShow_current;
+    if (!ctx || !ctx.appointmentId) return;
+    var inst = window.__DeleteOrNoShow_modal_instance || bootstrap.Modal.getInstance(modalEl);
+    if (inst) inst.hide();
+    if (typeof window.deleteAppointment === 'function') {
+      window.deleteAppointment(ctx.appointmentId);
+    }
+    window.__deleteOrNoShow_current = null;
   });
 
-  // No-Show: usa la logica esistente impostando stato 2
+  // Elimina tutti i blocchi contigui (NUOVO)
+  if (btnDeleteAll) btnDeleteAll.addEventListener('click', function () {
+    var ctx = window.__deleteOrNoShow_current;
+    if (!ctx || !ctx.appointmentId) return;
+
+    // Raccogli tutti gli ID: blocco corrente + contigui
+    var allIds = [ctx.appointmentId];
+    if (Array.isArray(ctx.contiguousIds)) {
+      allIds = allIds.concat(ctx.contiguousIds);
+    }
+
+    // Chiedi conferma
+    if (!confirm('Confermi di voler eliminare tutti i ' + allIds.length + ' blocchi di questo cliente?')) {
+      return;
+    }
+
+    // Chiudi il modal
+    var inst = window.__DeleteOrNoShow_modal_instance || bootstrap.Modal.getInstance(modalEl);
+    if (inst) inst.hide();
+
+    // Elimina tutti i blocchi in sequenza
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+    var deletePromises = allIds.map(function(aid) {
+      return fetch('/calendar/delete/' + encodeURIComponent(aid), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        credentials: 'same-origin'
+      }).then(function(response) {
+        if (response.ok || response.status === 404) {
+          // Rimuovi blocco dal DOM
+          var blockEl = document.querySelector('.appointment-block[data-appointment-id="' + aid + '"]');
+          if (blockEl) blockEl.remove();
+          return { success: true, id: aid };
+        }
+        return response.text().then(function(t) {
+          return { success: false, id: aid, error: t };
+        });
+      }).catch(function(err) {
+        console.error('Errore eliminazione blocco ' + aid + ':', err);
+        return { success: false, id: aid, error: err.message };
+      });
+    });
+
+    Promise.all(deletePromises).then(function(results) {
+      var failed = results.filter(function(r) { return !r.success; });
+      if (failed.length > 0) {
+        console.warn('Alcuni blocchi non sono stati eliminati:', failed);
+      }
+      // Reload dopo eliminazione multipla
+      setTimeout(function() { location.reload(); }, 100);
+    });
+
+    window.__deleteOrNoShow_current = null;
+  });
+
+  // No-Show: usa la logica esistente impostando stato 3
   if (btnNoShow) btnNoShow.addEventListener('click', function () {
-    const ctx = window.__deleteOrNoShow_current || {};
-    const appointmentId = ctx.appointmentId;
-    if (!appointmentId) { try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {} return; }
-    setNoShow(appointmentId);
-    try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {}
+    var ctx = window.__deleteOrNoShow_current;
+    if (!ctx || !ctx.appointmentId) return;
+    var inst = window.__DeleteOrNoShow_modal_instance || bootstrap.Modal.getInstance(modalEl);
+    if (inst) inst.hide();
+    if (typeof setNoShow === 'function') {
+      setNoShow(ctx.appointmentId);
+    }
     window.__deleteOrNoShow_current = null;
   });
 
   if (btnCancel) btnCancel.addEventListener('click', function () {
     window.__deleteOrNoShow_current = null;
-    try { window.__DeleteOrNoShow_modal_instance.hide(); } catch(_) {}
   });
 });
-
 
 // =============================================================
 //   MODAL DI CONFRONTO PER MATCH SOLO CELLULARE
