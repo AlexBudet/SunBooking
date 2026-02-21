@@ -344,6 +344,48 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
 
   if (window.SERVIZI_PRECOMPILATI && window.SERVIZI_PRECOMPILATI.length > 0) {
     localStorage.removeItem('scontrinoServizi');
+    localStorage.removeItem('scontrinoCliente');
+    localStorage.removeItem('scontrinoOperatore');
+    
+    // Crea le righe per ogni servizio precompilato
+    window.SERVIZI_PRECOMPILATI.forEach(s => {
+      aggiungiRigaServizio(s, false);
+    });
+    
+    // Verifica se ci sono operatori diversi tra i servizi precompilati
+    const operatorIds = new Set();
+    window.SERVIZI_PRECOMPILATI.forEach(s => {
+      if (s.operator_id) operatorIds.add(String(s.operator_id));
+    });
+    
+    // Se ci sono almeno 2 operatori diversi, attiva il toggle E svuota il campo globale
+    if (operatorIds.size >= 2) {
+      setTimeout(function() {
+        const toggleBtn = document.getElementById('toggleOperatoriRiga');
+        if (toggleBtn && !toggleBtn.classList.contains('active')) {
+          toggleBtn.classList.add('active');
+          document.body.classList.add('show-op-per-riga');
+        }
+        
+        // IMPORTANTE: Svuota il campo operatore globale per evitare conflitti
+        const operatorInput = document.getElementById('operatorSelectInput');
+        if (operatorInput) {
+          operatorInput.value = '';
+          delete operatorInput.dataset.selectedOperator;
+          operatorInput.placeholder = 'Multi-operatore';
+          operatorInput.disabled = true;
+        }
+        
+        // Aggiorna colonne operatore per ogni riga
+        document.querySelectorAll('.scontrino-row').forEach(r => {
+          const opCol = r.querySelector('.op-col');
+          if (opCol) {
+            const nome = r.dataset.operatorNome || '';
+            opCol.textContent = nome ? capitalizeName(nome) : '—';
+          }
+        });
+      }, 200);
+    }
   }
 
   // --- OPERATORE ---
@@ -377,29 +419,31 @@ fetch('/cassa/api/services?frequenti=1')
     if (qNow.length < 3) popolaPulsantiServizi(servizi);
   });
 
-  operatorInput.addEventListener('click', function () {
-    fetch('/cassa/api/operators')
-      .then(res => res.json())
-      .then(operators => {
-        operatorDropdown.innerHTML = '';
-        operators.forEach(op => {
-          const item = document.createElement('button');
-          item.type = 'button';
-          item.className = 'dropdown-item';
-          item.textContent = capitalizeName(op.nome);
-          item.dataset.operatorId = op.id;
-          item.onclick = function () {
-            operatorInput.value = capitalizeName(op.nome);
-            operatorInput.dataset.selectedOperator = op.id;
-            operatorDropdown.style.display = 'none';
-            // Forza trigger evento change per listener modifiche
-            operatorInput.dispatchEvent(new Event('change'));
-          };
-          operatorDropdown.appendChild(item);
-        });
-        operatorDropdown.style.display = 'block';
+operatorInput.addEventListener('click', function () {
+  fetch('/cassa/api/operators')
+    .then(res => res.json())
+    .then(operators => {
+      operatorDropdown.innerHTML = '';
+      operators.forEach(op => {
+        const nome = (op.nome || '').trim();
+        const cognome = (op.cognome || '').trim();
+        const label = [nome, cognome].filter(Boolean).map(capitalizeName).join(' ');
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'dropdown-item';
+        item.textContent = label || '—';
+        item.dataset.operatorId = op.id;
+        item.onclick = function () {
+          operatorInput.value = label || '';
+          operatorInput.dataset.selectedOperator = op.id;
+          operatorDropdown.style.display = 'none';
+          operatorInput.dispatchEvent(new Event('change'));
+        };
+        operatorDropdown.appendChild(item);
       });
-  });
+      operatorDropdown.style.display = operators.length ? 'block' : 'none';
+    });
+});
 
     // Se ci sono servizi precompilati dal calendar, IGNORA il localStorage
   // per evitare che si sommino voci vecchie a quelle nuove
@@ -604,16 +648,21 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       // Se metodo è prepagata, salviamo il prezzo originale e imposteremo a 0 dopo lo scalamento
       const isPrepagata = (metodo === 'prepagata');
       
+      const operator_id_riga = row.dataset.operatorId || null;
+      
+      // Operatore specifico per questa riga (se toggle attivo) oppure globale
+      const operatorIdRiga = row.dataset.operatorId || document.getElementById('operatorSelectInput')?.dataset.selectedOperator || null;
+      
       const voce = {
         servizio_id,
         nome,
-        prezzo: isPrepagata ? 0 : prezzo, // Se prepagata, prezzo a 0 per registro scontrini
-        prezzo_originale: prezzo, // Conserviamo il prezzo originale per lo scalamento
+        prezzo: isPrepagata ? 0 : prezzo,
+        prezzo_originale: prezzo,
         sconto_riga,
         tipo: 'service',
         metodo_pagamento: metodo,
-        // IMPORTANTE: Le voci pagate con prepagata NON sono fiscali (già pagate/scalate)
-        is_fiscale: isPrepagata ? false : !isGrigia
+        is_fiscale: isPrepagata ? false : !isGrigia,
+        operator_id: operatorIdRiga
       };
       if (appointment_id) voce.appointment_id = appointment_id;
       if (rata_id) voce.rata_id = parseInt(rata_id);
@@ -1196,6 +1245,8 @@ function aggiungiRigaServizio(servizio, salva = true) {
   row.dataset.servizioId = servizio.id || '';
   row.dataset.categoria = servizio.categoria || '';
   row.dataset.sottocategoriaId = servizio.sottocategoria_id || '';
+  row.dataset.operatorId = servizio.operator_id || '';
+  row.dataset.operatorNome = servizio.operator_nome || '';
 
   // Se la riga proviene da un appuntamento del calendar, memorizza l'id originale
   if (servizio.appointment_id) {
@@ -1219,6 +1270,20 @@ function aggiungiRigaServizio(servizio, salva = true) {
   selectBox.style.height = '32px';
   selectBox.style.cursor = 'pointer';
   row.appendChild(selectBox);
+
+  // Colonna operatore (visibile solo con toggle attivo)
+  const opCol = document.createElement('span');
+  opCol.className = 'op-col';
+  opCol.textContent = servizio.operator_nome ? capitalizeName(servizio.operator_nome) : '—';
+  opCol.title = 'Clicca per cambiare operatore';
+  opCol.addEventListener('click', function(e) {
+    e.stopPropagation();
+    window.currentRowForOperator = row;
+    if (typeof apriModalOperatoreRiga === 'function') {
+      apriModalOperatoreRiga(row);
+    }
+  });
+  row.appendChild(opCol);
 
   // Nome servizio
   const nome = document.createElement('div');
@@ -1457,6 +1522,45 @@ function aggiungiRigaServizio(servizio, salva = true) {
       window.listenersAdded = true;
     }
   }
+
+  // Toggle automatico se ci sono operatori diversi tra le righe
+  setTimeout(function() {
+    const allRows = document.querySelectorAll('.scontrino-row');
+    if (allRows.length < 2) return;
+    
+    const operatorIds = new Set();
+    allRows.forEach(r => {
+      const opId = r.dataset.operatorId;
+      if (opId && opId !== '') operatorIds.add(opId);
+    });
+    
+    // Se ci sono almeno 2 operatori diversi, attiva il toggle E disabilita campo globale
+    if (operatorIds.size >= 2) {
+      const toggleBtn = document.getElementById('toggleOperatoriRiga');
+      if (toggleBtn && !toggleBtn.classList.contains('active')) {
+        toggleBtn.classList.add('active');
+        document.body.classList.add('show-op-per-riga');
+      }
+      
+      // Disabilita e svuota il campo operatore globale
+      const operatorInput = document.getElementById('operatorSelectInput');
+      if (operatorInput && !operatorInput.disabled) {
+        operatorInput.value = '';
+        delete operatorInput.dataset.selectedOperator;
+        operatorInput.placeholder = 'Multi-operatore';
+        operatorInput.disabled = true;
+      }
+      
+      // Assicurati che ogni riga mostri il suo operatore
+      allRows.forEach(r => {
+        const opCol = r.querySelector('.op-col');
+        if (opCol) {
+          const nome = r.dataset.operatorNome || '';
+          opCol.textContent = nome ? capitalizeName(nome) : '—';
+        }
+      });
+    }
+  }, 100);
 }
 
 // Cambia metodo pagamento globale
@@ -1994,3 +2098,83 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
+// Toggle visibilità colonna operatore per riga
+document.getElementById('toggleOperatoriRiga')?.addEventListener('click', function() {
+  this.classList.toggle('active');
+  document.body.classList.toggle('show-op-per-riga');
+  
+  const isActive = this.classList.contains('active');
+  const operatorInput = document.getElementById('operatorSelectInput');
+  
+  if (isActive) {
+    // Disabilita campo operatore globale quando toggle è attivo
+    if (operatorInput) {
+      operatorInput.value = '';
+      delete operatorInput.dataset.selectedOperator;
+      operatorInput.placeholder = 'Multi-operatore';
+      operatorInput.disabled = true;
+    }
+  } else {
+    // Riabilita campo operatore globale quando toggle è disattivato
+    if (operatorInput) {
+      operatorInput.disabled = false;
+      operatorInput.placeholder = 'Seleziona operatore...';
+    }
+  }
+});
+
+// Funzione per aprire mini-modal selezione operatore
+function apriModalOperatoreRiga(row) {
+  const lista = document.getElementById('listaOperatoriRigaModal');
+  if (!lista) return;
+  lista.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm"></div></div>';
+  
+  const modalEl = document.getElementById('modalSelezionaOperatoreRiga');
+  if (!modalEl) return;
+  const modal = new bootstrap.Modal(modalEl);
+  modal.show();
+  
+  fetch('/cassa/api/operators')
+    .then(res => res.json())
+    .then(operators => {
+      console.log('Operatori ricevuti:', operators);
+      lista.innerHTML = '';
+      if (!Array.isArray(operators) || operators.length === 0) {
+        lista.innerHTML = '<p class="text-muted small">Nessun operatore disponibile</p>';
+        return;
+      }
+      operators.forEach(op => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-outline-secondary w-100 mb-1 text-start py-1';
+        btn.style.fontSize = '0.8em';
+        // Usa window.capitalizeName oppure fallback
+        const capName = (typeof window.capitalizeName === 'function') 
+          ? window.capitalizeName(op.nome) 
+          : (op.nome || '');
+        btn.textContent = capName;
+        
+        // Evidenzia se già selezionato
+        if (String(row.dataset.operatorId) === String(op.id)) {
+          btn.classList.remove('btn-outline-secondary');
+          btn.classList.add('btn-primary');
+        }
+        
+        btn.addEventListener('click', function() {
+          row.dataset.operatorId = op.id;
+          row.dataset.operatorNome = op.nome;
+          const opCol = row.querySelector('.op-col');
+          if (opCol) opCol.textContent = capitalizeName(op.nome);
+          modal.hide();
+          
+          // Segna come modificato
+          if (window.originalAppointmentIds && window.originalAppointmentIds.size > 0) {
+            window.hasModifications = true;
+            if (typeof mostraPulsanteSalva === 'function') mostraPulsanteSalva();
+          }
+        });
+        lista.appendChild(btn);
+      });
+    });
+}
+window.apriModalOperatoreRiga = apriModalOperatoreRiga;

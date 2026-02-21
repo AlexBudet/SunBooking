@@ -9446,11 +9446,14 @@ document.addEventListener('shown.bs.tooltip', function (event) {
 function procediAlPagamentoDaBlocchi(selectedBlocks) {
   if (!Array.isArray(selectedBlocks) || selectedBlocks.length === 0) return;
 
-  const decodeHtml = (s) => { const t = document.createElement('textarea'); t.innerHTML = String(s || ''); return t.value; };
+  const decodeHtml = (s) => {
+    const t = document.createElement('textarea');
+    t.innerHTML = String(s || '');
+    return t.value;
+  };
 
   const first = selectedBlocks[0];
   const clientId = first.dataset.clientId || '';
-  const operatorId = first.dataset.operatorId || '';
 
   // PRIMA SCELTA: testo visibile nel blocco (già decodificato)
   const nameEl = first.querySelector('.appointment-content .client-name');
@@ -9460,14 +9463,27 @@ function procediAlPagamentoDaBlocchi(selectedBlocks) {
   const clientCognome = decodeHtml(first.dataset.clientCognome || '');
   const clientName = rawName || `${clientNome} ${clientCognome}`.trim();
 
+  // Raccogli tutti gli operatori distinti per decidere se multi-operatore
+  const operatorIds = new Set();
+  
   const servizi = selectedBlocks
     .filter(b => b.getAttribute('data-status') !== "2")
     .map(block => {
+      const serviceId = block.getAttribute('data-service-id') || '';
+      const serviceName = block.getAttribute('data-service-name') || '';
+      const appointmentId = block.getAttribute('data-appointment-id') || '';
+      // Estrai operator_id e operator_name da OGNI blocco
+      const blockOperatorId = block.getAttribute('data-operator-id') || '';
+      const blockOperatorName = block.getAttribute('data-operator-name') || '';
+      
+      if (blockOperatorId) operatorIds.add(blockOperatorId);
+      
       return {
-        id: block.dataset.serviceId,
-        nome: block.dataset.serviceName || '',
-        prezzo: block.dataset.servicePrice || '',
-        appointment_id: block.dataset.appointmentId
+        id: serviceId,
+        nome: decodeHtml(serviceName),
+        appointment_id: appointmentId,
+        operator_id: blockOperatorId,
+        operator_nome: blockOperatorName
       };
     });
 
@@ -9475,7 +9491,15 @@ function procediAlPagamentoDaBlocchi(selectedBlocks) {
   params.set('servizi', JSON.stringify(servizi));
   if (clientId) params.set('client_id', clientId);
   if (clientName) params.set('client_name', clientName);
-  if (operatorId) params.set('operator_id', operatorId);
+  
+  // NON passare operator_id globale se ci sono operatori diversi
+  // Questo evita che cassa.html imposti un operatore unico
+  if (operatorIds.size === 1) {
+    const singleOpId = Array.from(operatorIds)[0];
+    params.set('operator_id', singleOpId);
+  }
+  // Se operatorIds.size >= 2, NON passare operator_id globale
+  // così cassa.html non precompilerà il campo unico
 
   window.location.href = `/cassa?${params.toString()}`;
 }

@@ -34,7 +34,7 @@
 
 <div class="d-flex flex-row align-items-start flex-wrap" style="min-height: 400px; gap: 16px; padding: 1em;">
   <!-- Sezione pseudoscontrino -->
-  <div style="flex: 1 1 450px; min-width: 420px; max-width: 730px;">
+  <div style="flex: 1 1 500px; min-width: 450px; max-width: 850px;">
     <div class="card neumorphic-card h-100">
       <div class="card-body">
         <!-- Operatore -->
@@ -47,6 +47,12 @@
            title="Seleziona l'operatore a cui associare il pagamento">
     <div id="operatorDropdown" class="dropdown-menu" style="width:100%;"></div>
   </div>
+  <button type="button" id="toggleOperatoriRiga" class="btn btn-sm btn-outline-secondary"
+          data-bs-toggle="tooltip" data-bs-placement="top"
+          title="Mostra/nasconde operatore per ogni voce"
+          style="padding: 4px 8px; font-size: 0.75em;">
+    <i class="bi bi-people"></i>
+  </button>
 
   <div class="dropdown-anchor" style="width:230px; max-width:230px; position:relative;">
     <input type="text" id="clientSearchInputCassa" name="clientSearchInputCassa"
@@ -135,7 +141,7 @@
   <!-- Container appuntamenti my-spia -->
   <div style="flex: 1 1 510px; min-width: 360px; max-width: 510px;">
     <div id="containerAppuntamentiMySpia" class="card neumorphic-card h-100"
-         style="min-height: 220px; margin-left: 60px;">
+         style="min-height: 220px; margin-left: 5px;">
       <div class="card-body">
         <h6 class="mb-3" id="mySpiaToggle" style="cursor:pointer; user-select:none;">
           Clienti in istituto
@@ -299,6 +305,21 @@
       </div>
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mini-modal selezione operatore per singola riga -->
+<div class="modal fade" id="modalSelezionaOperatoreRiga" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width: 200px;">
+    <div class="modal-content" style="font-size: 0.85em;">
+      <div class="modal-header py-1 px-2">
+        <span class="modal-title" style="font-size: 0.9em; font-weight: 600;">Operatore</span>
+        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal" style="font-size: 0.6em;"></button>
+      </div>
+      <div class="modal-body p-1">
+        <div id="listaOperatoriRigaModal" style="max-height: 200px; overflow-y: auto;"></div>
       </div>
     </div>
   </div>
@@ -821,7 +842,7 @@ async function addInitialServizi(list) {
   const calApptIds = [];
   for (const s0 of list) {
     const s = { ...s0 };
-    // Normalizza l’appointment_id per provenienza da calendar o altri alias
+    // Normalizza l'appointment_id per provenienza da calendar o altri alias
     s.appointment_id = s.appointment_id || s.appointmentId || s.appId || s.app_id || null;
     if (s.appointment_id) calApptIds.push(String(s.appointment_id));
 
@@ -838,7 +859,10 @@ async function addInitialServizi(list) {
             prezzo: d.prezzo,
             tag: d.tag,
             sottocategoria: d.sottocategoria,
-            appointment_id: s.appointment_id
+            appointment_id: s.appointment_id,
+            // IMPORTANTE: mantieni operator_id e operator_nome dal servizio originale
+            operator_id: s.operator_id || '',
+            operator_nome: s.operator_nome || ''
           }, false);
           continue;
         }
@@ -846,9 +870,33 @@ async function addInitialServizi(list) {
     }
     aggiungiRigaServizio(s, false);
   }
-  // Fallback usato da “Salva Modifiche” anche se le righe non hanno dataset.appointmentId
   window.lastPseudoscontrinoAppointmentIds = Array.from(new Set(calApptIds)).filter(Boolean);
-  setTimeout(() => ripristinaModifichePseudoscontrino(), 100);
+
+  // Attiva toggle multi-operatore se ci sono almeno 2 operatori diversi
+  setTimeout(function() {
+    const allRows = document.querySelectorAll('.scontrino-row');
+    const operatorIds = new Set();
+    allRows.forEach(r => {
+      const opId = r.dataset.operatorId;
+      if (opId && opId !== '') operatorIds.add(opId);
+    });
+    if (operatorIds.size >= 2) {
+      const toggleBtn = document.getElementById('toggleOperatoriRiga');
+      if (toggleBtn && !toggleBtn.classList.contains('active')) {
+        toggleBtn.classList.add('active');
+        document.body.classList.add('show-op-per-riga');
+      }
+      allRows.forEach(r => {
+        const opCol = r.querySelector('.op-col');
+        if (opCol) {
+          const nome = r.dataset.operatorNome || '';
+          opCol.textContent = window.capitalizeName ? window.capitalizeName(nome) : nome;
+        }
+      });
+    }
+  }, 150);
+
+  setTimeout(() => ripristinaModifichePseudoscontrino(), 200);
 }
   });
 </script>
@@ -967,7 +1015,7 @@ function renderMySpiaList(gruppi) {
   if (!Array.isArray(gruppi) || gruppi.length === 0) {
     const info = document.createElement('div');
     info.className = 'text-muted';
-    info.textContent = 'Nessun appuntamento my-spia attivo.';
+    info.textContent = 'Nessun cliente in istituto';
     list.appendChild(info);
     return;
   }
@@ -1118,67 +1166,87 @@ function renderMySpiaList(gruppi) {
   caricaAppuntamentiMySpia();
 
   // Crea pseudoscontrino per i blocchi selezionati
-  window.creaPseudoscontrinoMySpia = function(ids) {
-    fetch('/cassa/api/myspia/dettagli', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
-      body: JSON.stringify({ ids: ids.split(',') })
-    })
-    .then(res => res.json())
-    .then(async data => {
-      if (data.success && data.appuntamenti) {
-        // RESET set ids originali per questo gruppo (nuovo gruppo = nuova chiave di persistenza)
-        window.originalAppointmentIds = new Set();
+window.creaPseudoscontrinoMySpia = function(ids) {
+  fetch('/cassa/api/myspia/dettagli', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
+    body: JSON.stringify({ ids: ids.split(',') })
+  })
+  .then(res => res.json())
+  .then(async data => {
+    if (data.success && data.appuntamenti) {
+      window.originalAppointmentIds = new Set();
+      document.getElementById('scontrinoRowsContainer').innerHTML = '';
+      const apptIds = [];
+      data.appuntamenti.forEach(servizio => {
+        const apptId =
+          servizio.appointment_id ||
+          servizio.appointmentId ||
+          servizio.app_id ||
+          servizio.appId ||
+          servizio.appIdStr ||
+          servizio.appt_id ||
+          null;
+        if (apptId) apptIds.push(String(apptId));
+        aggiungiRigaServizio({
+          id: servizio.id,
+          nome: servizio.nome,
+          prezzo: servizio.prezzo,
+          tag: servizio.tag,
+          sottocategoria: servizio.sottocategoria,
+          appointment_id: apptId,
+          operator_id: servizio.operator_id || null,
+          operator_nome: servizio.operator_nome || ''
+        }, false);
+      });
+      window.lastPseudoscontrinoAppointmentIds = apptIds.filter(Boolean);
 
-        // Svuota e repopola
-        document.getElementById('scontrinoRowsContainer').innerHTML = '';
-        const apptIds = [];
-        data.appuntamenti.forEach(servizio => {
-          const apptId =
-            servizio.appointment_id ||
-            servizio.appointmentId ||
-            servizio.app_id ||
-            servizio.appId ||
-            servizio.appIdStr ||
-            servizio.appt_id ||
-            null;
-          if (apptId) apptIds.push(String(apptId));
-          aggiungiRigaServizio({
-            id: servizio.id,
-            nome: servizio.nome,
-            prezzo: servizio.prezzo,
-            tag: servizio.tag,
-            sottocategoria: servizio.sottocategoria,
-            appointment_id: apptId
-          }, false);
+      // PATCH: attiva toggle se ci sono almeno 2 operatori diversi e popola op-col
+      setTimeout(function() {
+        const allRows = document.querySelectorAll('.scontrino-row');
+        const operatorIds = new Set();
+        allRows.forEach(r => {
+          const opId = r.dataset.operatorId;
+          if (opId && opId !== '') operatorIds.add(opId);
         });
-        window.lastPseudoscontrinoAppointmentIds = apptIds.filter(Boolean);
-
-        // Setta cliente e operatore
-        if (data.cliente_nome) {
-          const input = document.getElementById('clientSearchInputCassa');
-          window.settingClientProgrammatically = true;
-          input.value = data.cliente_nome + ' ' + (data.cliente_cognome || '');
-          input.dataset.selectedClient = data.cliente_id;
-        }
-        if (data.operatore_nome) {
-          const op = document.getElementById('operatorSelectInput');
-          op.value = data.operatore_nome;
-          op.dataset.selectedOperator = data.operatore_id;
-        }
-
-        // APPLICA MODIFICHE SALVATE per questo gruppo (se presenti)
-        // Usa un piccolo delay per assicurare che il DOM sia pronto
-        setTimeout(() => {
-          if (typeof ripristinaModifichePseudoscontrino === 'function') {
-            ripristinaModifichePseudoscontrino();
+        if (operatorIds.size >= 2) {
+          const toggleBtn = document.getElementById('toggleOperatoriRiga');
+          if (toggleBtn && !toggleBtn.classList.contains('active')) {
+            toggleBtn.classList.add('active');
+            document.body.classList.add('show-op-per-riga');
           }
-        }, 50);
-      } else {
-        alert('Errore nel recupero dati appuntamenti');
+          // Aggiorna la colonna operatore per ogni riga
+          allRows.forEach(r => {
+            const opCol = r.querySelector('.op-col');
+            if (opCol) {
+              const nome = r.dataset.operatorNome || '';
+              opCol.textContent = window.capitalizeName ? window.capitalizeName(nome) : nome;
+            }
+          });
+        }
+      }, 100);
+
+      if (data.cliente_nome) {
+        const input = document.getElementById('clientSearchInputCassa');
+        window.settingClientProgrammatically = true;
+        input.value = data.cliente_nome + ' ' + (data.cliente_cognome || '');
+        input.dataset.selectedClient = data.cliente_id;
       }
-    });
-  };
+      if (data.operatore_nome) {
+        const op = document.getElementById('operatorSelectInput');
+        op.value = data.operatore_nome;
+        op.dataset.selectedOperator = data.operatore_id;
+      }
+      setTimeout(() => {
+        if (typeof ripristinaModifichePseudoscontrino === 'function') {
+          ripristinaModifichePseudoscontrino();
+        }
+      }, 50);
+    } else {
+      alert('Errore nel recupero dati appuntamenti');
+    }
+  });
+};
   
   // Elimina (resetta stato a 0) i blocchi selezionati
   window.eliminaMySpia = function(ids) {
@@ -1604,5 +1672,37 @@ body.touch-ui #mySpiaList .myspia-item.myspia-open .myspia-actions {
     padding-top: 4px;
     overflow: visible;     /* consente ai pulsanti di stare “fuori” dal blocco */
   }
+/* Colonna operatore per riga - nascosta di default */
+.scontrino-row .op-col {
+  display: none;
+  font-size: 0.68em;
+  color: #555;
+  min-width: 50px;
+  max-width: 70px;
+  text-align: center;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #e9ecef;
+  margin-right: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+}
+.scontrino-row .op-col:hover {
+  background: #e0e0e0;
+}
+
+/* Quando toggle attivo */
+body.show-op-per-riga .scontrino-row .op-col {
+  display: inline-block;
+}
+
+#toggleOperatoriRiga.active {
+  background: #1976d2;
+  color: white;
+  border-color: #1976d2;
+}
 </style>
 {% endblock %}
