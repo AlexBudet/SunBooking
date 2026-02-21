@@ -181,8 +181,40 @@ def cassa():
 
     if servizi_json:
         try:
-            servizi = json.loads(servizi_json)
-        except:
+            servizi_raw = json.loads(servizi_json)
+            # Assicurati che ogni servizio abbia operator_id e operator_nome
+            servizi = []
+            for s in servizi_raw:
+                # Recupera operator_id e operator_nome
+                op_id = s.get("operator_id")
+                op_nome = s.get("operator_nome", "")
+                
+                # Se operator_id è null/vuoto/stringa "null", recuperalo dall'appointment
+                appt_id = s.get("appointment_id")
+                if (not op_id or op_id == '' or op_id == 'null' or str(op_id).lower() == 'none') and appt_id:
+                    try:
+                        appt = db.session.get(Appointment, int(appt_id))
+                        if appt and appt.operator_id:
+                            op_id = appt.operator_id
+                            op = db.session.get(Operator, appt.operator_id)
+                            if op:
+                                op_nome = op.user_nome or ''
+                    except Exception:
+                        pass
+                
+                srv = {
+                    "id": s.get("id"),
+                    "nome": clean_str(s.get("nome", "")),
+                    "prezzo": s.get("prezzo", 0),
+                    "tag": clean_str(s.get("tag", "")),
+                    "sottocategoria": clean_str(s.get("sottocategoria", "")),
+                    "appointment_id": appt_id,
+                    "operator_id": op_id,
+                    "operator_nome": op_nome
+                }
+                servizi.append(srv)
+        except Exception as e:
+            current_app.logger.error(f"Errore parsing servizi_json: {e}")
             servizi = []
 
     if appointments_json:
@@ -193,20 +225,18 @@ def cassa():
                 Appointment.is_cancelled_by_client == False
             ).all()
             for appt in appointments:
+                appt_op = appt.operator
                 servizi.append({
                     "id": appt.service.id,
                     "nome": clean_str(appt.service.servizio_nome),
                     "prezzo": appt.service.servizio_prezzo,
                     "tag": clean_str(appt.service.servizio_tag),
                     "sottocategoria": clean_str(appt.service.servizio_sottocategoria.nome) if appt.service.servizio_sottocategoria else "",
-                    "appointment_id": appt.id
+                    "appointment_id": appt.id,
+                    "operator_id": appt_op.id if appt_op else None,
+                    "operator_nome": appt_op.user_nome if appt_op else ""
                 })
         except Exception as e:
-            servizi = []
-    elif servizi_json:
-        try:
-            servizi = json.loads(servizi_json)
-        except Exception:
             servizi = []
     
     try:
@@ -481,16 +511,7 @@ def send_to_rch():
         # normalizza il prezzo nella voce (2 decimali)
         v["prezzo"] = round(prezzo_val, 2)
 
-    # >>> FIX: robust flag handling (supporta is_fiscale OR is_non_fiscale per compatibilità)
-    def _is_fiscale(v):
-        if not isinstance(v, dict):
-            return True
-        if "is_fiscale" in v:
-            return bool(v.get("is_fiscale"))
-        if "is_non_fiscale" in v:
-            return not bool(v.get("is_non_fiscale"))
-        return True
-
+    # Ricalcola voci fiscali/non fiscali dopo normalizzazione prezzi
     voci_fiscali = [v for v in voci if _is_fiscale(v)]
     voci_non_fiscali = [v for v in voci if not _is_fiscale(v)]
     results = []
@@ -1403,13 +1424,17 @@ def myspia_dettagli():
 
         for a in apps:
             s = a.service
+            # Operatore specifico di questo appuntamento
+            appt_op = a.operator
             result["appuntamenti"].append({
                 "id": s.id if s else None,
                 "nome": s.servizio_nome if s else "",
                 "prezzo": s.servizio_prezzo if s else 0,
                 "tag": s.servizio_tag if s else "",
                 "sottocategoria": s.servizio_sottocategoria.nome if (s and s.servizio_sottocategoria) else "",
-                "appointment_id": a.id
+                "appointment_id": a.id,
+                "operator_id": appt_op.id if appt_op else None,
+                "operator_nome": appt_op.user_nome if appt_op else ""
             })
 
         return jsonify(result)
