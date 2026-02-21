@@ -473,20 +473,55 @@ def api_create_pacchetto():
     if tipo_pacchetto == 'prepagata':
         credito = Decimal(str(data['credito_iniziale']))
         
+        # Determina il client_id effettivo:
+        # Se c'è un beneficiario selezionato dal DB, associa la prepagata a lui (chi la usa)
+        beneficiario_nome = (data.get('beneficiario_nome') or '').strip()
+        beneficiario_client_id = data.get('beneficiario_client_id')
+        acquirente_client_id = data['client_id']
+        
+        # PRIORITA' 1: beneficiario_client_id esplicito
+        if beneficiario_client_id:
+            beneficiario = Client.query.get(int(beneficiario_client_id))
+            if beneficiario:
+                effective_client_id = beneficiario.id
+                beneficiario_nome = f"{capitalize_name(beneficiario.cliente_nome)} {capitalize_name(beneficiario.cliente_cognome)}"
+            else:
+                effective_client_id = acquirente_client_id
+        # PRIORITA' 2: cerca beneficiario per nome nel database
+        elif beneficiario_nome:
+            # Cerca cliente con nome simile
+            parts = beneficiario_nome.lower().split()
+            if len(parts) >= 2:
+                candidati = Client.query.filter(
+                    func.lower(Client.cliente_nome).like(f"%{parts[0]}%"),
+                    func.lower(Client.cliente_cognome).like(f"%{parts[-1]}%"),
+                    Client.is_deleted == False
+                ).all()
+                if len(candidati) == 1:
+                    # Match univoco trovato
+                    effective_client_id = candidati[0].id
+                    beneficiario_nome = f"{capitalize_name(candidati[0].cliente_nome)} {capitalize_name(candidati[0].cliente_cognome)}"
+                else:
+                    effective_client_id = acquirente_client_id
+            else:
+                effective_client_id = acquirente_client_id
+        else:
+            effective_client_id = acquirente_client_id
+        
         # La prepagata nasce in stato Preventivo con credito_residuo a 0
         # Il credito verrà attivato solo dopo il pagamento in cassa
         pacchetto = Pacchetto(
-            client_id=data['client_id'],
+            client_id=effective_client_id,
             nome=data.get('nome', 'Carta Prepagata'),
             data_sottoscrizione=datetime.now().date(),
             status=PacchettoStatus.Preventivo,
             tipo=PacchettoTipo.Prepagata,
             credito_iniziale=credito,
-            credito_residuo=Decimal('0'),  # Sarà caricato dopo il pagamento
-            beneficiario_nome=data.get('beneficiario_nome'),
+            credito_residuo=Decimal('0'),
+            beneficiario_nome=beneficiario_nome if beneficiario_nome else None,
             data_scadenza=datetime.strptime(data['data_scadenza'], '%Y-%m-%d').date() if data.get('data_scadenza') else None,
-            costo_totale_lordo=Decimal(str(data.get('importo_pagamento', credito))),  # Importo da pagare
-            costo_totale_scontato=Decimal(str(data.get('importo_pagamento', credito))),  # Importo da pagare
+            costo_totale_lordo=Decimal(str(data.get('importo_pagamento', credito))),
+            costo_totale_scontato=Decimal(str(data.get('importo_pagamento', credito))),
             vincoli_utilizzo=data.get('vincoli_utilizzo')
         )
         db.session.add(pacchetto)
@@ -494,7 +529,14 @@ def api_create_pacchetto():
         
         # NON registrare movimento iniziale qui - sarà fatto dopo il pagamento
         
-        aggiungi_history(pacchetto, f"Creata Carta Prepagata con credito €{credito:.2f}")
+        # History: traccia acquirente e beneficiario se diversi
+        if effective_client_id != int(acquirente_client_id):
+            acquirente = Client.query.get(acquirente_client_id)
+            acquirente_nome = f"{capitalize_name(acquirente.cliente_nome)} {capitalize_name(acquirente.cliente_cognome)}" if acquirente else "Sconosciuto"
+            aggiungi_history(pacchetto, f"Creata Carta Prepagata con credito €{credito:.2f} - Acquistata da {acquirente_nome} per {beneficiario_nome}")
+        else:
+            aggiungi_history(pacchetto, f"Creata Carta Prepagata con credito €{credito:.2f}")
+        
         db.session.commit()
         return jsonify({'id': pacchetto.id, 'message': 'Carta Prepagata creata'}), 201
     
@@ -1644,13 +1686,35 @@ def api_utilizza_prepagata(id):
 
 @pacchetti_bp.route('/api/prepagate-cliente/<int:client_id>', methods=['GET'])
 def api_prepagate_cliente(client_id):
-    """Restituisce le carte prepagate attive di un cliente (per la cassa)"""
+    """Restituisce le carte prepagate attive di un cliente (per la cassa).
+    Cerca sia per client_id diretto che per beneficiario_nome (retrocompatibilità
+    per prepagate create prima della riassociazione automatica)."""
+    
+    # Cerca per client_id diretto (caso standard dopo modifica 7)
     prepagate = Pacchetto.query.filter(
         Pacchetto.client_id == client_id,
         Pacchetto.tipo == PacchettoTipo.Prepagata,
         Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo]),
         Pacchetto.credito_residuo > 0
     ).all()
+    
+    # Retrocompatibilità: cerca anche prepagate dove il beneficiario_nome corrisponde
+    # (per prepagate create prima della modifica di riassociazione al beneficiario)
+    client = Client.query.get(client_id)
+    if client:
+        nome_completo = f"{client.cliente_nome} {client.cliente_cognome}".strip().lower()
+        prepagate_beneficiario = Pacchetto.query.filter(
+            Pacchetto.client_id != client_id,
+            Pacchetto.tipo == PacchettoTipo.Prepagata,
+            Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo]),
+            Pacchetto.credito_residuo > 0,
+            func.lower(func.trim(Pacchetto.beneficiario_nome)) == nome_completo
+        ).all()
+        
+        ids_trovati = {p.id for p in prepagate}
+        for p in prepagate_beneficiario:
+            if p.id not in ids_trovati:
+                prepagate.append(p)
     
     risultati = []
     oggi = datetime.now().date()

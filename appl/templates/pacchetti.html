@@ -1606,6 +1606,60 @@ tooltips.forEach(el => new bootstrap.Tooltip(el));
         document.getElementById('clientDropdown').style.display = 'none';
     }
 
+    // Ricerca beneficiario nel modal (per carte prepagate)
+    document.addEventListener('DOMContentLoaded', function() {
+        const benefInput = document.getElementById('beneficiarioNome');
+        if (!benefInput) return;
+        
+        // Crea dropdown per beneficiario
+        let benefDropdown = document.getElementById('beneficiarioDropdown');
+        if (!benefDropdown) {
+            benefDropdown = document.createElement('div');
+            benefDropdown.id = 'beneficiarioDropdown';
+            benefDropdown.style.cssText = 'display:none; max-height:200px; overflow-y:auto; position:absolute; background:#fff; border:1px solid #ccc; border-radius:4px; box-shadow:0 2px 5px rgba(0,0,0,0.2); z-index:1000; width:100%;';
+            benefInput.parentElement.style.position = 'relative';
+            benefInput.parentElement.appendChild(benefDropdown);
+        }
+        
+        // Variabile per salvare l'ID del beneficiario selezionato
+        window.beneficiarioClientId = null;
+        
+        benefInput.addEventListener('input', function() {
+            const query = this.value.trim();
+            window.beneficiarioClientId = null; // Reset quando si digita
+            if (query.length < 2) {
+                benefDropdown.style.display = 'none';
+                return;
+            }
+            fetch('/pacchetti/api/clienti?q=' + encodeURIComponent(query))
+                .then(res => res.json())
+                .then(clients => {
+                    benefDropdown.innerHTML = '';
+                    clients.forEach(c => {
+                        const a = document.createElement('a');
+                        a.href = '#';
+                        a.className = 'dropdown-item';
+                        a.textContent = c.nome + ' ' + c.cognome + (c.cellulare ? ' (' + c.cellulare + ')' : '');
+                        a.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            benefInput.value = c.nome + ' ' + c.cognome;
+                            window.beneficiarioClientId = c.id;
+                            benefDropdown.style.display = 'none';
+                        });
+                        benefDropdown.appendChild(a);
+                    });
+                    benefDropdown.style.display = clients.length ? 'block' : 'none';
+                });
+        });
+        
+        // Chiudi dropdown beneficiario se clicchi fuori
+        document.addEventListener('click', function(e) {
+            if (!benefInput.contains(e.target) && !benefDropdown.contains(e.target)) {
+                benefDropdown.style.display = 'none';
+            }
+        });
+    });
+
     // Ricerca cliente nella pagina principale
     document.getElementById('searchCliente').addEventListener('input', function () {
         delete this.dataset.clientId;
@@ -1911,11 +1965,12 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
                 client_id: document.getElementById('client_id').value,
                 tipo: 'prepagata',
                 nome: 'Carta Prepagata',
-                credito_iniziale: creditoTotale,  // Credito effettivo disponibile
-                importo_pagamento: importoPagamento,  // Quanto paga il cliente
+                credito_iniziale: creditoTotale,
+                importo_pagamento: importoPagamento,
                 beneficiario_nome: document.getElementById('beneficiarioNome').value.trim() || null,
+                beneficiario_client_id: window.beneficiarioClientId || null,
                 data_scadenza: document.getElementById('dataScadenzaPrepagata').value || null,
-                costo_totale: importoPagamento,  // Importo per la cassa
+                costo_totale: importoPagamento,
                 servizi: [],
                 sconto_tipo: '',
                 pagamento_tipo: 'saldo',
@@ -2060,6 +2115,7 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         document.getElementById('creditoTotaleCalcolato').readOnly = true;
         document.getElementById('creditoTotaleCalcolato').style.backgroundColor = '#e9ecef';
         document.getElementById('beneficiarioNome').value = '';
+        window.beneficiarioClientId = null;
         document.getElementById('dataScadenzaPrepagata').value = '';
         document.getElementById('sezioneServiziCampi').style.display = 'block';
         document.getElementById('sezionePrepagataCampi').style.display = 'none';

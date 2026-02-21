@@ -391,6 +391,15 @@
    title="<strong>📦 {{ appt.pacchetto_seduta.pacchetto.nome|e }}</strong><br>Servizio: {{ appt.pacchetto_seduta.service.servizio_nome|e if appt.pacchetto_seduta.service else '' }}<br>Seduta {{ appt.pacchetto_seduta.ordine }} di {{ appt.pacchetto_seduta.pacchetto.sedute|length }}"
    style="margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;"></i>
 {% endif %}
+{% if appt.client_id and prepagate_per_cliente.get(appt.client_id) %}
+{% set carte = prepagate_per_cliente[appt.client_id] %}
+{% set credito_totale = carte | map(attribute='credito_residuo') | sum %}
+<i class="bi bi-credit-card prepagata-badge" 
+   data-bs-toggle="tooltip"
+   data-bs-html="true"
+   title="<strong>💳 Carta Prepagata</strong><br>{% for c in carte %}{{ c.nome|e }}: <strong>€{{ '%.2f'|format(c.credito_residuo) }}</strong>{% if c.data_scadenza %} (scad. {{ c.data_scadenza }}){% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}{% if carte|length > 1 %}<br><strong>Totale: €{{ '%.2f'|format(credito_totale) }}</strong>{% endif %}"
+   style="margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;color:#0d6efd;"></i>
+{% endif %}
 {% if appt.client and appt.client.is_deleted %}
     <a href="javascript:void(0)" 
        data-bs-toggle="tooltip" 
