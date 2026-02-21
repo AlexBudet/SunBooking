@@ -540,12 +540,11 @@ display: none;
   </div>
 
 {% if pacchetto.tipo == 'prepagata' %}
-  <!-- ========== SEZIONE CARTA PREPAGATA ========== -->
   <div class="d-flex mt-4">
     <div class="flex-fill">
-      <!-- Riepilogo Credito -->
       <div class="neomorphic-div" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-        {% set prepagata_non_pagata = pacchetto.status.value == 'preventivo' or (pacchetto.credito_residuo or 0) == 0 %}
+        {# pacchetto.status è già una stringa (es. "preventivo") passata dalla route #}
+        {% set prepagata_non_pagata = (pacchetto.status == 'preventivo') %}
         {% if prepagata_non_pagata and (pacchetto.credito_iniziale or 0) > 0 %}
         <!-- Banner pagamento richiesto -->
         <div class="alert alert-warning text-dark mb-3 d-flex align-items-center justify-content-between" style="border-radius: 8px;">
@@ -560,8 +559,13 @@ display: none;
         {% endif %}
         <div class="row text-center">
           <div class="col-3">
+            {% if prepagata_non_pagata %}
+            <div class="small opacity-75">Da Pagare</div>
+            <div class="fs-5 fw-bold text-warning">€{{ '%.2f'|format(pacchetto.costo_totale_lordo or 0) }}</div>
+            {% else %}
             <div class="small opacity-75">Importo Pagato</div>
             <div class="fs-5 fw-bold">€{{ '%.2f'|format(pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo or 0) }}</div>
+            {% endif %}
           </div>
           <div class="col-3">
             <div class="small opacity-75">Credito Iniziale</div>
@@ -643,12 +647,14 @@ display: none;
         </tbody>
       </table>
 
-      <!-- Pulsante Ricarica -->
+      <!-- Pulsante Ricarica (solo se la carta è già stata pagata/attivata) -->
+      {% if not prepagata_non_pagata %}
       <div class="text-center mt-3">
         <button class="btn btn-success btn-lg" onclick="apriModalRicarica()">
           <i class="bi bi-plus-circle"></i> Ricarica Carta
         </button>
       </div>
+      {% endif %}
     </div>
 
     <div class="ms-3" style="width: 300px;">

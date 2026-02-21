@@ -5,8 +5,8 @@ from flask_caching import Cache
 from sqlalchemy.orm import joinedload
 from datetime import time as dtime
 from datetime import datetime, timedelta, time, timezone
-import requests
-from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo
+from decimal import Decimal
+from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo, Pacchetto, PacchettoTipo, PacchettoStatus
 from appl import app
 import random
 import json
@@ -226,10 +226,29 @@ def calendar_home():
     else:
         whatsapp_message = "Buongiorno {{nome}}, ecco un memo per il tuo appuntamento del {{data}} alle ore {{ora}}. Ci vediamo presto! Sun Booking"
 
+    prepagate_per_cliente = {}
+    client_ids_oggi = set(appt.client_id for appt in appointments if appt.client_id)
+    if client_ids_oggi:
+        prepagate_attive = Pacchetto.query.filter(
+            Pacchetto.client_id.in_(client_ids_oggi),
+            Pacchetto.tipo == PacchettoTipo.Prepagata,
+            Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo]),
+            Pacchetto.credito_residuo > 0
+        ).all()
+        for p in prepagate_attive:
+            if p.client_id not in prepagate_per_cliente:
+                prepagate_per_cliente[p.client_id] = []
+            prepagate_per_cliente[p.client_id].append({
+                'id': p.id,
+                'nome': p.nome,
+                'credito_residuo': float(p.credito_residuo) if p.credito_residuo else 0,
+                'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None
+            })
+
     return render_template(
         'calendar.html',
-        selected_date=selected_date,               # datetime
-        selected_date_str=selected_date.strftime('%Y-%m-%d'),  # 'YYYY-MM-DD'
+        selected_date=selected_date,
+        selected_date_str=selected_date.strftime('%Y-%m-%d'),
         day_before_str=day_before_str,
         day_after_str=day_after_str,
         today_str=today_str,
@@ -244,7 +263,8 @@ def calendar_home():
         clients=clients,
         services=services_data,
         shifts_by_operator=shifts_by_operator,
-        whatsapp_message=whatsapp_message
+        whatsapp_message=whatsapp_message,
+        prepagate_per_cliente=prepagate_per_cliente
     )
 
 @calendar_bp.route('/api/search-services/<query>', methods=['GET'])

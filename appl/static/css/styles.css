@@ -2258,14 +2258,26 @@ button.service-btn-prodotti,
     font-size: 1.25rem; /* oppure scegli la dimensione che preferisci */
   }
 
-  #operatorSelectInput, #clientSearchInputCassa {
+#operatorSelectInput, #clientSearchInputCassa {
     width: 50%;
-  }
+    border: 1px solid rgba(135, 100, 124, 0.2);
+    border-radius: 10px;
+    color: #444;
+    background: linear-gradient(180deg, #ffffff 0%, #f8f5f7 100%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+#operatorSelectInput:focus, #clientSearchInputCassa:focus {
+    border-color: #b8809d;
+    box-shadow: 0 0 0 3px rgba(184, 128, 157, 0.15);
+    outline: none;
+    background: #fff;
+}
 
   #clientDropdownCassa {
     position: absolute;
     left: 15;
-    margin-top: 124px !important;
     z-index: 2000;
     width: 100%;
     max-width: 300px;

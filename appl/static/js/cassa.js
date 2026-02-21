@@ -96,6 +96,26 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
   }
   window.caricaPrepagateCliente = caricaPrepagateCliente;
 
+  // Observer: carica prepagate automaticamente quando dataset.selectedClient cambia
+  // (copre tutti i casi: calendar, my-spia, dropdown manuale)
+  (function observeClientSelection() {
+    const clientInput = document.getElementById('clientSearchInputCassa');
+    if (!clientInput) return;
+    let lastClientId = null;
+    setInterval(function() {
+      const currentId = clientInput.dataset.selectedClient || null;
+      if (currentId && currentId !== lastClientId) {
+        lastClientId = currentId;
+        const nomeCliente = clientInput.value || '';
+        caricaPrepagateCliente(currentId, nomeCliente);
+      } else if (!currentId && lastClientId) {
+        lastClientId = null;
+        window.clientePrepagate = [];
+        aggiornaOpzioniPrepagata();
+      }
+    }, 800);
+  })();
+
   // Aggiorna tutte le select per mostrare/nascondere opzione prepagata
   function aggiornaOpzioniPrepagata() {
     const haPrepagate = window.clientePrepagate && window.clientePrepagate.length > 0;
@@ -366,10 +386,10 @@ fetch('/cassa/api/services?frequenti=1')
           const item = document.createElement('button');
           item.type = 'button';
           item.className = 'dropdown-item';
-          item.textContent = `${capitalizeName(op.nome)} ${capitalizeName(op.cognome)}`;
+          item.textContent = capitalizeName(op.nome);
           item.dataset.operatorId = op.id;
           item.onclick = function () {
-            operatorInput.value = `${capitalizeName(op.nome)} ${capitalizeName(op.cognome)}`;
+            operatorInput.value = capitalizeName(op.nome);
             operatorInput.dataset.selectedOperator = op.id;
             operatorDropdown.style.display = 'none';
             // Forza trigger evento change per listener modifiche
@@ -395,10 +415,6 @@ fetch('/cassa/api/services?frequenti=1')
     let serviziSalvati = JSON.parse(localStorage.getItem('scontrinoServizi') || '[]');
     serviziSalvati.forEach(servizio => aggiungiRigaServizio(servizio, false));
   }
-
-  // --- RIPRISTINA SERVIZI DAL LOCALSTORAGE AL CARICAMENTO ---
-  let serviziSalvati = JSON.parse(localStorage.getItem('scontrinoServizi') || '[]');
-  serviziSalvati.forEach(servizio => aggiungiRigaServizio(servizio, false));
 
   // --- SERVIZI AUTOCOMPLETE ---
 const serviceInput = document.getElementById('searchServiceInput');
@@ -560,6 +576,7 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
 
     // Raccogliamo prima tutte le voci con i loro prezzi originali
     const vociConPrepagata = [];
+    let hasValidationError = false;
     
     rows.forEach(row => {
       const isGrigia = row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc';
@@ -567,6 +584,18 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
       const sconto_riga = parseInt(row.querySelector('.scontrino-row-sconto')?.value || '0');
       const metodo = row.querySelector('select')?.value || 'cash';
+      
+      if (!isFinite(prezzo) || isNaN(prezzo)) {
+        alert('Prezzo non valido in una riga. Correggi prima di inviare.');
+        hasValidationError = true;
+        return;
+      }
+      if (prezzo < 0) {
+        alert('Prezzi negativi non sono consentiti.');
+        hasValidationError = true;
+        return;
+      }
+      
       const servizio_id = row.dataset.servizioId || null;
       const appointment_id = row.dataset.appointmentId || null;
       const rata_id = row.dataset.rataId || null;
@@ -590,6 +619,12 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       if (rata_id) voce.rata_id = parseInt(rata_id);
       if (pacchetto_id) voce.pacchetto_id = parseInt(pacchetto_id);
       
+      // IMPORTANTE: Copia prepagata_id e ricarica_prepagata_id dal dataset della riga
+      const prepagataId = row.dataset.prepagataId;
+      const ricaricaPrepagataId = row.dataset.ricaricaPrepagataId;
+      if (prepagataId) voce.prepagata_id = parseInt(prepagataId);
+      if (ricaricaPrepagataId) voce.ricarica_prepagata_id = parseInt(ricaricaPrepagataId);
+      
       if (isPrepagata) {
         vociConPrepagata.push({ voce, prezzo });
       }
@@ -603,6 +638,8 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       }
     });
 
+    if (hasValidationError) { stampaLock = false; return; }
+    
     const cliente_id = document.getElementById('clientSearchInputCassa').dataset.selectedClient || null;
     const operatore_id = document.getElementById('operatorSelectInput').dataset.selectedOperator || null;
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -860,7 +897,26 @@ function showPendingModal(key) {
 
         // 5. Svuota lo pseudoscontrino (DOM + localStorage) PRIMA del popup
         resetScontrino(true);
+        await Promise.allSettled(updatePromises);
 
+        // 4. Pulisci le modifiche salvate in localStorage per questi appointment
+        try {
+          const allApptIds = Array.from(new Set([
+            ...Array.from(document.querySelectorAll('.scontrino-row')).map(r => r.dataset.appointmentId).filter(Boolean),
+            ...(window.originalAppointmentIds ? Array.from(window.originalAppointmentIds) : []),
+            ...(window.lastPseudoscontrinoAppointmentIds || [])
+          ])).map(String).sort();
+          if (allApptIds.length) {
+            localStorage.removeItem(`pseudoscontrino_modifiche_group_${allApptIds.join('_')}`);
+            allApptIds.forEach(id => localStorage.removeItem(`pseudoscontrino_modifiche_for_${id}`));
+          }
+          if (typeof window.unmarkEditedIds === 'function') window.unmarkEditedIds(allApptIds);
+        } catch(_) {}
+
+        // Pulisci gli ID originali
+        if (window.originalAppointmentIds && typeof window.originalAppointmentIds.clear === 'function') {
+          window.originalAppointmentIds.clear();
+        }
         // 6. Mostra popup successo e poi redirect (UNICO showSuccessPopup)
         showSuccessPopup('Scontrino stampato con successo!', 3000, () => {
           if (nonFiscaleResponse && nonFiscaleResponse.redirect_to_pacchetto) {
@@ -889,6 +945,7 @@ function showPendingModal(key) {
         try { data = await res.json(); } catch { data = null; }
 
         if (!res.ok) {
+          stampaLock = false;
           alert((data && data.error) || 'Errore durante la stampa fiscale!');
           return;
         }
@@ -897,13 +954,14 @@ function showPendingModal(key) {
         await fiscaleOkFinalize();
         return;
       } catch (err) {
+        stampaLock = false;
         alert('Errore di rete durante la stampa fiscale.');
         return;
       }
     }
 
     // Se ci sono voci non fiscali, salva Receipt non fiscale (NON invia a RCH)
-    let nonFiscaleResponse = null;  // <-- AGGIUNGI
+    let nonFiscaleResponse = null;
     if (voci_non_fiscali.length > 0) {
       const payloadNonFiscale = {
         voci: voci_non_fiscali,
@@ -911,83 +969,57 @@ function showPendingModal(key) {
         operatore_id,
         is_fiscale: false
       };
-      const res = await fetch('/cassa/send-to-rch', {  // <-- CATTURA res
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-        },
-        body: JSON.stringify(payloadNonFiscale)
-      });
-      nonFiscaleResponse = await res.json();  // <-- AGGIUNGI
+      try {
+        const res = await fetch('/cassa/send-to-rch', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+          },
+          body: JSON.stringify(payloadNonFiscale)
+        });
+        nonFiscaleResponse = await res.json();
+        console.log('Non fiscale response:', nonFiscaleResponse);
+      } catch (err) {
+        console.error('Errore invio non fiscale:', err);
+      }
     }
+
+    // Gestione redirect per prepagata/pacchetto (flusso solo non fiscale)
+    let redirectUrl = null;
+    
+    if (nonFiscaleResponse && nonFiscaleResponse.redirect_to_pacchetto) {
+        redirectUrl = `/pacchetti/detail/${nonFiscaleResponse.redirect_to_pacchetto}`;
+    } else {
+        // Cerca prepagata_id o ricarica_prepagata_id nelle voci originali
+        const tutteLeVoci = [...(voci_fiscali || []), ...(voci_non_fiscali || [])];
+        for (const v of tutteLeVoci) {
+            const pid = v.prepagata_id || v.ricarica_prepagata_id;
+            if (pid) {
+                redirectUrl = `/pacchetti/detail/${pid}`;
+                break;
+            }
+        }
+    }
+
+    // Svuota lo pseudoscontrino e sblocca
+    resetScontrino(true);
+    stampaLock = false;
+
+    console.log('DEBUG: redirectUrl finale =', redirectUrl);
 
     showSuccessPopup('Pagamento registrato con successo!', 5000, () => {
-      window.location.href = '/cassa';
-    });
-
-    // Aggiorna prima gli appointment delle righe effettive e poi quelli originali portati da calendar.
-    // Raccogliamo le promise e le aspettiamo tutte (allSettled) prima di resettare e reload.
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
-    const updatePromises = [];
-
-    document.querySelectorAll('.scontrino-row').forEach(row => {
-      const appointmentId = row.dataset.appointmentId;
-      if (appointmentId) {
-        updatePromises.push(
-          fetch(`/calendar/update_status/${appointmentId}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(csrf ? { 'X-CSRFToken': csrf } : {})
-            },
-            body: JSON.stringify({ status: 2 })
-          })
-          .then(response => {
-            if (!response.ok) throw new Error(`Errore update appointment ${appointmentId}`);
-            return response.json();
-          })
-          .catch(err => console.error("Impossibile aggiornare lo stato:", err))
-        );
-      }
-    });
-
-    if (window.originalAppointmentIds && window.originalAppointmentIds.size > 0) {
-      window.originalAppointmentIds.forEach(appointmentId => {
-        updatePromises.push(
-          fetch(`/calendar/update_status/${appointmentId}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(csrf ? { 'X-CSRFToken': csrf } : {})
-            },
-            body: JSON.stringify({ status: 2 })
-          })
-          .then(response => {
-            if (!response.ok) throw new Error(`Errore update original appointment ${appointmentId}`);
-            return response.json();
-          })
-          .catch(err => console.error("Impossibile aggiornare appointment originale:", err))
-        );
-      });
-    }
-
-    await Promise.allSettled(updatePromises);
-    if (window.originalAppointmentIds && typeof window.originalAppointmentIds.clear === 'function') {
-      window.originalAppointmentIds.clear();
-    }
-    // Svuota il pseudoscontrino subito (ma NON navigare immediatamente) per permettere repaint visibile.
-    resetScontrino(true);
-    // NUOVO: Se il pagamento non fiscale era una rata di pacchetto, redirect a pacchetto_detail
-    if (nonFiscaleResponse && nonFiscaleResponse.redirect_to_pacchetto) {
-      const url = `/pacchetti/detail/${nonFiscaleResponse.redirect_to_pacchetto}`;
-      if (nonFiscaleResponse.rata_importo_modificato) {
-        window.location.href = url + '?ricalcola_rate=1';
+      if (redirectUrl) {
+        console.log('DEBUG: Eseguo redirect a:', redirectUrl);
+        window.location.href = redirectUrl;
       } else {
-        window.location.href = url;
+        window.location.href = '/cassa';
       }
-    }
-  });
+    });
+
+    // Termina qui il flusso non fiscale
+    return;
+});
 
   // === ANNULLA ULTIMO SCONTRINO ===
   document.getElementById('btnAnnullaScontrino').addEventListener('click', function(e) {
@@ -1035,11 +1067,10 @@ function aggiornaTotale() {
   document.querySelectorAll('.scontrino-row').forEach(row => {
     const input = row.querySelector('.scontrino-row-prezzo');
     const prezzo = parseFloat(input.value) || 0;
-    // Servizi in chiaro (non grigi)
-    if (
-      row.style.background !== 'rgb(220, 220, 220)' &&
-      row.style.background !== '#dcdcdc'
-    ) {
+    const metodo = row.querySelector('select')?.value || 'cash';
+    const isGrigia = row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc';
+    // Servizi in chiaro (non grigi) e non prepagata
+    if (!isGrigia && metodo !== 'prepagata') {
       totaleScontrino += prezzo;
     }
     // Tutti i servizi (anche grigi)
@@ -1206,6 +1237,24 @@ function aggiungiRigaServizio(servizio, salva = true) {
   prezzo.name = 'prezzo[]';
   prezzo.style.width = '95px';
   prezzo.style.marginRight = '8px';
+
+  // Se è il pagamento di una carta prepagata, blocca la modifica del prezzo
+  if (servizio.prepagata_id) {
+    prezzo.readOnly = true;
+    prezzo.style.backgroundColor = '#e8f5e9';
+    prezzo.title = 'Importo fisso: il credito caricato sulla carta è definito alla creazione';
+    row.dataset.prepagataId = servizio.prepagata_id;
+    row.dataset.creditoDaCaricare = servizio.credito_da_caricare || servizio.prezzo || '0';
+  }
+  // Se è una ricarica prepagata, blocca anche qui
+  if (servizio.ricarica_prepagata_id) {
+    prezzo.readOnly = true;
+    prezzo.style.backgroundColor = '#e8f5e9';
+    prezzo.title = 'Importo fisso per ricarica carta prepagata';
+    row.dataset.ricaricaPrepagataId = servizio.ricarica_prepagata_id;
+    row.dataset.creditoDaCaricare = servizio.credito_da_caricare || servizio.prezzo || '0';
+  }
+
   row.appendChild(prezzo);
 
   // Simbolo euro
@@ -1343,6 +1392,7 @@ function aggiungiRigaServizio(servizio, salva = true) {
     if (nuovoMetodo !== 'cash') {
       row.style.background = '#fff';
     }
+    aggiornaTotale();
     aggiornaSubtotaliPagamenti();
   });
 
@@ -1708,7 +1758,7 @@ async function ripristinaModifichePseudoscontrino() {
     try {
       const ops = await fetch('/cassa/api/operators').then(r => r.json());
       const op = Array.isArray(ops) ? ops.find(o => o.id == modifiche.operatore) : null;
-      if (op) document.getElementById('operatorSelectInput').value = `${op.nome} ${op.cognome}`;
+      if (op) document.getElementById('operatorSelectInput').value = op.nome;
     } catch {}
   }
   if (modifiche.cliente) {

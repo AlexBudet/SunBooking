@@ -42,14 +42,18 @@
   <div class="dropdown-anchor" style="width:230px; max-width:230px; position:relative;">
     <input type="text" id="operatorSelectInput" name="operatorSelectInput"
            class="form-control" placeholder="Salone" readonly
-           style="cursor:pointer; width:100%;">
+           style="cursor:pointer; width:100%;"
+           data-bs-toggle="tooltip" data-bs-placement="top"
+           title="Seleziona l'operatore a cui associare il pagamento">
     <div id="operatorDropdown" class="dropdown-menu" style="width:100%;"></div>
   </div>
 
   <div class="dropdown-anchor" style="width:230px; max-width:230px; position:relative;">
     <input type="text" id="clientSearchInputCassa" name="clientSearchInputCassa"
            class="form-control" placeholder="Cliente generico" autocomplete="off"
-           style="width:100%;">
+           style="width:100%;"
+           data-bs-toggle="tooltip" data-bs-placement="top"
+           title="Seleziona il cliente a cui associare il pagamento">
     <div id="clientDropdownCassa" class="dropdown-menu" style="width:100%;"></div>
   </div>
 </div>
@@ -301,6 +305,14 @@
 </div>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+  // Inizializza tooltip per i campi operatore e cliente
+  if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+    const operatorInput = document.getElementById('operatorSelectInput');
+    const clientInput = document.getElementById('clientSearchInputCassa');
+    if (operatorInput) new bootstrap.Tooltip(operatorInput);
+    if (clientInput) new bootstrap.Tooltip(clientInput);
+  }
+  
   // Verifica che gli elementi esistano (solo per admin/owner)
   if (!document.getElementById('modalConsoleRCH')) return;
   
@@ -631,15 +643,59 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .dropdown-anchor { position: relative; }
-.dropdown-anchor .dropdown-menu {
-  position: absolute;
-  top: -80px;
-  left: 0;
-  right: 0;
-  z-index: 1050;         /* sopra la card */
-  max-height: 260px;
-  overflow-y: auto;
-  display: none;         /* viene gestito da JS con style.display */
+
+#operatorDropdown {
+    border: 1px solid rgba(135, 100, 124, 0.2);
+    border-radius: 10px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8f5f7 100%);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+#clientDropdownCassa {
+    position: absolute !important;
+    top: 100% !important;
+    margin-top: 2px !important;
+    border: 1px solid rgba(135, 100, 124, 0.2);
+    border-radius: 10px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8f5f7 100%);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+#operatorDropdown .dropdown-item,
+#clientDropdownCassa .dropdown-item {
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    border-radius: 0;
+    color: #444;
+    background: transparent;
+    transition: background-color 0.15s ease;
+}
+
+#operatorDropdown .dropdown-item:last-child,
+#clientDropdownCassa .dropdown-item:last-child {
+    border-bottom: none;
+}
+
+#operatorDropdown .dropdown-item:hover,
+#clientDropdownCassa .dropdown-item:hover {
+    background-color: rgba(248, 232, 240, 0.6);
+    color: #333;
+}
+
+#searchServiceInput {
+    border: 1px solid rgba(135, 100, 124, 0.2);
+    border-radius: 10px;
+    color: #444;
+    background: linear-gradient(180deg, #ffffff 0%, #f8f5f7 100%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+#searchServiceInput:focus {
+    border-color: #b8809d;
+    box-shadow: 0 0 0 3px rgba(184, 128, 157, 0.15);
+    outline: none;
+    background: #fff;
 }
 </style>
 
@@ -741,13 +797,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (clientName) {
       const input = document.getElementById('clientSearchInputCassa');
-      window.settingClientProgrammatically = true;  // Flag per evitare fetch dropdown
+      window.settingClientProgrammatically = true;
       input.value = clientName;
       if (clientId) {
         input.dataset.selectedClient = clientId;
       }
-      // Forza trigger evento input per listener modifiche (ma senza fetch)
       input.dispatchEvent(new Event('input'));
+
+      // Carica prepagate per il cliente che arriva dal calendar
+      if (clientId) {
+        setTimeout(function() {
+          if (typeof window.caricaPrepagateCliente === 'function') {
+            window.caricaPrepagateCliente(clientId, clientName);
+          }
+        }, 600);
+      }
     }
 
     addInitialServizi(servizi);

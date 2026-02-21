@@ -44,14 +44,19 @@ def cassa():
                     client_id = pacchetto.client_id
                     client_name = f"{pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}"
                 
+                # Usa costo_totale_lordo (importo da pagare), non credito_iniziale (credito caricato)
+                importo_da_pagare = float(pacchetto.costo_totale_lordo) if pacchetto.costo_totale_lordo else float(pacchetto.credito_iniziale)
+                
                 servizi = [{
                     'id': None,
                     'nome': clean_str(f"Carta Prepagata - {pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}"),
-                    'prezzo': float(pacchetto.credito_iniziale),
+                    'prezzo': importo_da_pagare,
                     'categoria': 'Estetica',
-                    'is_fiscale': True,
+                    'is_fiscale': False,
+                    'is_non_fiscale': True,
                     'metodo_pagamento': 'contanti',
-                    'prepagata_id': pacchetto.id
+                    'prepagata_id': pacchetto.id,
+                    'credito_da_caricare': float(pacchetto.credito_iniziale)
                 }]
         except Exception as e:
             current_app.logger.error(f"Errore caricamento prepagata {prepagata_id}: {e}")
@@ -100,7 +105,7 @@ def cassa():
                 if pacchetto.preferred_operators:
                     first_op = pacchetto.preferred_operators[0]
                     operator_id = first_op.id
-                    operator_name = f"{first_op.user_nome} {first_op.user_cognome}"
+                    operator_name = first_op.user_nome
                 
                 # Determina categoria dal primo servizio del pacchetto
                 categoria = "Estetica"  # default
@@ -152,7 +157,7 @@ def cassa():
                     if pacchetto.preferred_operators:
                         first_op = pacchetto.preferred_operators[0]
                         operator_id = first_op.id
-                        operator_name = f"{first_op.user_nome} {first_op.user_cognome}"
+                        operator_name = first_op.user_nome
                     
                     # Determina categoria dal primo servizio del pacchetto
                     categoria = "Estetica"  # default
@@ -457,6 +462,9 @@ def send_to_rch():
     if not voci:
         return jsonify({"error": "Nessuna voce da registrare"}), 400
     
+    # Variabile per tracciare redirect a pacchetto prepagata
+    redirect_pacchetto_id = None
+    
     # --- VALIDAZIONE E NORMALIZZAZIONE PREZZI: solo numeri >= 0 ---
     for idx, v in enumerate(voci, start=1):
         # ensure prezzo key exists and is numeric
@@ -732,8 +740,12 @@ def send_to_rch():
             "is_fiscale": False
         })
 
-    pacchetto_ids_modificati = set()  # Per tracciare i pacchetti con rate modificate
+    # IMPORTANTE: Gestione prepagata/rate PRIMA di costruire response
+    # Deve essere FUORI dai blocchi fiscale/non fiscale perché le prepagate
+    # possono essere in entrambi i casi
+    pacchetto_ids_modificati = set()
     
+    # Processa TUTTE le voci per prepagata/rate (sia fiscali che non fiscali)
     for v in voci:
         # Gestione ricarica carta prepagata
         ricarica_prepagata_id = v.get('ricarica_prepagata_id')
@@ -742,20 +754,17 @@ def send_to_rch():
                 pacchetto = Pacchetto.query.get(int(ricarica_prepagata_id))
                 if pacchetto and pacchetto.tipo.value == 'prepagata':
                     importo = Decimal(str(v.get('ricarica_importo', 0)))
-                    # Usa ricarica_credito se presente (include eventuali bonus), altrimenti usa importo
                     credito_da_caricare = Decimal(str(v.get('ricarica_credito', importo)))
                     descrizione = v.get('ricarica_descrizione', 'Ricarica')
                     
-                    # Aggiorna credito residuo con il credito effettivo (può includere bonus)
                     vecchio_saldo = pacchetto.credito_residuo or Decimal('0')
                     nuovo_saldo = vecchio_saldo + credito_da_caricare
                     pacchetto.credito_residuo = nuovo_saldo
                     
-                    # Se era in Preventivo, attivala
+                    # Se era in preventivo, attivala
                     if pacchetto.status == PacchettoStatus.Preventivo:
                         pacchetto.status = PacchettoStatus.Attivo
                     
-                    # Registra movimento di ricarica
                     from appl.models import MovimentoPrepagata
                     movimento = MovimentoPrepagata(
                         pacchetto_id=pacchetto.id,
@@ -767,20 +776,22 @@ def send_to_rch():
                     db.session.add(movimento)
                     db.session.commit()
                     current_app.logger.info(f"Ricarica prepagata {ricarica_prepagata_id}: +€{importo:.2f}, nuovo saldo €{nuovo_saldo:.2f}")
+                    # IMPORTANTE: Salva ID per redirect
+                    redirect_pacchetto_id = int(ricarica_prepagata_id)
             except Exception as e:
                 current_app.logger.error(f"Errore ricarica prepagata {ricarica_prepagata_id}: {e}")
 
-        # Gestione pagamento carta prepagata
+        # Gestione pagamento carta prepagata (ATTIVAZIONE)
         prepagata_id = v.get('prepagata_id')
         if prepagata_id:
             try:
                 pacchetto = Pacchetto.query.get(int(prepagata_id))
                 if pacchetto and pacchetto.tipo.value == 'prepagata':
-                    credito = pacchetto.credito_iniziale
+                    credito = Decimal(str(v.get('credito_da_caricare', pacchetto.credito_iniziale)))
+                    
                     pacchetto.credito_residuo = credito
                     pacchetto.status = PacchettoStatus.Attivo
                     
-                    # Registra movimento iniziale di ricarica
                     from appl.models import MovimentoPrepagata
                     movimento = MovimentoPrepagata(
                         pacchetto_id=pacchetto.id,
@@ -792,33 +803,31 @@ def send_to_rch():
                     db.session.add(movimento)
                     db.session.commit()
                     current_app.logger.info(f"Prepagata {prepagata_id} attivata con credito €{credito:.2f}")
+                    # IMPORTANTE: Salva l'ID per redirect
+                    redirect_pacchetto_id = int(prepagata_id)
             except Exception as e:
                 current_app.logger.error(f"Errore attivazione prepagata {prepagata_id}: {e}")
 
+        # Gestione rate pacchetto
         rata_id = v.get('rata_id')
         if rata_id:
             try:
                 rata = PacchettoRata.query.get(int(rata_id))
                 if rata and not rata.is_pagata:
-                    # Controlla se l'importo è stato modificato
                     importo_pagato = float(v.get('prezzo', 0))
                     importo_originale = float(rata.importo)
                     importo_modificato = abs(importo_pagato - importo_originale) > 0.01
                     
                     if importo_modificato:
-                        # Aggiorna l'importo della rata con quello effettivamente pagato
                         rata.importo = importo_pagato
                         pacchetto_ids_modificati.add(rata.pacchetto_id)
                     
                     rata.is_pagata = True
                     rata.data_pagamento = datetime.now()
                     
-                    # Aggiorna history e status pacchetto
                     pacchetto = rata.pacchetto
                     if pacchetto:
-                        # Trova numero rata
                         rata_num = next((i+1 for i, r in enumerate(pacchetto.rate) if r.id == rata.id), 0)
-                        # Aggiungi history
                         try:
                             history = json.loads(pacchetto.history) if pacchetto.history else []
                         except:
@@ -830,7 +839,6 @@ def send_to_rch():
                             history.append({"ts": datetime.now().isoformat(), "azione": f"Pagata rata {rata_num}"})
                         pacchetto.history = json.dumps(history)
                         
-                        # Imposta status Attivo
                         if pacchetto.status.value not in ("completato", "eliminato"):
                             pacchetto.status = PacchettoStatus.Attivo
                     
@@ -842,20 +850,32 @@ def send_to_rch():
     # Prepara response con info per redirect a pacchetto se necessario
     response = {"results": results, "reset_voci": True}
     
-    # Se c'è un pacchetto con rata modificata, indica di fare redirect
-    if pacchetto_ids_modificati:
-        # Prendi il primo pacchetto (di solito ce n'è uno solo)
+    # PRIORITA' 1: Redirect a prepagata se è stata attivata/ricaricata
+    if redirect_pacchetto_id:
+        response["redirect_to_pacchetto"] = redirect_pacchetto_id
+        response["prepagata_attivata"] = True
+        current_app.logger.info(f"Redirect impostato a prepagata {redirect_pacchetto_id}")
+    # PRIORITA' 2: Se c'è un pacchetto con rata modificata
+    elif pacchetto_ids_modificati:
         pacchetto_id = list(pacchetto_ids_modificati)[0]
         response["redirect_to_pacchetto"] = pacchetto_id
         response["rata_importo_modificato"] = True
+    # PRIORITA' 3: Se c'era una rata, redirect al pacchetto
     elif any(v.get('rata_id') for v in voci):
-        # Anche se non modificato, se c'era una rata, redirect al pacchetto
         for v in voci:
             if v.get('rata_id'):
                 rata = PacchettoRata.query.get(int(v['rata_id']))
                 if rata:
                     response["redirect_to_pacchetto"] = rata.pacchetto_id
                     break
+    # PRIORITA' 4: Cerca prepagata_id o ricarica nelle voci (fallback)
+    if not response.get("redirect_to_pacchetto"):
+        for v in voci:
+            pid = v.get('prepagata_id') or v.get('ricarica_prepagata_id')
+            if pid:
+                response["redirect_to_pacchetto"] = int(pid)
+                current_app.logger.info(f"Redirect fallback a prepagata {pid}")
+                break
     
     # Salva idempotency solo se non ci sono errori nei risultati
     if idempotency_key and not any("error" in str(r).lower() for r in results):
@@ -1377,7 +1397,7 @@ def myspia_dettagli():
             "cliente_nome": (cli.cliente_nome if cli else "") or "",
             "cliente_cognome": (cli.cliente_cognome if cli else "") or "",
             "operatore_id": op.id if op else None,
-            "operatore_nome": (f"{op.user_nome} {op.user_cognome}".strip() if op else ""),
+            "operatore_nome": (op.user_nome if op else "") or "",
             "appuntamenti": []
         }
 
