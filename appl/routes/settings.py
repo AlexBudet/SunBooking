@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import os, ipaddress, requests
 from sqlalchemy.sql import func, or_
 from .. import db
-from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate
+from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio
 
 # Blueprint per le rotte delle impostazioni
 settings_bp = Blueprint('settings', __name__, template_folder='../templates')
@@ -3226,6 +3226,229 @@ def marketing_delete_template(template_id):
     db.session.delete(template)
     db.session.commit()
     return jsonify({'success': True})
+
+# ================= INVIO MARKETING WHATSAPP ====================
+@settings_bp.route('/api/marketing/send', methods=['POST'])
+def marketing_send_whatsapp():
+    """
+    Invia messaggi WhatsApp marketing ai clienti selezionati.
+    Rispetta il limite giornaliero configurato.
+    """
+    import requests
+    import os
+    from datetime import date
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'Dati mancanti'}), 400
+    
+    clients = data.get('clients', [])
+    template = data.get('template', '')
+    
+    if not clients:
+        return jsonify({'success': False, 'error': 'Nessun cliente selezionato'}), 400
+    if not template.strip():
+        return jsonify({'success': False, 'error': 'Messaggio vuoto'}), 400
+    
+    # Recupera impostazioni
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    if not business_info:
+        return jsonify({'success': False, 'error': 'BusinessInfo non configurato'}), 400
+    
+    # Verifica connessione WhatsApp
+    account_id = business_info.unipile_account_id
+    if not account_id:
+        return jsonify({'success': False, 'error': 'WhatsApp non connesso. Vai in Impostazioni > WhatsApp per collegare.'}), 400
+    
+    # Conta invii di oggi
+    oggi = date.today()
+    invii_oggi = MarketingInvio.query.filter(
+        func.date(MarketingInvio.data_invio) == oggi,
+        MarketingInvio.stato == 'inviato'
+    ).count()
+    
+    max_giornalieri = business_info.marketing_max_daily_sends or 30
+    disponibili = max_giornalieri - invii_oggi
+    
+    if disponibili <= 0:
+        return jsonify({
+            'success': False, 
+            'error': f'Limite giornaliero raggiunto ({max_giornalieri} invii). Riprova domani.'
+        }), 400
+    
+    # Limita al numero disponibile
+    clients_to_send = clients[:disponibili]
+    
+    # Configurazione Unipile
+    UNIPILE_API_KEY = os.getenv('UNIPILE_API_KEY', '')
+    UNIPILE_BASE_URL = os.getenv('UNIPILE_DSN', 'https://api.unipile.com:13337')
+    
+    if not UNIPILE_API_KEY:
+        return jsonify({'success': False, 'error': 'UNIPILE_API_KEY non configurata'}), 500
+    
+    headers = {
+        'X-API-KEY': UNIPILE_API_KEY,
+        'Content-Type': 'application/json'
+    }
+    
+    risultati = {
+        'inviati': 0,
+        'errori': 0,
+        'dettagli_errori': []
+    }
+    
+    centro_nome = business_info.business_name or 'Centro'
+    
+    for client_data in clients_to_send:
+        client_id = client_data.get('id')
+        cellulare = client_data.get('cellulare', '')
+        
+        if not cellulare:
+            risultati['errori'] += 1
+            risultati['dettagli_errori'].append(f"{client_data.get('nome', '?')} {client_data.get('cognome', '?')}: numero mancante")
+            continue
+        
+        # Normalizza numero
+        numero_normalizzato = _normalize_phone_for_whatsapp(cellulare)
+        if not numero_normalizzato:
+            risultati['errori'] += 1
+            risultati['dettagli_errori'].append(f"{client_data.get('nome', '?')}: numero non valido")
+            continue
+        
+        # Sostituisci variabili nel template
+        messaggio = template
+        messaggio = messaggio.replace('{{nome}}', client_data.get('nome', ''))
+        messaggio = messaggio.replace('{{cognome}}', client_data.get('cognome', ''))
+        messaggio = messaggio.replace('{{giorni_assenza}}', str(client_data.get('giorni_assenza', '0')))
+        messaggio = messaggio.replace('{{totale_visite}}', str(client_data.get('totale_visite', '0')))
+        messaggio = messaggio.replace('{{totale_speso}}', str(client_data.get('totale_speso', '0')))
+        messaggio = messaggio.replace('{{servizio_preferito}}', client_data.get('servizio_preferito', ''))
+        messaggio = messaggio.replace('{{centro}}', centro_nome)
+        
+        # Invia via Unipile
+        try:
+            payload = {
+                'account_id': account_id,
+                'text': messaggio,
+                'attendees_ids': [f"{numero_normalizzato}@s.whatsapp.net"]
+            }
+            
+            resp = requests.post(
+                f"{UNIPILE_BASE_URL}/api/v1/chats/",
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+            
+            if resp.status_code in (200, 201):
+                # Registra invio riuscito
+                invio = MarketingInvio(
+                    client_id=client_id,
+                    messaggio=messaggio[:500],
+                    stato='inviato'
+                )
+                db.session.add(invio)
+                risultati['inviati'] += 1
+            else:
+                # Registra errore
+                errore_msg = resp.text[:200] if resp.text else f"HTTP {resp.status_code}"
+                invio = MarketingInvio(
+                    client_id=client_id,
+                    messaggio=messaggio[:500],
+                    stato='errore',
+                    errore=errore_msg
+                )
+                db.session.add(invio)
+                risultati['errori'] += 1
+                risultati['dettagli_errori'].append(f"{client_data.get('nome', '?')}: {errore_msg[:50]}")
+                
+        except Exception as e:
+            invio = MarketingInvio(
+                client_id=client_id,
+                messaggio=messaggio[:500],
+                stato='errore',
+                errore=str(e)[:500]
+            )
+            db.session.add(invio)
+            risultati['errori'] += 1
+            risultati['dettagli_errori'].append(f"{client_data.get('nome', '?')}: {str(e)[:50]}")
+    
+    db.session.commit()
+    
+    # Messaggio di risposta
+    if risultati['inviati'] > 0:
+        msg = f"Inviati {risultati['inviati']} messaggi."
+        if risultati['errori'] > 0:
+            msg += f" {risultati['errori']} errori."
+        return jsonify({
+            'success': True,
+            'message': msg,
+            'inviati': risultati['inviati'],
+            'errori': risultati['errori'],
+            'dettagli_errori': risultati['dettagli_errori'][:5],
+            'rimanenti_oggi': disponibili - risultati['inviati']
+        })
+    else:
+        return jsonify({
+            'success': False,
+            'error': 'Nessun messaggio inviato',
+            'dettagli_errori': risultati['dettagli_errori'][:5]
+        }), 400
+
+
+def _normalize_phone_for_whatsapp(numero):
+    """Normalizza numero per WhatsApp (formato: 39xxxxxxxxxx)"""
+    import re
+    if not numero:
+        return None
+    
+    # Rimuovi spazi e caratteri non numerici eccetto +
+    pulito = re.sub(r'[^\d+]', '', str(numero).strip())
+    
+    # Rimuovi + iniziale
+    if pulito.startswith('+'):
+        pulito = pulito[1:]
+    
+    # Rimuovi 00 iniziale
+    if pulito.startswith('00'):
+        pulito = pulito[2:]
+    
+    # Se inizia con 3 (numero italiano senza prefisso), aggiungi 39
+    if pulito.startswith('3') and len(pulito) == 10:
+        pulito = '39' + pulito
+    
+    # Verifica lunghezza minima
+    if len(pulito) < 10:
+        return None
+    
+    return pulito
+
+
+@settings_bp.route('/api/marketing/daily-stats', methods=['GET'])
+def marketing_daily_stats():
+    """Restituisce statistiche invii del giorno"""
+    from datetime import date
+    
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    max_giornalieri = business_info.marketing_max_daily_sends if business_info else 30
+    
+    oggi = date.today()
+    invii_oggi = MarketingInvio.query.filter(
+        func.date(MarketingInvio.data_invio) == oggi,
+        MarketingInvio.stato == 'inviato'
+    ).count()
+    
+    errori_oggi = MarketingInvio.query.filter(
+        func.date(MarketingInvio.data_invio) == oggi,
+        MarketingInvio.stato == 'errore'
+    ).count()
+    
+    return jsonify({
+        'inviati_oggi': invii_oggi,
+        'errori_oggi': errori_oggi,
+        'limite': max_giornalieri,
+        'disponibili': max(0, max_giornalieri - invii_oggi)
+    })
 
 # ===================== AUTO-UPDATE ROUTES =====================
 
