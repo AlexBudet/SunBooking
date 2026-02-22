@@ -252,7 +252,7 @@
                                 <i class="bi bi-whatsapp me-2"></i>Invia a <span id="sendCount">0</span> clienti
                             </button>
                             <small class="text-muted d-block text-center mt-2">
-                                Limite giornaliero: {{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 30 }} invii
+                                <span id="dailyStatsInfo">Limite giornaliero: {{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 30 }} invii</span>
                             </small>
                             <div class="btn-group w-100">
                                 <button type="button" class="btn btn-outline-primary" id="btnSaveTemplate">
@@ -417,6 +417,21 @@
 <!-- JavaScript -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    
+    // Carica statistiche invii giornalieri
+    fetch('/settings/api/marketing/daily-stats')
+        .then(r => r.json())
+        .then(data => {
+            const info = document.getElementById('dailyStatsInfo');
+            if (info && data) {
+                info.innerHTML = `Oggi: <strong>${data.inviati_oggi}</strong>/${data.limite} invii | Disponibili: <strong>${data.disponibili}</strong>`;
+                if (data.disponibili === 0) {
+                    info.classList.add('text-danger');
+                    info.innerHTML += ' ⚠️';
+                }
+            }
+        })
+        .catch(err => console.log('Stats non disponibili'));
     
     // Inizializza tooltip Bootstrap
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
@@ -835,16 +850,61 @@ Ti aspettiamo 💆‍♀️`
             return;
         }
         
-        if (!confirm(`Confermi l'invio del messaggio a ${selectedClients.length} clienti?`)) {
+        if (!confirm(`Confermi l'invio del messaggio WhatsApp a ${selectedClients.length} clienti?\n\nQuesta operazione non può essere annullata.`)) {
             return;
         }
         
         const token = document.querySelector('#marketingMessageForm input[name="csrf_token"]').value;
+        const btn = document.getElementById('btnSendMarketing');
+        const originalText = btn.innerHTML;
         
-        // Per ora mostra solo l'anteprima - la logica di invio sarà implementata successivamente
-        alert(`Funzionalità di invio in sviluppo.\n\nClienti selezionati: ${selectedClients.length}\n\nI messaggi verranno inviati tramite WhatsApp Web.`);
+        // Disabilita pulsante e mostra spinner
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Invio in corso...';
         
-        // TODO: Implementare la logica di invio effettiva
+        fetch('/settings/api/marketing/send', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': token
+            },
+            body: JSON.stringify({
+                clients: selectedClients,
+                template: message
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            
+            if (data.success) {
+                let msg = `✅ ${data.message}\n\nInvii rimanenti oggi: ${data.rimanenti_oggi}`;
+                if (data.dettagli_errori && data.dettagli_errori.length > 0) {
+                    msg += '\n\nErrori:\n' + data.dettagli_errori.join('\n');
+                }
+                alert(msg);
+                
+                // Deseleziona i clienti inviati
+                document.querySelectorAll('.client-checkbox:checked').forEach(cb => {
+                    cb.checked = false;
+                    cb.closest('.client-item')?.classList.remove('selected');
+                });
+                updateCounts();
+            } else {
+                let errMsg = '❌ ' + (data.error || 'Errore sconosciuto');
+                if (data.dettagli_errori && data.dettagli_errori.length > 0) {
+                    errMsg += '\n\nDettagli:\n' + data.dettagli_errori.join('\n');
+                }
+                alert(errMsg);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            alert('❌ Errore di connessione durante l\'invio');
+        });
     }
 
     // Inizializza link recensione listener
