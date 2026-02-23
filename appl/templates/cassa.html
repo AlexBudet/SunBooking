@@ -309,21 +309,6 @@
     </div>
   </div>
 </div>
-
-<!-- Mini-modal selezione operatore per singola riga -->
-<div class="modal fade" id="modalSelezionaOperatoreRiga" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" style="max-width: 250px;">
-    <div class="modal-content" style="font-size: 1em;">
-      <div class="modal-header py-1 px-2">
-        <span class="modal-title" style="font-size: 1em; font-weight: 600;">Operatore</span>
-        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal" style="font-size: 0.9em;"></button>
-      </div>
-      <div class="modal-body p-1">
-        <div id="listaOperatoriRigaModal" style="max-height: 200px; overflow-y: auto;"></div>
-      </div>
-    </div>
-  </div>
-</div>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   // Inizializza tooltip per i campi operatore e cliente
@@ -573,6 +558,22 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endif %}
+
+<!-- Mini-modal selezione operatore per singola riga - ACCESSIBILE A TUTTI -->
+<div class="modal fade" id="modalSelezionaOperatoreRiga" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width: 320px;">
+    <div class="modal-content" style="font-size: 1.2em; border-radius: 12px; border: 1px solid rgba(135, 100, 124, 0.25); box-shadow: 0 8px 32px rgba(0,0,0,0.18);">
+      <div class="modal-header py-2 px-3" style="background: linear-gradient(180deg, #f8f5f7 0%, #fff 100%); border-bottom: 1px solid rgba(135, 100, 124, 0.15); border-radius: 12px 12px 0 0;">
+        <span class="modal-title" style="font-size: 1.2em; font-weight: 600; color: #5a4a54;">Seleziona Operatore</span>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" style="font-size: 1em;"></button>
+      </div>
+      <div class="modal-body p-3">
+        <div id="listaOperatoriRigaModal" style="max-height: 280px; overflow-y: auto;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <style>
   .modal-body {
     max-height: 70vh;      /* Limita l'altezza al 70% della viewport */
