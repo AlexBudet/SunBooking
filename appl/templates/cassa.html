@@ -1718,5 +1718,28 @@ body.show-op-per-riga .scontrino-row .op-col:hover {
   color: white;
   border-color: #1976d2;
 }
+
+/* Stili pulsanti operatore nel modal */
+#listaOperatoriRigaModal .btn {
+  font-size: 1.1em;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(135, 100, 124, 0.2);
+  background: linear-gradient(180deg, #ffffff 0%, #f8f5f7 100%);
+  transition: all 0.15s ease;
+  margin-bottom: 8px;
+}
+
+#listaOperatoriRigaModal .btn:hover {
+  border-color: rgba(135, 100, 124, 0.4);
+  box-shadow: 0 3px 8px rgba(135, 100, 124, 0.15);
+  transform: translateY(-1px);
+}
+
+#listaOperatoriRigaModal .btn.btn-primary {
+  background: linear-gradient(180deg, #b8809d 0%, #a06b88 100%);
+  border-color: #a06b88;
+  color: #fff;
+}
 </style>
 {% endblock %}
