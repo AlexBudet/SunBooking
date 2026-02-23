@@ -2255,8 +2255,53 @@ button.service-btn-prodotti,
 }
 
 .scontrino-row {
-    font-size: 1.25rem; /* oppure scegli la dimensione che preferisci */
-  }
+    font-size: 1.25rem;
+    border: 1px solid rgba(135, 100, 124, 0.2) !important;
+    border-radius: 10px !important;
+    background: linear-gradient(180deg, #ffffff 0%, #f8f5f7 100%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    padding: 8px 10px;
+    margin-bottom: 6px !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.scontrino-row:hover {
+    border-color: rgba(135, 100, 124, 0.35) !important;
+    box-shadow: 0 3px 8px rgba(135, 100, 124, 0.12);
+}
+
+.scontrino-row .form-control,
+.scontrino-row .form-select {
+    border: 1px solid rgba(135, 100, 124, 0.2);
+    border-radius: 8px;
+    background: #fff;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.scontrino-row .form-control:focus,
+.scontrino-row .form-select:focus {
+    border-color: #b8809d;
+    box-shadow: 0 0 0 2px rgba(184, 128, 157, 0.15);
+    outline: none;
+}
+
+.scontrino-row .btn-link.text-danger {
+    color: #dc6b7f !important;
+    transition: color 0.15s ease;
+}
+
+.scontrino-row .btn-link.text-danger:hover {
+    color: #c55a6d !important;
+}
+
+#scontrinoRowsContainer {
+    border: 1px solid rgba(135, 100, 124, 0.15);
+    border-radius: 12px;
+    padding: 10px;
+    background: #fdfbfc;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03);
+    min-height: 60px;
+}
 
 #operatorSelectInput, #clientSearchInputCassa {
     width: 50%;
