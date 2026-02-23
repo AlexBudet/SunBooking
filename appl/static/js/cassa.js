@@ -1240,7 +1240,8 @@ function aggiungiRigaServizio(servizio, salva = true) {
   row.dataset.appointmentId = servizio.appointment_id || '';
   row.dataset.rataId = servizio.rata_id || '';
   row.dataset.pacchettoId = servizio.pacchetto_id || '';
-  row.className = 'd-flex align-items-center border scontrino-row mb-1';
+  /* filepath: c:\Program Files\SunBooking\appl\static\js\cassa.js */
+row.className = 'd-flex align-items-center scontrino-row';
   row.style.background = '#fff';
   row.dataset.servizioId = servizio.id || '';
   row.dataset.categoria = servizio.categoria || '';
@@ -1281,7 +1282,9 @@ function aggiungiRigaServizio(servizio, salva = true) {
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
-    console.log('Click su op-col, row:', row);
+    console.log('DEBUG: Click su op-col rilevato');
+    console.log('DEBUG: row =', row);
+    console.log('DEBUG: window.apriModalOperatoreRiga =', typeof window.apriModalOperatoreRiga);
     window.currentRowForOperator = row;
     // Usa window.apriModalOperatoreRiga per essere sicuri che sia accessibile
     if (typeof window.apriModalOperatoreRiga === 'function') {
@@ -2132,12 +2135,21 @@ document.getElementById('toggleOperatoriRiga')?.addEventListener('click', functi
 
 // Funzione per aprire mini-modal selezione operatore
 function apriModalOperatoreRiga(row) {
+  console.log('apriModalOperatoreRiga chiamata con row:', row);
+
   const lista = document.getElementById('listaOperatoriRigaModal');
-  if (!lista) return;
+  if (!lista) {
+    console.error('Elemento listaOperatoriRigaModal non trovato!');
+    return;
+  }
   lista.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm"></div></div>';
   
   const modalEl = document.getElementById('modalSelezionaOperatoreRiga');
-  if (!modalEl) return;
+  if (!modalEl) {
+    console.error('Elemento modalSelezionaOperatoreRiga non trovato!');
+    return;
+  }
+
   const modal = new bootstrap.Modal(modalEl);
   modal.show();
   
@@ -2175,13 +2187,15 @@ function apriModalOperatoreRiga(row) {
           modal.hide();
           
           // Segna come modificato
-          if (window.originalAppointmentIds && window.originalAppointmentIds.size > 0) {
-            window.hasModifications = true;
-            if (typeof mostraPulsanteSalva === 'function') mostraPulsanteSalva();
-          }
+          window.hasModifications = true;
+          if (typeof mostraPulsanteSalva === 'function') mostraPulsanteSalva();
         });
         lista.appendChild(btn);
       });
+    })
+    .catch(err => {
+      console.error('Errore fetch operatori:', err);
+      lista.innerHTML = '<p class="text-danger small">Errore nel caricamento</p>';
     });
 }
 window.apriModalOperatoreRiga = apriModalOperatoreRiga;
