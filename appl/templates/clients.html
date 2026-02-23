@@ -248,7 +248,12 @@ th {
     margin-bottom: 10px;
   }
 </style>
-
+<script src="{{ url_for('static', filename='js/app_tour.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        checkAutoTour('clients');
+    });
+</script>
 <script>
     // Funzione per aprire il modal delle note del cliente
     function openClientNoteModal(clientId, clientNote) {

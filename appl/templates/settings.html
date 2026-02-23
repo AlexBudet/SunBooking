@@ -16,13 +16,13 @@
 <a href="{{ url_for('settings.pacchetti_settings') }}" class="neo-btn{% if request.endpoint == 'settings.pacchetti_settings' %} active{% endif %}">Pacchetti</a>
 <a href="{{ url_for('settings.marketing') }}" class="neo-btn{% if request.endpoint == 'settings.marketing' %} active{% endif %}">Marketing</a>
 <a href="{{ url_for('settings.business_info') }}" class="neo-btn{% if request.endpoint == 'settings.business_info' %} active{% endif %}">Info Azienda</a>
+<a href="{{ url_for('settings.help_page') }}" class="neo-btn{% if request.endpoint == 'settings.help_page' %} active{% endif %}">Centro Assistenza</a>
 {% if not (current_user and current_user.ruolo.value == 'user') %}
   <a href="{{ url_for('settings.set_bookings') }}" class="neo-btn{% if request.endpoint == 'settings.set_bookings' %} active{% endif %}">Booking Web</a>
   <a href="{{ url_for('settings.manage_users') }}" class="neo-btn{% if request.endpoint == 'settings.manage_users' %} active{% endif %}">Utenti</a>
 {% endif %}
 </div>
 <div style="height: 20px;"></div>
-</div>
 </div>
 <style>
   .neo-btn {

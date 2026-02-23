@@ -812,6 +812,14 @@
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/app_tour.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Controlla se mostrare il tour del calendario
+        setTimeout(() => checkAutoTour('calendar'), 2000);
+    });
+</script>
+
 <script id="create-appt-template" type="text/template">
   <form id="CreateAppointmentForm">
     <button type="button" id="btnCreateBlockOff" class="btn btn-warning" style="right: 3px; z-index: 999;">
