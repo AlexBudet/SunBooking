@@ -1,0 +1,736 @@
+{% extends "settings.html" %}
+
+{% block settings_content %}
+<div class="container-fluid mt-4 help-page" style="max-width: 80%; margin: 0 auto;">
+    
+    <!-- Intestazione più accogliente -->
+    <div class="text-center mb-5">
+        <h2 class="mb-3">
+            <span style="font-size: 2.5rem;">🎯</span><br>
+            Come possiamo aiutarti?
+        </h2>
+        <p class="text-muted" style="font-size: 1.1rem;">
+            Trova risposte rapide o contattaci per assistenza personalizzata
+        </p>
+        <div class="input-group mx-auto mt-4" style="max-width: 400px;">
+            <input type="text" class="form-control" id="helpSearch" placeholder="🔍 Cerca un argomento...">
+        </div>
+    </div>
+    
+    <!-- Pulsanti rapidi per saltare alle sezioni -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex flex-wrap gap-2 justify-content-center">
+                {% for cat in categories.keys() %}
+                <a href="#section-{{ loop.index }}" class="btn btn-outline-primary btn-sm">
+                    {{ cat }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Messaggio quando nessun risultato -->
+    <div id="noResults" class="alert alert-warning d-none">
+        <i class="bi bi-search me-2"></i>Nessun risultato trovato. Prova con altre parole.
+    </div>
+    
+    <!-- Sezioni Help organizzate per categoria -->
+    {% for category, topic_keys in categories.items() %}
+    <div class="card mb-4 help-category" id="section-{{ loop.index }}">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">
+                {% if category == "Calendario" %}<i class="bi bi-calendar3 me-2"></i>
+                {% elif category == "Cassa" %}<i class="bi bi-cash-register me-2"></i>
+                {% elif category == "Clienti" %}<i class="bi bi-people me-2"></i>
+                {% elif category == "Pacchetti" %}<i class="bi bi-box me-2"></i>
+                {% elif category == "WhatsApp" %}<i class="bi bi-whatsapp me-2"></i>
+                {% elif category == "Marketing" %}<i class="bi bi-megaphone me-2"></i>
+                {% elif category == "Prenotazioni Online" %}<i class="bi bi-globe me-2"></i>
+                {% elif category == "Operatori" %}<i class="bi bi-person-badge me-2"></i>
+                {% elif category == "Servizi" %}<i class="bi bi-list-check me-2"></i>
+                {% endif %}
+                {{ category }}
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="accordion accordion-flush" id="accordion{{ loop.index }}">
+                {% for key in topic_keys %}
+                {% set topic = topics.get(key, {}) %}
+                <div class="accordion-item help-item" 
+                     data-search="{{ topic.title|lower }} {{ topic.content|lower }}">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" 
+                                data-bs-toggle="collapse" 
+                                data-bs-target="#collapse-{{ key }}">
+                            {{ topic.title }}
+                        </button>
+                    </h2>
+                    <div id="collapse-{{ key }}" class="accordion-collapse collapse" 
+                         data-bs-parent="#accordion{{ loop.index }}">
+                        <div class="accordion-body">
+                            <div style="white-space: pre-line;">{{ topic.content|safe }}</div>
+                            
+                            {% if topic.image %}
+                            <div class="text-center">
+                                <img src="{{ url_for('static', filename='img/help/' + topic.image) }}" 
+                                     alt="{{ topic.title }}" 
+                                     class="help-image {% if topic.image.endswith('.gif') %}help-gif{% endif %}">
+                            </div>
+                            {% endif %}
+                            
+                            {% if topic.video %}
+                            <div class="mt-3">
+                                <button class="btn btn-outline-primary btn-sm" 
+                                        onclick="showVideo('{{ topic.video }}')">
+                                    <i class="bi bi-play-circle me-1"></i>Guarda il video tutorial
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    
+    <!-- Box contatto supporto -->
+    <div class="card mb-4 support-box">
+        <div class="card-body text-center py-5">
+            <div style="font-size: 3rem; margin-bottom: 15px;">💬</div>
+            <h5>Non hai trovato la risposta?</h5>
+            <p class="text-muted mb-4">Siamo qui per aiutarti!</p>
+            <a href="mailto:info@tosca-crm.it" class="btn btn-success btn-lg px-4">
+                <i class="bi bi-envelope me-2"></i>Scrivici
+            </a>
+        </div>
+    </div>
+    
+    <!-- Pulsante per rivedere il tour guidato -->
+    <div class="card mb-4 tour-box">
+        <div class="card-body text-center py-5">
+            <div style="font-size: 3rem; margin-bottom: 15px;">🎯</div>
+            <h5>Vuoi rivedere il tour guidato?</h5>
+            <p class="text-muted mb-4">Ti mostriamo di nuovo come funziona tutto</p>
+            <button class="btn btn-primary btn-lg px-4" onclick="resetAllTours(); location.reload();">
+                <i class="bi bi-arrow-repeat me-2"></i>Riattiva Tour
+            </button>
+        </div>
+    </div>
+
+</div>
+<br><br>
+
+<!-- Modal per i video tutorial -->
+<div class="modal fade" id="videoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Video Tutorial</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="ratio ratio-16x9">
+                    <iframe id="videoFrame" src="" allowfullscreen></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Font amichevole */
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap');
+
+.help-page {
+    font-family: 'Nunito', sans-serif;
+    max-width: 1200px;
+}
+
+/* Su schermi grandi, max 80% */
+@media (min-width: 1400px) {
+    .help-page {
+        max-width: 80% !important;
+    }
+}
+
+.help-page h2 {
+    font-weight: 700;
+    color: #333;
+}
+
+/* Card colorate per categoria */
+.help-category {
+    border: none;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    transition: transform 0.2s;
+}
+
+.help-category:hover {
+    transform: translateY(-2px);
+}
+
+/* Colori diversi per ogni categoria */
+.help-category:nth-child(6n+1) .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.help-category:nth-child(6n+2) .card-header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+.help-category:nth-child(6n+3) .card-header { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+.help-category:nth-child(6n+4) .card-header { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+.help-category:nth-child(6n+5) .card-header { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+.help-category:nth-child(6n+6) .card-header { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
+
+.help-category .card-header {
+    border: none;
+    padding: 20px 24px;
+}
+
+.help-category .card-header h5 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.help-category .card-header h5 i {
+    font-size: 1.5rem;
+}
+
+/* Accordion più morbido */
+.help-item {
+    border: none;
+    border-bottom: 1px solid #eee;
+}
+
+.help-item:last-child {
+    border-bottom: none;
+}
+
+.accordion-button {
+    font-weight: 600;
+    font-size: 1.05rem;
+    padding: 18px 24px;
+    color: #444;
+}
+
+.accordion-button:not(.collapsed) {
+    background-color: #f8f9ff;
+    color: #667eea;
+    box-shadow: none;
+}
+
+.accordion-button:focus {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.accordion-body {
+    padding: 20px 24px 24px;
+    font-size: 1rem;
+    line-height: 1.7;
+    color: #555;
+}
+
+/* Immagini help */
+.help-image {
+    max-width: 100%;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    margin: 16px 0;
+}
+
+.help-gif {
+    max-width: 100%;
+    border-radius: 12px;
+    border: 3px solid #eee;
+    margin: 16px 0;
+}
+
+/* Box ricerca migliorato */
+#helpSearch {
+    border-radius: 25px;
+    padding: 12px 20px;
+    border: 2px solid #eee;
+    transition: all 0.3s;
+}
+
+#helpSearch:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+/* Box supporto */
+.support-box {
+    background: linear-gradient(135deg, #e0ffe0 0%, #c8f7c8 100%);
+    border: none;
+    border-radius: 16px;
+}
+
+/* Box tour */
+.tour-box {
+    background: linear-gradient(135deg, #e8f4ff 0%, #d0e8ff 100%);
+    border: none;
+    border-radius: 16px;
+}
+
+.help-category.d-none {
+    display: none !important;
+}
+
+/* ========== TOOLTIP CON IMMAGINI ========== */
+.help-tooltip {
+    color: #667eea;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+    cursor: help;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.help-tooltip:hover,
+.help-tooltip:focus {
+    color: #764ba2;
+    text-decoration-style: solid;
+}
+
+/* Tooltip container - stile modal glamour */
+.tooltip-images {
+    position: fixed;
+    z-index: 10000;
+    background: linear-gradient(145deg, #fff9fc 0%, #ffffff 50%, #fff5f8 100%);
+    border-radius: 20px;
+    box-shadow: 
+        0 25px 80px rgba(180, 100, 140, 0.3),
+        0 10px 30px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    border: 2px solid rgba(200, 150, 170, 0.3);
+    padding: 24px;
+    padding-top: 56px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: auto;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+}
+
+/* Overlay scuro dietro il tooltip */
+.tooltip-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, rgba(40, 20, 30, 0.7) 0%, rgba(60, 30, 50, 0.8) 100%);
+    backdrop-filter: blur(3px);
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease;
+}
+
+.tooltip-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.tooltip-images.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, -50%) scale(1) !important;
+    pointer-events: auto;
+}
+
+.tooltip-images img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 12px;
+    display: block;
+    border: 3px solid #2c2c2c;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Navigazione immagini */
+.tooltip-nav {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+}
+
+.tooltip-nav button {
+    width: 40px;
+    height: 40px;
+    border: 2px solid rgba(180, 100, 140, 0.3);
+    background: linear-gradient(145deg, #fff 0%, #f8f0f4 100%);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s ease;
+    font-size: 14px;
+    color: #8b6078;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.tooltip-nav button:hover {
+    background: linear-gradient(145deg, #d4a5b9 0%, #c48da3 100%);
+    border-color: #b8829a;
+    color: white;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(180, 100, 140, 0.3);
+}
+
+.tooltip-nav button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    background: #f5f5f5;
+    border-color: #ddd;
+    color: #bbb;
+}
+
+.tooltip-counter {
+    font-size: 14px;
+    font-weight: 600;
+    color: #8b6078;
+    min-width: 60px;
+    text-align: center;
+}
+
+/* Indicatori pallini */
+.tooltip-dots {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+.tooltip-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(180, 100, 140, 0.25);
+    border: 1px solid rgba(180, 100, 140, 0.3);
+    transition: all 0.25s ease;
+}
+
+.tooltip-dot.active {
+    background: linear-gradient(145deg, #d4a5b9 0%, #c48da3 100%);
+    border-color: #b8829a;
+    transform: scale(1.3);
+    box-shadow: 0 2px 6px rgba(180, 100, 140, 0.4);
+}
+
+.tooltip-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    border: 2px solid rgba(180, 100, 140, 0.3);
+    background: linear-gradient(145deg, #fff 0%, #f8f0f4 100%);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #8b6078;
+    transition: all 0.25s ease;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.tooltip-close:hover {
+    background: linear-gradient(145deg, #d4a5b9 0%, #c48da3 100%);
+    border-color: #b8829a;
+    color: white;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(180, 100, 140, 0.3);
+}
+
+/* Loading spinner */
+.tooltip-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 150px;
+    color: #667eea;
+}
+
+.tooltip-loading::after {
+    content: '';
+    width: 30px;
+    height: 30px;
+    border: 3px solid #eee;
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // Funzione di ricerca
+    const searchInput = document.getElementById('helpSearch');
+    const noResults = document.getElementById('noResults');
+    
+    searchInput.addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        let foundAny = false;
+        
+        // Filtra gli elementi help
+        document.querySelectorAll('.help-item').forEach(item => {
+            const searchText = item.dataset.search || '';
+            const match = query === '' || searchText.includes(query);
+            item.classList.toggle('d-none', !match);
+            if (match) foundAny = true;
+        });
+        
+        // Mostra/nascondi categorie che non hanno elementi visibili
+        document.querySelectorAll('.help-category').forEach(cat => {
+            const visibleItems = cat.querySelectorAll('.help-item:not(.d-none)').length;
+            cat.classList.toggle('d-none', visibleItems === 0);
+        });
+        
+        // Mostra messaggio se nessun risultato
+        noResults.classList.toggle('d-none', foundAny || query === '');
+    });
+    
+});
+
+// Mappa dei video
+const VIDEO_URLS = {
+    'pacchetti': 'https://www.youtube.com/embed/VIDEO_ID_PACCHETTI',
+    'whatsapp': 'https://www.youtube.com/embed/VIDEO_ID_WHATSAPP',
+    'booking': 'https://www.youtube.com/embed/VIDEO_ID_BOOKING',
+};
+
+function showVideo(videoId) {
+    const url = VIDEO_URLS[videoId];
+    if (!url || url.includes('VIDEO_ID')) {
+        alert('Video tutorial non ancora disponibile.\n\nSarà aggiunto a breve!');
+        return;
+    }
+    document.getElementById('videoFrame').src = url;
+    new bootstrap.Modal(document.getElementById('videoModal')).show();
+}
+
+// Ferma il video quando si chiude il modal
+document.getElementById('videoModal')?.addEventListener('hidden.bs.modal', function() {
+    document.getElementById('videoFrame').src = '';
+});
+
+// Funzione per resettare i tour
+function resetAllTours() {
+    const tours = ['calendar', 'pacchetti', 'clients', 'settings'];
+    tours.forEach(t => localStorage.removeItem('tour_' + t + '_seen'));
+    alert('Tour guidato riattivato!\n\nLa prossima volta che visiterai le pagine principali, vedrai di nuovo la guida.');
+}
+
+// ========== TOOLTIP IMMAGINI INTERATTIVI ==========
+(function() {
+    let tooltipEl = null;
+    let currentImages = [];
+    let currentIndex = 0;
+    let hideTimeout = null;
+    let overlayEl = null;
+
+    function createTooltip() {
+        if (tooltipEl) return;
+        
+        // Crea overlay scuro
+        overlayEl = document.createElement('div');
+        overlayEl.className = 'tooltip-overlay';
+        document.body.appendChild(overlayEl);
+        
+        // Crea tooltip
+        tooltipEl = document.createElement('div');
+        tooltipEl.className = 'tooltip-images';
+        tooltipEl.innerHTML = `
+            <button type="button" class="tooltip-close" title="Chiudi">✕</button>
+            <div class="tooltip-loading"></div>
+            <img src="" alt="Help" style="display:none;">
+            <div class="tooltip-nav" style="display:none;">
+                <button type="button" class="tooltip-prev" title="Precedente">◀</button>
+                <span class="tooltip-counter">1 / 1</span>
+                <button type="button" class="tooltip-next" title="Successiva">▶</button>
+            </div>
+            <div class="tooltip-dots"></div>
+        `;
+        document.body.appendChild(tooltipEl);
+
+        // Tasto chiudi
+        tooltipEl.querySelector('.tooltip-close').addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            hideTooltip();
+        });
+        
+        // Click su overlay chiude
+        overlayEl.addEventListener('click', function() {
+            hideTooltip();
+        });
+
+        // Event listeners per navigazione
+        tooltipEl.querySelector('.tooltip-prev').addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigate(-1);
+        });
+        tooltipEl.querySelector('.tooltip-next').addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            navigate(1);
+        });
+        
+        // Previeni che click dentro il tooltip lo chiudano
+        tooltipEl.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+    }
+
+    function showTooltip(target) {
+        createTooltip();
+
+        const imagesStr = target.dataset.images;
+        if (!imagesStr) return;
+
+        currentImages = imagesStr.split(',');
+        currentIndex = 0;
+
+        // Mostra loading
+        tooltipEl.querySelector('.tooltip-loading').style.display = 'flex';
+        tooltipEl.querySelector('img').style.display = 'none';
+        tooltipEl.querySelector('.tooltip-nav').style.display = 'none';
+
+        // Mostra overlay e tooltip
+        overlayEl.classList.add('visible');
+        tooltipEl.classList.add('visible');
+
+        // Carica prima immagine
+        loadImage(0);
+    }
+
+    function loadImage(index) {
+        const img = tooltipEl.querySelector('img');
+        const imgPath = `/static/img/help/${currentImages[index]}`;
+        
+        img.onload = function() {
+            tooltipEl.querySelector('.tooltip-loading').style.display = 'none';
+            img.style.display = 'block';
+            updateNav();
+        };
+        
+        img.onerror = function() {
+            tooltipEl.querySelector('.tooltip-loading').style.display = 'none';
+            img.style.display = 'none';
+            console.warn('Immagine non trovata:', imgPath);
+        };
+        
+        img.src = imgPath;
+    }
+
+    function updateNav() {
+        const nav = tooltipEl.querySelector('.tooltip-nav');
+        const counter = tooltipEl.querySelector('.tooltip-counter');
+        const dots = tooltipEl.querySelector('.tooltip-dots');
+        const prevBtn = tooltipEl.querySelector('.tooltip-prev');
+        const nextBtn = tooltipEl.querySelector('.tooltip-next');
+
+        if (currentImages.length > 1) {
+            nav.style.display = 'flex';
+            counter.textContent = `${currentIndex + 1} / ${currentImages.length}`;
+            prevBtn.disabled = currentIndex === 0;
+            nextBtn.disabled = currentIndex === currentImages.length - 1;
+
+            // Aggiorna pallini
+            dots.innerHTML = currentImages.map((_, i) => 
+                `<span class="tooltip-dot ${i === currentIndex ? 'active' : ''}"></span>`
+            ).join('');
+        } else {
+            nav.style.display = 'none';
+            dots.innerHTML = '';
+        }
+    }
+
+    function navigate(direction) {
+        const newIndex = currentIndex + direction;
+        if (newIndex >= 0 && newIndex < currentImages.length) {
+            currentIndex = newIndex;
+            tooltipEl.querySelector('.tooltip-loading').style.display = 'flex';
+            tooltipEl.querySelector('img').style.display = 'none';
+            loadImage(currentIndex);
+        }
+    }
+
+    function hideTooltip() {
+        if (tooltipEl) {
+            tooltipEl.classList.remove('visible');
+        }
+        if (overlayEl) {
+            overlayEl.classList.remove('visible');
+        }
+    }
+
+    // Delegazione eventi - solo mouseenter, NO mouseleave
+    document.addEventListener('mouseenter', function(e) {
+        if (e.target && e.target.classList && e.target.classList.contains('help-tooltip')) {
+            showTooltip(e.target);
+        }
+    }, true);
+
+    // Click fuori dal tooltip lo chiude
+    document.addEventListener('click', function(e) {
+        if (tooltipEl && tooltipEl.classList.contains('visible')) {
+            if (!tooltipEl.contains(e.target) && !e.target.classList.contains('help-tooltip')) {
+                tooltipEl.classList.remove('visible');
+            }
+        }
+    });
+
+    // Supporto keyboard per accessibilità
+    document.addEventListener('focusin', function(e) {
+        if (e.target && e.target.classList && e.target.classList.contains('help-tooltip')) {
+            showTooltip(e.target);
+        }
+    });
+
+    document.addEventListener('focusout', function(e) {
+        if (e.target && e.target.classList && e.target.classList.contains('help-tooltip')) {
+            hideTooltip(e.target);
+        }
+    });
+
+    // Navigazione con tastiera
+    document.addEventListener('keydown', function(e) {
+        if (!tooltipEl || !tooltipEl.classList.contains('visible')) return;
+        if (e.key === 'ArrowLeft') navigate(-1);
+        if (e.key === 'ArrowRight') navigate(1);
+        if (e.key === 'Escape') {
+            tooltipEl.classList.remove('visible');
+        }
+    });
+})();
+</script>
+
+{% endblock %}

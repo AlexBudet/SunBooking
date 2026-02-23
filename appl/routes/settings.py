@@ -13,6 +13,7 @@ import os, ipaddress, requests
 from sqlalchemy.sql import func, or_
 from .. import db
 from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio
+from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
 
 # Blueprint per le rotte delle impostazioni
 settings_bp = Blueprint('settings', __name__, template_folder='../templates')
@@ -3867,3 +3868,47 @@ def shutdown_app():
         os._exit(0)
     threading.Thread(target=_shutdown, daemon=True).start()
     return jsonify({"success": True, "message": "Chiusura in corso..."})
+
+# ================= SEZIONE HELP ====================
+def convert_markdown(text):
+    """Converte **testo** in <strong>testo</strong> e [[testo|keyword]] in tooltip con immagini"""
+    if not text:
+        return text
+    
+    # Prima converti i tooltip immagine: [[testo visualizzato|keyword]]
+    def replace_tooltip(match):
+        display_text = match.group(1)
+        keyword = match.group(2)
+        images = HELP_IMAGES.get(keyword, [])
+        if images:
+            images_json = ','.join(images)
+            return f'<span class="help-tooltip" data-images="{images_json}" tabindex="0">{display_text}</span>'
+        return display_text
+    
+    text = re.sub(r'\[\[(.+?)\|(.+?)\]\]', replace_tooltip, text)
+    
+    # Poi converti il markdown bold
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    
+    return text
+
+@settings_bp.route('/help')
+def help_page():
+    # Converti markdown in HTML per ogni topic
+    topics = {}
+    for key, topic in get_all_topics().items():
+        topics[key] = {
+            "title": topic.get("title", ""),
+            "content": convert_markdown(topic.get("content", "")),
+            "image": topic.get("image"),
+            "video": topic.get("video")
+        }
+    categories = get_topics_by_category()
+    return render_template('help.html', topics=topics, categories=categories)
+
+
+@settings_bp.route('/api/help/<topic>', methods=['GET'])
+def api_help_topic(topic):
+    """API per ottenere il contenuto help di un singolo argomento (usato dai tooltip)"""
+    help_data = get_help(topic)
+    return jsonify(help_data)

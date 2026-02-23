@@ -2248,5 +2248,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 })();
 </script>
-
+<script src="{{ url_for('static', filename='js/app_tour.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        checkAutoTour('pacchetti');
+    });
+</script>
 {% endblock %}

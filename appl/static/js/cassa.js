@@ -1276,11 +1276,18 @@ function aggiungiRigaServizio(servizio, salva = true) {
   opCol.className = 'op-col';
   opCol.textContent = servizio.operator_nome ? capitalizeName(servizio.operator_nome) : '—';
   opCol.title = 'Clicca per cambiare operatore';
+  opCol.style.cursor = 'pointer';
   opCol.addEventListener('click', function(e) {
+    e.preventDefault();
     e.stopPropagation();
+    e.stopImmediatePropagation();
+    console.log('Click su op-col, row:', row);
     window.currentRowForOperator = row;
-    if (typeof apriModalOperatoreRiga === 'function') {
-      apriModalOperatoreRiga(row);
+    // Usa window.apriModalOperatoreRiga per essere sicuri che sia accessibile
+    if (typeof window.apriModalOperatoreRiga === 'function') {
+      window.apriModalOperatoreRiga(row);
+    } else {
+      console.error('apriModalOperatoreRiga non definita!');
     }
   });
   row.appendChild(opCol);

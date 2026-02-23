@@ -1697,6 +1697,19 @@ body.touch-ui #mySpiaList .myspia-item.myspia-open .myspia-actions {
 /* Quando toggle attivo */
 body.show-op-per-riga .scontrino-row .op-col {
   display: inline-block;
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-right: 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  font-size: 0.85em;
+  min-width: 80px;
+  text-align: center;
+}
+
+body.show-op-per-riga .scontrino-row .op-col:hover {
+  background: #e0e0e0;
 }
 
 #toggleOperatoriRiga.active {
