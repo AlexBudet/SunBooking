@@ -5635,10 +5635,20 @@ function renderPseudoBlocksList() {
 
   container.style.display = 'block';
 
-  // Mostra il pulsante "Svuota" se ci sono pseudoblocchi
+  // Mostra il pulsante "Svuota" e "Toggle" se ci sono pseudoblocchi
   const clearNavigatorBtn = document.getElementById('clearNavigatorBtn');
   if (clearNavigatorBtn) {
     clearNavigatorBtn.style.display = 'inline-block';
+  }
+  const navigatorToggleBtn = document.getElementById('navigatorToggleBtn');
+  if (navigatorToggleBtn) {
+    navigatorToggleBtn.style.display = 'inline-block';
+  }
+  
+  // Assicurati che il campo servizi sia visibile
+  const serviceInput = document.getElementById('serviceInputNav');
+  if (serviceInput) {
+    serviceInput.style.display = 'block';
   }
 }
 
@@ -9071,15 +9081,48 @@ function restoreNavigatorState() {
     // Ripristina i campi input visivi: preferisci nome selezionato, altrimenti il valore digitato
     const clientInput = document.getElementById('clientSearchInputNav');
     if (clientInput) {
+      // PULIZIA: Rimuovi eventuali icone info residue PRIMA di ripristinare il valore
+      const container = clientInput.parentElement;
+      if (container) {
+        const oldIcon = container.querySelector('.client-info-btn-nav');
+        if (oldIcon) oldIcon.remove();
+      }
+      
       if (window.selectedClientIdNav) {
         // Se cliente selezionato, usa solo il nome (senza cellulare) per evitare problemi di ricerca
         const fullName = window.selectedClientNameNav || '';
         const nameOnly = fullName.split(' - ')[0] || fullName;
         clientInput.value = nameOnly;
+        
+        // Se c'è un cliente selezionato, ricrea l'icona info correttamente
+        if (container) {
+          const infoBtn = document.createElement('button');
+          infoBtn.type = 'button';
+          infoBtn.className = 'client-info-btn client-info-btn-nav';
+          infoBtn.title = 'Info cliente';
+          infoBtn.setAttribute('aria-label', 'Info cliente');
+          infoBtn.innerText = 'i';
+          infoBtn.style.position = 'absolute';
+          infoBtn.style.right = '48px';
+          infoBtn.style.top = '50%';
+          infoBtn.style.transform = 'translateY(-50%)';
+          infoBtn.style.zIndex = '10';
+          container.style.position = 'relative';
+          container.appendChild(infoBtn);
+          
+          infoBtn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof showClientInfoModal === 'function') {
+              showClientInfoModal(rawSelId);
+            }
+          };
+        }
       } else {
         clientInput.value = clientSearchValue || '';
       }
     }
+    
     const serviceInput = document.getElementById('serviceInputNav');
     if (serviceInput) serviceInput.value = serviceSearchValue || '';
 
@@ -9161,7 +9204,7 @@ function restoreNavigatorState() {
     // Render dei pseudoBlocks solo se ce ne sono
     try { renderPseudoBlocksList(); } catch (e) { /* ignore */ }
 
-        try {
+    try {
       const cutBlocks = (typeof _loadCutBlocks === 'function') ? _loadCutBlocks() : JSON.parse(localStorage.getItem('cutBlocks') || '[]');
       const pseudo = Array.isArray(window.pseudoBlocks) ? window.pseudoBlocks : [];
       if (pseudo.length === 0 && Array.isArray(cutBlocks) && cutBlocks.length > 0) {
@@ -9258,9 +9301,53 @@ document.addEventListener('DOMContentLoaded', function() {
 // ===============================
 // AUTOCLOSE APPOINTMENT NAVIGATOR DOPO 10 SECONDI DI INATTIVITÀ
 // ===============================
+// Helper: verifica se il navigator ha contenuto (pseudoblocchi o testo nei campi)
+function navigatorHasContent() {
+  // Verifica pseudoblocchi
+  if (window.pseudoBlocks && Array.isArray(window.pseudoBlocks) && window.pseudoBlocks.length > 0) {
+    return true;
+  }
+  
+  // Verifica campo cliente
+  const clientInput = document.getElementById('clientSearchInputNav');
+  if (clientInput && clientInput.value && clientInput.value.trim().length > 0) {
+    return true;
+  }
+  
+  // Verifica campo servizio
+  const serviceInput = document.getElementById('serviceInputNav');
+  if (serviceInput && serviceInput.value && serviceInput.value.trim().length > 0) {
+    return true;
+  }
+  
+  // Verifica se c'è un cliente selezionato
+  if (window.selectedClientIdNav) {
+    return true;
+  }
+  
+  return false;
+}
+window.navigatorHasContent = navigatorHasContent;
 
 // Funzione per "contrarre" il navigator: mostra solo il campo "Cerca Cliente"
 function collapseAppointmentNavigator() {
+  // Se il navigator ha contenuto, NON collassare
+  if (typeof navigatorHasContent === 'function' && navigatorHasContent()) {
+    // Assicurati che i campi siano visibili
+    const serviceInput = document.getElementById('serviceInputNav');
+    const selectedServicesList = document.getElementById('selectedServicesList');
+    if (serviceInput) serviceInput.style.display = 'block';
+    if (selectedServicesList && window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+      selectedServicesList.style.display = 'block';
+    }
+    // Mostra i pulsanti Svuota e Toggle
+    const clearNavigatorBtn = document.getElementById('clearNavigatorBtn');
+    const navigatorToggleBtn = document.getElementById('navigatorToggleBtn');
+    if (clearNavigatorBtn) clearNavigatorBtn.style.display = 'inline-block';
+    if (navigatorToggleBtn) navigatorToggleBtn.style.display = 'inline-block';
+    return; // Esci senza collassare
+  }
+  
   const serviceInput = document.getElementById('serviceInputNav');
   const clientResults = document.getElementById('clientResultsNav');
   const serviceResults = document.getElementById('serviceResultsNav');

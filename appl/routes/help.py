@@ -24,7 +24,6 @@ Il click su cella vuota è più comodo se il cliente ha chiesto un particolare o
 Il [[Navigator Appuntamenti|navigator_appuntamenti]] in alto a destra sopra il calendario è più versatile e si presta a diverse esigenze.
 
 L'appuntamento verrà creato automaticamente con la durata del servizio scelto.""",
-        "video": None
     },
 
 "calendar_drag": {
@@ -38,8 +37,6 @@ L'appuntamento verrà creato automaticamente con la durata del servizio scelto."
 👥 **Cambiare operatore:** trascina l'appuntamento nella colonna di un altro operatore
 
 È tutto automatico, non devi salvare nulla! ✨""",
-    "image": "calendar_drag.gif",
-    "video": None
 },
 
     "calendar_status": {
@@ -52,14 +49,13 @@ L'appuntamento verrà creato automaticamente con la durata del servizio scelto."
 🔵 **Blu** → Colore di default di un appuntamento preso da Booking Online
 
 **Per cambiare stato:**prosegui nella lettura per vedere le funzioni nascoste di ogni blocco appuntamento...""",
-        "image": "calendar_colors.png",
-        "video": None
     },
 
     "calendar_block": {
         "title": "📋 Il blocco appuntamento - tutte le funzioni",
         "content": """Ogni blocco appuntamento ha tante funzioni nascoste! Ecco cosa puoi fare:
 
+        
 ⬆️ **PULSANTI SOPRA AL BLOCCO** (appaiono al passaggio del mouse)
 • ✂️ **Togli e Sposta** → Taglia il blocco e lo mette nel Navigator per spostarlo altrove
 • 📋 **Copia Blocco** → Copia il blocco nel Navigator per duplicarlo e posizionare lo stesso appuntamento su altra data
@@ -71,6 +67,7 @@ e inoltre...
 📱 **PULSANTE A LATO DEL BLOCCO**
 • 💬 **Invia WhatsApp** → Invia un promemoria WhatsApp al cliente  
 
+
 🖱️ **PASSANDO IL MOUSE/PUNTATORE SUL NOME CLIENTE**
 Passa il mouse sul nome del cliente e appare un **TOOLTIP CON INFORMAZIONI** con:
 • 🕰️ Data e ora di creazione (ed eventualmente di ultima modifica) di quel blocco appuntamento
@@ -81,20 +78,21 @@ Passa il mouse sul nome del cliente e appare un **TOOLTIP CON INFORMAZIONI** con
 • 💇 Servizio associato al blocco appuntamento
 • 📝 Note Appuntamento (se presenti)
 
+
 🖱️ **CLICK DENTRO BLOCCO**
 • 🗑️ **Cestino** (in alto a sinistra) → Apre una finestra con diverse opzioni:
    - **ELIMINA** il singolo blocco
    - Elimina tutto il gruppo di blocchi appuntamento per quel cliente in quella data (se più di uno)
    - Imposta **NO-SHOW** (il cliente non si è presentato!)
    - **ANNULLA** se si vuole uscire senza fare modifiche
+
 •  ◯ **Cliente in Istituto** (in alto a destra) → Indica che il cliente è arrivato ed è attualmente in istituto
 • 👤 **Nome Cliente** (al centro) → Cliccando sul nome si apre la finestra per assegnare quell'appuntamento (e gli altri della stessa data) ad un altro cliente
+
 
 🔔 **SPIE LAMPEGGIANTI**
 • 🟡 **Spia gialla** → Il cliente è in istituto, tutto ok!
 • 🔴 **Spia rossa** → Il cliente è in istituto ma siamo in ritardo!""",
-        "image": None,
-        "video": None
     },
 
     # ========== CASSA ==========
@@ -110,8 +108,6 @@ Passa il mouse sul nome del cliente e appare un **TOOLTIP CON INFORMAZIONI** con
 6️⃣ Infine stampa lo scontrino cliccando su "Stampa"
 
 Lo scontrino viene creato e salvato automaticamente! 🎉""",
-        "image": None,
-        "video": None
     },
     
     "cassa_pagamento": {
@@ -134,8 +130,6 @@ Se il cliente ha una prepagata attiva, puoi scalare il costo direttamente da lì
 4️⃣ Procedi cliccando su "Avanti"!
 
 Puoi anche dividere il pagamento su più metodi! 💡""",
-        "image": None,
-        "video": None
     },
     
     "cassa_blocchi_appuntamento": {
@@ -154,8 +148,6 @@ Puoi anche dividere il pagamento su più metodi! 💡""",
 4️⃣ Registra il pagamento
 
 Tutto collegato, zero errori! ✨""",
-        "image": None,
-        "video": None
     },
     
     # ========== CLIENTI ==========
@@ -171,8 +163,6 @@ Puoi cercare per:
 Bastano 3 lettere e i risultati corrispondenti appaiono subito sotto!
 
 **Trucco:** cerca solo con le prime lettere e scrivine altre solo se non vedi ancora il risultato che cercavi, è più veloce 😉""",
-        "image": None,
-        "video": None
     },
     
     "client_history": {
@@ -187,8 +177,6 @@ Clicca sull'icona "**i**" a fianco ai risultati della ricerca cliente, oppure va
 📝 I dati cliente e le note che hai salvato
 
 Perfetto per capire le abitudini dei tuoi clienti! 🎯""",
-        "image": "client_history.png",
-        "video": None
     },
     
     "client_new": {
@@ -202,8 +190,6 @@ Perfetto per capire le abitudini dei tuoi clienti! 🎯""",
 Il sesso viene capito automaticamente dal nome (ma puoi correggerlo)!
 
 **Consiglio:** verifica sempre il cellulare per i promemoria WhatsApp 📱, e fai in modo che il numero di cellulare sia associato al suo effettivo proprietario!""",
-        "image": None,
-        "video": None
     },
     
     # ========== PACCHETTI ==========
@@ -219,8 +205,6 @@ Il sesso viene capito automaticamente dal nome (ma puoi correggerlo)!
 6️⃣ Salva!
 
 Il pacchetto è subito pronto all'uso 🚀""",
-        "image": "pacchetto_create.png",
-        "video": "pacchetti"
     },
     
     "pacchetto_uso": {
@@ -235,8 +219,6 @@ Quando crei un appuntamento:
 Le sedute si scalano da sole quando completi l'appuntamento 🎯
 
 **Niente calcoli manuali, pensa a tutto l'app!**""",
-        "image": None,
-        "video": None
     },
     
     "prepagata": {
@@ -254,8 +236,6 @@ Le sedute si scalano da sole quando completi l'appuntamento 🎯
 • Regali 🎁
 
 Il saldo è sempre visibile nella scheda cliente!""",
-        "image": None,
-        "video": None
     },
     
     # ========== WHATSAPP ==========
@@ -273,8 +253,6 @@ Il saldo è sempre visibile nella scheda cliente!""",
 Quando diventa 🟢 **verde** = sei connesso! 
 
 **Nota:** il telefono deve restare connesso a internet""",
-        "image": "whatsapp_qr.png",
-        "video": "whatsapp"
     },
     
     "whatsapp_auto": {
@@ -293,8 +271,6 @@ Il sistema invia tutto da solo! 🤖
 • {{servizio}} → Nome del trattamento
 • {{data}} → Data appuntamento
 • {{ora}} → Orario appuntamento""",
-        "image": None,
-        "video": None
     },
     
     # ========== MARKETING ==========
@@ -311,8 +287,6 @@ Il sistema invia tutto da solo! 🤖
 ⚠️ **Attenzione:** rispetta il limite giornaliero per evitare blocchi da WhatsApp!
 
 **Consiglio:** non esagerare, 1-2 messaggi al mese per cliente 👍""",
-        "image": None,
-        "video": None
     },
     
     "marketing_variables": {
@@ -333,8 +307,6 @@ Il sistema invia tutto da solo! 🤖
 • {{totale_visite}} → Numero visite totali
 
 Ogni messaggio diventa unico! 💌""",
-        "image": None,
-        "video": None
     },
     
     # ========== BOOKING ONLINE ==========
@@ -356,8 +328,6 @@ Metti il link su:
 • Biglietti da visita e altra grafica per il tuo negozio 🖼️
 
 I clienti prenotano da soli, anche di notte! 🌙""",
-        "image": "booking_link.png",
-        "video": "booking"
     },
     
     "booking_rules": {
@@ -374,8 +344,6 @@ In entrambi i casi puoi decidere se pubblicare solo un avviso o bloccare complet
 • Puoi rindirizzare i clienti più complicati, gli **indecisi** che ti tengono sull'agenda delle mezz'ore e non si decidono mai!
 • Dà un'immagine più professionale, mostrando che hai regole chiare per il tuo servizio
 Trova il tuo equilibrio! ⚖️""",
-        "image": None,
-        "video": None
     },
     
     # ========== OPERATORI ==========
@@ -391,8 +359,6 @@ Trova il tuo equilibrio! ⚖️""",
 Gli appuntamenti si potranno creare **solo** negli orari di turno!
 
 **Trucco:** crea preset per i turni più comuni, risparmi tempo 🚀""",
-        "image": None,
-        "video": None
     },
 
     # ========== SERVIZI ==========
@@ -409,8 +375,6 @@ Gli appuntamenti si potranno creare **solo** negli orari di turno!
 Il servizio appare subito nel menu appuntamenti 🎉
 
 **Consiglio:** usa nomi chiari che anche i clienti capiscono (per il booking online)""",
-        "image": None,
-        "video": None
     },
 }
 
@@ -420,8 +384,6 @@ def get_help(topic):
     return HELP_TOPICS.get(topic, {
         "title": "🤔 Aiuto",
         "content": "Contenuto non disponibile per questo argomento. Contatta il supporto!",
-        "image": None,
-        "video": None
     })
 
 
