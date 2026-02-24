@@ -7,6 +7,7 @@ from argon2 import PasswordHasher, exceptions as argon2_exceptions
 from sqlalchemy import text
 import time
 import os
+import sys
 from flask_migrate import Migrate
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -16,8 +17,17 @@ migrate = Migrate()
 # Istanza globale di SQLAlchemy
 db = SQLAlchemy()
 csrf = CSRFProtect()
-app = None  # riferimento globale all’app
+app = None  # riferimento globale all'app
 ph = PasswordHasher()
+
+def get_base_path():
+    """Restituisce il path base corretto sia per exe che per script."""
+    if getattr(sys, 'frozen', False):
+        # Eseguito come exe PyInstaller
+        return sys._MEIPASS
+    else:
+        # Eseguito come script Python
+        return os.path.dirname(os.path.abspath(__file__))
 
 def create_app(db_uri: str | None = None):
     """
@@ -26,7 +36,22 @@ def create_app(db_uri: str | None = None):
     """
 
     global app
-    app = Flask(__name__)
+    
+    base_path = get_base_path()
+    
+    # Quando frozen, i templates sono in _MEIPASS/appl/templates
+    # Quando non frozen, sono relativi a questo file (appl/__init__.py)
+    if getattr(sys, 'frozen', False):
+        template_folder = os.path.join(base_path, 'appl', 'templates')
+        static_folder = os.path.join(base_path, 'appl', 'static')
+    else:
+        template_folder = os.path.join(os.path.dirname(__file__), 'templates')
+        static_folder = os.path.join(os.path.dirname(__file__), 'static')
+    
+    app = Flask(__name__, 
+                template_folder=template_folder,
+                static_folder=static_folder)
+    
     app.secret_key = os.getenv('SECRET_KEY') or os.urandom(24)
 
     import json
