@@ -2175,9 +2175,9 @@ function expandNavigatorIfCollapsed() {
 window.expandNavigatorIfCollapsed = expandNavigatorIfCollapsed;
 
 /**
- * Ripristina lo stato del Navigator all'avvio della pagina
+ * Ripristina lo stato collapsed/expanded del Navigator all'avvio della pagina
  */
-function restoreNavigatorState() {
+function restoreNavigatorCollapsedState() {
     const savedState = localStorage.getItem('navigatorCollapsed');
     if (savedState === 'true') {
         const navigator = document.getElementById('appointmentNavigator');
@@ -2190,9 +2190,9 @@ function restoreNavigatorState() {
     }
 }
 
-// Chiama restoreNavigatorState al caricamento della pagina
+// Chiama restoreNavigatorCollapsedState al caricamento della pagina
 document.addEventListener('DOMContentLoaded', function() {
-    restoreNavigatorState();
+    restoreNavigatorCollapsedState();
 });
 
 // =============================================================
@@ -5091,7 +5091,7 @@ function selectClientNav(clientId, fullName) {
   // chiudi dropdown
   const input = document.getElementById('clientSearchInputNav');
   const resultsContainer = document.getElementById('clientResultsNav');
-  input.value = capitalizeName(fullName);
+  input.value = capitalizeName((fullName || '').toString().replace(/\s+/g,' ').trim());
   resultsContainer.style.display = 'none';
   
   // Aggiungi icona info accanto al campo Navigator (STESSO STILE DEL DROPDOWN)
@@ -8493,7 +8493,8 @@ async function copyAsNewPseudoBlock(block, isCut = false) {
   
   // Ottieni i dati dell'appuntamento
   const clientId = block.getAttribute('data-client-id');
-  const clientName = block.querySelector('.appointment-content .client-name a')?.textContent || "Cliente".trim();
+  const _rawClientName = block.querySelector('.appointment-content .client-name a')?.textContent || block.getAttribute('data-client-nome') || '';
+  const clientName = String(_rawClientName).replace(/\s+/g, ' ').trim() || 'Cliente';
   const serviceId = block.getAttribute('data-service-id');
   const serviceName = block.getAttribute('data-service-name') || block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent || "Servizio";
   const duration = parseInt(block.getAttribute('data-duration'), 10) || 15;
@@ -8734,7 +8735,7 @@ async function cutAsNewPseudoBlock(block) {
   const backup = {
     appointment_id: String(appointmentId),
     client_id: block.getAttribute('data-client-id') || null,
-    client_name: block.getAttribute('data-client-nome') || block.querySelector('.appointment-content .client-name a')?.textContent || '',
+    client_name: String(block.getAttribute('data-client-nome') || block.querySelector('.appointment-content .client-name a')?.textContent || '').replace(/\s+/g,' ').trim(),
     service_id: block.getAttribute('data-service-id') || null,
     service_name: block.getAttribute('data-service-name') || block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent || '',
     duration: parseInt(block.getAttribute('data-duration') || '15', 10),
@@ -9133,6 +9134,18 @@ function saveNavigatorState() {
 
 function restoreNavigatorState() {
   try {
+    // Ripristina stato collapsed/expanded del Navigator
+    const collapsedState = localStorage.getItem('navigatorCollapsed');
+    if (collapsedState === 'true') {
+        const navigatorEl = document.getElementById('appointmentNavigator');
+        const toggleBtn = document.getElementById('navigatorToggleBtn');
+        if (navigatorEl && toggleBtn) {
+            navigatorEl.classList.add('collapsed');
+            toggleBtn.textContent = '+';
+            toggleBtn.title = 'Espandi Navigator';
+        }
+    }
+    
     const rawSelId = localStorage.getItem('selectedClientIdNav') || '';
     const rawSelName = localStorage.getItem('selectedClientNameNav') || '';
     const rawPseudo = localStorage.getItem('pseudoBlocksData') || '[]';
@@ -9141,7 +9154,7 @@ function restoreNavigatorState() {
 
     // Ripristina selected client (id o null) e nome selezionato
     window.selectedClientIdNav = rawSelId === '' ? null : rawSelId;
-    window.selectedClientNameNav = rawSelName || '';
+    window.selectedClientNameNav = (rawSelName || '').toString().replace(/\s+/g,' ').trim();
 
     // Ripristina i campi input visivi: preferisci nome selezionato, altrimenti il valore digitato
     const clientInput = document.getElementById('clientSearchInputNav');
@@ -9153,11 +9166,10 @@ function restoreNavigatorState() {
         if (oldIcon) oldIcon.remove();
       }
       
-      if (window.selectedClientIdNav) {
-        // Se cliente selezionato, usa solo il nome (senza cellulare) per evitare problemi di ricerca
-        const fullName = window.selectedClientNameNav || '';
+    if (window.selectedClientIdNav) {
+        const fullName = (window.selectedClientNameNav || '').replace(/\s+/g,' ').trim();
         const nameOnly = fullName.split(' - ')[0] || fullName;
-        clientInput.value = nameOnly;
+        clientInput.value = nameOnly.trim();
         
         // Se c'è un cliente selezionato, ricrea l'icona info correttamente
         if (container) {
