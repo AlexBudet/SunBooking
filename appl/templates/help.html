@@ -36,8 +36,8 @@
     </div>
     
     <!-- Sezioni Help organizzate per categoria -->
-    {% for category, topic_keys in categories.items() %}
-    <div class="card mb-4 help-category" id="section-{{ loop.index }}">
+{% for category, topic_keys in categories.items() %}
+<div class="card mb-4 help-category help-category-{{ loop.index }}" id="section-{{ loop.index }}">
         <div class="card-header bg-primary text-white">
             <h5 class="mb-0">
                 {% if category == "Calendario" %}<i class="bi bi-calendar3 me-2"></i>
@@ -175,12 +175,15 @@
 }
 
 /* Colori diversi per ogni categoria */
-.help-category:nth-child(6n+1) .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.help-category:nth-child(6n+2) .card-header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-.help-category:nth-child(6n+3) .card-header { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-.help-category:nth-child(6n+4) .card-header { background: linear-gradient(135deg, #4d5497 0%, #8c98c0 100%); }
-.help-category:nth-child(6n+5) .card-header { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
-.help-category:nth-child(6n+6) .card-header { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
+.help-category-1 .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.help-category-2 .card-header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+.help-category-3 .card-header { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+.help-category-4 .card-header { background: linear-gradient(135deg, #4d5497 0%, #8c98c0 100%); }
+.help-category-5 .card-header { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+.help-category-6 .card-header { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
+.help-category-7 .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.help-category-8 .card-header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+.help-category-9 .card-header { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
 
 .help-category .card-header {
     border: none;
@@ -224,90 +227,99 @@
 }
 
 /* Categoria 1 - Viola/Blu */
-.help-category:nth-child(6n+1) .accordion-button.collapsed {
+.help-category-1 .accordion-button.collapsed,
+.help-category-7 .accordion-button.collapsed {
     background: linear-gradient(135deg, rgba(102, 126, 234, 0.10) 0%, rgba(118, 75, 162, 0.10) 100%);
     border-left: 3px solid rgba(102, 126, 234, 0.5);
 }
-.help-category:nth-child(6n+1) .accordion-button.collapsed:hover {
+.help-category-1 .accordion-button.collapsed:hover,
+.help-category-7 .accordion-button.collapsed:hover {
     background: linear-gradient(135deg, rgba(102, 126, 234, 0.18) 0%, rgba(118, 75, 162, 0.18) 100%);
     border-left: 3px solid #667eea;
 }
-.help-category:nth-child(6n+1) .accordion-button:not(.collapsed) {
+.help-category-1 .accordion-button:not(.collapsed),
+.help-category-7 .accordion-button:not(.collapsed) {
     background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
     color: #667eea;
     border-left: 3px solid #667eea;
 }
 
 /* Categoria 2 - Rosa/Rosso */
-.help-category:nth-child(6n+2) .accordion-button.collapsed {
+.help-category-2 .accordion-button.collapsed,
+.help-category-8 .accordion-button.collapsed {
     background: linear-gradient(135deg, rgba(240, 147, 251, 0.10) 0%, rgba(245, 87, 108, 0.10) 100%);
     border-left: 3px solid rgba(240, 147, 251, 0.5);
 }
-.help-category:nth-child(6n+2) .accordion-button.collapsed:hover {
+.help-category-2 .accordion-button.collapsed:hover,
+.help-category-8 .accordion-button.collapsed:hover {
     background: linear-gradient(135deg, rgba(240, 147, 251, 0.18) 0%, rgba(245, 87, 108, 0.18) 100%);
     border-left: 3px solid #f093fb;
 }
-.help-category:nth-child(6n+2) .accordion-button:not(.collapsed) {
+.help-category-2 .accordion-button:not(.collapsed),
+.help-category-8 .accordion-button:not(.collapsed) {
     background: linear-gradient(135deg, rgba(240, 147, 251, 0.15) 0%, rgba(245, 87, 108, 0.15) 100%);
     color: #e84393;
     border-left: 3px solid #f093fb;
 }
 
 /* Categoria 3 - Azzurro/Ciano */
-.help-category:nth-child(6n+3) .accordion-button.collapsed {
+.help-category-3 .accordion-button.collapsed,
+.help-category-9 .accordion-button.collapsed {
     background: linear-gradient(135deg, rgba(79, 172, 254, 0.10) 0%, rgba(0, 242, 254, 0.10) 100%);
     border-left: 3px solid rgba(79, 172, 254, 0.5);
 }
-.help-category:nth-child(6n+3) .accordion-button.collapsed:hover {
+.help-category-3 .accordion-button.collapsed:hover,
+.help-category-9 .accordion-button.collapsed:hover {
     background: linear-gradient(135deg, rgba(79, 172, 254, 0.18) 0%, rgba(0, 242, 254, 0.18) 100%);
     border-left: 3px solid #4facfe;
 }
-.help-category:nth-child(6n+3) .accordion-button:not(.collapsed) {
+.help-category-3 .accordion-button:not(.collapsed),
+.help-category-9 .accordion-button:not(.collapsed) {
     background: linear-gradient(135deg, rgba(79, 172, 254, 0.15) 0%, rgba(0, 242, 254, 0.15) 100%);
     color: #0984e3;
     border-left: 3px solid #4facfe;
 }
 
 /* Categoria 4 - Blu scuro/Grigio */
-.help-category:nth-child(6n+4) .accordion-button.collapsed {
+.help-category-4 .accordion-button.collapsed {
     background: linear-gradient(135deg, rgba(77, 84, 151, 0.10) 0%, rgba(140, 152, 192, 0.10) 100%);
     border-left: 3px solid rgba(77, 84, 151, 0.5);
 }
-.help-category:nth-child(6n+4) .accordion-button.collapsed:hover {
+.help-category-4 .accordion-button.collapsed:hover {
     background: linear-gradient(135deg, rgba(77, 84, 151, 0.18) 0%, rgba(140, 152, 192, 0.18) 100%);
     border-left: 3px solid #4d5497;
 }
-.help-category:nth-child(6n+4) .accordion-button:not(.collapsed) {
+.help-category-4 .accordion-button:not(.collapsed) {
     background: linear-gradient(135deg, rgba(77, 84, 151, 0.15) 0%, rgba(140, 152, 192, 0.15) 100%);
     color: #4d5497;
     border-left: 3px solid #4d5497;
 }
 
 /* Categoria 5 - Rosa/Giallo */
-.help-category:nth-child(6n+5) .accordion-button.collapsed {
+.help-category-5 .accordion-button.collapsed {
     background: linear-gradient(135deg, rgba(250, 112, 154, 0.10) 0%, rgba(254, 225, 64, 0.10) 100%);
     border-left: 3px solid rgba(250, 112, 154, 0.5);
 }
-.help-category:nth-child(6n+5) .accordion-button.collapsed:hover {
+.help-category-5 .accordion-button.collapsed:hover {
     background: linear-gradient(135deg, rgba(250, 112, 154, 0.18) 0%, rgba(254, 225, 64, 0.18) 100%);
     border-left: 3px solid #fa709a;
 }
-.help-category:nth-child(6n+5) .accordion-button:not(.collapsed) {
+.help-category-5 .accordion-button:not(.collapsed) {
     background: linear-gradient(135deg, rgba(250, 112, 154, 0.15) 0%, rgba(254, 225, 64, 0.15) 100%);
     color: #e84393;
     border-left: 3px solid #fa709a;
 }
 
 /* Categoria 6 - Verde acqua/Rosa chiaro */
-.help-category:nth-child(6n+6) .accordion-button.collapsed {
+.help-category-6 .accordion-button.collapsed {
     background: linear-gradient(135deg, rgba(168, 237, 234, 0.15) 0%, rgba(254, 214, 227, 0.15) 100%);
     border-left: 3px solid rgba(168, 237, 234, 0.6);
 }
-.help-category:nth-child(6n+6) .accordion-button.collapsed:hover {
+.help-category-6 .accordion-button.collapsed:hover {
     background: linear-gradient(135deg, rgba(168, 237, 234, 0.25) 0%, rgba(254, 214, 227, 0.25) 100%);
     border-left: 3px solid #a8edea;
 }
-.help-category:nth-child(6n+6) .accordion-button:not(.collapsed) {
+.help-category-6 .accordion-button:not(.collapsed) {
     background: linear-gradient(135deg, rgba(168, 237, 234, 0.20) 0%, rgba(254, 214, 227, 0.20) 100%);
     color: #00b894;
     border-left: 3px solid #a8edea;
