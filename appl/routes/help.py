@@ -5,25 +5,39 @@ Contenuti Help per SunBooking.
 Modifica questo file per aggiornare i testi di aiuto nell'app.
 """
 HELP_IMAGES = {
-    "navigator_appuntamenti": ["NavigatorAppuntamenti_Chiuso.png", "NavigatorAppuntamenti_Aperto.png", "NavigatorAppuntamenti_dropdownClienti.png", "NavigatorAppuntamenti_dropdownServizi.png"] 
+    "navigator_appuntamenti": ["NavigatorAppuntamenti_Chiuso.png"],
+    "campo_ricerca_cliente": ["NavigatorAppuntamenti_CercaCliente.png"]
 }
 HELP_TOPICS = {
     
     # ========== CALENDARIO ==========
-    "calendar_new": {
-        "title": "✏️ Come creare un appuntamento",
-        "content": """Puoi **CLICCARE IN UNA CELLA VUOTA** del calendario e procedere nella finestra che si apre.<br><br>Oppure usare il **CAMPO DI RICERCA CLIENTE** in alto a destra sopra il calendario, e poi selezionare il servizio o i servizi.
+"calendar_create_appointment": {
+        "title": "✏️ Come creare un appuntamento con CLICK SU CELLA VUOTA",
+        "content": """Puoi **CLICCARE IN UNA CELLA VUOTA** del calendario e procedere nella finestra che si apre
+""",
+},
 
-In entrambi i casi, dovrai:
-1. Cercare e selezionare il **CLIENTE** (puoi anche crearne uno nuovo al volo cliccando su "**+**" a lato del campo di ricerca)
-2. Scegliere il **SERVIZIO**
-3. Confermare **DATA E ORA**
+"calendar_appointment_navigator": {
+        "title": "✏️ Come creare appuntamenti con il NAVIGATOR APPUNTAMENTI",
+        "content": """Il **[[NAVIGATOR APPUNTAMENTI|navigator_appuntamenti]]** in alto a destra sopra il calendario è più versatile e si presta a diverse esigenze. <br>
+                      Una volta aperto il Navigator, per creare un appuntamento clicca nel **[[CAMPO DI RICERCA CLIENTE|campo_ricerca_cliente]]** in alto a destra sopra il calendario, e poi selezionare il servizio o i servizi.
 
-Il click su cella vuota è più comodo se il cliente ha chiesto un particolare orario, oppure se devi trascrivere gli appuntamenti per quella giornata da appunti cartacei o altro.
+🔍 **SELEZIONARE UN CLIENTE**
+Scrivi almeno **3 lettere** del nome, cognome o telefono del cliente nel campo di ricerca: apparirà una **dropdown list** con i clienti corrispondenti presenti in database. Clicca sul cliente desiderato per selezionarlo.
 
-Il [[Navigator Appuntamenti|navigator_appuntamenti]] in alto a destra sopra il calendario è più versatile e si presta a diverse esigenze.
+💆 **SELEZIONARE UN SERVIZIO**
+Allo stesso modo, nel campo di ricerca servizi basta scrivere **3 o più lettere** e apparirà la lista dei servizi corrispondenti. Clicca sul servizio per selezionarlo.
 
-L'appuntamento verrà creato automaticamente con la durata del servizio scelto.""",
+📦 **MINI-BLOCCHI APPUNTAMENTO**
+Una volta selezionati cliente e servizio, viene creato automaticamente un **MINI-BLOCCO APPUNTAMENTO** che appare nell'area in basso del Navigator, in attesa di essere posizionato sul calendario.
+Puoi creare **più mini-blocchi**: dopo aver creato il primo, cerca e seleziona un altro servizio per aggiungerne un altro!
+
+👆 **POSIZIONAMENTO SUL CALENDARIO**
+Con i mini-blocchi creati, muovi il mouse sulle **celle vuote** del calendario: vedrai un'**OMBRA** che ti mostra esattamente dove verranno posizionati i blocchi appuntamento.
+
+☝️ **POSIZIONARE UN SOLO SERVIZIO**
+Se hai creato più mini-blocchi ma vuoi posizionare solo uno specifico servizio, **clicca sul singolo mini-blocco** per selezionarlo: in questo modo verrà creato l'appuntamento relativo solo a quel servizio.
+""",
     },
 
 "calendar_drag": {
@@ -44,11 +58,12 @@ L'appuntamento verrà creato automaticamente con la durata del servizio scelto."
         "content": """Ogni colore ti dice subito lo stato del blocco appunbtamento:
 
 🟢🟤🟣 **Colorato** → L'appuntamento è programmato (il colore si può modificare)
-⚪ **Grigio chiaro, scritta in bianco** → Tutto fatto e pagato ✓
+⚪ **Grigio chiaro, scritta in grigio** → Tutto fatto e pagato ✓
+🔘  **Grigio a puntini, scritta in nero** → Blocco OFF, non prenotabile!
 ⚫ **Nero a puntini** → Il cliente non si è presentato: No-Show! 😢
 🔵 **Blu** → Colore di default di un appuntamento preso da Booking Online
 
-**Per cambiare stato:**prosegui nella lettura per vedere le funzioni nascoste di ogni blocco appuntamento...""",
+**Per cambiare stato ad un blocco appuntamento prosegui nella lettura per vedere le funzioni nascoste di ogni blocco...""",
     },
 
     "calendar_block": {
@@ -93,6 +108,109 @@ Passa il mouse sul nome del cliente e appare un **TOOLTIP CON INFORMAZIONI** con
 🔔 **SPIE LAMPEGGIANTI**
 • 🟡 **Spia gialla** → Il cliente è in istituto, tutto ok!
 • 🔴 **Spia rossa** → Il cliente è in istituto ma siamo in ritardo!""",
+    },
+
+    "funzioni_blocchi": {
+        "title": "✂️ Maneggiare i blocchi appuntamenti: le funzioni 'Taglia', 'Copia' e 'Aggiungi'",
+        "content": """Sopra ogni blocco appuntamento trovi tre pulsanti fondamentali per gestire gli appuntamenti in modo rapido ed efficiente!
+
+✂️ **TAGLIA (Togli e Sposta)**
+Cliccando su questo pulsante, i blocchi appuntamento **scompaiono** dal calendario (lasciando un'ombra al loro posto) e vengono trasformati in **mini-blocchi** visibili nel **Navigator Appuntamenti** in alto a destra.
+Da lì puoi riposizionarli dove preferisci: basta muovere il mouse su una cella vuota del calendario e cliccare per confermare la nuova posizione.
+Perfetto per spostare un appuntamento ad un altro orario o giorno!
+
+📋 **COPIA (Copia Blocco)**
+Funziona in modo simile a "Taglia", ma **lascia i blocchi originali al loro posto**!
+I blocchi vengono copiati come mini-blocchi nel Navigator Appuntamenti, pronti per essere posizionati su un'altra data.
+**Esempio pratico:** un cliente vuole prenotare lo stesso trattamento una volta al mese per diversi mesi? Copia il blocco e posizionalo velocemente sulle date successive. Fatto in pochi secondi! 🚀
+
+➕ **AGGIUNGI (Aggiungi Servizi)**
+Cliccando su "Aggiungi", si apre il **Navigator Appuntamenti** già **pre-caricato con il nome del cliente** del blocco da cui hai cliccato.
+In questo modo puoi aggiungere altri servizi allo stesso cliente per lo stesso appuntamento, senza doverlo cercare di nuovo.
+Ideale quando il cliente decide di aggiungere un trattamento extra! 💆""",
+    },
+
+    "calendar_note": {
+        "title": "📝 Le note: cliente e appuntamento",
+        "content": """In SunBooking puoi aggiungere due tipi di note, entrambe visibili nel tooltip informativo del blocco appuntamento!
+
+👤 **NOTE CLIENTE**
+Sono note permanenti legate al cliente, utili per informazioni che valgono sempre (es: allergie, preferenze, richieste particolari).
+• **Come aggiungerle:** vai in **Impostazioni → Clienti**, cerca il cliente e compila il campo "Note"
+• **Dove si vedono:** nel tooltip che appare passando il mouse sul nome cliente nel blocco appuntamento, nella parte **superiore**
+
+📅 **NOTE APPUNTAMENTO**
+Sono note specifiche per quel singolo appuntamento (es: "porta il prodotto X", "arriva 10 min prima").
+• **Come aggiungerle:** clicca sul pulsante **📝 Nota Appuntamento** che appare sopra il blocco al passaggio del mouse
+• **Dove si vedono:** nel tooltip informativo, nella parte **inferiore**, sotto le note cliente
+
+👁️ **VISUALIZZAZIONE NEL TOOLTIP**
+Passando il mouse sul nome del cliente nel blocco appuntamento, il tooltip mostra:
+1. In alto: **Note Cliente** (se presenti)
+2. In basso: **Note Appuntamento** (se presenti)
+
+⭐ **NOTE APPUNTAMENTO AUTOMATICHE**
+Alcune note appuntamento vengono create automaticamente dal sistema:
+• 🌐 **Prenotazioni da Booking Online:** mostrano informazioni sulla prenotazione web (dettagli del cliente, eventuale operatore selezionato)
+• 🆕 **Nuovo Cliente:** quando un cliente prenota per la prima volta, appare la dicitura ****NUOVO CLIENTE**** per avvisarti che è alla sua prima visita!
+
+Queste note speciali ti aiutano a riconoscere subito situazioni particolari! ✨""",
+    },
+
+    "calendar_paid_block": {
+        "title": "✅ Blocchi \"PAGATO\" - appuntamenti completati",
+        "content": """I blocchi **grigio chiaro** sono appuntamenti già **completati e pagati**. Hanno funzionalità ridotte rispetto ai blocchi normali, perché rappresentano lo storico del cliente!
+
+🎨 **COME RICONOSCERLI**
+• Sfondo **grigio chiaro**
+• Testo in **grigio**
+• Rappresentano appuntamenti già passati in cassa
+
+🖱️ **FUNZIONI DISPONIBILI**
+I blocchi pagati hanno meno pulsanti rispetto ai blocchi normali:
+
+• 📋 **Copia Blocco** → L'unica funzione davvero utile! Permette di **ripetere lo stesso appuntamento** in un'altra data. Perfetto quando il cliente, dopo aver pagato, vuole già prenotare il prossimo trattamento identico.
+
+• 🗑️ **Cestino** → Permette di eliminare il blocco, ma è **sconsigliato**! Eliminando i blocchi pagati perdi lo **storico degli appuntamenti** del cliente, che è prezioso per:
+   - Vedere quante volte è venuto
+   - Calcolare la spesa totale
+   - Analizzare le sue abitudini
+
+💡 **CONSIGLIO**
+Non eliminare mai i blocchi pagati! Lasciali sul calendario come archivio storico. Se danno fastidio visivamente, ricorda che cambiando data nel calendario non li vedrai più.
+
+Lo storico è oro per conoscere i tuoi clienti! 📊""",
+    },
+
+    "calendar_off_block": {
+        "title": "🚫 I Blocchi OFF - pause e impegni di servizio",
+        "content": """I **Blocchi OFF** sono diversi dai blocchi appuntamento: servono per bloccare fasce orarie per attività di servizio come pause, riunioni o altri impegni. In pratica disattivano le celle del calendario, impostandole come "non prenotabili" per i clienti.
+
+📌 **A COSA SERVONO**
+Puoi usarli per segnare sul calendario:
+• ☕ **UNA PAUSA** → Pausa caffè o pranzo
+• 🗣️ **UN TURNO DI RECEPTION** → Turno alla reception
+• 📚 **UN BRIEFING O UNA RIUNIONE** → Sessioni di formazione
+• 🧹 **PULIZIE** → Tempo per riordino
+...e qualsiasi altro impegno non legato a un cliente!
+
+✏️ **COME CREARE UN BLOCCO OFF**
+1️⃣ **Clicca su una cella vuota** del calendario (come per creare un appuntamento)
+2️⃣ Nella finestra che si apre, clicca il pulsante **"Crea Blocco OFF"** in basso a destra
+3️⃣ Inserisci il **titolo** che descrive l'attività (es: "PAUSA", "RIUNIONE")
+4️⃣ Imposta la **durata** in quarti d'ora (15 min, 30 min, 45 min, ecc.)
+5️⃣ Conferma e il blocco OFF appare sul calendario!
+
+🖱️ **FUNZIONI INTERATTIVE DEL BLOCCO OFF**
+Una volta creato, il blocco OFF ha questi controlli:
+
+• 🗑️ **Cestino** (in alto a sinistra dentro il blocco) → Clicca per eliminare il blocco OFF
+
+• 📋 **Copia Blocco OFF** (in alto a destra dentro il blocco) → Copia il blocco in memoria. Al prossimo click su una cella vuota del calendario, il blocco verrà duplicato in quella posizione. Utile per replicare la stessa pausa su più giorni o più volte durante la stessa giornata!
+
+• 📝 **Titolo** (al centro del blocco) → Cliccando sul titolo si apre una finestra per modificarlo
+
+💡 **Nota:** a differenza della copia dei blocchi appuntamento (che usa il Navigator), i blocchi OFF copiati rimangono in memoria e vengono posizionati direttamente al click successivo su una cella libera.""",
     },
 
     # ========== CASSA ==========
@@ -395,7 +513,7 @@ def get_all_topics():
 def get_topics_by_category():
     """Restituisce gli argomenti organizzati per categoria"""
     return {
-        "Calendario": ["calendar_new", "calendar_drag", "calendar_status", "calendar_block"],
+        "Calendario": ["calendar_create_appointment", "calendar_appointment_navigator", "calendar_drag", "calendar_status", "calendar_block", "funzioni_blocchi", "calendar_note", "calendar_paid_block", "calendar_off_block"],
         "Cassa": ["cassa_crea_scontrino", "cassa_pagamento", "cassa_blocchi_appuntamento"],
         "Clienti": ["client_new", "client_search", "client_history"],
         "Pacchetti": ["pacchetto_create", "pacchetto_uso", "prepagata"],
