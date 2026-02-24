@@ -4,6 +4,76 @@
     const S_FORCED_FLAG = 'sun_touch_ui_forced';
     const S_PREV = 'sun_touch_ui_prev';
 
+// =============================================================
+//   CONTROLLO CONFLITTI RISORSE SERVIZI (BLOCCO)
+// =============================================================
+
+async function checkServiceConflict(serviceId, startTime, duration, excludeAppointmentId = null) {
+    if (!serviceId || !startTime) return { has_conflict: false };
+    
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const response = await fetch('/calendar/api/check-service-conflict', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                service_id: serviceId,
+                start_time: startTime,
+                duration: duration,
+                exclude_appointment_id: excludeAppointmentId
+            })
+        });
+        
+        if (!response.ok) return { has_conflict: false };
+        return await response.json();
+    } catch (e) {
+        console.warn('checkServiceConflict error:', e);
+        return { has_conflict: false };
+    }
+}
+window.checkServiceConflict = checkServiceConflict;
+
+function showServiceConflictBlock(conflictData) {
+    const { resource_name, max_concurrent, current_count, conflicts } = conflictData;
+    
+    let msg = `⛔ BLOCCO: "${resource_name}" può gestire max ${max_concurrent} appuntamento/i contemporaneo/i.\n\n`;
+    msg += `Ci sono già ${current_count} appuntamento/i nello stesso orario:\n`;
+    conflicts.forEach(c => {
+        msg += `• ${c.start_time}-${c.end_time} - ${c.client_name} (${c.operator_name})\n`;
+    });
+    msg += `\nImpossibile procedere. Scegli un altro orario.`;
+    alert(msg);
+}
+window.showServiceConflictBlock = showServiceConflictBlock;
+
+async function checkPseudoBlocksConflicts(pseudoblocks, date, startTime) {
+    if (!Array.isArray(pseudoblocks) || pseudoblocks.length === 0) return null;
+    
+    let currentStart = `${date} ${startTime}`;
+    
+    for (const pb of pseudoblocks) {
+        const serviceId = pb.serviceId || pb.service_id;
+        const duration = parseInt(pb.duration, 10) || 15;
+        
+        if (serviceId) {
+            const conflict = await checkServiceConflict(serviceId, currentStart, duration);
+            if (conflict.has_conflict) {
+                return conflict;
+            }
+        }
+        
+        const [y, m, d, hh, mm] = currentStart.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/).slice(1).map(Number);
+        const dt = new Date(y, m - 1, d, hh, mm + duration);
+        currentStart = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+    }
+    
+    return null;
+}
+window.checkPseudoBlocksConflicts = checkPseudoBlocksConflicts;
+
     // applica la classe e localStorage senza perdere il valore precedente
     function forceTouchOn() {
         try {
@@ -8395,26 +8465,6 @@ function addCutSourceHighlightRange(block) {
   addCutSourceHighlightFromData(opId, date, startHour, startMinute, duration, width, left);
 }
 
-  // *** Assicurati che il pseudoblocco conservi i dati pacchetto ***
-  try {
-    if (!Array.isArray(window.pseudoBlocks)) window.pseudoBlocks = [];
-    if (window.pseudoBlocks.length > 0) {
-      const pseudo = window.pseudoBlocks[0];
-      pseudo._origin_appointment_id = String(appointmentId);
-      pseudo._origin_backup = backup;
-      // *** Conserva relazione pacchetto nel pseudoblocco ***
-      if (backup.pacchettoSedutaId) {
-        pseudo.pacchettoSedutaId = backup.pacchettoSedutaId;
-        pseudo.pacchettoId = backup.pacchettoId;
-        pseudo.pacchettoNome = backup.pacchettoNome;
-        console.log('✅ CUT: Conservata relazione pacchetto sedutaId:', backup.pacchettoSedutaId);
-      }
-      try { saveNavigatorState(); } catch (e) {}
-    }
-  } catch (e) {
-    console.warn('cutAsNewPseudoBlock: non è stato possibile marcare il pseudoblocco con origin_backup', e);
-  }
-
 function restoreCutHighlights() {
   try {
     const cutBlocks = _loadCutBlocks();
@@ -8676,6 +8726,11 @@ async function cutAsNewPseudoBlock(block) {
   // Evidenzia tutte le celle coperte dal blocco
   try { addCutSourceHighlightRange(block); } catch (_) {}
 
+  // *** RECUPERA I DATI DEL PACCHETTO DAL BLOCCO ***
+  const pacchettoSedutaId = block.getAttribute('data-pacchetto-seduta-id') || null;
+  const pacchettoId = block.getAttribute('data-pacchetto-id') || null;
+  const pacchettoNome = block.getAttribute('data-pacchetto-nome') || null;
+
   const backup = {
     appointment_id: String(appointmentId),
     client_id: block.getAttribute('data-client-id') || null,
@@ -8690,7 +8745,10 @@ async function cutAsNewPseudoBlock(block) {
     note: block.getAttribute('data-note') || '',
     colore: block.getAttribute('data-colore') || '',
     colore_font: block.getAttribute('data-colore_font') || '',
-    status: parseInt(block.getAttribute('data-status') || '0', 10)
+    status: parseInt(block.getAttribute('data-status') || '0', 10),
+    pacchettoSedutaId: pacchettoSedutaId,  // ✅ ORA C'È LA VIRGOLA
+    pacchettoId: pacchettoId,
+    pacchettoNome: pacchettoNome
   };
 
 await copyAsNewPseudoBlock(block, true);
@@ -8701,6 +8759,13 @@ await copyAsNewPseudoBlock(block, true);
       const pseudo = window.pseudoBlocks[0];
       pseudo._origin_appointment_id = String(appointmentId);
       pseudo._origin_backup = backup;
+      // Conserva relazione pacchetto nel pseudoblocco
+      if (backup.pacchettoSedutaId) {
+        pseudo.pacchettoSedutaId = backup.pacchettoSedutaId;
+        pseudo.pacchettoId = backup.pacchettoId;
+        pseudo.pacchettoNome = backup.pacchettoNome;
+        console.log('✅ CUT: Conservata relazione pacchetto sedutaId:', backup.pacchettoSedutaId);
+      }
       try { saveNavigatorState(); } catch (e) {}
     }
   } catch (e) {

@@ -2527,3 +2527,4 @@ def create_client_from_booking():
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
