@@ -1599,12 +1599,14 @@ def api_ricarica_prepagata(id):
     pacchetto.credito_iniziale = (pacchetto.credito_iniziale or Decimal('0')) + importo
     
     # Registra movimento
+    operatore_id = data.get('operatore_id')
     movimento = MovimentoPrepagata(
         pacchetto_id=pacchetto.id,
-        tipo_movimento='ricarica',
+        tipo_movimento='utilizzo',
         importo=importo,
         saldo_dopo=nuovo_saldo,
-        descrizione=data.get('descrizione', 'Ricarica manuale')
+        descrizione=data.get('descrizione', 'Pagamento in cassa'),
+        operatore_id=int(operatore_id) if operatore_id else None
     )
     db.session.add(movimento)
     
