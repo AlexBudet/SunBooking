@@ -672,7 +672,12 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       const prepagataId = row.dataset.prepagataId;
       const ricaricaPrepagataId = row.dataset.ricaricaPrepagataId;
       if (prepagataId) voce.prepagata_id = parseInt(prepagataId);
-      if (ricaricaPrepagataId) voce.ricarica_prepagata_id = parseInt(ricaricaPrepagataId);
+      if (ricaricaPrepagataId) {
+        voce.ricarica_prepagata_id = parseInt(ricaricaPrepagataId);
+        voce.ricarica_importo = parseFloat(row.dataset.ricaricaImporto || '0');
+        voce.ricarica_credito = parseFloat(row.dataset.ricaricaCredito || '0');
+        voce.ricarica_descrizione = row.dataset.ricaricaDescrizione || 'Ricarica';
+      }
       
       if (isPrepagata) {
         vociConPrepagata.push({ voce, prezzo });
@@ -1327,7 +1332,9 @@ row.className = 'd-flex align-items-center scontrino-row';
     prezzo.style.backgroundColor = '#e8f5e9';
     prezzo.title = 'Importo fisso per ricarica carta prepagata';
     row.dataset.ricaricaPrepagataId = servizio.ricarica_prepagata_id;
-    row.dataset.creditoDaCaricare = servizio.credito_da_caricare || servizio.prezzo || '0';
+    row.dataset.ricaricaImporto = servizio.ricarica_importo || servizio.prezzo || '0';
+    row.dataset.ricaricaCredito = servizio.ricarica_credito || servizio.credito_da_caricare || servizio.prezzo || '0';
+    row.dataset.ricaricaDescrizione = servizio.ricarica_descrizione || 'Ricarica';
   }
 
   row.appendChild(prezzo);
