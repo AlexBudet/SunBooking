@@ -638,7 +638,13 @@ display: none;
             </td>
             <td class="text-end">€{{ '%.2f'|format(m.saldo_dopo) }}</td>
             <td>{{ m.descrizione or '—' }}</td>
-            <td>{{ m.operatore or '—' }}</td>
+            <td>
+              {% if m.operatore %}
+                {{ m.operatore.nome }}
+              {% else %}
+                <span class="text-muted fst-italic">non selezionato</span>
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
           {% if pacchetto.movimenti_prepagata|length == 0 %}

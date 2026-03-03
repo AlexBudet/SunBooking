@@ -705,6 +705,9 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       const prepagata = window.clientePrepagate[0]; // Usiamo la prima carta disponibile
       
       try {
+        // Recupera operatore_id dalle voci o dal campo globale
+        const operatoreIdPrepagata = vociConPrepagata[0]?.voce?.operator_id || operatore_id || null;
+        
         const scalaturaRes = await fetch(`/pacchetti/api/pacchetti/${prepagata.id}/utilizza`, {
           method: 'POST',
           headers: {
@@ -713,7 +716,8 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
           },
           body: JSON.stringify({
             importo: totalePrepagata,
-            descrizione: vociConPrepagata.map(v => v.voce.nome).join(', ')
+            descrizione: vociConPrepagata.map(v => v.voce.nome).join(', '),
+            operatore_id: operatoreIdPrepagata
           })
         });
         
