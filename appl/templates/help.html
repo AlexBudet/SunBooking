@@ -1,127 +1,124 @@
 {% extends "settings.html" %}
 
 {% block settings_content %}
-<div class="container-fluid mt-4 help-page" style="max-width: 80%; margin: 0 auto;">
+<div class="help-app" id="helpApp">
     
-    <!-- Intestazione più accogliente -->
-    <div class="text-center mb-5">
-        <h2 class="mb-3">
-            <span style="font-size: 2.5rem;">🎯</span><br>
-            Come possiamo aiutarti?
-        </h2>
-        <p class="text-muted" style="font-size: 1.1rem;">
-            Trova risposte rapide o contattaci per assistenza personalizzata
-        </p>
-        <div class="input-group mx-auto mt-4" style="max-width: 400px;">
-            <input type="text" class="form-control" id="helpSearch" placeholder="🔍 Cerca un argomento...">
+    <!-- ========== VISTA HOME: Griglia Categorie ========== -->
+    <div class="help-view" id="viewHome">
+    <div class="help-header">
+        <div class="help-header-icon">👩‍💻</div>
+        <h1>Centro Assistenza</h1>
+        <p>Tocca una categoria per scoprire tutto!</p>
+        
+        <!-- Barra di ricerca -->
+        <div class="help-search-box">
+            <i class="bi bi-search help-search-icon"></i>
+            <input type="text" id="helpSearchInput" class="help-search-input" 
+                   placeholder="Cerca nelle guide..." 
+                   onkeydown="if(event.key==='Enter') onSearchInput(this.value)">
+            <button class="help-search-clear d-none" id="searchClearBtn" onclick="clearSearch()">
+                <i class="bi bi-x-lg"></i>
+            </button>
         </div>
     </div>
-    
-    <!-- Pulsanti rapidi per saltare alle sezioni -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex flex-wrap gap-2 justify-content-center">
-                {% for cat in categories.keys() %}
-                <a href="#section-{{ loop.index }}" class="btn btn-outline-primary btn-sm">
-                    {{ cat }}
-                </a>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-    
-    <!-- Messaggio quando nessun risultato -->
-    <div id="noResults" class="alert alert-warning d-none">
-        <i class="bi bi-search me-2"></i>Nessun risultato trovato. Prova con altre parole.
-    </div>
-    
-    <!-- Sezioni Help organizzate per categoria -->
-{% for category, topic_keys in categories.items() %}
-<div class="card mb-4 help-category help-category-{{ loop.index }}" id="section-{{ loop.index }}">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0">
-                {% if category == "Calendario" %}<i class="bi bi-calendar3 me-2"></i>
-                {% elif category == "Cassa" %}<i class="bi bi-cash-register me-2"></i>
-                {% elif category == "Clienti" %}<i class="bi bi-people me-2"></i>
-                {% elif category == "Pacchetti" %}<i class="bi bi-box me-2"></i>
-                {% elif category == "WhatsApp" %}<i class="bi bi-whatsapp me-2"></i>
-                {% elif category == "Marketing" %}<i class="bi bi-megaphone me-2"></i>
-                {% elif category == "Prenotazioni Online" %}<i class="bi bi-globe me-2"></i>
-                {% elif category == "Operatori" %}<i class="bi bi-person-badge me-2"></i>
-                {% elif category == "Servizi" %}<i class="bi bi-list-check me-2"></i>
-                {% endif %}
-                {{ category }}
-            </h5>
-        </div>
-        <div class="card-body p-0">
-            <div class="accordion accordion-flush" id="accordion{{ loop.index }}">
-                {% for key in topic_keys %}
-                {% set topic = topics.get(key, {}) %}
-                <div class="accordion-item help-item" 
-                     data-search="{{ topic.title|lower }} {{ topic.content|lower }}">
-                    <h2 class="accordion-header">
-                        <button class="accordion-button collapsed" type="button" 
-                                data-bs-toggle="collapse" 
-                                data-bs-target="#collapse-{{ key }}">
-                            {{ topic.title }}
-                        </button>
-                    </h2>
-                    <div id="collapse-{{ key }}" class="accordion-collapse collapse" 
-                         data-bs-parent="#accordion{{ loop.index }}">
-                        <div class="accordion-body">
-                            <div style="white-space: pre-line;">{{ topic.content|safe }}</div>
-                            
-                            {% if topic.image %}
-                            <div class="text-center">
-                                <img src="{{ url_for('static', filename='img/help/' + topic.image) }}" 
-                                     alt="{{ topic.title }}" 
-                                     class="help-image {% if topic.image.endswith('.gif') %}help-gif{% endif %}">
-                            </div>
-                            {% endif %}
-                            
-                            {% if topic.video %}
-                            <div class="mt-3">
-                                <button class="btn btn-outline-primary btn-sm" 
-                                        onclick="showVideo('{{ topic.video }}')">
-                                    <i class="bi bi-play-circle me-1"></i>Guarda il video tutorial
-                                </button>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
+        
+        <div class="help-categories-grid">
+            {% for category, topic_keys in categories.items() %}
+            <div class="help-cat-card help-cat-{{ loop.index }}" 
+                 onclick="openCategory('{{ category }}', {{ loop.index }})"
+                 data-category="{{ category }}">
+                <div class="help-cat-icon">
+                    {% if category == "Calendario" %}📅
+                    {% elif category == "Cassa" %}💰
+                    {% elif category == "Clienti" %}👩‍🦰
+                    {% elif category == "Pacchetti" %}🎁
+                    {% elif category == "WhatsApp" %}💬
+                    {% elif category == "Marketing" %}📣
+                    {% elif category == "Prenotazioni Online" %}🌐
+                    {% elif category == "Operatori" %}👩‍💼
+                    {% elif category == "Servizi" %}💆
+                    {% endif %}
                 </div>
-                {% endfor %}
+                <div class="help-cat-name">{{ category }}</div>
+                <div class="help-cat-count">{{ topic_keys|length }} guide</div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Box utility in fondo -->
+        <div class="help-utility-row">
+            <div class="help-utility-card support-card" onclick="window.location.href='mailto:info@tosca-crm.it'">
+                <span class="utility-icon">✉️</span>
+                <span class="utility-text">Contatta il supporto</span>
+            </div>
+            <div class="help-utility-card tour-card" onclick="resetAllTours()">
+                <span class="utility-icon">🎯</span>
+                <span class="utility-text">Riattiva tour guidato</span>
             </div>
         </div>
     </div>
-    {% endfor %}
     
-    <!-- Box contatto supporto -->
-    <div class="card mb-4 support-box">
-        <div class="card-body text-center py-5">
-            <div style="font-size: 3rem; margin-bottom: 15px;">💬</div>
-            <h5>Non hai trovato la risposta?</h5>
-            <p class="text-muted mb-4">Siamo qui per aiutarti!</p>
-            <a href="mailto:info@tosca-crm.it" class="btn btn-success btn-lg px-4">
-                <i class="bi bi-envelope me-2"></i>Scrivici
-            </a>
+    <!-- ========== VISTA RICERCA: Risultati ========== -->
+    <div class="help-view d-none" id="viewSearch">
+        <div class="help-nav-bar">
+            <button class="help-back-btn" onclick="clearSearch()">
+                <i class="bi bi-arrow-left"></i> Indietro
+            </button>
+            <div class="help-nav-title" id="searchTitle">Risultati ricerca</div>
+        </div>
+        
+        <div class="help-topics-list" id="searchResultsList">
+            <!-- Risultati dinamici -->
+        </div>
+        
+        <div class="help-no-results d-none" id="noResults">
+            <div class="no-results-icon">🔍</div>
+            <p>Nessun risultato trovato</p>
+            <span>Prova con altre parole chiave</span>
         </div>
     </div>
     
-    <!-- Pulsante per rivedere il tour guidato -->
-    <div class="card mb-4 tour-box">
-        <div class="card-body text-center py-5">
-            <div style="font-size: 3rem; margin-bottom: 15px;">🎯</div>
-            <h5>Vuoi rivedere il tour guidato?</h5>
-            <p class="text-muted mb-4">Ti mostriamo di nuovo come funziona tutto</p>
-            <button class="btn btn-primary btn-lg px-4" onclick="resetAllTours(); location.reload();">
-                <i class="bi bi-arrow-repeat me-2"></i>Riattiva Tour
+    <!-- ========== VISTA CATEGORIA: Lista Topics ========== -->
+    <div class="help-view d-none" id="viewCategory">
+        <div class="help-nav-bar">
+            <button class="help-back-btn" onclick="goHome()">
+                <i class="bi bi-arrow-left"></i> Indietro
+            </button>
+            <div class="help-nav-title" id="categoryTitle">Categoria</div>
+        </div>
+        
+        <div class="help-topics-list" id="topicsList">
+            <!-- Topics dinamici -->
+        </div>
+    </div>
+    
+    <!-- ========== VISTA TOPIC: Singola Pagina ========== -->
+    <div class="help-view d-none" id="viewTopic">
+        <div class="help-nav-bar">
+            <button class="help-back-btn" onclick="goBackToCategory()">
+                <i class="bi bi-arrow-left"></i> Indietro
+            </button>
+            <div class="help-nav-progress" id="topicProgress">1 / 5</div>
+        </div>
+        
+        <div class="help-topic-content">
+            <h2 class="help-topic-title" id="topicTitle">Titolo</h2>
+            <div class="help-topic-body" id="topicBody">
+                <!-- Contenuto dinamico -->
+            </div>
+        </div>
+        
+        <div class="help-topic-nav">
+            <button class="help-nav-prev" id="btnPrev" onclick="prevTopic()">
+                <i class="bi bi-chevron-left"></i> Precedente
+            </button>
+            <button class="help-nav-next" id="btnNext" onclick="nextTopic()">
+                Successivo <i class="bi bi-chevron-right"></i>
             </button>
         </div>
     </div>
 
 </div>
-<br><br>
 
 <!-- Modal per i video tutorial -->
 <div class="modal fade" id="videoModal" tabindex="-1">
@@ -141,381 +138,853 @@
 </div>
 
 <style>
-/* Font amichevole */
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
 
-.help-page {
+/* ========== BASE ========== */
+.help-app {
     font-family: 'Nunito', sans-serif;
-    max-width: 1200px;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+    min-height: calc(100vh - 120px);
 }
 
-/* Su schermi grandi, max 80% */
-@media (min-width: 1400px) {
-    .help-page {
-        max-width: 80% !important;
-    }
+.help-view {
+    animation: fadeIn 0.3s ease;
 }
 
-.help-page h2 {
-    font-weight: 700;
-    color: #333;
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-/* Card colorate per categoria */
-.help-category {
-    border: none;
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-    transition: transform 0.2s;
-}
-
-.help-category:hover {
-    transform: translateY(-2px);
-}
-
-/* Colori diversi per ogni categoria */
-.help-category-1 .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.help-category-2 .card-header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-.help-category-3 .card-header { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-.help-category-4 .card-header { background: linear-gradient(135deg, #4d5497 0%, #8c98c0 100%); }
-.help-category-5 .card-header { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
-.help-category-6 .card-header { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
-.help-category-7 .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.help-category-8 .card-header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-.help-category-9 .card-header { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-
-.help-category .card-header {
-    border: none;
-    padding: 20px 24px;
-}
-
-.help-category .card-header h5 {
-    font-size: 1.3rem;
-    font-weight: 700;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.help-category .card-header h5 i {
-    font-size: 1.5rem;
-}
-
-/* Accordion più morbido */
-.help-item {
-    border: none;
-    border-bottom: 1px solid #eee;
-}
-
-.help-item:last-child {
-    border-bottom: none;
-}
-
-.accordion-button {
-    font-weight: 600;
-    font-size: 1.05rem;
-    padding: 18px 24px;
-    color: #444;
-    transition: all 0.3s ease;
-}
-
-.accordion-button:focus {
-    box-shadow: none;
-    border-color: transparent;
-}
-
-/* Categoria 1 - Viola/Blu */
-.help-category-1 .accordion-button.collapsed,
-.help-category-7 .accordion-button.collapsed {
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.10) 0%, rgba(118, 75, 162, 0.10) 100%);
-    border-left: 3px solid rgba(102, 126, 234, 0.5);
-}
-.help-category-1 .accordion-button.collapsed:hover,
-.help-category-7 .accordion-button.collapsed:hover {
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.18) 0%, rgba(118, 75, 162, 0.18) 100%);
-    border-left: 3px solid #667eea;
-}
-.help-category-1 .accordion-button:not(.collapsed),
-.help-category-7 .accordion-button:not(.collapsed) {
-    background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
-    color: #667eea;
-    border-left: 3px solid #667eea;
-}
-
-/* Categoria 2 - Rosa/Rosso */
-.help-category-2 .accordion-button.collapsed,
-.help-category-8 .accordion-button.collapsed {
-    background: linear-gradient(135deg, rgba(240, 147, 251, 0.10) 0%, rgba(245, 87, 108, 0.10) 100%);
-    border-left: 3px solid rgba(240, 147, 251, 0.5);
-}
-.help-category-2 .accordion-button.collapsed:hover,
-.help-category-8 .accordion-button.collapsed:hover {
-    background: linear-gradient(135deg, rgba(240, 147, 251, 0.18) 0%, rgba(245, 87, 108, 0.18) 100%);
-    border-left: 3px solid #f093fb;
-}
-.help-category-2 .accordion-button:not(.collapsed),
-.help-category-8 .accordion-button:not(.collapsed) {
-    background: linear-gradient(135deg, rgba(240, 147, 251, 0.15) 0%, rgba(245, 87, 108, 0.15) 100%);
-    color: #e84393;
-    border-left: 3px solid #f093fb;
-}
-
-/* Categoria 3 - Azzurro/Ciano */
-.help-category-3 .accordion-button.collapsed,
-.help-category-9 .accordion-button.collapsed {
-    background: linear-gradient(135deg, rgba(79, 172, 254, 0.10) 0%, rgba(0, 242, 254, 0.10) 100%);
-    border-left: 3px solid rgba(79, 172, 254, 0.5);
-}
-.help-category-3 .accordion-button.collapsed:hover,
-.help-category-9 .accordion-button.collapsed:hover {
-    background: linear-gradient(135deg, rgba(79, 172, 254, 0.18) 0%, rgba(0, 242, 254, 0.18) 100%);
-    border-left: 3px solid #4facfe;
-}
-.help-category-3 .accordion-button:not(.collapsed),
-.help-category-9 .accordion-button:not(.collapsed) {
-    background: linear-gradient(135deg, rgba(79, 172, 254, 0.15) 0%, rgba(0, 242, 254, 0.15) 100%);
-    color: #0984e3;
-    border-left: 3px solid #4facfe;
-}
-
-/* Categoria 4 - Blu scuro/Grigio */
-.help-category-4 .accordion-button.collapsed {
-    background: linear-gradient(135deg, rgba(77, 84, 151, 0.10) 0%, rgba(140, 152, 192, 0.10) 100%);
-    border-left: 3px solid rgba(77, 84, 151, 0.5);
-}
-.help-category-4 .accordion-button.collapsed:hover {
-    background: linear-gradient(135deg, rgba(77, 84, 151, 0.18) 0%, rgba(140, 152, 192, 0.18) 100%);
-    border-left: 3px solid #4d5497;
-}
-.help-category-4 .accordion-button:not(.collapsed) {
-    background: linear-gradient(135deg, rgba(77, 84, 151, 0.15) 0%, rgba(140, 152, 192, 0.15) 100%);
-    color: #4d5497;
-    border-left: 3px solid #4d5497;
-}
-
-/* Categoria 5 - Rosa/Giallo */
-.help-category-5 .accordion-button.collapsed {
-    background: linear-gradient(135deg, rgba(250, 112, 154, 0.10) 0%, rgba(254, 225, 64, 0.10) 100%);
-    border-left: 3px solid rgba(250, 112, 154, 0.5);
-}
-.help-category-5 .accordion-button.collapsed:hover {
-    background: linear-gradient(135deg, rgba(250, 112, 154, 0.18) 0%, rgba(254, 225, 64, 0.18) 100%);
-    border-left: 3px solid #fa709a;
-}
-.help-category-5 .accordion-button:not(.collapsed) {
-    background: linear-gradient(135deg, rgba(250, 112, 154, 0.15) 0%, rgba(254, 225, 64, 0.15) 100%);
-    color: #e84393;
-    border-left: 3px solid #fa709a;
-}
-
-/* Categoria 6 - Verde acqua/Rosa chiaro */
-.help-category-6 .accordion-button.collapsed {
-    background: linear-gradient(135deg, rgba(168, 237, 234, 0.15) 0%, rgba(254, 214, 227, 0.15) 100%);
-    border-left: 3px solid rgba(168, 237, 234, 0.6);
-}
-.help-category-6 .accordion-button.collapsed:hover {
-    background: linear-gradient(135deg, rgba(168, 237, 234, 0.25) 0%, rgba(254, 214, 227, 0.25) 100%);
-    border-left: 3px solid #a8edea;
-}
-.help-category-6 .accordion-button:not(.collapsed) {
-    background: linear-gradient(135deg, rgba(168, 237, 234, 0.20) 0%, rgba(254, 214, 227, 0.20) 100%);
-    color: #00b894;
-    border-left: 3px solid #a8edea;
-}
-
-.accordion-button:focus {
-    box-shadow: none;
-    border-color: transparent;
-}
-
-.accordion-body {
-    padding: 20px 24px 24px;
-    font-size: 1rem;
-    line-height: 1.7;
-    color: #555;
-}
-
-/* Immagini help */
-.help-image {
-    max-width: 100%;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-    margin: 16px 0;
-}
-
-.help-gif {
-    max-width: 100%;
-    border-radius: 12px;
-    border: 3px solid #eee;
-    margin: 16px 0;
-}
-
-/* Box ricerca migliorato */
-#helpSearch {
-    border-radius: 25px;
-    padding: 12px 20px;
-    border: 2px solid #eee;
-    transition: all 0.3s;
-}
-
-#helpSearch:focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
-}
-
-/* Box supporto */
-.support-box {
-    background: linear-gradient(135deg, #e0ffe0 0%, #c8f7c8 100%);
-    border: none;
-    border-radius: 16px;
-}
-
-/* Box tour */
-.tour-box {
-    background: linear-gradient(135deg, #e8f4ff 0%, #d0e8ff 100%);
-    border: none;
-    border-radius: 16px;
-}
-
-.help-category.d-none {
-    display: none !important;
-}
-
-/* ========== TOOLTIP CON IMMAGINI ========== */
-.help-tooltip {
-    color: #172564;
-    text-decoration: underline;
-    text-transform: bold;
-    cursor: help;
+/* ========== HEADER HOME ========== */
+.help-header {
+    text-align: center;
+    padding: 30px 20px 40px;
+    background: linear-gradient(135deg, #fff9fb 0%, #ffeff4 50%, #ffffff 100%);
+    border-radius: 24px;
+    margin-bottom: 30px;
     position: relative;
-    transition: all 0.2s ease;
+    overflow: hidden;
 }
 
-.help-tooltip:hover,
-.help-tooltip:focus {
-    color: #764ba2;
-    text-decoration-style: solid;
+.help-header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,182,193,0.3) 0%, transparent 50%);
+    animation: shimmer 8s ease-in-out infinite;
 }
 
-/* Quando il tooltip è aperto, evidenzia il testo */
-.help-tooltip.active {
-    background-color: #ffe4ec;
-    border-radius: 3px;
-    padding: 0 4px;
-    margin: 0 -4px;
+@keyframes shimmer {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(25%, 25%); }
 }
 
-.tooltip-images {
-    position: fixed;
-    z-index: 10000;
+.help-header-icon {
+    font-size: 4.5rem;
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
+    animation: bounce 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+
+.help-header h1 {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #d63384;
+    margin: 0 0 8px;
+    position: relative;
+    z-index: 1;
+}
+
+.help-header p {
+    color: #6c757d;
+    font-size: 1rem;
+    margin: 0;
+    position: relative;
+    z-index: 1;
+}
+
+/* ========== BARRA DI RICERCA ========== */
+.help-search-box {
+    position: relative;
+    max-width: 400px;
+    margin: 24px auto 0;
+    z-index: 1;
+}
+
+.help-search-input {
+    width: 100%;
+    padding: 14px 50px 14px 46px;
+    border: 2px solid #fbcfe8;
+    border-radius: 50px;
+    font-size: 1rem;
+    font-family: inherit;
     background: #fff;
-    border: 1px solid #ccc;
-    padding: 10px;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
 }
 
-.tooltip-images.visible {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
+.help-search-input:focus {
+    outline: none;
+    border-color: #ec4899;
+    box-shadow: 0 4px 20px rgba(236, 72, 153, 0.2);
 }
 
-.tooltip-images img {
-    display: block;
-    border: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    box-sizing: content-box !important;
-    image-rendering: crisp-edges !important;
-    image-rendering: pixelated !important;
-    filter: none !important;
+.help-search-input::placeholder {
+    color: #9ca3af;
 }
 
-.tooltip-close {
-    display: none;
+.help-search-icon {
+    position: absolute;
+    left: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #d1d5db;
+    font-size: 1.1rem;
 }
 
-.tooltip-loading {
+.help-search-clear {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #f3f4f6;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 150px;
-    color: #667eea;
+    color: #6b7280;
+    transition: all 0.2s;
 }
 
-.tooltip-loading::after {
-    content: '';
-    width: 30px;
-    height: 30px;
-    border: 3px solid #eee;
-    border-top-color: #667eea;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+.help-search-clear:hover {
+    background: #e5e7eb;
+    color: #374151;
 }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
+/* ========== NO RESULTS ========== */
+.help-no-results {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6b7280;
+}
+
+.no-results-icon {
+    font-size: 4rem;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.help-no-results p {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0 0 8px;
+    color: #374151;
+}
+
+.help-no-results span {
+    font-size: 0.9rem;
+}
+
+/* ========== GRIGLIA CATEGORIE ========== */
+.help-categories-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 30px;
+}
+
+@media (max-width: 768px) {
+    .help-categories-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .help-categories-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.help-cat-card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 2px solid transparent;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+}
+
+.help-cat-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.12);
+}
+
+/* Colori delle card */
+.help-cat-1 { border-color: #e8d5ff; background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); }
+.help-cat-1:hover { border-color: #c084fc; }
+.help-cat-2 { border-color: #ffd5e5; background: linear-gradient(135deg, #fff5f8 0%, #ffe4ec 100%); }
+.help-cat-2:hover { border-color: #f472b6; }
+.help-cat-3 { border-color: #d5f5f6; background: linear-gradient(135deg, #f0fdfa 0%, #e0f7f8 100%); }
+.help-cat-3:hover { border-color: #5eead4; }
+.help-cat-4 { border-color: #ffead5; background: linear-gradient(135deg, #fffbf5 0%, #fff3e4 100%); }
+.help-cat-4:hover { border-color: #fb923c; }
+.help-cat-5 { border-color: #d5ffe8; background: linear-gradient(135deg, #f0fff5 0%, #e4ffed 100%); }
+.help-cat-5:hover { border-color: #34d399; }
+.help-cat-6 { border-color: #ffe5d5; background: linear-gradient(135deg, #fff8f5 0%, #ffede4 100%); }
+.help-cat-6:hover { border-color: #fb7185; }
+.help-cat-7 { border-color: #d5e5ff; background: linear-gradient(135deg, #f5f8ff 0%, #e4edff 100%); }
+.help-cat-7:hover { border-color: #60a5fa; }
+.help-cat-8 { border-color: #f5d5ff; background: linear-gradient(135deg, #fdf5ff 0%, #f8e4ff 100%); }
+.help-cat-8:hover { border-color: #e879f9; }
+.help-cat-9 { border-color: #fff5d5; background: linear-gradient(135deg, #fffdf5 0%, #fff8e4 100%); }
+.help-cat-9:hover { border-color: #fbbf24; }
+
+.help-cat-icon {
+    font-size: 2.8rem;
+    margin-bottom: 12px;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+}
+
+.help-cat-name {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #374151;
+    margin-bottom: 4px;
+}
+
+.help-cat-count {
+    font-size: 0.8rem;
+    color: #9ca3af;
+}
+
+/* ========== UTILITY CARDS ========== */
+.help-utility-row {
+    display: flex;
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.help-utility-card {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 18px;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+}
+
+.support-card {
+    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+    color: #166534;
+}
+
+.support-card:hover {
+    transform: scale(1.02);
+    box-shadow: 0 6px 20px rgba(34, 197, 94, 0.3);
+}
+
+.tour-card {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #1e40af;
+}
+
+.tour-card:hover {
+    transform: scale(1.02);
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
+}
+
+.utility-icon {
+    font-size: 1.4rem;
+}
+
+/* ========== NAV BAR ========== */
+.help-nav-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: #fff;
+    border-radius: 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.help-back-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    border: none;
+    background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%);
+    color: #be185d;
+    border-radius: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.help-back-btn:hover {
+    background: linear-gradient(135deg, #fbcfe8 0%, #f9a8d4 100%);
+    transform: scale(1.02);
+}
+
+.help-nav-title {
+    flex: 1;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #374151;
+}
+
+.help-nav-progress {
+    font-size: 0.9rem;
+    color: #9ca3af;
+    background: #f3f4f6;
+    padding: 6px 14px;
+    border-radius: 20px;
+}
+
+/* ========== LISTA TOPICS ========== */
+.help-topics-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.help-topic-item {
+    background: #fff;
+    padding: 20px 24px;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-left: 4px solid transparent;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.help-topic-item:hover {
+    transform: translateX(6px);
+    border-left-color: #ec4899;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+}
+
+.help-topic-item-text {
+    font-weight: 600;
+    color: #374151;
+    font-size: 1rem;
+}
+
+.help-topic-item-arrow {
+    color: #d1d5db;
+    font-size: 1.2rem;
+    transition: color 0.2s;
+}
+
+.help-topic-item:hover .help-topic-item-arrow {
+    color: #ec4899;
+}
+
+.help-topic-item-cat {
+    font-size: 0.8rem;
+    color: #9ca3af;
+    margin-top: 4px;
+}
+
+/* ========== CONTENUTO TOPIC ========== */
+.help-topic-content {
+    background: #fff;
+    border-radius: 20px;
+    padding: 30px;
+    min-height: 400px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    margin-bottom: 20px;
+}
+
+.help-topic-title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #1f2937;
+    margin: 0 0 24px;
+    padding-bottom: 16px;
+    border-bottom: 3px solid #fce7f3;
+}
+
+.help-topic-body {
+    font-size: 1rem;
+    line-height: 1.8;
+    color: #4b5563;
+}
+
+.help-topic-body p {
+    margin-bottom: 16px;
+}
+
+/* Immagini inline nel contenuto */
+.help-inline-image {
+    display: block;
+    max-width: 100%;
+    margin: 20px auto;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    border: 3px solid #fce7f3;
+}
+
+.help-inline-image.gif {
+    border-color: #dbeafe;
+}
+
+/* Formattazione testo */
+.help-topic-body strong {
+    color: #be185d;
+}
+
+/* ========== BOX HINT/CONSIGLIO ========== */
+.help-hint-box {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 2px dashed #f50b46;
+    border-radius: 16px;
+    padding: 4px 20px 16px 20px;
+    margin: 20px 0;
+    position: relative;
+}
+
+.help-hint-label {
+    font-family: 'Chalkboard SE', 'Nunito', cursive;
+    font-weight: 800;
+    font-size: 1rem;
+    color: #d90669;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-right: 6px;
+    padding: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    display: inline;
+    vertical-align: top;
+    line-height: 1;
+}
+
+.help-hint-text {
+    color: #920e3a;
+    font-weight: 600;
+}
+
+/* ========== BLOCCHI TESTO + IMMAGINE INLINE ========== */
+.help-inline-block {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+    margin: 24px 0;
+    padding: 20px;
+    background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%);
+    border-radius: 16px;
+    border: 2px solid #fbcfe8;
+}
+
+.help-inline-block:nth-of-type(even) {
+    flex-direction: row-reverse;
+    background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+    border-color: #99f6e4;
+}
+
+.help-inline-text {
+    flex: 1;
+    min-width: 150px;
+    display: flex;
+    align-items: center;
+}
+
+.help-highlight {
+    font-weight: 700;
+    color: #be185d;
+    font-size: 1.1rem;
+    background: linear-gradient(135deg, #fff 0%, #fce7f3 100%);
+    padding: 8px 16px;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(190, 24, 93, 0.15);
+}
+
+.help-inline-block:nth-of-type(even) .help-highlight {
+    color: #0d9488;
+    background: linear-gradient(135deg, #fff 0%, #ccfbf1 100%);
+    box-shadow: 0 2px 8px rgba(13, 148, 136, 0.15);
+}
+
+.help-inline-img-wrap {
+    flex: 2;
+    max-width: 400px;
+}
+
+.help-inline-img-wrap .help-inline-image {
+    width: 100%;
+    margin: 0;
+    border: 3px solid #fff;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+@media (max-width: 700px) {
+    .help-inline-block {
+        flex-direction: column !important;
+    }
+    
+    .help-inline-img-wrap {
+        max-width: 100%;
+    }
+}
+
+/* ========== NAVIGAZIONE TOPIC ========== */
+.help-topic-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.help-nav-prev,
+.help-nav-next {
+    flex: 1;
+    padding: 14px 24px;
+    border: none;
+    border-radius: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.help-nav-prev {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.help-nav-prev:hover:not(:disabled) {
+    background: #e5e7eb;
+}
+
+.help-nav-next {
+    background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
+    color: #fff;
+}
+
+.help-nav-next:hover:not(:disabled) {
+    transform: scale(1.02);
+    box-shadow: 0 6px 20px rgba(236, 72, 153, 0.4);
+}
+
+.help-nav-prev:disabled,
+.help-nav-next:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* ========== UTILITIES ========== */
+.d-none {
+    display: none !important;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 600px) {
+    .help-app {
+        padding: 12px;
+    }
+    
+    .help-header {
+        padding: 24px 16px 30px;
+    }
+    
+    .help-header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .help-utility-row {
+        flex-direction: column;
+    }
+    
+    .help-topic-content {
+        padding: 20px;
+    }
+    
+    .help-topic-nav {
+        flex-direction: column;
+    }
 }
 </style>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+// ========== DATI HELP ==========
+const HELP_DATA = {
+    {% for category, topic_keys in categories.items() %}
+    "{{ category }}": {
+        index: {{ loop.index }},
+        topics: [
+            {% for key in topic_keys %}
+            {% set topic = topics.get(key, {}) %}
+            {
+                key: "{{ key }}",
+                title: {{ topic.title|tojson }},
+                content: {{ topic.content|tojson }},
+                image: {{ topic.image|default('')|tojson }}
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ]
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+// Mappa delle immagini per i riferimenti [[TESTO|chiave]]
+const HELP_IMAGES = {
+    {% for key, images in help_images.items() %}
+    "{{ key }}": {{ images|tojson }}{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+const STATIC_BASE = "{{ url_for('static', filename='img/help/') }}";
+
+let currentCategory = null;
+let currentTopicIndex = 0;
+let searchFromCategory = null;
+
+// ========== RICERCA ==========
+function onSearchInput(query) {
+    const clearBtn = document.getElementById('searchClearBtn');
     
-    // Chiudi tutte le altre sezioni quando se ne apre una nuova
-    document.querySelectorAll('.accordion-button').forEach(function(button) {
-        button.addEventListener('click', function() {
-            // Trova tutti i collapse aperti in TUTTE le categorie
-            document.querySelectorAll('.accordion-collapse.show').forEach(function(openCollapse) {
-                // Se non è quello che stiamo per aprire, chiudilo
-                const targetId = button.getAttribute('data-bs-target');
-                if ('#' + openCollapse.id !== targetId) {
-                    var bsCollapse = bootstrap.Collapse.getInstance(openCollapse);
-                    if (bsCollapse) {
-                        bsCollapse.hide();
-                    } else {
-                        new bootstrap.Collapse(openCollapse, { toggle: false }).hide();
-                    }
-                    // Aggiorna anche il pulsante relativo
-                    var relatedButton = document.querySelector('[data-bs-target="#' + openCollapse.id + '"]');
-                    if (relatedButton) {
-                        relatedButton.classList.add('collapsed');
-                    }
-                }
-            });
+    if (query.trim().length === 0) {
+        clearBtn.classList.add('d-none');
+        showView('viewHome');
+        return;
+    }
+    
+    clearBtn.classList.remove('d-none');
+    performSearch(query.trim().toLowerCase());
+}
+
+function performSearch(query) {
+    const results = [];
+    
+    for (const [categoryName, catData] of Object.entries(HELP_DATA)) {
+        catData.topics.forEach((topic, idx) => {
+            const titleMatch = topic.title.toLowerCase().includes(query);
+            const contentMatch = topic.content.toLowerCase().includes(query);
+            
+            if (titleMatch || contentMatch) {
+                // Controlla se la categoria corrisponde al termine cercato
+                const categoryMatch = categoryName.toLowerCase().includes(query);
+                
+                results.push({
+                    category: categoryName,
+                    catIndex: catData.index,
+                    topicIndex: idx,
+                    title: topic.title,
+                    highlight: titleMatch ? 'title' : 'content',
+                    categoryMatch: categoryMatch
+                });
+            }
         });
+    }
+    
+    // Ordina: prima i risultati con categoria corrispondente, poi per titolo match
+    results.sort((a, b) => {
+        // Prima priorità: categoria corrisponde al termine cercato
+        if (a.categoryMatch && !b.categoryMatch) return -1;
+        if (!a.categoryMatch && b.categoryMatch) return 1;
+        // Seconda priorità: match nel titolo del topic
+        if (a.highlight === 'title' && b.highlight !== 'title') return -1;
+        if (a.highlight !== 'title' && b.highlight === 'title') return 1;
+        return 0;
     });
     
-    // Funzione di ricerca
-    const searchInput = document.getElementById('helpSearch');
+    renderSearchResults(results, query);
+}
+
+function renderSearchResults(results, query) {
+    const list = document.getElementById('searchResultsList');
     const noResults = document.getElementById('noResults');
     
-    searchInput.addEventListener('input', function() {
-        const query = this.value.toLowerCase().trim();
-        let foundAny = false;
-        
-        // Filtra gli elementi help
-        document.querySelectorAll('.help-item').forEach(item => {
-            const searchText = item.dataset.search || '';
-            const match = query === '' || searchText.includes(query);
-            item.classList.toggle('d-none', !match);
-            if (match) foundAny = true;
-        });
-        
-        // Mostra/nascondi categorie che non hanno elementi visibili
-        document.querySelectorAll('.help-category').forEach(cat => {
-            const visibleItems = cat.querySelectorAll('.help-item:not(.d-none)').length;
-            cat.classList.toggle('d-none', visibleItems === 0);
-        });
-        
-        // Mostra messaggio se nessun risultato
-        noResults.classList.toggle('d-none', foundAny || query === '');
+    document.getElementById('searchTitle').textContent = `Risultati per "${query}"`;
+    
+    if (results.length === 0) {
+        list.innerHTML = '';
+        noResults.classList.remove('d-none');
+    } else {
+        noResults.classList.add('d-none');
+        list.innerHTML = results.map(r => `
+            <div class="help-topic-item" onclick="openSearchResult('${r.category}', ${r.topicIndex})">
+                <div>
+                    <span class="help-topic-item-text">${r.title}</span>
+                    <div class="help-topic-item-cat">${r.category}</div>
+                </div>
+                <i class="bi bi-chevron-right help-topic-item-arrow"></i>
+            </div>
+        `).join('');
+    }
+    
+    showView('viewSearch');
+}
+
+function openSearchResult(categoryName, topicIndex) {
+    searchFromCategory = null;
+    currentCategory = categoryName;
+    currentTopicIndex = topicIndex;
+    renderTopic();
+    showView('viewTopic');
+}
+
+function clearSearch() {
+    document.getElementById('helpSearchInput').value = '';
+    document.getElementById('searchClearBtn').classList.add('d-none');
+    showView('viewHome');
+}
+
+// ========== NAVIGAZIONE ==========
+function openCategory(categoryName, catIndex) {
+    currentCategory = categoryName;
+    currentTopicIndex = 0;
+    
+    const catData = HELP_DATA[categoryName];
+    
+    // Aggiorna titolo
+    document.getElementById('categoryTitle').textContent = categoryName;
+    
+    // Genera lista topics
+    const list = document.getElementById('topicsList');
+    list.innerHTML = catData.topics.map((topic, idx) => `
+        <div class="help-topic-item" onclick="openTopic(${idx})">
+            <span class="help-topic-item-text">${topic.title}</span>
+            <i class="bi bi-chevron-right help-topic-item-arrow"></i>
+        </div>
+    `).join('');
+    
+    // Cambia vista
+    showView('viewCategory');
+}
+
+function openTopic(index) {
+    currentTopicIndex = index;
+    renderTopic();
+    showView('viewTopic');
+}
+
+function renderTopic() {
+    const catData = HELP_DATA[currentCategory];
+    const topic = catData.topics[currentTopicIndex];
+    const total = catData.topics.length;
+    
+    // Aggiorna progress
+    document.getElementById('topicProgress').textContent = `${currentTopicIndex + 1} / ${total}`;
+    
+    // Aggiorna titolo
+    document.getElementById('topicTitle').textContent = topic.title;
+    
+    // Trasforma i markup [[TESTO|chiave_immagine]] in blocchi testo + immagine inline
+    let content = topic.content;
+    content = content.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, function(match, text, imageKey) {
+        const images = HELP_IMAGES[imageKey];
+        if (images && images.length > 0) {
+            // Genera HTML con testo evidenziato e immagine a fianco
+            const imgSrc = STATIC_BASE + images[0];
+            return `</p>
+                <div class="help-inline-block">
+                    <div class="help-inline-text">
+                        <span class="help-highlight">${text}</span>
+                    </div>
+                    <div class="help-inline-img-wrap">
+                        <img src="${imgSrc}" alt="${text}" class="help-inline-image">
+                    </div>
+                </div>
+                <p>`;
+        }
+        return `<strong class="help-highlight">${text}</strong>`;
     });
     
-});
+    // Formatta il contenuto (markdown-like)
+    // Nota: il bold **..** è già convertito dal server in <strong>
+    content = content
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+    
+    // Aggiungi tag p
+    content = '<p>' + content + '</p>';
+    
+    // Pulisci paragrafi vuoti
+    content = content.replace(/<p>\s*<\/p>/g, '');
+    
+    // Aggiungi immagine principale se presente
+    if (topic.image) {
+        const isGif = topic.image.endsWith('.gif');
+        content += `<img src="${STATIC_BASE}${topic.image}" class="help-inline-image ${isGif ? 'gif' : ''}" alt="${topic.title}">`;
+    }
+    
+    document.getElementById('topicBody').innerHTML = content;
+    
+    // Aggiorna pulsanti
+    document.getElementById('btnPrev').disabled = currentTopicIndex === 0;
+    document.getElementById('btnNext').disabled = currentTopicIndex === total - 1;
+    
+    // Scroll to top
+    document.querySelector('.help-topic-content').scrollTop = 0;
+}
+
+function prevTopic() {
+    if (currentTopicIndex > 0) {
+        currentTopicIndex--;
+        renderTopic();
+    }
+}
+
+function nextTopic() {
+    const total = HELP_DATA[currentCategory].topics.length;
+    if (currentTopicIndex < total - 1) {
+        currentTopicIndex++;
+        renderTopic();
+    }
+}
+
+function goHome() {
+    currentCategory = null;
+    showView('viewHome');
+}
+
+function goBackToCategory() {
+    showView('viewCategory');
+}
+
+function showView(viewId) {
+    document.querySelectorAll('.help-view').forEach(v => v.classList.add('d-none'));
+    document.getElementById(viewId).classList.remove('d-none');
+}
+
+// ========== UTILITIES ==========
+function resetAllTours() {
+    const tours = ['calendar', 'pacchetti', 'clients', 'settings'];
+    tours.forEach(t => localStorage.removeItem('tour_' + t + '_seen'));
+    alert('Tour guidato riattivato! 🎉\n\nLa prossima volta che visiterai le pagine principali, vedrai di nuovo la guida.');
+}
 
 // Mappa dei video
 const VIDEO_URLS = {
@@ -538,164 +1007,6 @@ function showVideo(videoId) {
 document.getElementById('videoModal')?.addEventListener('hidden.bs.modal', function() {
     document.getElementById('videoFrame').src = '';
 });
-
-// Funzione per resettare i tour
-function resetAllTours() {
-    const tours = ['calendar', 'pacchetti', 'clients', 'settings'];
-    tours.forEach(t => localStorage.removeItem('tour_' + t + '_seen'));
-    alert('Tour guidato riattivato!\n\nLa prossima volta che visiterai le pagine principali, vedrai di nuovo la guida.');
-}
-
-// ========== TOOLTIP IMMAGINI INTERATTIVI ==========
-(function() {
-    const STATIC_BASE = "{{ url_for('static', filename='img/help/') }}";
-
-let tooltipEl = null;
-let currentImages = [];
-let currentIndex = 0;
-let activeTarget = null;
-let ignoreMouseMove = false; 
-let ignoreMouseEnter = false;
-
-    function createTooltip() {
-        if (tooltipEl) return;
-        
-        // Crea tooltip
-        tooltipEl = document.createElement('div');
-        tooltipEl.className = 'tooltip-images';
-
-        tooltipEl.innerHTML = `
-            <div class="tooltip-loading"></div>
-            <img src="" alt="Help">
-        `;
-        document.body.appendChild(tooltipEl);
-        
-        tooltipEl.addEventListener('click', function(e) {
-            e.stopPropagation();
-        });
-        
-        // NUOVO: blocca mousemove dentro il tooltip
-        tooltipEl.addEventListener('mousemove', function(e) {
-            e.stopPropagation();
-        });
-    }
-
-function showTooltip(target) {
-    if (ignoreMouseEnter) return;
-    
-    createTooltip();
-
-    const imagesStr = target.dataset.images;
-    if (!imagesStr) return;
-
-    activeTarget = target;
-    activeTarget.classList.add('active');
-
-    currentImages = imagesStr.split(',');
-    currentIndex = 0;
-
-    tooltipEl.querySelector('.tooltip-loading').style.display = 'flex';
-    tooltipEl.querySelector('img').style.visibility = 'hidden';
-
-    tooltipEl.classList.add('visible');
-    
-    ignoreMouseMove = true;
-    setTimeout(function() {
-        ignoreMouseMove = false;
-    }, 300);
-
-    loadImage(0);
-}
-
-function loadImage(index) {
-    const img = tooltipEl.querySelector('img');
-    
-    const filename = currentImages[index].trim();
-    const imgPath = STATIC_BASE + filename;
-
-    img.onload = function() {
-        tooltipEl.querySelector('.tooltip-loading').style.display = 'none';
-        img.style.visibility = 'visible';
-        
-        // Centra con pixel interi per evitare sfocatura
-        const w = tooltipEl.offsetWidth;
-        const h = tooltipEl.offsetHeight;
-        tooltipEl.style.left = Math.round((window.innerWidth - w) / 2) + 'px';
-        tooltipEl.style.top = Math.round((window.innerHeight - h) / 2) + 'px';
-    };
-
-    img.onerror = function() {
-        tooltipEl.querySelector('.tooltip-loading').style.display = 'none';
-        img.style.visibility = 'hidden';
-        console.warn('Immagine non trovata:', imgPath);
-    };
-
-    img.src = imgPath;
-}
-
-function hideTooltip() {
-    if (tooltipEl) {
-        tooltipEl.classList.remove('visible');
-    }
-    if (activeTarget) {
-        activeTarget.classList.remove('active');
-        activeTarget = null;
-    }
-    
-    ignoreMouseEnter = true;
-    setTimeout(function() {
-        ignoreMouseEnter = false;
-    }, 200);
-}
-
-    // Delegazione eventi - solo mouseenter
-    document.addEventListener('mouseenter', function(e) {
-        if (e.target && e.target.classList && e.target.classList.contains('help-tooltip')) {
-            showTooltip(e.target);
-        }
-    }, true);
-
-    // NUOVO: chiudi tooltip al movimento del mouse (fuori dal tooltip)
-    document.addEventListener('mousemove', function(e) {
-        if (!tooltipEl || !tooltipEl.classList.contains('visible')) return;
-        if (ignoreMouseMove) return;
-        if (tooltipEl.contains(e.target)) return;  // Non chiudere se dentro il tooltip
-        
-        hideTooltip();
-    });
-
-    // Click fuori dal tooltip lo chiude
-    document.addEventListener('click', function(e) {
-        if (tooltipEl && tooltipEl.classList.contains('visible')) {
-            if (!tooltipEl.contains(e.target) && !e.target.classList.contains('help-tooltip')) {
-                hideTooltip();
-            }
-        }
-    });
-
-    // Supporto keyboard per accessibilità
-    document.addEventListener('focusin', function(e) {
-        if (e.target && e.target.classList && e.target.classList.contains('help-tooltip')) {
-            showTooltip(e.target);
-        }
-    });
-
-    document.addEventListener('focusout', function(e) {
-        if (e.target && e.target.classList && e.target.classList.contains('help-tooltip')) {
-            hideTooltip(e.target);
-        }
-    });
-
-    // Navigazione con tastiera
-    document.addEventListener('keydown', function(e) {
-        if (!tooltipEl || !tooltipEl.classList.contains('visible')) return;
-        if (e.key === 'ArrowLeft') navigate(-1);
-        if (e.key === 'ArrowRight') navigate(1);
-        if (e.key === 'Escape') {
-            tooltipEl.classList.remove('visible');
-        }
-    });
-})();
 </script>
 
 {% endblock %}
