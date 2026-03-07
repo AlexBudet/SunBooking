@@ -230,7 +230,8 @@
 <br><br><br>
 </div>
 
-<!-- Sezione Aggiornamenti -->
+<!-- Sezione Aggiornamenti (solo istanza locale, non web app) -->
+{% if not config.get('HIDE_CASSA') %}
 <div class="desktop-only-setting" style="margin-top: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
   <h5 style="margin-bottom: 15px;">Aggiornamenti App</h5>
   <div id="updateStatus" style="margin-bottom: 15px;">
@@ -258,8 +259,10 @@
     <div id="releaseNotes" style="margin-top:10px; padding:10px; background:#fff; border:1px solid #ccc; border-radius:4px; max-height:200px; overflow-y:auto;"></div>
   </div>
 </div>
+{% endif %}
 
 <script>
+{% if not config.get('HIDE_CASSA') %}
 let updateData = null;
 
 function checkForUpdates() {
@@ -423,6 +426,7 @@ function applyUpdateAutomatic() {
         '</div></div>';
     });
 }
+{% endif %}
 </script>
 
 <script>
