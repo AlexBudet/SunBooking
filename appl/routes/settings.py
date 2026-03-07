@@ -3871,23 +3871,12 @@ def shutdown_app():
 
 # ================= SEZIONE HELP ====================
 def convert_markdown(text):
-    """Converte **testo** in <strong>testo</strong> e [[testo|keyword]] in tooltip con immagini"""
+    """Converte **testo** in <strong>testo</strong>. I markup [[testo|keyword]] vengono lasciati per il JS"""
     if not text:
         return text
     
-    # Prima converti i tooltip immagine: [[testo visualizzato|keyword]]
-    def replace_tooltip(match):
-        display_text = match.group(1)
-        keyword = match.group(2)
-        images = HELP_IMAGES.get(keyword, [])
-        if images:
-            images_json = ','.join(images)
-            return f'<span class="help-tooltip" data-images="{images_json}" tabindex="0">{display_text}</span>'
-        return display_text
-    
-    text = re.sub(r'\[\[(.+?)\|(.+?)\]\]', replace_tooltip, text)
-    
-    # Poi converti il markdown bold
+    # NON convertire i markup [[...]] - li gestisce il JavaScript per mostrare immagini inline
+    # Converti solo il markdown bold
     text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
     
     return text
@@ -3904,7 +3893,7 @@ def help_page():
             "video": topic.get("video")
         }
     categories = get_topics_by_category()
-    return render_template('help.html', topics=topics, categories=categories)
+    return render_template('help.html', topics=topics, categories=categories, help_images=HELP_IMAGES)
 
 
 @settings_bp.route('/api/help/<topic>', methods=['GET'])

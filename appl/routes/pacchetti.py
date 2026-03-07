@@ -1663,13 +1663,15 @@ def api_utilizza_prepagata(id):
     if nuovo_saldo <= 0:
         pacchetto.status = PacchettoStatus.Completato
     
-    # Registra movimento
+    # Registra movimento con operatore
+    operatore_id = data.get('operatore_id')
     movimento = MovimentoPrepagata(
         pacchetto_id=pacchetto.id,
         tipo_movimento='utilizzo',
         importo=importo,
         saldo_dopo=nuovo_saldo,
-        descrizione=data.get('descrizione', 'Pagamento in cassa')
+        descrizione=data.get('descrizione', 'Pagamento in cassa'),
+        operatore_id=int(operatore_id) if operatore_id else None
     )
     db.session.add(movimento)
     

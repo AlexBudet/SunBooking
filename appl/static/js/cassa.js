@@ -1891,17 +1891,51 @@ async function ripristinaModifichePseudoscontrino() {
     document.getElementById('clientSearchInputCassa').dataset.selectedClient = modifiche.cliente.id || '';
   }
 
-  const savedIds = new Set((modifiche.servizi || []).map(s => String(s.servizioId)));
-  document.querySelectorAll('.scontrino-row').forEach(row => {
+  // NUOVO: salva un array di snapshot completi per righe duplicate
+  const savedServizi = (modifiche.servizi || []).map((s, idx) => ({
+    servizioId: String(s.servizioId),
+    prezzo: s.prezzo,
+    metodo: s.metodo,
+    index: idx // indice univoco per righe duplicate
+  }));
+
+  // Rimuovi righe che non sono più nello snapshot salvato
+  // (confronta sia servizioId che indice per gestire duplicati)
+  const existingRows = Array.from(document.querySelectorAll('.scontrino-row'));
+  existingRows.forEach(row => {
     const sid = String(row.dataset.servizioId || '');
     const apptId = row.dataset.appointmentId || '';
-    if (apptId && !savedIds.has(sid)) row.remove();
+    
+    // Se ha appointment_id, conta quante volte appare questo servizioId nello snapshot
+    if (apptId) {
+      const countInSaved = savedServizi.filter(s => s.servizioId === sid).length;
+      const countInDom = existingRows.filter(r => String(r.dataset.servizioId) === sid).length;
+      
+      // Se nel DOM ci sono più righe di quante salvate, rimuovi le eccedenti
+      if (countInDom > countInSaved) {
+        const rowIndex = existingRows.indexOf(row);
+        if (rowIndex >= countInSaved) {
+          row.remove();
+        }
+      } else if (countInSaved === 0) {
+        // Se non c'è più nello snapshot, rimuovi
+        row.remove();
+      }
+    }
   });
 
+  // Aggiungi/aggiorna righe secondo lo snapshot
   const addPromises = [];
-  (modifiche.servizi || []).forEach(sv => {
-    const sid = String(sv.servizioId);
-    if (!document.querySelector(`.scontrino-row[data-servizio-id="${sid}"]`)) {
+  savedServizi.forEach((sv, idx) => {
+    const sid = sv.servizioId;
+    
+    // Conta quante righe di questo servizio già esistono
+    const existingCount = document.querySelectorAll(`.scontrino-row[data-servizio-id="${sid}"]`).length;
+    
+    // Se questa è la N-esima occorrenza e nel DOM ne abbiamo meno di N, aggiungi
+    const occurrenceIndex = savedServizi.slice(0, idx + 1).filter(s => s.servizioId === sid).length - 1;
+    
+    if (occurrenceIndex >= existingCount) {
       const p = fetch(`/cassa/api/services?id=${encodeURIComponent(sid)}`)
         .then(r => r.json())
         .then(data => {
@@ -1921,9 +1955,20 @@ async function ripristinaModifichePseudoscontrino() {
   });
   await Promise.allSettled(addPromises);
 
-  (modifiche.servizi || []).forEach(sv => {
-    const row = document.querySelector(`.scontrino-row[data-servizio-id="${sv.servizioId}"]`);
+  // Aggiorna prezzi e metodi per TUTTE le righe (anche duplicate)
+  savedServizi.forEach((sv, idx) => {
+    const sid = sv.servizioId;
+    
+    // Trova tutte le righe con questo servizioId
+    const allRows = Array.from(document.querySelectorAll(`.scontrino-row[data-servizio-id="${sid}"]`));
+    
+    // Calcola quale occorrenza (0-based) è questa nello snapshot
+    const occurrenceIndex = savedServizi.slice(0, idx + 1).filter(s => s.servizioId === sid).length - 1;
+    
+    // Aggiorna la riga corrispondente (se esiste)
+    const row = allRows[occurrenceIndex];
     if (!row) return;
+    
     const prezzoInput = row.querySelector('.scontrino-row-prezzo');
     if (prezzoInput) prezzoInput.value = Number(sv.prezzo || 0).toFixed(2);
     const sel = row.querySelector('select');
