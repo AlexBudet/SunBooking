@@ -1832,6 +1832,7 @@ function showClientInfoModal(clientId) {
 window.showClientInfoModal = showClientInfoModal;
 
 function handleClientSearch(query) {
+  closeServiceDropdown();
   // fallback sicuro
    query = (query || '').toString().toLowerCase().trim();
 
@@ -5250,7 +5251,26 @@ function maybeShowPseudoBlock() {
     }
 }
 
+// Helper: chiude TUTTI i dropdown servizi (Navigator + Modal)
+function closeServiceDropdown() {
+  const serviceResultsNav = document.getElementById('serviceResultsNav');
+  if (serviceResultsNav) {
+    serviceResultsNav.style.display = 'none';
+    serviceResultsNav.innerHTML = '';
+  }
+  
+  const serviceResults = document.getElementById('serviceResults');
+  if (serviceResults) {
+    serviceResults.style.display = 'none';
+    serviceResults.innerHTML = '';
+  }
+}
+window.closeServiceDropdown = closeServiceDropdown;
+
 function handleClientSearchNav(query) {
+  // NUOVO: Chiudi dropdown servizi quando si apre clienti
+  closeServiceDropdown();
+  
   const resultsContainer = document.getElementById('clientResultsNav');
   const input = document.getElementById('clientSearchInputNav');
   if (!resultsContainer || !input) return;
