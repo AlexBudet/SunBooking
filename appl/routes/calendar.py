@@ -2528,3 +2528,147 @@ def create_client_from_booking():
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# ══════════════════════════════════════════════════════════════
+# AI BOOKING ASSISTANT — Endpoint dedicati
+# Tutti read-only. Richiedono sessione attiva (user_id in session).
+# ══════════════════════════════════════════════════════════════
+
+def _get_ai_service():
+    """Lazy import del service layer AI (importato solo se GROQ_API_KEY è presente)."""
+    from appl.services.ai_service import is_ai_enabled, process_ai_query
+    return is_ai_enabled, process_ai_query
+
+
+@calendar_bp.route('/api/ai/status', methods=['GET'])
+def ai_status():
+    """
+    Ritorna se l'assistente AI è disponibile.
+    Il frontend lo chiama al caricamento per mostrare/nascondere il badge.
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+
+    is_ai_enabled, _ = _get_ai_service()
+    return jsonify({'enabled': is_ai_enabled()}), 200
+
+
+@calendar_bp.route('/api/ai/query', methods=['POST'])
+def ai_query():
+    """
+    Endpoint principale AI Booking Assistant.
+
+    Body JSON atteso:
+    {
+      "message":       "testo domanda operatrice",        -- obbligatorio
+      "client_search": "Mario Rossi | 3331234567",        -- opzionale
+      "query_date":    "YYYY-MM-DD",                      -- opzionale
+      "operator_id":   123,                               -- opzionale
+      "service_id":    456,                               -- opzionale
+      "days_range":    14                                 -- opzionale (default 14, max 60)
+    }
+    """
+    # ── Autenticazione ──────────────────────────────────────────
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+
+    # ── AI abilitata? ───────────────────────────────────────────
+    is_ai_enabled, process_ai_query = _get_ai_service()
+    if not is_ai_enabled():
+        return jsonify({
+            'error':   'ai_disabled',
+            'answer':  'Assistente AI non configurato.',
+        }), 503
+
+    # ── Lettura e validazione body ───────────────────────────────
+    data = request.get_json(silent=True) or {}
+
+    message = (data.get('message') or '').strip()
+
+    # ── LOG TEMPORANEO DEBUG ──
+    import logging as _log
+    _dbg = _log.getLogger('AI_DEBUG')
+    _dbg.warning("=== AI QUERY DEBUG ===")
+    _dbg.warning("message: %r", message)
+    
+    from appl.services.ai_service import _extract_client_name_from_message
+    _estratto = _extract_client_name_from_message(message)
+    _dbg.warning("client_search estratto: %r", _estratto)
+    _dbg.warning("======================")
+    # ── FINE LOG TEMPORANEO ──
+
+    if not message:
+        return jsonify({'error': 'empty_message'}), 400
+    if len(message) > 500:
+        return jsonify({'error': 'message_too_long'}), 400
+
+    client_search = (data.get('client_search') or '').strip() or None
+
+    # Validazione formato data YYYY-MM-DD
+    query_date = (data.get('query_date') or '').strip() or None
+    if query_date:
+        import re as _re
+        if not _re.match(r'^\d{4}-\d{2}-\d{2}$', query_date):
+            return jsonify({'error': 'invalid_date_format', 'detail': 'Usare YYYY-MM-DD'}), 400
+
+    # operator_id e service_id: interi o None
+    try:
+        operator_id = int(data['operator_id']) if data.get('operator_id') else None
+        service_id  = int(data['service_id'])  if data.get('service_id')  else None
+    except (ValueError, TypeError):
+        return jsonify({'error': 'invalid_id_format'}), 400
+
+    # days_range: intero limitato a [1, 60]
+    try:
+        days_range = max(1, min(60, int(data.get('days_range', 14))))
+    except (ValueError, TypeError):
+        days_range = 14
+
+    # ── Recupera username per audit log ─────────────────────────
+    from appl.models import User
+    user     = db.session.get(User, session['user_id'])
+    username = user.username if user else 'unknown'
+
+    # ── Chiama service layer ─────────────────────────────────────
+    try:
+        result = process_ai_query(
+            user_message=message,
+            username=username,
+            db=db,
+            client_search=client_search,
+            query_date_str=query_date,
+            operator_id=operator_id,
+            service_id=service_id,
+            days_range=days_range,
+        )
+    except Exception as exc:
+        app.logger.exception("AI query error: %s", exc)
+        return jsonify({
+            'error':    'internal_error',
+            'answer':   'Errore interno. Riprova tra qualche secondo.',
+            'trace_id': 'N/A',
+        }), 500
+
+    return jsonify(result), 200
+
+
+@calendar_bp.route('/api/ai/sessions', methods=['GET'])
+def ai_sessions_log():
+    """
+    Ultime 50 sessioni AI per l'utente corrente.
+    Accessibile solo da ruoli owner/admin (per debug e monitoraggio token).
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+
+    from appl.models import User, AIAssistantSession, RuoloUtente
+    user = db.session.get(User, session['user_id'])
+    if not user or user.ruolo not in (RuoloUtente.owner, RuoloUtente.admin):
+        return jsonify({'error': 'forbidden'}), 403
+
+    sessions = (
+        AIAssistantSession.query
+        .order_by(AIAssistantSession.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return jsonify([s.to_dict() for s in sessions]), 200
