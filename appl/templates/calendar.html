@@ -2858,4 +2858,279 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endif %}
+
+<!-- ══════════════════════════════════════════════════════════
+     AI BOOKING ASSISTANT — Badge + Modal Chat
+     Aggiunto in append: zero impatto sul calendario esistente.
+     Il badge viene mostrato solo se /api/ai/status → enabled=true
+     ══════════════════════════════════════════════════════════ -->
+
+<!-- Badge flottante (angolo basso dx) -->
+<div id="aiBadgeBtn"
+     title="Assistente AI"
+     aria-label="Apri assistente AI"
+     style="display:none; position:fixed; bottom:28px; right:24px; z-index:99999;
+            width:54px; height:54px; border-radius:50%;
+            background:linear-gradient(135deg,#b8809d,#a06b88);
+            box-shadow:0 4px 18px rgba(184,128,157,0.45);
+            cursor:pointer; align-items:center; justify-content:center;
+            transition:transform .18s ease, box-shadow .18s ease;">
+  <i class="bi bi-stars" style="font-size:1.55rem; color:#fff; pointer-events:none;"></i>
+  <!-- Pallino rosso notifica (nascosto di default) -->
+  <span id="aiBadgeDot"
+        style="display:none; position:absolute; top:4px; right:4px;
+               width:11px; height:11px; border-radius:50%;
+               background:#ff3b3b; border:2px solid #fff;"></span>
+</div>
+
+<!-- Modal Chat AI -->
+<div id="aiChatModal"
+     role="dialog" aria-modal="true" aria-labelledby="aiChatTitle"
+     style="display:none; position:fixed; bottom:92px; right:24px; z-index:99998;
+            width:370px; max-width:90vw; min-width:100px;
+            height:520px; max-height:80vh; min-height:360px;
+            background:#fff; border-radius:16px;
+            box-shadow:0 8px 40px rgba(0,0,0,0.18);
+            flex-direction:column; overflow:hidden;
+            border:1px solid rgba(135,100,124,0.2);">
+
+  <div id="aiChatResizeHandle" aria-label="Ridimensiona chat (angolo)" title="Ridimensiona"></div>
+  <div id="aiChatResizeHandleRight" aria-label="Ridimensiona larghezza" title="Ridimensiona larghezza"></div>
+
+  <!-- Header -->
+  <div style="background:linear-gradient(135deg,#723a57,#83506c);
+              padding:13px 16px; display:flex; align-items:center; gap:10px;
+              flex-shrink:0; border-bottom:1px solid rgba(135,100,124,0.15);">
+    <i class="bi bi-stars" style="color:#fff; font-size:1.2rem;"></i>
+    <span id="aiChatTitle"
+          style="color:#fff; font-weight:700; font-size:1rem; flex:1;">
+      TOSCA AI
+    </span>
+    <span id="aiStatusDot"
+          title="Online"
+          style="width:9px; height:9px; border-radius:50%;
+                 background:#4cff91; border:1.5px solid #fff;
+                 display:inline-block; margin-right:4px;"></span>
+    <button id="aiChatClose"
+            aria-label="Chiudi assistente"
+            style="background:none; border:none; color:#fff;
+                   font-size:1.3rem; cursor:pointer; line-height:1;
+                   padding:0 2px;">&times;</button>
+  </div>
+
+  <!-- Area messaggi -->
+  <div id="aiChatMessages"
+       style="flex:1; overflow-y:auto; padding:14px 12px;
+              display:flex; flex-direction:column; gap:10px;
+              background:#f7f5ff;">
+    <!-- Messaggio di benvenuto inserito da JS -->
+  </div>
+
+  <!-- Indicatore "sta scrivendo..." -->
+  <div id="aiTypingIndicator"
+       style="display:none; padding:4px 16px 2px;
+              font-size:0.78rem; color:#888; background:#f7f5ff;
+              flex-shrink:0;">
+    <i class="bi bi-three-dots" style="animation:aiDotPulse 1s infinite;"></i>
+    TOSCA sta elaborando…
+  </div>
+
+  <!-- Anteprima dettatura -->
+  <div id="aiDictationPreview"
+       style="display:none; padding:4px 16px;
+              font-size:0.8rem; color:#6c47ff; background:#f0ebff;
+              border-top:1px solid #e0d6ff; flex-shrink:0; font-style:italic;">
+  </div>
+
+  <!-- Composer -->
+  <div style="padding:10px 10px 10px; border-top:1px solid #e8e0ff;
+              display:flex; gap:7px; align-items:flex-end;
+              background:#fff; flex-shrink:0;">
+<textarea id="aiChatInput"
+          rows="1"
+          placeholder=""
+          aria-label="Messaggio per l'assistente AI"
+          style="flex:1; border:1.5px solid #d0c8ff; border-radius:10px;
+                 padding:8px 10px; font-size:0.88rem; resize:none;
+                 outline:none; line-height:1.4; max-height:90px;
+                 overflow-y:auto; font-family:inherit;
+                 transition:border-color .15s;"></textarea>
+
+    <!-- Pulsante microfono -->
+    <button id="aiMicBtn"
+            type="button"
+            aria-label="Dettatura vocale"
+            title="Dettatura vocale"
+            style="width:36px; height:36px; border-radius:50%; border:none;
+                   background:#f0ebff; color:#6c47ff; cursor:pointer;
+                   display:flex; align-items:center; justify-content:center;
+                   flex-shrink:0; transition:background .15s;">
+      <i class="bi bi-mic" style="font-size:1rem; pointer-events:none;"></i>
+    </button>
+
+    <!-- Pulsante invia -->
+    <button id="aiSendBtn"
+            type="button"
+            aria-label="Invia messaggio"
+            style="width:36px; height:36px; border-radius:50%; border:none;
+                   background:linear-gradient(135deg,#b8809d,#a06b88);
+                   color:#fff; cursor:pointer;
+                   display:flex; align-items:center; justify-content:center;
+                   flex-shrink:0; transition:opacity .15s;">
+      <i class="bi bi-send-fill" style="font-size:0.9rem; pointer-events:none;"></i>
+    </button>
+  </div>
+</div>
+
+<!-- Stili animazione e slot-card -->
+<style>
+/* Pulsazione pallino typing */
+@keyframes aiDotPulse {
+  0%,100% { opacity:.3; } 50% { opacity:1; }
+}
+
+/* Badge hover */
+#aiBadgeBtn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 24px rgba(184,128,157,0.6);
+}
+
+#aiChatResizeHandle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  z-index: 3;
+  cursor: nwse-resize;
+  background: transparent;
+}
+
+#aiChatResizeHandle::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 9px;
+  height: 9px;
+  border-top: 2px solid rgba(135,100,124,0.6);
+  border-left: 2px solid rgba(135,100,124,0.6);
+  border-radius: 2px 0 0 0;
+  pointer-events: none;
+}
+
+#aiChatResizeHandleRight {
+  position: absolute;
+  top: 50%;
+  left: -6px;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 80px;
+  z-index: 10;
+  cursor: ew-resize;
+  background: rgba(135,100,124,0.08);
+}
+
+#aiChatResizeHandleRight::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 5px;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 50px;
+  background: rgba(135,100,124,0.5);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+#aiChatResizeHandleRight:hover::before {
+  background: rgba(135,100,124,0.6);
+}
+
+/* Microfono attivo */
+#aiMicBtn.ai-mic-active {
+  background: #ff3b3b !important;
+  color: #fff !important;
+  animation: aiMicPulse 1s infinite;
+}
+@keyframes aiMicPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,59,59,0.5); }
+  50%      { box-shadow: 0 0 0 7px rgba(255,59,59,0); }
+}
+
+/* Bolla messaggio utente */
+.ai-msg-user {
+  align-self: flex-end;
+  background: linear-gradient(135deg,#b8809d,#a06b88);
+  color: #fff;
+  border-radius: 14px 14px 3px 14px;
+  padding: 8px 12px;
+  max-width: 82%;
+  font-size: 0.87rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+/* Bolla messaggio assistente */
+.ai-msg-assistant {
+  align-self: flex-start;
+  background: #fff;
+  color: #222;
+  border-radius: 14px 14px 14px 3px;
+  padding: 10px 13px;
+  max-width: 92%;
+  font-size: 0.87rem;
+  line-height: 1.5;
+  border: 1px solid #e8e0ff;
+  word-break: break-word;
+  box-shadow: 0 1px 4px rgba(108,71,255,0.07);
+}
+
+/* Mini-blocco slot proposto (simile pseudo-block calendario) */
+.ai-slot-card {
+  background: #f8e8f0;
+  border: 1.5px solid #b8809d;
+  border-radius: 10px;
+  padding: 8px 11px;
+  margin-top: 7px;
+  cursor: pointer;
+  transition: background .15s, transform .12s;
+  font-size: 0.83rem;
+  line-height: 1.5;
+}
+.ai-slot-card:hover {
+  background: linear-gradient(135deg,#b8809d,#a06b88);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.ai-slot-card:hover .ai-slot-label {
+  color: #f0e4eb;
+}
+.ai-slot-label {
+  font-size: 0.73rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* Timestamp messaggi */
+.ai-msg-time {
+  font-size: 0.68rem;
+  color: #bbb;
+  margin-top: 2px;
+  align-self: flex-end;
+}
+.ai-msg-assistant + .ai-msg-time {
+  align-self: flex-start;
+}
+
+/* Messaggio errore */
+.ai-msg-error {
+  background: #fff3f3;
+  border-color: #ffcccc;
+  color: #c0392b;
+}
+</style>
+
 {% endblock %}

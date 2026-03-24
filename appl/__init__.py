@@ -83,12 +83,19 @@ def create_app(db_uri: str | None = None):
         default_limits=["200 per minute"],  # limite globale
         storage_uri="memory://",
     )
-    
+
     # Limite più stretto sul login
     @limiter.limit("5 per minute")
     @app.before_request
     def rate_limit_login():
         if request.endpoint == 'landing' and request.method == 'POST':
+            pass  # il decoratore applica il limite
+
+    # Limite endpoint AI: largo (ogni query dura 1-3 sec comunque)
+    @limiter.limit("100 per minute")
+    @app.before_request
+    def rate_limit_ai():
+        if request.endpoint in ('calendar.ai_query',) and request.method == 'POST':
             pass  # il decoratore applica il limite
 
     # Espone il token ai template Jinja come csrf_token()

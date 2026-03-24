@@ -1,39 +1,41 @@
-CALENDAR
-- dopo associazione cliente da web appt table, aggiornare calendar ma RESTARE nella table (non chiuderla)
-- copia-incolla del blocco prende anche lo stato, è ok, ma copia da blocco in stato 2 (pagato) invece deve poi incollare in stato default! 
-- aggiungere location.reload dopo eliminazione o resize blocchi
-
-CASSA
-- provare console RCH per sblocco
-- testare prepagate (anche in calendar)
-- se porto in cassa cliente con prepagata da calendar, non visualizza popup e non scala credito da prepagata
-- se porto in cassa prepagata con "vai in cassa" e cambio importo scontrino, non si capisce se la dà come pagata o no
-- se indico un beneficiario per prepagata, va associato da database e la prepagata va associata a lui
-
 SETTINGS:
+TERMINARE CENTRO ASSISTENZA
+- Aggiornamento a stili Glamour in varie parti di Settings
+- Velocizzare e migliorare tab "Booking Web" -> vedere se si possono impostare anche ALCUNI GIORNI per alcuni servizi
 - in Servizi/Utenti sezione visibile solo a owner: SEZIONI OSCURABILI DA PROFILO OWNER: 1) whatsapp, booking, marketing 2) pacchetti
-- serve gestione migliore della connettività a whatsapp/unipile in caso piu client siano collegati!
+- MARKETING: possibilità di caricare anche foto del messaggio whatsapp!
+
+CALENDAR: 
+- migliorare DRAG-and-DROP ! se posiziono con puntatore vicino a cella sotto, posizionare comunque in cella sotto
+- dropdown navigator appuntamenti che si sovrappongono, qndo apre dropdown clienti chiude sempre dropdown servizi
+- se creo doppio blocco per stesso cliente da navigator con due click distinti su mini-blocco e poi su cella calendar, invia memo whatsapp con SOLO UN appuntamento prenotato.......
+
+PROMPT AI PER PRENOTAZIONE:
+- collegamento con microfono
+- richieste appuntamenti in base a giorni/orari disponibili, trattamento, operatore, giorni apertura chiusura ecc -> AI deve POTER LEGGERE NEL DATABASE APPUNTAMENTI
+
+GENERALE: 
+- inserire più tooltip esplicativi (calendar, turni operatore, ecc) e completare Centro Assistenza (e tour)
+- creare icona! (dopo aver ricevuto il logo)
 
 WEB APP:
 - creare app per mobile (serve logo per creare icona!)
 
-SITI:
-- creare touch-icon e manifest.json per SunExpressBeauty e terminare SunExpressBeauty
+COMMERCIALIZZAZIONE:
+- scegliere LOGO E creare brand booklet con stili, font, icone ecc
+- creare sito e sezioni per commercializzazione
 
-GENERALE: 
-- inserire più tooltip esplicativi (calendar, turni operatore, ecc)
-- creare logging dei messaggi flask del terminale e da console?
-- creare wrapper per update via web
-- creare icona! (dopo aver ricevuto il logo)
+
+
 
 SOLARIUM:
 - boxare l'app e mettere tutto su un solo server
 - invio whatsapp a cliente in automatico
 
-COMMERCIALIZZAZIONE:
-- scegliere LOGO E creare brand booklet con stili, font, icone ecc
-- creare sito e sezioni per commercializzazione
-- creare tutorial e agentic AI bot per primo supporto tecnico
+
+
+
+
 
 
 UNIPILE_DSN=api15.unipile.com:14552
@@ -44,11 +46,44 @@ UNIPILE_ACCESS_TOKEN=T+y/2c/b.0MQy6V+D5z86R+aCJtQFZ4Ht50m/fe8HXNALTSOO0ck=
 
 
 
+Verifiche da fare PER PREPAGATA!!!!!!!!!!!!!!!!!!!!!!!!!
+1. Operatore nel movimento prepagata
+Vai in Calendar, crea un blocco appuntamento con un operatore (es. "Maria")
+Clicca sul € per andare in cassa
+Seleziona Prepagata come metodo di pagamento
+Conferma e stampa lo scontrino
+Vai nel dettaglio della prepagata (/pacchetti/detail/XXX)
+Nella tabella movimenti, verifica che compaia "Maria" nella colonna Operatore (non "—" o vuoto)
+2. Operatore non selezionato
+Vai direttamente in Cassa (senza passare dal calendar)
+Aggiungi un servizio manualmente
+Seleziona un cliente con prepagata attiva
+Paga con Prepagata (senza selezionare operatore)
+Vai nel dettaglio della prepagata
+Verifica che compaia "non selezionato" in corsivo grigio nella colonna Operatore
+3. Ricarica con promozione (es. paga 30€, ottieni 40€)
+Vai nel dettaglio di una prepagata esistente
+Clicca Ricarica con una promo attiva
+In cassa, verifica che il prezzo sia bloccato (30€)
+Conferma e stampa
+Torna nel dettaglio della prepagata
+Verifica che il credito sia aumentato di 40€ (non 30€)
 
-
-
-
-CORRETTI, DA VERIFICARE:
+CORRETTI, DA VERIFICARE
+- Aggiornamento App in BusinessInfo visibile solo nella versione boxed (start.py)
+- tooltip sui campi "Salone" e "Cliente Generico" nel container pseudoscontrini devono avere class "data-bs-toggle"
+- sezione prepagate, verificare e testare
+- non deve visualizzare cognomi in campo operatore in cassa
+- migliorare modal creazione turni da settings/operatori
+- modal info appuntamento ha z-index inferiore a whatsapp button, per app ultima colonna a dx è un problema
+- modal turni operatore da calendar quando aperto fa vedere blocchi appuntamento in background piu in alto di header
+- creare logging dei messaggi flask del terminale e da console
+- aggiungere location.reload dopo eliminazione
+- creare wrapper per update via web
+- in BusinessInfo nascondere alcune delle opzioni in fondo
+- cella ora ha z-index piu alto degli highlight da pseudoblocco
+- dopo associazione cliente da web appt table, aggiornare calendar ma RESTARE nella table (non chiuderla)
+- copia-incolla del blocco prende anche lo stato, è ok, ma copia da blocco in stato 2 (pagato) invece deve poi incollare in stato default! 
 - associare eventualmente solo certi servizi (o certe categorie, tipo prepagata lampade) alle prepagate
 - adattare pulsanti in pacchetto_detail/prepagate
 - fare in modo di andare in cassa.html per pagamento prepagate
@@ -256,22 +291,17 @@ CALENDAR... controllare:
 ( ... IN FUTURO UNDO e REDO )
 ( ... IN FUTURO CELLE DA 1/3 di QUARTER per APP di 20 MIN )
 
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-CALENDAR
-- PENSARE A WARNING DA APPLICARE A CERTI SERVIZI IN CASO DI APPUNTAMENTI SOVRAPPOSTI (per es. per quel servizio ho un solo macchinario, non posso farne due in contemporanea)
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - CALENDAR
+- PENSARE A WARNING DA APPLICARE A CERTI SERVIZI IN CASO DI APPUNTAMENTI SOVRAPPOSTI (per es. per quel servizio ho un solo macchinario, non posso farne due in contemporanea) - già inseriti campi in models.py (max_concurrent e resource_name)
 - creare COLONNE WISHLIST da attivare in periodi di grande passaggio (automaticamente se colonne target si liberano parte un whatsapp a cliente)
+- dividere in tre celle ogni cella oraria di calendar per prendere appuntamenti ogni 5 minuti per alcuni operatori? (es. LETTINO SOLARIUM)
+
 
 WEB BOOKING
 - opzionale, offrire la possibilità di PAGARE ONLINE gli appuntamenti
 
 DASHBOARD
 - con news, sponsor (?), video, suggerimenti, oroscopo, meteo ecc ecc
-
-SOLARIUM -> tenere su applicazione separata!
-- integrazione SunBooking x monitor e ricaricabili solarium
-
-Settings/Operatori:
-- migliorare UI per creare turni operatori
 
 PROMO e PACCHETTI
 - raccolta punti (tot euro ogni tot euro spesi)

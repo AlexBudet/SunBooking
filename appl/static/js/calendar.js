@@ -1832,7 +1832,6 @@ function showClientInfoModal(clientId) {
 window.showClientInfoModal = showClientInfoModal;
 
 function handleClientSearch(query) {
-  closeServiceDropdown();
   // fallback sicuro
    query = (query || '').toString().toLowerCase().trim();
 
@@ -5251,26 +5250,7 @@ function maybeShowPseudoBlock() {
     }
 }
 
-// Helper: chiude TUTTI i dropdown servizi (Navigator + Modal)
-function closeServiceDropdown() {
-  const serviceResultsNav = document.getElementById('serviceResultsNav');
-  if (serviceResultsNav) {
-    serviceResultsNav.style.display = 'none';
-    serviceResultsNav.innerHTML = '';
-  }
-  
-  const serviceResults = document.getElementById('serviceResults');
-  if (serviceResults) {
-    serviceResults.style.display = 'none';
-    serviceResults.innerHTML = '';
-  }
-}
-window.closeServiceDropdown = closeServiceDropdown;
-
 function handleClientSearchNav(query) {
-  // NUOVO: Chiudi dropdown servizi quando si apre clienti
-  closeServiceDropdown();
-  
   const resultsContainer = document.getElementById('clientResultsNav');
   const input = document.getElementById('clientSearchInputNav');
   if (!resultsContainer || !input) return;
@@ -11737,4 +11717,1238 @@ document.addEventListener('click', function(e) {
       }
     });
   });
+})();
+
+// ══════════════════════════════════════════════════════════════
+// AI BOOKING ASSISTANT — Logica UI
+// ══════════════════════════════════════════════════════════════
+
+(function () {
+  'use strict';
+
+  // ── Stato interno ─────────────────────────────────────────────
+  const AI = {
+    isOpen:      false,
+    isLoading:   false,
+    recognition: null,
+    isMicActive: false,
+    chatHistory: [],
+    csrfToken:   '',
+    baseUrl:     '',
+    pendingSlot: null,
+  };
+
+  let elBadge, elModal, elMessages, elInput, elSendBtn,
+      elMicBtn, elTyping, elDictation, elClose;
+
+  // ── Utility ───────────────────────────────────────────────────
+
+  function getCsrf() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || '';
+  }
+
+  function getBaseUrl() {
+    // Estrae /dbX/calendar dall'URL corrente
+    const match = window.location.pathname.match(/^(\/[^/]+\/calendar)/);
+    return match ? match[1] : '/calendar';
+  }
+
+  function fmtNow() {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+
+  function fmtDateISO(d) {
+    const dt = d || new Date();
+    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+  }
+
+  function esc(s) {
+    return String(s || '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Converte YYYY-MM-DD → DD Mmm YYYY per display (es. "06 Nov 2025")
+  // Gestisce anche date già in formato DD/MM/YYYY o DD Mmm YYYY
+function fmtDateIT(isoDate) {
+  if (!isoDate) return '';
+  const s = String(isoDate).trim();
+
+  const mesi = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const yyyy = iso[1];
+    const mm = parseInt(iso[2], 10);
+    const dd = iso[3];
+    return `${dd} ${mesi[mm - 1] || iso[2]} ${yyyy}`;
+  }
+
+  const it = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (it) {
+    const dd = it[1];
+    const mm = parseInt(it[2], 10);
+    const yyyy = it[3];
+    return `${dd} ${mesi[mm - 1] || it[2]} ${yyyy}`;
+  }
+
+  return s;
+}
+
+  function splitFullName(fullName) {
+    const clean = String(fullName || '').trim().replace(/\s+/g, ' ');
+    if (!clean) return { nome: '', cognome: '' };
+    const parts = clean.split(' ');
+    return {
+      nome: parts[0] || '',
+      cognome: parts.slice(1).join(' ') || '',
+    };
+  }
+
+  function extractClientQueryFromMessage(message) {
+    const msg = String(message || '').trim();
+    if (!msg) return '';
+
+    const patterns = [
+      /\b(?:appuntamenti|prossimi appuntamenti|storico|storico cliente)\s+di\s+([A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+(?:\s+[A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+)*)/i,
+      /\bdi\s+([A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+(?:\s+[A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+)*)/i,
+      /\bper\s+([A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+(?:\s+[A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+)*)/i
+    ];
+
+    for (const p of patterns) {
+      const m = msg.match(p);
+      if (m && m[1]) return m[1].trim();
+    }
+    return '';
+  }
+
+  function normalizeAiAppointments(raw, intent) {
+    const arr = Array.isArray(raw) ? raw : [];
+    if (arr.length === 0) return [];
+
+    return arr.map(item => {
+      const dt = String(item.ora_inizio || item.start_time || '').trim();
+      let date = '';
+      let time = '';
+      const m = dt.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+      if (m) {
+        date = m[1];
+        time = m[2];
+      } else {
+        date = String(item.date || '').slice(0, 10);
+        time = String(item.time || '').slice(0, 5);
+      }
+
+      // Fallback: estrai data da appointment_date o data
+      if (!date && item.appointment_date) {
+        date = String(item.appointment_date).slice(0, 10);
+      }
+      if (!date && item.data) {
+        // Gestisce formato DD/MM/YYYY o DD Mmm YYYY convertendolo a YYYY-MM-DD
+        const dataIt = String(item.data).trim();
+        // Formato DD/MM/YYYY
+        const matchSlash = dataIt.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (matchSlash) {
+          date = matchSlash[3] + '-' + matchSlash[2] + '-' + matchSlash[1];
+        } else {
+          // Formato DD Mmm YYYY (es. "06 Nov 2025")
+          const mesiIT = {'gen':'01','feb':'02','mar':'03','apr':'04','mag':'05','giu':'06','lug':'07','ago':'08','set':'09','ott':'10','nov':'11','dic':'12'};
+          const matchMese = dataIt.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
+          if (matchMese) {
+            const dd = matchMese[1].padStart(2, '0');
+            const mm = mesiIT[matchMese[2].toLowerCase()] || '01';
+            const yyyy = matchMese[3];
+            date = yyyy + '-' + mm + '-' + dd;
+          } else {
+            date = dataIt.slice(0, 10);
+          }
+        }
+      }
+
+      return {
+        date: date || '—',
+        time: time || String(item.time || item.ora || '').slice(0, 5) || '—',
+        service_name: item.service_name || item.servizio || item.servizio_tag || item.servizio_nome || '—',
+        operator_name: item.operator_name || item.operatore || item.operatore_nome || '—',
+        stato: item.stato || (intent === 'prossimi_appuntamenti' ? 'programmato' : '—')
+      };
+    });
+  }
+
+  async function ensureAiAppointmentsPayload(data, originalMessage) {
+    const out = Object.assign({}, data || {});
+    const hasAppointments = Array.isArray(out.appointments);
+
+    if (hasAppointments) {
+      return out;
+    }
+
+    const intentStorico = ['storico_cliente', 'prossimi_appuntamenti', 'info_cliente'].includes(out.intent);
+    if (!intentStorico) {
+      return out;
+    }
+
+    let client = out.client_resolved || null;
+
+    if (!client || !client.id) {
+      const q = extractClientQueryFromMessage(originalMessage);
+      if (!q) return out;
+
+      try {
+        const r = await fetch(`/calendar/api/search-clients/${encodeURIComponent(q)}`, {
+          credentials: 'same-origin'
+        });
+        if (!r.ok) return out;
+
+        const clients = await r.json();
+        if (!Array.isArray(clients) || clients.length === 0) return out;
+
+        const best = clients[0];
+        const split = splitFullName(best.name || '');
+        client = {
+          id: best.id,
+          nome: split.nome,
+          cognome: split.cognome,
+          cellulare: best.phone || ''
+        };
+        out.client_resolved = client;
+      } catch (err) {
+        console.warn('[AI] fallback search-clients failed:', err);
+        return out;
+      }
+    }
+
+    if (!client || !client.id) return out;
+
+    try {
+      if (out.intent === 'prossimi_appuntamenti') {
+        const r = await fetch(`/calendar/api/next-appointments-for-client/${encodeURIComponent(client.id)}`, {
+          credentials: 'same-origin'
+        });
+        if (r.ok) {
+          const rows = await r.json();
+          out.appointments = normalizeAiAppointments(rows, out.intent);
+        } else {
+          out.appointments = [];
+        }
+      } else {
+        const r = await fetch(`/settings/api/client_history?q=${encodeURIComponent(client.id)}`, {
+          credentials: 'same-origin'
+        });
+        if (r.ok) {
+          const rows = await r.json();
+          out.appointments = normalizeAiAppointments(rows, out.intent);
+        } else {
+          out.appointments = [];
+        }
+      }
+    } catch (err) {
+      console.warn('[AI] fallback appointments fetch failed:', err);
+      out.appointments = [];
+    }
+
+    return out;
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // RENDER MESSAGGI
+  // ──────────────────────────────────────────────────────────────
+
+  function appendMessage(role, content, extra) {
+    const isUser = role === 'user';
+    const now    = fmtNow();
+
+    AI.chatHistory.push({ role, content, time: now });
+
+    const bubble = document.createElement('div');
+    bubble.className = isUser
+      ? 'ai-msg-user'
+      : (role === 'error' ? 'ai-msg-assistant ai-msg-error' : 'ai-msg-assistant');
+    bubble.innerHTML = isUser ? esc(content) : content.replace(/\n/g, '<br>');
+    elMessages.appendChild(bubble);
+
+    // Slot cards
+    if (!isUser && extra?.slots?.length) {
+      extra.slots.forEach(slot => elMessages.appendChild(buildSlotCard(slot)));
+    }
+
+    const ts = document.createElement('div');
+    ts.className   = 'ai-msg-time';
+    ts.textContent = now;
+    elMessages.appendChild(ts);
+
+    scrollToBottom();
+  }
+
+  function scrollToBottom() {
+    elMessages.scrollTop = elMessages.scrollHeight;
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // SLOT CARD — mini-blocco con conferma inline
+  // ──────────────────────────────────────────────────────────────
+
+  function buildSlotCard(slot) {
+    const card = document.createElement('div');
+    card.className = 'ai-slot-card';
+
+    const dataIT = fmtDateIT(slot.date);
+    const clienteLine = (slot.client_nome || slot.client_cognome)
+      ? `<span class="ai-slot-label">Cliente</span><br>
+         <strong>${esc(slot.client_nome || '')} ${esc(slot.client_cognome || '')}</strong>
+         ${slot.client_cellulare ? `&nbsp;· <span style="font-size:0.8rem">${esc(slot.client_cellulare)}</span>` : ''}`
+      : '';
+
+    card.innerHTML = `
+      <div>
+        <span class="ai-slot-label">Data &amp; Ora</span><br>
+        <strong>${esc(dataIT)} alle ${esc(slot.time)}</strong>
+        ${slot.duration_minutes ? `<span style="font-size:0.8rem;opacity:.7"> · ${slot.duration_minutes} min</span>` : ''}
+      </div>
+      <div style="margin-top:5px">
+        <span class="ai-slot-label">Operatrice</span><br>
+        <strong>${esc(slot.operator_name || '—')}</strong>
+      </div>
+      <div style="margin-top:5px">
+        <span class="ai-slot-label">Servizio</span><br>
+        <strong>${esc(slot.service_name || '—')}</strong>
+      </div>
+      ${clienteLine ? `<div style="margin-top:5px">${clienteLine}</div>` : ''}
+
+      <!-- Riga conferma: appare DOPO click sul card -->
+      <div class="ai-slot-confirm" style="display:none; margin-top:10px;
+           border-top:1px solid #d0c8ff; padding-top:9px; gap:7px; flex-wrap:wrap;">
+        <span style="font-size:0.8rem; color:#555; flex:1 0 100%;">
+          ✅ Confermi la prenotazione?
+        </span>
+        <button class="ai-confirm-yes" style="
+            flex:1; padding:6px 10px; border:none; border-radius:8px;
+            background:linear-gradient(135deg,#6c47ff,#00c2cb);
+            color:#fff; font-size:0.82rem; cursor:pointer; font-weight:600;">
+          Prenota
+        </button>
+        <button class="ai-confirm-no" style="
+            flex:1; padding:6px 10px; border:none; border-radius:8px;
+            background:#f0ebff; color:#6c47ff; font-size:0.82rem;
+            cursor:pointer; font-weight:600;">
+          Annulla
+        </button>
+      </div>
+
+      <!-- Spinner (durante la chiamata POST) -->
+      <div class="ai-slot-spinner" style="display:none; margin-top:8px;
+           font-size:0.8rem; color:#6c47ff; text-align:center;">
+        <i class="bi bi-arrow-repeat" style="animation:aiDotPulse .8s infinite;"></i>
+        Creazione in corso…
+      </div>
+
+      <!-- Esito (dopo risposta server) -->
+      <div class="ai-slot-result" style="display:none; margin-top:8px;
+           font-size:0.82rem; font-weight:600; text-align:center;"></div>
+    `;
+
+    // ── Primo click sul card → mostra conferma ────────────────
+    card.addEventListener('click', function handleFirstClick(e) {
+      // Ignora se si clicca sui bottoni di conferma
+      if (e.target.closest('.ai-slot-confirm') || e.target.closest('.ai-slot-spinner') || e.target.closest('.ai-slot-result')) return;
+      const confirmBox = card.querySelector('.ai-slot-confirm');
+      if (confirmBox.style.display === 'none') {
+        confirmBox.style.display = 'flex';
+        card.style.cursor = 'default';
+        scrollToBottom();
+      }
+    });
+
+    // ── Bottone "Prenota" ─────────────────────────────────────
+    card.querySelector('.ai-confirm-yes').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await createAppointmentFromSlot(slot, card);
+    });
+
+    // ── Bottone "Annulla" ─────────────────────────────────────
+    card.querySelector('.ai-confirm-no').addEventListener('click', (e) => {
+      e.stopPropagation();
+      card.querySelector('.ai-slot-confirm').style.display = 'none';
+      card.style.cursor = 'pointer';
+    });
+
+    return card;
+  }
+
+  function buildAppointmentsTable(appointments, client) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:8px; overflow-x:auto;';
+
+    if (client) {
+      const header = document.createElement('div');
+      header.style.cssText = 'font-weight:600; font-size:0.9rem; margin-bottom:6px; color:#6c47ff;';
+      header.textContent = `📋 ${esc(client.nome || '')} ${esc(client.cognome || '')}`;
+      if (client.cellulare) {
+        const phone = document.createElement('span');
+        phone.style.cssText = 'font-weight:400; font-size:0.8rem; color:#555; margin-left:8px;';
+        phone.textContent = client.cellulare;
+        header.appendChild(phone);
+      }
+      wrap.appendChild(header);
+    }
+
+    if (!appointments || appointments.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'font-size:0.85rem; color:#888; padding:8px 0;';
+      empty.textContent = 'Nessun appuntamento trovato.';
+      wrap.appendChild(empty);
+      return wrap;
+    }
+
+    const table = document.createElement('table');
+    table.style.cssText = [
+      'width:100%', 'border-collapse:collapse', 'font-size:0.8rem',
+      'background:#fff', 'border-radius:8px', 'overflow:hidden',
+      'box-shadow:0 1px 4px rgba(108,71,255,0.10)'
+    ].join(';');
+
+      const thead = document.createElement('thead');
+      thead.innerHTML = `
+        <tr style="background:linear-gradient(135deg,#b8809d,#a06b88);color:#fff;">
+          <th style="padding:6px 8px;text-align:left;">Data</th>
+          <th style="padding:6px 8px;text-align:left;">Ora</th>
+          <th style="padding:6px 8px;text-align:left;">Servizio</th>
+          <th style="padding:6px 8px;text-align:left;">Operatrice</th>
+          <th style="padding:6px 8px;text-align:left;">Stato</th>
+        </tr>`;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+      appointments.forEach((appt, idx) => {
+        const tr = document.createElement('tr');
+        tr.style.background = idx % 2 === 0 ? '#fdf8fb' : '#fff';
+
+        // Converti la data nel formato italiano DD Mmm YYYY
+        let dateIT = '—';
+        if (appt.date) {
+          dateIT = fmtDateIT(appt.date);
+        }
+        const time   = appt.time || '—';
+        const svc    = esc(appt.service_name || '—');
+        const op     = esc(appt.operator_name || '—');
+        const stato  = esc(appt.stato || '—');
+
+        tr.innerHTML = `
+          <td style="padding:5px 8px;">${dateIT}</td>
+          <td style="padding:5px 8px;">${esc(time)}</td>
+          <td style="padding:5px 8px;">${svc}</td>
+          <td style="padding:5px 8px;">${op}</td>
+          <td style="padding:5px 8px;">${stato}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+
+    const footer = document.createElement('div');
+    footer.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-top:4px;';
+
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:0.75rem; color:#aaa;';
+    note.textContent = `${appointments.length} appuntament${appointments.length === 1 ? 'o' : 'i'}`;
+    footer.appendChild(note);
+
+    // Link per aprire storico completo (usa endpoint già esistente in Settings/Clients)
+    if (client && client.id) {
+      const linkStorico = document.createElement('a');
+      linkStorico.href = 'javascript:void(0)';
+      linkStorico.style.cssText = 'font-size:0.75rem; color:#6c47ff; text-decoration:underline; cursor:pointer;';
+      linkStorico.textContent = 'Apri storico completo →';
+      linkStorico.addEventListener('click', function() {
+        // Apri modal ClientHistoryModal se presente (Settings/Clients), altrimenti naviga
+        const histModal = document.getElementById('ClientHistoryModal');
+        if (histModal && typeof bootstrap !== 'undefined') {
+          const body = document.getElementById('clientHistoryBody');
+          if (body) {
+            body.innerHTML = '<div class="text-center text-muted">Caricamento...</div>';
+            fetch(`/settings/api/client_history?q=${client.id}`)
+              .then(r => r.json())
+              .then(data => {
+                if (!data || data.length === 0) {
+                  body.innerHTML = '<div class="alert alert-info">Nessun appuntamento pagato trovato.</div>';
+                  return;
+                }
+                const mesi = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+                body.innerHTML = `<div style="overflow-x:auto;">
+                  <table class="table table-striped align-middle">
+                    <thead><tr><th>DATA</th><th>ORA</th><th>SERVIZIO</th><th>OPERATRICE</th><th>STATO</th></tr></thead>
+                    <tbody>${data.map(item => {
+                      const [dateStr, oraStr] = (item.ora_inizio || '').split(' ');
+                      const [anno, mese, giorno] = (dateStr || '').split('-');
+                      const dataFmt = giorno ? `${giorno} ${mesi[parseInt(mese,10)-1]} ${anno}` : '—';
+                      return `<tr>
+                        <td>${dataFmt}</td>
+                        <td>${oraStr || '—'}</td>
+                        <td>${esc(item.servizio || '—')}</td>
+                        <td>${esc(item.operatore || '—')}</td>
+                        <td>${esc(item.stato || '—')}</td>
+                      </tr>`;
+                    }).join('')}</tbody>
+                  </table></div>`;
+              })
+              .catch(() => { body.innerHTML = '<div class="alert alert-danger">Errore caricamento.</div>'; });
+            new bootstrap.Modal(histModal).show();
+          }
+        }
+      });
+      footer.appendChild(linkStorico);
+    }
+
+    wrap.appendChild(footer);
+
+    return wrap;
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // CREAZIONE APPUNTAMENTO DA SLOT AI
+  // POST /create + conferma WhatsApp
+  // ──────────────────────────────────────────────────────────────
+
+  async function createAppointmentFromSlot(slot, card) {
+    const confirmBox = card.querySelector('.ai-slot-confirm');
+    const spinner    = card.querySelector('.ai-slot-spinner');
+    const resultEl   = card.querySelector('.ai-slot-result');
+
+    confirmBox.style.display = 'none';
+    spinner.style.display    = 'block';
+    resultEl.style.display   = 'none';
+
+    // ── Risolvi la durata da qualunque campo disponibile ──
+    const duration = parseInt(
+      slot.service_duration   ||
+      slot.duration_minutes   ||
+      slot.duration           ||
+      0, 10
+    );
+
+    // ── Risolvi client_id: lo slot AI può avere client_id o solo client_name ──
+    let client_id = slot.client_id || null;
+    if (!client_id && (slot.client_nome || slot.client_name)) {
+      // Cerca il cliente per nome
+      const searchName = (slot.client_nome || slot.client_name || '').trim();
+      try {
+        const r = await fetch(`/calendar/api/search-clients/${encodeURIComponent(searchName)}`, {
+          credentials: 'same-origin'
+        });
+        if (r.ok) {
+          const clients = await r.json();
+          if (clients && clients.length > 0) {
+            client_id = clients[0].id;
+            console.log('[AI] client_id risolto per nome:', searchName, '→', client_id);
+          }
+        }
+      } catch(e) { console.warn('[AI] ricerca client_id fallita:', e); }
+    }
+
+    // ── Risolvi service_id: lo slot AI può avere service_id o solo service_name ──
+    let service_id = slot.service_id || null;
+    if (!service_id && (slot.service_name || slot.servizio_nome)) {
+      const searchService = (slot.service_name || slot.servizio_nome || '').trim();
+      try {
+        const r = await fetch(`/calendar/api/service-by-name?name=${encodeURIComponent(searchService)}`, {
+          credentials: 'same-origin'
+        });
+        if (r.ok) {
+          const svc = await r.json();
+          if (svc && svc.id) {
+            service_id = svc.id;
+            // Se la durata non era nello slot, usala dal servizio
+            if (!duration && svc.durata) {
+              // aggiorna duration locale
+              slot.duration = svc.durata;
+            }
+            console.log('[AI] service_id risolto per nome:', searchService, '→', service_id);
+          }
+        }
+      } catch(e) { console.warn('[AI] ricerca service_id fallita:', e); }
+    }
+
+    // Ricalcola duration dopo risoluzione servizio (potrebbe essere stato aggiornato sopra)
+    const finalDuration = parseInt(
+      slot.service_duration   ||
+      slot.duration_minutes   ||
+      slot.duration           ||
+      0, 10
+    );
+
+    // ── Validazione campi minimi ──
+    const missing = [];
+    if (!slot.date)        missing.push('data');
+    if (!slot.time)        missing.push('ora');
+    if (!slot.operator_id) missing.push('operatore');
+    if (!finalDuration)    missing.push('durata');
+    if (!client_id)        missing.push('cliente');
+    if (!service_id)       missing.push('servizio');
+
+    if (missing.length > 0) {
+      spinner.style.display  = 'none';
+      resultEl.style.display = 'block';
+      resultEl.style.color   = '#c0392b';
+      resultEl.textContent   = `❌ Dati incompleti (manca: ${missing.join(', ')}). Riprova.`;
+      confirmBox.style.display = 'flex';
+      return;
+    }
+
+    // ── Payload per POST /create ──
+    const payload = {
+      client_id:        client_id,
+      service_id:       service_id,
+      operator_id:      slot.operator_id,
+      start_time:       slot.time,            // "HH:MM"
+      appointment_date: slot.date,            // "YYYY-MM-DD"
+      duration:         finalDuration,
+    };
+
+    console.log('[AI] createAppointmentFromSlot payload:', payload);
+
+    try {
+      const resp = await fetch(`${AI.baseUrl}/create`, {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken':  AI.csrfToken,
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+      });
+
+      const data = await resp.json();
+      if (!resp.ok || data.error) throw new Error(data.error || `HTTP ${resp.status}`);
+
+      // ── Successo ──
+      spinner.style.display  = 'none';
+      resultEl.style.display = 'block';
+      resultEl.style.color   = '#1a7f4f';
+      resultEl.textContent   = `✅ Appuntamento creato! (ID ${data.id || '—'})`;
+
+      card.style.pointerEvents = 'none';
+      card.style.opacity       = '0.75';
+
+      const dataIT = fmtDateIT(slot.date);
+      appendMessage('assistant',
+        `✅ Appuntamento creato il **${dataIT}** alle **${slot.time}**` +
+        (slot.operator_name ? ` con **${slot.operator_name}**` : '') +
+        (slot.service_name  ? ` · ${slot.service_name}`         : '') + '.'
+      );
+
+      // ── WhatsApp ──
+      if (slot.client_cellulare && client_id) {
+        const apptCompat = {
+          id:               data.id,
+          client_id:        client_id,
+          client_name:      `${slot.client_nome || slot.client_name || ''}`.trim(),
+          client_cellulare: slot.client_cellulare,
+          client: {
+            id:                client_id,
+            cliente_nome:      slot.client_nome    || '',
+            cliente_cognome:   slot.client_cognome || '',
+            cliente_cellulare: slot.client_cellulare,
+          },
+          service: { servizio_nome: slot.service_name || '' },
+          start_time:       `${slot.date} ${slot.time}`,
+          appointment_date: slot.date,
+          duration:         finalDuration,
+          operator_id:      slot.operator_id,
+        };
+        const waData = {
+          appointment_id: data.id,
+          client_id:      client_id,
+          client_name:    apptCompat.client_name,
+          data:           slot.date,
+          ora:            slot.time,
+          servizi:        slot.service_name ? [slot.service_name] : [],
+        };
+        try {
+          if (typeof inviaWhatsappAutoSeRichiesto === 'function') {
+            await inviaWhatsappAutoSeRichiesto(apptCompat, waData, AI.csrfToken);
+          }
+        } catch (waErr) {
+          console.warn('[AI] WhatsApp fallito:', waErr);
+        }
+      }
+
+      // ── Chiudi pannello AI e naviga al calendario con scroll sull'appuntamento ──
+      setTimeout(() => {
+        // 1. Chiudi il pannello AI
+        if (AI.isOpen) {
+          AI.isOpen = false;
+          elModal.style.display = 'none';
+          if (AI.isMicActive && AI.recognition) AI.recognition.stop();
+        }
+
+        // 2. Costruisci URL di destinazione (stessa data dell'appuntamento)
+        //    Se la data dello slot è diversa da quella corrente → cambia pagina
+        //    Se è uguale → è già sulla pagina giusta, ricarica con parametro ora
+        const slotDate = slot.date;           // "YYYY-MM-DD"
+        const slotTime = slot.time;           // "HH:MM"
+
+        // Recupera la data attualmente visualizzata nel calendario
+        const currentCalDate = (document.getElementById('date') || {}).value || '';
+
+        // Estrai base URL del calendario (es. /db1/calendar)
+        const calBase = AI.baseUrl || '/calendar';
+
+        if (slotDate && slotDate !== currentCalDate) {
+          // Data diversa: naviga alla pagina della data con scroll automatico
+          window.location.href = `${calBase}?date=${slotDate}&ora=${encodeURIComponent(slotTime)}`;
+        } else {
+          // Stessa data: salva posizione in sessionStorage poi ricarica
+          if (slotTime) {
+            const [hh, mm] = slotTime.split(':');
+            try {
+              sessionStorage.setItem('scrollToHour',   hh || '0');
+              sessionStorage.setItem('scrollToMinute', mm || '0');
+            } catch(_) {}
+          }
+          location.reload();
+        }
+      }, 1200);
+
+    } catch (err) {
+      console.error('[AI] createAppointmentFromSlot error:', err);
+      spinner.style.display  = 'none';
+      resultEl.style.display = 'block';
+      resultEl.style.color   = '#c0392b';
+      resultEl.textContent   = `❌ Errore: ${err.message}`;
+      confirmBox.style.display = 'flex';
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // INVIO QUERY AL BACKEND
+  // ──────────────────────────────────────────────────────────────
+
+  async function sendQuery(message) {
+    if (AI.isLoading || !message.trim()) return;
+
+    AI.isLoading       = true;
+    elSendBtn.disabled = true;
+    elInput.disabled   = true;
+
+    appendMessage('user', message.trim());
+    elInput.value = '';
+    autoResizeTextarea();
+
+    elTyping.style.display = 'block';
+    scrollToBottom();
+
+    const payload = { message: message.trim(), days_range: 14 };
+
+    const dateMatch = message.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dateMatch) {
+      payload.query_date = `${dateMatch[3]}-${dateMatch[2].padStart(2,'0')}-${dateMatch[1].padStart(2,'0')}`;
+    } else if (/\bdomani\b/i.test(message)) {
+      const tom = new Date(); tom.setDate(tom.getDate() + 1);
+      payload.query_date = fmtDateISO(tom);
+    } else if (/\boggi\b/i.test(message)) {
+      payload.query_date = fmtDateISO(new Date());
+    }
+
+    try {
+      const resp = await fetch(`${AI.baseUrl}/api/ai/query`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': AI.csrfToken },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+      });
+
+      if (resp.status === 401) {
+        appendMessage('error', '🔒 Sessione scaduta. Aggiorna la pagina e accedi di nuovo.');
+        return;
+      }
+      if (resp.status === 503) {
+        appendMessage('error', '⚙️ Assistente AI non disponibile al momento.');
+        return;
+      }
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      const data = await resp.json();
+
+      console.log('[AI] RISPOSTA COMPLETA:', JSON.stringify(data).substring(0, 500));
+      console.log('[AI] intent:', data.intent,
+                  'appointments:', Array.isArray(data.appointments) ? data.appointments.length : 'ASSENTE',
+                  'client_resolved:', data.client_resolved ? data.client_resolved.nome : 'null');
+
+let answerText = data.answer || 'Nessuna risposta ricevuta.';
+if (data.warnings && data.warnings.length) {
+  answerText += '\n\n⚠️ ' + data.warnings.join('\n⚠️ ');
+}
+if (data.data_points && data.data_points.length) {
+  answerText += '\n\n' + data.data_points.slice(0,3).map(function(p){ return '• ' + p; }).join('\n');
+}
+
+// Converte tutte le date ISO nel testo in formato DD xxx YYYY
+answerText = answerText.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, function(_, y, m, d) {
+  return fmtDateIT(y + '-' + m + '-' + d);
+});
+
+// Se il cliente è stato risolto lato server, elimina eventuali frasi fuorvianti del modello
+if (data.client_resolved && data.client_resolved.id) {
+  const righe = answerText.split('\n');
+  const filtrate = righe.filter(function(r) {
+    return !/\b(non ho trovato|nessun cliente trovato|non risultano clienti)\b/i.test(r);
+  });
+  answerText = filtrate.join('\n').trim();
+
+  if (!answerText) {
+    const nome = [data.client_resolved.nome || '', data.client_resolved.cognome || ''].join(' ').trim();
+    answerText = nome
+      ? `Ecco i dati del cliente ${nome}.`
+      : 'Ecco i dati del cliente.';
+  }
+}
+
+      var intentStorico = (
+        data.intent === 'storico_cliente' ||
+        data.intent === 'prossimi_appuntamenti'
+      );
+
+      if (data.intent === 'info_cliente') {
+        appendMessage('assistant', answerText);
+
+      } else if (intentStorico) {
+        appendMessage('assistant', answerText);
+
+        var appts = Array.isArray(data.appointments) ? data.appointments : [];
+        var client = data.client_resolved || null;
+
+        console.log('[AI] RENDERING TABELLA: appts=' + appts.length + ' client=' + (client ? client.nome : 'null'));
+
+        // Trova l'ultimo bubble messaggio appena creato da appendMessage
+        var allBubbles = elMessages.querySelectorAll('.ai-bubble, .msg-bubble, [class*="bubble"], [class*="message"]');
+        var lastBubble = allBubbles.length > 0 ? allBubbles[allBubbles.length - 1] : null;
+        // Fallback: ultimo figlio di elMessages
+        if (!lastBubble) {
+          lastBubble = elMessages.lastElementChild;
+        }
+        var tableParent = lastBubble || elMessages;
+
+        console.log('[AI] TABLE PARENT:', tableParent.tagName, tableParent.className);
+
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'margin-top:8px; overflow-x:auto;';
+
+        if (client) {
+          var hdr = document.createElement('div');
+          hdr.style.cssText = 'font-weight:600; font-size:0.9rem; margin-bottom:6px; color:#6c47ff;';
+          hdr.textContent = '📋 ' + (client.nome || '') + ' ' + (client.cognome || '');
+          if (client.cellulare) {
+            var ph = document.createElement('span');
+            ph.style.cssText = 'font-weight:400; font-size:0.8rem; color:#555; margin-left:8px;';
+            ph.textContent = client.cellulare;
+            hdr.appendChild(ph);
+          }
+          wrap.appendChild(hdr);
+        }
+
+        if (appts.length === 0) {
+          var empty = document.createElement('div');
+          empty.style.cssText = 'font-size:0.85rem; color:#888; padding:8px 0;';
+          empty.textContent = 'Nessun appuntamento trovato.';
+          wrap.appendChild(empty);
+        } else {
+          var tbl = document.createElement('table');
+          tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:0.82rem;color:#222;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(108,71,255,0.10)';
+
+          var theadHTML = '<thead><tr style="background:linear-gradient(135deg,#b8809d,#a06b88);color:#fff;">';
+          theadHTML += '<th style="padding:6px 8px;text-align:left;">Data</th>';
+          theadHTML += '<th style="padding:6px 8px;text-align:left;">Ora</th>';
+          theadHTML += '<th style="padding:6px 8px;text-align:left;">Servizio</th>';
+          theadHTML += '<th style="padding:6px 8px;text-align:left;">Operatrice</th>';
+          theadHTML += '<th style="padding:6px 8px;text-align:left;">Stato</th>';
+          theadHTML += '</tr></thead>';
+
+          var tbodyHTML = '<tbody>';
+          for (var i = 0; i < appts.length; i++) {
+            var a = appts[i];
+            var bg = (i % 2 === 0) ? '#fdf8fb' : '#fff';
+            var dateIT = '—';
+if (a.date) {
+  dateIT = fmtDateIT(a.date);
+}
+            var dateISO = a.date || '';
+            var timeVal = a.time || '';
+            tbodyHTML += '<tr data-date="' + esc(dateISO) + '" data-time="' + esc(timeVal) + '" style="background:' + bg + ';cursor:pointer;" onmouseover="this.style.background=\'#f8e8f0\'" onmouseout="this.style.background=\'' + bg + '\'">';
+            tbodyHTML += '<td style="padding:5px 8px;color:#222;">' + esc(dateIT) + '</td>';
+            tbodyHTML += '<td style="padding:5px 8px;color:#222;">' + esc(a.time || '—') + '</td>';
+            tbodyHTML += '<td style="padding:5px 8px;color:#333;">' + esc(a.service_name || '—') + '</td>';
+            tbodyHTML += '<td style="padding:5px 8px;color:#333;">' + esc(a.operator_name || '—') + '</td>';
+            tbodyHTML += '<td style="padding:5px 8px;color:#333;">' + esc(a.stato || '—') + '</td>';
+            tbodyHTML += '</tr>';
+          }
+          tbodyHTML += '</tbody>';
+
+          tbl.innerHTML = theadHTML + tbodyHTML;
+
+          tbl.querySelectorAll('tbody tr[data-date]').forEach(function(tr) {
+            tr.addEventListener('click', function() {
+              var d = tr.getAttribute('data-date');
+              var t = tr.getAttribute('data-time');
+              if (!d) return;
+
+              // Chiudi panel AI
+              var panel = document.getElementById('ai-panel');
+              if (panel) panel.classList.remove('open');
+
+              // Naviga alla vista giorno
+              var parts = d.split('-');
+              if (parts.length === 3) {
+                var dateObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                if (typeof window.calendarInstance !== 'undefined' && window.calendarInstance) {
+                  window.calendarInstance.gotoDate(dateObj);
+                  window.calendarInstance.changeView('resourceTimeGridDay', dateObj);
+                } else if (typeof calendar !== 'undefined' && calendar) {
+                  calendar.gotoDate(dateObj);
+                  calendar.changeView('resourceTimeGridDay', dateObj);
+                }
+
+                // Scroll all'ora se possibile
+                if (t) {
+                  setTimeout(function() {
+                    var timeSlot = document.querySelector('[data-time="' + t + '"], .fc-timegrid-slot[data-time="' + t + ':00"]');
+                    if (timeSlot) {
+                      timeSlot.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                  }, 400);
+                }
+              }
+            });
+          });
+
+          wrap.appendChild(tbl);
+
+          var ft = document.createElement('div');
+          ft.style.cssText = 'font-size:0.75rem;color:#aaa;margin-top:4px;text-align:right;';
+          ft.textContent = appts.length + ' appuntament' + (appts.length === 1 ? 'o' : 'i');
+          wrap.appendChild(ft);
+        }
+
+        tableParent.appendChild(wrap);
+        scrollToBottom();
+
+      } else {
+        appendMessage('assistant', answerText, { slots: data.suggested_slots || [] });
+      }
+
+      if (data.needs_more_info) elInput.focus();
+
+    } catch (err) {
+      console.error('[AI Assistant] sendQuery error:', err);
+      appendMessage('error',
+        !navigator.onLine
+          ? '📡 Nessuna connessione. Verifica la rete e riprova.'
+          : '❌ Errore nella risposta AI. Riprova tra qualche secondo.'
+      );
+    } finally {
+      AI.isLoading           = false;
+      elSendBtn.disabled     = false;
+      elInput.disabled       = false;
+      elTyping.style.display = 'none';
+      elInput.focus();
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // MICROFONO — Web Speech API
+  // Silence detection: 3 sec senza parlare → stop + invio automatico
+  // ──────────────────────────────────────────────────────────────
+
+  function initSpeech() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { elMicBtn.style.display = 'none'; return; }
+
+    const rec = new SpeechRecognition();
+    rec.lang           = 'it-IT';
+    rec.continuous     = true;
+    rec.interimResults = true;
+
+    let silenceTimer    = null;
+    let finalTranscript = '';
+    const SILENCE_MS    = 3000;
+
+    rec.onstart = () => {
+      AI.isMicActive = true;
+      elMicBtn.classList.add('ai-mic-active');
+      elMicBtn.querySelector('i').className = 'bi bi-mic-fill';
+      elDictation.style.display   = 'block';
+      elDictation.textContent     = '🎙️ In ascolto…';
+      finalTranscript = '';
+    };
+
+    rec.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) finalTranscript += t + ' ';
+        else interim += t;
+      }
+      elDictation.textContent = '🎙️ ' + (finalTranscript + interim).trim();
+      elInput.value = (finalTranscript + interim).trim();
+      autoResizeTextarea();
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => rec.stop(), SILENCE_MS);
+    };
+
+    rec.onend = () => {
+      AI.isMicActive = false;
+      clearTimeout(silenceTimer);
+      elMicBtn.classList.remove('ai-mic-active');
+      elMicBtn.querySelector('i').className = 'bi bi-mic';
+      elDictation.style.display = 'none';
+      const text = finalTranscript.trim() || elInput.value.trim();
+      if (text) { elInput.value = text; sendQuery(text); }
+    };
+
+    rec.onerror = (event) => {
+      AI.isMicActive = false;
+      elMicBtn.classList.remove('ai-mic-active');
+      elMicBtn.querySelector('i').className = 'bi bi-mic';
+      elDictation.style.display = 'none';
+      clearTimeout(silenceTimer);
+      if (event.error === 'not-allowed') {
+        appendMessage('error', '🎙️ Accesso al microfono negato. Abilita il microfono nelle impostazioni del browser.');
+      }
+    };
+
+    AI.recognition = rec;
+  }
+
+  function toggleMic() {
+    if (!AI.recognition) return;
+    if (AI.isMicActive) {
+      AI.recognition.stop();
+    } else {
+      try { AI.recognition.start(); } catch(e) { console.warn('[AI] mic start error:', e); }
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // APERTURA / CHIUSURA CHAT
+  // ──────────────────────────────────────────────────────────────
+
+  function toggleChat() {
+    AI.isOpen = !AI.isOpen;
+    elModal.style.display = AI.isOpen ? 'flex' : 'none';
+
+    if (AI.isOpen) {
+      setTimeout(() => elInput.focus(), 80);
+      if (AI.chatHistory.length === 0) {
+        appendMessage('assistant',
+          '👋 Ciao! Sono TOSCA AI, il tuo assistente di prenotazione.\n\n' +
+          'Puoi chiedermi:\n' +
+          '• Disponibilità per un servizio o operatrice\n' +
+          '• Storico di un cliente\n' +
+          '• Slot liberi in un periodo\n\n' +
+          'Clicca su uno slot proposto per prenotarlo direttamente — ti chiederò conferma prima di procedere.'
+        );
+      }
+    } else {
+      if (AI.isMicActive && AI.recognition) AI.recognition.stop();
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // AUTO-RESIZE TEXTAREA
+  // ──────────────────────────────────────────────────────────────
+
+  function autoResizeTextarea() {
+    elInput.style.height = 'auto';
+    elInput.style.height = Math.min(elInput.scrollHeight, 90) + 'px';
+  }
+
+  function initAiChatResize() {
+    var handleCorner = document.getElementById('aiChatResizeHandle');
+    var handleRight = document.getElementById('aiChatResizeHandleRight');
+    if (!elModal) return;
+
+    console.log('[AI] initAiChatResize - handleCorner:', !!handleCorner, 'handleRight:', !!handleRight);
+
+    var MIN_W = 100;
+    var MIN_H = 360;
+    var resizing = false;
+    var resizeMode = '';
+    var startX = 0;
+    var startY = 0;
+    var startW = 0;
+    var startH = 0;
+
+    function onPointerMove(ev) {
+      if (!resizing) return;
+
+      var deltaX = startX - ev.clientX;
+      var deltaY = startY - ev.clientY;
+
+      var maxW = Math.floor(window.innerWidth * 0.90);
+      var maxH = Math.floor(window.innerHeight * 0.90);
+
+      if (resizeMode === 'corner') {
+        var nextW = Math.max(MIN_W, Math.min(maxW, startW + deltaX));
+        var nextH = Math.max(MIN_H, Math.min(maxH, startH + deltaY));
+        elModal.style.width = nextW + 'px';
+        elModal.style.height = nextH + 'px';
+      } else if (resizeMode === 'right') {
+        var nextW = Math.max(MIN_W, Math.min(maxW, startW + deltaX));
+        elModal.style.width = nextW + 'px';
+      }
+    }
+
+    function onPointerUp() {
+      if (!resizing) return;
+      resizing = false;
+      resizeMode = '';
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+
+      AI._justResized = true;
+      setTimeout(function() { AI._justResized = false; }, 200);
+    }
+
+    function startResize(ev, mode) {
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      var rect = elModal.getBoundingClientRect();
+      resizing = true;
+      resizeMode = mode;
+      startX = ev.clientX;
+      startY = ev.clientY;
+      startW = rect.width;
+      startH = rect.height;
+
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = (mode === 'corner') ? 'nwse-resize' : 'ew-resize';
+
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+    }
+
+    if (handleCorner) {
+      handleCorner.addEventListener('pointerdown', function (ev) {
+        startResize(ev, 'corner');
+      });
+    }
+
+    if (handleRight) {
+      handleRight.addEventListener('pointerdown', function (ev) {
+        startResize(ev, 'right');
+      });
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // CHECK DISPONIBILITÀ AI al caricamento
+  // ──────────────────────────────────────────────────────────────
+
+  async function checkAiStatus() {
+    try {
+      const resp = await fetch(`${AI.baseUrl}/api/ai/status`, { credentials: 'same-origin' });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.enabled) elBadge.style.display = 'flex';
+      }
+    } catch (e) {
+      console.warn('[AI Assistant] status check failed:', e);
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // INIT
+  // ──────────────────────────────────────────────────────────────
+
+  document.addEventListener('DOMContentLoaded', function () {
+
+    // ── Inject CSS overrides per pannello AI più grande e font più grandi ──
+    var aiStyleOverride = document.createElement('style');
+    aiStyleOverride.textContent = `
+      #aiChatModal {
+        width: 500px !important;
+        right: -520px;
+      }
+      #aiChatModal.open,
+      #aiChatModal[style*="display: flex"] {
+        right: 0;
+      }
+      #aiChatModal .ai-msg-user,
+      #aiChatModal .ai-msg-assistant,
+      #aiChatModal .ai-msg-error {
+        font-size: 0.95rem !important;
+        line-height: 1.5 !important;
+        padding: 12px 16px !important;
+      }
+      #aiChatInput {
+        font-size: 0.95rem !important;
+        line-height: 1.5 !important;
+        padding: 8px 0 !important;
+        max-height: 100px !important;
+      }
+      #aiChatModal > div:first-child {
+        font-size: 1.05rem !important;
+        padding: 16px 20px !important;
+      }
+      #aiChatModal .ai-msg-time {
+        font-size: 0.72rem !important;
+      }
+      #aiChatModal .ai-slot-card {
+        font-size: 0.9rem !important;
+      }
+    `;
+    document.head.appendChild(aiStyleOverride);
+
+    elBadge     = document.getElementById('aiBadgeBtn');
+    elModal     = document.getElementById('aiChatModal');
+    elMessages  = document.getElementById('aiChatMessages');
+    elInput     = document.getElementById('aiChatInput');
+    elSendBtn   = document.getElementById('aiSendBtn');
+    elMicBtn    = document.getElementById('aiMicBtn');
+    elTyping    = document.getElementById('aiTypingIndicator');
+    elDictation = document.getElementById('aiDictationPreview');
+    elClose     = document.getElementById('aiChatClose');
+
+    if (!elBadge || !elModal) return;
+
+    AI.csrfToken = getCsrf();
+    AI.baseUrl   = getBaseUrl();
+
+    checkAiStatus();
+    initSpeech();
+    initAiChatResize();
+
+    elBadge.addEventListener('click', toggleChat);
+    elClose.addEventListener('click', toggleChat);
+    elSendBtn.addEventListener('click', () => sendQuery(elInput.value));
+
+    elInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendQuery(this.value);
+      }
+    });
+
+    elInput.addEventListener('input', autoResizeTextarea);
+    elMicBtn.addEventListener('click', toggleMic);
+
+    // Chiudi cliccando fuori
+    document.addEventListener('click', function (e) {
+      // Non chiudere se appena terminato un resize
+      if (AI._justResized) return;
+      if (AI.isOpen && !elModal.contains(e.target) && !elBadge.contains(e.target)) {
+        toggleChat();
+      }
+    });
+
+    // ESC chiude
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && AI.isOpen) toggleChat();
+    });
+
+  });
+
 })();
