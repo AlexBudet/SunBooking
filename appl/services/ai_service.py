@@ -111,7 +111,7 @@ Sei read-only: non crei, non modifichi, non elimini appuntamenti direttamente.
 
 OUTPUT: rispondi SEMPRE e SOLO con JSON valido con questa struttura esatta:
 {
-  "intent": "<disponibilita|storico_cliente|prossimi_appuntamenti|info_cliente|dati_cliente|conflitti|suggerimento_slot|generico>",
+  "intent": "<disponibilita|primo_slot_disponibile|storico_cliente|prossimi_appuntamenti|info_cliente|dati_cliente|conflitti|suggerimento_slot|generico>",
   "answer": "<risposta in italiano, max 200 parole>",
   "data_points": [],
   "suggested_slots": [],
@@ -120,6 +120,11 @@ OUTPUT: rispondi SEMPRE e SOLO con JSON valido con questa struttura esatta:
   "needs_more_info": false,
   "missing_fields": []
 }
+
+IMPORTANTE LINGUA:
+- Il campo "answer" DEVE essere SEMPRE in italiano.
+- Il campo "warnings" DEVE contenere SOLO messaggi in italiano (es: "cliente non trovato", "nessuno slot disponibile"). MAI warning in inglese.
+- Il campo "missing_fields" DEVE contenere nomi in italiano (es: "servizio", "cliente", "operatrice", "data", "ora"). MAI nomi in inglese.
 
 Per suggested_slots usa questa struttura:
 {
@@ -256,6 +261,9 @@ def build_client_info(client_id: int) -> dict:
     """
     Restituisce i dati anagrafici del cliente (non lo storico appuntamenti).
     Usato per intent info_cliente / dati_cliente.
+    Distingue:
+    - ultimo_appuntamento: ultimo appuntamento PRIMA di now (passato)
+    - prossimo_appuntamento: primo appuntamento DA now in avanti (futuro)
     """
     from appl.models import Client, Appointment
     from datetime import datetime as dt_class
@@ -264,15 +272,29 @@ def build_client_info(client_id: int) -> dict:
     if not client:
         return {}
 
-    # Data ultimo appuntamento
+    now = dt_class.now()
+
+    # Ultimo appuntamento PASSATO (start_time < now)
     last_appt = Appointment.query.filter(
         Appointment.client_id == client_id,
         Appointment.is_cancelled_by_client == False,
+        Appointment.start_time < now,
     ).order_by(Appointment.start_time.desc()).first()
 
     last_appt_date = ""
     if last_appt and last_appt.start_time:
         last_appt_date = _fmt_date(last_appt.start_time)
+
+    # Prossimo appuntamento FUTURO (start_time >= now)
+    next_appt = Appointment.query.filter(
+        Appointment.client_id == client_id,
+        Appointment.is_cancelled_by_client == False,
+        Appointment.start_time >= now,
+    ).order_by(Appointment.start_time.asc()).first()
+
+    next_appt_date = ""
+    if next_appt and next_appt.start_time:
+        next_appt_date = _fmt_date(next_appt.start_time)
 
     # Conta totale appuntamenti
     total_appts = Appointment.query.filter(
@@ -290,12 +312,12 @@ def build_client_info(client_id: int) -> dict:
         "data_nascita": _fmt_date(getattr(client, 'cliente_data_nascita', None)) or "",
         "data_registrazione": _fmt_date(getattr(client, 'created_at', None)) or "",
         "ultimo_appuntamento": last_appt_date,
+        "prossimo_appuntamento": next_appt_date,
         "totale_appuntamenti": total_appts,
         "note": getattr(client, 'note', "") or "",
     }
 
-
-def build_client_context(client_id: int, limit: int = 10, future_only: bool = False) -> dict:
+def build_client_context(client_id: int, limit: int = 10, future_only: bool = False, past_only: bool = False) -> dict:
     from appl.models import Appointment
     from datetime import datetime as dt_class
 
@@ -306,6 +328,8 @@ def build_client_context(client_id: int, limit: int = 10, future_only: bool = Fa
 
     if future_only:
         q = q.filter(Appointment.start_time >= dt_class.now()).order_by(Appointment.start_time.asc())
+    elif past_only:
+        q = q.filter(Appointment.start_time < dt_class.now()).order_by(Appointment.start_time.desc())
     else:
         q = q.order_by(Appointment.start_time.desc())
 
@@ -334,7 +358,6 @@ def build_client_context(client_id: int, limit: int = 10, future_only: bool = Fa
             "service_name":  a.service.servizio_nome if a.service else "—",
             "operator_name": a.operator.user_nome if a.operator else "—",
             "duration_min":  duration,
-            "stato":         stato,
         })
 
     logger.warning("BUILD_CLIENT_CONTEXT: history finale = %d record", len(history))
@@ -347,22 +370,53 @@ def find_client_by_text(search: str) -> list:
     """
     Cerca cliente per nome, cognome o cellulare (OR).
     Ritorna dati REALI — usati solo lato server per reinjection, MAI inviati al LLM.
+    Usa match su inizio parola per evitare match parziali errati
+    (es: "Ciara" non deve matchare "Sciara").
+    Supporta anche ricerca combinata "nome cognome" su colonne separate.
     """
     from appl.models import Client
-    from sqlalchemy import or_, func
+    from sqlalchemy import or_, func, and_
 
     q = search.strip()
     if not q:
         return []
 
+    q_lower = q.lower()
+    parts = q_lower.split()
+
+    # Usa LIKE con pattern "word start" per evitare match parziali:
+    # - "q%" matcha inizio campo
+    # - "% q%" matcha inizio di qualsiasi parola nel campo (dopo spazio)
+    # Questo evita che "ciara" matchi "sciara"
+    starts_pattern = f"{q_lower}%"         # inizio campo
+    word_pattern   = f"% {q_lower}%"       # inizio parola dopo spazio
+
+    conditions = [
+        func.lower(Client.cliente_nome).like(starts_pattern),
+        func.lower(Client.cliente_nome).like(word_pattern),
+        func.lower(Client.cliente_cognome).like(starts_pattern),
+        func.lower(Client.cliente_cognome).like(word_pattern),
+        Client.cliente_cellulare.contains(q),
+    ]
+
+    # Se la query contiene 2+ parole, cerca anche combinazione nome+cognome
+    # (es: "Cristina Gallo" → nome LIKE 'cristina%' AND cognome LIKE 'gallo%')
+    if len(parts) >= 2:
+        for i in range(len(parts)):
+            other_parts = [p for j, p in enumerate(parts) if j != i]
+            nome_part = parts[i]
+            for cognome_part in other_parts:
+                conditions.append(
+                    and_(
+                        func.lower(Client.cliente_nome).like(f"{nome_part}%"),
+                        func.lower(Client.cliente_cognome).like(f"{cognome_part}%"),
+                    )
+                )
+
     results = Client.query.filter(
         Client.is_deleted == False,
-        or_(
-            func.lower(Client.cliente_nome).contains(q.lower()),
-            func.lower(Client.cliente_cognome).contains(q.lower()),
-            Client.cliente_cellulare.contains(q),
-        )
-    ).limit(5).all()
+        or_(*conditions)
+    ).limit(20).all()
 
     return [
         {
@@ -453,22 +507,261 @@ def _extract_client_name_regex(message: str) -> Optional[str]:
                 return candidate
     return None
 
-
 def _extract_service_from_message(message: str, services: list) -> Optional[dict]:
     """
     Cerca nel messaggio il nome di un servizio disponibile (match parziale case-insensitive).
     Ritorna il dict servizio {id, name, duration, ...} se trovato.
+    Gestisce anche match parziali: "pulizia viso" matcha "Pulizia Viso Completa".
+    """
+    if not message or not services:
+        return None
+    
+    msg_lower = message.lower()
+    msg_normalized = _normalize(message)
+    
+    # Ordina per lunghezza discendente: match il più specifico prima
+    sorted_services = sorted(services, key=lambda s: len(s.get('name') or ''), reverse=True)
+    
+    for svc in sorted_services:
+        name = (svc.get('name') or '').strip()
+        if not name or len(name) < 3:
+            continue
+        
+        name_lower = name.lower()
+        name_normalized = _normalize(name)
+        
+        # Match esatto (case-insensitive)
+        if name_lower in msg_lower:
+            logger.debug("_extract_service_from_message: MATCH ESATTO '%s'", name)
+            return svc
+        
+        # Match normalizzato (senza accenti)
+        if name_normalized in msg_normalized:
+            logger.debug("_extract_service_from_message: MATCH NORMALIZZATO '%s'", name)
+            return svc
+        
+        # Match per singole parole significative (es: "pulizia" + "viso")
+        name_words = [w for w in name_lower.split() if len(w) > 2]
+        if len(name_words) >= 2:
+            matches = sum(1 for w in name_words if w in msg_lower)
+            if matches >= 2:
+                logger.debug("_extract_service_from_message: MATCH PAROLE '%s' (%d/%d)", 
+                           name, matches, len(name_words))
+                return svc
+        
+        # Match per tag
+        tag = (svc.get('tag') or '').strip()
+        if tag and len(tag) > 2:
+            tag_lower = tag.lower()
+            if tag_lower in msg_lower:
+                logger.debug("_extract_service_from_message: MATCH TAG '%s'", tag)
+                return svc
+    
+    return None
+
+def _extract_operator_from_message(message: str, operators: list) -> Optional[dict]:
+    """
+    Estrae l'operatore dal messaggio cercando pattern come:
+    - "con l'operatrice X", "con X", "di X" (quando X è operatore)
+    - "operatrice X", "operatore X"
+    FONDAMENTALE: "con X" al 99% indica un operatore, non un cliente!
+    Ritorna il dict operatore {id, name, type} se trovato.
     """
     msg_lower = message.lower()
-    # Ordina per lunghezza discendente: match il più specifico prima
-    for svc in sorted(services, key=lambda s: len(s.get('name', '')), reverse=True):
-        name = (svc.get('name') or '').lower().strip()
-        if name and len(name) > 2 and name in msg_lower:
-            return svc
-        tag = (svc.get('tag') or '').lower().strip()
-        if tag and len(tag) > 2 and tag in msg_lower:
-            return svc
+    
+    # Costruisci set di nomi operatori per match veloce
+    op_names_lower = {(op.get('name') or '').lower().strip(): op for op in operators if op.get('name')}
+    
+    # Pattern che indicano un OPERATORE (non un cliente)
+    # Ordine di priorità: pattern più specifici prima
+    operator_patterns = [
+        r"con\s+l['\u2019]?\s*operatric[ea]\s+(\w+)",      # con l'operatrice Rebecca
+        r"con\s+l['\u2019]?\s*operator[e]\s+(\w+)",        # con l'operatore Marco
+        r"operatric[ea]\s+(\w+)",                          # operatrice Rebecca
+        r"operator[e]\s+(\w+)",                            # operatore Marco
+        r"(?:spazio|slot|buco|posto|disponibilit[aà])\s+(?:di|con)\s+(\w+)",  # spazio di Rebecca
+        r"con\s+(\w+)\s+(?:alle|per\s+(?:le\s+)?ore)",     # con Rebecca alle 10
+        r"con\s+(\w+)\s*$",                                # "con Rebecca" a fine frase
+        r"con\s+(\w+)\s*[,\?\!]",                          # "con Rebecca," o "con Rebecca?"
+        r"con\s+(\w+)\s+(?:per|domani|oggi|lunedi|martedi|mercoledi|giovedi|venerdi|sabato|domenica)",  # con Rebecca domani
+    ]
+    
+    for pattern in operator_patterns:
+        match = re.search(pattern, msg_lower, re.IGNORECASE)
+        if match:
+            op_name_candidate = match.group(1).strip().lower()
+            # Cerca match esatto tra gli operatori
+            if op_name_candidate in op_names_lower:
+                op = op_names_lower[op_name_candidate]
+                logger.info("_extract_operator_from_message: trovato operatore '%s' (id=%s) con pattern '%s'", 
+                           op.get('name'), op.get('id'), pattern)
+                return op
+    
+    # FALLBACK: cerca "con X" dove X è un nome operatore (pattern generico)
+    # Questo cattura casi come "primo spazio con Rebecca per pulizia viso"
+    con_match = re.search(r"\bcon\s+([A-ZÀ-ÖØ-Ýa-zà-öø-ý']+)\b", message, re.IGNORECASE)
+    if con_match:
+        candidate = con_match.group(1).strip().lower()
+        if candidate in op_names_lower:
+            op = op_names_lower[candidate]
+            logger.info("_extract_operator_from_message: FALLBACK 'con X' → operatore '%s' (id=%s)", 
+                       op.get('name'), op.get('id'))
+            return op
+    
     return None
+
+def _extract_date_from_message(message: str, reference_date: Optional[date] = None) -> Optional[date]:
+    """
+    Estrae un riferimento temporale dal messaggio in linguaggio naturale.
+    Ritorna la data di INIZIO del periodo richiesto (es: "aprile" → 1 aprile).
+    Gestisce: nomi di mesi, "domani", "dopodomani", giorni della settimana,
+    "prossima settimana", "prima settimana di X", "dopo le 16 di giovedì", ecc.
+    """
+    if not message:
+        return None
+
+    today = reference_date or date.today()
+    msg_lower = message.lower()
+
+    # ── Mappa mesi italiani → numero ──
+    _mesi = {
+        'gennaio': 1, 'febbraio': 2, 'marzo': 3, 'aprile': 4,
+        'maggio': 5, 'giugno': 6, 'luglio': 7, 'agosto': 8,
+        'settembre': 9, 'ottobre': 10, 'novembre': 11, 'dicembre': 12,
+    }
+
+    # ── Mappa giorni italiani → weekday Python (0=Lunedì) ──
+    _giorni = {
+        'lunedì': 0, 'lunedi': 0, 'martedì': 1, 'martedi': 1,
+        'mercoledì': 2, 'mercoledi': 2, 'giovedì': 3, 'giovedi': 3,
+        'venerdì': 4, 'venerdi': 4, 'sabato': 5, 'domenica': 6,
+    }
+
+    # ── Pattern 1: "prima settimana di MESE" / "seconda settimana di MESE" ──
+    _settimana_ord = {
+        'prima': 1, 'primo': 1, '1': 1, '1a': 1, '1°': 1,
+        'seconda': 2, 'secondo': 2, '2': 2, '2a': 2, '2°': 2,
+        'terza': 3, 'terzo': 3, '3': 3, '3a': 3, '3°': 3,
+        'quarta': 4, 'quarto': 4, '4': 4, '4a': 4, '4°': 4,
+        'ultima': 5,
+    }
+    for mese_nome, mese_num in _mesi.items():
+        for sett_nome, sett_num in _settimana_ord.items():
+            pattern = rf'\b{re.escape(sett_nome)}\s+settimana\s+(?:di\s+)?{re.escape(mese_nome)}\b'
+            if re.search(pattern, msg_lower):
+                anno = today.year
+                # Se il mese è già passato quest'anno, usa l'anno prossimo
+                if mese_num < today.month or (mese_num == today.month and today.day > 21):
+                    anno += 1
+                if sett_num == 5:  # "ultima settimana"
+                    # Ultimo giorno del mese, poi torna indietro al lunedì
+                    import calendar
+                    ultimo_giorno = calendar.monthrange(anno, mese_num)[1]
+                    d = date(anno, mese_num, ultimo_giorno)
+                    while d.weekday() != 0:  # Lunedì
+                        d -= timedelta(days=1)
+                    logger.debug("_extract_date_from_message: '%s settimana di %s' → %s", sett_nome, mese_nome, d)
+                    return d
+                else:
+                    # Giorno 1 del mese + offset settimane
+                    primo_del_mese = date(anno, mese_num, 1)
+                    # Trova il primo lunedì del mese
+                    primo_lunedi = primo_del_mese
+                    while primo_lunedi.weekday() != 0:
+                        primo_lunedi += timedelta(days=1)
+                    target = primo_lunedi + timedelta(weeks=sett_num - 1)
+                    # Se il target è prima del primo del mese (lunedì precedente), usa il primo del mese
+                    if target < primo_del_mese:
+                        target = primo_del_mese
+                    logger.debug("_extract_date_from_message: '%s settimana di %s' → %s", sett_nome, mese_nome, target)
+                    return target
+
+    # ── Pattern 2: giorno specifico + mese (es: "3 aprile", "il 15 maggio") ──
+    for mese_nome, mese_num in _mesi.items():
+        pattern = rf'\b(?:il\s+)?(\d{{1,2}})\s+(?:di\s+)?{re.escape(mese_nome)}\b'
+        m = re.search(pattern, msg_lower)
+        if m:
+            giorno = int(m.group(1))
+            anno = today.year
+            try:
+                target = date(anno, mese_num, giorno)
+                if target < today:
+                    target = date(anno + 1, mese_num, giorno)
+                logger.debug("_extract_date_from_message: '%d %s' → %s", giorno, mese_nome, target)
+                return target
+            except ValueError:
+                continue
+
+    # ── Pattern 3: solo nome del mese (es: "ad aprile", "in maggio", "a giugno") ──
+    for mese_nome, mese_num in _mesi.items():
+        # Evita match parziali: "marzo" non deve matchare in "marzorlini"
+        pattern = rf'\b(?:ad?\s+|in\s+|di\s+|per\s+)?{re.escape(mese_nome)}\b'
+        if re.search(pattern, msg_lower):
+            anno = today.year
+            if mese_num < today.month or (mese_num == today.month and today.day > 25):
+                anno += 1
+            target = date(anno, mese_num, 1)
+            logger.debug("_extract_date_from_message: mese '%s' → %s", mese_nome, target)
+            return target
+
+    # ── Pattern 4: "domani", "dopodomani" ──
+    if re.search(r'\bdomani\b', msg_lower):
+        return today + timedelta(days=1)
+    if re.search(r'\bdopodomani\b', msg_lower):
+        return today + timedelta(days=2)
+
+    # ── Pattern 5: "oggi" ──
+    if re.search(r'\boggi\b', msg_lower):
+        return today
+
+    # ── Pattern 6: giorno della settimana (es: "lunedì", "giovedì prossimo") ──
+    for giorno_nome, giorno_wd in _giorni.items():
+        pattern = rf'\b{re.escape(giorno_nome)}(?:\s+prossim[oa])?\b'
+        if re.search(pattern, msg_lower):
+            # Calcola il prossimo giorno con quel weekday
+            days_ahead = giorno_wd - today.weekday()
+            if days_ahead <= 0:
+                days_ahead += 7
+            target = today + timedelta(days=days_ahead)
+            logger.debug("_extract_date_from_message: giorno '%s' → %s", giorno_nome, target)
+            return target
+
+    # ── Pattern 7: "prossima settimana", "settimana prossima" ──
+    if re.search(r'\b(?:prossima\s+settimana|settimana\s+prossima)\b', msg_lower):
+        # Lunedì della prossima settimana
+        days_to_monday = 7 - today.weekday()
+        if days_to_monday == 7:
+            days_to_monday = 7  # Se oggi è lunedì, vai al prossimo
+        return today + timedelta(days=days_to_monday)
+
+    # ── Pattern 8: "questa settimana" ──
+    if re.search(r'\bquesta\s+settimana\b', msg_lower):
+        return today
+
+    # ── Pattern 9: "tra N giorni/settimane" ──
+    m = re.search(r'\btra\s+(\d+)\s+giorn[io]\b', msg_lower)
+    if m:
+        return today + timedelta(days=int(m.group(1)))
+    m = re.search(r'\btra\s+(\d+)\s+settiman[ae]\b', msg_lower)
+    if m:
+        return today + timedelta(weeks=int(m.group(1)))
+
+    return None
+
+def _is_first_slot_request(message: str) -> bool:
+    """
+    Verifica se il messaggio chiede il PRIMO slot disponibile.
+    Pattern: "primo spazio", "primo buco", "prima disponibilità", "primo posto", ecc.
+    """
+    msg_lower = message.lower()
+    patterns = [
+        r"\bprim[oa]\s+(?:spazio|slot|buco|posto|disponibilit[aà])\b",
+        r"\bprim[oa]\s+(?:ora|orario)\s+(?:liber[oa]|disponibile)\b",
+        r"\bquando\s+(?:è|e|c['\u2019]?\s*è)\s+(?:il\s+)?prim[oa]\s+",
+        r"\b(?:spazio|slot|buco|posto)\s+(?:più\s+)?prossim[oa]\b",
+        r"\bprossim[oa]\s+(?:spazio|slot|buco|disponibilit[aà])\b",
+    ]
+    return any(re.search(p, msg_lower) for p in patterns)
 
 import unicodedata
 
@@ -477,27 +770,143 @@ def _normalize(text: str) -> str:
     return unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('ascii').lower()
 
 def _extract_client_by_hints(message: str, find_client_by_text) -> list:
-    words = re.findall(r"\b[A-ZÀ-ÖØ-Ýa-zà-öø-ý']{2,}\b", message)
-    capitalized = [w for w in words if w[0].isupper()]
+    # Tokenizza tutte le parole ≥2 caratteri
+    all_words = re.findall(r"\b[A-ZÀ-ÖØ-Ýa-zà-öø-ý']{2,}\b", message)
+    capitalized = [w for w in all_words if w[0].isupper()]
 
     if not capitalized:
         return []
 
     logger.debug("_extract_client_by_hints: parole maiuscole=%r", capitalized)
 
+    # Escludi parole che seguono "con" (al 99% sono operatori, non clienti)
+    msg_lower = message.lower()
+    con_matches = re.findall(r"\bcon\s+([A-ZÀ-ÖØ-Ýa-zà-öø-ý']+)", message, re.IGNORECASE)
+    words_after_con = {w.capitalize() for w in con_matches}
+    if words_after_con:
+        logger.debug("_extract_client_by_hints: parole dopo 'con' (escluse): %r", words_after_con)
+        capitalized = [w for w in capitalized if w not in words_after_con]
+        logger.debug("_extract_client_by_hints: parole rimanenti dopo esclusione: %r", capitalized)
+
+    if not capitalized:
+        return []
+
+    # ── COGNOME MINUSCOLO: input vocale spesso scrive il cognome in minuscolo.
+    # Strategia: per ogni parola maiuscola nei candidati, cerca la parola
+    # IMMEDIATAMENTE SUCCESSIVA nel messaggio originale. Se è minuscola
+    # e non è una stop-word, è quasi certamente il cognome.
+    _stop_after_name = {
+        'questa', 'questo', 'sera', 'mattina', 'pomeriggio', 'domani',
+        'oggi', 'alle', 'dopo', 'prima', 'per', 'una', 'uno', 'con',
+        'che', 'come', 'dove', 'quando', 'quale', 'dalla', 'dalle',
+        'vuole', 'vuoi', 'vorrei', 'prossimo', 'prossima', 'nel',
+        'nella', 'dello', 'della', 'degli', 'delle', 'dei', 'del',
+        'sul', 'sulla', 'dai', 'ore', 'tra', 'fra', 'suo', 'sua',
+        # Articoli e preposizioni che input vocale potrebbe mettere dopo un nome
+        'il', 'lo', 'la', 'le', 'li', 'gli', 'al', 'allo', 'alla',
+        'ai', 'agli', 'un', 'di', 'da', 'in', 'su', 'se',
+        'ci', 'vi', 'ne', 'ed', 'mi', 'ti', 'si', 'ma', 'poi',
+        # Verbi comuni
+        'vuole', 'prende', 'prenota', 'cerca', 'mostra', 'trova',
+        'dammi', 'dimmi', 'mostrami', 'fammi', 'trovami', 'cercami',
+        'elenca', 'elencami', 'visualizza', 'apri', 'recupera',
+        'vedi', 'vediamo', 'guarda', 'mandami', 'leggi', 'scrivi',
+        'conferma', 'annulla', 'cancella', 'elimina', 'modifica',
+        # Parole comuni di booking
+        'disponibile', 'disponibili', 'slot', 'spazio', 'libero', 'libera',
+        'appuntamento', 'prenotazione', 'servizio', 'trattamento',
+    }
+
+    cognomi_aggiunti = []
+    for nome in list(capitalized):
+        # Cerca: Nome + parola_minuscola nel messaggio originale
+        pattern = rf'\b{re.escape(nome)}\s+([a-zà-öø-ý][a-zà-öø-ý\']+)\b'
+        m = re.search(pattern, message)
+        if m:
+            possibile_cognome = m.group(1)
+            if possibile_cognome.lower() not in _stop_after_name and len(possibile_cognome) >= 2:
+                cognome_cap = possibile_cognome.capitalize()
+                if cognome_cap not in capitalized and cognome_cap not in cognomi_aggiunti:
+                    cognomi_aggiunti.append(cognome_cap)
+                    capitalized.append(cognome_cap)
+                    logger.debug("_extract_client_by_hints: COGNOME MINUSCOLO rilevato "
+                                "'%s' dopo '%s' → aggiunto '%s'",
+                                possibile_cognome, nome, cognome_cap)
+
+    # Caso aggiuntivo: pattern espliciti di introduzione cliente
+    # "per/di/cliente/storico di" + nome + cognome (entrambi possibilmente minuscoli da vocale)
+    _intro_patterns = re.findall(
+        r'\b(?:per|di|cliente|storico\s+di|appuntamenti\s+di|info\s+di|dati\s+di)\s+'
+        r'([A-ZÀ-ÖØ-Ýa-zà-öø-ý][a-zà-öø-ý\']+)'
+        r'\s+'
+        r'([a-zà-öø-ý][a-zà-öø-ý\']+)',
+        message, re.IGNORECASE
+    )
+    for nome_raw, cognome_raw in _intro_patterns:
+        if cognome_raw.lower() in _stop_after_name:
+            continue
+        nome_cap = nome_raw.capitalize()
+        cognome_cap = cognome_raw.capitalize()
+        if nome_cap not in capitalized:
+            capitalized.append(nome_cap)
+            logger.debug("_extract_client_by_hints: NOME da pattern intro → '%s'", nome_cap)
+        if cognome_cap not in capitalized:
+            capitalized.append(cognome_cap)
+            logger.debug("_extract_client_by_hints: COGNOME da pattern intro → '%s'", cognome_cap)
+
+    logger.debug("_extract_client_by_hints: candidati finali (con cognomi minuscoli)=%r", capitalized)
+
     # Parole da ignorare (non sono nomi propri)
     noise = {
-        'Pulizia', 'Viso', 'Massaggio', 'Trattamento', 'Manicure',
-        'Pedicure', 'Ceretta', 'Epilazione', 'Lunedi', 'Martedi',
-        'Mercoledi', 'Giovedi', 'Venerdi', 'Sabato', 'Domenica',
-        'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
-        'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
-        # Verbi e parole comuni che possono iniziare con maiuscola (inizio frase)
-        'Mostra', 'Cerca', 'Trova', 'Dammi', 'Voglio', 'Vorrei',
-        'Fammi', 'Dimmi', 'Quali', 'Quando', 'Come', 'Dove',
-        'Prossimi', 'Prossimo', 'Prossima', 'Storico', 'Dati',
-        'Cliente', 'Appuntamenti', 'Appuntamento', 'Disponibilita',
-        'Prenota', 'Prenotazione', 'Info', 'Informazioni',
+        "Prenota", "Cerca", "Mostra", "Quando", "Chi", "Quale",
+        "Appuntamento", "Appuntamenti", "Prenotazione", "Prenotazioni",
+        "Slot", "Disponibile", "Disponibili", "Orario", "Orari",
+        "Giorno", "Giorni", "Settimana", "Settimane", "Mese", "Mesi",
+        "Mattina", "Pomeriggio", "Sera", "Oggi", "Domani", "Dopodomani",
+        "Luned", "Marted", "Mercoled", "Gioved", "Venerd", "Sabato", "Domenica",
+        "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+        "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
+        "Prossima", "Prossimo", "Questa", "Questo", "Prima", "Dopo",
+        "Primo", "Secondo", "Terzo", "Quarto", "Ultimo", "Ultima",
+        "Alle", "Dalle", "Fino", "Entro", "Tra", "Fra",
+        "Pulizia", "Ceretta", "Manicure", "Pedicure", "Massaggio",
+        "Pressoterapia", "Radiofrequenza", "Epilazione", "Viso", "Corpo",
+        "Semipermanente", "Smalto", "Gel", "French", "Lampada",
+        "Info", "Informazioni", "Storico", "Storia", "Dati",
+        "Cliente", "Clienti", "Operatrice", "Operatore",
+        "Servizio", "Servizi", "Trattamento", "Trattamenti",
+        "Per", "Con", "Del", "Della", "Dello", "Dei", "Degli", "Delle",
+        "Dal", "Dalla", "Sul", "Sulla", "Nel", "Nella",
+        "Che", "Come", "Dove", "Quanto", "Quali",
+        "Non", "Mai", "Sempre", "Anche", "Solo", "Molto",
+        "Buongiorno", "Buonasera", "Ciao", "Salve", "Grazie",
+        "Vorrei", "Voglio", "Potrei", "Posso", "Fammi", "Dimmi",
+        "Trova", "Controlla", "Verifica", "Disponibilit",
+        "Hybrid", "Doccia", "Ergoline", "Lettino",
+        "Braccia", "Gambe", "Gamba", "Inguine", "Ascelle", "Schiena",
+        "Petto", "Addome", "Glutei", "Spalle", "Mani", "Piedi",
+        "Sopracciglia", "Baffetto", "Mento", "Orecchie",
+        "Intera", "Completo", "Completa", "Sgambato", "Classica", "Specifica",
+        # ── Articoli, pronomi e preposizioni che possono essere capitalizzati ──
+        "Il", "Lo", "La", "Le", "Li", "Gli", "Un", "Una", "Uno",
+        "Di", "Da", "In", "Su", "Se", "Ci", "Vi", "Ne",
+        "Al", "Allo", "Alla", "Ai", "Agli", "Alle",
+        "Mi", "Ti", "Si", "Noi", "Voi", "Loro", "Suo", "Sua",
+        "Ed", "Od", "Ma", "Poi", "Già", "Qui", "Ora",
+        # ── Verbi comuni capitalizzati da input vocale ──
+        "Prende", "Prendi", "Prendere", "Fai", "Fare", "Metti", "Mettere",
+        "Vorrebbe", "Vuole", "Vuoi",
+        "Dammi", "Dimmi", "Mostrami", "Fammi", "Trovami", "Cercami",
+        "Dai", "Elenca", "Elencami", "Visualizza", "Apri", "Recupera",
+        "Vedi", "Vediamo", "Guarda", "Guardami", "Mandami",
+        "Leggi", "Leggimi", "Scrivi", "Scrivimi",
+        "Conferma", "Annulla", "Cancella", "Elimina", "Modifica",
+        "Aggiorna", "Cambia", "Sposta", "Ripeti",
+        "Ho", "Ha", "Hanno", "Sono", "Sei", "Siamo",
+        "Aveva", "Avrebbe", "Potrebbe",
+        # ── Altre parole comuni nei messaggi di prenotazione ──
+        "Disponibilità", "Primo", "Spazio", "Libero", "Libera",
+        "Sul", "Sua", "Sue", "Suoi",
     }
 
     # Arricchisci noise con nomi servizi dal DB
@@ -513,6 +922,19 @@ def _extract_client_by_hints(message: str, find_client_by_text) -> list:
             for w in tag.split():
                 if len(w) > 2:
                     noise.add(w.capitalize())
+    except Exception:
+        pass
+
+    # Arricchisci noise con nomi operatori dal DB (evita confusione operatore/cliente)
+    try:
+        from appl.models import Operator
+        operatori = Operator.query.filter_by(is_deleted=False, is_visible=True).all()
+        for op in operatori:
+            nome_op = op.user_nome or ''
+            if len(nome_op) > 2:
+                noise.add(nome_op.capitalize())
+                noise.add(nome_op.upper())
+                noise.add(nome_op.lower().capitalize())
     except Exception:
         pass
 
@@ -545,24 +967,102 @@ def _extract_client_by_hints(message: str, find_client_by_text) -> list:
             logger.warning("_extract_client_by_hints: %d match esatti su '%s'", len(exact), full_query)
             return exact
 
-    # ── STEP 2: cerca ogni singola parola nel DB ──
+    # ── STEP 2: cerca clienti nel DB ──
     found: dict = {}  # id → cliente (deduplicato)
-    for word in candidates:
-        results = find_client_by_text(word)
-        for c in results:
-            found[c["id"]] = c
-        # Riprova con parola normalizzata (senza accenti) se nessun risultato
-        if not results:
-            results_norm = find_client_by_text(_normalize(word))
-            for c in results_norm:
+    word_hits: dict = {}  # id → set di candidate words che hanno matchato
+
+    # STEP 2a: Se abbiamo ≥2 candidate, cerca PRIMA la combinazione completa
+    # (es: "Cristina Gallo" come stringa unica). Questo evita che il LIMIT
+    # tronchi risultati quando ci sono molti omonimi per singola parola.
+    if len(candidates) >= 2:
+        for i in range(len(candidates)):
+            for j in range(i + 1, len(candidates)):
+                combo_a = f"{candidates[i]} {candidates[j]}"
+                combo_b = f"{candidates[j]} {candidates[i]}"
+                for combo in [combo_a, combo_b]:
+                    results = find_client_by_text(combo)
+                    for c in results:
+                        found[c["id"]] = c
+                        word_hits.setdefault(c["id"], set()).add(_normalize(candidates[i]))
+                        word_hits.setdefault(c["id"], set()).add(_normalize(candidates[j]))
+        if found:
+            logger.debug("_extract_client_by_hints: STEP 2a combo trovati %d clienti: %r",
+                        len(found),
+                        [f"{c.get('nome')} {c.get('cognome')}" for c in found.values()])
+
+    # STEP 2b: fallback — cerca ogni singola parola nel DB
+    if not found:
+        for word in candidates:
+            results = find_client_by_text(word)
+            for c in results:
                 found[c["id"]] = c
+                word_hits.setdefault(c["id"], set()).add(_normalize(word))
+            # Riprova con parola normalizzata (senza accenti) se nessun risultato
+            if not results:
+                results_norm = find_client_by_text(_normalize(word))
+                for c in results_norm:
+                    found[c["id"]] = c
+                    word_hits.setdefault(c["id"], set()).add(_normalize(word))
 
     if not found:
         return []
 
     clients = list(found.values())
 
-    # ── STEP 3: se più clienti e ≥2 candidate, filtra per chi matcha nome+cognome ──
+    # ── STEP 2c: Se abbiamo ≥2 candidate words, FILTRA i clienti in base
+    # a quante candidate words matchano il nome/cognome.
+    # Strategia: conta quante candidate matchano (inizio-parola) per ogni cliente.
+    # Richiedi almeno 2 match. Questo evita che una parola "spuria" sfuggita
+    # al noise (es: "Dammi") blocchi tutta la ricerca.
+    if len(candidates) >= 2:
+        scored_clients = []
+        for c in clients:
+            c_nome = _normalize(c.get("nome") or "")
+            c_cognome = _normalize(c.get("cognome") or "")
+            c_words = c_nome.split() + c_cognome.split()
+            # Conta quante candidate matchano almeno una parola del cliente
+            match_count = 0
+            matched_cands = []
+            for cand in candidates:
+                cand_norm = _normalize(cand)
+                word_start_match = any(
+                    cw.startswith(cand_norm) or cand_norm.startswith(cw)
+                    for cw in c_words if cw
+                )
+                if word_start_match:
+                    match_count += 1
+                    matched_cands.append(cand)
+            # Conta anche quante "parole" del nome/cognome sono coperte
+            c_total_words = len([w for w in c_words if w])
+            scored_clients.append((match_count, c_total_words, c, matched_cands))
+
+        # Ordina per match_count discendente, poi per copertura nome
+        scored_clients.sort(key=lambda x: (x[0], x[1]), reverse=True)
+
+        if scored_clients:
+            best_match_count = scored_clients[0][0]
+
+            if best_match_count >= 2:
+                # Prendi solo i clienti col punteggio migliore
+                validated = [c for mc, _, c, _ in scored_clients if mc == best_match_count]
+                logger.warning("_extract_client_by_hints: dopo validazione multi-word → %d clienti "
+                              "(match_count=%d, candidates=%r): %r",
+                              len(validated), best_match_count, candidates,
+                              [f"{c.get('nome')} {c.get('cognome')}" for c in validated])
+                clients = validated
+            else:
+                # Nessun cliente matcha almeno 2 candidate words
+                # Il nome richiesto probabilmente non esiste nel DB
+                logger.warning("_extract_client_by_hints: nessun cliente matcha almeno 2 "
+                              "delle parole candidate %r (best=%d) → restituisco []",
+                              candidates, best_match_count)
+                return []
+        else:
+            logger.warning("_extract_client_by_hints: nessun cliente trovato per parole candidate %r → restituisco []",
+                           candidates)
+            return []
+
+    # ── STEP 3: se più clienti e ≥2 candidate, filtra per chi matcha nome+cognome esatto ──
     if len(clients) > 1 and len(candidates) >= 2:
         exact_match = []
         for c in clients:
@@ -584,10 +1084,12 @@ def _extract_client_by_hints(message: str, find_client_by_text) -> list:
         for c in clients:
             nome_c = _normalize(c.get("nome") or "")
             cognome_c = _normalize(c.get("cognome") or "")
+            # Conta match su inizio parola (non substring!)
+            c_words = nome_c.split() + cognome_c.split()
             matches = sum(
                 1 for w in candidates
-                if _normalize(w) == nome_c or _normalize(w) == cognome_c
-                or _normalize(w) in nome_c or _normalize(w) in cognome_c
+                if any(cw.startswith(_normalize(w)) or _normalize(w).startswith(cw)
+                       for cw in c_words if cw)
             )
             scored.append((matches, c))
         scored.sort(key=lambda x: x[0], reverse=True)
@@ -633,7 +1135,14 @@ def compute_free_slots(
     """
     Calcola slot liberi dai dati RAG già caricati (no query aggiuntive).
     Tutti gli orari in formato HH:MM, date in YYYY-MM-DD.
+    FILTRO: esclude slot con data/ora precedente a datetime.now()
     """
+    from datetime import datetime as dt_class
+    
+    now = dt_class.now()
+    today_date = now.date()
+    current_minutes = now.hour * 60 + now.minute
+    
     biz         = rag_context.get("business", {})
     opening_str = biz.get("opening", "08:00") or "08:00"
     closing_str = biz.get("closing", "20:00") or "20:00"
@@ -656,7 +1165,6 @@ def compute_free_slots(
         start_m = _parse_time_to_minutes(s["start"])
         end_m   = _parse_time_to_minutes(s["end"])
         if end_m <= start_m:
-            # Slot con fine <= inizio: usa durata come fallback
             end_m = start_m + s.get("duration_min", 15)
         occupied.setdefault(key, []).append((start_m, end_m))
 
@@ -667,7 +1175,7 @@ def compute_free_slots(
     else:
         ops = [o for o in all_ops if o.get("type") == "estetista"]
 
-    start_date = target_date if target_date else date.today()
+    start_date = target_date if target_date else today_date
     free_slots  = []
 
     for day_offset in range(days_to_check):
@@ -676,11 +1184,11 @@ def compute_free_slots(
             continue
 
         date_str = _fmt_date(check_date)
+        is_today = (check_date == today_date)
 
         for op in ops:
             oid = op["id"]
 
-            # Usa turni se definiti per quel giorno, altrimenti orari negozio
             shifts = [
                 s for s in rag_context.get("shifts", [])
                 if s["operator_id"] == oid and s["date"] == date_str
@@ -699,6 +1207,13 @@ def compute_free_slots(
 
             for (win_start, win_end) in windows:
                 cur = win_start
+                
+                # Se è oggi, parti dal prossimo slot disponibile (arrotondato a slot_step)
+                if is_today:
+                    # Arrotonda current_minutes al prossimo multiplo di slot_step
+                    next_slot = ((current_minutes // slot_step) + 1) * slot_step
+                    cur = max(cur, next_slot)
+                
                 while cur + service_duration <= win_end:
                     slot_end = cur + service_duration
                     conflict = any(
@@ -716,13 +1231,15 @@ def compute_free_slots(
                             "duration_minutes": service_duration,
                             "service_name":     service_name,
                             "service_id":       service_id,
+                            # NUOVO: flag per indicare se il cliente è richiesto
+                            "client_required":  True,
+                            "client_missing":   True,  # default: cliente non ancora selezionato
                         })
                         if len(free_slots) >= max_slots:
                             return free_slots
                     cur += slot_step
 
     return free_slots
-
 
 # ──────────────────────────────────────────────
 # Chiamata Groq
@@ -788,7 +1305,7 @@ def process_ai_query(
     query_date_str: Optional[str] = None,
     operator_id: Optional[int] = None,
     service_id: Optional[int] = None,
-    days_range: int = 14,
+    days_range: int = 60,
 ) -> dict:
     """
     Entry point chiamato dall'endpoint Flask.
@@ -813,6 +1330,15 @@ def process_ai_query(
     # ── 1. Parse data di riferimento ────────────────────────────
     query_date = _parse_date(query_date_str) if query_date_str else None
 
+    # ── 1b. Estrai data dal linguaggio naturale nel messaggio ────
+    # Se l'utente non ha passato una data esplicita, cerca nel testo
+    # (es: "aprile", "domani", "prima settimana di maggio", "giovedì prossimo")
+    if not query_date:
+        extracted_date = _extract_date_from_message(user_message)
+        if extracted_date:
+            query_date = extracted_date
+            logger.warning("DATA ESTRATTA dal messaggio: %s", _fmt_date(query_date))
+
     # ── 2. RAG context ───────────────────────────────────────────
     rag = build_rag_context(query_date=query_date, days_range=days_range)
 
@@ -825,11 +1351,42 @@ def process_ai_query(
     if client_search and str(client_search).strip().lower() in ("none", ""):
         client_search = None
 
+    # ── NUOVO: Rilevamento "primo slot disponibile" ─────────────
+    is_primo_slot = _is_first_slot_request(user_message)
+    extracted_operator: Optional[dict] = None
+    
+    # SEMPRE cerca operatore dal messaggio (non solo per primo_slot)
+    # Pattern "con X" indica quasi sempre un operatore
+    extracted_operator = _extract_operator_from_message(user_message, rag.get("operators", []))
+    if extracted_operator:
+        operator_id = extracted_operator.get("id")
+        logger.warning("OPERATORE estratto dal messaggio: '%s' (id=%s)", 
+                      extracted_operator.get('name'), operator_id)
+    
+    if is_primo_slot:
+        logger.warning("PRIMO_SLOT_REQUEST rilevato nel messaggio")
+
     if not client_search:
-        hint_clients = _extract_client_by_hints(user_message, find_client_by_text)
-        logger.warning("HINT_CLIENTS dal messaggio: %d trovati: %r",
-                       len(hint_clients),
-                       [f"{c.get('nome')} {c.get('cognome')}" for c in hint_clients])
+        # Se c'è un operatore estratto (es. "con Rebecca"), NON cercare cliente con quel nome
+        # Questo vale sempre, non solo per primo_slot
+        if extracted_operator:
+            # Passa comunque alla ricerca hint, ma _extract_client_by_hints
+            # già esclude le parole dopo "con"
+            hint_clients = _extract_client_by_hints(user_message, find_client_by_text)
+            # Se l'unico hint trovato ha lo stesso nome dell'operatore, scartalo
+            op_name_lower = (extracted_operator.get('name') or '').lower()
+            hint_clients = [
+                c for c in hint_clients 
+                if (c.get('nome') or '').lower() != op_name_lower
+            ]
+            if not hint_clients:
+                logger.warning("SKIP ricerca cliente: 'con %s' è un operatore, non un cliente",
+                              extracted_operator.get('name'))
+        else:
+            hint_clients = _extract_client_by_hints(user_message, find_client_by_text)
+            logger.warning("HINT_CLIENTS dal messaggio: %d trovati: %r",
+                           len(hint_clients),
+                           [f"{c.get('nome')} {c.get('cognome')}" for c in hint_clients])
         if len(hint_clients) == 1:
             client_data    = hint_clients
             client_context = build_client_context(client_data[0]["id"])
@@ -904,8 +1461,12 @@ def process_ai_query(
         found_svc = _extract_service_from_message(user_message, rag["services"])
         if found_svc:
             service_context = found_svc
-            service_id = found_svc["id"]
-            logger.info("service estratto dal messaggio: '%s' (id=%s)", found_svc.get('name'), service_id)
+            service_id = found_svc.get("id")
+            logger.warning("SERVIZIO estratto dal messaggio: '%s' (id=%s, durata=%s)", 
+                          found_svc.get('name'), service_id, found_svc.get('duration'))
+        else:
+            logger.warning("SERVIZIO NON TROVATO nel messaggio. Servizi disponibili: %r",
+                          [s.get('name') for s in rag.get("services", [])])
 
     # ── 6. Slot liberi pre-calcolati ─────────────────────────────
     suggested_slots: list = []
@@ -921,6 +1482,11 @@ def process_ai_query(
             service_name=service_context.get("name", ""),
             service_id=service_context.get("id"),
         )
+        logger.warning("SLOT PRE-CALCOLATI: %d slot trovati per servizio '%s' (durata=%d min, operator_id=%s)",
+                      len(suggested_slots), service_context.get("name"), svc_duration, operator_id)
+    else:
+        logger.warning("SLOT PRE-CALCOLATI: skip — nessun servizio con durata trovato (service_context=%r)",
+                      bool(service_context))
 
     # ── 6. Payload per Groq ──────────────────────────────────────
     context_block = {
@@ -959,14 +1525,131 @@ def process_ai_query(
         logger.exception("Errore inatteso Groq: %s", exc)
         outcome   = "error"
         ai_result = _error_result("Errore temporaneo. Riprova.")
+    
+    # FALLBACK: Se Groq fallisce ma abbiamo dati locali, usali
+    if outcome != "ok" and (service_context or suggested_slots or is_primo_slot):
+        logger.warning("FALLBACK LOCALE: Groq fallito, uso dati estratti localmente")
+        
+        # Determina intent in base al messaggio
+        if is_primo_slot:
+            ai_result["intent"] = "primo_slot_disponibile"
+        elif service_context:
+            ai_result["intent"] = "disponibilita"
+        
+        # Se abbiamo slot pre-calcolati, usali
+        if suggested_slots:
+            ai_result["suggested_slots"] = suggested_slots
+            svc_name = service_context.get("name", "il servizio richiesto") if service_context else "il servizio"
+            op_name = extracted_operator.get("name", "") if extracted_operator else ""
+            
+            if is_primo_slot and suggested_slots:
+                slot = suggested_slots[0]
+                ai_result["answer"] = (
+                    f"Il primo spazio disponibile per {svc_name}"
+                    + (f" con {op_name}" if op_name else "")
+                    + f" è il {slot.get('date', '')} alle {slot.get('time', '')}."
+                )
+            else:
+                ai_result["answer"] = (
+                    f"Ho trovato {len(suggested_slots)} slot disponibili per {svc_name}"
+                    + (f" con {op_name}" if op_name else "")
+                    + "."
+                )
+            ai_result["confidence"] = 0.8
+        elif service_context and not suggested_slots:
+            ai_result["answer"] = (
+                f"Non ho trovato slot disponibili per {service_context.get('name', 'questo servizio')} "
+                f"nei prossimi {days_range} giorni."
+            )
 
     tokens_used = ai_result.pop("_tokens_used", 0)
+
+    # ── Filtra warning in inglese generati da Groq ───────────────
+    _english_warnings = {
+        "client_required_for_booking",
+        "no slots available",
+        "no_slots_available",
+        "client_not_found",
+        "service_not_found",
+        "operator_not_found",
+        "missing_service",
+        "missing_client",
+        "missing_operator",
+        "past_slot",
+        "conflict_detected",
+        "no_shifts_found",
+        "invalid_date",
+        "invalid_time",
+    }
+    raw_warnings = ai_result.get("warnings") or []
+    ai_result["warnings"] = [
+        w for w in raw_warnings
+        if w not in _english_warnings and not w.isascii()
+        or any(c in w for c in "àèéìòùÀÈÉÌÒÙ")  # contiene caratteri italiani
+        or " " in w and not all(ord(c) < 128 for c in w.replace(" ", ""))  # frase non ASCII
+    ]
+    # Fallback: se dopo il filtro rimangono warning puri ASCII che sembrano inglese, rimuovili
+    ai_result["warnings"] = [
+        w for w in ai_result["warnings"]
+        if not re.match(r'^[a-z_]+$', w)  # rimuovi token tecnici tipo "rate_limited"
+    ]
+
     logger.warning("AI RESULT INTENT: '%s'", ai_result.get("intent"))
     logger.warning("AI RESULT ANSWER: '%s'", ai_result.get("answer", "")[:100])
     logger.warning("CLIENT_CONTEXT HISTORY LEN: %d", len(client_context.get("history", [])))
 
     # ── 8. Reinjection dati reali (server-side) ──────────────────
     final_slots = ai_result.get("suggested_slots") or suggested_slots
+    
+    # ── NUOVO: Gestione intent primo_slot_disponibile ────────────
+    intent = ai_result.get("intent", "")
+    
+    # Forza intent se rilevato pattern di primo slot
+    if is_primo_slot and intent not in ("primo_slot_disponibile",):
+        logger.warning("FORCE INTENT: '%s' → 'primo_slot_disponibile'", intent)
+        intent = "primo_slot_disponibile"
+        ai_result["intent"] = "primo_slot_disponibile"
+    
+    if intent == "primo_slot_disponibile":
+        # Ricalcola slot con parametri specifici: solo 1 slot (il primo disponibile)
+        if service_context and service_context.get("duration"):
+            primo_slots = compute_free_slots(
+                rag,
+                service_duration=int(service_context.get("duration")),
+                operator_id=operator_id,  # Può essere None o l'ID estratto
+                target_date=query_date or date.today(),
+                days_to_check=days_range,
+                max_slots=1,  # Solo il primo!
+                service_name=service_context.get("name", ""),
+                service_id=service_context.get("id"),
+            )
+            if primo_slots:
+                final_slots = primo_slots
+                op_name = primo_slots[0].get("operator_name", "")
+                svc_name = service_context.get("name", "")
+                slot_date = primo_slots[0].get("date", "")
+                slot_time = primo_slots[0].get("time", "")
+                ai_result["answer"] = (
+                    f"Il primo spazio disponibile per {svc_name}"
+                    + (f" con {op_name}" if op_name else "")
+                    + f" è il {slot_date} alle {slot_time}."
+                )
+                logger.warning("PRIMO_SLOT trovato: %s %s con %s", slot_date, slot_time, op_name)
+            else:
+                ai_result["answer"] = (
+                    f"Non ho trovato slot disponibili per "
+                    f"{service_context.get('name', 'questo servizio')}"
+                    + (f" con l'operatrice selezionata" if operator_id else "")
+                    + f" nei prossimi {days_range} giorni."
+                )
+                logger.warning("PRIMO_SLOT: nessuno slot trovato")
+        else:
+            ai_result["answer"] = (
+                "Per trovare il primo spazio disponibile ho bisogno di sapere quale servizio vuoi prenotare. "
+                "Puoi specificare il trattamento?"
+            )
+            ai_result["needs_more_info"] = True
+            ai_result["missing_fields"] = ["servizio"]
     logger.warning("REINJECT DEBUG: client_search='%s' client_data=%r final_slots=%d",
                    client_search, [c.get('nome') for c in client_data], len(final_slots))
     if client_data and final_slots:
@@ -992,23 +1675,48 @@ def process_ai_query(
             slot["date"] = _fmt_date(slot["date"]) if slot["date"] else slot["date"]
         if "time" in slot:
             slot["time"] = _fmt_time(slot["time"]) if slot["time"] else slot["time"]
+        if "client_required" not in slot:
+            slot["client_required"] = True
+        if "client_missing" not in slot:
+            # Se client_id è presente, cliente non mancante
+            slot["client_missing"] = not bool(slot.get("client_id"))
 
     ai_result["suggested_slots"] = final_slots
+
+    if final_slots and not client_data:
+        ai_result["needs_client_selection"] = True
+        # Rimuovi warning tecnici in inglese — mai mostrarli al frontend
+        existing_warnings = ai_result.get("warnings") or []
+        ai_result["warnings"] = [w for w in existing_warnings if w != "client_required_for_booking"]
+        # Messaggio solo in italiano, senza warning tecnico
+        if ai_result.get("intent") in ("disponibilita", "primo_slot_disponibile", "suggerimento_slot"):
+            existing_answer = (ai_result.get("answer") or "").strip()
+            guidance = "Per confermare, seleziona il cliente nell'apposito campo dello slot."
+            if existing_answer:
+                ai_result["answer"] = f"{existing_answer}\n\n{guidance}"
+            else:
+                ai_result["answer"] = guidance
 
     # Aggiunge dati cliente reali per i mini-blocchi nel frontend
     if client_data:
         ai_result["client_resolved"] = client_data[0]
 
+    # Ri-leggi intent (potrebbe essere stato modificato sopra)
     intent = ai_result.get("intent", "")
     logger.warning("APPOINTMENTS INJECT: intent='%s' client_data=%d history=%d",
                    intent, len(client_data), len(client_context.get("history", [])))
 
+    # NUOVO: Se è primo_slot_disponibile, salta la gestione storico/info
+    if intent == "primo_slot_disponibile":
+        logger.warning("SKIP gestione storico/info: intent è primo_slot_disponibile")
+    
     intenti_storico = ("storico_cliente", "prossimi_appuntamenti")
     intenti_info = ("info_cliente", "dati_cliente")
 
     # Determina se l'utente chiede DATI/INFO (anagrafica) o STORICO (appuntamenti)
     msg_lower = user_message.lower()
     chiede_info = any(kw in msg_lower for kw in ("dati", "info", "anagrafica", "scheda", "telefono", "cellulare", "email"))
+    chiede_prossimi = any(kw in msg_lower for kw in ("prossim", "futur", "successiv"))
     chiede_storico = any(kw in msg_lower for kw in ("storico", "appuntamenti", "passati", "precedenti", "ultimi"))
 
     # Se Groq ha restituito un intent generico ma abbiamo client_data,
@@ -1021,25 +1729,37 @@ def process_ai_query(
     ))
 
     if intent not in intenti_storico and intent not in intenti_info and client_data:
-        if chiede_info and not chiede_storico:
+        if chiede_info and not chiede_storico and not chiede_prossimi:
             logger.warning("FORCE INTENT: '%s' → 'info_cliente' (richiesta dati anagrafica)",
                            intent)
             intent = "info_cliente"
             ai_result["intent"] = "info_cliente"
-        elif chiede_storico and not chiede_prenotazione:
+        elif chiede_prossimi and not chiede_prenotazione:
+            logger.warning("FORCE INTENT: '%s' → 'prossimi_appuntamenti' (richiesta prossimi esplicita)",
+                           intent)
+            intent = "prossimi_appuntamenti"
+            ai_result["intent"] = "prossimi_appuntamenti"
+        elif chiede_storico and not chiede_prenotazione and not chiede_prossimi:
             logger.warning("FORCE INTENT: '%s' → 'storico_cliente' (richiesta storico esplicita)",
                            intent)
             intent = "storico_cliente"
             ai_result["intent"] = "storico_cliente"
         else:
-            logger.warning("NO FORCE INTENT: rimane '%s' (chiede_prenotazione=%s, chiede_storico=%s)",
-                           intent, chiede_prenotazione, chiede_storico)
+            logger.warning("NO FORCE INTENT: rimane '%s' (chiede_prenotazione=%s, chiede_storico=%s, chiede_prossimi=%s)",
+                           intent, chiede_prenotazione, chiede_storico, chiede_prossimi)
 
     # === GESTIONE INFO_CLIENTE / DATI_CLIENTE ===
     if intent in intenti_info and client_data:
         client_info = build_client_info(client_data[0]["id"])
         nome_c = f"{client_data[0].get('nome','')} {client_data[0].get('cognome','')}".strip()
         ai_result["client_info"] = client_info
+
+        # Formatta ultimo appuntamento (passato) e prossimo (futuro)
+        ultimo = client_info.get('ultimo_appuntamento', '') or ''
+        prossimo = client_info.get('prossimo_appuntamento', '') or ''
+        ultimo_label = ultimo if ultimo else 'nessuno'
+        prossimo_label = prossimo if prossimo else 'nessuno'
+
         ai_result["answer"] = (
             f"Ecco i dati del cliente {nome_c}:\n"
             f"• Nome: {client_info.get('nome', '-')}\n"
@@ -1047,7 +1767,8 @@ def process_ai_query(
             f"• Cellulare: {client_info.get('cellulare', '-')}\n"
             f"• Email: {client_info.get('email', '-') or '-'}\n"
             f"• Data registrazione: {client_info.get('data_registrazione', '-') or '-'}\n"
-            f"• Ultimo appuntamento: {client_info.get('ultimo_appuntamento', '-') or '-'}\n"
+            f"• Ultimo appuntamento: {ultimo_label}\n"
+            f"• Prossimo appuntamento: {prossimo_label}\n"
             f"• Totale appuntamenti: {client_info.get('totale_appuntamenti', 0)}"
         )
         if client_info.get('note'):
@@ -1061,6 +1782,12 @@ def process_ai_query(
                 client_data[0]["id"], limit=10, future_only=True
             )
             logger.warning("RICARICATO client_context future_only: %d appuntamenti",
+                           len(client_context.get("history", [])))
+        elif intent == "storico_cliente":
+            client_context = build_client_context(
+                client_data[0]["id"], limit=10, past_only=True
+            )
+            logger.warning("RICARICATO client_context past_only: %d appuntamenti",
                            len(client_context.get("history", [])))
 
         history  = client_context.get("history", [])
@@ -1170,7 +1897,7 @@ def _ambiguous_client_response(trace_id: str, candidates: list) -> dict:
         "data_points":     [],
         "suggested_slots": [],
         "confidence":      0.7,
-        "warnings":        ["client_ambiguous"],
+        "warnings":        ["cliente non univoco"],
         "needs_more_info": True,
         "missing_fields":  ["cellulare"],
         "trace_id":        trace_id,
@@ -1186,3 +1913,45 @@ def _inject_client_into_slots(slots: list, client: dict) -> None:
         slot["client_cognome"]   = client.get("cognome", "")
         slot["client_cellulare"] = client.get("cellulare", "")
         slot["client_id"]        = client.get("id")
+        slot["client_missing"]   = False
+
+def validate_slot_for_booking(slot: dict) -> dict:
+    """
+    Valida uno slot prima di creare l'appuntamento.
+    Ritorna dict con 'valid': bool e 'errors': list di messaggi.
+    """
+    errors = []
+    
+    # 1. Data/ora non nel passato
+    from datetime import datetime as dt_class
+    now = dt_class.now()
+    
+    slot_date = _parse_date(slot.get("date"))
+    slot_time_str = slot.get("time", "")
+    
+    if slot_date:
+        slot_minutes = _parse_time_to_minutes(slot_time_str)
+        slot_datetime = dt_class.combine(slot_date, dtime(slot_minutes // 60, slot_minutes % 60))
+        
+        if slot_datetime < now:
+            errors.append("Non puoi prenotare uno slot nel passato.")
+    else:
+        errors.append("Data dello slot non valida.")
+    
+    # 2. Cliente obbligatorio
+    if not slot.get("client_id"):
+        errors.append("Seleziona un cliente per confermare la prenotazione.")
+    
+    # 3. Servizio obbligatorio
+    if not slot.get("service_id"):
+        errors.append("Seleziona un servizio per confermare la prenotazione.")
+    
+    # 4. Operatore obbligatorio
+    if not slot.get("operator_id"):
+        errors.append("Seleziona un operatore per confermare la prenotazione.")
+    
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "slot": slot,
+    }

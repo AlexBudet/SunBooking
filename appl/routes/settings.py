@@ -3452,7 +3452,6 @@ def marketing_daily_stats():
     })
 
 # ===================== AUTO-UPDATE ROUTES =====================
-
 @settings_bp.route('/api/check-update', methods=['GET'])
 def check_update():
     """Controlla se c'è una nuova versione disponibile su GitHub Releases."""
@@ -3497,7 +3496,23 @@ def check_update():
                 download_url = asset.get("browser_download_url")
                 break
         
-        has_update = local_version != remote_version if local_version else True
+        # Normalizza versioni: rimuovi prefisso 'v'/'V' e spazi per confronto affidabile
+        def _clean_version(v):
+            if not v:
+                return ''
+            v = v.strip()
+            if v.lower().startswith('v'):
+                v = v[1:]
+            return v
+
+        local_clean = _clean_version(local_version)
+        remote_clean = _clean_version(remote_version)
+        has_update = (local_clean != remote_clean) if local_clean else True
+
+        current_app.logger.info(
+            "[CHECK-UPDATE] local_raw=%r local_clean=%r remote_raw=%r remote_clean=%r has_update=%s",
+            local_version, local_clean, remote_version, remote_clean, has_update
+        )
         
         return jsonify({
             "has_update": has_update,

@@ -11769,6 +11769,22 @@ document.addEventListener('click', function(e) {
       .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  async function searchAiClientsFromDb(query) {
+    const q = String(query || '').trim();
+    if (q.length < 2) return [];
+    try {
+      const r = await fetch(
+        getBaseUrl() + '/api/search-clients/' + encodeURIComponent(q),
+        { credentials: 'same-origin' }
+      );
+      if (!r.ok) return [];
+      const data = await r.json();
+      return Array.isArray(data) ? data : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
   // Converte YYYY-MM-DD → DD Mmm YYYY per display (es. "06 Nov 2025")
   // Gestisce anche date già in formato DD/MM/YYYY o DD Mmm YYYY
 function fmtDateIT(isoDate) {
@@ -11994,86 +12010,278 @@ function fmtDateIT(isoDate) {
     card.className = 'ai-slot-card';
 
     const dataIT = fmtDateIT(slot.date);
-    const clienteLine = (slot.client_nome || slot.client_cognome)
-      ? `<span class="ai-slot-label">Cliente</span><br>
-         <strong>${esc(slot.client_nome || '')} ${esc(slot.client_cognome || '')}</strong>
-         ${slot.client_cellulare ? `&nbsp;· <span style="font-size:0.8rem">${esc(slot.client_cellulare)}</span>` : ''}`
+    const hasClient = Boolean(slot.client_id);
+
+    const clienteLine = hasClient
+      ? '<span class="ai-slot-label">Cliente</span><br>' +
+        '<strong>' + esc(slot.client_nome || '') + ' ' + esc(slot.client_cognome || '') + '</strong>' +
+        (slot.client_cellulare ? '&nbsp;· <span style="font-size:0.8rem">' + esc(slot.client_cellulare) + '</span>' : '')
       : '';
 
-    card.innerHTML = `
-      <div>
-        <span class="ai-slot-label">Data &amp; Ora</span><br>
-        <strong>${esc(dataIT)} alle ${esc(slot.time)}</strong>
-        ${slot.duration_minutes ? `<span style="font-size:0.8rem;opacity:.7"> · ${slot.duration_minutes} min</span>` : ''}
-      </div>
-      <div style="margin-top:5px">
-        <span class="ai-slot-label">Operatrice</span><br>
-        <strong>${esc(slot.operator_name || '—')}</strong>
-      </div>
-      <div style="margin-top:5px">
-        <span class="ai-slot-label">Servizio</span><br>
-        <strong>${esc(slot.service_name || '—')}</strong>
-      </div>
-      ${clienteLine ? `<div style="margin-top:5px">${clienteLine}</div>` : ''}
+    card.innerHTML =
+      '<div>' +
+        '<span class="ai-slot-label">Data &amp; Ora</span><br>' +
+        '<strong>' + esc(dataIT) + ' alle ' + esc(slot.time || '—') + '</strong>' +
+        (slot.duration_minutes ? '<span style="font-size:0.8rem;opacity:.7"> · ' + slot.duration_minutes + ' min</span>' : '') +
+      '</div>' +
+      '<div style="margin-top:5px">' +
+        '<span class="ai-slot-label">Operatrice</span><br>' +
+        '<strong>' + esc(slot.operator_name || '—') + '</strong>' +
+      '</div>' +
+      '<div style="margin-top:5px">' +
+        '<span class="ai-slot-label">Servizio</span><br>' +
+        '<strong>' + esc(slot.service_name || '—') + '</strong>' +
+      '</div>' +
+      (clienteLine ? '<div style="margin-top:5px">' + clienteLine + '</div>' : '') +
+      (!hasClient ?
+        '<div class="ai-client-picker" style="margin-top:8px; position:relative;">' +
+          '<span class="ai-slot-label">Cliente</span><br>' +
+          '<input type="text" class="ai-client-search" ' +
+                 'placeholder="Cerca cliente (nome, cognome o cellulare)" ' +
+                 'style="width:100%; margin-top:4px; border:1px solid #d0c8ff; border-radius:8px; padding:6px 8px; font-size:0.82rem;">' +
+          '<div class="ai-client-results" ' +
+               'style="display:none; position:absolute; left:0; right:0; top:58px; background:#fff; border:1px solid #d0c8ff; border-radius:8px; max-height:160px; overflow:auto; z-index:3;"></div>' +
+        '</div>'
+      : '') +
+      '<div class="ai-slot-required-msg" style="margin-top:8px; font-size:0.78rem; color:#8a6d3b;"></div>' +
+      '<div class="ai-slot-confirm" style="display:none; margin-top:10px; border-top:1px solid #d0c8ff; padding-top:9px; gap:7px; flex-wrap:wrap;">' +
+        '<span style="font-size:0.8rem; color:#555; flex:1 0 100%;">✅ Confermi la prenotazione?</span>' +
+        '<button class="ai-confirm-yes" style="flex:1; padding:6px 10px; border:none; border-radius:8px; background:linear-gradient(135deg,#6c47ff,#00c2cb); color:#fff; font-size:0.82rem; cursor:pointer; font-weight:600;">Prenota</button>' +
+        '<button class="ai-confirm-no" style="flex:1; padding:6px 10px; border:none; border-radius:8px; background:#f0ebff; color:#6c47ff; font-size:0.82rem; cursor:pointer; font-weight:600;">Annulla</button>' +
+      '</div>' +
+      '<div class="ai-slot-spinner" style="display:none; margin-top:8px; font-size:0.8rem; color:#6c47ff; text-align:center;">' +
+        '<i class="bi bi-arrow-repeat" style="animation:aiDotPulse .8s infinite;"></i> Creazione in corso…' +
+      '</div>' +
+      '<div class="ai-slot-result" style="display:none; margin-top:8px; font-size:0.82rem; font-weight:600; text-align:center;"></div>';
 
-      <!-- Riga conferma: appare DOPO click sul card -->
-      <div class="ai-slot-confirm" style="display:none; margin-top:10px;
-           border-top:1px solid #d0c8ff; padding-top:9px; gap:7px; flex-wrap:wrap;">
-        <span style="font-size:0.8rem; color:#555; flex:1 0 100%;">
-          ✅ Confermi la prenotazione?
-        </span>
-        <button class="ai-confirm-yes" style="
-            flex:1; padding:6px 10px; border:none; border-radius:8px;
-            background:linear-gradient(135deg,#6c47ff,#00c2cb);
-            color:#fff; font-size:0.82rem; cursor:pointer; font-weight:600;">
-          Prenota
-        </button>
-        <button class="ai-confirm-no" style="
-            flex:1; padding:6px 10px; border:none; border-radius:8px;
-            background:#f0ebff; color:#6c47ff; font-size:0.82rem;
-            cursor:pointer; font-weight:600;">
-          Annulla
-        </button>
-      </div>
+    var confirmBox = card.querySelector('.ai-slot-confirm');
+    var spinner    = card.querySelector('.ai-slot-spinner');
+    var resultEl   = card.querySelector('.ai-slot-result');
+    var requiredMsg= card.querySelector('.ai-slot-required-msg');
+    var yesBtn     = card.querySelector('.ai-confirm-yes');
+    var noBtn      = card.querySelector('.ai-confirm-no');
 
-      <!-- Spinner (durante la chiamata POST) -->
-      <div class="ai-slot-spinner" style="display:none; margin-top:8px;
-           font-size:0.8rem; color:#6c47ff; text-align:center;">
-        <i class="bi bi-arrow-repeat" style="animation:aiDotPulse .8s infinite;"></i>
-        Creazione in corso…
-      </div>
+    function missingFields() {
+      var m = [];
+      if (!slot.date) m.push('data');
+      if (!slot.time) m.push('ora');
+      if (!slot.operator_id) m.push('operatrice');
+      if (!slot.service_id && !(slot.service_name && String(slot.service_name).trim())) m.push('servizio');
+      if (!slot.client_id) m.push('cliente');
+      return m;
+    }
 
-      <!-- Esito (dopo risposta server) -->
-      <div class="ai-slot-result" style="display:none; margin-top:8px;
-           font-size:0.82rem; font-weight:600; text-align:center;"></div>
-    `;
+    function slotReady() {
+      return missingFields().length === 0;
+    }
 
-    // ── Primo click sul card → mostra conferma ────────────────
-    card.addEventListener('click', function handleFirstClick(e) {
-      // Ignora se si clicca sui bottoni di conferma
-      if (e.target.closest('.ai-slot-confirm') || e.target.closest('.ai-slot-spinner') || e.target.closest('.ai-slot-result')) return;
-      const confirmBox = card.querySelector('.ai-slot-confirm');
-      if (confirmBox.style.display === 'none') {
-        confirmBox.style.display = 'flex';
-        card.style.cursor = 'default';
-        scrollToBottom();
+    function refreshReadyState() {
+      var miss = missingFields();
+      var ready = miss.length === 0;
+
+      card.classList.toggle('ai-slot-disabled', !ready);
+      yesBtn.disabled = !ready;
+      yesBtn.style.opacity = ready ? '1' : '.45';
+      yesBtn.style.cursor = ready ? 'pointer' : 'not-allowed';
+
+      if (ready) {
+        requiredMsg.textContent = '';
+      } else {
+        requiredMsg.textContent = 'Per confermare completa: ' + miss.join(', ') + '.';
       }
+    }
+
+    refreshReadyState();
+
+    // ── Ricerca cliente dal DB ──────────────────────────────
+    var clientSearch  = card.querySelector('.ai-client-search');
+    var clientResults = card.querySelector('.ai-client-results');
+
+    if (clientSearch && clientResults) {
+      var tmr = null;
+
+      clientSearch.addEventListener('input', function() {
+        clearTimeout(tmr);
+        var q = clientSearch.value || '';
+        tmr = setTimeout(async function() {
+          var rows = await searchAiClientsFromDb(q);
+
+          clientResults.innerHTML = '';
+          if (!rows.length) {
+            clientResults.style.display = 'none';
+            return;
+          }
+
+          rows.forEach(function(c) {
+            var row = document.createElement('button');
+            row.type = 'button';
+            row.style.cssText = 'display:block; width:100%; text-align:left; border:none; background:#fff; padding:7px 8px; font-size:0.82rem; cursor:pointer;';
+            row.textContent = (c.name || '') + ' \u2022 ' + (c.phone || '');
+
+            row.addEventListener('click', function(e) {
+              e.preventDefault();
+              e.stopPropagation();
+
+              slot.client_id = c.id;
+
+              var full = String(c.name || '').trim().replace(/\s+/g, ' ');
+              var parts = full.split(' ');
+              slot.client_nome = parts[0] || '';
+              slot.client_cognome = parts.slice(1).join(' ') || '';
+              slot.client_cellulare = c.phone || '';
+
+              clientSearch.value = full;
+              clientResults.style.display = 'none';
+
+              refreshReadyState();
+            });
+
+            clientResults.appendChild(row);
+          });
+
+          clientResults.style.display = 'block';
+        }, 220);
+      });
+
+      document.addEventListener('click', function(ev) {
+        if (!card.contains(ev.target)) clientResults.style.display = 'none';
+      });
+    }
+
+    // ── Click sulla card ──────────────────────────────────────
+    card.addEventListener('click', function(e) {
+      if (e.target.closest('.ai-client-picker') ||
+          e.target.closest('.ai-confirm-yes') ||
+          e.target.closest('.ai-confirm-no')) return;
+
+      if (!slotReady()) return;
+
+      confirmBox.style.display = 'flex';
     });
 
     // ── Bottone "Prenota" ─────────────────────────────────────
-    card.querySelector('.ai-confirm-yes').addEventListener('click', async (e) => {
+    yesBtn.addEventListener('click', async function(e) {
+      e.preventDefault();
       e.stopPropagation();
+      if (!slotReady()) return;
       await createAppointmentFromSlot(slot, card);
     });
 
     // ── Bottone "Annulla" ─────────────────────────────────────
-    card.querySelector('.ai-confirm-no').addEventListener('click', (e) => {
+    noBtn.addEventListener('click', function(e) {
+      e.preventDefault();
       e.stopPropagation();
-      card.querySelector('.ai-slot-confirm').style.display = 'none';
-      card.style.cursor = 'pointer';
+      confirmBox.style.display = 'none';
+      spinner.style.display = 'none';
+      resultEl.style.display = 'none';
     });
 
     return card;
+  }
+
+  // ── Card di disambiguazione clienti (cliccabili) ────────────
+  function buildDisambiguationCards(clients, originalMessage) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:8px;';
+
+    const title = document.createElement('div');
+    title.style.cssText = 'font-weight:600; font-size:0.88rem; margin-bottom:8px; color:#6c47ff;';
+    title.textContent = '👥 Ho trovato più clienti. Clicca su quello corretto:';
+    wrap.appendChild(title);
+
+    clients.forEach(function(client) {
+      var card = document.createElement('div');
+      card.style.cssText = [
+        'display:flex',
+        'align-items:center',
+        'gap:10px',
+        'padding:10px 14px',
+        'margin-bottom:6px',
+        'background:#fdf8fb',
+        'border:1px solid #d0c8ff',
+        'border-radius:10px',
+        'cursor:pointer',
+        'transition:all 0.15s ease'
+      ].join(';');
+
+      card.addEventListener('mouseenter', function() {
+        card.style.background = '#ede6ff';
+        card.style.borderColor = '#6c47ff';
+        card.style.boxShadow = '0 2px 8px rgba(108,71,255,0.15)';
+      });
+      card.addEventListener('mouseleave', function() {
+        card.style.background = '#fdf8fb';
+        card.style.borderColor = '#d0c8ff';
+        card.style.boxShadow = 'none';
+      });
+
+      var icon = document.createElement('div');
+      icon.style.cssText = 'font-size:1.4rem; flex:0 0 auto;';
+      icon.textContent = '👤';
+      card.appendChild(icon);
+
+      var info = document.createElement('div');
+      info.style.cssText = 'flex:1 1 auto; min-width:0;';
+
+      var nameRow = document.createElement('div');
+      nameRow.style.cssText = 'font-weight:600; font-size:0.9rem; color:#333;';
+      var nome = (client.nome || client.cliente_nome || '').toString().trim();
+      var cognome = (client.cognome || client.cliente_cognome || '').toString().trim();
+      var fullName = (nome + ' ' + cognome).trim();
+      if (typeof window.capitalizeName === 'function') {
+        fullName = window.capitalizeName(fullName);
+      }
+      nameRow.textContent = fullName || 'Cliente sconosciuto';
+      info.appendChild(nameRow);
+
+      var cellulare = (client.cellulare || client.cliente_cellulare || client.phone || '').toString().trim();
+      if (cellulare) {
+        var phoneRow = document.createElement('div');
+        phoneRow.style.cssText = 'font-size:0.8rem; color:#888; margin-top:2px;';
+        phoneRow.textContent = '📱 ' + cellulare;
+        info.appendChild(phoneRow);
+      }
+
+      card.appendChild(info);
+
+      var arrow = document.createElement('div');
+      arrow.style.cssText = 'font-size:1.1rem; color:#6c47ff; flex:0 0 auto;';
+      arrow.textContent = '→';
+      card.appendChild(arrow);
+
+      // Al click: rilancia la query con il client_id specifico
+      var clientId = client.id || client.cliente_id || null;
+      card.addEventListener('click', function() {
+        if (!clientId) return;
+
+        // Feedback visivo: disabilita tutte le card
+        wrap.querySelectorAll('div[data-disamb-card]').forEach(function(c) {
+          c.style.pointerEvents = 'none';
+          c.style.opacity = '0.5';
+        });
+        card.style.opacity = '1';
+        card.style.background = '#e0d4ff';
+        card.style.pointerEvents = 'none';
+
+        // Mostra messaggio di selezione
+        var selecting = document.createElement('div');
+        selecting.style.cssText = 'margin-top:6px; font-size:0.82rem; color:#6c47ff; font-weight:600;';
+        selecting.textContent = '✅ Selezionato: ' + fullName + ' — ripeto la ricerca…';
+        wrap.appendChild(selecting);
+        scrollToBottom();
+
+        // Rilancia la query precedente con il client_id selezionato
+        var lastMsg = originalMessage || AI._lastUserMessage || '';
+        if (lastMsg) {
+          sendQuery(lastMsg, clientId);
+        }
+      });
+
+      card.setAttribute('data-disamb-card', '1');
+      wrap.appendChild(card);
+    });
+
+    return wrap;
   }
 
   function buildAppointmentsTable(appointments, client) {
@@ -12115,7 +12323,6 @@ function fmtDateIT(isoDate) {
           <th style="padding:6px 8px;text-align:left;">Ora</th>
           <th style="padding:6px 8px;text-align:left;">Servizio</th>
           <th style="padding:6px 8px;text-align:left;">Operatrice</th>
-          <th style="padding:6px 8px;text-align:left;">Stato</th>
         </tr>`;
     table.appendChild(thead);
 
@@ -12123,24 +12330,73 @@ function fmtDateIT(isoDate) {
       appointments.forEach((appt, idx) => {
         const tr = document.createElement('tr');
         tr.style.background = idx % 2 === 0 ? '#fdf8fb' : '#fff';
+        tr.style.cursor = appt.date ? 'pointer' : 'default';
 
         // Converti la data nel formato italiano DD Mmm YYYY
         let dateIT = '—';
         if (appt.date) {
           dateIT = fmtDateIT(appt.date);
+          tr.setAttribute('data-date', appt.date);
         }
         const time   = appt.time || '—';
+        if (appt.time) {
+          tr.setAttribute('data-time', appt.time);
+        }
         const svc    = esc(appt.service_name || '—');
         const op     = esc(appt.operator_name || '—');
-        const stato  = esc(appt.stato || '—');
 
         tr.innerHTML = `
           <td style="padding:5px 8px;">${dateIT}</td>
           <td style="padding:5px 8px;">${esc(time)}</td>
           <td style="padding:5px 8px;">${svc}</td>
           <td style="padding:5px 8px;">${op}</td>
-          <td style="padding:5px 8px;">${stato}</td>
         `;
+
+        // Click sulla riga → naviga alla data/ora nel calendario
+        if (appt.date) {
+          tr.addEventListener('mouseenter', function() {
+            tr.style.background = '#ede6ff';
+          });
+          tr.addEventListener('mouseleave', function() {
+            tr.style.background = idx % 2 === 0 ? '#fdf8fb' : '#fff';
+          });
+          tr.addEventListener('click', function() {
+            var d = appt.date;
+            var t = appt.time || '';
+
+            // Chiudi pannello AI
+            if (AI.isOpen) {
+              AI.isOpen = false;
+              elModal.style.display = 'none';
+              if (AI.isMicActive && AI.recognition) AI.recognition.stop();
+            }
+
+            // Salva ora in sessionStorage per lo scroll dopo il caricamento
+            if (t) {
+              var timeParts = t.split(':');
+              try {
+                sessionStorage.setItem('scrollToHour',   timeParts[0] || '0');
+                sessionStorage.setItem('scrollToMinute', timeParts[1] || '0');
+              } catch(_) {}
+            }
+
+            // Recupera la data attualmente visualizzata nel calendario
+            var currentCalDate = (document.getElementById('date') || {}).value || '';
+            var calBase = AI.baseUrl || '/calendar';
+
+            if (d !== currentCalDate) {
+              // Data diversa: naviga alla pagina di quella data
+              window.location.href = calBase + '?date=' + d + (t ? '&ora=' + encodeURIComponent(t) : '');
+            } else {
+              // Stessa data: scroll diretto all'ora senza ricaricare
+              if (t && typeof window.scrollToHourMinute === 'function') {
+                var tp = t.split(':');
+                window.scrollToHourMinute(tp[0], tp[1]);
+              }
+            }
+          });
+        }
+
         tbody.appendChild(tr);
       });
     table.appendChild(tbody);
@@ -12182,15 +12438,60 @@ function fmtDateIT(isoDate) {
                       const [dateStr, oraStr] = (item.ora_inizio || '').split(' ');
                       const [anno, mese, giorno] = (dateStr || '').split('-');
                       const dataFmt = giorno ? `${giorno} ${mesi[parseInt(mese,10)-1]} ${anno}` : '—';
-                      return `<tr>
+                      const rowDate = dateStr || '';
+                      const rowTime = oraStr || '';
+                      return `<tr data-date="${esc(rowDate)}" data-time="${esc(rowTime)}" style="cursor:${rowDate ? 'pointer' : 'default'};">
                         <td>${dataFmt}</td>
-                        <td>${oraStr || '—'}</td>
+                        <td>${rowTime || '—'}</td>
                         <td>${esc(item.servizio || '—')}</td>
                         <td>${esc(item.operatore || '—')}</td>
                         <td>${esc(item.stato || '—')}</td>
                       </tr>`;
                     }).join('')}</tbody>
                   </table></div>`;
+
+                // Rendi le righe cliccabili: naviga alla data/ora
+                body.querySelectorAll('tbody tr[data-date]').forEach(function(tr) {
+                  tr.addEventListener('click', function() {
+                    var d = tr.getAttribute('data-date');
+                    var t = tr.getAttribute('data-time');
+                    if (!d) return;
+
+                    // Chiudi il modal storico
+                    var histModalEl = document.getElementById('ClientHistoryModal');
+                    if (histModalEl) {
+                      var bsInst = bootstrap.Modal.getInstance(histModalEl);
+                      if (bsInst) bsInst.hide();
+                    }
+
+                    // Chiudi pannello AI se aperto
+                    var aiPanel = document.getElementById('aiChatModal');
+                    if (aiPanel && aiPanel.style.display !== 'none') {
+                      aiPanel.style.display = 'none';
+                    }
+
+                    // Salva ora per lo scroll dopo caricamento
+                    if (t) {
+                      var tp = t.split(':');
+                      try {
+                        sessionStorage.setItem('scrollToHour',   tp[0] || '0');
+                        sessionStorage.setItem('scrollToMinute', tp[1] || '0');
+                      } catch(_) {}
+                    }
+
+                    var currentCalDate = (document.getElementById('date') || {}).value || '';
+                    var calBase = AI.baseUrl || '/calendar';
+
+                    if (d !== currentCalDate) {
+                      window.location.href = calBase + '?date=' + d + (t ? '&ora=' + encodeURIComponent(t) : '');
+                    } else {
+                      if (t && typeof window.scrollToHourMinute === 'function') {
+                        var tp2 = t.split(':');
+                        window.scrollToHourMinute(tp2[0], tp2[1]);
+                      }
+                    }
+                  });
+                });
               })
               .catch(() => { body.innerHTML = '<div class="alert alert-danger">Errore caricamento.</div>'; });
             new bootstrap.Modal(histModal).show();
@@ -12424,12 +12725,17 @@ function fmtDateIT(isoDate) {
   // INVIO QUERY AL BACKEND
   // ──────────────────────────────────────────────────────────────
 
-  async function sendQuery(message) {
+  async function sendQuery(message, overrideClientId) {
     if (AI.isLoading || !message.trim()) return;
 
     AI.isLoading       = true;
     elSendBtn.disabled = true;
     elInput.disabled   = true;
+
+    // Salva l'ultimo messaggio utente per eventuale replay con disambiguazione
+    if (!overrideClientId) {
+      AI._lastUserMessage = message.trim();
+    }
 
     appendMessage('user', message.trim());
     elInput.value = '';
@@ -12439,6 +12745,11 @@ function fmtDateIT(isoDate) {
     scrollToBottom();
 
     const payload = { message: message.trim(), days_range: 14 };
+
+    // Se è stato selezionato un cliente specifico dalla disambiguazione, forzalo nel payload
+    if (overrideClientId) {
+      payload.client_id = overrideClientId;
+    }
 
     const dateMatch = message.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (dateMatch) {
@@ -12474,6 +12785,73 @@ function fmtDateIT(isoDate) {
       console.log('[AI] intent:', data.intent,
                   'appointments:', Array.isArray(data.appointments) ? data.appointments.length : 'ASSENTE',
                   'client_resolved:', data.client_resolved ? data.client_resolved.nome : 'null');
+
+      // ── DISAMBIGUAZIONE: se il backend restituisce più clienti candidati ──
+      // Controlla sia il campo "disambiguation_clients" che "ambiguous_clients"
+      var disambClients = data.disambiguation_clients || data.ambiguous_clients || null;
+      if (Array.isArray(disambClients) && disambClients.length > 1) {
+        var disambAnswer = data.answer || 'Ho trovato più clienti con questo nome. Seleziona quello corretto:';
+        appendMessage('assistant', disambAnswer);
+
+        // Costruisci e inserisci le card cliccabili
+        var disambCards = buildDisambiguationCards(disambClients, AI._lastUserMessage || message.trim());
+        elMessages.appendChild(disambCards);
+        scrollToBottom();
+
+        // Esce dal flusso normale: non mostrare tabelle o slot
+        return;
+      }
+
+      // ── DISAMBIGUAZIONE FALLBACK: rileva dal testo della risposta ──
+      // Se l'AI dice "ho trovato più clienti" o "quale cliente intendi" ma non ha il campo strutturato,
+      // proviamo a cercare nel DB e mostrare le card
+      var answerLower = (data.answer || '').toLowerCase();
+      var isDisambText = (
+        /\bpiù clienti\b/i.test(answerLower) ||
+        /\bquale cliente\b/i.test(answerLower) ||
+        /\bnon univoco\b/i.test(answerLower) ||
+        /\bspecifica.*cliente\b/i.test(answerLower) ||
+        /\bpiù persone\b/i.test(answerLower) ||
+        /\bambig/i.test(answerLower)
+      );
+      var hasNoAppointments = !Array.isArray(data.appointments) || data.appointments.length === 0;
+      var hasNoSlots = !Array.isArray(data.suggested_slots) || data.suggested_slots.length === 0;
+
+      if (isDisambText && hasNoAppointments && hasNoSlots) {
+        // Estrai il nome dal messaggio originale e cerca nel DB
+        var clientQuery = extractClientQueryFromMessage(AI._lastUserMessage || message.trim());
+        if (clientQuery && clientQuery.length >= 2) {
+          try {
+            var searchResp = await fetch(
+              getBaseUrl() + '/api/search-clients/' + encodeURIComponent(clientQuery),
+              { credentials: 'same-origin' }
+            );
+            if (searchResp.ok) {
+              var foundClients = await searchResp.json();
+              if (Array.isArray(foundClients) && foundClients.length > 1) {
+                // Normalizza il formato dei clienti per le card
+                var normalizedClients = foundClients.map(function(c) {
+                  var nameParts = splitFullName(c.name || '');
+                  return {
+                    id: c.id,
+                    nome: nameParts.nome,
+                    cognome: nameParts.cognome,
+                    cellulare: c.phone || ''
+                  };
+                });
+
+                appendMessage('assistant', data.answer || 'Ho trovato più clienti. Seleziona quello corretto:');
+                var fallbackCards = buildDisambiguationCards(normalizedClients, AI._lastUserMessage || message.trim());
+                elMessages.appendChild(fallbackCards);
+                scrollToBottom();
+                return;
+              }
+            }
+          } catch (searchErr) {
+            console.warn('[AI] disambiguazione fallback search failed:', searchErr);
+          }
+        }
+      }
 
 let answerText = data.answer || 'Nessuna risposta ricevuta.';
 if (data.warnings && data.warnings.length) {
@@ -12518,6 +12896,23 @@ if (data.client_resolved && data.client_resolved.id) {
         var appts = Array.isArray(data.appointments) ? data.appointments : [];
         var client = data.client_resolved || null;
 
+        // Filtra appuntamenti in base all'intent: storico = solo passati, prossimi = solo futuri
+        var nowISO = (function() {
+          var d = new Date();
+          return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+        })();
+        if (data.intent === 'prossimi_appuntamenti') {
+          appts = appts.filter(function(a) {
+            var dt = (a.date || '') + 'T' + (a.time || '00:00');
+            return dt >= nowISO;
+          });
+        } else if (data.intent === 'storico_cliente') {
+          appts = appts.filter(function(a) {
+            var dt = (a.date || '') + 'T' + (a.time || '00:00');
+            return dt < nowISO;
+          });
+        }
+
         console.log('[AI] RENDERING TABELLA: appts=' + appts.length + ' client=' + (client ? client.nome : 'null'));
 
         // Trova l'ultimo bubble messaggio appena creato da appendMessage
@@ -12553,6 +12948,18 @@ if (data.client_resolved && data.client_resolved.id) {
           empty.textContent = 'Nessun appuntamento trovato.';
           wrap.appendChild(empty);
         } else {
+          // Titolo differenziato in base all'intent
+          var tableTitle = document.createElement('div');
+          tableTitle.style.cssText = 'font-weight:700; font-size:0.88rem; margin-bottom:6px; color:#6c47ff; text-transform:uppercase;';
+          if (data.intent === 'prossimi_appuntamenti') {
+            tableTitle.textContent = '📅 Prossimi Appuntamenti';
+          } else if (data.intent === 'storico_cliente') {
+            tableTitle.textContent = '📋 Storico Appuntamenti';
+          } else {
+            tableTitle.textContent = '📋 Appuntamenti';
+          }
+          wrap.appendChild(tableTitle);
+
           var tbl = document.createElement('table');
           tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:0.82rem;color:#222;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(108,71,255,0.10)';
 
@@ -12561,7 +12968,6 @@ if (data.client_resolved && data.client_resolved.id) {
           theadHTML += '<th style="padding:6px 8px;text-align:left;">Ora</th>';
           theadHTML += '<th style="padding:6px 8px;text-align:left;">Servizio</th>';
           theadHTML += '<th style="padding:6px 8px;text-align:left;">Operatrice</th>';
-          theadHTML += '<th style="padding:6px 8px;text-align:left;">Stato</th>';
           theadHTML += '</tr></thead>';
 
           var tbodyHTML = '<tbody>';
@@ -12579,7 +12985,6 @@ if (a.date) {
             tbodyHTML += '<td style="padding:5px 8px;color:#222;">' + esc(a.time || '—') + '</td>';
             tbodyHTML += '<td style="padding:5px 8px;color:#333;">' + esc(a.service_name || '—') + '</td>';
             tbodyHTML += '<td style="padding:5px 8px;color:#333;">' + esc(a.operator_name || '—') + '</td>';
-            tbodyHTML += '<td style="padding:5px 8px;color:#333;">' + esc(a.stato || '—') + '</td>';
             tbodyHTML += '</tr>';
           }
           tbodyHTML += '</tbody>';
@@ -12592,30 +12997,36 @@ if (a.date) {
               var t = tr.getAttribute('data-time');
               if (!d) return;
 
-              // Chiudi panel AI
-              var panel = document.getElementById('ai-panel');
-              if (panel) panel.classList.remove('open');
+              // Chiudi pannello AI
+              if (AI.isOpen) {
+                AI.isOpen = false;
+                elModal.style.display = 'none';
+                if (AI.isMicActive && AI.recognition) AI.recognition.stop();
+              }
 
-              // Naviga alla vista giorno
-              var parts = d.split('-');
-              if (parts.length === 3) {
-                var dateObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-                if (typeof window.calendarInstance !== 'undefined' && window.calendarInstance) {
-                  window.calendarInstance.gotoDate(dateObj);
-                  window.calendarInstance.changeView('resourceTimeGridDay', dateObj);
-                } else if (typeof calendar !== 'undefined' && calendar) {
-                  calendar.gotoDate(dateObj);
-                  calendar.changeView('resourceTimeGridDay', dateObj);
-                }
+              // Recupera la data attualmente visualizzata nel calendario
+              var currentCalDate = (document.getElementById('date') || {}).value || '';
+              var calBase = AI.baseUrl || '/calendar';
 
-                // Scroll all'ora se possibile
-                if (t) {
-                  setTimeout(function() {
-                    var timeSlot = document.querySelector('[data-time="' + t + '"], .fc-timegrid-slot[data-time="' + t + ':00"]');
-                    if (timeSlot) {
-                      timeSlot.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                  }, 400);
+              // Salva ora in sessionStorage per lo scroll dopo il caricamento
+              if (t) {
+                var timeParts = t.split(':');
+                try {
+                  sessionStorage.setItem('scrollToHour',   timeParts[0] || '0');
+                  sessionStorage.setItem('scrollToMinute', timeParts[1] || '0');
+                } catch(_) {}
+              }
+
+              if (d !== currentCalDate) {
+                // Data diversa: naviga alla pagina di quella data
+                window.location.href = calBase + '?date=' + d + (t ? '&ora=' + encodeURIComponent(t) : '');
+              } else {
+                // Stessa data: scroll diretto all'ora senza ricaricare
+                if (t && typeof window.scrollToHourMinute === 'function') {
+                  var timeParts2 = t.split(':');
+                  window.scrollToHourMinute(timeParts2[0], timeParts2[1]);
+                } else {
+                  location.reload();
                 }
               }
             });
