@@ -799,7 +799,7 @@ function _getShiftPresets(callback) {
         callback(_cachedPresets);
         return;
     }
-    fetch('/api/shift-presets')
+    fetch('/settings/api/shift-presets')
         .then(function(r) { return r.json(); })
         .then(function(data) {
             _cachedPresets = Array.isArray(data) ? data : [];
@@ -814,7 +814,7 @@ function _getShiftPresets(callback) {
 // --- Scrittura su DB (e aggiorna cache) ---
 function _setShiftPresets(arr, callback) {
     var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-    fetch('/api/shift-presets', {
+    fetch('/settings/api/shift-presets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
         body: JSON.stringify(arr)
