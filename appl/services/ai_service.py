@@ -509,54 +509,83 @@ def _extract_client_name_regex(message: str) -> Optional[str]:
 
 def _extract_service_from_message(message: str, services: list) -> Optional[dict]:
     """
-    Cerca nel messaggio il nome di un servizio disponibile (match parziale case-insensitive).
-    Ritorna il dict servizio {id, name, duration, ...} se trovato.
-    Gestisce anche match parziali: "pulizia viso" matcha "Pulizia Viso Completa".
+    Cerca nel messaggio il nome di un servizio disponibile.
+    Usa un sistema MULTI-PASS a priorità decrescente per evitare match errati.
+    Pass 1: nome completo esatto nel messaggio (più specifico vince)
+    Pass 2: nome normalizzato senza accenti
+    Pass 3: tutte le parole significative del nome presenti nel messaggio
+    Pass 4: tag + almeno una parola chiave del nome nel messaggio
     """
     if not message or not services:
         return None
-    
+
     msg_lower = message.lower()
     msg_normalized = _normalize(message)
-    
+
     # Ordina per lunghezza discendente: match il più specifico prima
     sorted_services = sorted(services, key=lambda s: len(s.get('name') or ''), reverse=True)
-    
+
+    # Pre-calcola dati per ogni servizio
+    svc_data = []
     for svc in sorted_services:
         name = (svc.get('name') or '').strip()
         if not name or len(name) < 3:
             continue
-        
-        name_lower = name.lower()
-        name_normalized = _normalize(name)
-        
-        # Match esatto (case-insensitive)
-        if name_lower in msg_lower:
-            logger.debug("_extract_service_from_message: MATCH ESATTO '%s'", name)
-            return svc
-        
-        # Match normalizzato (senza accenti)
-        if name_normalized in msg_normalized:
-            logger.debug("_extract_service_from_message: MATCH NORMALIZZATO '%s'", name)
-            return svc
-        
-        # Match per singole parole significative (es: "pulizia" + "viso")
-        name_words = [w for w in name_lower.split() if len(w) > 2]
-        if len(name_words) >= 2:
-            matches = sum(1 for w in name_words if w in msg_lower)
-            if matches >= 2:
-                logger.debug("_extract_service_from_message: MATCH PAROLE '%s' (%d/%d)", 
-                           name, matches, len(name_words))
-                return svc
-        
-        # Match per tag
-        tag = (svc.get('tag') or '').strip()
-        if tag and len(tag) > 2:
-            tag_lower = tag.lower()
-            if tag_lower in msg_lower:
-                logger.debug("_extract_service_from_message: MATCH TAG '%s'", tag)
-                return svc
-    
+        svc_data.append({
+            "svc": svc,
+            "name": name,
+            "name_lower": name.lower(),
+            "name_normalized": _normalize(name),
+            "name_words": [w for w in name.lower().split() if len(w) > 2],
+            "tag": (svc.get('tag') or '').strip().lower(),
+        })
+
+    # ── Pass 1: Match esatto nome completo (case-insensitive) ──
+    for sd in svc_data:
+        if sd["name_lower"] in msg_lower:
+            logger.debug("_extract_service_from_message: MATCH ESATTO '%s'", sd["name"])
+            return sd["svc"]
+
+    # ── Pass 2: Match normalizzato (senza accenti) ──
+    for sd in svc_data:
+        if sd["name_normalized"] in msg_normalized:
+            logger.debug("_extract_service_from_message: MATCH NORMALIZZATO '%s'", sd["name"])
+            return sd["svc"]
+
+    # ── Pass 3: Match per parole — TUTTE le parole significative devono essere presenti ──
+    # Per servizi con 4+ parole, tollera al massimo 1 parola mancante
+    best_word_match = None
+    best_word_ratio = 0
+    for sd in svc_data:
+        words = sd["name_words"]
+        if len(words) < 2:
+            continue
+        matches = sum(1 for w in words if w in msg_lower)
+        ratio = matches / len(words)
+        # Servizi 2-3 parole: richiede 100% (TUTTE le parole)
+        # Servizi 4+ parole: richiede almeno 75% (tollera 1 mancante)
+        min_ratio = 1.0 if len(words) <= 3 else 0.75
+        if matches >= 2 and ratio >= min_ratio and ratio > best_word_ratio:
+            best_word_ratio = ratio
+            best_word_match = sd
+    if best_word_match:
+        logger.debug("_extract_service_from_message: MATCH PAROLE '%s' (ratio=%.0f%%)",
+                     best_word_match["name"], best_word_ratio * 100)
+        return best_word_match["svc"]
+
+    # ── Pass 4: Match per tag, ma SOLO se almeno una parola chiave del nome (>3 char) è nel messaggio ──
+    for sd in svc_data:
+        tag = sd["tag"]
+        if not tag or len(tag) < 3:
+            continue
+        if tag in msg_lower:
+            # Validazione: almeno una parola distintiva del nome deve comparire nel messaggio
+            distinctive_words = [w for w in sd["name_words"] if len(w) > 3]
+            if any(w in msg_lower for w in distinctive_words):
+                logger.debug("_extract_service_from_message: MATCH TAG+NOME '%s' (tag='%s')",
+                             sd["name"], tag)
+                return sd["svc"]
+
     return None
 
 def _extract_operator_from_message(message: str, operators: list) -> Optional[dict]:
