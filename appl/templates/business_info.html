@@ -134,6 +134,18 @@
       <td><label for="vat_percentage">IVA (%)</label></td>
       <td><input type="number" step="0.01" min="0" max="100" id="vat_percentage" name="vat_percentage" value="{{ business_info.vat_percentage or 22.0 }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
     </tr>
+{% if current_user and current_user.ruolo.value in ['admin', 'owner'] %}
+    <tr>
+      <td><label for="printer_model">Modello Stampante Fiscale</label></td>
+      <td>
+        <select id="printer_model" name="printer_model" style="min-width: 250px;">
+          <option value="rch_print_rt" {% if business_info and business_info.printer_model == 'rch_print_rt' %}selected{% endif %}>RCH Print 3.0 RT</option>
+          <option value="rch_print_f" {% if business_info and business_info.printer_model == 'rch_print_f' %}selected{% endif %}>RCH Print F</option>
+        </select>
+        <span id="printerModelStatus" style="margin-left:8px; font-size:0.9em; color:#666;"></span>
+      </td>
+    </tr>
+{% endif %}
 {% if not config.get('HIDE_PRINTER_IP') %}
     <tr>
       <td><label for="printer_ip">IP Stampante Fiscale</label></td>
@@ -429,6 +441,46 @@ function applyUpdateAutomatic() {
 {% endif %}
 </script>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var printerModelSelect = document.getElementById('printer_model');
+    var printerModelStatus = document.getElementById('printerModelStatus');
+    if (printerModelSelect && printerModelStatus) {
+        printerModelSelect.addEventListener('change', function() {
+            var value = printerModelSelect.value;
+            printerModelStatus.style.color = '#666';
+            printerModelStatus.textContent = 'Salvataggio...';
+
+            var token = (document.querySelector('input[name="csrf_token"]') || {}).value || '';
+
+            fetch("{{ url_for('settings.save_printer_model') }}", {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': token
+                },
+                body: JSON.stringify({ printer_model: value })
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    printerModelStatus.style.color = '#28a745';
+                    printerModelStatus.textContent = 'Salvato!';
+                    setTimeout(function() { printerModelStatus.textContent = ''; }, 2000);
+                } else {
+                    printerModelStatus.style.color = '#dc3545';
+                    printerModelStatus.textContent = data.error || 'Errore nel salvataggio';
+                }
+            })
+            .catch(function() {
+                printerModelStatus.style.color = '#dc3545';
+                printerModelStatus.textContent = 'Errore di connessione';
+            });
+        });
+    }
+});
+</script>
 <script>
   // Inizializza checkbox da localStorage e salva alla modifica
   (function(){

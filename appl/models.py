@@ -47,6 +47,10 @@ class PacchettoTipo(PyEnum):
     Servizi = "servizi"        # Pacchetto classico con sedute
     Prepagata = "prepagata"    # Carta prepagata/Gift Card
 
+class PrinterModel(PyEnum):
+    RCH_PRINT_RT = "rch_print_rt"    # RCH Print 3.0 RT (HTTPS, application/xml)
+    RCH_PRINT_F = "rch_print_f"      # RCH Print F (HTTP, text/xml)
+
 class User(db.Model):
     __tablename__ = 'utenti'
     id = db.Column(db.Integer, primary_key=True)
@@ -267,6 +271,11 @@ class BusinessInfo(db.Model):
     is_deleted = db.Column(Boolean, default=False)
     vat_percentage = db.Column(db.Float, default=22.0)  # IVA di default al 22%
     printer_ip = db.Column(db.String(64), default="192.168.1.155")
+    printer_model = db.Column(
+        db.String(30),
+        nullable=False,
+        default=PrinterModel.RCH_PRINT_RT.value
+    )
     whatsapp_modal_disable = db.Column(db.Boolean, default=False)
     whatsapp_message = db.Column(db.Text, nullable=True)
     whatsapp_message_auto = db.Column(db.Text) 
