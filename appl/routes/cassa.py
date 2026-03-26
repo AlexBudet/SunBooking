@@ -19,6 +19,7 @@ def _rch_url(ip: str, model: str = None) -> str:
     - RCH Print 3.0 RT: HTTPS + /service.cgi
     - RCH Print F: HTTP + /service.cgi
     """
+    model = _normalize_model(model)
     if model == PrinterModel.RCH_PRINT_F.value:
         return f"http://{ip}/service.cgi"
     return f"https://{ip}/service.cgi"
@@ -28,6 +29,7 @@ def _rch_headers(model: str = None) -> dict:
     - RCH Print 3.0 RT: application/xml
     - RCH Print F: text/xml; charset=UTF-8
     """
+    model = _normalize_model(model)
     if model == PrinterModel.RCH_PRINT_F.value:
         return {"Content-Type": "text/xml; charset=UTF-8"}
     return {"Content-Type": "application/xml"}
@@ -38,6 +40,7 @@ def _rch_verify_ssl(model: str = None):
     - RCH Print F: None (HTTP, parametro non necessario)
     Ritorna False per RT, None per Print F.
     """
+    model = _normalize_model(model)
     if model == PrinterModel.RCH_PRINT_F.value:
         return None
     return False
@@ -47,6 +50,7 @@ def _rch_chiusura_headers(model: str = None) -> dict:
     - RCH Print F: application/x-www-form-urlencoded (storicamente funzionante)
     - RCH Print 3.0 RT: application/xml (come per gli altri comandi)
     """
+    model = _normalize_model(model)
     if model == PrinterModel.RCH_PRINT_F.value:
         return {"Content-Type": "application/x-www-form-urlencoded"}
     return {"Content-Type": "application/xml"}
@@ -56,6 +60,7 @@ def _rch_dgfe_headers(model: str = None) -> dict:
     - RCH Print F: text/xml; charset=iso-8859-1
     - RCH Print 3.0 RT: application/xml
     """
+    model = _normalize_model(model)
     if model == PrinterModel.RCH_PRINT_F.value:
         return {'Content-Type': 'text/xml; charset=iso-8859-1'}
     return {"Content-Type": "application/xml"}
@@ -65,17 +70,42 @@ def _rch_request_kwargs(model: str = None) -> dict:
     - RCH Print 3.0 RT: verify=False (HTTPS self-signed)
     - RCH Print F: niente (HTTP puro, nessun verify necessario)
     """
+    model = _normalize_model(model)
     if model == PrinterModel.RCH_PRINT_F.value:
         return {}
     return {"verify": False}
 
+def _normalize_model(model_raw) -> str:
+    """Normalizza il valore printer_model a stringa canonica."""
+    if model_raw is None:
+        return PrinterModel.RCH_PRINT_RT.value
+    if hasattr(model_raw, 'value'):
+        model_raw = model_raw.value
+    s = str(model_raw).strip().lower()
+    if s in ('rch_print_f', 'printermodel.rch_print_f', 'print_f', 'print f'):
+        return PrinterModel.RCH_PRINT_F.value
+    return PrinterModel.RCH_PRINT_RT.value
+
 def _get_printer_config():
-    """Ritorna (ip, model) dalla BusinessInfo corrente."""
-    business = BusinessInfo.query.first()
-    if not business or not business.printer_ip:
+    """Ritorna (ip, model) dalla BusinessInfo corrente.
+    Usa expire_all + query fresca per garantire lettura dal DB reale,
+    mai dalla identity map cached di SQLAlchemy.
+    """
+    db.session.expire_all()
+    row = db.session.execute(
+        text("SELECT id, printer_ip, printer_model FROM business_info WHERE is_deleted = false ORDER BY id ASC LIMIT 1")
+    ).fetchone()
+    if not row:
         return None, None
-    model = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
-    return business.printer_ip, model
+    ip = (row[1] or '').strip()
+    if not ip:
+        return None, None
+    model = _normalize_model(row[2])
+    current_app.logger.debug(
+        "_get_printer_config: id=%s, ip=%s, raw_model=%r, model=%s",
+        row[0], ip, row[2], model
+    )
+    return ip, model
 
 def clean_str(s):
     # Rimuove apostrofi e caratteri HTML problematici
@@ -325,7 +355,7 @@ def cassa():
             operator_name = f"{op.user_nome} {op.user_cognome}"
 
     giorno = date.today()
-    businessinfo = db.session.get(BusinessInfo, 1)
+    businessinfo = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
 
     # Aggiungi ruolo utente per mostrare/nascondere console RCH
     user_id = session.get("user_id")
@@ -1736,10 +1766,9 @@ def rch_retry():
     if not pending:
         return jsonify({"error": "Pending non trovato"}), 404
 
-    business = BusinessInfo.query.first()
-    if not business or not business.printer_ip:
+    ip, _ = _get_printer_config()
+    if not ip:
         return jsonify({"error": "IP stampante RCH non configurato"}), 400
-    ip = business.printer_ip
 
     try:
         expected_total = float(pending.get("expected_total")) \
@@ -1792,7 +1821,7 @@ def rch_retry():
         return jsonify({"pending": True, "retry_after": 6}), 202
 
     # Lettura progressivo ufficiale lastDocF/lastZ
-    _, printer_model = _get_printer_config()
+    ip, printer_model = _get_printer_config()
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
     rch_kwargs = _rch_request_kwargs(printer_model)
@@ -1865,12 +1894,10 @@ def rch_retry():
 @cassa_bp.route('/cassa/rch-console/status', methods=['GET'])
 def rch_console_status():
     """Query stato stampante RCH"""
-    business = BusinessInfo.query.first()
-    if not business or not business.printer_ip:
+    ip, printer_model = _get_printer_config()
+    if not ip:
         return jsonify({"error": "IP stampante non configurato"}), 400
     
-    ip = business.printer_ip
-    printer_model = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
     rch_kwargs = _rch_request_kwargs(printer_model)
@@ -1889,6 +1916,8 @@ def rch_console_status():
         
         result = {
             "printer_ip": ip,
+            "printer_model": printer_model,
+            "printer_url": url,
             "status": "ok",
             "error_code": None,
             "error_message": None,
@@ -1932,12 +1961,10 @@ def rch_console_status():
 @cassa_bp.route('/cassa/rch-console/send-cl', methods=['POST'])
 def rch_console_send_cl():
     """Invia comando CL (C3 + C1) - equivale a premere tasto CL"""
-    business = BusinessInfo.query.first()
-    if not business or not business.printer_ip:
+    ip, printer_model = _get_printer_config()
+    if not ip:
         return jsonify({"error": "IP stampante non configurato"}), 400
     
-    ip = business.printer_ip
-    printer_model = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
     rch_kwargs = _rch_request_kwargs(printer_model)
@@ -1962,12 +1989,10 @@ def rch_console_send_cl():
 @cassa_bp.route('/cassa/rch-console/full-reset', methods=['POST'])
 def rch_console_full_reset():
     """Reset completo: C99 → C10 → C3 → T5/$0 → C3 → C1"""
-    business = BusinessInfo.query.first()
-    if not business or not business.printer_ip:
+    ip, printer_model = _get_printer_config()
+    if not ip:
         return jsonify({"error": "IP stampante non configurato"}), 400
     
-    ip = business.printer_ip
-    printer_model = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
     rch_kwargs = _rch_request_kwargs(printer_model)
@@ -1996,12 +2021,10 @@ def rch_console_close_document():
     importo = float(data.get("importo", 0))
     metodo = data.get("metodo", "contanti")
     
-    business = BusinessInfo.query.first()
-    if not business or not business.printer_ip:
+    ip, printer_model = _get_printer_config()
+    if not ip:
         return jsonify({"error": "IP stampante non configurato"}), 400
     
-    ip = business.printer_ip
-    printer_model = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
     rch_kwargs = _rch_request_kwargs(printer_model)
@@ -2048,21 +2071,18 @@ def rch_console_send_raw():
     
     # Aggiungi = se non presente
     # Il prefisso > è supportato solo su RCH Print 3.0 RT
-    business = BusinessInfo.query.first()
-    pm = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
-    if pm == PrinterModel.RCH_PRINT_RT.value:
+    ip, printer_model = _get_printer_config()
+    if not ip:
+        return jsonify({"error": "IP stampante non configurato"}), 400
+    
+    # Il prefisso > è supportato solo su RCH Print 3.0 RT
+    if printer_model == PrinterModel.RCH_PRINT_RT.value:
         if not command.startswith("=") and not command.startswith(">"):
             command = "=" + command
     else:
         if not command.startswith("="):
             command = "=" + command
     
-    business = BusinessInfo.query.first()
-    if not business or not business.printer_ip:
-        return jsonify({"error": "IP stampante non configurato"}), 400
-    
-    ip = business.printer_ip
-    printer_model = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
     rch_kwargs = _rch_request_kwargs(printer_model)
