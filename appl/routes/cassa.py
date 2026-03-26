@@ -17,10 +17,10 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 def _rch_url(ip: str, model: str = None) -> str:
     """Costruisce URL per la stampante RCH in base al modello.
     - RCH Print 3.0 RT: HTTPS + /service.cgi
-    - RCH Print F: HTTP + /cgi-bin/fpmate.cgi
+    - RCH Print F: HTTP + /service.cgi
     """
     if model == PrinterModel.RCH_PRINT_F.value:
-        return f"http://{ip}/cgi-bin/fpmate.cgi"
+        return f"http://{ip}/service.cgi"
     return f"https://{ip}/service.cgi"
 
 def _rch_headers(model: str = None) -> dict:
@@ -32,14 +32,42 @@ def _rch_headers(model: str = None) -> dict:
         return {"Content-Type": "text/xml; charset=UTF-8"}
     return {"Content-Type": "application/xml"}
 
-def _rch_verify_ssl(model: str = None) -> bool:
-    """Se verificare il certificato SSL.
-    - RCH Print 3.0 RT: False (self-signed)
-    - RCH Print F: True (HTTP, non serve)
+def _rch_verify_ssl(model: str = None):
+    """Parametro verify per requests.
+    - RCH Print 3.0 RT: False (HTTPS self-signed, disabilita verifica)
+    - RCH Print F: None (HTTP, parametro non necessario)
+    Ritorna False per RT, None per Print F.
     """
     if model == PrinterModel.RCH_PRINT_F.value:
-        return True
+        return None
     return False
+
+def _rch_chiusura_headers(model: str = None) -> dict:
+    """Header speciali per la chiusura giornaliera.
+    - RCH Print F: application/x-www-form-urlencoded (storicamente funzionante)
+    - RCH Print 3.0 RT: application/xml (come per gli altri comandi)
+    """
+    if model == PrinterModel.RCH_PRINT_F.value:
+        return {"Content-Type": "application/x-www-form-urlencoded"}
+    return {"Content-Type": "application/xml"}
+
+def _rch_dgfe_headers(model: str = None) -> dict:
+    """Header per lettura DGFE.
+    - RCH Print F: text/xml; charset=iso-8859-1
+    - RCH Print 3.0 RT: application/xml
+    """
+    if model == PrinterModel.RCH_PRINT_F.value:
+        return {'Content-Type': 'text/xml; charset=iso-8859-1'}
+    return {"Content-Type": "application/xml"}
+
+def _rch_request_kwargs(model: str = None) -> dict:
+    """Keyword arguments extra per requests.post() in base al modello.
+    - RCH Print 3.0 RT: verify=False (HTTPS self-signed)
+    - RCH Print F: niente (HTTP puro, nessun verify necessario)
+    """
+    if model == PrinterModel.RCH_PRINT_F.value:
+        return {}
+    return {"verify": False}
 
 def _get_printer_config():
     """Ritorna (ip, model) dalla BusinessInfo corrente."""
@@ -631,12 +659,12 @@ def send_to_rch():
             return jsonify({"error": "IP stampante RCH non configurato"}), 400
         url = _rch_url(ip, printer_model)
         headers = _rch_headers(printer_model)
-        verify_ssl = _rch_verify_ssl(printer_model)
+        rch_kwargs = _rch_request_kwargs(printer_model)
 
         try:
             resp_vendita = requests.post(
                 url, data=payload_vendita.encode("UTF-8"), headers=headers, timeout=120,
-                verify=verify_ssl
+                **rch_kwargs
             )
             current_app.logger.info("RCH risposta: %s", resp_vendita.text[:300] if resp_vendita.text else "(vuoto)")
         except requests.exceptions.Timeout as exc:
@@ -723,7 +751,7 @@ def send_to_rch():
             for _ in range(6):
                 pytime.sleep(0.5)
                 resp = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=5,
-                                     verify=verify_ssl)
+                                     **rch_kwargs)
                 m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp.text) or
                          re.search(r'<C453[^>]*>(\d+)</C453>', resp.text) or
                          re.search(r'<result>(\d+)</result>', resp.text))
@@ -1180,8 +1208,8 @@ def chiusura_giornaliera():
         return jsonify({"error": "IP stampante RCH non configurato"}), 400
 
     url = _rch_url(ip, printer_model)
-    headers = _rch_headers(printer_model)
-    verify_ssl = _rch_verify_ssl(printer_model)
+    headers = _rch_chiusura_headers(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
 
     xml_payload = """<?xml version="1.0" encoding="UTF-8"?>
 <Service>
@@ -1193,7 +1221,7 @@ def chiusura_giornaliera():
 
     try:
         resp = requests.post(url, data=xml_payload.encode("UTF-8"), headers=headers, timeout=45,
-                             verify=verify_ssl)
+                             **rch_kwargs)
         body = resp.text or ""
         masked = re.sub(r'([A-Za-z0-9_\-]{8,})', '[REDACTED]', body)
         current_app.logger.debug("Chiusura giornaliera raw (masked): %s", masked[:4000])
@@ -1220,7 +1248,7 @@ def chiusura_giornaliera():
         try:
             unlock = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C1</cmd></Service>'
             requests.post(url, data=unlock.encode("UTF-8"), headers=headers, timeout=8,
-                          verify=verify_ssl)
+                          **rch_kwargs)
         except Exception:
             pass
         current_app.logger.error("Chiusura giornaliera: codici fatali rilevati: %s", sorted(fatali))
@@ -1232,7 +1260,7 @@ def chiusura_giornaliera():
         try:
             unlock = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C1</cmd></Service>'
             requests.post(url, data=unlock.encode("UTF-8"), headers=headers, timeout=8,
-                          verify=verify_ssl)
+                          **rch_kwargs)
         except Exception:
             pass
         return jsonify({"error": "Errore di comunicazione con la stampante fiscale."}), 502
@@ -1259,15 +1287,16 @@ def api_dgfe():
 
     _, printer_model = _get_printer_config()
     url = _rch_url(ip, printer_model)
-    headers = _rch_headers(printer_model)
-    verify_ssl = _rch_verify_ssl(printer_model)
+    headers = _rch_dgfe_headers(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
     timeout_short = 5
     timeout_mid = 10
 
     try:
         with requests.Session() as s:
             s.headers.update({'Connection': 'close'})
-            s.verify = verify_ssl
+            if 'verify' in rch_kwargs:
+                s.verify = rch_kwargs['verify']
             xml_c3 = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C3</cmd></Service>'
             s.post(url, data=xml_c3.encode('iso-8859-1'), headers=headers, timeout=timeout_short, allow_redirects=False)
 
@@ -1385,10 +1414,10 @@ def annulla_ultimo_scontrino():
         return jsonify({"error": "IP stampante RCH non configurato"}), 400
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
-    verify_ssl = _rch_verify_ssl(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
     try:
         resp = requests.post(url, data=xml.encode("UTF-8"), headers=headers, timeout=10,
-                             verify=verify_ssl)
+                             **rch_kwargs)
         numero_progressivo = None
         numero_z = None
         for cmd in ("=C453/$0", "=DGFE/REG"):
@@ -1396,7 +1425,7 @@ def annulla_ultimo_scontrino():
             for _ in range(6):
                 pytime.sleep(0.5)
                 resp2 = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=5,
-                                      verify=verify_ssl)
+                                      **rch_kwargs)
                 m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp2.text) or
                         re.search(r'<C453[^>]*>(\d+)</C453>', resp2.text) or
                         re.search(r'<result>(\d+)</result>', resp2.text))
@@ -1525,11 +1554,11 @@ def stornare_scontrino_specifico(scontrino):
     
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
-    verify_ssl = _rch_verify_ssl(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
     
     try:
         resp = requests.post(url, data=xml.encode("UTF-8"), headers=headers, timeout=None,
-                             verify=verify_ssl)
+                             **rch_kwargs)
         current_app.logger.info("Risposta RCH storno: %s", resp.text)
         
         # Leggi nuovo progressivo post-storno (come in annulla_ultimo_scontrino)
@@ -1540,7 +1569,7 @@ def stornare_scontrino_specifico(scontrino):
             for _ in range(6):
                 pytime.sleep(0.5)
                 resp2 = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=None,
-                                      verify=verify_ssl)
+                                      **rch_kwargs)
                 m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp2.text) or
                          re.search(r'<C453[^>]*>(\d+)</C453>', resp2.text) or
                          re.search(r'<result>(\d+)</result>', resp2.text))
@@ -1614,11 +1643,12 @@ def _dgfe_entries_for_date(ip: str, day: date):
     try:
         _, printer_model = _get_printer_config()
         url = _rch_url(ip, printer_model)
-        headers = _rch_headers(printer_model)
-        verify_ssl = _rch_verify_ssl(printer_model)
+        headers = _rch_dgfe_headers(printer_model)
+        rch_kwargs = _rch_request_kwargs(printer_model)
         with requests.Session() as s:
             s.headers.update({'Connection': 'close'})
-            s.verify = verify_ssl
+            if 'verify' in rch_kwargs:
+                s.verify = rch_kwargs['verify']
             xml_c3 = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C3</cmd></Service>'
             s.post(url, data=xml_c3.encode('iso-8859-1'), headers=headers, timeout=5, allow_redirects=False)
             d_str = day.strftime('%d%m%y')
@@ -1765,7 +1795,7 @@ def rch_retry():
     _, printer_model = _get_printer_config()
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
-    verify_ssl = _rch_verify_ssl(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
     numero_progressivo = None
     numero_z = None
     for cmd in ("=C453/$0", "=DGFE/REG"):
@@ -1774,7 +1804,7 @@ def rch_retry():
             pytime.sleep(0.5)
             try:
                 resp = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=6,
-                                     verify=verify_ssl)
+                                     **rch_kwargs)
             except Exception:
                 continue
             m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp.text) or
@@ -1843,7 +1873,7 @@ def rch_console_status():
     printer_model = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
-    verify_ssl = _rch_verify_ssl(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
     
     # Codici RCH che indicano stato OK (non errore)
     # 0 = OK, 20 = Idle/pronta, 99 = operazione completata
@@ -1855,7 +1885,7 @@ def rch_console_status():
         # Query stato con C453
         payload = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C453/$0</cmd></Service>'
         resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=8,
-                             verify=verify_ssl)
+                             **rch_kwargs)
         
         result = {
             "printer_ip": ip,
@@ -1910,7 +1940,7 @@ def rch_console_send_cl():
     printer_model = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
-    verify_ssl = _rch_verify_ssl(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
     
     results = []
     commands = ["=C3", "=C1"]
@@ -1919,7 +1949,7 @@ def rch_console_send_cl():
         try:
             payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
             resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=10,
-                                 verify=verify_ssl)
+                                 **rch_kwargs)
             success = '<errorCode>0</errorCode>' in resp.text or resp.status_code == 200
             results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
             pytime.sleep(0.3)
@@ -1940,7 +1970,7 @@ def rch_console_full_reset():
     printer_model = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
-    verify_ssl = _rch_verify_ssl(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
     
     results = []
     commands = ["=C99", "=C10", "=C3", "=T5/$0", "=C3", "=C1"]
@@ -1949,7 +1979,7 @@ def rch_console_full_reset():
         try:
             payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
             resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
-                                 verify=verify_ssl)
+                                 **rch_kwargs)
             success = '<errorCode>0</errorCode>' in resp.text or resp.status_code == 200
             results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
             pytime.sleep(0.5)
@@ -1974,7 +2004,7 @@ def rch_console_close_document():
     printer_model = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
-    verify_ssl = _rch_verify_ssl(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
     
     results = []
     
@@ -1996,7 +2026,7 @@ def rch_console_close_document():
         try:
             payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
             resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
-                                 verify=verify_ssl)
+                                 **rch_kwargs)
             success = '<errorCode>0</errorCode>' in resp.text or resp.status_code == 200
             results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
             pytime.sleep(0.3)
@@ -2016,9 +2046,16 @@ def rch_console_send_raw():
     if not command:
         return jsonify({"error": "Comando vuoto"}), 400
     
-    # Aggiungi = se non presente (ma NON se inizia con > che è un comando valido RCH)
-    if not command.startswith("=") and not command.startswith(">"):
-        command = "=" + command
+    # Aggiungi = se non presente
+    # Il prefisso > è supportato solo su RCH Print 3.0 RT
+    business = BusinessInfo.query.first()
+    pm = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
+    if pm == PrinterModel.RCH_PRINT_RT.value:
+        if not command.startswith("=") and not command.startswith(">"):
+            command = "=" + command
+    else:
+        if not command.startswith("="):
+            command = "=" + command
     
     business = BusinessInfo.query.first()
     if not business or not business.printer_ip:
@@ -2028,12 +2065,12 @@ def rch_console_send_raw():
     printer_model = getattr(business, 'printer_model', PrinterModel.RCH_PRINT_RT.value) or PrinterModel.RCH_PRINT_RT.value
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
-    verify_ssl = _rch_verify_ssl(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
     
     try:
         payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{command}</cmd></Service>'
         resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
-                             verify=verify_ssl)
+                             **rch_kwargs)
         
         m_err = re.search(r'<errorCode>(\d+)</errorCode>', resp.text)
         error_code = int(m_err.group(1)) if m_err else None
