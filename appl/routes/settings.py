@@ -323,6 +323,35 @@ def set_logo_visibility():
         current_app.logger.error("Errore set_logo_visibility: %s", str(e))
         return jsonify({"ok": False, "error": str(e)}), 500
 
+@settings_bp.route('/settings/save-printer-model', methods=['POST'])
+def save_printer_model():
+    """Salva il modello della stampante fiscale (solo admin/owner)."""
+    try:
+        user_id = session.get('user_id')
+        current_user = db.session.get(User, user_id) if user_id else None
+        if not current_user or current_user.ruolo.value not in ['admin', 'owner']:
+            return jsonify({"ok": False, "error": "Non autorizzato"}), 403
+
+        data = request.get_json(silent=True) or {}
+        printer_model = data.get('printer_model', '').strip()
+
+        valid_models = ['rch_print_rt', 'rch_print_f']
+        if printer_model not in valid_models:
+            return jsonify({"ok": False, "error": "Modello non valido"}), 400
+
+        business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+        if not business_info:
+            return jsonify({"ok": False, "error": "BusinessInfo non trovato"}), 404
+
+        business_info.printer_model = printer_model
+        db.session.commit()
+
+        current_app.logger.info("Modello stampante aggiornato a: %s", printer_model)
+        return jsonify({"ok": True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error("Errore save_printer_model: %s", str(e))
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @settings_bp.route('/settings/business-info', methods=['GET'])
 def business_info():
@@ -360,6 +389,11 @@ def set_business_info():
             business_info.vat_percentage = 22.0
 
         business_info.rch_serial = request.form.get('rch_serial')
+
+        # Modello stampante fiscale (se presente nel form)
+        printer_model_val = request.form.get('printer_model')
+        if printer_model_val and printer_model_val in ('rch_print_rt', 'rch_print_f'):
+            business_info.printer_model = printer_model_val
 
         # Orari e giorni di chiusura (se presenti nel form)
         open_time_str = request.form.get('opening_time', '08:00')
