@@ -379,7 +379,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         statusHtml = docAlert +
           '<div class="alert alert-' + statusColor + ' py-1 mb-0 small">' +
-          '<b>IP:</b> ' + data.printer_ip + ' | <b>Stato:</b> ' + statusText +
+          '<b>Modello:</b> ' + (data.printer_model === 'rch_print_f' ? 'RCH Print F (HTTP)' : 'RCH Print 3.0 RT (HTTPS)') +
+          ' | <b>IP:</b> ' + data.printer_ip + ' | <b>Stato:</b> ' + statusText +
           (data.last_z !== null ? ' | <b>Z:</b>' + data.last_z : '') +
           (data.last_doc !== null ? ' <b>Doc:</b>' + data.last_doc : '') +
           '</div>';
