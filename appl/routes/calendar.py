@@ -1,6 +1,6 @@
 # appl/routes/calendar.py
 from collections import defaultdict
-from flask import Blueprint, make_response, session, render_template, request, redirect, url_for, jsonify, flash, abort
+from flask import Blueprint, logging, make_response, session, render_template, request, redirect, url_for, jsonify, flash, abort
 from flask_caching import Cache
 from sqlalchemy.orm import joinedload
 from datetime import time as dtime
@@ -2585,8 +2585,8 @@ def ai_query():
     message = (data.get('message') or '').strip()
 
     # ── LOG TEMPORANEO DEBUG ──
-    import logging as _log
-    _dbg = _log.getLogger('AI_DEBUG')
+    import logging
+    _dbg = logging.getLogger('AI_DEBUG')
     _dbg.warning("=== AI QUERY DEBUG ===")
     _dbg.warning("message: %r", message)
     
@@ -2602,6 +2602,13 @@ def ai_query():
         return jsonify({'error': 'message_too_long'}), 400
 
     client_search = (data.get('client_search') or '').strip() or None
+
+    # Storico conversazione dalla sessione chat (per contesto multi-turno)
+    chat_history = data.get('chat_history') or []
+    if not isinstance(chat_history, list):
+        chat_history = []
+    # Limita a ultimi 10 messaggi per evitare payload troppo grandi
+    chat_history = chat_history[-10:]
 
     # Validazione formato data YYYY-MM-DD
     query_date = (data.get('query_date') or '').strip() or None
