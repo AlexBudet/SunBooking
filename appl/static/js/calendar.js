@@ -11736,6 +11736,8 @@ document.addEventListener('click', function(e) {
     csrfToken:   '',
     baseUrl:     '',
     pendingSlot: null,
+    pendingContext: {},  // contesto per disambiguazione (servizio/cliente da messaggio originale)
+    pendingDisambiguation: null,  // { type: 'service', selectedServiceId: ..., originalMessage: '...' }
   };
 
   let elBadge, elModal, elMessages, elInput, elSendBtn,
@@ -12638,7 +12640,7 @@ function fmtDateIT(isoDate) {
         (slot.service_name  ? ` · ${slot.service_name}`         : '') + '.'
       );
 
-      // ── WhatsApp ──
+      // ── WhatsApp (con modal di conferma, come per gli appuntamenti da modal) ──
       if (slot.client_cellulare && client_id) {
         const apptCompat = {
           id:               data.id,
@@ -12666,7 +12668,15 @@ function fmtDateIT(isoDate) {
           servizi:        slot.service_name ? [slot.service_name] : [],
         };
         try {
-          if (typeof inviaWhatsappAutoSeRichiesto === 'function') {
+          // Usa chiediInvioWhatsappNavigator (popup fixed) perché il pannello AI
+          // non è un modal Bootstrap e chiediInvioWhatsappAuto non trova il modal-body
+          let inviaWA = false;
+          if (typeof chiediInvioWhatsappNavigator === 'function') {
+            inviaWA = await chiediInvioWhatsappNavigator();
+          } else if (typeof chiediInvioWhatsappAuto === 'function') {
+            inviaWA = await chiediInvioWhatsappAuto();
+          }
+          if (inviaWA === true && typeof inviaWhatsappAutoSeRichiesto === 'function') {
             await inviaWhatsappAutoSeRichiesto(apptCompat, waData, AI.csrfToken);
           }
         } catch (waErr) {
@@ -12732,8 +12742,12 @@ function fmtDateIT(isoDate) {
     elSendBtn.disabled = true;
     elInput.disabled   = true;
 
+    // Controlla se stiamo facendo un replay da disambiguazione servizio
+    var isServiceReplay = Boolean(AI._pendingServiceId);
+
     // Salva l'ultimo messaggio utente per eventuale replay con disambiguazione
-    if (!overrideClientId) {
+    // Non sovrascrivere se stiamo facendo un replay (overrideClientId o service disambig)
+    if (!overrideClientId && !isServiceReplay) {
       AI._lastUserMessage = message.trim();
     }
 
@@ -12749,6 +12763,26 @@ function fmtDateIT(isoDate) {
     // Se è stato selezionato un cliente specifico dalla disambiguazione, forzalo nel payload
     if (overrideClientId) {
       payload.client_id = overrideClientId;
+    }
+
+    // Invia chat_history al backend (ultimi 10 messaggi)
+    if (AI.chatHistory.length > 0) {
+      payload.chat_history = AI.chatHistory.slice(-10).map(function(msg) {
+        return { role: msg.role === 'error' ? 'assistant' : msg.role, content: msg.content };
+      });
+    }
+
+    // Se c'è un service_id pendente dalla disambiguazione servizio, invialo
+    if (AI._pendingServiceId) {
+      payload.service_id = AI._pendingServiceId;
+      AI._pendingServiceId = null;
+    }
+
+    // Fallback: vecchio meccanismo pendingDisambiguation (se ancora usato altrove)
+    if (!payload.service_id && AI.pendingDisambiguation && AI.pendingDisambiguation.type === 'service' && AI.pendingDisambiguation.selectedServiceId) {
+      payload.service_id = AI.pendingDisambiguation.selectedServiceId;
+      payload.original_message = AI.pendingDisambiguation.originalMessage || message.trim();
+      AI.pendingDisambiguation = null;
     }
 
     const dateMatch = message.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
@@ -12785,6 +12819,82 @@ function fmtDateIT(isoDate) {
       console.log('[AI] intent:', data.intent,
                   'appointments:', Array.isArray(data.appointments) ? data.appointments.length : 'ASSENTE',
                   'client_resolved:', data.client_resolved ? data.client_resolved.nome : 'null');
+
+      // ── DISAMBIGUAZIONE SERVIZI: intercetta intent disambigua_servizio dal backend ──
+      if (data.intent === 'disambigua_servizio' && Array.isArray(data.buttons) && data.buttons.length > 1) {
+        var svcAnswer = data.answer || 'Ho trovato più servizi corrispondenti. Quale intendi?';
+        appendMessage('assistant', svcAnswer);
+
+        // Salva il contesto del messaggio originale per il replay
+        var originalMsg = data.original_message || AI._lastUserMessage || message.trim();
+
+        // Costruisci i bottoni per la selezione del servizio
+        var svcWrap = document.createElement('div');
+        svcWrap.style.cssText = 'margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;';
+
+        data.buttons.forEach(function(svc) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.style.cssText = [
+            'padding:8px 16px',
+            'border:1px solid #d0c8ff',
+            'border-radius:10px',
+            'background:#fdf8fb',
+            'color:#6c47ff',
+            'font-size:0.88rem',
+            'font-weight:600',
+            'cursor:pointer',
+            'transition:all 0.15s ease'
+          ].join(';');
+
+          var svcName = svc.label || svc.service_name || '—';
+          var svcDuration = svc.duration || '';
+          btn.textContent = svcName + (svcDuration ? ' (' + svcDuration + ' min)' : '');
+
+          btn.addEventListener('mouseenter', function() {
+            btn.style.background = '#ede6ff';
+            btn.style.borderColor = '#6c47ff';
+            btn.style.boxShadow = '0 2px 8px rgba(108,71,255,0.15)';
+          });
+          btn.addEventListener('mouseleave', function() {
+            btn.style.background = '#fdf8fb';
+            btn.style.borderColor = '#d0c8ff';
+            btn.style.boxShadow = 'none';
+          });
+
+          var svcId = svc.service_id || null;
+          btn.addEventListener('click', function() {
+            if (!svcId) return;
+
+            // Feedback visivo: disabilita tutti i bottoni
+            svcWrap.querySelectorAll('button').forEach(function(b) {
+              b.disabled = true;
+              b.style.opacity = '0.5';
+              b.style.pointerEvents = 'none';
+            });
+            btn.style.opacity = '1';
+            btn.style.background = '#e0d4ff';
+
+            // Mostra selezione
+            appendMessage('user', svcName);
+
+            // Rilancia la query originale con il service_id scelto
+            // Il messaggio originale contiene già "con Alma" e le altre info
+            var replayMsg = originalMsg;
+            // Salva il service_id scelto nel payload della prossima chiamata
+            AI._pendingServiceId = svcId;
+            sendQuery(replayMsg);
+          });
+
+          svcWrap.appendChild(btn);
+        });
+
+        elMessages.appendChild(svcWrap);
+        scrollToBottom();
+
+        // Esce dal flusso normale
+        return;
+      }
 
       // ── DISAMBIGUAZIONE: se il backend restituisce più clienti candidati ──
       // Controlla sia il campo "disambiguation_clients" che "ambiguous_clients"
@@ -12851,6 +12961,86 @@ function fmtDateIT(isoDate) {
             console.warn('[AI] disambiguazione fallback search failed:', searchErr);
           }
         }
+      }
+
+      // ── DISAMBIGUAZIONE SERVIZI: se il backend restituisce più servizi candidati ──
+      var disambServices = data.disambiguation_services || null;
+      if (Array.isArray(disambServices) && disambServices.length > 1) {
+        var svcAnswer = data.answer || 'Ho trovato più servizi corrispondenti. Quale intendi?';
+        appendMessage('assistant', svcAnswer);
+
+        // Costruisci i bottoni per la selezione del servizio
+        var svcWrap = document.createElement('div');
+        svcWrap.style.cssText = 'margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;';
+
+        disambServices.forEach(function(svc) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.style.cssText = [
+            'padding:8px 16px',
+            'border:1px solid #d0c8ff',
+            'border-radius:10px',
+            'background:#fdf8fb',
+            'color:#6c47ff',
+            'font-size:0.88rem',
+            'font-weight:600',
+            'cursor:pointer',
+            'transition:all 0.15s ease'
+          ].join(';');
+
+          var svcName = svc.name || svc.servizio_nome || svc.service_name || '—';
+          var svcDuration = svc.duration || svc.durata || '';
+          btn.textContent = svcName + (svcDuration ? ' (' + svcDuration + ' min)' : '');
+
+          btn.addEventListener('mouseenter', function() {
+            btn.style.background = '#ede6ff';
+            btn.style.borderColor = '#6c47ff';
+            btn.style.boxShadow = '0 2px 8px rgba(108,71,255,0.15)';
+          });
+          btn.addEventListener('mouseleave', function() {
+            btn.style.background = '#fdf8fb';
+            btn.style.borderColor = '#d0c8ff';
+            btn.style.boxShadow = 'none';
+          });
+
+          var svcId = svc.id || svc.service_id || null;
+          btn.addEventListener('click', function() {
+            if (!svcId) return;
+
+            // Feedback visivo: disabilita tutti i bottoni
+            svcWrap.querySelectorAll('button').forEach(function(b) {
+              b.disabled = true;
+              b.style.opacity = '0.5';
+              b.style.pointerEvents = 'none';
+            });
+            btn.style.opacity = '1';
+            btn.style.background = '#e0d4ff';
+
+            // Mostra messaggio di selezione
+            appendMessage('user', svcName);
+
+            // Salva la scelta nella disambiguazione pendente e rilancia la query
+            AI.pendingDisambiguation = {
+              type: 'service',
+              selectedServiceId: svcId,
+              originalMessage: AI._lastUserMessage || ''
+            };
+
+            // Rilancia la query originale con il service_id scelto
+            var lastMsg = AI._lastUserMessage || '';
+            if (lastMsg) {
+              sendQuery(lastMsg);
+            }
+          });
+
+          svcWrap.appendChild(btn);
+        });
+
+        elMessages.appendChild(svcWrap);
+        scrollToBottom();
+
+        // Esce dal flusso normale: non mostrare tabelle o slot
+        return;
       }
 
 let answerText = data.answer || 'Nessuna risposta ricevuta.';

@@ -19,6 +19,9 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# Cache thread-local per servizi ambigui (popolata da _extract_service_from_message)
+_ambiguous_services_cache: list = []
+
 # ──────────────────────────────────────────────
 # Config da .env (letta a ogni chiamata: compatibile con multi-tenant)
 # ──────────────────────────────────────────────
@@ -552,38 +555,89 @@ def _extract_service_from_message(message: str, services: list) -> Optional[dict
             logger.debug("_extract_service_from_message: MATCH NORMALIZZATO '%s'", sd["name"])
             return sd["svc"]
 
-    # ── Pass 3: Match per parole — TUTTE le parole significative devono essere presenti ──
-    # Per servizi con 4+ parole, tollera al massimo 1 parola mancante
-    best_word_match = None
-    best_word_ratio = 0
+    # ── Pass 3: Match per parole significative ──
+    # Servizi 2 parole: richiede 100% (tutte le parole)
+    # Servizi 3 parole: richiede 100% OPPURE 2/3 se le 2 parole matchate
+    #   sono un prefisso contiguo del nome (es: "pulizia viso" matcha
+    #   "Pulizia Viso Classica" ma "viso classica" da solo no)
+    # Servizi 4+ parole: richiede almeno 75%
+    # SE PIÙ servizi matchano con lo stesso score → disambiguazione
+    all_word_matches = []
     for sd in svc_data:
         words = sd["name_words"]
         if len(words) < 2:
             continue
-        matches = sum(1 for w in words if w in msg_lower)
+        matched_words = [w for w in words if w in msg_lower]
+        matches = len(matched_words)
         ratio = matches / len(words)
-        # Servizi 2-3 parole: richiede 100% (TUTTE le parole)
-        # Servizi 4+ parole: richiede almeno 75% (tollera 1 mancante)
-        min_ratio = 1.0 if len(words) <= 3 else 0.75
-        if matches >= 2 and ratio >= min_ratio and ratio > best_word_ratio:
-            best_word_ratio = ratio
-            best_word_match = sd
-    if best_word_match:
-        logger.debug("_extract_service_from_message: MATCH PAROLE '%s' (ratio=%.0f%%)",
-                     best_word_match["name"], best_word_ratio * 100)
-        return best_word_match["svc"]
 
-    # ── Pass 4: Match per tag, ma SOLO se almeno una parola chiave del nome (>3 char) è nel messaggio ──
+        accept = False
+        if len(words) == 2:
+            # 2 parole: richiede 100%
+            accept = (matches == 2)
+        elif len(words) == 3:
+            if matches == 3:
+                accept = True
+            elif matches == 2:
+                # Accetta 2/3 SOLO se le 2 parole matchate sono le prime 2
+                # del nome del servizio (prefisso contiguo).
+                if matched_words == words[:2]:
+                    accept = True
+        else:
+            # 4+ parole: almeno 75%
+            accept = (matches >= 2 and ratio >= 0.75)
+
+        if accept:
+            all_word_matches.append((matches, ratio, sd))
+
+    if all_word_matches:
+        # Ordina per score decrescente
+        all_word_matches.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        best_score = (all_word_matches[0][0], all_word_matches[0][1])
+        # Prendi tutti i servizi con lo stesso miglior score
+        top_matches = [sd for m, r, sd in all_word_matches if (m, r) == best_score]
+
+        if len(top_matches) == 1:
+            logger.debug("_extract_service_from_message: MATCH PAROLE '%s' (score=%d/%d)",
+                         top_matches[0]["name"], best_score[0],
+                         len(top_matches[0]["name_words"]))
+            return top_matches[0]["svc"]
+        else:
+            # Più servizi con stesso score → disambiguazione necessaria
+            # Salva i candidati nel thread-local per il chiamante
+            _ambiguous_services_cache.clear()
+            for sd in top_matches:
+                _ambiguous_services_cache.append(sd["svc"])
+            logger.warning("_extract_service_from_message: AMBIGUITÀ %d servizi con score %s: %r",
+                          len(top_matches), best_score,
+                          [sd["name"] for sd in top_matches])
+            return None
+
+    # ── Pass 4: Match per tag ──
+    # Il tag può essere multi-parola (es: "Pul Viso").
+    # Accetta se:
+    #   A) il tag intero è contenuto nel messaggio, OPPURE
+    #   B) TUTTE le parole del tag (>2 char) sono contenute nel messaggio
+    # In entrambi i casi, richiede anche almeno una parola distintiva del nome (>3 char).
     for sd in svc_data:
         tag = sd["tag"]
         if not tag or len(tag) < 3:
             continue
-        if tag in msg_lower:
-            # Validazione: almeno una parola distintiva del nome deve comparire nel messaggio
+
+        tag_words = [w for w in tag.split() if len(w) > 2]
+        tag_full_match = tag in msg_lower
+        tag_words_match = (
+            len(tag_words) >= 1
+            and all(w in msg_lower for w in tag_words)
+        )
+
+        if tag_full_match or tag_words_match:
+            # Validazione: almeno una parola distintiva del nome deve comparire
             distinctive_words = [w for w in sd["name_words"] if len(w) > 3]
             if any(w in msg_lower for w in distinctive_words):
-                logger.debug("_extract_service_from_message: MATCH TAG+NOME '%s' (tag='%s')",
-                             sd["name"], tag)
+                logger.debug("_extract_service_from_message: MATCH TAG+NOME '%s' (tag='%s', "
+                             "full=%s, words=%s)",
+                             sd["name"], tag, tag_full_match, tag_words_match)
                 return sd["svc"]
 
     return None
@@ -780,7 +834,8 @@ def _extract_date_from_message(message: str, reference_date: Optional[date] = No
 def _is_first_slot_request(message: str) -> bool:
     """
     Verifica se il messaggio chiede il PRIMO slot disponibile.
-    Pattern: "primo spazio", "primo buco", "prima disponibilità", "primo posto", ecc.
+    Pattern: "primo spazio", "primo buco", "prima disponibilità", "primo posto",
+    "prima pulizia viso disponibile", "trova primo/prima X disponibile", ecc.
     """
     msg_lower = message.lower()
     patterns = [
@@ -789,6 +844,12 @@ def _is_first_slot_request(message: str) -> bool:
         r"\bquando\s+(?:è|e|c['\u2019]?\s*è)\s+(?:il\s+)?prim[oa]\s+",
         r"\b(?:spazio|slot|buco|posto)\s+(?:più\s+)?prossim[oa]\b",
         r"\bprossim[oa]\s+(?:spazio|slot|buco|disponibilit[aà])\b",
+        # "prima/primo X disponibile" dove X è qualsiasi cosa (nome servizio)
+        r"\bprim[oa]\s+.{2,40}\s+disponibil[ei]\b",
+        # "trova/cerca il primo/prima X" (implicito: primo disponibile)
+        r"\b(?:trova|cerca|cercare|trovare|trovami|cercami)\s+(?:il\s+|la\s+|un\s+|una\s+)?prim[oa]\s+",
+        # "prossimo/prossima X disponibile"
+        r"\bprossim[oa]\s+.{2,40}\s+disponibil[ei]\b",
     ]
     return any(re.search(p, msg_lower) for p in patterns)
 
@@ -1481,18 +1542,30 @@ def process_ai_query(
 
     # ── 5. Servizio richiesto (opzionale) ────────────────────────
     service_context: dict = {}
+    _service_id_forced = False
     if service_id:
         service_context = next(
             (s for s in rag["services"] if s["id"] == service_id), {}
         )
-    # Se service_id non passato, cerca il servizio nel testo del messaggio
+        if service_context:
+            _service_id_forced = True
+            logger.warning("SERVIZIO FORZATO da service_id=%s: '%s' (durata=%s)",
+                          service_id, service_context.get('name'), service_context.get('duration'))
+    # Se service_id non passato (o non trovato), cerca il servizio nel testo del messaggio
     if not service_context:
+        _ambiguous_services_cache.clear()
         found_svc = _extract_service_from_message(user_message, rag["services"])
         if found_svc:
             service_context = found_svc
             service_id = found_svc.get("id")
             logger.warning("SERVIZIO estratto dal messaggio: '%s' (id=%s, durata=%s)", 
                           found_svc.get('name'), service_id, found_svc.get('duration'))
+        elif _ambiguous_services_cache:
+            # Servizio ambiguo: più servizi matchano → chiedi disambiguazione
+            logger.warning("SERVIZIO AMBIGUO: %d candidati: %r",
+                          len(_ambiguous_services_cache),
+                          [s.get('name') for s in _ambiguous_services_cache])
+            return _ambiguous_service_response(trace_id, _ambiguous_services_cache, user_message)
         else:
             logger.warning("SERVIZIO NON TROVATO nel messaggio. Servizi disponibili: %r",
                           [s.get('name') for s in rag.get("services", [])])
@@ -1914,24 +1987,66 @@ def _error_response(trace_id: str, msg: str) -> dict:
 
 
 def _ambiguous_client_response(trace_id: str, candidates: list) -> dict:
-    """Risposta quando la ricerca cliente è ambigua (più risultati)."""
+    """Risposta quando la ricerca cliente è ambigua (più risultati) — con bottoni."""
     nomi = [f"{c['nome']} {c['cognome']} ({c['cellulare']})" for c in candidates]
+    client_buttons = []
+    for c in candidates:
+        client_buttons.append({
+            "type": "client_select",
+            "label": f"{c.get('nome', '')} {c.get('cognome', '')} - {c.get('cellulare', '')}",
+            "client_id": c.get("id"),
+            "client_nome": c.get("nome", ""),
+            "client_cognome": c.get("cognome", ""),
+            "client_cellulare": c.get("cellulare", ""),
+        })
     return {
-        "intent":          "storico_cliente",
+        "intent":          "disambigua_cliente",
         "answer":          (
             f"Ho trovato {len(candidates)} clienti con questo nome. "
-            f"Puoi specificare il numero di cellulare?\n"
-            + "\n".join(f"• {n}" for n in nomi)
+            f"Quale intendi?"
         ),
         "data_points":     [],
         "suggested_slots": [],
         "confidence":      0.7,
-        "warnings":        ["cliente non univoco"],
+        "warnings":        [],
         "needs_more_info": True,
-        "missing_fields":  ["cellulare"],
+        "missing_fields":  ["cliente"],
         "trace_id":        trace_id,
         "latency_ms":      0,
         "client_candidates": candidates,
+        "buttons":         client_buttons,
+    }
+
+
+def _ambiguous_service_response(trace_id: str, candidates: list, original_message: str) -> dict:
+    """Risposta quando più servizi matchano la ricerca — chiede disambiguazione con bottoni."""
+    nomi = [s.get('name', '') for s in candidates]
+    service_buttons = []
+    for svc in candidates:
+        service_buttons.append({
+            "type": "service_select",
+            "label": svc.get('name', ''),
+            "service_id": svc.get('id'),
+            "service_name": svc.get('name', ''),
+            "duration": svc.get('duration', 0),
+        })
+    return {
+        "intent":            "disambigua_servizio",
+        "answer":            (
+            f"Ho trovato {len(candidates)} servizi corrispondenti. "
+            f"Quale intendi?\n"
+            + "\n".join(f"• {n}" for n in nomi)
+        ),
+        "data_points":       [],
+        "suggested_slots":   [],
+        "confidence":        0.8,
+        "warnings":          [],
+        "needs_more_info":   True,
+        "missing_fields":    ["servizio"],
+        "trace_id":          trace_id,
+        "latency_ms":        0,
+        "buttons":           service_buttons,
+        "original_message":  original_message,
     }
 
 
