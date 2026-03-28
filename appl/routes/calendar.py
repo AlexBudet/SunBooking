@@ -2528,6 +2528,186 @@ def create_client_from_booking():
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@calendar_bp.route('/api/operator-availability', methods=['GET'])
+def operator_availability():
+    """
+    Restituisce la disponibilità degli operatori per un intervallo di date.
+    Query params:
+      - start_date: YYYY-MM-DD (default: oggi)
+      - days: int (default: 7, max 30)
+      - operator_id: int (opzionale, filtra per operatore specifico)
+    Per ogni operatore/giorno restituisce:
+      - turno (start/end)
+      - se è OFF (blocco con nota "OFF")
+      - numero di slot liberi stimati (30 min ciascuno)
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+
+    start_date_str = request.args.get('start_date', datetime.today().strftime('%Y-%m-%d'))
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        start_date = datetime.today().date()
+
+    try:
+        days = min(30, max(1, int(request.args.get('days', 7))))
+    except (ValueError, TypeError):
+        days = 7
+
+    filter_operator_id = request.args.get('operator_id', type=int)
+
+    end_date = start_date + timedelta(days=days)
+
+    # Operatori attivi
+    op_query = Operator.query.filter_by(is_deleted=False, is_visible=True)
+    if filter_operator_id:
+        op_query = op_query.filter_by(id=filter_operator_id)
+    operators_list = op_query.order_by(Operator.order).all()
+
+    # Turni nel range
+    shifts = OperatorShift.query.filter(
+        OperatorShift.shift_date >= start_date,
+        OperatorShift.shift_date < end_date,
+    ).all()
+    shifts_map = {}
+    for s in shifts:
+        key = (s.operator_id, s.shift_date)
+        if key not in shifts_map:
+            shifts_map[key] = []
+        shifts_map[key].append(s)
+
+    # Appuntamenti nel range (per calcolare slot occupati e blocchi OFF)
+    day_start_dt = datetime.combine(start_date, time.min)
+    day_end_dt = datetime.combine(end_date, time.min)
+    appointments = Appointment.query.filter(
+        Appointment.start_time >= day_start_dt,
+        Appointment.start_time < day_end_dt,
+        Appointment.is_cancelled_by_client == False,
+    ).all()
+
+    # Mappa appuntamenti per (operator_id, date)
+    appts_map = {}
+    off_set = set()
+    for appt in appointments:
+        if not appt.start_time:
+            continue
+        appt_date = appt.start_time.date()
+        key = (appt.operator_id, appt_date)
+        if key not in appts_map:
+            appts_map[key] = []
+        appts_map[key].append(appt)
+        # Rileva blocchi OFF (nota "OFF" con client dummy)
+        nota = (appt.note or '').strip().upper()
+        if nota == 'OFF':
+            off_set.add(key)
+
+    # BusinessInfo per orari default
+    business_info = BusinessInfo.query.first()
+    default_open = business_info.active_opening_time if business_info else time(9, 0)
+    default_close = business_info.active_closing_time if business_info else time(19, 0)
+    closing_days = business_info.closing_days_list if business_info else []
+
+    _day_names_it = {
+        0: 'Lunedì', 1: 'Martedì', 2: 'Mercoledì',
+        3: 'Giovedì', 4: 'Venerdì', 5: 'Sabato', 6: 'Domenica',
+    }
+
+    result = []
+    current = start_date
+    while current < end_date:
+        day_name = _day_names_it.get(current.weekday(), '')
+        is_closing_day = day_name in closing_days
+
+        for op in operators_list:
+            key = (op.id, current)
+
+            # Giorno di chiusura attività
+            if is_closing_day:
+                result.append({
+                    'operator_id': op.id,
+                    'operator_name': op.user_nome,
+                    'date': current.strftime('%Y-%m-%d'),
+                    'day_name': day_name,
+                    'shift_start': None,
+                    'shift_end': None,
+                    'is_off': True,
+                    'is_closing_day': True,
+                    'free_slots_count': 0,
+                })
+                continue
+
+            # Blocco OFF esplicito
+            if key in off_set:
+                result.append({
+                    'operator_id': op.id,
+                    'operator_name': op.user_nome,
+                    'date': current.strftime('%Y-%m-%d'),
+                    'day_name': day_name,
+                    'shift_start': None,
+                    'shift_end': None,
+                    'is_off': True,
+                    'is_closing_day': False,
+                    'free_slots_count': 0,
+                })
+                continue
+
+            # Turni dell'operatore in questo giorno
+            day_shifts = shifts_map.get(key, [])
+            if day_shifts:
+                shift_start = min(s.shift_start_time for s in day_shifts)
+                shift_end = max(s.shift_end_time for s in day_shifts)
+            else:
+                shift_start = default_open
+                shift_end = default_close
+
+            shift_start_min = shift_start.hour * 60 + shift_start.minute
+            shift_end_min = shift_end.hour * 60 + shift_end.minute
+
+            # Calcola slot occupati per questo operatore/giorno
+            day_appts = appts_map.get(key, [])
+            occupied_intervals = []
+            for appt in day_appts:
+                if not appt.start_time or not appt.end_time:
+                    continue
+                a_start = appt.start_time.hour * 60 + appt.start_time.minute
+                dur = appt._duration if hasattr(appt, '_duration') and appt._duration else int(
+                    (appt.end_time - appt.start_time).total_seconds() / 60
+                )
+                a_end = a_start + dur
+                occupied_intervals.append((a_start, a_end))
+
+            # Conta slot liberi da 30 minuti
+            slot_step = 30
+            free_count = 0
+            cur = shift_start_min
+            while cur + slot_step <= shift_end_min:
+                slot_end = cur + slot_step
+                conflict = any(
+                    not (slot_end <= b_start or cur >= b_end)
+                    for b_start, b_end in occupied_intervals
+                )
+                if not conflict:
+                    free_count += 1
+                cur += slot_step
+
+            result.append({
+                'operator_id': op.id,
+                'operator_name': op.user_nome,
+                'date': current.strftime('%Y-%m-%d'),
+                'day_name': day_name,
+                'shift_start': shift_start.strftime('%H:%M') if shift_start else None,
+                'shift_end': shift_end.strftime('%H:%M') if shift_end else None,
+                'is_off': False,
+                'is_closing_day': False,
+                'free_slots_count': free_count,
+            })
+
+        current += timedelta(days=1)
+
+    return jsonify(result)
+
+
 # ══════════════════════════════════════════════════════════════
 # AI BOOKING ASSISTANT — Endpoint dedicati
 # Tutti read-only. Richiedono sessione attiva (user_id in session).
@@ -2564,6 +2744,7 @@ def ai_query():
       "query_date":    "YYYY-MM-DD",                      -- opzionale
       "operator_id":   123,                               -- opzionale
       "service_id":    456,                               -- opzionale
+      "service_ids":   [456, 789],                        -- opzionale (multi-gruppo)
       "days_range":    14                                 -- opzionale (default 14, max 60)
     }
     """
@@ -2624,6 +2805,17 @@ def ai_query():
     except (ValueError, TypeError):
         return jsonify({'error': 'invalid_id_format'}), 400
 
+    # service_ids: lista di interi per disambiguazione multi-gruppo
+    service_ids = None
+    raw_service_ids = data.get('service_ids')
+    _dbg.warning("service_ids RAW dal payload: %r", raw_service_ids)
+    _dbg.warning("service_id RAW dal payload: %r", data.get('service_id'))
+    if isinstance(raw_service_ids, list) and len(raw_service_ids) >= 2:
+        try:
+            service_ids = [int(sid) for sid in raw_service_ids if sid]
+        except (ValueError, TypeError):
+            service_ids = None
+    _dbg.warning("service_ids PARSED: %r", service_ids)
     # days_range: intero limitato a [1, 60]
     try:
         days_range = max(1, min(60, int(data.get('days_range', 14))))
@@ -2637,6 +2829,9 @@ def ai_query():
 
     # ── Chiama service layer ─────────────────────────────────────
     try:
+
+        intent_hint = data.get('intent_hint')
+
         result = process_ai_query(
             user_message=message,
             username=username,
@@ -2645,7 +2840,9 @@ def ai_query():
             query_date_str=query_date,
             operator_id=operator_id,
             service_id=service_id,
+            service_ids=service_ids,
             days_range=days_range,
+            intent_hint=intent_hint,
         )
     except Exception as exc:
         app.logger.exception("AI query error: %s", exc)
@@ -2656,7 +2853,6 @@ def ai_query():
         }), 500
 
     return jsonify(result), 200
-
 
 @calendar_bp.route('/api/ai/sessions', methods=['GET'])
 def ai_sessions_log():

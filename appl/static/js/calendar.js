@@ -11719,6 +11719,17 @@ document.addEventListener('click', function(e) {
   });
 })();
 
+
+
+
+
+
+
+
+
+
+
+
 // ══════════════════════════════════════════════════════════════
 // AI BOOKING ASSISTANT — Logica UI
 // ══════════════════════════════════════════════════════════════
@@ -11738,6 +11749,7 @@ document.addEventListener('click', function(e) {
     pendingSlot: null,
     pendingContext: {},  // contesto per disambiguazione (servizio/cliente da messaggio originale)
     pendingDisambiguation: null,  // { type: 'service', selectedServiceId: ..., originalMessage: '...' }
+    selectedIntent: null,  // intent selezionato dai bottoni rapidi (es. 'disponibilita', 'storico_cliente', ...)
   };
 
   let elBadge, elModal, elMessages, elInput, elSendBtn,
@@ -11828,15 +11840,38 @@ function fmtDateIT(isoDate) {
     const msg = String(message || '').trim();
     if (!msg) return '';
 
+    // Pattern che accettano anche particelle minuscole nel mezzo del nome
+    // Es: "per Leon bou Dehon" → cattura "Leon bou Dehon"
+    // La regex ammette sequenze di parole dove quelle intermedie possono essere minuscole
+    // purché la prima parola abbia iniziale maiuscola (case-insensitive con flag /i)
     const patterns = [
-      /\b(?:appuntamenti|prossimi appuntamenti|storico|storico cliente)\s+di\s+([A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+(?:\s+[A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+)*)/i,
-      /\bdi\s+([A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+(?:\s+[A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+)*)/i,
-      /\bper\s+([A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+(?:\s+[A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+)*)/i
+      /\b(?:appuntamenti|prossimi appuntamenti|storico|storico cliente)\s+di\s+([A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+(?:\s+[\wÀ-ÖØ-öø-ÿ']+)*)/i,
+      /\bdi\s+([A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+(?:\s+[\wÀ-ÖØ-öø-ÿ']+)*)/i,
+      /\bper\s+([A-ZÀ-ÖØ-Ý][\wÀ-ÖØ-öø-ÿ']+(?:\s+[\wÀ-ÖØ-öø-ÿ']+)*)/i
     ];
+
+    // Stop words: parole che indicano la fine del nome e l'inizio di un altro concetto
+    var stopWords = new Set([
+      'con', 'alle', 'per', 'domani', 'oggi', 'lunedi', 'martedi', 'mercoledi',
+      'giovedi', 'venerdi', 'sabato', 'domenica', 'il', 'la', 'lo', 'un', 'una',
+      'del', 'dal', 'nel', 'sul', 'al', 'dalla', 'nella', 'sulla', 'alla',
+      'dopo', 'prima', 'alle', 'ore', 'dalle', 'questa', 'questo', 'prossimo',
+      'prossima', 'mattina', 'pomeriggio', 'sera'
+    ]);
 
     for (const p of patterns) {
       const m = msg.match(p);
-      if (m && m[1]) return m[1].trim();
+      if (m && m[1]) {
+        // Tronca il risultato alla prima stop word
+        // Es: "Leon bou Dehon con Rebecca" → "Leon bou Dehon"
+        var words = m[1].trim().split(/\s+/);
+        var nameWords = [];
+        for (var i = 0; i < words.length; i++) {
+          if (stopWords.has(words[i].toLowerCase())) break;
+          nameWords.push(words[i]);
+        }
+        if (nameWords.length > 0) return nameWords.join(' ');
+      }
     }
     return '';
   }
@@ -12170,6 +12205,189 @@ function fmtDateIT(isoDate) {
     });
 
     // ── Bottone "Annulla" ─────────────────────────────────────
+    noBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      confirmBox.style.display = 'none';
+      spinner.style.display = 'none';
+      resultEl.style.display = 'none';
+    });
+
+    return card;
+  }
+
+    // ──────────────────────────────────────────────────────────────
+  // MULTI-SLOT CARD — blocco con N servizi contigui
+  // ──────────────────────────────────────────────────────────────
+
+  function buildMultiSlotCard(group) {
+    var card = document.createElement('div');
+    card.className = 'ai-slot-card';
+    card.style.borderLeft = '4px solid #6c47ff';
+
+    var slots = group.slots || [];
+    if (!slots.length) return card;
+
+    var firstSlot = slots[0];
+    var dataIT = fmtDateIT(firstSlot.date);
+    var totalDuration = group.total_duration || 0;
+    var hasClient = Boolean(firstSlot.client_id);
+
+    // Costruisci lista servizi
+    var servicesHTML = slots.map(function(s, idx) {
+      var timeStr = s.time || '—';
+      var svcName = esc(s.service_name || '—');
+      var dur = s.duration_minutes || s.service_duration || 0;
+      return '<div style="margin-top:' + (idx > 0 ? '4' : '0') + 'px; padding:3px 0; ' +
+             (idx > 0 ? 'border-top:1px dashed #e0d4ff;' : '') + '">' +
+             '<strong>' + svcName + '</strong>' +
+             '<span style="font-size:0.78rem; opacity:.65; margin-left:6px;">' +
+             timeStr + ' · ' + dur + ' min</span></div>';
+    }).join('');
+
+    var clienteLine = hasClient
+      ? '<span class="ai-slot-label">Cliente</span><br>' +
+        '<strong>' + esc(firstSlot.client_nome || '') + ' ' + esc(firstSlot.client_cognome || '') + '</strong>' +
+        (firstSlot.client_cellulare ? '&nbsp;· <span style="font-size:0.8rem">' + esc(firstSlot.client_cellulare) + '</span>' : '')
+      : '';
+
+    card.innerHTML =
+      '<div>' +
+        '<span class="ai-slot-label">Data &amp; Ora</span><br>' +
+        '<strong>' + esc(dataIT) + ' dalle ' + esc(firstSlot.time || '—') + '</strong>' +
+        '<span style="font-size:0.8rem;opacity:.7"> · totale ' + totalDuration + ' min</span>' +
+      '</div>' +
+      '<div style="margin-top:5px">' +
+        '<span class="ai-slot-label">Operatrice</span><br>' +
+        '<strong>' + esc(firstSlot.operator_name || '—') + '</strong>' +
+      '</div>' +
+      '<div style="margin-top:5px">' +
+        '<span class="ai-slot-label">Servizi (' + slots.length + ')</span><br>' +
+        servicesHTML +
+      '</div>' +
+      (clienteLine ? '<div style="margin-top:5px">' + clienteLine + '</div>' : '') +
+      (!hasClient ?
+        '<div class="ai-client-picker" style="margin-top:8px; position:relative;">' +
+          '<span class="ai-slot-label">Cliente</span><br>' +
+          '<input type="text" class="ai-client-search" ' +
+                 'placeholder="Cerca cliente (nome, cognome o cellulare)" ' +
+                 'style="width:100%; margin-top:4px; border:1px solid #d0c8ff; border-radius:8px; padding:6px 8px; font-size:0.82rem;">' +
+          '<div class="ai-client-results" ' +
+               'style="display:none; position:absolute; left:0; right:0; top:58px; background:#fff; border:1px solid #d0c8ff; border-radius:8px; max-height:160px; overflow:auto; z-index:3;"></div>' +
+        '</div>'
+      : '') +
+      '<div class="ai-slot-required-msg" style="margin-top:8px; font-size:0.78rem; color:#8a6d3b;"></div>' +
+      '<div class="ai-slot-confirm" style="display:none; margin-top:10px; border-top:1px solid #d0c8ff; padding-top:9px; gap:7px; flex-wrap:wrap;">' +
+        '<span style="font-size:0.8rem; color:#555; flex:1 0 100%;">✅ Confermi la prenotazione di ' + slots.length + ' servizi?</span>' +
+        '<button class="ai-confirm-yes" style="flex:1; padding:6px 10px; border:none; border-radius:8px; background:linear-gradient(135deg,#6c47ff,#00c2cb); color:#fff; font-size:0.82rem; cursor:pointer; font-weight:600;">Prenota tutti</button>' +
+        '<button class="ai-confirm-no" style="flex:1; padding:6px 10px; border:none; border-radius:8px; background:#f0ebff; color:#6c47ff; font-size:0.82rem; cursor:pointer; font-weight:600;">Annulla</button>' +
+      '</div>' +
+      '<div class="ai-slot-spinner" style="display:none; margin-top:8px; font-size:0.8rem; color:#6c47ff; text-align:center;">' +
+        '<i class="bi bi-arrow-repeat" style="animation:aiDotPulse .8s infinite;"></i> Creazione in corso…' +
+      '</div>' +
+      '<div class="ai-slot-result" style="display:none; margin-top:8px; font-size:0.82rem; font-weight:600; text-align:center;"></div>';
+
+    var confirmBox = card.querySelector('.ai-slot-confirm');
+    var spinner = card.querySelector('.ai-slot-spinner');
+    var resultEl = card.querySelector('.ai-slot-result');
+    var requiredMsg = card.querySelector('.ai-slot-required-msg');
+    var yesBtn = card.querySelector('.ai-confirm-yes');
+    var noBtn = card.querySelector('.ai-confirm-no');
+
+    function missingFields() {
+      var m = [];
+      if (!firstSlot.date) m.push('data');
+      if (!firstSlot.time) m.push('ora');
+      if (!firstSlot.operator_id) m.push('operatrice');
+      // Verifica che tutti gli slot abbiano service_id
+      var missingSvc = slots.some(function(s) { return !s.service_id; });
+      if (missingSvc) m.push('servizio');
+      if (!firstSlot.client_id) m.push('cliente');
+      return m;
+    }
+
+    function slotReady() {
+      return missingFields().length === 0;
+    }
+
+    function refreshReadyState() {
+      var miss = missingFields();
+      var ready = miss.length === 0;
+      card.classList.toggle('ai-slot-disabled', !ready);
+      yesBtn.disabled = !ready;
+      yesBtn.style.opacity = ready ? '1' : '.45';
+      yesBtn.style.cursor = ready ? 'pointer' : 'not-allowed';
+      if (ready) {
+        requiredMsg.textContent = '';
+      } else {
+        requiredMsg.textContent = 'Per confermare completa: ' + miss.join(', ') + '.';
+      }
+    }
+
+    refreshReadyState();
+
+    // ── Ricerca cliente ──
+    var clientSearch = card.querySelector('.ai-client-search');
+    var clientResults = card.querySelector('.ai-client-results');
+
+    if (clientSearch && clientResults) {
+      var tmr = null;
+      clientSearch.addEventListener('input', function() {
+        clearTimeout(tmr);
+        var q = clientSearch.value || '';
+        tmr = setTimeout(async function() {
+          var rows = await searchAiClientsFromDb(q);
+          clientResults.innerHTML = '';
+          if (!rows.length) { clientResults.style.display = 'none'; return; }
+          rows.forEach(function(c) {
+            var row = document.createElement('button');
+            row.type = 'button';
+            row.style.cssText = 'display:block; width:100%; text-align:left; border:none; background:#fff; padding:7px 8px; font-size:0.82rem; cursor:pointer;';
+            row.textContent = (c.name || '') + ' \u2022 ' + (c.phone || '');
+            row.addEventListener('click', function(e) {
+              e.preventDefault();
+              e.stopPropagation();
+              var full = String(c.name || '').trim().replace(/\s+/g, ' ');
+              var parts = full.split(' ');
+              // Propaga client a TUTTI gli slot del gruppo
+              slots.forEach(function(s) {
+                s.client_id = c.id;
+                s.client_nome = parts[0] || '';
+                s.client_cognome = parts.slice(1).join(' ') || '';
+                s.client_cellulare = c.phone || '';
+              });
+              clientSearch.value = full;
+              clientResults.style.display = 'none';
+              refreshReadyState();
+            });
+            clientResults.appendChild(row);
+          });
+          clientResults.style.display = 'block';
+        }, 220);
+      });
+      document.addEventListener('click', function(ev) {
+        if (!card.contains(ev.target)) clientResults.style.display = 'none';
+      });
+    }
+
+    // ── Click sulla card ──
+    card.addEventListener('click', function(e) {
+      if (e.target.closest('.ai-client-picker') ||
+          e.target.closest('.ai-confirm-yes') ||
+          e.target.closest('.ai-confirm-no')) return;
+      if (!slotReady()) return;
+      confirmBox.style.display = 'flex';
+    });
+
+    // ── Bottone "Prenota tutti" ──
+    yesBtn.addEventListener('click', async function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!slotReady()) return;
+      await createMultiAppointmentsFromSlots(slots, card);
+    });
+
+    // ── Bottone "Annulla" ──
     noBtn.addEventListener('click', function(e) {
       e.preventDefault();
       e.stopPropagation();
@@ -12598,6 +12816,9 @@ function fmtDateIT(isoDate) {
       return;
     }
 
+    // Genera un colore per il blocco (coerente con la logica Navigator/modal)
+    const slotColor = (typeof getRandomColor === 'function') ? getRandomColor() : '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
+
     // ── Payload per POST /create ──
     const payload = {
       client_id:        client_id,
@@ -12606,6 +12827,7 @@ function fmtDateIT(isoDate) {
       start_time:       slot.time,            // "HH:MM"
       appointment_date: slot.date,            // "YYYY-MM-DD"
       duration:         finalDuration,
+      colore:           slotColor,
     };
 
     console.log('[AI] createAppointmentFromSlot payload:', payload);
@@ -12732,6 +12954,218 @@ function fmtDateIT(isoDate) {
   }
 
   // ──────────────────────────────────────────────────────────────
+  // CREAZIONE MULTI-APPUNTAMENTO DA SLOT AI (N servizi contigui)
+  // ──────────────────────────────────────────────────────────────
+
+  async function createMultiAppointmentsFromSlots(slots, card) {
+    var confirmBox = card.querySelector('.ai-slot-confirm');
+    var spinner = card.querySelector('.ai-slot-spinner');
+    var resultEl = card.querySelector('.ai-slot-result');
+
+    confirmBox.style.display = 'none';
+    spinner.style.display = 'block';
+    resultEl.style.display = 'none';
+
+    var createdIds = [];
+    var errors = [];
+    var firstSlot = slots[0];
+
+    // Risolvi client_id se necessario (una sola volta per tutti gli slot)
+    var client_id = firstSlot.client_id || null;
+    if (!client_id && (firstSlot.client_nome || firstSlot.client_name)) {
+      var searchName = (firstSlot.client_nome || firstSlot.client_name || '').trim();
+      try {
+        var r = await fetch(AI.baseUrl + '/api/search-clients/' + encodeURIComponent(searchName), {
+          credentials: 'same-origin'
+        });
+        if (r.ok) {
+          var clients = await r.json();
+          if (clients && clients.length > 0) {
+            client_id = clients[0].id;
+          }
+        }
+      } catch (e) { console.warn('[AI] ricerca client_id fallita:', e); }
+    }
+
+    // Genera un colore condiviso per tutti i blocchi contigui (come fa il Navigator)
+    var sharedColor = (typeof getRandomColor === 'function') ? getRandomColor() : '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
+    var sharedFontColor = (typeof computeFontColor === 'function') ? computeFontColor(sharedColor) : '#ffffff';
+
+    // Crea ogni appuntamento in sequenza
+    for (var i = 0; i < slots.length; i++) {
+      var slot = slots[i];
+
+      // Risolvi service_id per questo slot
+      var service_id = slot.service_id || null;
+      if (!service_id && slot.service_name) {
+        try {
+          var sr = await fetch(AI.baseUrl + '/api/service-by-name?name=' + encodeURIComponent(slot.service_name), {
+            credentials: 'same-origin'
+          });
+          if (sr.ok) {
+            var svc = await sr.json();
+            if (svc && svc.id) {
+              service_id = svc.id;
+              if (!slot.service_duration && svc.durata) {
+                slot.service_duration = svc.durata;
+              }
+            }
+          }
+        } catch (e) { console.warn('[AI] ricerca service_id fallita:', e); }
+      }
+
+      var finalDuration = parseInt(
+        slot.service_duration || slot.duration_minutes || slot.duration || 0, 10
+      );
+
+      // Validazione
+      var missing = [];
+      if (!slot.date) missing.push('data');
+      if (!slot.time) missing.push('ora');
+      if (!slot.operator_id) missing.push('operatore');
+      if (!finalDuration) missing.push('durata');
+      if (!client_id) missing.push('cliente');
+      if (!service_id) missing.push('servizio (' + (slot.service_name || '?') + ')');
+
+      if (missing.length > 0) {
+        errors.push('Servizio ' + (i + 1) + ': manca ' + missing.join(', '));
+        continue;
+      }
+
+      var payload = {
+        client_id: client_id,
+        service_id: service_id,
+        operator_id: slot.operator_id,
+        start_time: slot.time,
+        appointment_date: slot.date,
+        duration: finalDuration,
+        colore: sharedColor,
+      };
+
+      try {
+        var resp = await fetch(AI.baseUrl + '/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': AI.csrfToken,
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload),
+        });
+
+        var data = await resp.json();
+        if (!resp.ok || data.error) {
+          errors.push('Servizio "' + (slot.service_name || '?') + '": ' + (data.error || 'HTTP ' + resp.status));
+        } else {
+          createdIds.push(data.id);
+        }
+      } catch (err) {
+        errors.push('Servizio "' + (slot.service_name || '?') + '": ' + err.message);
+      }
+    }
+
+    spinner.style.display = 'none';
+
+    if (errors.length > 0 && createdIds.length === 0) {
+      // Tutti falliti
+      resultEl.style.display = 'block';
+      resultEl.style.color = '#c0392b';
+      resultEl.textContent = '❌ Errore: ' + errors.join('; ');
+      confirmBox.style.display = 'flex';
+      return;
+    }
+
+    // Almeno alcuni creati
+    resultEl.style.display = 'block';
+    resultEl.style.color = '#1a7f4f';
+    if (errors.length > 0) {
+      resultEl.textContent = '⚠️ ' + createdIds.length + '/' + slots.length + ' appuntamenti creati. Errori: ' + errors.join('; ');
+    } else {
+      resultEl.textContent = '✅ ' + createdIds.length + ' appuntamenti creati!';
+    }
+
+    card.style.pointerEvents = 'none';
+    card.style.opacity = '0.75';
+
+    var dataIT = fmtDateIT(firstSlot.date);
+    var svcNames = slots.map(function(s) { return s.service_name || '?'; }).join(' + ');
+    appendMessage('assistant',
+      '✅ Creati ' + createdIds.length + ' appuntamenti il **' + dataIT + '** dalle **' + firstSlot.time + '**' +
+      (firstSlot.operator_name ? ' con **' + firstSlot.operator_name + '**' : '') +
+      ' · ' + svcNames + '.'
+    );
+
+    // ── WhatsApp ──
+    if (firstSlot.client_cellulare && client_id) {
+      var apptCompat = {
+        id: createdIds[0],
+        client_id: client_id,
+        client_name: ((firstSlot.client_nome || '') + ' ' + (firstSlot.client_cognome || '')).trim(),
+        client_cellulare: firstSlot.client_cellulare,
+        client: {
+          id: client_id,
+          cliente_nome: firstSlot.client_nome || '',
+          cliente_cognome: firstSlot.client_cognome || '',
+          cliente_cellulare: firstSlot.client_cellulare,
+        },
+        service: { servizio_nome: svcNames },
+        start_time: firstSlot.date + ' ' + firstSlot.time,
+        appointment_date: firstSlot.date,
+        duration: slots.reduce(function(sum, s) { return sum + (parseInt(s.duration_minutes || s.service_duration || 0, 10)); }, 0),
+        operator_id: firstSlot.operator_id,
+      };
+      var waData = {
+        appointment_id: createdIds[0],
+        client_id: client_id,
+        client_name: apptCompat.client_name,
+        data: firstSlot.date,
+        ora: firstSlot.time,
+        servizi: slots.map(function(s) { return s.service_name || ''; }),
+      };
+      try {
+        var inviaWA = false;
+        if (typeof chiediInvioWhatsappNavigator === 'function') {
+          inviaWA = await chiediInvioWhatsappNavigator();
+        } else if (typeof chiediInvioWhatsappAuto === 'function') {
+          inviaWA = await chiediInvioWhatsappAuto();
+        }
+        if (inviaWA === true && typeof inviaWhatsappAutoSeRichiesto === 'function') {
+          await inviaWhatsappAutoSeRichiesto(apptCompat, waData, AI.csrfToken);
+        }
+      } catch (waErr) {
+        console.warn('[AI] WhatsApp fallito:', waErr);
+      }
+    }
+
+    // ── Naviga al calendario ──
+    setTimeout(function() {
+      if (AI.isOpen) {
+        AI.isOpen = false;
+        elModal.style.display = 'none';
+        if (AI.isMicActive && AI.recognition) AI.recognition.stop();
+      }
+
+      var slotDate = firstSlot.date;
+      var slotTime = firstSlot.time;
+      var currentCalDate = (document.getElementById('date') || {}).value || '';
+      var calBase = AI.baseUrl || '/calendar';
+
+      if (slotDate && slotDate !== currentCalDate) {
+        window.location.href = calBase + '?date=' + slotDate + '&ora=' + encodeURIComponent(slotTime);
+      } else {
+        if (slotTime) {
+          var parts = slotTime.split(':');
+          try {
+            sessionStorage.setItem('scrollToHour', parts[0] || '0');
+            sessionStorage.setItem('scrollToMinute', parts[1] || '0');
+          } catch (_) {}
+        }
+        location.reload();
+      }
+    }, 1200);
+  }
+
+  // ──────────────────────────────────────────────────────────────
   // INVIO QUERY AL BACKEND
   // ──────────────────────────────────────────────────────────────
 
@@ -12743,7 +13177,7 @@ function fmtDateIT(isoDate) {
     elInput.disabled   = true;
 
     // Controlla se stiamo facendo un replay da disambiguazione servizio
-    var isServiceReplay = Boolean(AI._pendingServiceId);
+    var isServiceReplay = Boolean(AI._pendingServiceId) || Boolean(AI._pendingServiceIds);
 
     // Salva l'ultimo messaggio utente per eventuale replay con disambiguazione
     // Non sovrascrivere se stiamo facendo un replay (overrideClientId o service disambig)
@@ -12751,7 +13185,10 @@ function fmtDateIT(isoDate) {
       AI._lastUserMessage = message.trim();
     }
 
-    appendMessage('user', message.trim());
+    // Non mostrare messaggio utente duplicato durante replay disambiguazione
+    if (!isServiceReplay) {
+      appendMessage('user', message.trim());
+    }
     elInput.value = '';
     autoResizeTextarea();
 
@@ -12759,6 +13196,20 @@ function fmtDateIT(isoDate) {
     scrollToBottom();
 
     const payload = { message: message.trim(), days_range: 14 };
+
+    // Se è stato selezionato un intent rapido dai bottoni di benvenuto, invialo al backend
+    if (AI.selectedIntent) {
+      payload.intent_hint = AI.selectedIntent;
+      // Salva l'intent per eventuali replay (disambiguazione)
+      AI._lastIntentHint = AI.selectedIntent;
+      // Resetta dopo il primo invio: l'intent guida solo la prima query
+      AI.selectedIntent = null;
+      // Ripristina il placeholder originale
+      elInput.setAttribute('placeholder', 'Scrivi o detta un messaggio…');
+    } else if (isServiceReplay && AI._lastIntentHint) {
+      // Replay da disambiguazione servizio: riusa l'intent originale
+      payload.intent_hint = AI._lastIntentHint;
+    }
 
     // Se è stato selezionato un cliente specifico dalla disambiguazione, forzalo nel payload
     if (overrideClientId) {
@@ -12772,9 +13223,17 @@ function fmtDateIT(isoDate) {
       });
     }
 
-    // Se c'è un service_id pendente dalla disambiguazione servizio, invialo
+    // Se c'è una lista di service_ids pendenti dalla disambiguazione multi-gruppo, inviali
+    if (AI._pendingServiceIds && AI._pendingServiceIds.length >= 2) {
+      payload.service_ids = AI._pendingServiceIds;
+      console.log('[AI] PAYLOAD service_ids (multi-gruppo):', JSON.stringify(AI._pendingServiceIds));
+      AI._pendingServiceIds = null;
+    }
+
+    // Se c'è un service_id pendente dalla disambiguazione servizio singolo, invialo
     if (AI._pendingServiceId) {
       payload.service_id = AI._pendingServiceId;
+      console.log('[AI] PAYLOAD service_id (singolo):', AI._pendingServiceId);
       AI._pendingServiceId = null;
     }
 
@@ -12828,7 +13287,131 @@ function fmtDateIT(isoDate) {
         // Salva il contesto del messaggio originale per il replay
         var originalMsg = data.original_message || AI._lastUserMessage || message.trim();
 
-        // Costruisci i bottoni per la selezione del servizio
+        // ── MULTI-GRUPPO: se ci sono button_groups, mostra selezione multi-step ──
+        if (data.multi_disambig && Array.isArray(data.button_groups) && data.button_groups.length >= 2) {
+          // Stato di selezione multi-gruppo
+          var selectedServiceIds = [];
+          var selectedServiceNames = [];
+          var totalGroups = data.button_groups.length;
+
+          var multiWrap = document.createElement('div');
+          multiWrap.style.cssText = 'margin-top:8px;';
+
+          data.button_groups.forEach(function(group, groupIdx) {
+            // Label del gruppo (es. "manicure", "pedicure")
+            var groupLabel = document.createElement('div');
+            groupLabel.style.cssText = 'font-weight:600; font-size:0.82rem; color:#6c47ff; margin-top:' + (groupIdx > 0 ? '12' : '0') + 'px; margin-bottom:4px; text-transform:capitalize;';
+            groupLabel.textContent = '🔹 ' + (group.segment || ('Servizio ' + (groupIdx + 1))) + ':';
+            multiWrap.appendChild(groupLabel);
+
+            // Riga di bottoni per questo gruppo
+            var groupRow = document.createElement('div');
+            groupRow.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px;';
+            groupRow.setAttribute('data-group-idx', String(groupIdx));
+
+            (group.buttons || []).forEach(function(svc) {
+              var btn = document.createElement('button');
+              btn.type = 'button';
+              btn.style.cssText = [
+                'padding:8px 16px',
+                'border:1px solid #d0c8ff',
+                'border-radius:10px',
+                'background:#fdf8fb',
+                'color:#6c47ff',
+                'font-size:0.88rem',
+                'font-weight:600',
+                'cursor:pointer',
+                'transition:all 0.15s ease'
+              ].join(';');
+
+              var svcName = svc.label || svc.service_name || '—';
+              var svcDuration = svc.duration || '';
+              btn.textContent = svcName + (svcDuration ? ' (' + svcDuration + ' min)' : '');
+              btn.setAttribute('data-svc-id', svc.service_id || '');
+              btn.setAttribute('data-svc-name', svcName);
+              btn.setAttribute('data-group-idx', String(groupIdx));
+
+              btn.addEventListener('mouseenter', function() {
+                if (!btn.disabled) {
+                  btn.style.background = '#ede6ff';
+                  btn.style.borderColor = '#6c47ff';
+                  btn.style.boxShadow = '0 2px 8px rgba(108,71,255,0.15)';
+                }
+              });
+              btn.addEventListener('mouseleave', function() {
+                if (!btn.disabled) {
+                  btn.style.background = '#fdf8fb';
+                  btn.style.borderColor = '#d0c8ff';
+                  btn.style.boxShadow = 'none';
+                }
+              });
+
+              btn.addEventListener('click', function() {
+                var svcId = parseInt(btn.getAttribute('data-svc-id'), 10);
+                var clickedName = btn.getAttribute('data-svc-name');
+                var clickedGroupIdx = parseInt(btn.getAttribute('data-group-idx'), 10);
+                console.log('[AI DISAMBIG] Button clicked: svcId=' + svcId + ' name=' + clickedName + ' groupIdx=' + clickedGroupIdx);
+                if (!svcId) return;
+
+                // Disabilita tutti i bottoni di QUESTO gruppo
+                groupRow.querySelectorAll('button').forEach(function(b) {
+                  b.disabled = true;
+                  b.style.opacity = '0.5';
+                  b.style.pointerEvents = 'none';
+                });
+                // Evidenzia il bottone selezionato
+                btn.style.opacity = '1';
+                btn.style.background = '#e0d4ff';
+                btn.style.borderColor = '#6c47ff';
+
+                // Salva la selezione per questo gruppo
+                selectedServiceIds[clickedGroupIdx] = svcId;
+                selectedServiceNames[clickedGroupIdx] = clickedName;
+
+                // Mostra feedback sotto il gruppo
+                var feedbackEl = groupRow.parentElement.querySelector('[data-feedback-group="' + clickedGroupIdx + '"]');
+                if (!feedbackEl) {
+                  feedbackEl = document.createElement('div');
+                  feedbackEl.setAttribute('data-feedback-group', String(clickedGroupIdx));
+                  feedbackEl.style.cssText = 'font-size:0.8rem; color:#1a7f4f; font-weight:600; margin-top:2px; margin-bottom:4px;';
+                  groupRow.parentElement.insertBefore(feedbackEl, groupRow.nextSibling);
+                }
+                feedbackEl.textContent = '✅ ' + clickedName;
+
+                // Conta quanti gruppi sono stati selezionati
+                var completedGroups = 0;
+                for (var g = 0; g < totalGroups; g++) {
+                  if (selectedServiceIds[g]) completedGroups++;
+                }
+
+                // Se TUTTI i gruppi sono stati selezionati → rilancia la query
+                if (completedGroups >= totalGroups) {
+                  // Mostra riepilogo
+                  var summaryMsg = selectedServiceNames.join(' + ');
+                  appendMessage('user', summaryMsg);
+
+                  // Rilancia la query con TUTTI i service_ids selezionati
+                  AI._pendingServiceIds = selectedServiceIds.slice();
+                  console.log('[AI DISAMBIG] ALL GROUPS COMPLETED! pendingServiceIds:', JSON.stringify(AI._pendingServiceIds));
+                  console.log('[AI DISAMBIG] Replaying original message:', originalMsg);
+                  sendQuery(originalMsg);
+                }
+              });
+
+              groupRow.appendChild(btn);
+            });
+
+            multiWrap.appendChild(groupRow);
+          });
+
+          elMessages.appendChild(multiWrap);
+          scrollToBottom();
+
+          // Esce dal flusso normale
+          return;
+        }
+
+        // ── SINGOLO GRUPPO (comportamento originale) ──
         var svcWrap = document.createElement('div');
         svcWrap.style.cssText = 'margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;';
 
@@ -12879,7 +13462,6 @@ function fmtDateIT(isoDate) {
             appendMessage('user', svcName);
 
             // Rilancia la query originale con il service_id scelto
-            // Il messaggio originale contiene già "con Alma" e le altre info
             var replayMsg = originalMsg;
             // Salva il service_id scelto nel payload della prossima chiamata
             AI._pendingServiceId = svcId;
@@ -13233,6 +13815,100 @@ if (a.date) {
         tableParent.appendChild(wrap);
         scrollToBottom();
 
+      } else if (data.intent === 'disponibilita_operatori' && Array.isArray(data.operator_availability) && data.operator_availability.length > 0) {
+        // ── DISPONIBILITÀ OPERATORI: mostra tabella turni ──
+        appendMessage('assistant', answerText);
+
+        var opWrap = document.createElement('div');
+        opWrap.style.cssText = 'margin-top:8px; overflow-x:auto;';
+
+        var opTitle = document.createElement('div');
+        opTitle.style.cssText = 'font-weight:700; font-size:0.88rem; margin-bottom:6px; color:#6c47ff; text-transform:uppercase;';
+        opTitle.textContent = '👩‍💼 Disponibilità Operatori';
+        opWrap.appendChild(opTitle);
+
+        var opTbl = document.createElement('table');
+        opTbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:0.82rem;color:#222;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(108,71,255,0.10)';
+
+        var opTheadHTML = '<thead><tr style="background:linear-gradient(135deg,#b8809d,#a06b88);color:#fff;">';
+        opTheadHTML += '<th style="padding:6px 8px;text-align:left;">Operatrice</th>';
+        opTheadHTML += '<th style="padding:6px 8px;text-align:left;">Data</th>';
+        opTheadHTML += '<th style="padding:6px 8px;text-align:left;">Turno</th>';
+        opTheadHTML += '<th style="padding:6px 8px;text-align:left;">Stato</th>';
+        opTheadHTML += '</tr></thead>';
+
+        var opTbodyHTML = '<tbody>';
+        data.operator_availability.forEach(function(row, idx) {
+          var bg = (idx % 2 === 0) ? '#fdf8fb' : '#fff';
+          var dateIT = fmtDateIT(row.date || '');
+          var turno = row.shift_start && row.shift_end ? (esc(row.shift_start) + ' – ' + esc(row.shift_end)) : '—';
+          var stato = '';
+          if (row.is_off) {
+            stato = '<span style="color:#c0392b;font-weight:600;">🔴 OFF</span>';
+          } else if (row.shift_start) {
+            var freeCount = row.free_slots_count || 0;
+            if (freeCount > 0) {
+              stato = '<span style="color:#1a7f4f;font-weight:600;">🟢 Disponibile (' + freeCount + ' slot)</span>';
+            } else {
+              stato = '<span style="color:#e67e22;font-weight:600;">🟠 Piena</span>';
+            }
+          } else {
+            stato = '<span style="color:#aaa;">Nessun turno</span>';
+          }
+
+          var dateISO = row.date || '';
+          opTbodyHTML += '<tr data-date="' + esc(dateISO) + '" style="background:' + bg + ';cursor:pointer;" onmouseover="this.style.background=\'#f8e8f0\'" onmouseout="this.style.background=\'' + bg + '\'">';
+          opTbodyHTML += '<td style="padding:5px 8px;font-weight:600;">' + esc(row.operator_name || '—') + '</td>';
+          opTbodyHTML += '<td style="padding:5px 8px;">' + esc(dateIT) + '</td>';
+          opTbodyHTML += '<td style="padding:5px 8px;">' + turno + '</td>';
+          opTbodyHTML += '<td style="padding:5px 8px;">' + stato + '</td>';
+          opTbodyHTML += '</tr>';
+        });
+        opTbodyHTML += '</tbody>';
+
+        opTbl.innerHTML = opTheadHTML + opTbodyHTML;
+
+        // Click sulla riga → naviga alla data nel calendario
+        opTbl.querySelectorAll('tbody tr[data-date]').forEach(function(tr) {
+          tr.addEventListener('click', function() {
+            var d = tr.getAttribute('data-date');
+            if (!d) return;
+
+            if (AI.isOpen) {
+              AI.isOpen = false;
+              elModal.style.display = 'none';
+              if (AI.isMicActive && AI.recognition) AI.recognition.stop();
+            }
+
+            var currentCalDate = (document.getElementById('date') || {}).value || '';
+            var calBase = AI.baseUrl || '/calendar';
+
+            if (d !== currentCalDate) {
+              window.location.href = calBase + '?date=' + d;
+            }
+          });
+        });
+
+        opWrap.appendChild(opTbl);
+
+        var opFt = document.createElement('div');
+        opFt.style.cssText = 'font-size:0.75rem;color:#aaa;margin-top:4px;text-align:right;';
+        opFt.textContent = data.operator_availability.length + ' righ' + (data.operator_availability.length === 1 ? 'a' : 'e');
+        opWrap.appendChild(opFt);
+
+        var lastEl = elMessages.lastElementChild;
+        var opParent = lastEl || elMessages;
+        opParent.appendChild(opWrap);
+        scrollToBottom();
+
+      } else if (Array.isArray(data.multi_slot_groups) && data.multi_slot_groups.length > 0) {
+        // ── MULTI-SERVIZIO: mostra card multi-slot ──
+        appendMessage('assistant', answerText);
+        data.multi_slot_groups.forEach(function(group) {
+          elMessages.appendChild(buildMultiSlotCard(group));
+        });
+        scrollToBottom();
+
       } else {
         appendMessage('assistant', answerText, { slots: data.suggested_slots || [] });
       }
@@ -13341,13 +14017,10 @@ if (a.date) {
       setTimeout(() => elInput.focus(), 80);
       if (AI.chatHistory.length === 0) {
         appendMessage('assistant',
-          '👋 Ciao! Sono TOSCA AI, il tuo assistente di prenotazione.\n\n' +
-          'Puoi chiedermi:\n' +
-          '• Disponibilità per un servizio o operatrice\n' +
-          '• Storico di un cliente\n' +
-          '• Slot liberi in un periodo\n\n' +
-          'Clicca su uno slot proposto per prenotarlo direttamente — ti chiederò conferma prima di procedere.'
+          '👋 Ciao! Sono TOSCA AI, la tua assistente di prenotazione. Clicca su ciò di cui hai bisogno per iniziare:'
         );
+        // Inserisci i bottoni di intent rapido
+        buildIntentButtons();
       }
     } else {
       if (AI.isMicActive && AI.recognition) AI.recognition.stop();
@@ -13355,8 +14028,88 @@ if (a.date) {
   }
 
   // ──────────────────────────────────────────────────────────────
-  // AUTO-RESIZE TEXTAREA
+  // BOTTONI INTENT RAPIDO — Messaggio di benvenuto
   // ──────────────────────────────────────────────────────────────
+
+  function buildIntentButtons() {
+    var intents = [
+      { id: 'disponibilita',            icon: '🔍', label: 'Cerca disponibilità' },
+      { id: 'primo_slot_disponibile',    icon: '⚡', label: 'Primo spazio libero' },
+      { id: 'prossimi_appuntamenti',     icon: '📅', label: 'Prossimi appuntamenti' },
+      { id: 'disponibilita_operatori',   icon: '👩‍💼', label: 'Disponibilità operatori' },
+      { id: 'storico_cliente',           icon: '📋', label: 'Storico appuntamenti' },
+      { id: 'info_cliente',              icon: '👤', label: 'Info cliente' }
+    ];
+
+    var wrap = document.createElement('div');
+    wrap.className = 'ai-intent-buttons-wrap';
+    wrap.style.cssText = 'margin-top:10px; display:flex; flex-wrap:wrap; gap:6px;';
+
+    intents.forEach(function(item) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ai-intent-btn';
+      btn.setAttribute('data-intent', item.id);
+      btn.style.cssText = [
+        'display:inline-flex',
+        'align-items:center',
+        'gap:6px',
+        'padding:7px 14px',
+        'border:1px solid rgba(184,128,157,0.35)',
+        'border-radius:20px',
+        'background:linear-gradient(135deg,#fdf2f8 0%,#f5e6ef 100%)',
+        'color:#87647c',
+        'font-size:0.82rem',
+        'font-weight:600',
+        'cursor:pointer',
+        'transition:all 0.15s ease',
+        'white-space:nowrap',
+        'box-shadow:0 1px 3px rgba(135,100,124,0.08)'
+      ].join(';');
+
+      btn.textContent = item.icon + '  ' + item.label;
+
+      btn.addEventListener('mouseenter', function() {
+        btn.style.background = 'linear-gradient(135deg,#f0dce6 0%,#e8cedd 100%)';
+        btn.style.borderColor = '#b8809d';
+        btn.style.color = '#6b4a5e';
+        btn.style.boxShadow = '0 2px 8px rgba(184,128,157,0.2)';
+      });
+      btn.addEventListener('mouseleave', function() {
+        btn.style.background = 'linear-gradient(135deg,#fdf2f8 0%,#f5e6ef 100%)';
+        btn.style.borderColor = 'rgba(184,128,157,0.35)';
+        btn.style.color = '#87647c';
+        btn.style.boxShadow = '0 1px 3px rgba(135,100,124,0.08)';
+      });
+
+      btn.addEventListener('click', function() {
+        AI.selectedIntent = item.id;
+
+        wrap.querySelectorAll('.ai-intent-btn').forEach(function(b) {
+          b.disabled = true;
+          b.style.opacity = '0.45';
+          b.style.pointerEvents = 'none';
+        });
+        btn.style.opacity = '1';
+        btn.style.background = 'linear-gradient(135deg,#b8809d 0%,#a06b88 100%)';
+        btn.style.color = '#fff';
+        btn.style.borderColor = '#a06b88';
+        btn.style.pointerEvents = 'none';
+
+        appendMessage('assistant',
+          item.icon + ' <strong>' + item.label + '</strong> — scrivi o detta la tua richiesta.'
+        );
+
+        elInput.focus();
+        scrollToBottom();
+      });
+
+      wrap.appendChild(btn);
+    });
+
+    elMessages.appendChild(wrap);
+    scrollToBottom();
+  }
 
   function autoResizeTextarea() {
     elInput.style.height = 'auto';
@@ -13514,6 +14267,73 @@ if (a.date) {
     elClose     = document.getElementById('aiChatClose');
 
     if (!elBadge || !elModal) return;
+
+    // ── Crea pulsante Reset Chat dinamicamente nell'header ──
+    (function createResetButton() {
+      var header = elClose ? elClose.parentElement : null;
+      if (!header) return;
+
+      var resetBtn = document.createElement('button');
+      resetBtn.type = 'button';
+      resetBtn.id = 'aiChatReset';
+      resetBtn.setAttribute('data-bs-toggle', 'tooltip');
+      resetBtn.setAttribute('data-bs-placement', 'bottom');
+      resetBtn.setAttribute('title', 'Resetta e ricomincia daccapo');
+      resetBtn.style.cssText = [
+        'background:none',
+        'border:none',
+        'color:#fff',
+        'font-size:1.1rem',
+        'cursor:pointer',
+        'padding:4px 6px',
+        'margin-right:4px',
+        'opacity:0.85',
+        'transition:opacity 0.15s ease'
+      ].join(';');
+      resetBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+
+      resetBtn.addEventListener('mouseenter', function() { resetBtn.style.opacity = '1'; });
+      resetBtn.addEventListener('mouseleave', function() { resetBtn.style.opacity = '0.85'; });
+
+      resetBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        // Resetta lo stato della chat
+        AI.chatHistory = [];
+        AI.selectedIntent = null;
+        AI.pendingSlot = null;
+        AI.pendingContext = {};
+        AI.pendingDisambiguation = null;
+        AI._lastUserMessage = '';
+        AI._lastIntentHint = null;
+        AI._pendingServiceId = null;
+        AI._pendingServiceIds = null;
+
+        // Svuota i messaggi visibili
+        while (elMessages.firstChild) {
+          elMessages.removeChild(elMessages.firstChild);
+        }
+
+        // Ripristina il messaggio di benvenuto e i bottoni intent
+        appendMessage('assistant',
+          '👋 Ciao! Sono TOSCA AI, la tua assistente di prenotazione. Clicca su ciò di cui hai bisogno per iniziare:'
+        );
+        buildIntentButtons();
+
+        // Ripristina placeholder
+        elInput.setAttribute('placeholder', 'Scrivi o detta un messaggio…');
+        elInput.value = '';
+        autoResizeTextarea();
+        elInput.focus();
+      });
+
+      // Inserisci prima del bottone chiudi
+      header.insertBefore(resetBtn, elClose);
+
+      // Inizializza tooltip Bootstrap se disponibile
+      if (window.bootstrap && window.bootstrap.Tooltip) {
+        new bootstrap.Tooltip(resetBtn);
+      }
+    })();
 
     AI.csrfToken = getCsrf();
     AI.baseUrl   = getBaseUrl();
