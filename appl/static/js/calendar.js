@@ -1833,7 +1833,7 @@ window.showClientInfoModal = showClientInfoModal;
 
 function handleClientSearch(query) {
   // fallback sicuro
-   query = (query || '').toString().toLowerCase().trim();
+  query = (query || '').toString().toLowerCase().trim();
 
   // trova il container risultati più appropriato:
   // - se il focus è sull'input #clientSearchInput dentro un modal, usa il clientResults di quel modal
@@ -1871,6 +1871,7 @@ function handleClientSearch(query) {
     }
     return;
   }
+
   fetch(`/calendar/api/search-clients/${encodeURIComponent(query)}`)
     .then(r => {
       if (!r.ok) throw new Error('Network response not ok: ' + r.status);
@@ -1894,6 +1895,7 @@ function handleClientSearch(query) {
         item.style.display = 'flex';
         item.style.alignItems = 'center';
         item.style.gap = '8px';
+        item.style.boxSizing = 'border-box';
 
         const id = String(client.id ?? '');
         const name = String(client.name ?? '');
@@ -1909,6 +1911,13 @@ function handleClientSearch(query) {
         txt.textContent = phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name);
         item.appendChild(txt);
 
+        // piccolo span per "days since last appointment" (verrà popolato asincrono)
+        const daysSpan = document.createElement('small');
+        daysSpan.style.marginLeft = '0.5rem';
+        daysSpan.style.opacity = '0.65';
+        daysSpan.textContent = '';
+        item.appendChild(daysSpan);
+
         // dataset usati anche dall’hover
         item.dataset.clientId = id;
         item.dataset.clientName = name;
@@ -1920,12 +1929,11 @@ function handleClientSearch(query) {
         infoBtn.title = 'Info cliente';
         infoBtn.setAttribute('aria-label', 'Info cliente');
         infoBtn.innerText = 'i';
-        
+
         infoBtn.addEventListener('click', function(ev) {
           ev.stopPropagation();
           ev.preventDefault();
           try {
-            // Chiama la funzione centrale che costruisce il modal in modo sicuro e completo
             showClientInfoModal(id);
           } catch (e) {
             console.error('showClientInfoModal error', e);
@@ -1949,7 +1957,19 @@ function handleClientSearch(query) {
         });
 
         resultsContainer.appendChild(item);
+
+        // Asincrono: recupera e mostra "days since last appointment" usando helper già presente
+        (async () => {
+          try {
+            const last = await fetchClientLastDate(id);
+            const txtDays = formatDaysSince(last);
+            if (txtDays) daysSpan.textContent = txtDays;
+          } catch (e) {
+            // ignore error silently
+          }
+        })();
       });
+
       resultsContainer.style.display = 'block';
     })
     .catch(err => {
@@ -5319,6 +5339,13 @@ function handleClientSearchNav(query) {
         txt.textContent = phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name);
         item.appendChild(txt);
 
+        // piccolo span per "days since last appointment" (verrà popolato asincrono)
+        const daysSpan = document.createElement('small');
+        daysSpan.style.marginLeft = '8px';
+        daysSpan.style.opacity = '0.65';
+        daysSpan.textContent = '';
+        item.appendChild(daysSpan);
+
         item.dataset.clientId = id;
         item.dataset.clientName = name;
 
@@ -5348,6 +5375,17 @@ function handleClientSearchNav(query) {
         });
 
         resultsContainer.appendChild(item);
+
+        // Asincrono: recupera e mostra "days since last appointment"
+        (async () => {
+          try {
+            const last = await fetchClientLastDate(id);
+            const txtDays = formatDaysSince(last);
+            if (txtDays) daysSpan.textContent = txtDays;
+          } catch (e) {
+            // ignore
+          }
+        })();
       });
 
       ensureOverlay();
@@ -5480,6 +5518,122 @@ function formatDaysSince(lastDateStr) {
   if (diffDays === 1) return ' • ieri';
   if (diffDays > 1) return ` • ${String(diffDays).padStart(3, ' ')} gg`;
   return ''; // con filtro backend <= oggi non dovresti avere negativi
+}
+
+// NEW: cache e fetch helper per ricavare la data ultimo appuntamento di un cliente
+const __clientLastDateCache = {}; // clientId -> ISO date string or null
+async function fetchClientLastDate(clientId) {
+  if (!clientId) return null;
+  const key = String(clientId);
+  if (__clientLastDateCache.hasOwnProperty(key)) return __clientLastDateCache[key];
+
+  const urls = [
+    `/calendar/api/last-services-for-client/${encodeURIComponent(key)}`,
+    `/api/last-services-for-client/${encodeURIComponent(key)}`,
+    `/calendar/api/next-appointments-for-client/${encodeURIComponent(key)}`,
+    `/settings/api/client_history?q=${encodeURIComponent(key)}`
+  ];
+
+  const dateFields = [
+    'last_date','lastDate','last_date_iso','lastDateIso',
+    'date','appointment_date','ora_inizio','start_time','ora',
+    'data','created_at','updated_at','last_seen','ultima_visita'
+  ];
+
+  for (const url of urls) {
+    try {
+      const resp = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+      if (!resp.ok) continue;
+      let payload;
+      try { payload = await resp.json(); } catch(_) { continue; }
+
+      // Normalizza: l'endpoint potrebbe restituire array, oggetto singolo o oggetto {items: [...]}
+      let rows = [];
+      if (Array.isArray(payload)) rows = payload;
+      else if (payload && Array.isArray(payload.items)) rows = payload.items;
+      else if (payload && payload.data && Array.isArray(payload.data)) rows = payload.data;
+      else if (payload && typeof payload === 'object' && Object.keys(payload).length > 0) {
+        // Se è un singolo oggetto rappresentante un appuntamento/servizio, trasformalo in array
+        rows = [payload];
+      } else {
+        rows = [];
+      }
+
+      if (!rows.length) {
+        // non forzare cache negativa: prova prossimo endpoint
+        continue;
+      }
+
+      // Estrai la data (YYYY-MM-DD) da ogni elemento considerando molti nomi possibili
+      let maxIso = null;
+      for (const s of rows) {
+        if (!s) continue;
+
+        // Se l'elemento è una stringa che è già una data ISO
+        if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}/.test(s)) {
+          const iso = s.split('T')[0];
+          if (!maxIso || iso > maxIso) maxIso = iso;
+          continue;
+        }
+
+        let raw = null;
+        for (const f of dateFields) {
+          if (s[f]) { raw = s[f]; break; }
+          // support nested shapes: e.g. s.appointment && s.appointment.start_time
+          if (s.appointment && s.appointment[f]) { raw = s.appointment[f]; break; }
+          if (s.service && s.service[f]) { raw = s.service[f]; break; }
+        }
+
+        // fallback: alcuni endpoint usano 'ora_inizio' con timestamp completo
+        if (!raw && s.ora_inizio) raw = s.ora_inizio;
+        if (!raw && s.start) raw = s.start;
+
+        if (!raw) continue;
+
+        // prendi prima parte ISO (YYYY-MM-DD) se possibile, altrimenti prova a riconvertire formato IT/DD/MM/YYYY
+        let isoPart = null;
+        const str = String(raw).trim();
+
+        // caso ISO o ISO date-time
+        const mIso = str.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (mIso) isoPart = mIso[1];
+        else {
+          // formato DD/MM/YYYY
+          const mIt = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+          if (mIt) isoPart = `${mIt[3]}-${mIt[2]}-${mIt[1]}`;
+          else {
+            // formato "DD Mon YYYY"
+            const mMon = str.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})/);
+            if (mMon) {
+              const mesi = {gen:'01',feb:'02',mar:'03',apr:'04',mag:'05',giu:'06',lug:'07',ago:'08',set:'09',ott:'10',nov:'11',dic:'12',
+                            Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+              const mm = mesi[mMon[2].toLowerCase()] || mesi[mMon[2]] || '01';
+              isoPart = `${mMon[3]}-${mm}-${String(mMon[1]).padStart(2,'0')}`;
+            }
+          }
+        }
+
+        if (isoPart) {
+          if (!maxIso || isoPart > maxIso) maxIso = isoPart;
+        }
+      }
+
+      // Se abbiamo trovato una data valida, memorizza e ritorna
+      if (maxIso) {
+        __clientLastDateCache[key] = maxIso;
+        return maxIso;
+      } else {
+        // prova prossimo endpoint
+        continue;
+      }
+    } catch (err) {
+      console.warn('fetchClientLastDate try failed for', url, err);
+      // prova prossimo endpoint
+    }
+  }
+
+  __clientLastDateCache[key] = null;
+  return null;
 }
   
   // showServicesDropdownNav: scrive i risultati nel contenitore e li rende cliccabili
@@ -11738,19 +11892,21 @@ document.addEventListener('click', function(e) {
   'use strict';
 
   // ── Stato interno ─────────────────────────────────────────────
-  const AI = {
-    isOpen:      false,
-    isLoading:   false,
-    recognition: null,
-    isMicActive: false,
-    chatHistory: [],
-    csrfToken:   '',
-    baseUrl:     '',
-    pendingSlot: null,
-    pendingContext: {},  // contesto per disambiguazione (servizio/cliente da messaggio originale)
-    pendingDisambiguation: null,  // { type: 'service', selectedServiceId: ..., originalMessage: '...' }
-    selectedIntent: null,  // intent selezionato dai bottoni rapidi (es. 'disponibilita', 'storico_cliente', ...)
-  };
+const AI = {
+  isOpen:      false,
+  isLoading:   false,
+  recognition: null,
+  isMicActive: false,
+  chatHistory: [],
+  csrfToken:   '',
+  baseUrl:     '',
+  pendingSlot: null,
+  pendingContext: {},
+  pendingDisambiguation: null,
+  selectedIntent: null,
+  intentSelected: false,
+  lastUsedIntent: null,  // NUOVO: ultimo intent usato con successo (per continuità)
+};
 
   let elBadge, elModal, elMessages, elInput, elSendBtn,
       elMicBtn, elTyping, elDictation, elClose;
@@ -12042,7 +12198,7 @@ function fmtDateIT(isoDate) {
   // SLOT CARD — mini-blocco con conferma inline
   // ──────────────────────────────────────────────────────────────
 
-  function buildSlotCard(slot) {
+function buildSlotCard(slot) {
     const card = document.createElement('div');
     card.className = 'ai-slot-card';
 
@@ -12069,7 +12225,7 @@ function fmtDateIT(isoDate) {
         '<span class="ai-slot-label">Servizio</span><br>' +
         '<strong>' + esc(slot.service_name || '—') + '</strong>' +
       '</div>' +
-      (clienteLine ? '<div style="margin-top:5px">' + clienteLine + '</div>' : '') +
+      (clienteLine ? '<div style="margin-top:5px" id="ai-slot-client-line">' + clienteLine + '</div>' : '') +
       (!hasClient ?
         '<div class="ai-client-picker" style="margin-top:8px; position:relative;">' +
           '<span class="ai-slot-label">Cliente</span><br>' +
@@ -12145,35 +12301,82 @@ function fmtDateIT(isoDate) {
 
           clientResults.innerHTML = '';
           if (!rows.length) {
-            clientResults.style.display = 'none';
+            const empty = document.createElement('div');
+            empty.className = 'dropdown-item';
+            empty.textContent = 'Nessun risultato';
+            clientResults.appendChild(empty);
+            clientResults.style.display = 'block';
             return;
           }
 
           rows.forEach(function(c) {
-            var row = document.createElement('button');
-            row.type = 'button';
-            row.style.cssText = 'display:block; width:100%; text-align:left; border:none; background:#fff; padding:7px 8px; font-size:0.82rem; cursor:pointer;';
-            row.textContent = (c.name || '') + ' \u2022 ' + (c.phone || '');
+            const item = document.createElement('div');
+            item.className = 'dropdown-item';
+            item.style.display = 'flex';
+            item.style.alignItems = 'center';
+            item.style.justifyContent = 'space-between';
+            item.style.gap = '8px';
+            item.style.boxSizing = 'border-box';
 
-            row.addEventListener('click', function(e) {
-              e.preventDefault();
-              e.stopPropagation();
+            const left = document.createElement('div');
+            left.style.flex = '1 1 auto';
+            left.style.minWidth = '0';
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = (c.nome || c.cliente_nome || c.name || '') + (c.cellulare || c.phone ? ' · ' + (c.cellulare || c.phone) : '');
+            nameSpan.style.overflow = 'hidden';
+            nameSpan.style.textOverflow = 'ellipsis';
+            nameSpan.style.whiteSpace = 'nowrap';
+            left.appendChild(nameSpan);
 
-              slot.client_id = c.id;
+            const daysSpan = document.createElement('small');
+            daysSpan.style.marginLeft = '8px';
+            daysSpan.style.opacity = '0.65';
+            daysSpan.textContent = '';
 
-              var full = String(c.name || '').trim().replace(/\s+/g, ' ');
-              var parts = full.split(' ');
-              slot.client_nome = parts[0] || '';
-              slot.client_cognome = parts.slice(1).join(' ') || '';
-              slot.client_cellulare = c.phone || '';
+            // append left and daysSpan in right container
+            item.appendChild(left);
+            item.appendChild(daysSpan);
 
-              clientSearch.value = full;
+            item.addEventListener('click', function() {
+              slot.client_id = String(c.id || c.cliente_id || '');
+              slot.client_nome = (c.nome || c.cliente_nome || c.name || '');
+              slot.client_cognome = (c.cognome || c.cliente_cognome || '');
+              // update visible client line
+              const clientLineEl = card.querySelector('#ai-slot-client-line');
+              if (clientLineEl) {
+                clientLineEl.textContent = '';
+                const strong = document.createElement('strong');
+                strong.textContent = (slot.client_nome || '') + ' ' + (slot.client_cognome || '');
+                clientLineEl.appendChild(strong);
+                if (c.cellulare || c.phone) clientLineEl.appendChild(document.createTextNode(' · ' + (c.cellulare || c.phone)));
+                // add small days info placeholder
+                const ds = document.createElement('small');
+                ds.style.marginLeft = '8px';
+                ds.style.opacity = '0.65';
+                ds.textContent = '';
+                clientLineEl.appendChild(ds);
+                // async populate
+                (async () => {
+                  try {
+                    const last = await fetchClientLastDate(String(c.id || c.cliente_id || ''));
+                    const txtDays = formatDaysSince(last);
+                    if (txtDays) ds.textContent = txtDays;
+                  } catch (_) {}
+                })();
+              }
               clientResults.style.display = 'none';
-
-              refreshReadyState();
             });
 
-            clientResults.appendChild(row);
+            // async populate days since last appointment for each search row
+            (async () => {
+              try {
+                const last = await fetchClientLastDate(String(c.id || c.cliente_id || ''));
+                const txtDays = formatDaysSince(last);
+                if (txtDays) daysSpan.textContent = txtDays;
+              } catch (_) {}
+            })();
+
+            clientResults.appendChild(item);
           });
 
           clientResults.style.display = 'block';
@@ -12212,6 +12415,27 @@ function fmtDateIT(isoDate) {
       spinner.style.display = 'none';
       resultEl.style.display = 'none';
     });
+
+    // If slot already has a client_id, populate "days since last" next to the client line
+    if (hasClient) {
+      // find the client line element and append small days span
+      const clientLineEl = card.querySelector('#ai-slot-client-line');
+      if (clientLineEl) {
+        const ds = document.createElement('small');
+        ds.style.marginLeft = '8px';
+        ds.style.opacity = '0.65';
+        ds.textContent = '';
+        clientLineEl.appendChild(ds);
+
+        (async () => {
+          try {
+            const last = await fetchClientLastDate(String(slot.client_id));
+            const txtDays = formatDaysSince(last);
+            if (txtDays) ds.textContent = txtDays;
+          } catch (_) { /* ignore */ }
+        })();
+      }
+    }
 
     return card;
   }
@@ -12343,7 +12567,27 @@ function fmtDateIT(isoDate) {
             var row = document.createElement('button');
             row.type = 'button';
             row.style.cssText = 'display:block; width:100%; text-align:left; border:none; background:#fff; padding:7px 8px; font-size:0.82rem; cursor:pointer;';
-            row.textContent = (c.name || '') + ' \u2022 ' + (c.phone || '');
+            
+            // Costruisci il testo con nome, telefono e giorni dall'ultimo passaggio
+            var displayText = (c.name || '');
+            if (c.phone) {
+              displayText += ' \u2022 ' + c.phone;
+            }
+            // Aggiungi i giorni dall'ultimo passaggio se disponibili
+            if (c.days_since_last !== undefined && c.days_since_last !== null) {
+              var daysSince = parseInt(c.days_since_last, 10);
+              if (!isNaN(daysSince)) {
+                if (daysSince === 0) {
+                  displayText += ' \u2022 oggi';
+                } else if (daysSince === 1) {
+                  displayText += ' \u2022 ieri';
+                } else {
+                  displayText += ' \u2022 ' + daysSince + ' gg';
+                }
+              }
+            }
+            row.textContent = displayText;
+            
             row.addEventListener('click', function(e) {
               e.preventDefault();
               e.stopPropagation();
@@ -13186,30 +13430,40 @@ function fmtDateIT(isoDate) {
     }
 
     // Non mostrare messaggio utente duplicato durante replay disambiguazione
-    if (!isServiceReplay) {
+    // Il messaggio utente per multi-gruppo viene già mostrato prima di chiamare sendQuery
+    if (!isServiceReplay && !overrideClientId) {
       appendMessage('user', message.trim());
     }
     elInput.value = '';
     autoResizeTextarea();
 
-    elTyping.style.display = 'block';
+    // Mostra typing solo se non è già visibile (potrebbe essere stato mostrato prima)
+    if (elTyping.style.display !== 'block') {
+      elTyping.style.display = 'block';
+    }
     scrollToBottom();
 
-    const payload = { message: message.trim(), days_range: 14 };
+const payload = { message: message.trim(), days_range: 14 };
 
-    // Se è stato selezionato un intent rapido dai bottoni di benvenuto, invialo al backend
-    if (AI.selectedIntent) {
-      payload.intent_hint = AI.selectedIntent;
-      // Salva l'intent per eventuali replay (disambiguazione)
-      AI._lastIntentHint = AI.selectedIntent;
-      // Resetta dopo il primo invio: l'intent guida solo la prima query
-      AI.selectedIntent = null;
-      // Ripristina il placeholder originale
-      elInput.setAttribute('placeholder', 'Scrivi o detta un messaggio…');
-    } else if (isServiceReplay && AI._lastIntentHint) {
-      // Replay da disambiguazione servizio: riusa l'intent originale
-      payload.intent_hint = AI._lastIntentHint;
-    }
+// Se è stato selezionato un intent rapido dai bottoni di benvenuto, invialo al backend
+if (AI.selectedIntent) {
+  payload.intent_hint = AI.selectedIntent;
+  // Salva l'intent per eventuali replay (disambiguazione) E per continuità conversazionale
+  AI._lastIntentHint = AI.selectedIntent;
+  AI.lastUsedIntent = AI.selectedIntent;  // NUOVO: salva per query successive
+  // Resetta dopo il primo invio: l'intent guida solo la prima query
+  AI.selectedIntent = null;
+  // Ripristina il placeholder originale
+  elInput.setAttribute('placeholder', 'Scrivi o detta un messaggio…');
+} else if (isServiceReplay && AI._lastIntentHint) {
+  // Replay da disambiguazione servizio: riusa l'intent originale
+  payload.intent_hint = AI._lastIntentHint;
+} else if (AI.lastUsedIntent) {
+  // NUOVO: Continuità conversazionale - propaga l'ultimo intent usato
+  // Questo permette di chiedere "info su Mario Rossi" e poi "Carmine Cone"
+  // mantenendo l'intent info_cliente
+  payload.last_intent = AI.lastUsedIntent;
+}
 
     // Se è stato selezionato un cliente specifico dalla disambiguazione, forzalo nel payload
     if (overrideClientId) {
@@ -13272,9 +13526,20 @@ function fmtDateIT(isoDate) {
       }
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
-      const data = await resp.json();
+const data = await resp.json();
 
-      console.log('[AI] RISPOSTA COMPLETA:', JSON.stringify(data).substring(0, 500));
+console.log('[AI] RISPOSTA COMPLETA:', JSON.stringify(data).substring(0, 500));
+
+// NUOVO: Aggiorna l'ultimo intent usato per continuità conversazionale
+// Solo se l'intent restituito è "significativo" (non generico/errore)
+var significantIntents = [
+  'info_cliente', 'dati_cliente', 'storico_cliente', 'prossimi_appuntamenti',
+  'disponibilita', 'primo_slot_disponibile', 'disponibilita_operatori'
+];
+if (data.intent && significantIntents.indexOf(data.intent) !== -1) {
+  AI.lastUsedIntent = data.intent;
+  console.log('[AI] lastUsedIntent aggiornato a:', data.intent);
+}
       console.log('[AI] intent:', data.intent,
                   'appointments:', Array.isArray(data.appointments) ? data.appointments.length : 'ASSENTE',
                   'client_resolved:', data.client_resolved ? data.client_resolved.nome : 'null');
@@ -13293,6 +13558,9 @@ function fmtDateIT(isoDate) {
           var selectedServiceIds = [];
           var selectedServiceNames = [];
           var totalGroups = data.button_groups.length;
+          
+          // IMPORTANTE: Cattura originalMsg in una closure locale per evitare problemi di scope
+          var capturedOriginalMsg = originalMsg;
 
           var multiWrap = document.createElement('div');
           multiWrap.style.cssText = 'margin-top:8px;';
@@ -13386,15 +13654,24 @@ function fmtDateIT(isoDate) {
 
                 // Se TUTTI i gruppi sono stati selezionati → rilancia la query
                 if (completedGroups >= totalGroups) {
-                  // Mostra riepilogo
+                  // Mostra riepilogo come messaggio utente
                   var summaryMsg = selectedServiceNames.join(' + ');
                   appendMessage('user', summaryMsg);
 
+                  // Mostra indicatore di caricamento
+                  elTyping.style.display = 'block';
+                  scrollToBottom();
+
                   // Rilancia la query con TUTTI i service_ids selezionati
+                  // Usa setTimeout per permettere all'UI di aggiornarsi prima della chiamata
                   AI._pendingServiceIds = selectedServiceIds.slice();
                   console.log('[AI DISAMBIG] ALL GROUPS COMPLETED! pendingServiceIds:', JSON.stringify(AI._pendingServiceIds));
-                  console.log('[AI DISAMBIG] Replaying original message:', originalMsg);
-                  sendQuery(originalMsg);
+                  console.log('[AI DISAMBIG] Replaying original message:', capturedOriginalMsg);
+                  
+                  // Usa capturedOriginalMsg invece di originalMsg per evitare problemi di closure
+                  setTimeout(function() {
+                    sendQuery(capturedOriginalMsg);
+                  }, 100);
                 }
               });
 
@@ -14014,13 +14291,22 @@ if (a.date) {
     elModal.style.display = AI.isOpen ? 'flex' : 'none';
 
     if (AI.isOpen) {
-      setTimeout(() => elInput.focus(), 80);
       if (AI.chatHistory.length === 0) {
+        // Prima apertura: disabilita input fino a selezione intent
+        AI.intentSelected = false;
+        setInputEnabled(false);
+        
         appendMessage('assistant',
           '👋 Ciao! Sono TOSCA AI, la tua assistente di prenotazione. Clicca su ciò di cui hai bisogno per iniziare:'
         );
         // Inserisci i bottoni di intent rapido
         buildIntentButtons();
+      } else {
+        // Chat già iniziata: abilita input se intent già selezionato
+        if (AI.intentSelected) {
+          setInputEnabled(true);
+          setTimeout(() => elInput.focus(), 80);
+        }
       }
     } else {
       if (AI.isMicActive && AI.recognition) AI.recognition.stop();
@@ -14084,6 +14370,7 @@ if (a.date) {
 
       btn.addEventListener('click', function() {
         AI.selectedIntent = item.id;
+        AI.intentSelected = true; // Segna che un intent è stato selezionato
 
         wrap.querySelectorAll('.ai-intent-btn').forEach(function(b) {
           b.disabled = true;
@@ -14100,6 +14387,8 @@ if (a.date) {
           item.icon + ' <strong>' + item.label + '</strong> — scrivi o detta la tua richiesta.'
         );
 
+        // Abilita l'input dopo la selezione dell'intent
+        setInputEnabled(true);
         elInput.focus();
         scrollToBottom();
       });
@@ -14114,6 +14403,29 @@ if (a.date) {
   function autoResizeTextarea() {
     elInput.style.height = 'auto';
     elInput.style.height = Math.min(elInput.scrollHeight, 90) + 'px';
+  }
+
+  // ── Abilita/Disabilita input in base a selezione intent ──────
+  function setInputEnabled(enabled) {
+    if (enabled) {
+      elInput.disabled = false;
+      elInput.style.opacity = '1';
+      elInput.style.cursor = 'text';
+      elInput.setAttribute('placeholder', 'Scrivi o detta un messaggio…');
+      elSendBtn.disabled = false;
+      elSendBtn.style.opacity = '1';
+      elMicBtn.disabled = false;
+      elMicBtn.style.opacity = '1';
+    } else {
+      elInput.disabled = true;
+      elInput.style.opacity = '0.5';
+      elInput.style.cursor = 'not-allowed';
+      elInput.setAttribute('placeholder', '👆 Seleziona prima un\'opzione qui sopra…');
+      elSendBtn.disabled = true;
+      elSendBtn.style.opacity = '0.5';
+      elMicBtn.disabled = true;
+      elMicBtn.style.opacity = '0.5';
+    }
   }
 
   function initAiChatResize() {
@@ -14220,41 +14532,72 @@ if (a.date) {
   document.addEventListener('DOMContentLoaded', function () {
 
     // ── Inject CSS overrides per pannello AI più grande e font più grandi ──
-    var aiStyleOverride = document.createElement('style');
-    aiStyleOverride.textContent = `
-      #aiChatModal {
-        width: 500px !important;
-        right: -520px;
-      }
-      #aiChatModal.open,
-      #aiChatModal[style*="display: flex"] {
-        right: 0;
-      }
-      #aiChatModal .ai-msg-user,
-      #aiChatModal .ai-msg-assistant,
-      #aiChatModal .ai-msg-error {
-        font-size: 0.95rem !important;
-        line-height: 1.5 !important;
-        padding: 12px 16px !important;
-      }
-      #aiChatInput {
-        font-size: 0.95rem !important;
-        line-height: 1.5 !important;
-        padding: 8px 0 !important;
-        max-height: 100px !important;
-      }
-      #aiChatModal > div:first-child {
-        font-size: 1.05rem !important;
-        padding: 16px 20px !important;
-      }
-      #aiChatModal .ai-msg-time {
-        font-size: 0.72rem !important;
-      }
-      #aiChatModal .ai-slot-card {
-        font-size: 0.9rem !important;
-      }
-    `;
-    document.head.appendChild(aiStyleOverride);
+var aiStyleOverride = document.createElement('style');
+aiStyleOverride.textContent = `
+  /* layout */
+  #aiChatModal { width: 500px !important; right: -520px; }
+  #aiChatModal.open, #aiChatModal[style*="display: flex"] { right: 0; }
+
+  /* messaggi */
+  #aiChatModal .ai-msg-user,
+  #aiChatModal .ai-msg-assistant,
+  #aiChatModal .ai-msg-error {
+    font-size: 1.05rem !important;
+    line-height: 1.6 !important;
+    padding: 12px 16px !important;
+  }
+
+  /* input */
+  #aiChatInput {
+    font-size: 1.02rem !important;
+    line-height: 1.4 !important;
+    padding: 8px 0 !important;
+    max-height: 140px !important;
+  }
+
+  #aiChatModal > div:first-child {
+    font-size: 1.08rem !important;
+    padding: 16px 20px !important;
+  }
+
+  /* time stamp */
+  #aiChatModal .ai-msg-time { font-size: 0.82rem !important; }
+
+  /* slot card: aumentiamo dimensione testi e label */
+  #aiChatModal .ai-slot-card { font-size: 1.02rem !important; }
+  #aiChatModal .ai-slot-card .ai-slot-label { font-size: 0.92rem !important; font-weight:600 !important; }
+
+  /* client search + results: override per input e dropdown (usa !important per sovrascrivere inline styles) */
+  .ai-client-search,
+  #clientSearchInput,
+  #clientSearchInputNav,
+  input.ai-client-search,
+  input#clientSearchInput,
+  input#clientSearchInputNav {
+    font-size: 1.02rem !important;
+    padding: 8px 10px !important;
+  }
+
+  .ai-client-results .dropdown-item,
+  .dropdown-item,
+  .dropdown-item-text,
+  #clientResults .dropdown-item,
+  #clientResultsNav .dropdown-item {
+    font-size: 1.00rem !important;
+    padding: 8px 10px !important;
+  }
+
+  .ai-client-results small,
+  .dropdown-item small,
+  .ai-slot-card small {
+    font-size: 0.92rem !important;
+    opacity: 0.75 !important;
+  }
+
+  /* ensure readability for multi-slot lists */
+  #aiChatModal .ai-slot-card strong { font-size: 1.03rem !important; }
+`;
+document.head.appendChild(aiStyleOverride);
 
     elBadge     = document.getElementById('aiBadgeBtn');
     elModal     = document.getElementById('aiChatModal');
@@ -14300,6 +14643,7 @@ if (a.date) {
         // Resetta lo stato della chat
         AI.chatHistory = [];
         AI.selectedIntent = null;
+        AI.intentSelected = false; // Reset: nessun intent selezionato
         AI.pendingSlot = null;
         AI.pendingContext = {};
         AI.pendingDisambiguation = null;
@@ -14319,11 +14663,10 @@ if (a.date) {
         );
         buildIntentButtons();
 
-        // Ripristina placeholder
-        elInput.setAttribute('placeholder', 'Scrivi o detta un messaggio…');
+        // Disabilita l'input fino alla selezione di un intent
+        setInputEnabled(false);
         elInput.value = '';
         autoResizeTextarea();
-        elInput.focus();
       });
 
       // Inserisci prima del bottone chiudi

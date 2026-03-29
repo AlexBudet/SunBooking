@@ -396,27 +396,35 @@ def build_client_context(client_id: int, limit: int = 10, future_only: bool = Fa
 def find_client_by_text(search: str) -> list:
     """
     Cerca cliente per nome, cognome o cellulare (OR).
+
     Ritorna dati REALI — usati solo lato server per reinjection, MAI inviati al LLM.
-    Usa match su inizio parola per evitare match parziali errati
-    (es: "Ciara" non deve matchare "Sciara").
-    Supporta anche ricerca combinata "nome cognome" su colonne separate.
+
+    Strategia di ricerca (in ordine di priorità):
+    1. Match esatto su inizio campo o inizio parola (LIKE pattern)
+       - Evita match parziali errati: "Ciara" NON matcha "Sciara"
+       - Supporta ricerca combinata nome+cognome su colonne separate
+         es: "Cristina Gallo" → nome LIKE 'cristina%' AND cognome LIKE 'gallo%'
+    2. Fuzzy matching (soglia 0.70) se nessun match esatto trovato
+       - Tollerante a errori di battitura
+         es: "Rachele Dell'Angelo" trova "Rachele Dall'Angelo"
+         es: "Cone" trova "Coone" (1 char diff su 5 = 80% similarità)
     """
     from appl.models import Client
     from sqlalchemy import or_, func, and_
 
+    # ── Normalizzazione input ────────────────────────────────────
     q = search.strip()
     if not q:
         return []
 
     q_lower = q.lower()
-    parts = q_lower.split()
+    parts   = q_lower.split()
 
-    # Usa LIKE con pattern "word start" per evitare match parziali:
-    # - "q%" matcha inizio campo
-    # - "% q%" matcha inizio di qualsiasi parola nel campo (dopo spazio)
-    # Questo evita che "ciara" matchi "sciara"
-    starts_pattern = f"{q_lower}%"         # inizio campo
-    word_pattern   = f"% {q_lower}%"       # inizio parola dopo spazio
+    # ── Pattern LIKE per match su inizio campo / inizio parola ──
+    # "q%"   → matcha dall'inizio del campo (es: "ciara%" matcha "Ciara" ma NON "Sciara")
+    # "% q%" → matcha dall'inizio di qualsiasi parola interna (dopo uno spazio)
+    starts_pattern = f"{q_lower}%"
+    word_pattern   = f"% {q_lower}%"
 
     conditions = [
         func.lower(Client.cliente_nome).like(starts_pattern),
@@ -426,12 +434,12 @@ def find_client_by_text(search: str) -> list:
         Client.cliente_cellulare.contains(q),
     ]
 
-    # Se la query contiene 2+ parole, cerca anche combinazione nome+cognome
-    # (es: "Cristina Gallo" → nome LIKE 'cristina%' AND cognome LIKE 'gallo%')
+    # ── Ricerca combinata nome+cognome (query con 2+ parole) ────
+    # Per ogni permutazione parte[i] → nome, parte[j] → cognome
+    # es: "Cristina Gallo" → (nome LIKE 'cristina%' AND cognome LIKE 'gallo%')
     if len(parts) >= 2:
-        for i in range(len(parts)):
+        for i, nome_part in enumerate(parts):
             other_parts = [p for j, p in enumerate(parts) if j != i]
-            nome_part = parts[i]
             for cognome_part in other_parts:
                 conditions.append(
                     and_(
@@ -440,12 +448,13 @@ def find_client_by_text(search: str) -> list:
                     )
                 )
 
+    # ── Query DB (match esatto) ──────────────────────────────────
     results = Client.query.filter(
         Client.is_deleted == False,
         or_(*conditions)
     ).limit(20).all()
 
-    return [
+    exact_matches = [
         {
             "id":        c.id,
             "nome":      c.cliente_nome or "",
@@ -455,6 +464,37 @@ def find_client_by_text(search: str) -> list:
         }
         for c in results
     ]
+
+    # ── Ritorna subito se trovati match esatti ───────────────────
+    if exact_matches:
+        return exact_matches
+
+    # ── Fuzzy matching (fallback) ────────────────────────────────
+    # Attivato solo se nessun match esatto trovato.
+    # Soglia 0.70: sufficiente per tollerare varianti ortografiche comuni.
+    logger.info(
+        "find_client_by_text: nessun match esatto per '%s', provo fuzzy matching", q
+    )
+
+    fuzzy_results = _fuzzy_match_clients(q, threshold=0.70)
+
+    if fuzzy_results:
+        for fr in fuzzy_results:
+            logger.info(
+                "find_client_by_text: FUZZY MATCH '%s %s' (score=%.2f%%) per query '%s'",
+                fr["client"].get("nome"),
+                fr["client"].get("cognome"),
+                fr["score"] * 100,
+                q,
+            )
+        # Restituisce solo il dict cliente (senza score) per compatibilità col formato esistente
+        return [fr["client"] for fr in fuzzy_results]
+
+    # ── Nessun risultato ─────────────────────────────────────────
+    logger.warning(
+        "find_client_by_text: nessun cliente trovato per '%s' (né esatto né fuzzy)", q
+    )
+    return []
 
 def _extract_client_name_from_message(message: str) -> Optional[str]:
     """
@@ -543,6 +583,9 @@ def _extract_service_from_message(message: str, services: list) -> Optional[dict
     Pass 3: tutte le parole significative del nome presenti nel messaggio
     Pass 4: tag + almeno una parola chiave del nome nel messaggio
     """
+    # CRITICO: Pulisci la cache SUBITO per evitare dati sporchi da chiamate precedenti
+    _ambiguous_services_cache.clear()
+    
     if not message or not services:
         return None
 
@@ -693,6 +736,10 @@ def _load_services_for_matching(fallback_services: list) -> list:
 
 
 def _extract_multiple_services_from_message(message: str, services: list) -> list:
+    # CRITICO: Pulisci le cache SUBITO, prima di qualsiasi altra operazione
+    _ambiguous_services_cache.clear()
+    _ambiguous_groups_cache.clear()
+    
     services = _load_services_for_matching(services)
     if not message or not services:
         return []
@@ -1290,6 +1337,9 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
         best_score = 0
         alternatives = []  # servizi con score vicino al best
         
+        # NUOVO: Raccogli TUTTI i candidati con score > 0 per analisi disambiguazione
+        all_candidates_for_segment = []
+        
         for sc in svc_cache:
             svc = sc["svc"]
             if svc.get('id') in found_service_ids:
@@ -1450,6 +1500,9 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
                 score = max(1, score - gender_penalty)
             
             if score > 0:
+                # Raccogli tutti i candidati con score > 0
+                all_candidates_for_segment.append((svc, score, sc))
+                
                 if score > best_score:
                     # Salva il precedente best come alternativa
                     if best_match and best_score > 0:
@@ -1458,6 +1511,45 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
                     best_match = svc
                 else:
                     alternatives.append((svc, score))
+        
+        # NUOVO: Verifica se ci sono più servizi della STESSA FAMIGLIA con score alto
+        # Es: "pulizia viso" → "Pulizia Viso Classica" e "Pulizia Viso Specifica"
+        # entrambi hanno le stesse prime 2 parole → disambiguazione obbligatoria
+        if best_match and len(sig_segment_words) >= 2:
+            # Estrai le prime N parole del segmento (tipicamente "tipo servizio" + "zona")
+            seg_words_list = segment_lower.split()
+            seg_prefix = ' '.join(seg_words_list[:2]) if len(seg_words_list) >= 2 else segment_lower
+            
+            # Trova tutti i servizi il cui nome INIZIA con lo stesso prefisso del segmento
+            same_prefix_candidates = []
+            for svc, sc, sc_data in all_candidates_for_segment:
+                svc_name_lower = sc_data["name_lower"]
+                svc_words = svc_name_lower.split()
+                svc_prefix = ' '.join(svc_words[:2]) if len(svc_words) >= 2 else svc_name_lower
+                
+                # Match se il prefisso del servizio contiene tutte le parole del segmento
+                # o se il prefisso del segmento è contenuto nel nome del servizio
+                if seg_prefix in svc_name_lower or all(w in svc_name_lower for w in seg_words_list[:2]):
+                    same_prefix_candidates.append((svc, sc))
+            
+            # Se ci sono 2+ servizi della stessa famiglia → DEVE disambiguare
+            if len(same_prefix_candidates) >= 2:
+                # Verifica che non ci sia un match ESATTO del segmento (caso speciale)
+                exact_match_found = False
+                for svc, sc in same_prefix_candidates:
+                    svc_name_lower = (svc.get('name') or '').lower()
+                    # Il segmento è esattamente uguale a un nome servizio?
+                    if segment_lower == svc_name_lower or _normalize(segment) == _normalize(svc.get('name', '')):
+                        exact_match_found = True
+                        break
+                
+                if not exact_match_found:
+                    # Nessun match esatto → forza disambiguazione
+                    logger.warning("_extract_multiple_services: segmento '%s' → STESSA FAMIGLIA: %d candidati con prefisso '%s' → DISAMBIGUAZIONE",
+                                  segment, len(same_prefix_candidates), seg_prefix)
+                    ambiguous_segments.append((segment, same_prefix_candidates))
+                    segment_results.append((segment, None, 0, []))  # Segna come non risolto
+                    continue
         
         segment_results.append((segment, best_match, best_score, alternatives))
     
@@ -2310,8 +2402,291 @@ def _is_first_slot_request(message: str) -> bool:
 import unicodedata
 
 def _normalize(text: str) -> str:
-    """Normalizza accenti: é→e, è→e, à→a ecc. per confronto fuzzy."""
-    return unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('ascii').lower()
+    """
+    Normalizza per confronto fuzzy:
+    - Rimuove accenti (é→e, è→e, à→a)
+    - Normalizza apostrofi (', ', `) → '
+    - Lowercase
+    """
+    if not text:
+        return ""
+    # Normalizza varianti di apostrofo
+    text = text.replace("'", "'").replace("`", "'").replace("'", "'")
+    # Rimuove accenti
+    normalized = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('ascii')
+    return normalized.lower().strip()
+
+
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """
+    Calcola la distanza di Levenshtein tra due stringhe.
+    Restituisce il numero minimo di operazioni (inserimento, cancellazione, sostituzione)
+    necessarie per trasformare s1 in s2.
+    """
+    if len(s1) < len(s2):
+        return _levenshtein_distance(s2, s1)
+    
+    if len(s2) == 0:
+        return len(s1)
+    
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            # costo: 0 se i caratteri sono uguali, 1 altrimenti
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    
+    return previous_row[-1]
+
+
+def _similarity_ratio(s1: str, s2: str) -> float:
+    """
+    Calcola la similarità tra due stringhe come percentuale (0.0 - 1.0).
+    Usa la distanza di Levenshtein normalizzata.
+    1.0 = stringhe identiche, 0.0 = completamente diverse.
+    
+    OTTIMIZZATO: confronta anche versioni senza apostrofo per gestire
+    varianti come "Dell'Angelo" vs "Dall'Angelo".
+    """
+    if not s1 and not s2:
+        return 1.0
+    if not s1 or not s2:
+        return 0.0
+    
+    # Normalizza le stringhe (rimuovi accenti, lowercase, normalizza apostrofi)
+    s1_norm = _normalize(s1.strip())
+    s2_norm = _normalize(s2.strip())
+    
+    if s1_norm == s2_norm:
+        return 1.0
+    
+    max_len = max(len(s1_norm), len(s2_norm))
+    if max_len == 0:
+        return 1.0
+    
+    # Calcola distanza standard
+    distance = _levenshtein_distance(s1_norm, s2_norm)
+    score_standard = 1.0 - (distance / max_len)
+    
+    # Se contengono apostrofi, calcola anche senza per tolleranza maggiore
+    # "dell'angelo" vs "dall'angelo" → "dellangelo" vs "dallangelo" (diff = 1)
+    if "'" in s1_norm or "'" in s2_norm:
+        s1_no_apo = s1_norm.replace("'", "")
+        s2_no_apo = s2_norm.replace("'", "")
+        if s1_no_apo and s2_no_apo:
+            max_len_na = max(len(s1_no_apo), len(s2_no_apo))
+            distance_na = _levenshtein_distance(s1_no_apo, s2_no_apo)
+            score_no_apo = 1.0 - (distance_na / max_len_na)
+            # Usa il miglior score tra le due versioni
+            return max(score_standard, score_no_apo)
+    
+    return score_standard
+
+def _fuzzy_match_clients(search: str, threshold: float = 0.80) -> list:
+    """
+    Cerca clienti con matching fuzzy (tollerante agli errori di battitura).
+    Restituisce clienti con similarità >= threshold (default 80%).
+    
+    IMPORTANTE: la similarità viene calcolata su:
+    - nome+cognome completo (come stringa unica), oppure
+    - cognome+nome completo (come stringa unica), oppure
+    - numero di cellulare
+    - confronto parola per parola (per ricerche multi-parola)
+    
+    MAI su nome o cognome singolarmente.
+    
+    Args:
+        search: stringa di ricerca (nome e/o cognome)
+        threshold: soglia minima di similarità (0.0 - 1.0)
+    
+    Returns:
+        Lista di dict {client: {...}, score: float} ordinate per similarità decrescente
+    """
+    from appl.models import Client
+    from sqlalchemy import or_, func
+    
+    search = (search or '').strip()
+    if len(search) < 2:
+        return []
+    
+    search_norm = _normalize(search)
+    search_parts = [p for p in search_norm.split() if len(p) >= 2]
+    
+    if not search_parts:
+        return []
+    
+    # PRE-FILTERING SQL: cerca clienti i cui nome/cognome iniziano con
+    # i primi 1-3 caratteri di qualsiasi parola della ricerca.
+    # Usiamo prefissi MOLTO corti (1-2 char) per tollerare errori all'inizio.
+    # Es: "Cone" → prefissi "c", "co", "con" per trovare anche "Coone"
+    prefixes = set()
+    for part in search_parts:
+        # Prefisso di 1 carattere: massima tolleranza (trova Cone→Coone, Dell→Dall)
+        if len(part) >= 1:
+            prefixes.add(part[:1])
+        # Prefisso di 2 caratteri
+        if len(part) >= 2:
+            prefixes.add(part[:2])
+        # Prefisso di 3 caratteri (più specifico)
+        if len(part) >= 3:
+            prefixes.add(part[:3])
+        # Per cognomi con apostrofo (dell, dall), cerca anche senza
+        if "'" in part:
+            clean_part = part.replace("'", "")
+            if len(clean_part) >= 1:
+                prefixes.add(clean_part[:1])
+            if len(clean_part) >= 2:
+                prefixes.add(clean_part[:2])
+            if len(clean_part) >= 3:
+                prefixes.add(clean_part[:3])
+    
+    # Costruisci condizioni OR per ogni prefisso
+    prefix_conditions = []
+    for prefix in prefixes:
+        prefix_conditions.append(func.lower(Client.cliente_nome).like(f"{prefix}%"))
+        prefix_conditions.append(func.lower(Client.cliente_cognome).like(f"{prefix}%"))
+    
+    # Query con pre-filtering — NESSUN LIMITE per fuzzy matching
+    # Il pre-filtering già riduce i candidati tramite i prefissi
+    if prefix_conditions:
+        clients = Client.query.filter(
+            Client.is_deleted == False,
+            or_(*prefix_conditions)
+        ).all()
+    else:
+        # Fallback senza prefissi: carica TUTTI i clienti attivi
+        # (necessario per fuzzy matching completo)
+        clients = Client.query.filter(
+            Client.is_deleted == False
+        ).all()
+    
+    logger.warning("_fuzzy_match_clients: search='%s', prefixes=%r, clients_loaded=%d",
+                   search, prefixes, len(clients))
+    
+    matches = []
+    
+    # Prepara versioni normalizzate della ricerca
+    search_no_apo = search_norm.replace("'", "")
+    
+    for client in clients:
+        nome = (client.cliente_nome or '').strip()
+        cognome = (client.cliente_cognome or '').strip()
+        cellulare = (client.cliente_cellulare or '').strip()
+        
+        # Costruisci le stringhe complete nome+cognome
+        full_name = f"{nome} {cognome}".strip()
+        full_name_rev = f"{cognome} {nome}".strip()
+        
+        # Versioni normalizzate
+        full_name_norm = _normalize(full_name)
+        full_name_rev_norm = _normalize(full_name_rev)
+        full_name_no_apo = full_name_norm.replace("'", "")
+        full_name_rev_no_apo = full_name_rev_norm.replace("'", "")
+        
+        scores = []
+        
+        # ═══ MATCH 1: Cellulare (se la ricerca sembra un numero) ═══
+        # Se la ricerca contiene solo cifre, confronta col cellulare
+        search_digits = ''.join(c for c in search if c.isdigit())
+        if len(search_digits) >= 3 and cellulare:
+            cell_digits = ''.join(c for c in cellulare if c.isdigit())
+            if cell_digits:
+                # Match esatto o contenuto
+                if search_digits in cell_digits or cell_digits in search_digits:
+                    scores.append(1.0)
+                else:
+                    # Similarità sulla sequenza di cifre
+                    scores.append(_similarity_ratio(search_digits, cell_digits))
+        
+        # ═══ MATCH 2: Nome+Cognome completo (normalizzato) ═══
+        # Confronta la ricerca con "nome cognome" e "cognome nome"
+        scores.append(_similarity_ratio(search_norm, full_name_norm))
+        scores.append(_similarity_ratio(search_norm, full_name_rev_norm))
+        
+        # ═══ MATCH 3: Senza apostrofi ═══
+        # "Dell'Angelo" vs "Dall'Angelo" → "dellangelo" vs "dallangelo"
+        if "'" in full_name_norm or "'" in search_norm:
+            scores.append(_similarity_ratio(search_no_apo, full_name_no_apo))
+            scores.append(_similarity_ratio(search_no_apo, full_name_rev_no_apo))
+        
+        # ═══ MATCH 4: Confronto parola per parola (per ricerche multi-parola) ═══
+        # Se la ricerca ha 2+ parole, confronta ogni parola della ricerca
+        # con nome e cognome separatamente, poi fai la MEDIA dei migliori score.
+        # Es: "Carmine Cone" → confronta "carmine" vs nome, "cone" vs cognome
+        if len(search_parts) >= 2:
+            nome_norm = _normalize(nome)
+            cognome_norm = _normalize(cognome)
+            
+            # Prova tutte le combinazioni: quale parola matcha il nome, quale il cognome
+            word_scores = []
+            for i, part in enumerate(search_parts):
+                other_parts = [p for j, p in enumerate(search_parts) if j != i]
+                
+                # part vs nome, other_parts[0] vs cognome
+                if other_parts:
+                    score_nome = _similarity_ratio(part, nome_norm)
+                    score_cognome = _similarity_ratio(other_parts[0], cognome_norm)
+                    # Media dei due score
+                    avg_score = (score_nome + score_cognome) / 2
+                    # Bonus se entrambi sono alti (>0.7)
+                    if score_nome >= 0.7 and score_cognome >= 0.7:
+                        avg_score = min(1.0, avg_score + 0.1)
+                    word_scores.append(avg_score)
+            
+            if word_scores:
+                scores.append(max(word_scores))
+        
+        # ═══ NON fare match su nome o cognome singolarmente! ═══
+        # Il cliente deve matchare sulla combinazione completa.
+        
+        best_score = max(scores) if scores else 0.0
+        
+        if best_score >= threshold:
+            matches.append({
+                "client": {
+                    "id": client.id,
+                    "nome": nome,
+                    "cognome": cognome,
+                    "cellulare": cellulare,
+                    "ref": f"C{client.id % 9999:04d}",
+                },
+                "score": best_score
+            })
+    
+    # Ordina per similarità decrescente
+    matches.sort(key=lambda x: x["score"], reverse=True)
+    
+    # Log risultati per debug
+    if matches:
+        logger.info("_fuzzy_match_clients: search='%s' → %d match (top: '%s %s' score=%.2f)",
+                   search, len(matches),
+                   matches[0]["client"].get("nome"), matches[0]["client"].get("cognome"),
+                   matches[0]["score"])
+    else:
+        # DEBUG: logga il miglior score trovato anche se sotto threshold
+        if clients:
+            debug_scores = []
+            for client in clients[:10]:  # primi 10 per debug
+                nome = (client.cliente_nome or '').strip()
+                cognome = (client.cliente_cognome or '').strip()
+                full_name = f"{nome} {cognome}".strip()
+                full_name_norm = _normalize(full_name)
+                score = _similarity_ratio(search_norm, full_name_norm)
+                if score > 0.5:  # logga solo se almeno 50%
+                    debug_scores.append((f"{nome} {cognome}", score))
+            if debug_scores:
+                debug_scores.sort(key=lambda x: x[1], reverse=True)
+                logger.warning("_fuzzy_match_clients: search='%s' → 0 match MA migliori candidati: %r",
+                              search, debug_scores[:5])
+        logger.warning("_fuzzy_match_clients: search='%s' → 0 match (threshold=%.2f, clients_checked=%d)",
+                      search, threshold, len(clients))
+    
+    # Restituisci solo i top 5 match
+    return matches[:5]
 
 def _extract_client_by_hints(message: str, find_client_by_text) -> list:
     # Tokenizza tutte le parole ≥2 caratteri
@@ -2446,7 +2821,18 @@ def _extract_client_by_hints(message: str, find_client_by_text) -> list:
                 capitalized.append(part_cap)
                 logger.debug("_extract_client_by_hints: 3-WORD INTRO pattern → '%s'", part_cap)
 
-    logger.debug("_extract_client_by_hints: candidati finali (con cognomi minuscoli)=%r", capitalized)
+    # ══ DEDUPLICAZIONE: rimuovi varianti case-insensitive dello stesso token ══
+    # Es: ["Dell'Angelo", "Dell'angelo"] → ["Dell'Angelo"]
+    seen_normalized = {}
+    deduped_capitalized = []
+    for w in capitalized:
+        w_norm = _normalize(w)
+        if w_norm not in seen_normalized:
+            seen_normalized[w_norm] = w
+            deduped_capitalized.append(w)
+    capitalized = deduped_capitalized
+
+    logger.debug("_extract_client_by_hints: candidati finali (deduplicati)=%r", capitalized)
 
     # Parole da ignorare (non sono nomi propri)
     noise = {
@@ -2563,20 +2949,28 @@ def _extract_client_by_hints(message: str, find_client_by_text) -> list:
     found: dict = {}  # id → cliente (deduplicato)
     word_hits: dict = {}  # id → set di candidate words che hanno matchato
 
-    # STEP 2a: Se abbiamo ≥2 candidate, cerca PRIMA la combinazione completa
-    # (es: "Cristina Gallo" come stringa unica). Questo evita che il LIMIT
-    # tronchi risultati quando ci sono molti omonimi per singola parola.
+    # STEP 2a: Se abbiamo ≥2 candidate, cerca la combinazione completa SENZA
+    # generare troppe query. Limita a max 3 combinazioni per evitare lentezza.
     if len(candidates) >= 2:
-        for i in range(len(candidates)):
-            for j in range(i + 1, len(candidates)):
+        # Prova prima la combinazione diretta in ordine
+        combos_tried = 0
+        max_combos = 3
+        for i in range(min(len(candidates), 3)):
+            for j in range(i + 1, min(len(candidates), 4)):
+                if combos_tried >= max_combos:
+                    break
                 combo_a = f"{candidates[i]} {candidates[j]}"
-                combo_b = f"{candidates[j]} {candidates[i]}"
-                for combo in [combo_a, combo_b]:
-                    results = find_client_by_text(combo)
-                    for c in results:
-                        found[c["id"]] = c
-                        word_hits.setdefault(c["id"], set()).add(_normalize(candidates[i]))
-                        word_hits.setdefault(c["id"], set()).add(_normalize(candidates[j]))
+                results = find_client_by_text(combo_a)
+                combos_tried += 1
+                for c in results:
+                    found[c["id"]] = c
+                    word_hits.setdefault(c["id"], set()).add(_normalize(candidates[i]))
+                    word_hits.setdefault(c["id"], set()).add(_normalize(candidates[j]))
+                # Se trovato, non cercare altre combinazioni
+                if results:
+                    break
+            if found:
+                break
         if found:
             logger.debug("_extract_client_by_hints: STEP 2a combo trovati %d clienti: %r",
                         len(found),
@@ -2597,7 +2991,23 @@ def _extract_client_by_hints(message: str, find_client_by_text) -> list:
                     word_hits.setdefault(c["id"], set()).add(_normalize(word))
 
     if not found:
-        return []
+        # FUZZY FALLBACK: se nessun match esatto, prova fuzzy sulle candidate words
+        if len(candidates) >= 1:
+            # Costruisci query di ricerca dalle parole candidate
+            fuzzy_query = ' '.join(candidates)
+            logger.info("_extract_client_by_hints: nessun match esatto, provo fuzzy su '%s'", fuzzy_query)
+            
+            # Soglia 0.80 per tollerare errori di battitura comuni (es: Cone vs Coone)
+            fuzzy_results = _fuzzy_match_clients(fuzzy_query, threshold=0.80)
+            if fuzzy_results:
+                for fr in fuzzy_results:
+                    client = fr["client"]
+                    found[client["id"]] = client
+                    logger.info("_extract_client_by_hints: FUZZY MATCH '%s %s' (score=%.2f%%)",
+                               client.get("nome"), client.get("cognome"), fr["score"] * 100)
+        
+        if not found:
+            return []
 
     clients = list(found.values())
 
@@ -2643,10 +3053,24 @@ def _extract_client_by_hints(message: str, find_client_by_text) -> list:
                               [f"{c.get('nome')} {c.get('cognome')}" for c in validated])
                 clients = validated
             else:
-                # Nessun cliente matcha almeno 2 candidate words
-                # Il nome richiesto probabilmente non esiste nel DB
+                # Nessun cliente matcha almeno 2 candidate words con match ESATTO
+                # FUZZY FALLBACK: prova fuzzy match sulla query completa
+                full_query = " ".join(candidates)
+                logger.warning("_extract_client_by_hints: nessun match esatto per %r (best=%d), "
+                              "provo FUZZY su '%s'",
+                              candidates, best_match_count, full_query)
+                
+                fuzzy_results = _fuzzy_match_clients(full_query, threshold=0.80)
+                if fuzzy_results:
+                    fuzzy_clients = [fr["client"] for fr in fuzzy_results]
+                    logger.warning("_extract_client_by_hints: FUZZY MATCH trovato %d clienti: %r",
+                                  len(fuzzy_clients),
+                                  [f"{c.get('nome')} {c.get('cognome')} (score={fr['score']:.2f})"
+                                   for c, fr in zip(fuzzy_clients, fuzzy_results)])
+                    return fuzzy_clients
+                
                 logger.warning("_extract_client_by_hints: nessun cliente matcha almeno 2 "
-                              "delle parole candidate %r (best=%d) → restituisco []",
+                              "delle parole candidate %r (best=%d) e fuzzy fallito → restituisco []",
                               candidates, best_match_count)
                 return []
         else:
@@ -3225,6 +3649,7 @@ def process_ai_query(
     service_ids: Optional[list] = None,
     days_range: int = 60,
     intent_hint: Optional[str] = None,
+    last_intent: Optional[str] = None,  # NUOVO: ultimo intent per continuità conversazionale
 ) -> dict:
     """
     Entry point chiamato dall'endpoint Flask.
@@ -3244,6 +3669,7 @@ def process_ai_query(
     # Pulisci cache disambiguazione da chiamate precedenti (module-level, non thread-safe)
     _ambiguous_services_cache.clear()
     _ambiguous_groups_cache.clear()
+    logger.warning("PROCESS_AI_QUERY START: cache pulite, trace_id=%s", trace_id)
 
     if not cfg["api_key"]:
         return _error_response(trace_id, "Servizio AI non configurato.")
@@ -3278,6 +3704,12 @@ def process_ai_query(
     # forziamo is_primo_slot=True anche se il messaggio non contiene "primo spazio".
     if intent_hint:
         logger.warning("INTENT_HINT ricevuto dal frontend: '%s'", intent_hint)
+    elif last_intent:
+        # NUOVO: Continuità conversazionale - se non c'è intent_hint ma c'è last_intent,
+        # significa che l'utente sta continuando una conversazione (es. "info su X" poi "Y")
+        # Usiamo last_intent come hint per mantenere il contesto
+        intent_hint = last_intent
+        logger.warning("LAST_INTENT usato per continuità conversazionale: '%s'", last_intent)
 
     # ── 3. Estrazione automatica nome cliente dal messaggio ──────
     # ── 3+4. Ricerca cliente: hint diretti → DB, poi fallback Groq/regex ─────
@@ -3369,27 +3801,39 @@ def process_ai_query(
                     seen.setdefault(c["id"], c)
                 client_data = list(seen.values())
                 logger.warning("FALLBACK SPLIT: trovati %d clienti", len(client_data))
-
-        if len(client_data) == 1:
-            client_context = build_client_context(client_data[0]["id"])
-            logger.warning("CLIENT_CONTEXT CARICATO: '%s %s' id=%s history=%d",
-                           client_data[0].get('nome'), client_data[0].get('cognome'),
-                           client_data[0].get('id'), len(client_context.get('history', [])))
-        elif len(client_data) > 1:
+        
+        # NUOVO: Se fallback split trova più clienti, DEVE mostrare disambiguazione
+        # Non proseguire col flusso normale
+        if len(client_data) > 1:
+            logger.warning("FALLBACK SPLIT → DISAMBIGUAZIONE: %d clienti trovati per '%s'",
+                          len(client_data), client_search)
+            # Prova prima a filtrare per match esatto nome+cognome
             parts = (client_search or "").strip().split()
             if len(parts) >= 2:
                 filtered = [
                     c for c in client_data
-                    if (parts[0].lower() in c["nome"].lower() and parts[-1].lower() in c["cognome"].lower())
-                    or (parts[0].lower() in c["cognome"].lower() and parts[-1].lower() in c["nome"].lower())
+                    if (parts[0].lower() in (c.get("nome") or "").lower() and parts[-1].lower() in (c.get("cognome") or "").lower())
+                    or (parts[0].lower() in (c.get("cognome") or "").lower() and parts[-1].lower() in (c.get("nome") or "").lower())
                 ]
                 if len(filtered) == 1:
-                    client_data    = filtered
+                    client_data = filtered
                     client_context = build_client_context(client_data[0]["id"])
+                    logger.warning("FALLBACK SPLIT filtrato a 1 cliente: '%s %s'",
+                                  client_data[0].get('nome'), client_data[0].get('cognome'))
                 elif len(filtered) > 1:
+                    # Filtro non ha ridotto abbastanza, mostra disambiguazione
                     return _ambiguous_client_response(trace_id, filtered)
-            if len(client_data) > 1 and not client_context:
+                else:
+                    # Filtro ha dato 0 risultati, mostra tutti i candidati originali
+                    return _ambiguous_client_response(trace_id, client_data)
+            else:
+                # Ricerca con una sola parola e più risultati → disambiguazione
                 return _ambiguous_client_response(trace_id, client_data)
+        elif len(client_data) == 1:
+            client_context = build_client_context(client_data[0]["id"])
+            logger.warning("CLIENT_CONTEXT CARICATO: '%s %s' id=%s history=%d",
+                           client_data[0].get('nome'), client_data[0].get('cognome'),
+                           client_data[0].get('id'), len(client_context.get('history', [])))
 
     # ── 5. Servizio richiesto (opzionale) — supporto MULTI-SERVIZIO ──
     service_context: dict = {}
