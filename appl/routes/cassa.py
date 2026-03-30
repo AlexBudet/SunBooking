@@ -669,7 +669,7 @@ def send_to_rch():
             '<?xml version="1.0" encoding="UTF-8"?>',
             '<Service>'
         ]
-        totali = {"T1": 0, "T2": 0, "T4": 0}
+        totali = {"T1": 0, "T2": 0, "T3": 0}
 
         for v in voci_fiscali:
             srv = db.session.get(Service, v.get("servizio_id"))
@@ -694,7 +694,7 @@ def send_to_rch():
             elif metodo == "bank":
                 totali["T2"] += prezzo_cents
             elif metodo == "pos":
-                totali["T4"] += prezzo_cents
+                totali["T3"] += prezzo_cents
 
         codice_lotteria = (data.get("lotteria") or "").strip().upper()
         pagamenti_digitali = any(
@@ -707,15 +707,15 @@ def send_to_rch():
         ):
             xml_lines.insert(2, f'<cmd>="/?L/$1/({codice_lotteria})</cmd>')
 
-        if totali["T1"] == 0 and totali["T2"] == 0 and totali["T4"] == 0:
+        if totali["T1"] == 0 and totali["T2"] == 0 and totali["T3"] == 0:
             xml_lines.append('<cmd>=T5/$0</cmd>')
         else:
             if totali["T1"] > 0:
                 xml_lines.append(f'<cmd>=T1/${totali["T1"]}</cmd>')
             if totali["T2"] > 0:
                 xml_lines.append(f'<cmd>=T2/${totali["T2"]}</cmd>')
-            if totali["T4"] > 0:
-                xml_lines.append(f'<cmd>=T4/${totali["T4"]}</cmd>')
+            if totali["T3"] > 0:
+                xml_lines.append(f'<cmd>=T3/${totali["T3"]}</cmd>')
 
         xml_lines.append('</Service>')
         payload_vendita = "\n".join(xml_lines)
@@ -2073,7 +2073,7 @@ def rch_console_close_document():
     else:
         cents = int(round(importo * 100))
         if metodo == "pos":
-            pay_cmd = f"=T4/${cents}"
+            pay_cmd = f"=T3/${cents}"
         elif metodo == "bank":
             pay_cmd = f"=T2/${cents}"
         else:
