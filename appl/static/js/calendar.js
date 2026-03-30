@@ -12233,7 +12233,7 @@ function buildSlotCard(slot) {
                  'placeholder="Cerca cliente (nome, cognome o cellulare)" ' +
                  'style="width:100%; margin-top:4px; border:1px solid #d0c8ff; border-radius:8px; padding:6px 8px; font-size:0.82rem;">' +
           '<div class="ai-client-results" ' +
-               'style="display:none; position:absolute; left:0; right:0; top:58px; background:#fff; border:1px solid #d0c8ff; border-radius:8px; max-height:160px; overflow:auto; z-index:3;"></div>' +
+               'style="display:none; position:absolute; left:0; right:0; top:58px; background:#fff; border:1px solid #d0c8ff; border-radius:8px; max-height:160px; overflow:auto; z-index:13333;"></div>' +
         '</div>'
       : '') +
       '<div class="ai-slot-required-msg" style="margin-top:8px; font-size:0.78rem; color:#8a6d3b;"></div>' +

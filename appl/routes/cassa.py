@@ -26,13 +26,18 @@ def _rch_url(ip: str, model: str = None) -> str:
 
 def _rch_headers(model: str = None) -> dict:
     """Header HTTP per la stampante RCH in base al modello.
-    - RCH Print 3.0 RT: application/xml
+    - RCH Print 3.0 RT: application/xml + Accept obbligatorio (da specifica)
     - RCH Print F: text/xml; charset=UTF-8
     """
     model = _normalize_model(model)
     if model == PrinterModel.RCH_PRINT_F.value:
         return {"Content-Type": "text/xml; charset=UTF-8"}
-    return {"Content-Type": "application/xml"}
+    return {
+        "Content-Type": "application/xml",
+        "Accept": "application/xml",
+        "Connection": "keep-alive",
+        "Cache-Control": "no-cache"
+    }
 
 def _rch_verify_ssl(model: str = None):
     """Parametro verify per requests.
@@ -53,7 +58,12 @@ def _rch_chiusura_headers(model: str = None) -> dict:
     model = _normalize_model(model)
     if model == PrinterModel.RCH_PRINT_F.value:
         return {"Content-Type": "application/x-www-form-urlencoded"}
-    return {"Content-Type": "application/xml"}
+    return {
+        "Content-Type": "application/xml",
+        "Accept": "application/xml",
+        "Connection": "keep-alive",
+        "Cache-Control": "no-cache"
+    }
 
 def _rch_dgfe_headers(model: str = None) -> dict:
     """Header per lettura DGFE.
@@ -63,7 +73,12 @@ def _rch_dgfe_headers(model: str = None) -> dict:
     model = _normalize_model(model)
     if model == PrinterModel.RCH_PRINT_F.value:
         return {'Content-Type': 'text/xml; charset=iso-8859-1'}
-    return {"Content-Type": "application/xml"}
+    return {
+        "Content-Type": "application/xml",
+        "Accept": "application/xml",
+        "Connection": "close",
+        "Cache-Control": "no-cache"
+    }
 
 def _rch_request_kwargs(model: str = None) -> dict:
     """Keyword arguments extra per requests.post() in base al modello.
@@ -106,6 +121,31 @@ def _get_printer_config():
         row[0], ip, row[2], model
     )
     return ip, model
+
+def _rch_parse_errcode(body: str):
+    """Estrae codice errore dalla risposta RCH.
+    Supporta sia <errCode> (da specifica) che <errorCode> (variante firmware).
+    """
+    if not body:
+        return None
+    m = re.search(r'<(?:errCode|errorCode)>(\d+)</(?:errCode|errorCode)>', body)
+    if m:
+        try:
+            return int(m.group(1))
+        except Exception:
+            return None
+    return None
+
+def _rch_is_success(resp):
+    """Verifica se la risposta RCH indica successo (errCode/errorCode == 0)."""
+    if resp is None:
+        return False
+    body = getattr(resp, 'text', '') or ''
+    code = _rch_parse_errcode(body)
+    if code is not None:
+        return code == 0
+    # Nessun codice trovato: HTTP 200 = OK presumibile
+    return getattr(resp, 'status_code', 0) == 200
 
 def clean_str(s):
     # Rimuove apostrofi e caratteri HTML problematici
@@ -629,7 +669,7 @@ def send_to_rch():
             '<?xml version="1.0" encoding="UTF-8"?>',
             '<Service>'
         ]
-        totali = {"T1": 0, "T2": 0, "T3": 0}
+        totali = {"T1": 0, "T2": 0, "T4": 0}
 
         for v in voci_fiscali:
             srv = db.session.get(Service, v.get("servizio_id"))
@@ -654,7 +694,7 @@ def send_to_rch():
             elif metodo == "bank":
                 totali["T2"] += prezzo_cents
             elif metodo == "pos":
-                totali["T3"] += prezzo_cents
+                totali["T4"] += prezzo_cents
 
         codice_lotteria = (data.get("lotteria") or "").strip().upper()
         pagamenti_digitali = any(
@@ -667,16 +707,15 @@ def send_to_rch():
         ):
             xml_lines.insert(2, f'<cmd>="/?L/$1/({codice_lotteria})</cmd>')
 
-        if totali["T1"] == 0 and totali["T2"] == 0 and totali["T3"] == 0:
-            xml_lines.append('<cmd>=T5/$0.00</cmd>')
+        if totali["T1"] == 0 and totali["T2"] == 0 and totali["T4"] == 0:
+            xml_lines.append('<cmd>=T5/$0</cmd>')
         else:
-            # Aggiungi solo per totali >0
             if totali["T1"] > 0:
                 xml_lines.append(f'<cmd>=T1/${totali["T1"]}</cmd>')
             if totali["T2"] > 0:
                 xml_lines.append(f'<cmd>=T2/${totali["T2"]}</cmd>')
-            if totali["T3"] > 0:
-                xml_lines.append(f'<cmd>=T3/${totali["T3"]}</cmd>')
+            if totali["T4"] > 0:
+                xml_lines.append(f'<cmd>=T4/${totali["T4"]}</cmd>')
 
         xml_lines.append('</Service>')
         payload_vendita = "\n".join(xml_lines)
@@ -747,8 +786,8 @@ def send_to_rch():
                 }), 202
             return jsonify({"error": "Stampante non raggiungibile. Riprova."}), 502
 
-        # Se non è esplicitamente “OK”, considera pending/retryable (es. fine carta, coperchio aperto, ecc.)
-        if '<errorCode>0</errorCode>' not in (resp_vendita.text or ''):
+        # Se non è esplicitamente "OK", considera pending/retryable (es. fine carta, coperchio aperto, ecc.)
+        if not _rch_is_success(resp_vendita):
             current_app.logger.warning("RCH ha risposto con errore (retryable): %s", resp_vendita.text[:800])
             if idempotency_key:
                 expected_total = round(sum(float(v.get("prezzo", 0)) for v in voci_fiscali), 2)
@@ -1258,7 +1297,7 @@ def chiusura_giornaliera():
 
         # Estrai eventuali codici di esito dal body (diverse forme che la RCH può usare)
         codes = set()
-        codes.update(int(m) for m in re.findall(r'<errorCode>(\d+)</errorCode>', body))
+        codes.update(int(m) for m in re.findall(r'<(?:errCode|errorCode)>(\d+)</(?:errCode|errorCode)>', body))
         codes.update(int(m) for m in re.findall(r'<result[^>]*>(\d+)</result>', body))
         codes.update(int(m) for m in re.findall(r'Risultat[oi]\s*:\s*(\d+)', body, flags=re.IGNORECASE))
 
@@ -1311,9 +1350,6 @@ def api_dgfe():
 
     if not re.match(r'^(?:\d{1,3}\.){3}\d{1,3}$', ip) or any(int(p) > 255 for p in ip.split('.')):
         return jsonify({"error": "IP non valido"}), 400
-
-    if not ip or not date_str:
-        return jsonify({"error": "IP e data obbligatori"}), 400
 
     _, printer_model = _get_printer_config()
     url = _rch_url(ip, printer_model)
@@ -1587,7 +1623,7 @@ def stornare_scontrino_specifico(scontrino):
     rch_kwargs = _rch_request_kwargs(printer_model)
     
     try:
-        resp = requests.post(url, data=xml.encode("UTF-8"), headers=headers, timeout=None,
+        resp = requests.post(url, data=xml.encode("UTF-8"), headers=headers, timeout=30,
                              **rch_kwargs)
         current_app.logger.info("Risposta RCH storno: %s", resp.text)
         
@@ -1598,7 +1634,7 @@ def stornare_scontrino_specifico(scontrino):
             payload_prog = f'''<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'''
             for _ in range(6):
                 pytime.sleep(0.5)
-                resp2 = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=None,
+                resp2 = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=30,
                                       **rch_kwargs)
                 m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp2.text) or
                          re.search(r'<C453[^>]*>(\d+)</C453>', resp2.text) or
@@ -1927,8 +1963,8 @@ def rch_console_status():
             "raw_response": resp.text[:500]
         }
         
-        # Parse errorCode
-        m_err = re.search(r'<errorCode>(\d+)</errorCode>', resp.text)
+        # Parse errorCode / errCode (supporta entrambi i formati)
+        m_err = re.search(r'<(?:errCode|errorCode)>(\d+)</(?:errCode|errorCode)>', resp.text)
         if m_err:
             code = int(m_err.group(1))
             result["error_code"] = code
@@ -1977,7 +2013,7 @@ def rch_console_send_cl():
             payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
             resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=10,
                                  **rch_kwargs)
-            success = '<errorCode>0</errorCode>' in resp.text or resp.status_code == 200
+            success = _rch_is_success(resp)
             results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
             pytime.sleep(0.3)
         except Exception as e:
@@ -2005,7 +2041,7 @@ def rch_console_full_reset():
             payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
             resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
                                  **rch_kwargs)
-            success = '<errorCode>0</errorCode>' in resp.text or resp.status_code == 200
+            success = _rch_is_success(resp)
             results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
             pytime.sleep(0.5)
         except Exception as e:
@@ -2037,7 +2073,7 @@ def rch_console_close_document():
     else:
         cents = int(round(importo * 100))
         if metodo == "pos":
-            pay_cmd = f"=T3/${cents}"
+            pay_cmd = f"=T4/${cents}"
         elif metodo == "bank":
             pay_cmd = f"=T2/${cents}"
         else:
@@ -2050,7 +2086,7 @@ def rch_console_close_document():
             payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
             resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
                                  **rch_kwargs)
-            success = '<errorCode>0</errorCode>' in resp.text or resp.status_code == 200
+            success = _rch_is_success(resp)
             results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
             pytime.sleep(0.3)
         except Exception as e:
@@ -2092,8 +2128,7 @@ def rch_console_send_raw():
         resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
                              **rch_kwargs)
         
-        m_err = re.search(r'<errorCode>(\d+)</errorCode>', resp.text)
-        error_code = int(m_err.group(1)) if m_err else None
+        error_code = _rch_parse_errcode(resp.text)
         
         return jsonify({
             "success": error_code == 0 or error_code is None,
