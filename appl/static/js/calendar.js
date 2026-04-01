@@ -5529,7 +5529,7 @@ async function fetchClientLastDate(clientId) {
 
   const urls = [
     `/calendar/api/last-services-for-client/${encodeURIComponent(key)}`,
-    `/api/last-services-for-client/${encodeURIComponent(key)}`,
+    `/calendar/api/last-services-for-client/${encodeURIComponent(key)}`,
     `/calendar/api/next-appointments-for-client/${encodeURIComponent(key)}`,
     `/settings/api/client_history?q=${encodeURIComponent(key)}`
   ];
@@ -5976,7 +5976,6 @@ async function restoreCutBlocks() {
   localStorage.removeItem('cutBlocks');
 }
 
-  // Inserisci questa funzione utility in alto nel file
 function chiediInvioWhatsappNavigator() {
   return new Promise(resolve => {
     // Rimuovi eventuale popup precedente
@@ -6129,7 +6128,7 @@ if (blocksInCell.length >= 2) {
   return;
 }
             
-            // PATCH: Blocca ulteriori click
+            // Blocca ulteriori click
             window.isCreatingAppointment = true;
 
             const operatorId = cell.getAttribute('data-operator-id');
@@ -6142,6 +6141,15 @@ if (blocksInCell.length >= 2) {
               window.commonPseudoBlockColor = window.pseudoBlocks[0].color;
             }
             const commonColor = window.commonPseudoBlockColor;
+
+            // Accumula i nomi dei servizi creati per il memo WhatsApp finale
+            if (!window._createdServicesForWhatsapp) {
+                window._createdServicesForWhatsapp = [];
+            }
+            // Accumula anche l'ora del primo blocco piazzato
+            if (!window._firstCreatedStartTime) {
+                window._firstCreatedStartTime = minutesToTime(startTimeInMin);
+            }
             
             // Se esiste un pseudo-blocco selezionato, crea solo quell'appuntamento
             if (selectedPseudoBlock) {
@@ -6202,6 +6210,10 @@ else if (window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_dispo
     appointment.colore_font = appointment.colore_font || computeFontColor(commonColor);
     appointment.note = appointment.note || blk.note || "";
     appointment.service_tag = appointment.service_tag || blk.tag || blk.serviceName;
+
+    // Accumula il servizio appena creato per il memo WhatsApp finale
+    if (!window._createdServicesForWhatsapp) window._createdServicesForWhatsapp = [];
+    window._createdServicesForWhatsapp.push(blk.serviceName || blk.tag || "Servizio");
 
     // Rimuovi subito il pseudoblocco consumato
     window.pseudoBlocks.splice(index, 1);
@@ -6271,17 +6283,26 @@ appointment.service_tag = appointment.service_tag || blk.tag || blk.serviceName;
 
     // Ultimo pseudoblocco: chiedi WhatsApp e poi redirect
     clearNavigator(false);
+    // Raccogli tutti i servizi creati nella sessione
+    const tuttiServiziCreati = (window._createdServicesForWhatsapp && window._createdServicesForWhatsapp.length > 0)
+        ? window._createdServicesForWhatsapp
+        : [blk.serviceName || blk.tag || "Servizio"];
+    // Usa l'ora del primo blocco piazzato (non dell'ultimo)
+    const oraPerWhatsapp = window._firstCreatedStartTime || startTimeStr;
     const want = await chiediInvioWhatsappNavigator();
     if (want === true) {
         await inviaWhatsappAutoSeRichiesto(appointment, {
             client_id: blk.clientId,
             client_name: blk.clientName,
             data: date,
-            ora: startTimeStr,
-            servizi: blk.serviceName
+            ora: oraPerWhatsapp,
+            servizi: tuttiServiziCreati
         }, csrfToken);
         alert("Messaggio WhatsApp inviato!");
     }
+    // Pulisci gli accumulatori
+    window._createdServicesForWhatsapp = [];
+    window._firstCreatedStartTime = null;
 
 // *** AGGIUNGI QUESTO DEBUG ***
 console.log("🔍 DEBUG REDIRECT CHECK:");
@@ -6455,13 +6476,20 @@ if (sedutaMatch) {
                         return resp.json();
                     });
                 });
+// Salva i dati dei pseudoBlocks PRIMA di Promise.all per il WhatsApp
+const pseudoBlocksSnapshot = window.pseudoBlocks.map(blk => ({
+    clientId: blk.clientId,
+    clientName: blk.clientName,
+    serviceName: blk.serviceName || blk.tag || "Servizio"
+}));
+
 Promise.all(requests)
 .then(async responses => {
   console.log("Appuntamenti creati dai pseudo-blocchi:", responses);
 
   const want = await chiediInvioWhatsappNavigator();
   if (want === true) {
-    const servizi = window.pseudoBlocks.map(blk => blk.serviceName || blk.tag || "Servizio");
+    const servizi = pseudoBlocksSnapshot.map(blk => blk.serviceName);
     const firstAppointment = responses[0];
     // Normalizza ora in formato HH:MM
     let oraMsg = '';
@@ -6470,8 +6498,8 @@ Promise.all(requests)
       oraMsg = m ? m[1] : '';
     }
     await inviaWhatsappAutoSeRichiesto(firstAppointment, {
-      client_id: window.pseudoBlocks[0].clientId,
-      client_name: window.pseudoBlocks[0].clientName,
+      client_id: pseudoBlocksSnapshot[0].clientId,
+      client_name: pseudoBlocksSnapshot[0].clientName,
       data: date,
       ora: oraMsg || (('0' + hour).slice(-2) + ':' + ('0' + minute).slice(-2)),
       servizi: servizi
