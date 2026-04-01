@@ -1,0 +1,446 @@
+===========================================================
+RCH PRINT! 3.0 RT – ESTRAZIONE COMPLETA PROTOCOLLO
+SOURCE: MANUALE PROTOCOLLO PRINT! 3.0 RT
+===========================================================
+
+===========================================================
+1. STRUTTURA PROTOCOLLO BASSO LIVELLO
+===========================================================
+
+Formato pacchetto:
+
+<STX><ADDS><LUNGH><PROT-ID><DATI><PACK-ID><CHK><ETX>
+
+CAMPI:
+
+STX = 02h (inizio)
+ADDS = indirizzo (non usato)
+LUNGH = lunghezza dati
+PROT-ID = identificatore protocollo
+DATI = payload comando
+PACK-ID = id pacchetto (eco nella risposta)
+CHK = checksum XOR
+ETX = 03h (fine)
+
+CHECKSUM:
+- XOR di tutto il pacchetto (incluso STX, escluso ETX)
+- convertito in ASCII esadecimale
+
+NOTE:
+- ASCII standard 20h–7Fh
+- estesi non garantiti
+
+===========================================================
+2. FLUSSO COMUNICAZIONE
+===========================================================
+
+STANDARD:
+
+PC → DATA_CMD
+RT → ACK (06h) o NACK (15h)
+RT → DATA_ANSW
+
+CON DATI:
+
+PC → DATA_CMD
+RT → ACK/NACK
+RT → DATA_TEXT
+RT → DATA_ANSW
+
+DOWNLOAD XML:
+
+<SOH> file <RS>
+...
+<FS>
+
+===========================================================
+3. STRUTTURA COMANDO LOGICO
+===========================================================
+
+<DATI> = <TIPO_CMD><SEQ_CONTROLLO>
+
+TIPI:
+
+=   stampante fiscale
+>   load/set
+<   dump/enquiry
+
+===========================================================
+4. STRUTTURA COMANDO FISCALE "="
+===========================================================
+
+Formato:
+
+=<FUNZIONE>[numero]
+/$valore
+/*quantità
+/(descrizione)
+/&param
+/[valori extra]
+
+IDENTIFICATORI:
+
+$ = prezzo
+* = quantità
+() = descrizione
+& = parametro funzione
++/- = segno
+
+===========================================================
+5. FUNZIONI FISCALI COMPLETE
+===========================================================
+
+R  vendita reparto
+%  sconto percentuale
+V  variazione valore
+T  pagamento
+O  operatore
+"  codice/testo
+C  comandi sistema
+S  subtotale
+K  clear
+a  annullo riga
+s  storno
+r  reso
+f  avanzamento carta
+D  display
+k  annullamento documento
+o  documento gestionale
+H  ristampa intestazione
+c  chiusura fidelity
+l  prezzo libero
+e  entrate
+p  prelievi
+U  sconto indiretto
+x  terminatore
+A  dati cliente
+
+===========================================================
+6. VENDITA (R)
+===========================================================
+
+=R[n]/$importo/*qta/(desc)/&tipo
+
+TIPI:
+
+&0 vendita
+&1 omaggio
+&2 acconto
+&3 buono
+
+ESEMPI:
+
+=R1/$1000
+=R2/$2000/(Articolo)
+=R1/$1000/*2
+=R2/$2000/&1/(Omaggio)
+
+NOTE:
+
+- max 36 caratteri descrizione
+- acconti solo se vendita precedente
+- vincoli IVA per acconti
+
+===========================================================
+7. SCONTO (%)
+===========================================================
+
+=%/*12.15
+=%-/*12.15
+=%+/*12.15/(desc)
+
+SU SUBTOTALE:
+
+=S
+=%/*10
+
+===========================================================
+8. VARIAZIONE (V)
+===========================================================
+
+=V/$1250
+=V-/$1250
+=V+/$215
+
+SU SUBTOTALE:
+
+=S
+=V+/$215
+
+===========================================================
+9. PAGAMENTO (T)
+===========================================================
+
+=T[n]/$importo/(desc)/&param
+
+TIPI:
+
+T1 contanti
+T2 non riscosso
+T3 assegni
+T4 elettronico
+T5 ticket
+
+TICKET:
+
+=T5/$1000/&2
+=T5/&3
+
+NOTE:
+
+- ticket non incrementano incasso
+- descrizione non può contenere "TOTALE"
+
+===========================================================
+10. OPERATORE (O)
+===========================================================
+
+=O1
+=O3
+
+===========================================================
+11. CODICE / STRINGHE (")
+===========================================================
+
+="/?A/(testo)
+="/?C/(codice fiscale)
+
+NOTE:
+
+- max 25 caratteri
+- 32 gestionale
+- escape parentesi: ))
+
+===========================================================
+12. SUBTOTALE (S)
+===========================================================
+
+=S
+
+===========================================================
+13. CLEAR / CONTROLLO
+===========================================================
+
+=K clear
+=a annullo riga
+=s storno modalità
+
+===========================================================
+14. RESO (r)
+===========================================================
+
+=r/&data/[chiusura/]numero
+
+PARAMETRI:
+
+&ggmmaa = data
+[ = chiusura
+] = progressivo
+
+MODI:
+
+/*1 verifica
+/*2 verifica + storico
+
+===========================================================
+15. ANNULLAMENTO (k)
+===========================================================
+
+=k/&data/[chiusura/]numero
+
+ANNULLAMENTO COMPLETO:
+
+=k
+
+===========================================================
+16. DISPLAY (D)
+===========================================================
+
+=D1/(msg)
+=D2/(msg)
+=D3/(msg)
+
+===========================================================
+17. DOCUMENTO GESTIONALE (o)
+===========================================================
+
+=o
+=o/*1
+=o/&1
+=o/&2
+
+===========================================================
+18. CLIENTE (A)
+===========================================================
+
+=A/(dati cliente)
+
+===========================================================
+19. ENTRATE / PRELIEVI
+===========================================================
+
+=e
+=p
+
+===========================================================
+20. AVANZAMENTO CARTA
+===========================================================
+
+=f
+
+===========================================================
+21. COMANDI SISTEMA (C)
+===========================================================
+
+MODALITÀ:
+
+=C0 LOCK
+=C1 REG
+=C2 X
+=C3 Z
+=C4 PRG
+=C5 SRV
+
+===========================================================
+22. DGFE (MEMORIA DETTAGLIO)
+===========================================================
+
+=C450/$0 scarico
+=C450/$1 stampa
+=C451 intervallo date
+=C452 intervallo documenti
+=C453 ultimo documento
+
+EXPORT XML:
+
+=C426
+=C426/&data/^data
+
+===========================================================
+23. MEMORIA RIEPILOGO
+===========================================================
+
+=C400 stampa
+=C401 date
+=C402 chiusure
+=C404 scarico
+=C405 intervallo
+
+EXPORT:
+
+=C423
+=C423/&data/^data
+
+===========================================================
+24. XML / ADE
+===========================================================
+
+=C422 invio file pendenti
+=C411 scarico XML
+=C419 rigenera XML
+
+NOTE:
+
+- no invio 03:00–05:00
+
+===========================================================
+25. COMANDI "<" (DUMP)
+===========================================================
+
+<  stato RT
+
+ALTRI:
+
+- stato DGFE
+- stato stampante
+- certificato
+- rete
+- data attivazione
+- ultima verifica
+
+===========================================================
+26. COMANDI ">" (LOAD/SET)
+===========================================================
+
+PROGRAMMAZIONI:
+
+- IVA / ATECO
+- reparti
+- data/ora
+- intestazione
+- messaggi
+- pagamenti
+- operatori
+- flag sistema
+- connettività
+- URL STS
+
+===========================================================
+27. SCARICO XML
+===========================================================
+
+FORMATO:
+
+<SOH>
+XML
+<RS>
+...
+<FS>
+
+===========================================================
+28. ERRORI
+===========================================================
+
+LIVELLI:
+
+1 HTTP (500)
+2 XML errCode
+3 RT interno
+
+500:
+
+- richiesta ricevuta
+- non processata
+- possibile nessuna risposta
+
+===========================================================
+29. REGOLE
+===========================================================
+
+- ASCII standard
+- prezzi in centesimi
+- max 3 decimali quantità
+- sequenza obbligatoria
+- documento coerente
+
+===========================================================
+30. SEQUENZA SCONTRINO
+===========================================================
+
+=R...
+=R...
+=S
+=T1
+
+===========================================================
+31. LIMITI
+===========================================================
+
+- no multithreading
+- no queue
+- no comandi paralleli
+- stato macchina vincolante
+
+===========================================================
+32. NOTE CRITICHE
+===========================================================
+
+- ACK può essere disabilitato
+- NACK sempre attivo
+- PACK-ID deve essere gestito lato client
+- retry necessario lato CRM
+- certificati SSL locali
+
+===========================================================
+FINE ESTRAZIONE
+===========================================================
