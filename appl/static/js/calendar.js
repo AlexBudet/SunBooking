@@ -12292,7 +12292,8 @@ function fmtDateIT(isoDate) {
 
     // Slot cards
     if (!isUser && extra?.slots?.length) {
-      extra.slots.forEach(slot => elMessages.appendChild(buildSlotCard(slot)));
+      var isMulti = extra.slots.length > 1;
+      extra.slots.forEach(slot => elMessages.appendChild(buildSlotCard(slot, isMulti)));
     }
 
     const ts = document.createElement('div');
@@ -12311,7 +12312,7 @@ function fmtDateIT(isoDate) {
   // SLOT CARD — mini-blocco con conferma inline
   // ──────────────────────────────────────────────────────────────
 
-function buildSlotCard(slot) {
+function buildSlotCard(slot, isMultiSlot) {
     const card = document.createElement('div');
     card.className = 'ai-slot-card';
 
@@ -12320,45 +12321,104 @@ function buildSlotCard(slot) {
 
     const clienteLine = hasClient
       ? '<span class="ai-slot-label">Cliente</span><br>' +
-        '<strong>' + esc(slot.client_nome || '') + ' ' + esc(slot.client_cognome || '') + '</strong>' +
+        '<strong>' + esc(capitalizeName((slot.client_nome || '') + ' ' + (slot.client_cognome || ''))) + '</strong>' +
         (slot.client_cellulare ? '&nbsp;· <span style="font-size:0.8rem">' + esc(slot.client_cellulare) + '</span>' : '')
       : '';
 
-    card.innerHTML =
-      '<div>' +
-        '<span class="ai-slot-label">Data &amp; Ora</span><br>' +
-        '<strong>' + esc(dataIT) + ' alle ' + esc(slot.time || '—') + '</strong>' +
-        (slot.duration_minutes ? '<span style="font-size:0.8rem;opacity:.7"> · ' + slot.duration_minutes + ' min</span>' : '') +
-      '</div>' +
-      '<div style="margin-top:5px">' +
-        '<span class="ai-slot-label">Operatrice</span><br>' +
-        '<strong>' + esc(slot.operator_name || '—') + '</strong>' +
-      '</div>' +
-      '<div style="margin-top:5px">' +
-        '<span class="ai-slot-label">Servizio</span><br>' +
-        '<strong>' + esc(slot.service_name || '—') + '</strong>' +
-      '</div>' +
-      (clienteLine ? '<div style="margin-top:5px" id="ai-slot-client-line">' + clienteLine + '</div>' : '') +
-      (!hasClient ?
-        '<div class="ai-client-picker" style="margin-top:8px; position:relative; z-index:10;">' +
-          '<span class="ai-slot-label">Cliente</span><br>' +
-          '<input type="text" class="ai-client-search" ' +
-                 'placeholder="Cerca cliente (nome, cognome o cellulare)" ' +
-                 'style="width:100%; margin-top:4px; border:1px solid #d0c8ff; border-radius:8px; padding:6px 8px; font-size:0.82rem;">' +
-          '<div class="ai-client-results" ' +
-               'style="display:none; position:absolute; left:0; right:0; top:58px; background:#fff; border:1px solid #d0c8ff; border-radius:8px; max-height:160px; overflow:auto; z-index:99999; box-shadow:0 4px 16px rgba(0,0,0,0.18);"></div>' +
-        '</div>'
-      : '') +
-      '<div class="ai-slot-required-msg" style="margin-top:8px; font-size:0.78rem; color:#8a6d3b;"></div>' +
-      '<div class="ai-slot-confirm" style="display:none; margin-top:10px; border-top:1px solid #d0c8ff; padding-top:9px; gap:7px; flex-wrap:wrap;">' +
-        '<span style="font-size:0.8rem; color:#555; flex:1 0 100%;">✅ Confermi la prenotazione?</span>' +
-        '<button class="ai-confirm-yes" style="flex:1; padding:6px 10px; border:none; border-radius:8px; background:linear-gradient(135deg,#6c47ff,#00c2cb); color:#fff; font-size:0.82rem; cursor:pointer; font-weight:600;">Prenota</button>' +
-        '<button class="ai-confirm-no" style="flex:1; padding:6px 10px; border:none; border-radius:8px; background:#f0ebff; color:#6c47ff; font-size:0.82rem; cursor:pointer; font-weight:600;">Annulla</button>' +
-      '</div>' +
-      '<div class="ai-slot-spinner" style="display:none; margin-top:8px; font-size:0.8rem; color:#6c47ff; text-align:center;">' +
-        '<i class="bi bi-arrow-repeat" style="animation:aiDotPulse .8s infinite;"></i> Creazione in corso…' +
-      '</div>' +
-      '<div class="ai-slot-result" style="display:none; margin-top:8px; font-size:0.82rem; font-weight:600; text-align:center;"></div>';
+    // Se multi-slot, costruisci con summary collassabile + details
+    if (isMultiSlot) {
+      card.classList.add('ai-slot-collapsed');
+
+      // Riga di riepilogo compatta
+      var summaryHTML =
+        '<div class="ai-slot-summary">' +
+          '<span class="ai-slot-expand-icon">▶</span>' +
+          '<strong>' + esc(dataIT) + '</strong>' +
+          '<span>alle <strong>' + esc(slot.time || '—') + '</strong></span>' +
+          (slot.duration_minutes ? '<span style="opacity:.65;font-size:0.85rem;">' + slot.duration_minutes + ' min</span>' : '') +
+          '<span style="opacity:.75;">· ' + esc(slot.operator_name || '—') + '</span>' +
+          '<span style="opacity:.75;">· ' + esc(slot.service_name || '—') + '</span>' +
+        '</div>';
+
+      // Dettagli espandibili (stessa struttura di prima)
+      var detailsHTML =
+        '<div class="ai-slot-details">' +
+          '<div>' +
+            '<span class="ai-slot-label">Data &amp; Ora</span><br>' +
+            '<strong>' + esc(dataIT) + ' alle ' + esc(slot.time || '—') + '</strong>' +
+            (slot.duration_minutes ? '<span style="font-size:0.8rem;opacity:.7"> · ' + slot.duration_minutes + ' min</span>' : '') +
+          '</div>' +
+          '<div style="margin-top:5px">' +
+            '<span class="ai-slot-label">Operatrice</span><br>' +
+            '<strong>' + esc(slot.operator_name || '—') + '</strong>' +
+          '</div>' +
+          '<div style="margin-top:5px">' +
+            '<span class="ai-slot-label">Servizio</span><br>' +
+            '<strong>' + esc(slot.service_name || '—') + '</strong>' +
+          '</div>' +
+          (clienteLine ? '<div style="margin-top:5px" id="ai-slot-client-line">' + clienteLine + '</div>' : '') +
+          (!hasClient ?
+            '<div class="ai-client-picker" style="margin-top:8px; position:relative; z-index:10;">' +
+              '<span class="ai-slot-label">Cliente</span><br>' +
+              '<input type="text" class="ai-client-search" ' +
+                     'placeholder="Cerca cliente (nome, cognome o cellulare)" ' +
+                     'style="width:100%; margin-top:4px; border:1px solid #d0c8ff; border-radius:8px; padding:6px 8px; font-size:0.82rem;">' +
+              '<div class="ai-client-results" ' +
+                   'style="display:none; position:absolute; left:0; right:0; top:58px; background:#fff; border:1px solid #d0c8ff; border-radius:8px; max-height:160px; overflow:auto; z-index:99999; box-shadow:0 4px 16px rgba(0,0,0,0.18);"></div>' +
+            '</div>'
+          : '') +
+          '<div class="ai-slot-required-msg" style="margin-top:8px; font-size:0.78rem; color:#8a6d3b;"></div>' +
+          '<div class="ai-slot-confirm" style="display:none; margin-top:10px; border-top:1px solid #d0c8ff; padding-top:9px; gap:7px; flex-wrap:wrap;">' +
+            '<span style="font-size:0.8rem; color:#555; flex:1 0 100%;">✅ Confermi la prenotazione?</span>' +
+            '<button class="ai-confirm-yes" style="flex:1; padding:6px 10px; border:none; border-radius:8px; background:linear-gradient(135deg,#6c47ff,#00c2cb); color:#fff; font-size:0.82rem; cursor:pointer; font-weight:600;">Prenota</button>' +
+            '<button class="ai-confirm-no" style="flex:1; padding:6px 10px; border:none; border-radius:8px; background:#f0ebff; color:#6c47ff; font-size:0.82rem; cursor:pointer; font-weight:600;">Annulla</button>' +
+          '</div>' +
+          '<div class="ai-slot-spinner" style="display:none; margin-top:8px; font-size:0.8rem; color:#6c47ff; text-align:center;">' +
+            '<i class="bi bi-arrow-repeat" style="animation:aiDotPulse .8s infinite;"></i> Creazione in corso…' +
+          '</div>' +
+          '<div class="ai-slot-result" style="display:none; margin-top:8px; font-size:0.82rem; font-weight:600; text-align:center;"></div>' +
+        '</div>';
+
+      card.innerHTML = summaryHTML + detailsHTML;
+
+    } else {
+      // Singolo slot: layout completo come prima (non collassabile)
+      card.innerHTML =
+        '<div>' +
+          '<span class="ai-slot-label">Data &amp; Ora</span><br>' +
+          '<strong>' + esc(dataIT) + ' alle ' + esc(slot.time || '—') + '</strong>' +
+          (slot.duration_minutes ? '<span style="font-size:0.8rem;opacity:.7"> · ' + slot.duration_minutes + ' min</span>' : '') +
+        '</div>' +
+        '<div style="margin-top:5px">' +
+          '<span class="ai-slot-label">Operatrice</span><br>' +
+          '<strong>' + esc(slot.operator_name || '—') + '</strong>' +
+        '</div>' +
+        '<div style="margin-top:5px">' +
+          '<span class="ai-slot-label">Servizio</span><br>' +
+          '<strong>' + esc(slot.service_name || '—') + '</strong>' +
+        '</div>' +
+        (clienteLine ? '<div style="margin-top:5px" id="ai-slot-client-line">' + clienteLine + '</div>' : '') +
+        (!hasClient ?
+          '<div class="ai-client-picker" style="margin-top:8px; position:relative; z-index:10;">' +
+            '<span class="ai-slot-label">Cliente</span><br>' +
+            '<input type="text" class="ai-client-search" ' +
+                   'placeholder="Cerca cliente (nome, cognome o cellulare)" ' +
+                   'style="width:100%; margin-top:4px; border:1px solid #d0c8ff; border-radius:8px; padding:6px 8px; font-size:0.82rem;">' +
+            '<div class="ai-client-results" ' +
+                 'style="display:none; position:absolute; left:0; right:0; top:58px; background:#fff; border:1px solid #d0c8ff; border-radius:8px; max-height:160px; overflow:auto; z-index:99999; box-shadow:0 4px 16px rgba(0,0,0,0.18);"></div>' +
+          '</div>'
+        : '') +
+        '<div class="ai-slot-required-msg" style="margin-top:8px; font-size:0.78rem; color:#8a6d3b;"></div>' +
+        '<div class="ai-slot-confirm" style="display:none; margin-top:10px; border-top:1px solid #d0c8ff; padding-top:9px; gap:7px; flex-wrap:wrap;">' +
+          '<span style="font-size:0.8rem; color:#555; flex:1 0 100%;">✅ Confermi la prenotazione?</span>' +
+          '<button class="ai-confirm-yes" style="flex:1; padding:6px 10px; border:none; border-radius:8px; background:linear-gradient(135deg,#6c47ff,#00c2cb); color:#fff; font-size:0.82rem; cursor:pointer; font-weight:600;">Prenota</button>' +
+          '<button class="ai-confirm-no" style="flex:1; padding:6px 10px; border:none; border-radius:8px; background:#f0ebff; color:#6c47ff; font-size:0.82rem; cursor:pointer; font-weight:600;">Annulla</button>' +
+        '</div>' +
+        '<div class="ai-slot-spinner" style="display:none; margin-top:8px; font-size:0.8rem; color:#6c47ff; text-align:center;">' +
+          '<i class="bi bi-arrow-repeat" style="animation:aiDotPulse .8s infinite;"></i> Creazione in corso…' +
+        '</div>' +
+        '<div class="ai-slot-result" style="display:none; margin-top:8px; font-size:0.82rem; font-weight:600; text-align:center;"></div>';
+    }
 
     var confirmBox = card.querySelector('.ai-slot-confirm');
     var spinner    = card.querySelector('.ai-slot-spinner');
@@ -12462,7 +12522,10 @@ function buildSlotCard(slot) {
             left.style.flex = '1 1 auto';
             left.style.minWidth = '0';
             const nameSpan = document.createElement('span');
-            nameSpan.textContent = (c.nome || c.cliente_nome || c.name || '') + (c.cellulare || c.phone ? ' · ' + (c.cellulare || c.phone) : '');
+            // Capitalizza il nome cliente nel dropdown AI slot
+            var rawClientName = (c.nome || c.cliente_nome || c.name || '');
+            var capitalizedClientName = (typeof capitalizeName === 'function') ? capitalizeName(rawClientName) : rawClientName;
+            nameSpan.textContent = capitalizedClientName + (c.cellulare || c.phone ? ' · ' + (c.cellulare || c.phone) : '');
             nameSpan.style.overflow = 'hidden';
             nameSpan.style.textOverflow = 'ellipsis';
             nameSpan.style.whiteSpace = 'nowrap';
@@ -12506,7 +12569,9 @@ function buildSlotCard(slot) {
               clientLineEl.appendChild(labelSpan);
               clientLineEl.appendChild(document.createElement('br'));
               const strong = document.createElement('strong');
-              strong.textContent = (slot.client_nome || '') + ' ' + (slot.client_cognome || '');
+              // Capitalizza il nome cliente selezionato nella riga di conferma
+              var selectedFullName = ((slot.client_nome || '') + ' ' + (slot.client_cognome || '')).trim();
+              strong.textContent = (typeof capitalizeName === 'function') ? capitalizeName(selectedFullName) : selectedFullName;
               clientLineEl.appendChild(strong);
               if (c.cellulare || c.phone) clientLineEl.appendChild(document.createTextNode(' · ' + (c.cellulare || c.phone)));
               // add small days info placeholder
@@ -12559,6 +12624,23 @@ function buildSlotCard(slot) {
       if (e.target.closest('.ai-client-picker') ||
           e.target.closest('.ai-confirm-yes') ||
           e.target.closest('.ai-confirm-no')) return;
+
+      // Se la card è in modalità collassata (multi-slot), toggle expand/collapse
+      if (card.classList.contains('ai-slot-collapsed') || card.classList.contains('ai-slot-expanded')) {
+        // Se è collassata → espandi
+        if (card.classList.contains('ai-slot-collapsed')) {
+          card.classList.remove('ai-slot-collapsed');
+          card.classList.add('ai-slot-expanded');
+          return;
+        }
+        // Se è espansa e il click è sulla summary → collassa
+        if (card.classList.contains('ai-slot-expanded') && e.target.closest('.ai-slot-summary')) {
+          card.classList.remove('ai-slot-expanded');
+          card.classList.add('ai-slot-collapsed');
+          return;
+        }
+        // Se è espansa e il click è nei details → procedi con la conferma
+      }
 
       if (!slotReady()) return;
 
@@ -12637,7 +12719,7 @@ function buildSlotCard(slot) {
 
     var clienteLine = hasClient
       ? '<span class="ai-slot-label">Cliente</span><br>' +
-        '<strong>' + esc(firstSlot.client_nome || '') + ' ' + esc(firstSlot.client_cognome || '') + '</strong>' +
+        '<strong>' + esc(capitalizeName((firstSlot.client_nome || '') + ' ' + (firstSlot.client_cognome || ''))) + '</strong>' +
         (firstSlot.client_cellulare ? '&nbsp;· <span style="font-size:0.8rem">' + esc(firstSlot.client_cellulare) + '</span>' : '')
       : '';
 
@@ -12722,6 +12804,30 @@ function buildSlotCard(slot) {
 
     if (clientSearch && clientResults) {
       var tmr = null;
+
+      /* FIX: sposta il dropdown nel body per uscire dall'overflow:auto di #aiChatMessages */
+      clientResults.remove();
+      document.body.appendChild(clientResults);
+
+      function positionMultiDropdown() {
+        var rect = clientSearch.getBoundingClientRect();
+        clientResults.style.position = 'fixed';
+        clientResults.style.left = rect.left + 'px';
+        clientResults.style.top = (rect.bottom + 2) + 'px';
+        clientResults.style.width = rect.width + 'px';
+        clientResults.style.right = 'auto';
+        clientResults.style.zIndex = '999999';
+      }
+
+      function hideMultiDropdown() {
+        clientResults.style.display = 'none';
+      }
+
+      /* Nascondi quando si scrolla il container messaggi */
+      if (elMessages) {
+        elMessages.addEventListener('scroll', hideMultiDropdown);
+      }
+
       clientSearch.addEventListener('input', function() {
         clearTimeout(tmr);
         var q = clientSearch.value || '';
@@ -12735,7 +12841,9 @@ function buildSlotCard(slot) {
             row.style.cssText = 'display:block; width:100%; text-align:left; border:none; background:#fff; padding:7px 8px; font-size:0.82rem; cursor:pointer;';
             
             // Costruisci il testo con nome, telefono e giorni dall'ultimo passaggio
-            var displayText = (c.name || '');
+            // Capitalizza il nome cliente nel dropdown AI multi-slot
+            var rawName = (c.name || '');
+            var displayText = (typeof capitalizeName === 'function') ? capitalizeName(rawName) : rawName;
             if (c.phone) {
               displayText += ' \u2022 ' + c.phone;
             }
@@ -12757,7 +12865,7 @@ function buildSlotCard(slot) {
             row.addEventListener('click', function(e) {
               e.preventDefault();
               e.stopPropagation();
-              var full = String(c.name || '').trim().replace(/\s+/g, ' ');
+              var full = capitalizeName(String(c.name || '').trim().replace(/\s+/g, ' '));
               var parts = full.split(' ');
               // Propaga client a TUTTI gli slot del gruppo
               slots.forEach(function(s) {
@@ -12772,11 +12880,14 @@ function buildSlotCard(slot) {
             });
             clientResults.appendChild(row);
           });
+          positionMultiDropdown();
           clientResults.style.display = 'block';
         }, 220);
       });
       document.addEventListener('click', function(ev) {
-        if (!card.contains(ev.target)) clientResults.style.display = 'none';
+        if (!card.contains(ev.target) && ev.target !== clientResults && !clientResults.contains(ev.target)) {
+          hideMultiDropdown();
+        }
       });
     }
 
@@ -14247,7 +14358,45 @@ if (a.date) {
             });
           });
 
-          wrap.appendChild(tbl);
+          // ── COLLASSA TABELLA: mostra solo 1 riga, espandi al click ──
+          if (appts.length > 1) {
+            var tbodyEl = tbl.querySelector('tbody');
+            var allRows = tbodyEl ? Array.from(tbodyEl.querySelectorAll('tr')) : [];
+            // Nascondi tutte le righe tranne la prima
+            for (var ri = 1; ri < allRows.length; ri++) {
+              allRows[ri].style.display = 'none';
+            }
+            // Crea link "Mostra tutti (N)"
+            var expandLink = document.createElement('div');
+            expandLink.style.cssText = 'margin-top:4px; font-size:0.82rem; color:#6c47ff; cursor:pointer; font-weight:600; text-align:center; padding:4px 0;';
+            expandLink.textContent = '▼ Mostra tutti (' + appts.length + ' appuntamenti)';
+            expandLink.setAttribute('data-expanded', 'false');
+            expandLink.addEventListener('click', function() {
+              var isExpanded = expandLink.getAttribute('data-expanded') === 'true';
+              if (isExpanded) {
+                // Collassa: nascondi tutte tranne la prima
+                for (var rj = 1; rj < allRows.length; rj++) {
+                  allRows[rj].style.display = 'none';
+                }
+                expandLink.textContent = '▼ Mostra tutti (' + appts.length + ' appuntamenti)';
+                expandLink.setAttribute('data-expanded', 'false');
+              } else {
+                // Espandi: mostra tutte
+                for (var rk = 1; rk < allRows.length; rk++) {
+                  allRows[rk].style.display = '';
+                }
+                expandLink.textContent = '▲ Mostra solo il primo';
+                expandLink.setAttribute('data-expanded', 'true');
+              }
+              scrollToBottom();
+            });
+            // Il link va inserito DOPO la tabella ma prima del footer
+            // Lo aggiungiamo al wrap dopo tbl
+            wrap.appendChild(tbl);
+            wrap.appendChild(expandLink);
+          } else {
+            wrap.appendChild(tbl);
+          }
 
           var ft = document.createElement('div');
           ft.style.cssText = 'font-size:0.75rem;color:#aaa;margin-top:4px;text-align:right;';
@@ -14732,24 +14881,6 @@ aiStyleOverride.textContent = `
   /* slot card: aumentiamo dimensione testi e label */
   #aiChatModal .ai-slot-card { font-size: 1.02rem !important; overflow: visible !important; position: relative; }
   #aiChatModal .ai-slot-card .ai-slot-label { font-size: 0.92rem !important; font-weight:600 !important; }
-
-  /* FIX: le label e il testo nello slot card NON devono cambiare colore a hover */
-  #aiChatModal .ai-slot-card:hover .ai-slot-label {
-    color: #6c47ff !important;
-    opacity: 1 !important;
-  }
-  #aiChatModal .ai-slot-card:hover {
-    color: inherit !important;
-  }
-  #aiChatModal .ai-slot-card:hover strong {
-    color: inherit !important;
-  }
-  #aiChatModal .ai-slot-card:hover span {
-    color: inherit !important;
-  }
-  #aiChatModal .ai-slot-card:hover div {
-    color: inherit !important;
-  }
 
   /* Assicura che il dropdown clienti nello slot sia sopra tutto */
   #aiChatModal .ai-client-results {
