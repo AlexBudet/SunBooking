@@ -11912,6 +11912,91 @@ document.addEventListener('click', function(e) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // ══════════════════════════════════════════════════════════════
 // AI BOOKING ASSISTANT — Logica UI
 // ══════════════════════════════════════════════════════════════
@@ -12255,13 +12340,13 @@ function buildSlotCard(slot) {
       '</div>' +
       (clienteLine ? '<div style="margin-top:5px" id="ai-slot-client-line">' + clienteLine + '</div>' : '') +
       (!hasClient ?
-        '<div class="ai-client-picker" style="margin-top:8px; position:relative;">' +
+        '<div class="ai-client-picker" style="margin-top:8px; position:relative; z-index:10;">' +
           '<span class="ai-slot-label">Cliente</span><br>' +
           '<input type="text" class="ai-client-search" ' +
                  'placeholder="Cerca cliente (nome, cognome o cellulare)" ' +
                  'style="width:100%; margin-top:4px; border:1px solid #d0c8ff; border-radius:8px; padding:6px 8px; font-size:0.82rem;">' +
           '<div class="ai-client-results" ' +
-               'style="display:none; position:absolute; left:0; right:0; top:58px; background:#fff; border:1px solid #d0c8ff; border-radius:8px; max-height:160px; overflow:auto; z-index:13333;"></div>' +
+               'style="display:none; position:absolute; left:0; right:0; top:58px; background:#fff; border:1px solid #d0c8ff; border-radius:8px; max-height:160px; overflow:auto; z-index:99999; box-shadow:0 4px 16px rgba(0,0,0,0.18);"></div>' +
         '</div>'
       : '') +
       '<div class="ai-slot-required-msg" style="margin-top:8px; font-size:0.78rem; color:#8a6d3b;"></div>' +
@@ -12321,6 +12406,30 @@ function buildSlotCard(slot) {
     if (clientSearch && clientResults) {
       var tmr = null;
 
+      // FIX z-index: sposta il dropdown nel body così esce completamente
+      // dall'overflow:auto di #aiChatMessages
+      clientResults.remove();
+      document.body.appendChild(clientResults);
+
+      function positionDropdown() {
+        var rect = clientSearch.getBoundingClientRect();
+        clientResults.style.position = 'fixed';
+        clientResults.style.left = rect.left + 'px';
+        clientResults.style.top = (rect.bottom + 2) + 'px';
+        clientResults.style.width = rect.width + 'px';
+        clientResults.style.right = 'auto';
+        clientResults.style.zIndex = '999999';
+      }
+
+      function hideDropdown() {
+        clientResults.style.display = 'none';
+      }
+
+      // Nascondi quando si scrolla il container messaggi
+      if (elMessages) {
+        elMessages.addEventListener('scroll', hideDropdown);
+      }
+
       clientSearch.addEventListener('input', function() {
         clearTimeout(tmr);
         var q = clientSearch.value || '';
@@ -12333,6 +12442,7 @@ function buildSlotCard(slot) {
             empty.className = 'dropdown-item';
             empty.textContent = 'Nessun risultato';
             clientResults.appendChild(empty);
+            positionDropdown();
             clientResults.style.display = 'block';
             return;
           }
@@ -12345,6 +12455,8 @@ function buildSlotCard(slot) {
             item.style.justifyContent = 'space-between';
             item.style.gap = '8px';
             item.style.boxSizing = 'border-box';
+            item.style.cursor = 'pointer';
+            item.style.padding = '7px 8px';
 
             const left = document.createElement('div');
             left.style.flex = '1 1 auto';
@@ -12365,34 +12477,57 @@ function buildSlotCard(slot) {
             item.appendChild(left);
             item.appendChild(daysSpan);
 
-            item.addEventListener('click', function() {
+            item.addEventListener('click', function(e) {
+              e.preventDefault();
+              e.stopPropagation();
               slot.client_id = String(c.id || c.cliente_id || '');
               slot.client_nome = (c.nome || c.cliente_nome || c.name || '');
               slot.client_cognome = (c.cognome || c.cliente_cognome || '');
+              slot.client_cellulare = (c.cellulare || c.phone || '');
               // update visible client line
-              const clientLineEl = card.querySelector('#ai-slot-client-line');
-              if (clientLineEl) {
-                clientLineEl.textContent = '';
-                const strong = document.createElement('strong');
-                strong.textContent = (slot.client_nome || '') + ' ' + (slot.client_cognome || '');
-                clientLineEl.appendChild(strong);
-                if (c.cellulare || c.phone) clientLineEl.appendChild(document.createTextNode(' · ' + (c.cellulare || c.phone)));
-                // add small days info placeholder
-                const ds = document.createElement('small');
-                ds.style.marginLeft = '8px';
-                ds.style.opacity = '0.65';
-                ds.textContent = '';
-                clientLineEl.appendChild(ds);
-                // async populate
-                (async () => {
-                  try {
-                    const last = await fetchClientLastDate(String(c.id || c.cliente_id || ''));
-                    const txtDays = formatDaysSince(last);
-                    if (txtDays) ds.textContent = txtDays;
-                  } catch (_) {}
-                })();
+              var clientLineEl = card.querySelector('#ai-slot-client-line');
+              if (!clientLineEl) {
+                // Crea il blocco client line se non esiste ancora
+                clientLineEl = document.createElement('div');
+                clientLineEl.id = 'ai-slot-client-line';
+                clientLineEl.style.marginTop = '5px';
+                // Inserisci prima del required-msg
+                var reqMsg = card.querySelector('.ai-slot-required-msg');
+                if (reqMsg) {
+                  reqMsg.parentElement.insertBefore(clientLineEl, reqMsg);
+                } else {
+                  card.appendChild(clientLineEl);
+                }
               }
+              clientLineEl.innerHTML = '';
+              var labelSpan = document.createElement('span');
+              labelSpan.className = 'ai-slot-label';
+              labelSpan.textContent = 'Cliente';
+              clientLineEl.appendChild(labelSpan);
+              clientLineEl.appendChild(document.createElement('br'));
+              const strong = document.createElement('strong');
+              strong.textContent = (slot.client_nome || '') + ' ' + (slot.client_cognome || '');
+              clientLineEl.appendChild(strong);
+              if (c.cellulare || c.phone) clientLineEl.appendChild(document.createTextNode(' · ' + (c.cellulare || c.phone)));
+              // add small days info placeholder
+              const ds = document.createElement('small');
+              ds.style.marginLeft = '8px';
+              ds.style.opacity = '0.65';
+              ds.textContent = '';
+              clientLineEl.appendChild(ds);
+              // async populate
+              (async () => {
+                try {
+                  const last = await fetchClientLastDate(String(c.id || c.cliente_id || ''));
+                  const txtDays = formatDaysSince(last);
+                  if (txtDays) ds.textContent = txtDays;
+                } catch (_) {}
+              })();
+              // Nascondi il picker input dopo la selezione
+              var pickerEl = card.querySelector('.ai-client-picker');
+              if (pickerEl) pickerEl.style.display = 'none';
               clientResults.style.display = 'none';
+              refreshReadyState();
             });
 
             // async populate days since last appointment for each search row
@@ -12407,12 +12542,15 @@ function buildSlotCard(slot) {
             clientResults.appendChild(item);
           });
 
+          positionDropdown();
           clientResults.style.display = 'block';
         }, 220);
       });
 
       document.addEventListener('click', function(ev) {
-        if (!card.contains(ev.target)) clientResults.style.display = 'none';
+        if (!card.contains(ev.target) && ev.target !== clientResults && !clientResults.contains(ev.target)) {
+          hideDropdown();
+        }
       });
     }
 
@@ -14592,8 +14730,35 @@ aiStyleOverride.textContent = `
   #aiChatModal .ai-msg-time { font-size: 0.82rem !important; }
 
   /* slot card: aumentiamo dimensione testi e label */
-  #aiChatModal .ai-slot-card { font-size: 1.02rem !important; }
+  #aiChatModal .ai-slot-card { font-size: 1.02rem !important; overflow: visible !important; position: relative; }
   #aiChatModal .ai-slot-card .ai-slot-label { font-size: 0.92rem !important; font-weight:600 !important; }
+
+  /* FIX: le label e il testo nello slot card NON devono cambiare colore a hover */
+  #aiChatModal .ai-slot-card:hover .ai-slot-label {
+    color: #6c47ff !important;
+    opacity: 1 !important;
+  }
+  #aiChatModal .ai-slot-card:hover {
+    color: inherit !important;
+  }
+  #aiChatModal .ai-slot-card:hover strong {
+    color: inherit !important;
+  }
+  #aiChatModal .ai-slot-card:hover span {
+    color: inherit !important;
+  }
+  #aiChatModal .ai-slot-card:hover div {
+    color: inherit !important;
+  }
+
+  /* Assicura che il dropdown clienti nello slot sia sopra tutto */
+  #aiChatModal .ai-client-results {
+    z-index: 99999 !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18) !important;
+  }
+  #aiChatModal .ai-client-results .dropdown-item:hover {
+    background: #ede6ff !important;
+  }
 
   /* client search + results: override per input e dropdown (usa !important per sovrascrivere inline styles) */
   .ai-client-search,

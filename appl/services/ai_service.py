@@ -219,6 +219,7 @@ def build_rag_context(query_date: Optional[date] = None, days_range: int = 7) ->
             "tag":      sv.servizio_tag,
             "duration": sv.servizio_durata,
             "price":    float(sv.servizio_prezzo) if sv.servizio_prezzo else 0,
+            "category": (getattr(sv, 'servizio_categoria', '') or '').strip(),
         }
         for sv in services
     ]
@@ -711,7 +712,7 @@ def _extract_service_from_message(message: str, services: list) -> Optional[dict
 
 def _load_services_for_matching(fallback_services: list) -> list:
     """
-    Lista servizi completa dal DB per matching AI (nome + tag), case-insensitive.
+    Lista servizi completa dal DB per matching AI (nome + tag + categoria), case-insensitive.
     Fallback su services se query DB fallisce.
     """
     try:
@@ -726,7 +727,8 @@ def _load_services_for_matching(fallback_services: list) -> list:
                 "id": sv.id,
                 "name": name,
                 "tag": (sv.servizio_tag or "").strip(),
-                "duration": int(sv.servizio_durata or 0)
+                "duration": int(sv.servizio_durata or 0),
+                "category": (getattr(sv, 'servizio_categoria', '') or '').strip(),
             })
         if out:
             return out
@@ -890,6 +892,11 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
     clean_msg = re.sub(r"c['\u2019]?\s*[eè]\s+(?:un\s+)?(?:posto|spazio|buco|slot)\s+(?:libero\s+|disponibile\s+)?(?:per\s+)?", '', clean_msg)
     clean_msg = re.sub(r'ci\s+sono\s+(?:posti|spazi|slot)\s+(?:liberi\s+|disponibili\s+)?(?:per\s+)?', '', clean_msg)
     
+    # "cerca/trova uno spazio/buco/slot/posto (libero/disponibile) per (fare)"
+    clean_msg = re.sub(r'(?:cerca(?:re|mi)?|trova(?:re|mi)?)\s+(?:un[oa]?\s+)?(?:buco|spazio|slot|posto|orario)\s+(?:libero\s+|disponibile\s+)?(?:per\s+)?(?:fare\s+)?', '', clean_msg)
+    # "uno spazio/buco/slot/posto (libero/disponibile) per (fare)" senza verbo iniziale
+    clean_msg = re.sub(r'(?:un[oa]?\s+)?(?:buco|spazio|slot|posto)\s+(?:libero\s+|disponibile\s+)?per\s+(?:fare\s+)?', '', clean_msg)
+    
     # "quando posso/puoi fare"
     clean_msg = re.sub(r'quando\s+(?:posso|puoi|si\s+pu[oò]|potrei|potresti)\s+(?:fare|mettere|fissare|inserire|prenotare)\s+(?:un[oa]?\s+)?', '', clean_msg)
     
@@ -922,6 +929,9 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
     clean_msg = re.sub(r'prenota(?:mi|re|melo)?\s*', '', clean_msg)
     clean_msg = re.sub(r'(?:un[oa]?\s+)?appuntamento\s+(?:per\s+)?', '', clean_msg)
     clean_msg = re.sub(r'(?:fissa|metti|inserisci|segna|aggiungi)(?:mi)?\s*', '', clean_msg)
+    # "fare/fai" isolato come verbo introduttivo (es: "fare una pedicure" → "pedicure")
+    clean_msg = re.sub(r'\bfare\s+(?:un[oa]?\s+)?', '', clean_msg)
+    clean_msg = re.sub(r'\bfai\s+(?:un[oa]?\s+)?', '', clean_msg)
     
     # ── FASE C: Parole singole — DOPO tutte le frasi lunghe! ──
     # Questo è CRITICO: "cerca" deve essere rimossa DOPO "cerca disponibilità per"
@@ -3134,6 +3144,65 @@ def _looks_like_history_request(message: str) -> bool:
     ]
     return any(k in m for k in keys)
 # ──────────────────────────────────────────────
+# Helper: mapping categoria servizio → tipo operatore
+# ──────────────────────────────────────────────
+
+def _get_operator_type_for_service(service_context: dict) -> Optional[str]:
+    """
+    Determina il tipo di operatore compatibile con un servizio in base alla sua categoria.
+    
+    REGOLA FONDAMENTALE:
+    - Servizi categoria SOLARIUM → solo operatori tipo 'macchinario'
+    - Servizi categoria ESTETICA (o qualsiasi altra) → solo operatori tipo 'estetista'
+    - Se la categoria non è specificata → default 'estetista'
+    
+    Ritorna la stringa del tipo operatore ('estetista', 'macchinario') oppure None
+    se non c'è restrizione (operatore già specificato dall'utente).
+    """
+    if not service_context:
+        return "estetista"
+    
+    category = (service_context.get("category") or "").strip().lower()
+    
+    if category == "solarium":
+        logger.debug("_get_operator_type_for_service: categoria SOLARIUM → tipo 'macchinario'")
+        return "macchinario"
+    else:
+        # ESTETICA, o qualsiasi altra categoria, o categoria vuota → estetista
+        logger.debug("_get_operator_type_for_service: categoria '%s' → tipo 'estetista'", category)
+        return "estetista"
+
+
+def _get_operator_type_for_services(services: list) -> Optional[str]:
+    """
+    Determina il tipo di operatore compatibile con una LISTA di servizi.
+    
+    Se tutti i servizi sono della stessa categoria → ritorna il tipo corrispondente.
+    Se i servizi hanno categorie miste (es: SOLARIUM + ESTETICA) → ritorna None
+    (indica che non è possibile fare tutti i servizi con un singolo operatore dello stesso tipo,
+    il chiamante dovrà gestire il caso).
+    
+    Ritorna 'estetista', 'macchinario', o None (misto).
+    """
+    if not services:
+        return "estetista"
+    
+    types = set()
+    for svc in services:
+        t = _get_operator_type_for_service(svc)
+        if t:
+            types.add(t)
+    
+    if len(types) == 1:
+        return types.pop()
+    elif len(types) > 1:
+        logger.warning("_get_operator_type_for_services: categorie MISTE rilevate (%r) — "
+                       "impossibile assegnare un singolo tipo operatore", types)
+        return None
+    else:
+        return "estetista"
+
+# ──────────────────────────────────────────────
 # Calcolo slot liberi
 # ──────────────────────────────────────────────
 
@@ -3185,12 +3254,27 @@ def compute_free_slots(
             end_m = start_m + s.get("duration_min", 15)
         occupied.setdefault(key, []).append((start_m, end_m))
 
-    # Operatori da considerare
+    # Operatori da considerare — filtrati per tipo in base alla categoria del servizio
+    # REGOLA: SOLARIUM → solo operatori 'macchinario', ESTETICA → solo operatori 'estetista'
     all_ops = rag_context.get("operators", [])
     if operator_id:
         ops = [o for o in all_ops if o["id"] == operator_id]
     else:
-        ops = [o for o in all_ops if o.get("type") == "estetista"]
+        # Determina il tipo operatore dalla categoria del servizio
+        # Costruisci un service_context minimale per il lookup
+        _svc_ctx_for_type = {}
+        if service_id:
+            _svc_ctx_for_type = next(
+                (s for s in rag_context.get("services", []) if s.get("id") == service_id), {}
+            )
+        if not _svc_ctx_for_type and service_name:
+            _svc_ctx_for_type = next(
+                (s for s in rag_context.get("services", []) if s.get("name") == service_name), {}
+            )
+        required_op_type = _get_operator_type_for_service(_svc_ctx_for_type)
+        ops = [o for o in all_ops if o.get("type") == required_op_type]
+        logger.debug("compute_free_slots: categoria servizio → tipo operatore '%s', %d operatori trovati",
+                    required_op_type, len(ops))
 
     start_date = target_date if target_date else today_date
     free_slots  = []
@@ -3333,7 +3417,20 @@ def compute_contiguous_free_slots(
     if operator_id:
         ops = [o for o in all_ops if o["id"] == operator_id]
     else:
-        ops = [o for o in all_ops if o.get("type") == "estetista"]
+        # Determina il tipo operatore dalla categoria dei servizi richiesti
+        # REGOLA: SOLARIUM → solo operatori 'macchinario', ESTETICA → solo operatori 'estetista'
+        required_op_type = _get_operator_type_for_services(services)
+        if required_op_type:
+            ops = [o for o in all_ops if o.get("type") == required_op_type]
+            logger.debug("compute_contiguous_free_slots: tipo operatore '%s', %d operatori trovati",
+                        required_op_type, len(ops))
+        else:
+            # Categorie miste (es: SOLARIUM + ESTETICA): impossibile fare tutti i servizi
+            # con un singolo operatore dello stesso tipo.
+            # Fallback: prova con tutti gli operatori (il vincolo sarà gestito a livello superiore)
+            logger.warning("compute_contiguous_free_slots: categorie MISTE nei servizi richiesti — "
+                          "uso tutti gli operatori come fallback")
+            ops = all_ops
     
     start_date = target_date if target_date else today_date
     results = []
