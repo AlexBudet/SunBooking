@@ -212,17 +212,30 @@ def build_rag_context(query_date: Optional[date] = None, days_range: int = 7) ->
 
     # ── Servizi attivi ──────────────────────────────────
     services = Service.query.filter_by(is_deleted=False, is_visible_in_calendar=True).all()
-    svcs_context = [
-        {
+    svcs_context = []
+    for sv in services:
+        # servizio_categoria può essere un Enum/oggetto, non una stringa
+        raw_cat = getattr(sv, 'servizio_categoria', None)
+        if raw_cat is None:
+            cat_str = ''
+        elif isinstance(raw_cat, str):
+            cat_str = raw_cat.strip()
+        elif hasattr(raw_cat, 'value'):
+            # Enum: usa .value (es: ServiceCategory.SOLARIUM → "SOLARIUM")
+            cat_str = str(raw_cat.value).strip()
+        elif hasattr(raw_cat, 'name'):
+            # Enum senza .value: usa .name
+            cat_str = str(raw_cat.name).strip()
+        else:
+            cat_str = str(raw_cat).strip()
+        svcs_context.append({
             "id":       sv.id,
             "name":     sv.servizio_nome,
             "tag":      sv.servizio_tag,
             "duration": sv.servizio_durata,
             "price":    float(sv.servizio_prezzo) if sv.servizio_prezzo else 0,
-            "category": (getattr(sv, 'servizio_categoria', '') or '').strip(),
-        }
-        for sv in services
-    ]
+            "category": cat_str,
+        })
 
     # ── Slot occupati nel range (ANONIMIZZATI) ──────────
     # start_time e end_time sono datetime nel modello Appointment
@@ -723,12 +736,24 @@ def _load_services_for_matching(fallback_services: list) -> list:
             name = (sv.servizio_nome or "").strip()
             if not name:
                 continue
+            # servizio_categoria può essere un Enum/oggetto, non una stringa
+            raw_cat = getattr(sv, 'servizio_categoria', None)
+            if raw_cat is None:
+                cat_str = ''
+            elif isinstance(raw_cat, str):
+                cat_str = raw_cat.strip()
+            elif hasattr(raw_cat, 'value'):
+                cat_str = str(raw_cat.value).strip()
+            elif hasattr(raw_cat, 'name'):
+                cat_str = str(raw_cat.name).strip()
+            else:
+                cat_str = str(raw_cat).strip()
             out.append({
                 "id": sv.id,
                 "name": name,
                 "tag": (sv.servizio_tag or "").strip(),
                 "duration": int(sv.servizio_durata or 0),
-                "category": (getattr(sv, 'servizio_categoria', '') or '').strip(),
+                "category": cat_str,
             })
         if out:
             return out
@@ -1412,6 +1437,21 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
                     score = 120 + len(segment_lower) + gender_bonus
                 else:
                     score = 90 + len(segment_lower) + gender_bonus
+                
+                # ── PENALITÀ FORTE: se il segmento ha 2+ parole e il nome del servizio
+                # NON contiene TUTTE le parole del segmento, penalizza pesantemente.
+                # Es: segmento="inguine sgambato", nome="Ceretta Inguine Completo"
+                #     → "sgambato" NON è in "ceretta inguine completo" → penalità
+                # Questo evita che "inguine sgambato" matchi "Ceretta Inguine Completo"
+                if score > 0 and len(sig_segment_words) >= 2:
+                    missing_seg_words = [w for w in sig_segment_words if w not in name_words]
+                    if missing_seg_words:
+                        # Il servizio NON contiene tutte le parole del segmento
+                        # Penalizza proporzionalmente al numero di parole mancanti
+                        penalty = len(missing_seg_words) * 80
+                        score = max(1, score - penalty)
+                        logger.debug("Match Level 2: PENALITÀ parole mancanti %r in '%s' → score=%d",
+                                    missing_seg_words, name_lower, score)
             
             # ── Match Level 3: parole del segmento vs parole del nome ──
             if score == 0 and sig_segment_words:
@@ -1464,10 +1504,37 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
                         elif is_first_word:
                             first_word_bonus = 8   # prima parola del segmento matcha, ma non è il tipo
                         
+                        # ── PENALITÀ ESCLUSIONE: se le parole NON matchate del segmento
+                        # sono parole distintive che appaiono in ALTRI servizi, questo servizio
+                        # è quasi certamente sbagliato.
+                        # Es: segmento="inguine sgambato", servizio="Ceretta Inguine Completo"
+                        #     → "inguine" matcha, "sgambato" NO → ma "sgambato" appare in
+                        #       "Ceretta Inguine Sgambato" → escludiamo "Ceretta Inguine Completo"
+                        unmatched_words = sig_segment_words - (matched_exact | matched_partial)
+                        exclusion_penalty = 0
+                        for uw in unmatched_words:
+                            if len(uw) >= 4:
+                                # Controlla se questa parola non-matchata appare in qualche altro servizio
+                                uw_in_other_svc = any(
+                                    uw in sc2["all_name_words"]
+                                    for sc2 in svc_cache
+                                    if sc2["svc"].get("id") != svc.get("id")
+                                )
+                                if uw_in_other_svc:
+                                    # La parola è specifica di un ALTRO servizio → penalità forte
+                                    exclusion_penalty += 60
+                                    logger.debug("Match Level 3: parola '%s' del segmento '%s' "
+                                                "è in un altro servizio ma NON in '%s' → penalità",
+                                                uw, segment_lower, name_lower)
+                        
                         if len(the_word) >= 5 and word_frequency <= 3:
                             score = 30 + len(the_word) - word_frequency + first_word_bonus + gender_bonus
                         else:
                             score = 20 + len(the_word) + first_word_bonus + gender_bonus
+                        
+                        # Applica penalità esclusione
+                        if exclusion_penalty > 0:
+                            score = max(1, score - exclusion_penalty)
                 elif len(sig_segment_words) == 1:
                     # Segmento = singola parola
                     word = list(sig_segment_words)[0]
@@ -1525,21 +1592,25 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
         # NUOVO: Verifica se ci sono più servizi della STESSA FAMIGLIA con score alto
         # Es: "pulizia viso" → "Pulizia Viso Classica" e "Pulizia Viso Specifica"
         # entrambi hanno le stesse prime 2 parole → disambiguazione obbligatoria
+        # REGOLA CRITICA: i candidati per disambiguazione devono contenere TUTTE le parole
+        # significative del segmento nel loro nome. "inguine sgambato" NON deve matchare
+        # "Ceretta Inguine Completo" perché "sgambato" non è in quel nome.
         if best_match and len(sig_segment_words) >= 2:
-            # Estrai le prime N parole del segmento (tipicamente "tipo servizio" + "zona")
             seg_words_list = segment_lower.split()
             seg_prefix = ' '.join(seg_words_list[:2]) if len(seg_words_list) >= 2 else segment_lower
             
-            # Trova tutti i servizi il cui nome INIZIA con lo stesso prefisso del segmento
+            # Trova tutti i servizi il cui nome contiene TUTTE le parole significative del segmento
             same_prefix_candidates = []
             for svc, sc, sc_data in all_candidates_for_segment:
                 svc_name_lower = sc_data["name_lower"]
-                svc_words = svc_name_lower.split()
-                svc_prefix = ' '.join(svc_words[:2]) if len(svc_words) >= 2 else svc_name_lower
+                svc_words = sc_data["all_name_words"]
                 
-                # Match se il prefisso del servizio contiene tutte le parole del segmento
-                # o se il prefisso del segmento è contenuto nel nome del servizio
-                if seg_prefix in svc_name_lower or all(w in svc_name_lower for w in seg_words_list[:2]):
+                # REGOLA FONDAMENTALE: il nome del servizio DEVE contenere TUTTE le parole
+                # significative del segmento. Senza questa regola, "inguine sgambato"
+                # matcherebbe anche "Ceretta Inguine Completo" (che non ha "sgambato").
+                all_seg_words_in_name = all(w in svc_words for w in sig_segment_words)
+                
+                if all_seg_words_in_name:
                     same_prefix_candidates.append((svc, sc))
             
             # Se ci sono 2+ servizi della stessa famiglia → DEVE disambiguare
@@ -1555,8 +1626,8 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
                 
                 if not exact_match_found:
                     # Nessun match esatto → forza disambiguazione
-                    logger.warning("_extract_multiple_services: segmento '%s' → STESSA FAMIGLIA: %d candidati con prefisso '%s' → DISAMBIGUAZIONE",
-                                  segment, len(same_prefix_candidates), seg_prefix)
+                    logger.warning("_extract_multiple_services: segmento '%s' → STESSA FAMIGLIA: %d candidati (tutti contengono %r) → DISAMBIGUAZIONE",
+                                  segment, len(same_prefix_candidates), list(sig_segment_words))
                     ambiguous_segments.append((segment, same_prefix_candidates))
                     segment_results.append((segment, None, 0, []))  # Segna come non risolto
                     continue
@@ -1658,6 +1729,82 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
     # REGOLA: se c'è ALMENO UN segmento ambiguo non risolto, chiedi SEMPRE disambiguazione.
     # Non usare best-effort: l'utente deve scegliere esplicitamente.
     if ambiguous_segments:
+        # ── FILTRO CRITICO: se il segmento ha 2+ parole significative,
+        # filtra i candidati mantenendo SOLO quelli il cui nome contiene
+        # TUTTE le parole significative del segmento (o un prefisso ≥4 char).
+        # Es: segmento "ceretta gambe" → candidati devono contenere sia "ceretta" che "gamb*"
+        # Questo evita che "Ceretta Inguine", "Ceretta Ascelle" ecc. appaiano come candidati.
+        filtered_ambiguous_segments = []
+        for seg, candidates in ambiguous_segments:
+            seg_lower = seg.lower().strip()
+            seg_sig_words = [w for w in seg_lower.split() if len(w) > 2]
+            
+            if len(seg_sig_words) >= 2:
+                # Filtra candidati: il nome del servizio deve contenere TUTTE le parole
+                # significative del segmento (match esatto o prefisso ≥4 char)
+                filtered_candidates = []
+                for svc, sc in candidates:
+                    svc_name_lower = (svc.get('name') or '').lower()
+                    svc_name_words = set(svc_name_lower.split())
+                    
+                    all_words_found = True
+                    for seg_word in seg_sig_words:
+                        # Match esatto: la parola del segmento è nel nome del servizio
+                        exact_match = seg_word in svc_name_words
+                        # Match prefisso: una parola del nome inizia con il seg_word (o viceversa)
+                        # Es: "gambe" matcha "gamba" perché condividono prefisso "gamb" (≥4 char)
+                        prefix_match = False
+                        if not exact_match and len(seg_word) >= 4:
+                            for nw in svc_name_words:
+                                if len(nw) >= 4:
+                                    # Controlla prefisso comune di almeno 4 caratteri
+                                    common_len = min(len(seg_word), len(nw))
+                                    prefix_len = 0
+                                    for ci in range(common_len):
+                                        if seg_word[ci] == nw[ci]:
+                                            prefix_len += 1
+                                        else:
+                                            break
+                                    if prefix_len >= 4:
+                                        prefix_match = True
+                                        break
+                        
+                        if not exact_match and not prefix_match:
+                            all_words_found = False
+                            break
+                    
+                    if all_words_found:
+                        filtered_candidates.append((svc, sc))
+                
+                if filtered_candidates:
+                    if len(filtered_candidates) < len(candidates):
+                        logger.warning("_extract_multiple_services: segmento '%s' → filtrati candidati da %d a %d "
+                                      "(solo quelli con TUTTE le parole %r)",
+                                      seg, len(candidates), len(filtered_candidates), seg_sig_words)
+                    filtered_ambiguous_segments.append((seg, filtered_candidates))
+                    
+                    # Se dopo il filtro resta UN SOLO candidato, risolvilo subito
+                    if len(filtered_candidates) == 1:
+                        only_svc, only_sc = filtered_candidates[0]
+                        if only_svc.get('id') not in found_service_ids:
+                            found_services.append(only_svc)
+                            found_service_ids.add(only_svc.get('id'))
+                            logger.warning("_extract_multiple_services: segmento '%s' → risolto dopo filtro parole: '%s'",
+                                          seg, only_svc.get('name'))
+                            # Rimuovi dal filtered_ambiguous_segments dato che è risolto
+                            filtered_ambiguous_segments.pop()
+                else:
+                    # Nessun candidato sopravvive al filtro → tieni i candidati originali
+                    logger.warning("_extract_multiple_services: segmento '%s' → filtro parole ha eliminato TUTTI i candidati, "
+                                  "mantengo originali (%d)", seg, len(candidates))
+                    filtered_ambiguous_segments.append((seg, candidates))
+            else:
+                # Segmento con 1 sola parola significativa → non filtrare
+                filtered_ambiguous_segments.append((seg, candidates))
+        
+        # Sostituisci ambiguous_segments con la versione filtrata
+        ambiguous_segments = filtered_ambiguous_segments
+
         # Per ogni segmento ambiguo, prova a risolvere col criterio "tipo"
         # MA solo se quel tipo ha UN SOLO candidato
         resolved_count = 0
@@ -3162,13 +3309,21 @@ def _get_operator_type_for_service(service_context: dict) -> Optional[str]:
     if not service_context:
         return "estetista"
     
-    category = (service_context.get("category") or "").strip().lower()
+    raw_cat = service_context.get("category") or ""
+    # Difesa: se per qualche motivo il valore non è stringa, convertilo
+    if not isinstance(raw_cat, str):
+        if hasattr(raw_cat, 'value'):
+            raw_cat = str(raw_cat.value)
+        elif hasattr(raw_cat, 'name'):
+            raw_cat = str(raw_cat.name)
+        else:
+            raw_cat = str(raw_cat)
+    category = raw_cat.strip().lower()
     
     if category == "solarium":
         logger.debug("_get_operator_type_for_service: categoria SOLARIUM → tipo 'macchinario'")
         return "macchinario"
     else:
-        # ESTETICA, o qualsiasi altra categoria, o categoria vuota → estetista
         logger.debug("_get_operator_type_for_service: categoria '%s' → tipo 'estetista'", category)
         return "estetista"
 

@@ -3130,6 +3130,63 @@ document.addEventListener('DOMContentLoaded', function() {
   letter-spacing: .04em;
 }
 
+/* AI Slot Card: stati collassato/espanso per multi-slot */
+.ai-slot-card.ai-slot-collapsed .ai-slot-details {
+  display: none !important;
+}
+.ai-slot-card.ai-slot-collapsed .ai-slot-summary {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ai-slot-card.ai-slot-collapsed .ai-slot-summary .ai-slot-expand-icon {
+  display: inline-block;
+  font-size: 0.7rem;
+  transition: transform 0.2s ease;
+  color: #b8809d;
+  flex: 0 0 auto;
+}
+
+.ai-slot-card.ai-slot-expanded .ai-slot-details {
+  display: block !important;
+}
+.ai-slot-card.ai-slot-expanded .ai-slot-summary {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(184, 128, 157, 0.3);
+}
+.ai-slot-card.ai-slot-expanded .ai-slot-summary .ai-slot-expand-icon {
+  display: inline-block;
+  font-size: 0.7rem;
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+  color: #b8809d;
+  flex: 0 0 auto;
+}
+
+/* Impedisci che l'hover della card collassata cambi colore del testo interno */
+.ai-slot-card.ai-slot-collapsed:hover {
+  background: #f0dce6;
+  color: inherit;
+  transform: none;
+}
+.ai-slot-card.ai-slot-collapsed:hover .ai-slot-label {
+  color: #888;
+}
+.ai-slot-card.ai-slot-expanded:hover {
+  background: #f8e8f0;
+  color: inherit;
+  transform: none;
+}
+.ai-slot-card.ai-slot-expanded:hover .ai-slot-label {
+  color: #888;
+}
+
 /* Timestamp messaggi */
 .ai-msg-time {
   font-size: 0.68rem;
