@@ -1389,6 +1389,9 @@ document.addEventListener('DOMContentLoaded', function() {
     popup.style.width = 'auto';
     popup.style.maxWidth = '320px';
     popup.style.minWidth = '180px';
+    // Azzera offset residui definiti inline nel markup (#clientInfoPopup ha margin-top:-25px)
+    popup.style.marginTop = '0';
+    popup.style.transform = 'none';
     popup.style.display = 'block';
 
     const pw = popup.offsetWidth || 220;
@@ -1400,7 +1403,8 @@ document.addEventListener('DOMContentLoaded', function() {
       if (left < 1) left = 1;
     }
 
-    let top = rect.top + scrollY - 10;
+    // Allinea il bordo superiore del popup al bordo superiore del blocco appuntamento
+    let top = rect.top + scrollY;
     if (top + ph > document.documentElement.clientHeight + scrollY) {
       top = Math.max(1, document.documentElement.clientHeight + scrollY - ph);
     }
