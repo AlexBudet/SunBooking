@@ -1423,7 +1423,22 @@ document.addEventListener('DOMContentLoaded', function() {
           window.location.href = url;
         }
       } else {
-        location.reload();
+        // Niente reload: resetta UI locale e rilascia lock
+        try {
+          if (typeof resetScontrino === 'function') resetScontrino(false);
+          if (typeof caricaAppuntamentiMySpia === 'function') caricaAppuntamentiMySpia();
+          if (typeof aggiornaTotale === 'function') aggiornaTotale();
+          if (typeof aggiornaSubtotaliPagamenti === 'function') aggiornaSubtotaliPagamenti();
+          if (typeof mostraPulsanteSalva === 'function') mostraPulsanteSalva();
+          const lotteriaModalEl = document.getElementById('modalLotteria');
+          if (lotteriaModalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(lotteriaModalEl).hide();
+          }
+        } catch(_) {}
+
+        lotteriaInvioLock = false;
+        btnLotteriaInvia.disabled = false;
+        btnLotteriaInvia.textContent = originalText;
       }
     })
     .catch(error => {
