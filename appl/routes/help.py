@@ -13,44 +13,44 @@ HELP_TOPICS = {
     # ========== CALENDARIO ==========
 "calendar_create_appointment": {
     "title": "✏️ Come creare un appuntamento con CLICK SU CELLA VUOTA",
-    "content": """Puoi **CLICCARE IN UNA CELLA VUOTA** del calendario e procedere nella finestra che si apre.
+    "content": """Per creare rapidamente un appuntamento standard:
 
-Una volta aperta la finestra, per creare un appuntamento clicca nel **CAMPO DI RICERCA CLIENTE**, digita le prime tre lettere o più, e poi seleziona dal dropdown il cliente per il quale vuoi prenotare (al momento del click sarà selezionato il cliente e si aprirà automaticamente il campo servizi).
+1️⃣ fai <span class=\"help-strong-dark\">click su una cella vuota</span>
+2️⃣ si apre il modal <span class=\"help-strong-dark\">Crea Appuntamento</span>
+3️⃣ nel campo cliente scrivi almeno 3 caratteri e seleziona il nominativo corretto
+4️⃣ nel campo servizio scrivi almeno 3 caratteri e scegli il trattamento
+5️⃣ se vuoi, aggiungi più mini-blocchi servizio nello stesso modal
+6️⃣ conferma la creazione
 
-Nel **CAMPO DI RICERCA SERVIZI** allo stesso modo digita le prime tre lettere o più, e poi seleziona dal dropdown il servizio per il quale vuoi creare il **MINI-BLOCCO** per l'appuntamento.
+<span class=\"help-strong-dark\">Che cosa succede nel modal</span>
+• il sistema precompila già operatore, data e orario partendo dalla cella cliccata
+• quando selezioni il cliente, la ricerca servizi diventa il passaggio successivo naturale
+• puoi anche creare un <span class=\"help-strong-dark\">Blocco OFF</span> se non stai prenotando un cliente
 
-Puoi creare diversi mini-blocchi in questo modo.
-
-Quando li avrai creati tutti clicca in basso a sinistra su **CREA APPUNTAMENTO**.
-
-Se hai il pacchetto Web, si aprirà ancora un campo opzioni in basso che ti chiederà se vuoi inviare un **Memo Whatsapp** automatico per il cliente per il servizio o i servizi prenotati.
-
-Subito dopo si creeranno i blocchi appuntamento in agenda, è facile!
-""",
+Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>, dopo la conferma può comparire la richiesta per inviare un memo automatico al cliente.""",
 },
 
 "calendar_appointment_navigator": {
         "title": "✏️ Come creare appuntamenti con il NAVIGATOR APPUNTAMENTI",
-        "content": """Il **NAVIGATOR APPUNTAMENTI** in alto a destra sopra il calendario è più versatile e si presta a diverse esigenze.**[[NAVIGATOR APPUNTAMENTI|navigator_appuntamenti]]**
+    "content": """Il <span class=\"help-strong-dark\">Navigator Appuntamenti</span> è il metodo più flessibile quando devi preparare uno o più servizi e poi decidere dove posizionarli. **[[NAVIGATOR APPUNTAMENTI|navigator_appuntamenti]]**
 
-Una volta aperto il Navigator, per creare un appuntamento clicca nel **CAMPO DI RICERCA CLIENTE** e poi seleziona il servizio o i servizi. **[[CAMPO DI RICERCA CLIENTE|campo_ricerca_cliente]]**
+<span class=\"help-strong-dark\">Quando conviene usarlo</span>
+• per creare appuntamenti con più servizi
+• per spostare o copiare blocchi esistenti
+• per aggiungere servizi allo stesso cliente
+• per lavorare più comodamente rispetto al modal singolo
 
-🔍 **SELEZIONARE UN CLIENTE**
-Scrivi almeno **3 lettere** del nome, cognome o telefono del cliente nel campo di ricerca: apparirà una **dropdown list** con i clienti corrispondenti presenti in database. Clicca sul cliente desiderato per selezionarlo.
+<span class=\"help-strong-dark\">Flusso corretto</span>
+1. cerca il cliente
+2. seleziona uno o più servizi
+3. controlla i mini-blocchi nel riquadro basso
+4. muovi il mouse sulle celle vuote del calendario
+5. clicca per posizionare
 
-💆 **SELEZIONARE UN SERVIZIO**
-Allo stesso modo, nel **CAMPO DI RICERCA SERVIZI** basta scrivere **3 o più lettere** e apparirà la lista dei servizi corrispondenti. Clicca sul servizio per selezionarlo.
+<span class=\"help-strong-dark\">Mini-blocchi</span>
+Ogni mini-blocco rappresenta un servizio pronto da inserire. Se ne prepari più di uno, Tosca mostra l'ombra di posizionamento per aiutarti a capire dove finiranno in agenda.
 
-📦 **MINI-BLOCCHI APPUNTAMENTO**
-Una volta selezionati cliente e servizio, viene creato automaticamente un **MINI-BLOCCO APPUNTAMENTO** che appare nell'area in basso del Navigator, in attesa di essere posizionato sul calendario.
-Puoi creare **più mini-blocchi**: dopo aver creato il primo, cerca e seleziona un altro servizio per aggiungerne un altro!
-
-👆 **POSIZIONAMENTO SUL CALENDARIO**
-Con i mini-blocchi creati, muovi il mouse sulle **celle vuote** del calendario: vedrai un'**OMBRA** che ti mostra esattamente dove verranno posizionati i blocchi appuntamento.
-
-☝️ **POSIZIONARE UN SOLO SERVIZIO**
-Se hai creato più mini-blocchi ma vuoi posizionare solo uno specifico servizio, **clicca sul singolo mini-blocco** per selezionarlo: in questo modo verrà creato l'appuntamento relativo solo a quel servizio.
-""",
+Se vuoi posizionare solo un servizio specifico, seleziona il singolo mini-blocco prima del click sulla griglia. **[[CAMPO DI RICERCA CLIENTE|campo_ricerca_cliente]]**""",
     },
 
 "calendar_drag": {
@@ -63,7 +63,7 @@ Se hai creato più mini-blocchi ma vuoi posizionare solo uno specifico servizio,
 
 👥 **Cambiare operatore:** trascina semplicemente l'appuntamento in un'altra colonna per assegnarlo ad un altro operatore
 
-È tutto automatico, non devi salvare nulla! Nella versione web ad ogni spostamento dovrai confermare se inviare o meno un memo Whatsapp al cliente ✨""",
+È tutto automatico, non devi salvare nulla! Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>, in alcuni flussi potrà comparire la conferma di invio memo al cliente ✨""",
 },
 
     "calendar_status": {
@@ -74,7 +74,7 @@ Se hai creato più mini-blocchi ma vuoi posizionare solo uno specifico servizio,
 ⚪ **Grigio chiaro, scritta in grigio** → Tutto fatto e pagato ✓
 🔘  **Grigio a puntini, scritta in nero** → Blocco OFF, non prenotabile!
 ⚫ **Nero a puntini, scritta in bianco** → Il cliente non si è presentato: No-Show! 😢
-🔵 **Blu** → Colore di default di un appuntamento preso da Booking Online
+🔵 **Blu** → colore tipico degli appuntamenti provenienti dal <span class="help-strong-dark">modulo opzionale Booking via Web</span>
 
 **Per cambiare stato ad un blocco appuntamento prosegui nella lettura per vedere le funzioni nascoste di ogni blocco...""",
     },
@@ -92,7 +92,7 @@ Se hai creato più mini-blocchi ma vuoi posizionare solo uno specifico servizio,
 •  **€** **PORTA IN CASSA** → Porta il servizio relativo al blocco e gli altri contigui per quel cliente in cassa per il pagamento. A pagamento effettuato il blocco diventerà grigio chiaro con scritte in grigio, vuol dire che il pagamento per quei servizi è stato effettuato! ps: funzione disponibile solo su versione installata, non per versione web!
 e inoltre...
 📱 **Pulsante a lato del blocco**
-• 💬 **INVIA WHATSAPP** → Invia un **promemoria WhatsApp** al cliente
+• 💬 **INVIA WHATSAPP** → disponibile solo con <span class="help-strong-dark">modulo opzionale WhatsApp</span>, invia un promemoria al cliente
 """,
 },
 
@@ -167,7 +167,7 @@ Passando il mouse sul nome del cliente nel blocco appuntamento, il tooltip mostr
 
 ⭐ **NOTE APPUNTAMENTO AUTOMATICHE**
 Alcune note appuntamento vengono create automaticamente dal sistema:
-• 🌐 **Prenotazioni da Booking Online:** mostrano informazioni sulla prenotazione web (dettagli del cliente, eventuale operatore selezionato)
+• 🌐 **Prenotazioni da Booking Online:** compaiono solo con <span class="help-strong-dark">modulo opzionale Booking via Web</span> e mostrano informazioni sulla prenotazione web
 • 🆕 **Nuovo Cliente:** quando un cliente prenota per la prima volta, appare la dicitura ****NUOVO CLIENTE**** per avvisarti che è alla sua prima visita!
 
 Queste note speciali ti aiutano a riconoscere subito situazioni particolari! ✨""",
@@ -314,7 +314,7 @@ Il **SESSO** viene capito automaticamente dal nome (ma puoi correggerlo nelle im
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Verifica sempre il cellulare per i promemoria WhatsApp 📱, e fai in modo che il numero sia associato al suo effettivo proprietario!</span>
+<span class="help-hint-text">Verifica sempre il cellulare: e' un dato fondamentale per contatto, recall e, se attivo il modulo opzionale, anche per l'invio WhatsApp.</span>
 </div>
 
 Puoi inserire clienti anche da **Impostazioni → Clienti** (tab "Clienti"), dove trovi molte altre funzioni avanzate per la gestione e modifica dei dati cliente.
@@ -378,160 +378,371 @@ Qui hai il controllo totale sulla tua rubrica clienti! 📋""",
     },
     
     # ========== PACCHETTI ==========
+    "pacchetto_panorama": {
+        "title": "🎁 Pacchetti: panoramica generale",
+        "content": """La sezione Pacchetti serve a gestire due grandi strumenti commerciali:
+
+• <span class="help-strong-dark">Pacchetti servizi</span>
+• <span class="help-strong-dark">Carte prepagate</span>
+
+Qui puoi creare programmi venduti in anticipo, seguirne avanzamento, controllare pagamenti, sedute e stato generale del cliente.
+
+In pratica Pacchetti è il ponte tra vendita, Agenda e Cassa.""",
+    },
+
     "pacchetto_create": {
         "title": "📦 Creare un pacchetto",
-        "content": """I pacchetti fanno felici i clienti E te! Ecco come crearli:
+        "content": """Per creare un pacchetto:
 
-1️⃣ Vai nella sezione **Pacchetti**
-2️⃣ Clicca **"Nuovo Pacchetto"**
-3️⃣ Seleziona: **Pacchetto Servizi** o **Carta Prepagata**
-4️⃣ Scegli il cliente
-5️⃣ Configura servizi, sedute e prezzo
-6️⃣ Salva!
+1️⃣ entra nella sezione <span class="help-strong-dark">Pacchetti</span>
+2️⃣ apri il modal di nuovo pacchetto
+3️⃣ scegli il cliente
+4️⃣ decidi se stai creando un programma a sedute oppure una carta/prepagata
+5️⃣ compila nome, servizi, quantità, listino, eventuale sconto e struttura pagamento
+6️⃣ salva
 
-Il pacchetto è subito pronto all'uso 🚀""",
+Durante la creazione puoi impostare anche elementi commerciali come omaggi, rate o promozioni, in base al tipo di pacchetto.""",
+    },
+
+    "pacchetto_stati_dettaglio": {
+        "title": "🧾 Pacchetti: stati, dettaglio, sedute e rate",
+        "content": """Ogni pacchetto ha uno <span class="help-strong-dark">stato</span> e una scheda dettaglio.
+
+Stati tipici:
+• preventivo
+• attivo
+• completato
+• abbandonato
+
+Nel dettaglio pacchetto puoi seguire:
+• sedute effettuate e residue
+• rate pagate e mancanti
+• prossime date
+• storico modifiche operative
+
+Questa pagina è quella da consultare quando vuoi capire a colpo d'occhio quanto è stato usato e quanto resta da saldare o consumare.""",
     },
     
     "pacchetto_uso": {
         "title": "✂️ Usare un pacchetto",
-        "content": """Scalare le sedute è automatico!
+        "content": """L'uso quotidiano del pacchetto avviene soprattutto passando da Agenda e Cassa.
 
-Quando crei un appuntamento:
-1️⃣ Seleziona il cliente (verrà mostrato se ha pacchetti attivi)
-2️⃣ Scegli un servizio incluso nel pacchetto
-3️⃣ Il sistema chiede: "Scalare dal pacchetto?" → Sì!
+Quando prenoti un cliente con pacchetto attivo:
+1️⃣ seleziona il cliente
+2️⃣ scegli un servizio compatibile
+3️⃣ Tosca controlla se esiste una copertura da pacchetto
+4️⃣ quando il flusso viene confermato, la seduta o il credito vengono scalati secondo le regole previste
 
-Le sedute si scalano da sole quando completi l'appuntamento 🎯
+Così eviti conteggi manuali e mantieni allineati appuntamento, pagamento e residuo pacchetto.
 
-**Niente calcoli manuali, pensa a tutto l'app!**""",
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Controlla periodicamente i pacchetti attivi con residuo basso: aiuta a proporre rinnovi in modo naturale al momento giusto.</span>
+</div>""",
     },
     
     "prepagata": {
         "title": "💳 Carta prepagata",
-        "content": """È come un borsellino digitale per i tuoi clienti!
+        "content": """La carta prepagata funziona come un credito cliente disponibile nel tempo.
 
-**Come funziona:**
-1️⃣ Il cliente carica un importo (es: 200€)
-2️⃣ Ad ogni visita, il costo viene scalato
-3️⃣ Tu vedi sempre il saldo rimanente
+Come si usa:
+1️⃣ carichi un importo iniziale
+2️⃣ il cliente usa servizi o prodotti compatibili
+3️⃣ in Cassa puoi scegliere <span class="help-strong-dark">Prepagata</span> come metodo di pagamento
+4️⃣ il saldo residuo si aggiorna automaticamente
 
-**Perfetta per:**
-• Clienti abituali che vogliono pagare in anticipo
-• Chi vuole evitare di pagare ogni volta
-• Regali 🎁
+È utile per fidelizzazione, regali e clienti abituali che vogliono lasciare credito disponibile.""",
+    },
 
-Il saldo è sempre visibile nella scheda cliente!""",
+    "pacchetto_settings": {
+        "title": "⚙️ Pacchetti: impostazioni, promo e template",
+        "content": """Nelle <span class="help-strong-dark">Impostazioni Pacchetti</span> puoi configurare la parte commerciale e comunicativa del modulo.
+
+Qui trovi, ad esempio:
+• regole per stato "abbandonato"
+• promo personalizzate
+• template WhatsApp per riepilogo pacchetto
+• template per carte prepagate
+
+Questa sezione è utile per standardizzare il modo in cui il centro vende e comunica i pacchetti.""",
     },
     
     # ========== WHATSAPP ==========
+    "whatsapp_panorama": {
+        "title": "💬 WhatsApp: panoramica del modulo opzionale",
+        "content": """La sezione <span class="help-strong-dark">WhatsApp e Marketing</span> appartiene a un <span class="help-strong-dark">modulo opzionale separato</span> rispetto al gestionale standard.
+
+Se il modulo non e' attivo:
+• non compaiono le funzioni di invio WhatsApp
+• non vengono mostrati i flussi automatici relativi ai messaggi
+
+Se il modulo e' attivo, puoi gestire:
+• connessione account WhatsApp Business
+• messaggi manuali e automatici
+• reminder giornalieri
+• memo turni operatori
+• campagne marketing""",
+    },
+
     "whatsapp_connect": {
         "title": "📱 Collegare WhatsApp",
-        "content": """Collega WhatsApp in 1 minuto!
+        "content": """Per usare il modulo WhatsApp devi prima collegare l'account Business.
 
-1️⃣ Vai in **Impostazioni → WhatsApp**
-2️⃣ Clicca **"Connetti WhatsApp"**
-3️⃣ Appare un QR code sullo schermo
-4️⃣ Prendi il telefono, apri WhatsApp
-5️⃣ Vai in **Impostazioni → Dispositivi collegati**
-6️⃣ Scansiona il QR code
+Flusso base:
+1️⃣ vai in <span class="help-strong-dark">Impostazioni → WhatsApp</span>
+2️⃣ clicca <span class="help-strong-dark">Connetti WhatsApp</span>
+3️⃣ si apre il flusso con QR code o pagina di connessione
+4️⃣ dal telefono apri WhatsApp → Dispositivi collegati
+5️⃣ inquadra il QR
 
-Quando diventa 🟢 **verde** = sei connesso! 
+Quando la connessione e' attiva, la schermata mostra lo stato collegato e il numero associato.
 
-**Nota:** il telefono deve restare connesso a internet""",
+Nota operativa:
+• nella versione desktop locale sono disponibili piu' opzioni di connessione
+• il telefono/account deve restare correttamente connesso per permettere gli invii
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Fai un test con il tuo numero interno subito dopo la connessione: conferma prima invio manuale e poi invio automatico.</span>
+</div>""",
+    },
+
+    "whatsapp_messaggi_template": {
+        "title": "📝 WhatsApp: messaggi manuali e template",
+        "content": """Nel modulo puoi configurare diversi testi WhatsApp.
+
+I principali sono:
+• messaggio manuale da calendario
+• messaggio automatico alla conferma appuntamento
+• reminder giornaliero
+
+Ogni template puo' usare variabili come:
+• {{nome}}
+• {{data}}
+• {{ora}}
+• {{servizi}}
+
+Questo ti permette di mantenere un messaggio coerente ma personalizzato per ogni cliente.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Mantieni i template brevi e chiari: una frase di conferma, data/ora e call-to-action sono spesso sufficienti.</span>
+</div>""",
     },
     
     "whatsapp_auto": {
         "title": "⏰ Promemoria automatici",
-        "content": """Mai più clienti che dimenticano l'appuntamento!
+        "content": """Con il modulo attivo puoi automatizzare piu' tipi di invio.
 
-Una volta collegato WhatsApp:
-1️⃣ Attiva i **promemoria automatici**
-2️⃣ Scegli **quando inviarli** (es: ore 18:00 del giorno prima)
-3️⃣ Personalizza il **messaggio**
+<span class="help-strong-dark">Conferma automatica</span>
+Messaggio inviato al momento della creazione appuntamento, se il flusso lo prevede.
 
-Il sistema invia tutto da solo! 🤖
+<span class="help-strong-dark">Reminder giornaliero</span>
+Puoi attivare un invio automatico a orario fisso ogni giorno, usando il template dedicato.
 
-**Variabili utili:**
-• {{nome}} → Nome del cliente
-• {{servizio}} → Nome del trattamento
-• {{data}} → Data appuntamento
-• {{ora}} → Orario appuntamento""",
-    },
-    
-    # ========== MARKETING ==========
-    "marketing_send": {
-        "title": "📣 Inviare messaggi marketing",
-        "content": """Raggiungi i tuoi clienti in pochi click!
-
-1️⃣ Usa i **filtri** per scegliere chi contattare
-   (es: "clienti che non vengono da 30 giorni")
-2️⃣ Scrivi il messaggio o usa un **template**
-3️⃣ Controlla l'**anteprima**
-4️⃣ Clicca **"Invia"**
-
-⚠️ **Attenzione:** rispetta il limite giornaliero per evitare blocchi da WhatsApp!
+<span class="help-strong-dark">Opzione utile</span>
+Puoi anche disattivare la richiesta di conferma WhatsApp nel modal di creazione appuntamento, se vuoi un flusso piu' rapido.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Non esagerare, 1-2 messaggi al mese per cliente 👍</span>
+<span class="help-hint-text">Imposta un orario reminder che non risulti invasivo: la fascia tardo pomeriggio del giorno prima funziona spesso meglio.</span>
+</div>""",
+    },
+
+    "whatsapp_operatori": {
+        "title": "👩‍💼 WhatsApp: memo turni operatori",
+        "content": """Il modulo puo' inviare automaticamente ai singoli operatori il riepilogo del turno del giorno successivo.
+
+Configurazioni principali:
+• attivazione generale memo turni
+• orario di invio
+• template messaggio operatori
+• scelta degli operatori abilitati a riceverlo
+
+E' una funzione utile per organizzare il team senza dover inviare manualmente i turni ogni sera.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Prima di attivare l'invio per tutti, usa la funzione di preview e verifica il template su 1-2 operatori.</span>
+</div>""",
+    },
+    
+    # ========== MARKETING ==========
+    "marketing_panorama": {
+        "title": "📣 Marketing: panoramica del modulo opzionale",
+        "content": """La parte Marketing e' inclusa nello stesso <span class="help-strong-dark">modulo opzionale WhatsApp</span>.
+
+Serve a inviare campagne mirate ai clienti usando filtri e template.
+
+Non fa parte del gestionale standard: se il modulo non e' attivo, questa sezione non rientra nei flussi operativi base di Agenda e Cassa.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Definisci 2-3 campagne tipo (riattivazione, promo stagionale, fedelta') e riusale come base per risparmiare tempo.</span>
+</div>""",
+    },
+
+    "marketing_send": {
+        "title": "📣 Inviare messaggi marketing",
+        "content": """La schermata Marketing e' divisa in tre parti:
+
+• <span class="help-strong-dark">filtri clienti</span>
+• <span class="help-strong-dark">risultati selezionabili</span>
+• <span class="help-strong-dark">template messaggio e anteprima</span>
+
+Flusso corretto:
+1️⃣ attiva uno o piu' filtri
+2️⃣ cerca i clienti
+3️⃣ seleziona i destinatari
+4️⃣ scegli o scrivi il template
+5️⃣ verifica l'anteprima
+6️⃣ invia
+
+⚠️ Mantieni sempre un uso misurato degli invii per non stressare i clienti e non saturare il canale WhatsApp.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Meglio una campagna ben mirata che molti invii generici. Qualita' del target prima della quantita'.</span>
 </div>""",
     },
     
     "marketing_variables": {
         "title": "✨ Personalizzare i messaggi",
-        "content": """Fai sentire speciale ogni cliente con le variabili!
+        "content": """Le variabili trasformano un messaggio generico in un messaggio personalizzato.
 
-**Scrivi così:**
-"Ciao {{nome}}, sono passati {{giorni_assenza}} giorni..."
+Esempio:
+• testo scritto: "Ciao {{nome}}, sono passati {{giorni_assenza}} giorni..."
+• testo ricevuto: "Ciao Maria, sono passati 45 giorni..."
 
-**Il cliente riceve:**
-"Ciao Maria, sono passati 45 giorni..."
+Variabili tipiche:
+• {{nome}}
+• {{cognome}}
+• {{centro}}
+• {{giorni_assenza}}
+• {{totale_visite}}
+• {{totale_speso}}
 
-**Variabili disponibili:**
-• {{nome}} → Nome
-• {{cognome}} → Cognome
-• {{centro}} → Nome del tuo centro
-• {{giorni_assenza}} → Giorni dall'ultima visita
-• {{totale_visite}} → Numero visite totali
+Usale con criterio: poche variabili, ma ben scelte, rendono la comunicazione molto piu' efficace.
 
-Ogni messaggio diventa unico! 💌""",
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Evita template con troppe variabili: se un dato manca, il messaggio rischia di risultare meno naturale.</span>
+</div>""",
+    },
+
+    "marketing_filtri_template": {
+        "title": "🧩 Marketing: filtri, template salvati e anteprima",
+        "content": """Nel modulo marketing puoi costruire campagne usando filtri combinabili.
+
+Esempi di filtri presenti:
+• clienti inattivi
+• top spender
+• utilizzo di un servizio specifico
+• frequenza visite
+• categoria servizi
+• nuovi clienti
+• genere
+
+In piu' puoi:
+• usare template predefiniti
+• salvare i tuoi template personalizzati
+• vedere l'anteprima sul primo cliente selezionato prima dell'invio
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Prima di inviare a molti clienti, esegui sempre un micro-test su un gruppo ristretto e controlla il testo finale.</span>
+</div>""",
     },
     
     # ========== BOOKING ONLINE ==========
+    "booking_panorama": {
+        "title": "🌐 Booking via Web: panoramica del modulo opzionale",
+        "content": """La sezione <span class="help-strong-dark">Booking via Web</span> e' un <span class="help-strong-dark">modulo opzionale separato</span> dal gestionale standard.
+
+Se il modulo non e' attivo:
+• non compare il flusso prenotazioni web
+• non vengono mostrati gli elementi collegati alle prenotazioni online
+• in Agenda non compaiono gli elementi specifici del booking web
+
+Se il modulo e' attivo, puoi pubblicare servizi online, gestire regole e associare operatori prenotabili.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Gestisci il Booking via Web come canale separato: prima configuralo bene, poi promuovi il link ai clienti.</span>
+</div>""",
+    },
+
     "booking_setup": {
         "title": "🌐 Prenotazioni online",
-        "content": """Fai prenotare i clienti 24 ore su 24!
+        "content": """Per attivare il modulo Booking via Web:
 
-1️⃣ Vai in **Impostazioni → Booking Web**
-2️⃣ **Attiva** i servizi prenotabili online
-3️⃣ **Assegna** gli operatori a ogni servizio
-4️⃣ Configura le **regole** che vuoi siano mostrate sulla tua pagina prenotazioni(anticipo, durata max, ecc.)
-5️⃣ **Copia il link** e condividilo!
+1️⃣ entra in <span class="help-strong-dark">Impostazioni → Booking Web</span>
+2️⃣ scegli quali servizi rendere visibili online
+3️⃣ associa gli operatori prenotabili per ogni servizio
+4️⃣ configura le regole di prenotazione
+5️⃣ pubblica e condividi il link booking
 
-Metti il link su:
-• Instagram bio 📸
-• Facebook 👍
-• Google My Business 🗺️
-• Messaggi Whatsapp 📱
-• Biglietti da visita e altra grafica per il tuo negozio 🖼️
+Il link puo' essere usato su sito, social, Google Business e canali del centro.
 
-I clienti prenotano da soli, anche di notte! 🌙""",
+Questo modulo consente ai clienti di richiedere prenotazioni anche fuori dagli orari di apertura.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Pubblica online solo i servizi davvero adatti all'auto-prenotazione, lasciando quelli complessi al contatto diretto.</span>
+</div>""",
     },
     
     "booking_rules": {
         "title": "⚙️ Regole prenotazione online",
-        "content": """Proteggi il tuo calendario con le regole giuste!
+        "content": """Le regole booking servono a proteggere l'agenda da prenotazioni online non adatte.
 
-**Puoi impostare:**
-• ⏱️ **Durata massima:** es. max 90 minuti per prenotazione
-• 💰 **Prezzo massimo:** es. max 100€
-In entrambi i casi puoi decidere se pubblicare solo un avviso o bloccare completamente la prenotazione.
+    Regole principali disponibili:
+    • durata massima prenotabile
+    • prezzo massimo prenotabile
 
-**Perché servono?**
-• Eviti che nelle ore di punta il telefono sia congestionato
-• Puoi rindirizzare i clienti più complicati, gli **indecisi** che ti tengono sull'agenda delle mezz'ore e non si decidono mai!
-• Dà un'immagine più professionale, mostrando che hai regole chiare per il tuo servizio
-Trova il tuo equilibrio! ⚖️""",
+    Per ciascuna regola puoi scegliere se:
+    • mostrare solo un <span class="help-strong-dark">warning</span>
+    • oppure <span class="help-strong-dark">bloccare</span> la prenotazione
+
+    Inoltre puoi personalizzare il messaggio mostrato al cliente, cosi' il sito comunica chiaramente il motivo della limitazione.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Parti con limiti prudenti e poi allargali gradualmente in base ai risultati reali delle prenotazioni web.</span>
+</div>""",
+        },
+
+        "booking_servizi_operatori": {
+        "title": "👩‍💼 Booking via Web: servizi visibili e operatori associati",
+        "content": """Nel pannello Booking Web trovi una tabella servizi dedicata al modulo online.
+
+    Qui puoi decidere:
+    • se un servizio e' visibile online
+    • quanti operatori sono associati a quel servizio
+    • quali operatori possono essere prenotati dal cliente via web
+
+    Questo e' un punto chiave: un servizio pubblicato online senza corretta associazione operatori non produrra' un'esperienza di prenotazione coerente.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Dopo ogni modifica operatori/servizi, testa una prenotazione completa dal link pubblico per verificare il risultato reale.</span>
+</div>""",
+        },
+
+        "booking_agenda_separazione": {
+        "title": "🧭 Booking via Web: cosa compare in Agenda e cosa no",
+        "content": """Le funzioni del Booking via Web devono essere lette come <span class="help-strong-dark">aggiuntive</span> rispetto all'Agenda standard.
+
+    Se il modulo non e' attivo:
+    • non devi aspettarti la presenza di elementi dedicati al booking web
+    • la normale Agenda continua a funzionare senza icone o tabelle collegate al mondo online
+
+    Se il modulo e' attivo, alcuni blocchi o pannelli possono mostrare informazioni specifiche del booking web, ma questi contenuti appartengono a questa sezione e non alla guida Agenda standard.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Quando formi lo staff, separa sempre i flussi: prima Agenda standard, poi add-on Booking via Web.</span>
+</div>""",
     },
     
     # ========== OPERATORI ==========
@@ -575,7 +786,7 @@ Il servizio appare subito nel menu appuntamenti 🎉
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Usa nomi chiari che anche i clienti capiscono (per il booking online), e abbreviazioni intuitive per te e il tuo staff!</span>
+<span class="help-hint-text">Usa nomi chiari per il cliente e abbreviazioni intuitive per lo staff. Se attivi Booking via Web, questa chiarezza diventa ancora piu' importante.</span>
 </div>""",
     },
 
@@ -655,6 +866,317 @@ Alcuni elementi **NON** hanno durata:
 <span class="help-hint-text">Imposta durate realistiche! Se un massaggio dura 50 minuti, meglio impostare 60 per avere un margine.</span>
 </div>""",
     },
+
+    # ========== AGENDA (NUOVA STRUTTURA) ==========
+    "agenda_create_modify_delete": {
+        "title": "🗂️ Agenda: creare, modificare e cancellare appuntamenti",
+        "content": """La sezione Agenda serve a <span class=\"help-strong-dark\">creare</span>, <span class=\"help-strong-dark\">modificare</span>, <span class=\"help-strong-dark\">spostare</span> e <span class=\"help-strong-dark\">chiudere</span> gli appuntamenti.
+
+<span class=\"help-strong-dark\">Creazione</span>
+• da cella vuota con modal rapido
+• con Navigator Appuntamenti per flussi più complessi
+
+<span class=\"help-strong-dark\">Modifica</span>
+• trascinamento verticale/orizzontale
+• cambio durata dal bordo inferiore
+• cambio cliente, colore, nota o servizi aggiuntivi
+
+<span class=\"help-strong-dark\">Cancellazione / chiusura</span>
+• cestino del blocco
+• opzione No-Show
+• passaggio in Cassa per completamento e pagamento
+
+L'idea corretta è questa: l'Agenda è la vista operativa del lavoro giornaliero, mentre la Cassa e i Report leggono quello che succede qui.""",
+    },
+
+    "agenda_turni": {
+        "title": "🕒 Agenda: impostare i turni (anche da Settings)",
+        "content": """I turni sono ciò che definisce quando un operatore è prenotabile.
+
+Puoi gestirli in due modi:
+• <span class=\"help-strong-dark\">da Agenda</span>, cliccando il nome operatore in intestazione
+• <span class=\"help-strong-dark\">da Settings → Operatori</span>, dove hai anche la parte anagrafica e gestionale
+
+<span class=\"help-strong-dark\">Effetto pratico</span>
+Le celle fuori turno non diventano disponibili per nuove prenotazioni.
+
+<span class=\"help-strong-dark\">Buona pratica</span>
+1. imposta i turni standard
+2. usa l'Agenda per le eccezioni giornaliere
+3. usa i Blocchi OFF solo per impegni di servizio, non per sostituire la logica dei turni""",
+    },
+
+    # ========== CASSA (DETTAGLIO OPERATIVO) ==========
+    "cassa_filtri_ricerca": {
+        "title": "🔎 Cassa: filtri superiori e campo ricerca servizi",
+        "content": """La parte alta della Cassa serve a <span class=\"help-strong-dark\">costruire velocemente la bozza scontrino</span>.
+
+Hai due strumenti principali:
+• <span class=\"help-strong-dark\">campo Cerca servizio</span>: ricerca veloce con autocomplete
+• <span class=\"help-strong-dark\">filtri rapidi</span>: Frequenti, Ultimi, Solarium, Estetica, Prodotti
+
+Sotto questi controlli compare il contenitore pulsanti servizi, che cambia in base al filtro selezionato.
+
+Uso corretto:
+1. scegli filtro oppure cerca per nome
+2. clicca sui servizi/prodotti da aggiungere
+3. controlla subito la bozza nella card principale""",
+    },
+
+    "cassa_bozza_scontrino": {
+        "title": "🧾 Cassa: creazione bozza scontrino (pseudo-scontrino)",
+        "content": """La <span class=\"help-strong-dark\">bozza scontrino</span> è il riquadro centrale in cui prepari il documento prima della conferma.
+
+Che cosa contiene:
+• righe servizi/prodotti
+• cliente selezionato
+• operatore selezionato
+• prezzi, sconti, metodi di pagamento, totale
+
+La bozza può nascere in due modi:
+• <span class=\"help-strong-dark\">manuale</span>: aggiungendo voci dalla Cassa
+• <span class=\"help-strong-dark\">da Agenda</span>: portando uno o più blocchi in Cassa
+
+Nel codice storico trovi il termine "pseudo-scontrino", ma per l'uso quotidiano pensa a questa sezione come alla <span class=\"help-strong-dark\">bozza operativa dello scontrino</span>.""",
+    },
+
+    "cassa_myspia_save_reset": {
+        "title": "💾 Cassa: Clienti in istituto + Salva/Reset bozza",
+        "content": """A destra trovi il riquadro <span class=\"help-strong-dark\">Clienti in istituto</span>.
+
+Serve per:
+• vedere rapidamente chi è arrivato
+• aprire il gruppo cliente presente in istituto
+• portare i servizi relativi nella bozza scontrino
+
+Quando la bozza nasce da appuntamenti Agenda compaiono due pulsanti importanti:
+• <span class=\"help-strong-dark\">Salva Modifiche</span>: conserva la versione modificata della bozza
+• <span class=\"help-strong-dark\">Reset</span>: ricostruisce la bozza partendo dai dati originali del calendario
+
+Questa logica è utile quando, prima di stampare, cambi prezzi, righe o metodi ma vuoi mantenere coerenza con l'origine Agenda.""",
+    },
+
+    "cassa_sconti_metodi_stampa_test": {
+        "title": "🧮 Cassa: sconti, metodi pagamento, stampa e modalità test",
+        "content": """Ogni riga della bozza può essere rifinita prima della conferma.
+
+<span class=\"help-strong-dark\">Per singola riga puoi gestire</span>
+• prezzo
+• sconto percentuale
+• metodo di pagamento
+
+<span class=\"help-strong-dark\">Metodi pagamento supportati</span>
+• Cash
+• POS
+• Bank
+• Prepagata (se disponibile per il cliente)
+
+In basso trovi anche i bottoni rapidi per applicare il metodo a tutte le righe e leggere i subtotali per metodo.
+
+Flusso corretto:
+1. prepara la bozza
+2. clicca <span class=\"help-strong-dark\">CONFERMA</span>
+3. controlla il riepilogo
+4. manda in stampa con il bottone stampante
+
+Se previsto dal flusso fiscale, può comparire anche la <span class=\"help-strong-dark\">Lotteria Scontrini</span>.
+
+I documenti non fiscali o di test vengono trattati in modo distinto e nel registro hanno comportamento/visualizzazione differente rispetto ai fiscali.""",
+    },
+
+    "cassa_registro_ruoli": {
+        "title": "📚 Cassa: Registro Scontrini e differenze per ruolo",
+        "content": """Il <span class=\"help-strong-dark\">Registro Scontrini</span> è lo storico giornaliero dei documenti emessi.
+
+Che cosa puoi fare:
+• cambiare data visualizzata
+• aprire il dettaglio di uno scontrino
+• distinguere fiscale / non fiscale / storno
+• usare azioni aggiuntive se il tuo ruolo lo consente
+
+<span class=\"help-strong-dark\">Differenze per ruolo</span>
+• <span class=\"help-strong-dark\">user</span>: vista più limitata, senza strumenti critici
+• <span class=\"help-strong-dark\">admin/owner</span>: più strumenti, tra cui eliminazione nei casi consentiti e console RCH
+
+Nel dettaglio scontrino puoi leggere righe, metodi di pagamento, totale e stato fiscale del documento.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Rivedi il Registro Scontrini ogni giorno prima della chiusura: riduce errori e correzioni a posteriori.</span>
+</div>""",
+    },
+
+    "cassa_strumenti_fiscali_rch": {
+        "title": "🖨️ Cassa: strumenti fiscali, DGFE e console RCH",
+        "content": """Nella colonna destra alta della Cassa trovi gli strumenti legati alla stampante fiscale:
+
+• <span class=\"help-strong-dark\">Registro Scontrini</span>
+• <span class=\"help-strong-dark\">Registro DGFE</span>
+• <span class=\"help-strong-dark\">Chiusura Giornaliera</span>
+• <span class=\"help-strong-dark\">Annulla Scontrino</span>
+• <span class=\"help-strong-dark\">Console RCH</span> (solo admin/owner)
+
+Che cosa fanno:
+• DGFE: legge la memoria fiscale del giorno
+• Chiusura Giornaliera: esegue la chiusura del registratore
+• Annulla Scontrino: avvia il flusso di storno/annullo previsto
+• Console RCH: strumento tecnico avanzato per sblocco e diagnostica
+
+Questi pulsanti vanno usati con attenzione perché incidono sulla parte fiscale e sul dialogo con la stampante.""",
+    },
+
+    # ========== REPORT ==========
+    "report_navigazione_filtri": {
+        "title": "📊 Report: navigazione data e filtri avanzati",
+        "content": """La pagina Report include una barra di navigazione simile all'Agenda:
+
+• frecce giorno precedente/successivo
+• campo data con giorno della settimana
+• tasto "Vai a Oggi"
+• versione mobile dedicata della navigazione data
+
+Con i filtri avanzati puoi analizzare:
+• un singolo giorno
+• un intervallo date (Da/A)
+• mese/anno
+
+Dopo aver impostato i filtri usa il tasto **VAI** per ricalcolare tutti i widget e le tabelle.""",
+    },
+
+    "report_sezioni_principali": {
+        "title": "📈 Report: sezioni principali e KPI",
+        "content": """In alto trovi le <span class=\"help-strong-dark\">tile KPI</span> e sotto i pulsanti di sezione.
+
+<span class=\"help-strong-dark\">Che cosa significa KPI?</span>
+KPI è l'acronimo di <span class=\"help-strong-dark\">Key Performance Indicator</span>, cioè <span class=\"help-strong-dark\">Indicatore Chiave di Performance</span>.
+In pratica è un numero sintetico che ti dice rapidamente se stai andando nella direzione giusta.
+
+Nel Report, i KPI mostrano ad esempio:
+• incasso totale
+• passaggi in cassa
+• trend o scostamento
+
+Le <span class=\"help-strong-dark\">tile</span> sono i riquadri KPI: ogni tile riassume un dato e il relativo significato operativo.""",
+    },
+
+    "report_previsioni_tile_edit": {
+        "title": "🧠 Report: calcoli previsionali e gestione tile",
+        "content": """La parte previsionale confronta i dati correnti con obiettivi e andamento temporale.
+
+In termini operativi:
+• il sistema legge i dati reali disponibili nel periodo selezionato
+• li confronta con un target di riferimento
+• mostra la differenza nelle tile (trend/scostamento)
+
+<span class=\"help-strong-dark\">Come leggere una tile previsionale</span>
+• valore principale: dato attuale
+• testo secondario: contesto (giorno/periodo)
+• trend: sei sopra o sotto target
+
+<span class=\"help-strong-dark\">Come si modificano</span>
+Le tile non si modificano "a mano" direttamente dal widget: si aggiornano cambiando filtri e impostazioni disponibili nel report/settings (quando abilitate per il tuo ruolo).""",
+    },
+
+    "report_corrispettivi_ufficiali": {
+        "title": "🧾 Report: sezione Corrispettivi (dati ufficiali)",
+        "content": """La sezione <span class=\"help-strong-dark\">Corrispettivi</span> raccoglie i <span class=\"help-strong-dark\">dati ufficiali degli incassi</span> generati dalla cassa.
+
+Questa è la sezione di riferimento per la contabilità ordinaria.
+
+Uso pratico:
+1. seleziona il periodo corretto
+2. verifica il totale e i dettagli
+3. esporta il file di riepilogo
+4. invialo al commercialista
+
+<span class=\"help-strong-dark\">Nota importante</span>
+L'export Corrispettivi è pensato proprio per essere inviato comodamente al commercialista per la normale tenuta contabile.""",
+    },
+
+    "report_pulsanti_operativi": {
+        "title": "🔘 Report: come usare i pulsanti operativi",
+        "content": """I pulsanti principali cambiano il tipo di analisi mostrata:
+
+• <span class=\"help-strong-dark\">Corrispettivi</span>: quadro ufficiale incassi
+• <span class=\"help-strong-dark\">Incasso per categoria</span>: distribuzione per categorie servizi/prodotti
+• <span class=\"help-strong-dark\">Passaggi cassa</span>: volumi e frequenza pagamenti
+• <span class=\"help-strong-dark\">Clienti</span>: indicatori legati alla clientela
+• <span class=\"help-strong-dark\">Operatori</span>: performance per operatore
+
+Alcuni pulsanti sono visibili solo a ruoli abilitati (admin/owner).""",
+    },
+
+    "report_esportazione_lettura": {
+        "title": "🧠 Report: lettura dati ed esportazione",
+        "content": """I report sono pensati per controllo giornaliero e analisi periodica.
+
+Suggerimenti:
+• confronta sempre periodo selezionato e giorno visualizzato
+• usa i filtri per isolare categorie/operatori
+• interpreta insieme KPI + dettaglio tabellare per decisioni operative
+
+Quando disponibile, usa strumenti di esportazione/stampa in coerenza con i permessi del tuo ruolo.
+
+Per invii amministrativi, usa sempre la vista Corrispettivi del periodo corretto prima dell'export.""",
+    },
+
+    # ========== TOOLS / SETTINGS ==========
+    "tools_panorama": {
+        "title": "🧰 Tools: panoramica della sezione Settings",
+        "content": """La sezione Tools raccoglie le impostazioni strutturali del gestionale:
+
+    • Operatori
+    • Servizi
+    • Clienti
+    • Info Azienda
+    • Utenti (ruoli abilitati)
+
+    È il punto in cui si definiscono le basi operative su cui poi lavorano Agenda, Cassa, Report e, se attivi, anche i moduli opzionali.""",
+    },
+
+    "tools_clienti_servizi_operatori": {
+        "title": "⚙️ Tools: clienti, servizi, operatori",
+        "content": """In questa parte di Tools gestisci gli elementi che usi tutti i giorni.
+
+    <span class="help-strong-dark">Clienti</span>
+    • ricerca, modifica, note, storico, export
+
+    <span class="help-strong-dark">Servizi</span>
+    • nome, tag, durata, prezzo, categorie, sottocategorie, descrizioni
+
+    <span class="help-strong-dark">Operatori</span>
+    • anagrafica, visibilità, ordine, memo turni, turni operativi
+
+    Ogni modifica qui ha effetto diretto sui flussi quotidiani del centro.""",
+    },
+
+    "tools_info_azienda_utenti": {
+        "title": "🏢 Tools: Info Azienda, utenti e permessi",
+        "content": """Da questa area puoi configurare:
+
+    • <span class="help-strong-dark">Info Azienda</span>: dati centro, informazioni usate nei documenti e nelle integrazioni
+    • <span class="help-strong-dark">Utenti</span>: creazione account e assegnazione ruolo (solo admin/owner)
+
+    I ruoli influenzano ciò che ogni persona può vedere o fare, ad esempio in Cassa, Report e negli strumenti fiscali avanzati.""",
+        },
+
+        "tools_workflow_consigliato": {
+        "title": "🧭 Tools: ordine consigliato di configurazione",
+        "content": """Se stai configurando Tosca da zero, l'ordine più sensato è questo:
+
+    1️⃣ crea gli operatori
+    2️⃣ inserisci i servizi con durata e categoria
+    3️⃣ carica i clienti principali
+    4️⃣ completa le info aziendali
+    5️⃣ crea gli utenti con i ruoli corretti
+
+    Seguendo questo ordine eviti configurazioni parziali e fai partire più velocemente Agenda e Cassa.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Documenta questa sequenza in una checklist interna: accelera onboarding di nuovi collaboratori e nuove aperture.</span>
+</div>""",
+    },
 }
 
 def get_help(topic):
@@ -674,9 +1196,12 @@ def get_all_topics():
 def get_topics_by_category():
     """Restituisce gli argomenti organizzati per categoria"""
     return {
-        "Calendario": [
+        "Agenda": [
+            "agenda_create_modify_delete",
             "calendar_create_appointment",
             "calendar_appointment_navigator",
+            "agenda_turni",
+            "operator_shifts",
             "calendar_drag",
             "calendar_status",
             "calendar_block_buttons",
@@ -688,41 +1213,63 @@ def get_topics_by_category():
             "calendar_off_block"
         ],
         "Cassa": [
+            "cassa_filtri_ricerca",
+            "cassa_bozza_scontrino",
+            "cassa_myspia_save_reset",
+            "cassa_sconti_metodi_stampa_test",
+            "cassa_registro_ruoli",
+            "cassa_strumenti_fiscali_rch",
             "cassa_crea_scontrino",
             "cassa_pagamento",
             "cassa_blocchi_appuntamento"
         ],
-        "Clienti": [
+        "Report": [
+            "report_navigazione_filtri",
+            "report_sezioni_principali",
+            "report_previsioni_tile_edit",
+            "report_corrispettivi_ufficiali",
+            "report_pulsanti_operativi",
+            "report_esportazione_lettura"
+        ],
+        "Pacchetti": [
+            "pacchetto_panorama",
+            "pacchetto_create",
+            "pacchetto_stati_dettaglio",
+            "pacchetto_uso",
+            "prepagata",
+            "pacchetto_settings"
+        ],
+        "Tools": [
+            "tools_panorama",
+            "tools_clienti_servizi_operatori",
+            "tools_info_azienda_utenti",
+            "tools_workflow_consigliato",
             "client_new",
             "client_search",
             "client_info_window",
             "client_history",
-            "client_settings"
-        ],
-        "Servizi": [
+            "client_settings",
             "service_create",
             "service_categories",
             "service_vs_products",
             "service_duration"
         ],
-        "Pacchetti": [
-            "pacchetto_create",
-            "pacchetto_uso",
-            "prepagata"
-        ],
-        "WhatsApp": [
-            "whatsapp_connect",
-            "whatsapp_auto"
-        ],
-        "Marketing": [
-            "marketing_send",
-            "marketing_variables"
-        ],
-        "Prenotazioni Online": [
+        "Booking via Web": [
+            "booking_panorama",
             "booking_setup",
-            "booking_rules"
+            "booking_rules",
+            "booking_servizi_operatori",
+            "booking_agenda_separazione"
         ],
-        "Operatori": [
-            "operator_shifts"
+        "WhatsApp e Marketing": [
+            "whatsapp_panorama",
+            "whatsapp_connect",
+            "whatsapp_messaggi_template",
+            "whatsapp_auto",
+            "whatsapp_operatori",
+            "marketing_panorama",
+            "marketing_send",
+            "marketing_variables",
+            "marketing_filtri_template"
         ],
     }
