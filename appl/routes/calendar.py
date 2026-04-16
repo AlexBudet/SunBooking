@@ -3,7 +3,7 @@ from collections import defaultdict
 from flask import Blueprint, logging, make_response, session, render_template, request, redirect, url_for, jsonify, flash, abort
 from flask_caching import Cache
 from sqlalchemy.orm import joinedload
-from datetime import time as dtime
+from datetime import date, time as dtime
 from datetime import datetime, timedelta, time, timezone
 from decimal import Decimal
 from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo, Pacchetto, PacchettoTipo, PacchettoStatus
@@ -978,6 +978,125 @@ def get_operator_shifts(operator_id):
         "start_time": s.shift_start_time.strftime('%H:%M'),
         "end_time": s.shift_end_time.strftime('%H:%M')
     } for s in shifts])
+
+@calendar_bp.route('/api/operators/<int:operator_id>/shifts/month', methods=['GET'])
+def get_operator_shifts_month(operator_id):
+    """Restituisce i turni di un operatore per tutto un mese (YYYY-MM).
+    
+    Risposta JSON:
+      {
+        "default_start": "09:00",  # orario apertura attività (fallback)
+        "default_end":   "19:00",
+        "closing_days":  ["Sunday"],  # giorni di chiusura attività
+        "shifts": {
+          "2026-04-15": [{"start_time": "09:00", "end_time": "19:00", "is_off": false}],
+          "2026-04-20": [{"start_time": "00:00", "end_time": "00:00", "is_off": true}]
+          // giorni non presenti → usare orario default
+        }
+      }
+    """
+    month_str = request.args.get('month')  # formato YYYY-MM
+    if not month_str:
+        return jsonify({"error": "Parametro 'month' mancante"}), 400
+    try:
+        year, month = int(month_str[:4]), int(month_str[5:7])
+    except (ValueError, IndexError):
+        return jsonify({"error": "Formato month non valido (usa YYYY-MM)"}), 400
+
+    first_day = date(year, month, 1)
+    if month == 12:
+        last_day = date(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        last_day = date(year, month + 1, 1) - timedelta(days=1)
+
+    shifts = OperatorShift.query.filter(
+        OperatorShift.operator_id == operator_id,
+        OperatorShift.shift_date >= first_day,
+        OperatorShift.shift_date <= last_day
+    ).all()
+
+    # Turni espliciti per giorno
+    shifts_map = {}
+    for s in shifts:
+        key = s.shift_date.strftime('%Y-%m-%d')
+        is_off = (s.shift_start_time == s.shift_end_time)
+        shifts_map.setdefault(key, []).append({
+            "start_time": s.shift_start_time.strftime('%H:%M'),
+            "end_time":   s.shift_end_time.strftime('%H:%M'),
+            "is_off":     is_off
+        })
+
+    # Orari di apertura/chiusura default dell'attività (usati come fallback)
+    business_info = BusinessInfo.query.first()
+    default_start = "09:00"
+    default_end   = "19:00"
+    closing_days  = []
+    if business_info:
+        if business_info.active_opening_time:
+            default_start = business_info.active_opening_time.strftime('%H:%M')
+        if business_info.active_closing_time:
+            default_end = business_info.active_closing_time.strftime('%H:%M')
+        if business_info.closing_days:
+            import json as _json
+            try:
+                closing_days = _json.loads(business_info.closing_days)
+            except Exception:
+                closing_days = []
+
+    # Calcola i giorni "FULL": turno attivo ma zero minuti liberi
+    # Per ogni giorno del mese con turno attivo, confronta minuti turno con minuti occupati
+    from datetime import datetime as _dt
+    appointments_in_month = Appointment.query.filter(
+        Appointment.operator_id == operator_id,
+        Appointment.start_time >= _dt(year, month, 1),
+        Appointment.start_time < _dt(year if month < 12 else year + 1,
+                                      month + 1 if month < 12 else 1, 1),
+        Appointment.is_cancelled_by_client == False
+    ).all()
+
+    # Raggruppa appuntamenti per giorno → minuti totali occupati
+    appt_minutes_by_day = {}
+    for appt in appointments_in_month:
+        day_key = appt.start_time.strftime('%Y-%m-%d')
+        appt_minutes_by_day[day_key] = appt_minutes_by_day.get(day_key, 0) + (appt.duration or 0)
+
+    def _minutes(t_str):
+        h, m = map(int, t_str.split(':'))
+        return h * 60 + m
+
+    full_days = []
+    current = first_day
+    while current <= last_day:
+        day_key = current.strftime('%Y-%m-%d')
+        dow_en = current.strftime('%A')   # e.g. "Sunday"
+        # Salta giorni di chiusura attività e giorni OFF espliciti
+        if dow_en in closing_days:
+            current += timedelta(days=1)
+            continue
+        explicit = shifts_map.get(day_key, [])
+        if explicit and all(s['is_off'] for s in explicit):
+            current += timedelta(days=1)
+            continue
+        # Determina durata del turno
+        if explicit and not all(s['is_off'] for s in explicit):
+            active = [s for s in explicit if not s['is_off']]
+            shift_mins = sum(_minutes(s['end_time']) - _minutes(s['start_time']) for s in active)
+        else:
+            shift_mins = _minutes(default_end) - _minutes(default_start)
+
+        if shift_mins > 0:
+            occupied = appt_minutes_by_day.get(day_key, 0)
+            if occupied >= shift_mins:
+                full_days.append(day_key)
+        current += timedelta(days=1)
+
+    return jsonify({
+        "default_start": default_start,
+        "default_end":   default_end,
+        "closing_days":  closing_days,
+        "shifts":        shifts_map,
+        "full_days":     full_days
+    })
 
 @calendar_bp.route('/api/operators/<int:operator_id>/shifts/multi', methods=['POST'])
 def operator_multi_shifts(operator_id):

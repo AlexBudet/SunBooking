@@ -164,7 +164,8 @@ display:none;
               <span class="variable-tag" onclick="insertVariable('{rate_pagate}')">Rate Pagate</span>
               <span class="variable-tag" onclick="insertVariable('{rate_totali}')">Rate Totali</span>
               <span class="variable-tag" onclick="insertVariable('{importo_pagato}')">Importo Pagato</span>
-              <span class="variable-tag" onclick="insertVariable('{importo_totale}')">Importo Totale</span>
+              <span class="variable-tag" onclick="insertVariable('{importo_totale}')">Importo Pacchetto</span>
+              <span class="variable-tag" onclick="insertVariable('{importo_da_listino}')">Importo da Listino</span>
               <span class="variable-tag" onclick="insertVariable('{prossima_seduta}')">Prossima Seduta</span>
               <span class="variable-tag" onclick="insertVariable('{centro_nome}')">Nome Centro</span>
             </div>
@@ -814,6 +815,7 @@ function showDisclaimerPreview() {
     .replace(/{sedute_totali}/g, '15')
     .replace(/{importo_totale}/g, '300.00')
     .replace(/{importo_totale_lordo}/g, '450.00')
+    .replace(/{importo_da_listino}/g, '450.00')
     .replace(/{data_sottoscrizione}/g, '07/01/2026')
     .replace(/{centro_nome}/g, 'Beauty Center')
     .replace(/{centro_indirizzo}/g, 'Via Roma 123, Milano')
@@ -863,6 +865,7 @@ function showPreviewModal() {
     .replace(/{rate_totali}/g, '3')
     .replace(/{importo_pagato}/g, '200.00')
     .replace(/{importo_totale}/g, '300.00')
+    .replace(/{importo_da_listino}/g, '450.00')
     .replace(/{prossima_seduta}/g, '15 Gen 2026 ore 10:00')
     .replace(/{centro_nome}/g, 'Beauty Center');
   

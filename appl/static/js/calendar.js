@@ -2473,6 +2473,46 @@ function openShiftsModalCalendar(operatorId, operatorName, date) {
   form.appendChild(secondRow);
   modalBody.appendChild(form);
 
+  // ===== VISUALIZZAZIONE RAPIDA TURNI =====
+  // La sezione viene ricreata ogni volta perché il modalBody viene svuotato
+  const shiftsSec = document.createElement('div');
+  shiftsSec.className = 'shifts-month-calendar-section mt-4 pt-3';
+  shiftsSec.id = 'shiftsMonthCalendarSection';
+  shiftsSec.style.borderTop = '1px solid rgba(135,100,124,0.18)';
+  shiftsSec.innerHTML = `
+    <div class="shifts-month-section-title" id="shiftsMonthSectionTitle">Visualizzazione Rapida Turni</div>
+    <div class="shifts-month-header">
+      <button type="button" class="shifts-month-nav-btn" id="shiftsMonthPrev" aria-label="Mese precedente">&#8249;</button>
+      <span class="shifts-month-title" id="shiftsMonthTitle"></span>
+      <button type="button" class="shifts-month-nav-btn" id="shiftsMonthNext" aria-label="Mese successivo">&#8250;</button>
+    </div>
+    <div class="shifts-month-grid-wrap">
+      <div class="shifts-month-dow-row">
+        <div>Lun</div><div>Mar</div><div>Mer</div><div>Gio</div><div>Ven</div><div>Sab</div><div>Dom</div>
+      </div>
+      <div class="shifts-month-grid" id="shiftsMonthGrid">
+        <div class="shifts-month-loading">Caricamento&hellip;</div>
+      </div>
+    </div>
+  `;
+  modalBody.appendChild(shiftsSec);
+
+  // Rincollega i listener nav (i bottoni prev/next appena creati)
+  if (typeof window._bindShiftsMonthNavButtons === 'function') {
+    window._bindShiftsMonthNavButtons();
+  }
+
+  // Aggiorna il titolo con il nome operatore
+  const titleSecEl = shiftsSec.querySelector('#shiftsMonthSectionTitle');
+  if (titleSecEl) {
+    titleSecEl.textContent = 'Visualizzazione Rapida Turni — ' + operatorName;
+  }
+
+  // Imposta l'operatore e renderizza subito il calendario mensile
+  if (typeof window.shiftsMonthCalendarRender === 'function') {
+    window.shiftsMonthCalendarRender(operatorId);
+  }
+
   // Adatta larghezza del modal al contenuto della prima riga
   const dialog = modalEl.querySelector('.modal-dialog');
   if (dialog) {
@@ -2542,6 +2582,9 @@ function saveDailyShiftCalendar() {
     })
     .then(data => {
         console.log('Turno salvato:', data);
+        if (typeof window.shiftsMonthCalendarInvalidate === 'function') {
+            window.shiftsMonthCalendarInvalidate(operatorId, date);
+        }
         const modalEl = document.getElementById('OperatorShiftsModalCalendar');
         const bsModal = bootstrap.Modal.getInstance(modalEl);
         if (bsModal) {
@@ -2587,6 +2630,9 @@ function setDayOffCalendar() {
     })
     .then(data => {
         console.log('Giorno di riposo impostato:', data);
+        if (typeof window.shiftsMonthCalendarInvalidate === 'function') {
+            window.shiftsMonthCalendarInvalidate(operatorId, date);
+        }
         const modalEl = document.getElementById('OperatorShiftsModalCalendar');
         const bsModal = bootstrap.Modal.getInstance(modalEl);
         if (bsModal) {
@@ -9082,6 +9128,11 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
   const clientSearchInputNav = document.getElementById('clientSearchInputNav');
   if (clientSearchInputNav) {
       clientSearchInputNav.value = "";
+      // Rimuovi il pulsante "i" (info cliente) se presente
+      const container = clientSearchInputNav.parentElement;
+      if (container) {
+        container.querySelectorAll('.client-info-btn-nav').forEach(function(btn) { btn.remove(); });
+      }
   }
 
   const serviceInputNav = document.getElementById('serviceInputNav');
@@ -9113,6 +9164,16 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
 
   // Persist state pulito
   try { saveNavigatorState(); } catch(e) { /* ignore */ }
+
+  // Collassa il navigator alla visualizzazione a una riga (come al caricamento pagina).
+  // Imposta flag per impedire che restoreNavigatorState (chiamata da fetchCalendarData)
+  // ri-espanda il navigator nel ciclo asincrono successivo.
+  window._navigatorJustCleared = true;
+  if (typeof collapseAppointmentNavigator === 'function') {
+    collapseAppointmentNavigator();
+  }
+  // Rimuovi il flag dopo un breve timeout (oltre ogni eventuale fetch asincrona)
+  setTimeout(function() { window._navigatorJustCleared = false; }, 2000);
 
   // Nessun reload: stato navigator già resettato in-place.
 }
@@ -9893,6 +9954,8 @@ function saveNavigatorState() {
 }
 
 function restoreNavigatorState() {
+  // Se il navigator è appena stato svuotato manualmente, non ripristinare nulla
+  if (window._navigatorJustCleared) return;
   try {
     // Ripristina stato collapsed/expanded del Navigator
     const collapsedState = localStorage.getItem('navigatorCollapsed');
@@ -10168,6 +10231,17 @@ function collapseAppointmentNavigator() {
   if (clientResults) clientResults.style.display = 'none';
   if (serviceResults) serviceResults.style.display = 'none';
   if (selectedServicesList) selectedServicesList.style.display = 'none';
+
+  // Nascondi i pulsanti Svuota e Toggle (come al caricamento pagina),
+  // rimuovendo lo style inline in modo che torni al display:none del CSS
+  const clearBtn = document.getElementById('clearNavigatorBtn');
+  if (clearBtn) clearBtn.style.display = '';
+  const toggleBtn = document.getElementById('navigatorToggleBtn');
+  if (toggleBtn) toggleBtn.style.display = '';
+
+  // Rimuovi classe open dal navigator (riporta allo stato iniziale)
+  const nav = document.getElementById('appointmentNavigator');
+  if (nav) nav.classList.remove('open');
 }
 
 // Chiudi il navigator anche cliccando fuori, se i campi sono vuoti
@@ -12467,6 +12541,369 @@ document.addEventListener('click', function(e) {
       }
     });
   });
+})();
+
+// ===============================
+// VISUALIZZAZIONE RAPIDA TURNI — Calendario mensile nel modal OperatorShiftsModalCalendar
+// ===============================
+(function() {
+  const MESI_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                   'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+
+  let _shiftsMonthYear  = null;  // anno corrente visualizzato
+  let _shiftsMonthMonth = null;  // mese corrente visualizzato (0-based)
+  let _shiftsOperatorId = null;  // operatore corrente
+  let _shiftsCache      = {};    // cache { 'YYYY-MM': {...} }
+
+  function _shiftsMonthKey(year, month) {
+    return year + '-' + String(month + 1).padStart(2, '0');
+  }
+
+  async function _fetchShiftsForMonth(operatorId, year, month) {
+    const key = _shiftsMonthKey(year, month);
+    if (_shiftsCache[operatorId + '_' + key]) return _shiftsCache[operatorId + '_' + key];
+    try {
+      const resp = await fetch(`/calendar/api/operators/${encodeURIComponent(operatorId)}/shifts/month?month=${key}`);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      _shiftsCache[operatorId + '_' + key] = data;
+      return data;
+    } catch (e) {
+      console.warn('fetchShiftsForMonth error', e);
+      return { default_start: null, default_end: null, closing_days: [], shifts: {} };
+    }
+  }
+
+  // Nomi dei giorni della settimana in inglese (come li ritorna Python strftime('%A'))
+  const _DOW_EN = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  async function renderShiftsMonthCalendar(operatorId, year, month) {
+    const grid     = document.getElementById('shiftsMonthGrid');
+    const titleEl  = document.getElementById('shiftsMonthTitle');
+    if (!grid || !titleEl) return;
+
+    // Titolo cliccabile: mese + anno separati
+    titleEl.innerHTML = '';
+    const monthSpan = document.createElement('span');
+    monthSpan.className = 'shifts-month-title-month';
+    monthSpan.textContent = MESI_IT[month];
+    monthSpan.title = 'Cambia mese';
+    monthSpan.style.cursor = 'pointer';
+    monthSpan.style.textDecoration = 'underline dotted';
+    monthSpan.addEventListener('click', function(e) {
+      e.stopPropagation();
+      _openMonthPicker(operatorId, year, month);
+    });
+    const sep = document.createTextNode(' ');
+    const yearSpan = document.createElement('span');
+    yearSpan.className = 'shifts-month-title-year';
+    yearSpan.textContent = year;
+    yearSpan.title = 'Cambia anno';
+    yearSpan.style.cursor = 'pointer';
+    yearSpan.style.textDecoration = 'underline dotted';
+    yearSpan.addEventListener('click', function(e) {
+      e.stopPropagation();
+      _openYearPicker(operatorId, year, month);
+    });
+    titleEl.appendChild(monthSpan);
+    titleEl.appendChild(sep);
+    titleEl.appendChild(yearSpan);
+
+    // Skeleton loader
+    grid.innerHTML = '<div class="shifts-month-loading">Caricamento…</div>';
+
+    const apiData = await _fetchShiftsForMonth(operatorId, year, month);
+
+    // Supporta sia vecchio formato (dict piatto) che nuovo (con .shifts)
+    const shiftsMap     = (apiData && apiData.shifts) ? apiData.shifts : (apiData || {});
+    const defaultStart  = (apiData && apiData.default_start) ? apiData.default_start : null;
+    const defaultEnd    = (apiData && apiData.default_end)   ? apiData.default_end   : null;
+    const closingDays   = (apiData && Array.isArray(apiData.closing_days)) ? apiData.closing_days : [];
+    const fullDaysSet   = new Set((apiData && Array.isArray(apiData.full_days)) ? apiData.full_days : []);
+
+    grid.innerHTML = '';
+
+    // Primo giorno del mese: getDay() → 0=Dom, convertiamo a lun=0
+    const firstDate = new Date(year, month, 1);
+    let startDow = firstDate.getDay(); // 0=Dom
+    startDow = (startDow === 0) ? 6 : startDow - 1; // 0=Lun … 6=Dom
+
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
+    const todayStr = today.getFullYear() + '-' +
+                     String(today.getMonth() + 1).padStart(2,'0') + '-' +
+                     String(today.getDate()).padStart(2,'0');
+
+    // Celle vuote iniziali
+    for (let i = 0; i < startDow; i++) {
+      const empty = document.createElement('div');
+      empty.className = 'shifts-month-cell shifts-month-empty';
+      grid.appendChild(empty);
+    }
+
+    // Celle giorni
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = year + '-' + String(month + 1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+      const cell = document.createElement('div');
+      cell.className = 'shifts-month-cell';
+      if (dateStr === todayStr) cell.classList.add('shifts-month-today');
+
+      const dayEl = document.createElement('span');
+      dayEl.className = 'shifts-month-day-num';
+      dayEl.textContent = d;
+      cell.appendChild(dayEl);
+
+      // Giorno della settimana in inglese (come closing_days dal backend)
+      const dowEn = _DOW_EN[new Date(year, month, d).getDay()];
+      const isClosingDay = closingDays.includes(dowEn);
+      const isFull = fullDaysSet.has(dateStr);
+
+      const explicitShifts = shiftsMap[dateStr];
+
+      if (explicitShifts && explicitShifts.length > 0) {
+        // Turno esplicito salvato: mostra start-end (o OFF se 00:00-00:00)
+        const allOff = explicitShifts.every(function(s) { return s.is_off; });
+        if (allOff) {
+          cell.classList.add('shifts-month-off');
+          const offLabel = document.createElement('span');
+          offLabel.className = 'shifts-month-label shifts-month-off-label';
+          offLabel.textContent = 'OFF';
+          cell.appendChild(offLabel);
+        } else if (isFull) {
+          cell.classList.add('shifts-month-full');
+          const fullLabel = document.createElement('span');
+          fullLabel.className = 'shifts-month-label shifts-month-full-label';
+          fullLabel.textContent = 'FULL';
+          cell.appendChild(fullLabel);
+        } else {
+          cell.classList.add('shifts-month-on');
+          explicitShifts.forEach(function(s) {
+            if (!s.is_off) {
+              const label = document.createElement('span');
+              label.className = 'shifts-month-label';
+              label.textContent = s.start_time + ' – ' + s.end_time;
+              cell.appendChild(label);
+            }
+          });
+        }
+      } else if (isClosingDay) {
+        // Giorno di chiusura attività → OFF
+        cell.classList.add('shifts-month-off');
+        const offLabel = document.createElement('span');
+        offLabel.className = 'shifts-month-label shifts-month-off-label';
+        offLabel.textContent = 'OFF';
+        cell.appendChild(offLabel);
+      } else if (isFull) {
+        // Giorno lavorativo default ma FULL
+        cell.classList.add('shifts-month-full');
+        const fullLabel = document.createElement('span');
+        fullLabel.className = 'shifts-month-label shifts-month-full-label';
+        fullLabel.textContent = 'FULL';
+        cell.appendChild(fullLabel);
+      } else if (defaultStart && defaultEnd) {
+        // Nessun turno esplicito, giorno lavorativo: mostra orario default attività
+        cell.classList.add('shifts-month-default');
+        const label = document.createElement('span');
+        label.className = 'shifts-month-label shifts-month-default-label';
+        label.textContent = defaultStart + ' – ' + defaultEnd;
+        cell.appendChild(label);
+      } else {
+        cell.classList.add('shifts-month-off');
+        const offLabel = document.createElement('span');
+        offLabel.className = 'shifts-month-label shifts-month-off-label';
+        offLabel.textContent = 'OFF';
+        cell.appendChild(offLabel);
+      }
+
+      // Click sul giorno → vai al calendario giornaliero
+      cell.title = 'Vai al ' + dateStr;
+      cell.addEventListener('click', function() {
+        const base = (typeof calendarHomeUrl !== 'undefined') ? calendarHomeUrl : '/calendar/';
+        window.location.href = base + '?date=' + dateStr;
+      });
+
+      grid.appendChild(cell);
+    }
+  }
+
+  // ── MONTH PICKER ──────────────────────────────────────────────
+  function _openMonthPicker(operatorId, year, month) {
+    _removeFloatingPicker();
+    const titleEl = document.getElementById('shiftsMonthTitle');
+    if (!titleEl) return;
+
+    const picker = document.createElement('div');
+    picker.id = '_shiftsFloatingPicker';
+    picker.className = 'shifts-floating-picker';
+
+    const grid = document.createElement('div');
+    grid.className = 'shifts-picker-month-grid';
+    MESI_IT.forEach(function(nome, idx) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'shifts-picker-btn' + (idx === month ? ' active' : '');
+      btn.textContent = nome.slice(0, 3);
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        _removeFloatingPicker();
+        _shiftsMonthMonth = idx;
+        renderShiftsMonthCalendar(operatorId, year, idx);
+      });
+      grid.appendChild(btn);
+    });
+    picker.appendChild(grid);
+    _positionPicker(picker, titleEl);
+  }
+
+  // ── YEAR PICKER ───────────────────────────────────────────────
+  function _openYearPicker(operatorId, year, month) {
+    _removeFloatingPicker();
+    const titleEl = document.getElementById('shiftsMonthTitle');
+    if (!titleEl) return;
+
+    const picker = document.createElement('div');
+    picker.id = '_shiftsFloatingPicker';
+    picker.className = 'shifts-floating-picker';
+
+    let _pickerYear = year;
+    const RANGE = 4; // -4 … +4 anni intorno all'anno corrente
+
+    function _buildYearGrid() {
+      picker.innerHTML = '';
+      const nav = document.createElement('div');
+      nav.className = 'shifts-picker-year-nav';
+      const prev = document.createElement('button');
+      prev.type = 'button'; prev.textContent = '‹'; prev.className = 'shifts-month-nav-btn';
+      prev.addEventListener('click', function(e) { e.stopPropagation(); _pickerYear -= 9; _buildYearGrid(); });
+      const next = document.createElement('button');
+      next.type = 'button'; next.textContent = '›'; next.className = 'shifts-month-nav-btn';
+      next.addEventListener('click', function(e) { e.stopPropagation(); _pickerYear += 9; _buildYearGrid(); });
+      nav.appendChild(prev); nav.appendChild(next);
+      picker.appendChild(nav);
+
+      const grid = document.createElement('div');
+      grid.className = 'shifts-picker-year-grid';
+      for (let y = _pickerYear - RANGE; y <= _pickerYear + RANGE; y++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'shifts-picker-btn' + (y === year ? ' active' : '');
+        btn.textContent = y;
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          _removeFloatingPicker();
+          _shiftsMonthYear = y;
+          renderShiftsMonthCalendar(operatorId, y, month);
+        });
+        grid.appendChild(btn);
+      }
+      picker.appendChild(grid);
+    }
+    _buildYearGrid();
+    _positionPicker(picker, titleEl);
+  }
+
+  function _positionPicker(picker, anchor) {
+    document.body.appendChild(picker);
+    const rect = anchor.getBoundingClientRect();
+    picker.style.position = 'fixed';
+    picker.style.top = (rect.bottom + 6) + 'px';
+    const left = Math.min(rect.left, window.innerWidth - picker.offsetWidth - 8);
+    picker.style.left = Math.max(8, left) + 'px';
+    picker.style.zIndex = '99999';
+    // Chiudi cliccando fuori
+    setTimeout(function() {
+      document.addEventListener('click', _removeFloatingPicker, { once: true, capture: true });
+    }, 0);
+  }
+
+  function _removeFloatingPicker() {
+    const el = document.getElementById('_shiftsFloatingPicker');
+    if (el) el.remove();
+  }
+
+  function initShiftsMonthCalendar() {
+    const modalEl = document.getElementById('OperatorShiftsModalCalendar');
+    if (!modalEl) return;
+
+    // Init data corrente
+    const now = new Date();
+    _shiftsMonthYear  = now.getFullYear();
+    _shiftsMonthMonth = now.getMonth();
+
+    // Esponi funzione per rincollare i bottoni nav dopo che il modalBody viene ricreato dinamicamente
+    window._bindShiftsMonthNavButtons = function() {
+      const prev = document.getElementById('shiftsMonthPrev');
+      const next = document.getElementById('shiftsMonthNext');
+      if (prev) {
+        prev.onclick = function(e) {
+          e.stopPropagation();
+          _shiftsMonthMonth--;
+          if (_shiftsMonthMonth < 0) { _shiftsMonthMonth = 11; _shiftsMonthYear--; }
+          if (_shiftsOperatorId) renderShiftsMonthCalendar(_shiftsOperatorId, _shiftsMonthYear, _shiftsMonthMonth);
+        };
+      }
+      if (next) {
+        next.onclick = function(e) {
+          e.stopPropagation();
+          _shiftsMonthMonth++;
+          if (_shiftsMonthMonth > 11) { _shiftsMonthMonth = 0; _shiftsMonthYear++; }
+          if (_shiftsOperatorId) renderShiftsMonthCalendar(_shiftsOperatorId, _shiftsMonthYear, _shiftsMonthMonth);
+        };
+      }
+    };
+
+    // Quando il modal viene aperto, recupera l'operatorId e renderizza
+    // Ascolta sia 'show.bs.modal' (modal con fade) che 'show' (modal senza fade)
+    function _onModalShow() {
+      const opId = modalEl.getAttribute('data-operator-id');
+      if (!opId) return;
+      _shiftsOperatorId = opId;
+      const now2 = new Date();
+      _shiftsMonthYear  = now2.getFullYear();
+      _shiftsMonthMonth = now2.getMonth();
+      renderShiftsMonthCalendar(_shiftsOperatorId, _shiftsMonthYear, _shiftsMonthMonth);
+    }
+    modalEl.addEventListener('show.bs.modal', _onModalShow);
+    modalEl.addEventListener('shown.bs.modal', function() {
+      // Fallback: se il grid è vuoto al momento del fully-shown, renderizza
+      const grid = document.getElementById('shiftsMonthGrid');
+      if (grid && grid.children.length === 0) _onModalShow();
+    });
+
+    // Aggiorna anche dopo il salvataggio di un turno (se l'evento viene emesso)
+    modalEl.addEventListener('shiftsUpdated', function() {
+      // Invalida cache per il mese corrente
+      const key = _shiftsOperatorId + '_' + _shiftsMonthKey(_shiftsMonthYear, _shiftsMonthMonth);
+      delete _shiftsCache[key];
+      renderShiftsMonthCalendar(_shiftsOperatorId, _shiftsMonthYear, _shiftsMonthMonth);
+    });
+  }
+
+  // Esponi per poter invalidare la cache dall'esterno dopo salvataggio turno
+  window.shiftsMonthCalendarInvalidate = function(operatorId, dateStr) {
+    if (!dateStr) {
+      Object.keys(_shiftsCache).forEach(function(k) {
+        if (k.startsWith(String(operatorId) + '_')) delete _shiftsCache[k];
+      });
+    } else {
+      const ym = dateStr.slice(0, 7);
+      delete _shiftsCache[String(operatorId) + '_' + ym];
+    }
+    if (_shiftsOperatorId && String(_shiftsOperatorId) === String(operatorId)) {
+      renderShiftsMonthCalendar(_shiftsOperatorId, _shiftsMonthYear, _shiftsMonthMonth);
+    }
+  };
+
+  // Esponi per renderizzare direttamente da openShiftsModalCalendar
+  window.shiftsMonthCalendarRender = function(operatorId) {
+    const now2 = new Date();
+    _shiftsOperatorId = operatorId;
+    _shiftsMonthYear  = now2.getFullYear();
+    _shiftsMonthMonth = now2.getMonth();
+    renderShiftsMonthCalendar(_shiftsOperatorId, _shiftsMonthYear, _shiftsMonthMonth);
+  };
+
+  document.addEventListener('DOMContentLoaded', initShiftsMonthCalendar);
 })();
 
 
