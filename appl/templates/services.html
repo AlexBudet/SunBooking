@@ -348,6 +348,38 @@ document.addEventListener('DOMContentLoaded', function() {
 });
         </script>
 <style>
+/* ── Glamour micro-skin servizi (solo stile, no layout) ── */
+#servicesTable thead th {
+  background: linear-gradient(180deg, #f5f7fb 0%, #ebeef5 100%);
+  color: #34475f;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-bottom: 2px solid #dde2ed;
+}
+#servicesTable tbody tr {
+  transition: background 0.12s;
+}
+#servicesTable tbody tr:hover {
+  background: rgba(228, 236, 252, 0.38);
+}
+#servicesTable .btn {
+  border-radius: 8px;
+  transition: background-color 0.14s, box-shadow 0.14s;
+}
+#servicesTable .btn:hover {
+  box-shadow: 0 3px 9px rgba(31,46,80,0.13);
+}
+
+/* Sezione sottocategorie */
+#subcategoriesSection table thead th {
+  background: linear-gradient(180deg, #f5f7fb 0%, #ebeef5 100%);
+  color: #34475f;
+  border-bottom: 2px solid #dde2ed;
+}
+#subcategoriesSection table tbody tr:hover {
+  background: rgba(228, 236, 252, 0.38);
+}
+
 .sort-icons {
   font-size: 10px;
   line-height: 10px;

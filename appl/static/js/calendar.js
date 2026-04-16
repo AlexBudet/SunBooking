@@ -1950,6 +1950,36 @@ function showClientInfoModal(clientId) {
 
 window.showClientInfoModal = showClientInfoModal;
 
+const CLIENT_SEARCH_DEBOUNCE_MS = 500;
+const __clientSearchStates = {
+  modal: { timer: null, controller: null, requestSeq: 0 },
+  navigator: { timer: null, controller: null, requestSeq: 0 }
+};
+
+function getClientSearchState(kind) {
+  return __clientSearchStates[kind] || __clientSearchStates.modal;
+}
+
+function abortClientSearchRequest(kind) {
+  const state = getClientSearchState(kind);
+  if (state.controller) {
+    try { state.controller.abort(); } catch (_) {}
+    state.controller = null;
+  }
+}
+
+function scheduleClientSearch(kind, query, runner) {
+  const state = getClientSearchState(kind);
+  clearTimeout(state.timer);
+  state.timer = setTimeout(runner, CLIENT_SEARCH_DEBOUNCE_MS);
+}
+
+window.CLIENT_SEARCH_DEBOUNCE_MS = CLIENT_SEARCH_DEBOUNCE_MS;
+window.__clientSearchStates = __clientSearchStates;
+window.getClientSearchState = getClientSearchState;
+window.abortClientSearchRequest = abortClientSearchRequest;
+window.scheduleClientSearch = scheduleClientSearch;
+
 function handleClientSearch(query) {
   // fallback sicuro
   query = (query || '').toString().toLowerCase().trim();
@@ -1975,6 +2005,8 @@ function handleClientSearch(query) {
   if (!resultsContainer) return;
 
   if (query.length < 3) {
+    clearTimeout(getClientSearchState('modal').timer);
+    abortClientSearchRequest('modal');
     resultsContainer.innerHTML = '';
     resultsContainer.style.display = 'none';
     // Se campo cliente svuotato E nessun pseudo-blocco, ripristina tasto OFF
@@ -1991,111 +2023,123 @@ function handleClientSearch(query) {
     return;
   }
 
-  fetch(`/calendar/api/search-clients/${encodeURIComponent(query)}`)
-    .then(r => {
-      if (!r.ok) throw new Error('Network response not ok: ' + r.status);
-      return r.json();
-    })
-    .then(clients => {
-      resultsContainer.innerHTML = '';
+  scheduleClientSearch('modal', query, () => {
+    const state = getClientSearchState('modal');
+    abortClientSearchRequest('modal');
 
-      if (!Array.isArray(clients) || clients.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'dropdown-item';
-        empty.textContent = 'Nessun risultato';
-        resultsContainer.appendChild(empty);
+    const requestSeq = ++state.requestSeq;
+    const controller = new AbortController();
+    state.controller = controller;
+
+    fetch(`/calendar/api/search-clients/${encodeURIComponent(query)}`, { signal: controller.signal })
+      .then(r => {
+        if (!r.ok) throw new Error('Network response not ok: ' + r.status);
+        return r.json();
+      })
+      .then(clients => {
+        if (requestSeq !== state.requestSeq) return;
+
+        const liveInput = document.activeElement && document.activeElement.id === 'clientSearchInput'
+          ? document.activeElement
+          : document.querySelector('.modal.show #clientSearchInput') || document.getElementById('clientSearchInput');
+        const liveQuery = ((liveInput && liveInput.value) || '').toString().toLowerCase().trim();
+        if (liveQuery !== query) return;
+
+        resultsContainer.innerHTML = '';
+
+        if (!Array.isArray(clients) || clients.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'dropdown-item';
+          empty.textContent = 'Nessun risultato';
+          resultsContainer.appendChild(empty);
+          resultsContainer.style.display = 'block';
+          return;
+        }
+
+        clients.forEach(client => {
+          const item = document.createElement('div');
+          item.className = 'dropdown-item';
+          item.style.display = 'flex';
+          item.style.alignItems = 'center';
+          item.style.gap = '8px';
+          item.style.boxSizing = 'border-box';
+
+          const id = String(client.id ?? '');
+          const name = String(client.name ?? '');
+          const phone = String(client.phone ?? '');
+
+          const txt = document.createElement('span');
+          txt.className = 'dropdown-item-text';
+          txt.style.flex = '1 1 auto';
+          txt.style.overflow = 'hidden';
+          txt.style.textOverflow = 'ellipsis';
+          txt.style.whiteSpace = 'nowrap';
+          txt.textContent = phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name);
+          item.appendChild(txt);
+
+          const daysSpan = document.createElement('small');
+          daysSpan.style.marginLeft = '0.5rem';
+          daysSpan.style.opacity = '0.65';
+          daysSpan.textContent = '';
+          item.appendChild(daysSpan);
+
+          item.dataset.clientId = id;
+          item.dataset.clientName = name;
+
+          const infoBtn = document.createElement('button');
+          infoBtn.type = 'button';
+          infoBtn.className = 'client-info-btn';
+          infoBtn.title = 'Info cliente';
+          infoBtn.setAttribute('aria-label', 'Info cliente');
+          infoBtn.innerText = 'i';
+
+          infoBtn.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+            ev.preventDefault();
+            try {
+              showClientInfoModal(id);
+            } catch (e) {
+              console.error('showClientInfoModal error', e);
+            }
+          });
+
+          item.appendChild(infoBtn);
+
+          item.addEventListener('click', () => {
+            if (typeof selectClient === 'function') {
+              selectClient(id, name);
+            } else {
+              const input = document.querySelector('#clientSearchInput') || document.querySelector('#clientSearchInputNav');
+              const idInput = document.querySelector('#client_id');
+              if (input) input.value = name;
+              if (idInput) idInput.value = id;
+            }
+            resultsContainer.innerHTML = '';
+            resultsContainer.style.display = 'none';
+          });
+
+          resultsContainer.appendChild(item);
+
+          (async () => {
+            try {
+              const last = await fetchClientLastDate(id);
+              const txtDays = formatDaysSince(last);
+              if (txtDays) daysSpan.textContent = txtDays;
+            } catch (e) {
+              // ignore error silently
+            }
+          })();
+        });
+
         resultsContainer.style.display = 'block';
-        return;
-      }
-
-      clients.forEach(client => {
-        const item = document.createElement('div');
-        item.className = 'dropdown-item';
-        item.style.display = 'flex';
-        item.style.alignItems = 'center';
-        item.style.gap = '8px';
-        item.style.boxSizing = 'border-box';
-
-        const id = String(client.id ?? '');
-        const name = String(client.name ?? '');
-        const phone = String(client.phone ?? '');
-
-        // testo (left) — occupa lo spazio rimanente e tronca se troppo lungo
-        const txt = document.createElement('span');
-        txt.className = 'dropdown-item-text';
-        txt.style.flex = '1 1 auto';
-        txt.style.overflow = 'hidden';
-        txt.style.textOverflow = 'ellipsis';
-        txt.style.whiteSpace = 'nowrap';
-        txt.textContent = phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name);
-        item.appendChild(txt);
-
-        // piccolo span per "days since last appointment" (verrà popolato asincrono)
-        const daysSpan = document.createElement('small');
-        daysSpan.style.marginLeft = '0.5rem';
-        daysSpan.style.opacity = '0.65';
-        daysSpan.textContent = '';
-        item.appendChild(daysSpan);
-
-        // dataset usati anche dall’hover
-        item.dataset.clientId = id;
-        item.dataset.clientName = name;
-
-        // info button (right) — ferma la propagazione del click della riga
-        const infoBtn = document.createElement('button');
-        infoBtn.type = 'button';
-        infoBtn.className = 'client-info-btn';
-        infoBtn.title = 'Info cliente';
-        infoBtn.setAttribute('aria-label', 'Info cliente');
-        infoBtn.innerText = 'i';
-
-        infoBtn.addEventListener('click', function(ev) {
-          ev.stopPropagation();
-          ev.preventDefault();
-          try {
-            showClientInfoModal(id);
-          } catch (e) {
-            console.error('showClientInfoModal error', e);
-          }
-        });
-
-        item.appendChild(infoBtn);
-
-        // click → selezione (riga)
-        item.addEventListener('click', () => {
-          if (typeof selectClient === 'function') {
-            selectClient(id, name);
-          } else {
-            const input = document.querySelector('#clientSearchInput') || document.querySelector('#clientSearchInputNav');
-            const idInput = document.querySelector('#client_id');
-            if (input) input.value = name;
-            if (idInput) idInput.value = id;
-          }
-          resultsContainer.innerHTML = '';
-          resultsContainer.style.display = 'none';
-        });
-
-        resultsContainer.appendChild(item);
-
-        // Asincrono: recupera e mostra "days since last appointment" usando helper già presente
-        (async () => {
-          try {
-            const last = await fetchClientLastDate(id);
-            const txtDays = formatDaysSince(last);
-            if (txtDays) daysSpan.textContent = txtDays;
-          } catch (e) {
-            // ignore error silently
-          }
-        })();
+      })
+      .catch(err => {
+        if (err && err.name === 'AbortError') return;
+        console.error('handleClientSearch error:', err);
+        resultsContainer.innerHTML = '';
+        resultsContainer.style.display = 'none';
       });
-
-      resultsContainer.style.display = 'block';
-    })
-    .catch(err => {
-      console.error('handleClientSearch error:', err);
-      resultsContainer.innerHTML = '';
-      resultsContainer.style.display = 'none';
-    });
+  });
 }
 
 function handleServiceSearch(query) {
@@ -5696,6 +5740,34 @@ function handleClientSearchNav(query) {
   const input = document.getElementById('clientSearchInputNav');
   if (!resultsContainer || !input) return;
 
+  const getState = typeof window.getClientSearchState === 'function'
+    ? window.getClientSearchState
+    : function(kind) {
+        window.__clientSearchStates = window.__clientSearchStates || {
+          modal: { timer: null, controller: null, requestSeq: 0 },
+          navigator: { timer: null, controller: null, requestSeq: 0 }
+        };
+        return window.__clientSearchStates[kind] || window.__clientSearchStates.modal;
+      };
+
+  const abortSearch = typeof window.abortClientSearchRequest === 'function'
+    ? window.abortClientSearchRequest
+    : function(kind) {
+        const state = getState(kind);
+        if (state.controller) {
+          try { state.controller.abort(); } catch (_) {}
+          state.controller = null;
+        }
+      };
+
+  const scheduleSearch = typeof window.scheduleClientSearch === 'function'
+    ? window.scheduleClientSearch
+    : function(kind, _query, runner) {
+        const state = getState(kind);
+        clearTimeout(state.timer);
+        state.timer = setTimeout(runner, window.CLIENT_SEARCH_DEBOUNCE_MS || 500);
+      };
+
   const clearResults = () => {
     resultsContainer.style.display = 'none';
     while (resultsContainer.firstChild) resultsContainer.removeChild(resultsContainer.firstChild);
@@ -5705,117 +5777,132 @@ function handleClientSearchNav(query) {
   query = (query || '').toString().toLowerCase().trim();
 
   if (!query || query.length < 3) {
+    clearTimeout(getState('navigator').timer);
+    abortSearch('navigator');
     clearResults();
     return;
   }
 
-  fetch(`/calendar/api/search-clients/${encodeURIComponent(query)}`)
-    .then(r => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json();
-    })
-    .then(clients => {
-      clearResults();
+  scheduleSearch('navigator', query, () => {
+    const state = getState('navigator');
+    abortSearch('navigator');
 
-      const ensureOverlay = () => {
-        const parent = input.parentElement || input.closest('div');
-        if (parent && window.getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
-        resultsContainer.style.position = 'absolute';
-        resultsContainer.style.left = input.offsetLeft + 'px';
-        resultsContainer.style.top = (input.offsetTop + input.offsetHeight) + 'px';
-        resultsContainer.style.width = '100%';
-        resultsContainer.style.zIndex = '2000';
-        resultsContainer.style.maxHeight = '240px';
-        resultsContainer.style.overflowY = 'auto';
-      };
+    const requestSeq = ++state.requestSeq;
+    const controller = new AbortController();
+    state.controller = controller;
 
-      if (!Array.isArray(clients) || clients.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'dropdown-item';
-        empty.textContent = 'Nessun risultato';
-        resultsContainer.appendChild(empty);
+    fetch(`/calendar/api/search-clients/${encodeURIComponent(query)}`, { signal: controller.signal })
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(clients => {
+        if (requestSeq !== state.requestSeq) return;
+
+        const liveQuery = ((input && input.value) || '').toString().toLowerCase().trim();
+        if (liveQuery !== query) return;
+
+        clearResults();
+
+        const ensureOverlay = () => {
+          const parent = input.parentElement || input.closest('div');
+          if (parent && window.getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+          resultsContainer.style.position = 'absolute';
+          resultsContainer.style.left = input.offsetLeft + 'px';
+          resultsContainer.style.top = (input.offsetTop + input.offsetHeight) + 'px';
+          resultsContainer.style.width = '100%';
+          resultsContainer.style.zIndex = '2000';
+          resultsContainer.style.maxHeight = '240px';
+          resultsContainer.style.overflowY = 'auto';
+        };
+
+        if (!Array.isArray(clients) || clients.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'dropdown-item';
+          empty.textContent = 'Nessun risultato';
+          resultsContainer.appendChild(empty);
+          ensureOverlay();
+          resultsContainer.style.display = 'block';
+          return;
+        }
+
+        clients.forEach(client => {
+          const id = String(client.id ?? '');
+          const name = String(client.name ?? '');
+          const phone = String(client.phone ?? '');
+
+          const item = document.createElement('div');
+          item.className = 'dropdown-item';
+          item.style.display = 'flex';
+          item.style.alignItems = 'center';
+          item.style.gap = '8px';
+          item.style.boxSizing = 'border-box';
+
+          const txt = document.createElement('span');
+          txt.className = 'dropdown-item-text';
+          txt.style.flex = '1 1 auto';
+          txt.style.overflow = 'hidden';
+          txt.style.textOverflow = 'ellipsis';
+          txt.style.whiteSpace = 'nowrap';
+          txt.textContent = phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name);
+          item.appendChild(txt);
+
+          const daysSpan = document.createElement('small');
+          daysSpan.style.marginLeft = '8px';
+          daysSpan.style.opacity = '0.65';
+          daysSpan.textContent = '';
+          item.appendChild(daysSpan);
+
+          item.dataset.clientId = id;
+          item.dataset.clientName = name;
+
+          const infoBtn = document.createElement('button');
+          infoBtn.type = 'button';
+          infoBtn.className = 'client-info-btn';
+          infoBtn.setAttribute('aria-label', 'Info cliente');
+          infoBtn.title = 'Info cliente';
+          infoBtn.textContent = 'i';
+          infoBtn.addEventListener('click', function (ev) {
+            ev.stopPropagation();
+            ev.preventDefault();
+            try { showClientInfoModal(id); } catch (e) { console.error('showClientInfoModal error', e); }
+          });
+          item.appendChild(infoBtn);
+
+          item.addEventListener('click', () => {
+            try {
+              if (typeof selectClientNav === 'function') selectClientNav(id, phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name));
+              else {
+                const inputNav = document.getElementById('clientSearchInputNav');
+                if (inputNav) inputNav.value = phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name);
+              }
+            } finally {
+              clearResults();
+            }
+          });
+
+          resultsContainer.appendChild(item);
+
+          (async () => {
+            try {
+              const last = await fetchClientLastDate(id);
+              const txtDays = formatDaysSince(last);
+              if (txtDays) daysSpan.textContent = txtDays;
+            } catch (e) {
+              // ignore
+            }
+          })();
+        });
+
         ensureOverlay();
         resultsContainer.style.display = 'block';
-        return;
-      }
-
-      clients.forEach(client => {
-        const id = String(client.id ?? '');
-        const name = String(client.name ?? '');
-        const phone = String(client.phone ?? '');
-
-        const item = document.createElement('div');
-        item.className = 'dropdown-item';
-        item.style.display = 'flex';
-        item.style.alignItems = 'center';
-        item.style.gap = '8px';
-        item.style.boxSizing = 'border-box';
-
-        const txt = document.createElement('span');
-        txt.className = 'dropdown-item-text';
-        txt.style.flex = '1 1 auto';
-        txt.style.overflow = 'hidden';
-        txt.style.textOverflow = 'ellipsis';
-        txt.style.whiteSpace = 'nowrap';
-        txt.textContent = phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name);
-        item.appendChild(txt);
-
-        // piccolo span per "days since last appointment" (verrà popolato asincrono)
-        const daysSpan = document.createElement('small');
-        daysSpan.style.marginLeft = '8px';
-        daysSpan.style.opacity = '0.65';
-        daysSpan.textContent = '';
-        item.appendChild(daysSpan);
-
-        item.dataset.clientId = id;
-        item.dataset.clientName = name;
-
-        const infoBtn = document.createElement('button');
-        infoBtn.type = 'button';
-        infoBtn.className = 'client-info-btn';
-        infoBtn.setAttribute('aria-label', 'Info cliente');
-        infoBtn.title = 'Info cliente';
-        infoBtn.textContent = 'i';
-        infoBtn.addEventListener('click', function (ev) {
-          ev.stopPropagation();
-          ev.preventDefault();
-          try { showClientInfoModal(id); } catch (e) { console.error('showClientInfoModal error', e); }
-        });
-        item.appendChild(infoBtn);
-
-        item.addEventListener('click', () => {
-          try {
-            if (typeof selectClientNav === 'function') selectClientNav(id, phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name));
-            else {
-              const inputNav = document.getElementById('clientSearchInputNav');
-              if (inputNav) inputNav.value = phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name);
-            }
-          } finally {
-            clearResults();
-          }
-        });
-
-        resultsContainer.appendChild(item);
-
-        // Asincrono: recupera e mostra "days since last appointment"
-        (async () => {
-          try {
-            const last = await fetchClientLastDate(id);
-            const txtDays = formatDaysSince(last);
-            if (txtDays) daysSpan.textContent = txtDays;
-          } catch (e) {
-            // ignore
-          }
-        })();
+      })
+      .catch(err => {
+        if (err && err.name === 'AbortError') return;
+        console.error('handleClientSearchNav error:', err);
+        clearResults();
       });
-
-      ensureOverlay();
-      resultsContainer.style.display = 'block';
-    })
-    .catch(err => {
-      console.error('handleClientSearchNav error:', err);
-      clearResults();
-    });
+  });
 }
 
 function handleServiceSearchNav(query) {

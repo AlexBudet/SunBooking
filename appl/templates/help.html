@@ -28,15 +28,13 @@
                  onclick="openCategory('{{ category }}', {{ loop.index }})"
                  data-category="{{ category }}">
                 <div class="help-cat-icon">
-                    {% if category == "Calendario" %}📅
+                    {% if category == "Agenda" %}📅
                     {% elif category == "Cassa" %}💰
-                    {% elif category == "Clienti" %}👩‍🦰
+                    {% elif category == "Report" %}📊
                     {% elif category == "Pacchetti" %}🎁
-                    {% elif category == "WhatsApp" %}💬
-                    {% elif category == "Marketing" %}📣
-                    {% elif category == "Prenotazioni Online" %}🌐
-                    {% elif category == "Operatori" %}👩‍💼
-                    {% elif category == "Servizi" %}💆
+                    {% elif category == "Tools" %}🧰
+                    {% elif category == "Booking via Web" %}🌐
+                    {% elif category == "WhatsApp e Marketing" %}💬
                     {% endif %}
                 </div>
                 <div class="help-cat-name">{{ category }}</div>
@@ -513,6 +511,27 @@
     margin-top: 4px;
 }
 
+.help-topics-more-wrap {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.help-topics-more-btn {
+    border: none;
+    background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+    color: #374151;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    padding: 8px 14px;
+    cursor: pointer;
+}
+
+.help-topics-more-btn:hover {
+    background: linear-gradient(135deg, #edeef1 0%, #dde0e6 100%);
+}
+
 /* ========== CONTENUTO TOPIC ========== */
 .help-topic-content {
     background: #fff;
@@ -559,6 +578,11 @@
 /* Formattazione testo */
 .help-topic-body strong {
     color: #be185d;
+}
+
+.help-strong-dark {
+    color: #374151;
+    font-weight: 800;
 }
 
 /* ========== BOX HINT/CONSIGLIO ========== */
@@ -871,14 +895,43 @@ function openCategory(categoryName, catIndex) {
     // Aggiorna titolo
     document.getElementById('categoryTitle').textContent = categoryName;
     
-    // Genera lista topics
+    // Genera lista topics (prime 5 visibili, il resto espandibile)
     const list = document.getElementById('topicsList');
-    list.innerHTML = catData.topics.map((topic, idx) => `
-        <div class="help-topic-item" onclick="openTopic(${idx})">
+    const maxVisible = 5;
+    const hasExtra = catData.topics.length > maxVisible;
+
+    const topicRows = catData.topics.map((topic, idx) => {
+        const hiddenClass = (hasExtra && idx >= maxVisible) ? ' d-none topic-extra-item' : '';
+        return `
+        <div class="help-topic-item${hiddenClass}" data-topic-idx="${idx}" onclick="openTopic(${idx})">
             <span class="help-topic-item-text">${topic.title}</span>
             <i class="bi bi-chevron-right help-topic-item-arrow"></i>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
+
+    const extraBtn = hasExtra ? `
+        <div class="help-topics-more-wrap">
+            <button type="button" class="help-topics-more-btn" id="toggleExtraTopicsBtn" data-expanded="false">
+                Mostra altre ${catData.topics.length - maxVisible} voci
+            </button>
+        </div>` : '';
+
+    list.innerHTML = topicRows + extraBtn;
+
+    if (hasExtra) {
+        const toggleBtn = document.getElementById('toggleExtraTopicsBtn');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function() {
+                const isExpanded = toggleBtn.getAttribute('data-expanded') === 'true';
+                const extraNodes = list.querySelectorAll('.topic-extra-item');
+                extraNodes.forEach(node => node.classList.toggle('d-none', isExpanded));
+                toggleBtn.setAttribute('data-expanded', isExpanded ? 'false' : 'true');
+                toggleBtn.textContent = isExpanded
+                    ? `Mostra altre ${catData.topics.length - maxVisible} voci`
+                    : 'Mostra meno';
+            });
+        }
+    }
     
     // Cambia vista
     showView('viewCategory');

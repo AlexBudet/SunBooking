@@ -70,23 +70,29 @@
 }
 
 .storico-btn {
-  background-color: #f5ecdc; /* Beige */
-  color: #333333; /* Grigio scuro */
+  background-color: #f5ecdc;
+  color: #333333;
   border: 0.5px solid #c0c2b9 !important;
+  border-radius: 8px;
+  transition: background-color 0.14s, box-shadow 0.14s;
 }
 .storico-btn:hover {
-  background-color: #d4cca9; /* Beige leggermente più scuro al passaggio del mouse */
+  background-color: #d4cca9;
   color: #333333;
+  box-shadow: 0 3px 8px rgba(120,96,48,0.13);
 }
 /* Stile per Nota VUOTA (es. grigio chiaro) */
 .btn-note-empty {
   background-color: #e9ecef !important;
   color: #6c757d !important;
   border: 0.5px solid #ced4da !important;
+  border-radius: 8px;
+  transition: background-color 0.14s, box-shadow 0.14s;
 }
 .btn-note-empty:hover {
   background-color: #dde2e6 !important;
   color: #495057 !important;
+  box-shadow: 0 3px 8px rgba(100,110,130,0.12);
 }
 
 /* Stile per Nota PIENA (es. giallo evidenziatore) */
@@ -94,10 +100,13 @@
   background-color: #ffc107 !important;
   color: #212529 !important;
   border: 1px solid #ffc71f !important;
+  border-radius: 8px;
+  transition: background-color 0.14s, box-shadow 0.14s;
 }
 .btn-note-filled:hover {
   background-color: #ffeaac !important;
   color: #212529 !important;
+  box-shadow: 0 3px 8px rgba(200,155,0,0.18);
 }
 
 #clientsTable td:last-child .btn {
@@ -228,6 +237,21 @@
 </div>
 
 <style>
+/* ── Glamour micro-skin clienti (solo stile, no layout) ── */
+#clientsTable thead th {
+  background: linear-gradient(180deg, #f5f7fb 0%, #ebeef5 100%);
+  color: #34475f;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-bottom: 2px solid #dde2ed;
+}
+#clientsTable tbody tr {
+  transition: background 0.12s;
+}
+#clientsTable tbody tr:hover {
+  background: rgba(228, 236, 252, 0.38);
+}
+
 .sort-icons {
   font-size: 10px;
   line-height: 10px;
@@ -568,9 +592,26 @@ return `
 let originalRows = []; // Non necessario ora, ma lasciato per compatibilità
 let lastClients = [];  // Array clienti per sorting
 
+const CLIENTS_SEARCH_DEBOUNCE_MS = 500;
+
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('clientSearchInput');
     const tbody = document.getElementById('clientsTableBody'); // Usa l'ID del tbody
+    let searchTimer = null;
+    let searchController = null;
+    let searchRequestSeq = 0;
+
+    function abortPendingSearch() {
+        if (searchController) {
+            try { searchController.abort(); } catch (_) {}
+            searchController = null;
+        }
+    }
+
+    function scheduleSearch(task) {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(task, CLIENTS_SEARCH_DEBOUNCE_MS);
+    }
 
     // Al focus sul campo ricerca (click o tab), se vuoto, carica ultimi 10
     searchInput.addEventListener('focus', function() {
@@ -584,22 +625,29 @@ document.addEventListener('DOMContentLoaded', function() {
         const searchValue = this.value.trim().toLowerCase();
 
         if (searchValue.length === 0) {
+            clearTimeout(searchTimer);
+            abortPendingSearch();
             // Campo vuoto: svuota la tabella
             tbody.innerHTML = '';
         } else if (searchValue.length < 3) {
+            clearTimeout(searchTimer);
+            abortPendingSearch();
             // Prime 2 lettere: mostra ultimi 10
             loadRecentClients();
         } else {
-            // Dopo 3 lettere: cerca tutti
-            loadSearchResults(searchValue);
+            // Dopo 3 lettere: cerca tutti, ma solo quando l'utente ha smesso di digitare
+            scheduleSearch(() => loadSearchResults(searchValue));
         }
     });
 
     // Funzione per caricare ultimi 10 clienti
     function loadRecentClients() {
+        abortPendingSearch();
         fetch('/settings/api/recent-clients')
             .then(r => r.json())
             .then(clients => {
+                const liveValue = (searchInput.value || '').trim().toLowerCase();
+                if (liveValue.length >= 3) return;
                 lastClients = clients || [];
                 populateTable(lastClients);
             })
@@ -610,13 +658,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Funzione per caricare risultati ricerca
     function loadSearchResults(searchValue) {
-        fetch(`/settings/api/search-clients?q=${encodeURIComponent(searchValue)}`)
+        abortPendingSearch();
+        const requestSeq = ++searchRequestSeq;
+        searchController = new AbortController();
+
+        fetch(`/settings/api/search-clients?q=${encodeURIComponent(searchValue)}`, { signal: searchController.signal })
             .then(r => r.json())
             .then(clients => {
+                if (requestSeq !== searchRequestSeq) return;
+
+                const liveValue = (searchInput.value || '').trim().toLowerCase();
+                if (liveValue !== searchValue) return;
+
                 lastClients = clients || [];
                 populateTable(lastClients);
             })
-            .catch(() => {
+            .catch((err) => {
+                if (err && err.name === 'AbortError') return;
                 tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Errore nella ricerca.</td></tr>';
             });
     }

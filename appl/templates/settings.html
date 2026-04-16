@@ -34,9 +34,9 @@
   border: none;
     transition: background 0.15s, box-shadow 0.15s, color 0.15s;
     box-shadow:
-      0 -6px 14px #fff,                /* ombra bianca sopra */
-      4px 4px 10px #e0e0e0,              /* ombra scura sotto */
-      -4px -4px 10px #ffffff;            /* effetto rilievo */
+      0 -6px 14px #fff,
+      4px 4px 10px #e0e0e0,
+      -4px -4px 10px #ffffff;
   color: #3f3f3f !important;
   display: inline-block;
   outline: none;
@@ -46,11 +46,75 @@
 .neo-btn.active {
   background: #ffffff !important;
   color: #e72c64 !important;
-  font-size: 1.1m;
+  font-size: 1.1em;
 }
 .neo-btn:hover {
   background-color: #ffffff;
   color: #215586;
+  box-shadow:
+    0 -7px 16px #ffffff,
+    5px 5px 12px #dddddd,
+    -5px -5px 12px #ffffff;
+}
+
+/* Skin condivisa per le sotto-pagine Settings (solo look & feel, nessun cambio comportamento) */
+.settings-glam h2,
+.settings-glam h3,
+.settings-glam h4,
+.settings-glam h5 {
+  color: #2f3b4b;
+  text-shadow: 0 1px 0 #ffffff;
+}
+
+.settings-glam .table,
+.settings-glam table {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfbfd 100%);
+  border-radius: 10px;
+  box-shadow: 0 3px 10px rgba(26, 48, 74, 0.06);
+}
+
+.settings-glam .table thead th,
+.settings-glam table thead th {
+  background: linear-gradient(180deg, #f7f8fb 0%, #eef1f6 100%);
+  color: #34475f;
+}
+
+.settings-glam .table tbody tr:hover,
+.settings-glam table tbody tr:hover {
+  background: rgba(244, 248, 255, 0.65);
+}
+
+.settings-glam .form-control,
+.settings-glam .form-select,
+.settings-glam input[type="text"],
+.settings-glam input[type="number"],
+.settings-glam input[type="date"],
+.settings-glam input[type="time"],
+.settings-glam input[type="email"],
+.settings-glam select,
+.settings-glam textarea {
+  border-color: #d9deea;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+  box-shadow: inset 0 1px 2px rgba(28, 43, 63, 0.04);
+}
+
+.settings-glam .form-control:focus,
+.settings-glam .form-select:focus,
+.settings-glam input:focus,
+.settings-glam select:focus,
+.settings-glam textarea:focus {
+  border-color: #e38fb2;
+  box-shadow: 0 0 0 0.2rem rgba(231, 44, 100, 0.12);
+}
+
+.settings-glam .btn {
+  border-radius: 10px;
+  box-shadow: 0 2px 7px rgba(31, 46, 68, 0.08);
+  transition: background-color 0.15s, box-shadow 0.15s, color 0.15s;
+}
+
+.settings-glam .btn:hover {
+  box-shadow: 0 4px 12px rgba(31, 46, 68, 0.14);
 }
 
   /* Nascondi Marketing sotto 1200px */
@@ -61,5 +125,7 @@
   }
 </style>
 <!-- Qui verrà inserito il contenuto delle pagine specifiche -->
-{% block settings_content %}{% endblock %}
+<div class="settings-glam">
+  {% block settings_content %}{% endblock %}
+</div>
 {% endblock %}
