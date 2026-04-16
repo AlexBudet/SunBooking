@@ -169,6 +169,9 @@ window.selectedServiceDurationNav = 15;
 window.handleClientSearchNav = handleClientSearchNav;
 window.handleServiceSearchNav = handleServiceSearchNav;
 window.pseudoBlocks = window.pseudoBlocks || [];
+window.commonPseudoBlockColor = null;
+window.originBlockColor = null;
+window.addServiceStatus = undefined;
 window.lastClickPosition = null;
 window._lastBlocksCountPerCell = window._lastBlocksCountPerCell || new Map();
 window.CLIENT_ID_BOOKING = null;
@@ -223,6 +226,64 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribut
       }
     } catch (e) {}
   }, 60000);
+})();
+
+// === SYNC CENTRALIZZATO CALENDARIO DOPO MUTAZIONI DB ===
+// Dopo ogni mutation riuscita su endpoint calendario, riallinea UI e DB come nel refresh pagina.
+(function setupCalendarMutationSync() {
+  if (window.__calendarMutationSyncInstalled) return;
+  window.__calendarMutationSyncInstalled = true;
+
+  const prevFetch = window.fetch;
+  let syncTimer = null;
+
+  function scheduleSync() {
+    if (syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => {
+      if (typeof window.fetchCalendarData === 'function') {
+        window.fetchCalendarData();
+      }
+    }, 120);
+  }
+
+  function isMutationMethod(method) {
+    const m = String(method || 'GET').toUpperCase();
+    return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE';
+  }
+
+  function shouldSyncUrl(url) {
+    const u = String(url || '');
+    return (
+      /\/calendar\/create(?:$|\?)/.test(u) ||
+      /\/calendar\/edit\/\d+/.test(u) ||
+      /\/calendar\/update\/\d+/.test(u) ||
+      /\/calendar\/delete\/\d+/.test(u) ||
+      /\/calendar\/adjust-duration\/\d+/.test(u) ||
+      /\/calendar\/update_note\/\d+/.test(u) ||
+      /\/calendar\/update_color\/\d+/.test(u) ||
+      /\/calendar\/update_layout\/\d+/.test(u) ||
+      /\/calendar\/update_status\/\d+/.test(u) ||
+      /\/calendar\/api\/operators\/\d+\/shifts(?:\/multi)?(?:$|\?)/.test(u)
+    );
+  }
+
+  window.fetch = async function(...args) {
+    const req = args[0];
+    const init = args[1] || {};
+    const url = (typeof req === 'string') ? req : (req && req.url) || '';
+    const method = (init && init.method) || ((req && req.method) ? req.method : 'GET');
+
+    const response = await prevFetch.apply(this, args);
+
+    try {
+      const syncSuspended = Number(window.__suspendCalendarMutationSync || 0) > 0;
+      if (!syncSuspended && response && response.ok && isMutationMethod(method) && shouldSyncUrl(url)) {
+        scheduleSync();
+      }
+    } catch (_) {}
+
+    return response;
+  };
 })();
 
 // === GESTIONE SEDUTA DA PACCHETTO ===
@@ -512,6 +573,9 @@ function mostraPopupSelezionePacchetto(pacchetti, callback) {
       window.pseudoBlocks = [];
       window.selectedClientIdNav = null;
       window.selectedClientNameNav = "";
+      window.commonPseudoBlockColor = null;
+      window.originBlockColor = null;
+      window.addServiceStatus = undefined;
       window.pacchettoSelezionato = null;
       renderPseudoBlocksList();
       saveNavigatorState();
@@ -1125,6 +1189,49 @@ function initPseudoBlockSelection() {
 }
 document.addEventListener('DOMContentLoaded', initPseudoBlockSelection);
 
+function renderAppointmentsFromServer(appointments, date) {
+  const cells = document.querySelectorAll('.selectable-cell');
+  if (!cells || cells.length === 0) return;
+
+  // Reset completo dei blocchi per riallinearli alla stessa fonte dati del refresh pagina.
+  document.querySelectorAll('.selectable-cell .appointment-block').forEach(block => block.remove());
+
+  const touchedCells = new Set();
+  const list = Array.isArray(appointments) ? appointments : [];
+
+  list.forEach(appt => {
+    const startRaw = String(appt.start_time || '');
+    const match = startRaw.match(/(\d{1,2}):(\d{2})/);
+    if (!match) return;
+
+    const bHour = parseInt(match[1], 10);
+    const bMinute = parseInt(match[2], 10);
+    const opId = appt.operator_id;
+    if (isNaN(bHour) || isNaN(bMinute) || opId == null) return;
+
+    let targetCell = null;
+    if (typeof findCellAt === 'function') {
+      targetCell = findCellAt(opId, bHour, bMinute);
+    }
+    if (!targetCell) {
+      targetCell = document.querySelector(
+        `.selectable-cell[data-operator-id="${opId}"][data-date="${date}"][data-hour="${bHour}"][data-minute="${bMinute}"]`
+      );
+    }
+    if (!targetCell) return;
+
+    const blockEl = createAppointmentBlockElement(appt, opId, bHour, bMinute);
+    targetCell.appendChild(blockEl);
+    touchedCells.add(targetCell);
+
+    if (typeof initOffBlockUI === 'function' && blockEl.classList.contains('note-off')) {
+      initOffBlockUI(blockEl);
+    }
+  });
+
+  touchedCells.forEach(cell => arrangeBlocksInCell(cell));
+}
+
   function fetchCalendarData() {
     const date = selectedDate;
     const operatorCells = document.querySelectorAll('.selectable-cell');
@@ -1133,7 +1240,7 @@ document.addEventListener('DOMContentLoaded', initPseudoBlockSelection);
 
     // Converti operatorIds in array e crea le promises
     const promises = Array.from(operatorIds).map(operatorId => 
-        fetch(`/calendar/api/operators/${operatorId}/shifts?date=${date}`)
+      fetch(`/calendar/api/operators/${operatorId}/shifts?date=${date}&_ts=${Date.now()}`, { cache: 'no-store' })
             .then(response => response.json())
             .then(data => {
                 if (data.error) throw new Error(data.error);
@@ -1141,8 +1248,15 @@ document.addEventListener('DOMContentLoaded', initPseudoBlockSelection);
             })
     );
 
+    const appointmentsPromise = fetch(`/calendar/api/appointments?date=${date}&_ts=${Date.now()}`, { cache: 'no-store' })
+      .then(response => response.json())
+      .then(data => {
+        if (data && data.error) throw new Error(data.error);
+        renderAppointmentsFromServer(data, date);
+      });
+
     // Aspetta il completamento di tutte le fetch
-    Promise.all(promises)
+    Promise.all([...promises, appointmentsPromise])
         .then(() => {
             // Applica il ridimensionamento dopo il rendering
             arrangeBlocksInCell();
@@ -1155,6 +1269,11 @@ document.addEventListener('DOMContentLoaded', initPseudoBlockSelection);
 window.fetchCalendarData = fetchCalendarData;
 
 function updateCalendarDisplay(shiftData, operatorId) {
+  // Resetta lo stato "chiuso" prima di ricalcolare i turni aggiornati.
+  document.querySelectorAll(`.selectable-cell[data-operator-id="${operatorId}"]`).forEach(cell => {
+    cell.classList.remove('calendar-closed');
+  });
+
     if (closingDays.map(d => d.toLowerCase()).includes(new Date(selectedDate).toLocaleDateString('it-IT', {weekday:'long'}).toLowerCase())) return markUnavailable(0, 1440, operatorId);
     
     const cells = document.querySelectorAll(`.selectable-cell[data-operator-id="${operatorId}"]`);
@@ -2384,7 +2503,6 @@ function saveDailyShiftCalendar() {
             bsModal.hide();
         }
         fetchCalendarData(); // Ricarica i dati
-        location.reload();
     })
     .catch(error => {
         console.error('Errore:', error);
@@ -2430,7 +2548,6 @@ function setDayOffCalendar() {
             bsModal.hide();
         }
         fetchCalendarData(); // Ricarica i dati
-        location.reload(); // Ricarica la pagina dopo l'aggiornamento
     })
     .catch(error => {
         console.error('Errore:', error);
@@ -2856,12 +2973,21 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
           }
           return response.json();
         })
-        .then(appointment => {
-            console.log("Risposta appointment:", appointment);
+        .then(responsePayload => {
+            console.log("Risposta create appointment:", responsePayload);
+
+          const createdAppointments = Array.isArray(responsePayload?.appointments)
+            ? responsePayload.appointments
+            : [responsePayload];
+          const firstAppointment = createdAppointments[0] || null;
+
+          if (!firstAppointment) {
+            throw new Error("Risposta creazione appuntamento non valida");
+          }
           
           // Gestisci redirect a pacchetto se presente
-          if (appointment.pacchettoInfo) {
-            const pInfo = appointment.pacchettoInfo;
+          if (responsePayload && responsePayload.pacchettoInfo) {
+            const pInfo = responsePayload.pacchettoInfo;
             
             const doRedirectToPacchetto = () => {
               // Salva messaggio in sessionStorage per mostrarlo nella pagina pacchetto
@@ -2874,7 +3000,13 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
             
             // Se è stato chiesto l'invio WhatsApp, aspetta che finisca prima di redirigere
             if (inviaWhatsapp) {
-              inviaWhatsappAutoSeRichiesto(appointment, data, csrfToken).finally(doRedirectToPacchetto);
+              const servizi = createdAppointments
+                .map(a => a.service_name || a.service_tag)
+                .filter(Boolean);
+              const whatsappData = Object.assign({}, data, {
+                servizi: servizi
+              });
+              inviaWhatsappAutoSeRichiesto(firstAppointment, whatsappData, csrfToken).finally(doRedirectToPacchetto);
             } else {
               setTimeout(doRedirectToPacchetto, 100);
             }
@@ -2882,31 +3014,93 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
             return; // Esci dalla funzione, non fare il reload normale
           }
           
-          // Comportamento standard (quando NON deriva da pacchetto)
-          if (appointment.start_time) {
-            const [h, m] = appointment.start_time.split(':');
-            sessionStorage.setItem('scrollToHour', parseInt(h, 10));
-            sessionStorage.setItem('scrollToMinute', parseInt(m, 10));
-          }
-          if (appointment.id) {
-            sessionStorage.setItem('scrollToAppointmentId', appointment.id);
-          }
-          const modalBody = document.getElementById('CreateAppointmentModalBody');
-          if (modalBody) modalBody.style.display = 'none';
+          // Comportamento standard (quando NON deriva da pacchetto):
+          // Inserisce i blocchi direttamente nel DOM senza ricaricare la pagina.
+          const doInsertBlocks = () => {
+            let insertedAtLeastOne = false;
+            let firstScrollTime = null;
 
-const doReload = () => {
-  if (window.lastClickPosition !== undefined && window.lastClickPosition !== null) {
-    sessionStorage.setItem('lastClickPosition', window.lastClickPosition);
-  }
-  location.reload();
-};
+            createdAppointments.forEach((appointmentItem, idx) => {
+              const startRaw = String(appointmentItem.start_time || data.start_time || '');
+              const timeMatch = startRaw.match(/(\d{1,2}):(\d{2})/);
+              const bHour = timeMatch
+                ? parseInt(timeMatch[1], 10)
+                : parseInt(appointmentItem.hour ?? data.hour ?? hour, 10);
+              const bMinute = timeMatch
+                ? parseInt(timeMatch[2], 10)
+                : parseInt(appointmentItem.minute ?? data.minute ?? minute, 10);
+              const opId = appointmentItem.operator_id || data.operator_id || operatorId;
 
-// Se è stato chiesto l'invio WhatsApp, aspetta che finisca prima di ricaricare
-if (inviaWhatsapp) {
-  inviaWhatsappAutoSeRichiesto(appointment, data, csrfToken).finally(doReload);
-} else {
-  setTimeout(doReload, 100);
-}
+              // Componi l'oggetto con tutti i campi attesi da createAppointmentBlockElement.
+              const blockData = Object.assign({}, appointmentItem, {
+                colore: appointmentItem.colore || data.colore,
+                colore_font: appointmentItem.colore_font || data.colore_font,
+                client_id: appointmentItem.client_id != null ? appointmentItem.client_id : (data.client_id || null),
+                service_id: appointmentItem.service_id != null ? appointmentItem.service_id : (data.service_id || null),
+                client_name: appointmentItem.client_name || data.client_name || '',
+                service_name: appointmentItem.service_name || data.service_name || '',
+                service_tag: appointmentItem.service_tag || '',
+                status: appointmentItem.status || 0,
+              });
+
+              if (isNaN(bHour) || isNaN(bMinute)) {
+                console.warn('doInsertBlocks: orario non valido, skip blocco', appointmentItem.start_time);
+                return;
+              }
+
+              let targetCell = null;
+              if (typeof findCellAt === 'function') {
+                targetCell = findCellAt(opId, bHour, bMinute);
+              }
+              if (!targetCell) {
+                const dateSel = appointmentItem.appointment_date || data.appointment_date || data.date || date || selectedDate;
+                targetCell = document.querySelector(`.selectable-cell[data-operator-id="${opId}"][data-date="${dateSel}"][data-hour="${bHour}"][data-minute="${bMinute}"]`);
+              }
+
+              if (!targetCell) {
+                console.warn('doInsertBlocks: cella non trovata per operatore', opId, 'ora', bHour, bMinute);
+                return;
+              }
+
+              const newBlock = createAppointmentBlockElement(blockData, opId, bHour, bMinute);
+              targetCell.appendChild(newBlock);
+              arrangeBlocksInCell(targetCell);
+              insertedAtLeastOne = true;
+
+              if (idx === 0) {
+                firstScrollTime = { hour: bHour, minute: bMinute };
+              }
+            });
+
+            if (!insertedAtLeastOne && typeof fetchCalendarData === 'function') {
+              fetchCalendarData();
+            }
+
+            // Scorri alla posizione del primo blocco creato senza reload
+            if (firstScrollTime && typeof scrollToHourMinute === 'function') {
+              scrollToHourMinute(firstScrollTime.hour, firstScrollTime.minute);
+            }
+
+            // Chiudi il modal Bootstrap correttamente
+            const modalEl = document.getElementById('CreateAppointmentModal');
+            if (modalEl) {
+              const bsModal = bootstrap.Modal.getInstance(modalEl);
+              if (bsModal) bsModal.hide();
+            }
+          };
+
+          // Se è stato chiesto l'invio WhatsApp, aspetta che finisca prima di inserire i blocchi
+          if (inviaWhatsapp) {
+            const servizi = createdAppointments
+              .map(a => a.service_name || a.service_tag)
+              .filter(Boolean);
+            const whatsappData = Object.assign({}, data, {
+              servizi: servizi
+            });
+            inviaWhatsappAutoSeRichiesto(firstAppointment, whatsappData, csrfToken).finally(doInsertBlocks);
+          } else {
+            doInsertBlocks();
+          }
 
         })
         .catch(error => {
@@ -2952,6 +3146,40 @@ let wasDragged = false;
 const DRAG_DISTANCE_THRESHOLD = 5; // in pixel
 let dropOccurred = false;
 
+function startCustomDragFromHandle(block, e) {
+  if (!block) return;
+  customDragging = true;
+  window._isDraggingBlock = true;
+  if (typeof window.clearCalendarHighlights === 'function') window.clearCalendarHighlights();
+
+  // Se il blocco fa parte di un macro‑blocco, usiamo il contenitore del gruppo
+  const macroBlock = block.closest('.macro-block');
+  if (macroBlock) {
+    // Segnaliamo che si tratta di un macroblocco
+    macroBlock.dataset.isMacroBlock = 'true';
+    customDraggedBlock = macroBlock;
+    // Imposta l'opacità a 0.5 solo sul macroblocco
+    customDraggedBlock.style.opacity = '0.5';
+  } else {
+    customDraggedBlock = block;
+  }
+
+  customDraggedBlock.style.zIndex = '9999';
+  wasDragged = false;
+  customDragStartX = e.clientX;
+  customDragStartY = e.clientY;
+  customInitialLeft = parseFloat(window.getComputedStyle(customDraggedBlock).left) || 0;
+  customInitialTop = parseFloat(window.getComputedStyle(customDraggedBlock).top) || 0;
+  customDraggedBlock.__oldParent = block.parentNode;
+  customDraggedBlock.__originalPosition = {
+    left: customDraggedBlock.style.left,
+    top: customDraggedBlock.style.top
+  };
+
+  e.stopPropagation();
+  e.preventDefault();
+}
+
 /* =============================================================
    FUNZIONE NUOVA: Se in una cella rimane un SOLO blocco, riportalo a width 100%
 ============================================================= */
@@ -2987,35 +3215,18 @@ document.querySelectorAll('.appointment-block').forEach(block => {
     if (dragHandle) {
         dragHandle.style.cursor = 'grab'; // Indica la cliccabilità del drag-handle
         dragHandle.addEventListener('mousedown', function(e) {
-          customDragging = true;
-          window._isDraggingBlock = true;
-          if (typeof window.clearCalendarHighlights === 'function') window.clearCalendarHighlights();
-          // Se il blocco fa parte di un macro‑blocco, usiamo il contenitore del gruppo
-          var macroBlock = block.closest('.macro-block');
-          if (macroBlock) {
-              // Segnaliamo che si tratta di un macroblocco
-              macroBlock.dataset.isMacroBlock = "true";
-              customDraggedBlock = macroBlock;
-              // Imposta l'opacità a 0.5 solo sul macroblocco
-              customDraggedBlock.style.opacity = "0.5";
-          } else {
-              customDraggedBlock = block;
-          }
-          customDraggedBlock.style.zIndex = '9999';
-          wasDragged = false;
-          customDragStartX = e.clientX;
-          customDragStartY = e.clientY;
-          customInitialLeft = parseFloat(window.getComputedStyle(customDraggedBlock).left) || 0;
-          customInitialTop = parseFloat(window.getComputedStyle(customDraggedBlock).top) || 0;
-          customDraggedBlock.__oldParent = block.parentNode;
-              customDraggedBlock.__originalPosition = {
-        left: customDraggedBlock.style.left,
-        top: customDraggedBlock.style.top
-    };
-          e.stopPropagation();
-          e.preventDefault();
-      });
+          startCustomDragFromHandle(block, e);
+        });
     }
+});
+
+// Delegato: abilita drag anche sui blocchi creati dinamicamente dopo il primo load.
+document.addEventListener('mousedown', function(e) {
+  const dragHandle = e.target.closest('.appointment-block .drag-handle');
+  if (!dragHandle) return;
+  const block = dragHandle.closest('.appointment-block');
+  if (!block) return;
+  startCustomDragFromHandle(block, e);
 });
 
 /* =============================================================
@@ -3107,7 +3318,7 @@ if (oldCell) {
     setTimeout(() => {
         const nowBlocks = oldCell.querySelectorAll('.appointment-block').length;
         if (nowBlocks === prevBlocks - 1) {
-            location.reload();
+      arrangeBlocksInCell(oldCell);
         }
     }, 50);
 }
@@ -3156,7 +3367,7 @@ function onBlockMouseUp(e) {
         saveDraggedBlockPosition(draggedBlock, lastCell)
             .then(() => {
                 console.log("Posizione salvata con successo.");
-                location.reload(); // Ricarica la pagina per aggiornare il calendario
+            arrangeBlocksInCell(lastCell);
             })
             .catch(err => {
                 console.error("Errore durante il salvataggio della posizione:", err);
@@ -3458,7 +3669,9 @@ function openModifyPopup(appointmentId) {
           const bs = bootstrap.Modal.getInstance(document.getElementById('EditAppointmentModal'));
           if (bs) bs.hide();
           if (shouldReload) {
-            setTimeout(() => location.reload(), 100);
+            if (typeof fetchCalendarData === 'function') {
+              fetchCalendarData();
+            }
           }
         })
         .catch(err => {
@@ -3804,6 +4017,56 @@ window.commonPseudoBlockColor = null;
 })();
 
 // Funzione per rimuovere un blocco appuntamento
+function _getAppointmentMutationRegistry() {
+  if (!window.__appointmentMutationRegistry) {
+    window.__appointmentMutationRegistry = new Map();
+  }
+  return window.__appointmentMutationRegistry;
+}
+
+function isAppointmentMutationPending(appointmentId) {
+  const id = String(appointmentId || '');
+  if (!id) return false;
+  return _getAppointmentMutationRegistry().has(id);
+}
+
+function setAppointmentMutationPending(appointmentId, pending, meta) {
+  const id = String(appointmentId || '');
+  if (!id) return;
+
+  const registry = _getAppointmentMutationRegistry();
+  if (pending) registry.set(id, meta || true);
+  else registry.delete(id);
+
+  document.querySelectorAll(`.appointment-block[data-appointment-id="${id}"]`).forEach(block => {
+    if (pending) {
+      block.dataset.pendingMutation = '1';
+      block.setAttribute('aria-busy', 'true');
+    } else {
+      delete block.dataset.pendingMutation;
+      block.removeAttribute('aria-busy');
+    }
+  });
+}
+
+async function withAppointmentMutationLock(appointmentId, action, meta) {
+  const id = String(appointmentId || '');
+  if (!id) return action();
+  if (isAppointmentMutationPending(id)) {
+    throw new Error('Operazione gia in corso su questo appuntamento');
+  }
+
+  setAppointmentMutationPending(id, true, meta);
+  try {
+    return await action();
+  } finally {
+    setAppointmentMutationPending(id, false);
+  }
+}
+
+window.isAppointmentMutationPending = isAppointmentMutationPending;
+window.withAppointmentMutationLock = withAppointmentMutationLock;
+
 function deleteAppointment(appointmentId) {
     if (!appointmentId) {
         console.error("ID appuntamento mancante");
@@ -3816,13 +4079,13 @@ function deleteAppointment(appointmentId) {
     const csrfMeta = document.querySelector('meta[name="csrf-token"]');
     const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
 
-    return fetch(`/calendar/delete/${encodeURIComponent(appointmentId)}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken
-        },
-        credentials: 'same-origin'
+    return withAppointmentMutationLock(appointmentId, () => fetch(`/calendar/delete/${encodeURIComponent(appointmentId)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      credentials: 'same-origin'
     })
     .then(async response => {
         if (response.ok) {
@@ -3855,11 +4118,35 @@ function deleteAppointment(appointmentId) {
             // rimuovi note legate
             const notePopup = document.querySelector(`.note-popup[data-appointment-id="${appointmentId}"]`);
             if (notePopup) notePopup.remove();
+
+            // Salva colonna e dati temporali PRIMA di remove() —
+            // block.parentNode diventa null immediatamente dopo remove()
+            const column  = block.__oldParent || block.parentNode;
+            const bHour   = parseInt(block.getAttribute('data-hour'), 10);
+            const bMinute = parseInt(block.getAttribute('data-minute'), 10);
+            const bDur    = parseInt(block.getAttribute('data-duration'), 10) || 15;
+            const bStart  = bHour * 60 + bMinute;
+            const bEnd    = bStart + bDur;
+
             // rimuovi l'elemento
             block.remove();
-            // aggiorna layout cella
-            const parentCell = block.__oldParent || block.parentNode;
-            if (parentCell) arrangeBlocksInCell(parentCell);
+
+            // Ricalcola layout per TUTTE le celle coperte dal blocco eliminato.
+            // Un blocco da 30/45/60 min può coprire più slot da 15 min: è necessario
+            // aggiornare ciascuna cella affinché i blocchi rimasti riacquistino la larghezza corretta.
+            if (column) {
+                const affected = Array.from(column.querySelectorAll('[data-hour][data-minute]'))
+                    .filter(cell => {
+                        const cs = parseInt(cell.getAttribute('data-hour'), 10) * 60
+                                 + parseInt(cell.getAttribute('data-minute'), 10);
+                        return (cs + 15) > bStart && cs < bEnd;
+                    });
+                (affected.length > 0
+                    ? affected
+                    : [column.querySelector(`[data-hour="${bHour}"][data-minute="${bMinute}"]`)])
+                    .filter(Boolean)
+                    .forEach(cell => arrangeBlocksInCell(cell));
+            }
         } else {
             console.debug(`deleteAppointment: no DOM block for id ${appointmentId}`);
         }
@@ -3868,9 +4155,6 @@ function deleteAppointment(appointmentId) {
         if (result && result.success === false) {
             alert(result.error || 'Errore durante l\'eliminazione');
         }
-
-        // Reload sempre dopo eliminazione
-        setTimeout(() => location.reload(), 80);
     })
     .catch(err => {
         console.error("Errore deleteAppointment:", err);
@@ -3878,7 +4162,7 @@ function deleteAppointment(appointmentId) {
         // (se vuoi, puoi forzare la rimozione per 404 già gestita sopra)
         alert(err.message || 'Errore durante l\'eliminazione');
         throw err; // rethrow per possibilità di await dal chiamante
-    });
+    }), { type: 'delete' });
 }
 window.deleteAppointment = deleteAppointment;
 
@@ -4164,7 +4448,7 @@ document.addEventListener('click', function(e) {
     try { if (typeof window.closeAllPopups === 'function') window.closeAllPopups(); } catch (_) {}
   }
 
-function onCutClick(e) {
+async function onCutClick(e) {
   e.preventDefault();
   e.stopPropagation();
   e.stopImmediatePropagation();
@@ -4205,7 +4489,8 @@ function onCutClick(e) {
   }
 
   // TAGLIA
-  cutAsNewPseudoBlock(block);
+  const cutOk = await cutAsNewPseudoBlock(block);
+  if (!cutOk) return;
 
   // Espandi Navigator se collassato
   if (typeof window.expandNavigatorIfCollapsed === 'function') {
@@ -4250,7 +4535,7 @@ function onCutClick(e) {
         tb.style.setProperty('padding', '0', 'important');
 
         // Trova il bottone TAGLIA preferito (normale o touch fallback)
-        let cutBtn = tb.querySelector('.btn-popup.taglia') || tb.querySelector('.btn-popup.touch-top-cut');
+        let cutBtn = tb.querySelector('.btn-popup.sposta, .btn-popup.taglia, .btn-popup.touch-top-cut');
 
         // Se non esiste, creiamo un fallback minimale senza alterare altri listeners
         if (!cutBtn) {
@@ -4371,76 +4656,6 @@ function onCutClick(e) {
 })();
 
 document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.btn-popup.pagamento').forEach(button => {
-  button.addEventListener('click', function(e) {
-    e.stopPropagation();
-      const block = button.closest('.appointment-block');
-      if (!block) return;
-
-      // Se è un appuntamento di pacchetto, vai al pacchetto
-      const pacchettoId = block.getAttribute('data-pacchetto-id') || button.getAttribute('data-pacchetto-id');
-      if (pacchettoId) {
-        window.location.href = `/pacchetti/detail/${pacchettoId}`;
-        return;
-      }
-
-      // helper decodifica (fallback)
-      const decodeHtml = (s) => { const t = document.createElement('textarea'); t.innerHTML = String(s || ''); return t.value; };
-
-      const clientId = block.getAttribute('data-client-id');
-      const operatorId = block.getAttribute('data-operator-id');
-      const operatorName = button.closest('.appointment-block').closest('td').getAttribute('data-operator-name') || '';
-
-      // PRIMA SCELTA: testo visibile nel blocco (già decodificato)
-      const nameEl = block.querySelector('.appointment-content .client-name');
-      const rawName = nameEl ? nameEl.textContent.trim() : '';
-      // FALLBACK: data-* decodificati
-      const clientNome = decodeHtml(block.getAttribute('data-client-nome') || '');
-      const clientCognome = decodeHtml(block.getAttribute('data-client-cognome') || '');
-      const clientName = rawName || `${clientNome} ${clientCognome}`.trim();
-
-    // --- includi anche blocchi sovrapposti nella stessa cella con lo stesso cliente ---
-    const cell = block.closest('.selectable-cell');
-    let blocksInCell = [];
-    if (cell) {
-      blocksInCell = Array.from(cell.querySelectorAll('.appointment-block'))
-        .filter(b => {
-          // Confronta per clientId e per nome+cognome
-          const bClientId = b.getAttribute('data-client-id');
-          const bNome = b.getAttribute('data-client-nome');
-          const bCognome = b.getAttribute('data-client-cognome');
-          const bClientName = `${bNome || ''} ${bCognome || ''}`.trim();
-          return (
-            (bClientId && bClientId === clientId) ||
-            (bClientName && bClientName === clientName)
-          );
-        });
-    }
-
-    // Unisci con i blocchi contigui classici
-    const contiguousBlocks = getRelevantBlocks(block);
-    const allBlocks = Array.from(new Set([...blocksInCell, ...contiguousBlocks]));
-
-    // ESCLUDI I BLOCCI IN STATO 2 (già pagati)
-    const servizi = allBlocks
-      .filter(b => b.getAttribute('data-status') !== "2")
-      .map(b => ({
-        id: b.getAttribute('data-service-id'),
-        appointment_id: b.getAttribute('data-appointment-id')
-      }));
-
-    // Costruisci la query string
-      const params = new URLSearchParams();
-      params.set('client_id', clientId);
-      params.set('client_name', clientName);
-      params.set('operator_id', operatorId);
-      params.set('servizi', JSON.stringify(servizi));
-      params.set('operator_name', operatorName);
-
-    window.location.href = `/cassa?${params.toString()}`;
-  });
-});
-
   // Listener delegato per pulsante "Vai al pacchetto" (appuntamenti seduta pacchetto)
   document.addEventListener('click', function(e) {
     const btn = e.target.closest('.btn-popup.vai-pacchetto');
@@ -4454,23 +4669,94 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }, true);
 
-    // Aggiunge l'event listener per il pulsante "nota" nei popup dei blocchi appuntamento
-    document.querySelectorAll('.appointment-block .popup-buttons .btn-popup.nota').forEach(button => {
-        button.addEventListener('click', function(e) {
-            e.stopPropagation(); // Impedisce la propagazione del click
-            const block = this.closest('.appointment-block');
-            openNoteModal(block);
-        });
-    });
+  // Listener delegato per pulsante "Pagamento" anche su blocchi creati dinamicamente.
+  document.addEventListener('click', function(e) {
+    const button = e.target.closest('.btn-popup.pagamento');
+    if (!button) return;
 
-    // Aggiunge l'event listener per il pulsante "aggiungi-servizi" nei popup dei blocchi appuntamento
-    document.querySelectorAll('.appointment-block .popup-buttons .btn-popup.aggiungi-servizi').forEach(button => {
-        button.addEventListener('click', function(e) {
-            e.stopPropagation(); // Impedisce la propagazione del click
-            const block = this.closest('.appointment-block');
-            openAddServicesModal(block);
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    const block = button.closest('.appointment-block');
+    if (!block) return;
+
+    const pacchettoId = block.getAttribute('data-pacchetto-id') || button.getAttribute('data-pacchetto-id');
+    if (pacchettoId) {
+      window.location.href = `/pacchetti/detail/${pacchettoId}`;
+      return;
+    }
+
+    const decodeHtml = (s) => { const t = document.createElement('textarea'); t.innerHTML = String(s || ''); return t.value; };
+
+    const clientId = block.getAttribute('data-client-id');
+    const operatorId = block.getAttribute('data-operator-id');
+    const operatorName = button.closest('.appointment-block').closest('td').getAttribute('data-operator-name') || '';
+
+    const nameEl = block.querySelector('.appointment-content .client-name');
+    const rawName = nameEl ? nameEl.textContent.trim() : '';
+    const clientNome = decodeHtml(block.getAttribute('data-client-nome') || '');
+    const clientCognome = decodeHtml(block.getAttribute('data-client-cognome') || '');
+    const clientName = rawName || `${clientNome} ${clientCognome}`.trim();
+
+    const cell = block.closest('.selectable-cell');
+    let blocksInCell = [];
+    if (cell) {
+      blocksInCell = Array.from(cell.querySelectorAll('.appointment-block'))
+        .filter(b => {
+          const bClientId = b.getAttribute('data-client-id');
+          const bNome = b.getAttribute('data-client-nome');
+          const bCognome = b.getAttribute('data-client-cognome');
+          const bClientName = `${bNome || ''} ${bCognome || ''}`.trim();
+          return (
+            (bClientId && bClientId === clientId) ||
+            (bClientName && bClientName === clientName)
+          );
         });
-    });
+    }
+
+    const contiguousBlocks = getRelevantBlocks(block);
+    const allBlocks = Array.from(new Set([...blocksInCell, ...contiguousBlocks]));
+
+    const servizi = allBlocks
+      .filter(b => b.getAttribute('data-status') !== '2')
+      .map(b => ({
+        id: b.getAttribute('data-service-id'),
+        appointment_id: b.getAttribute('data-appointment-id')
+      }));
+
+    const params = new URLSearchParams();
+    params.set('client_id', clientId);
+    params.set('client_name', clientName);
+    params.set('operator_id', operatorId);
+    params.set('servizi', JSON.stringify(servizi));
+    params.set('operator_name', operatorName);
+
+    window.location.href = `/cassa?${params.toString()}`;
+  }, true);
+
+  // Listener delegato "Nota" anche su blocchi creati dinamicamente.
+  document.addEventListener('click', function(e) {
+    const button = e.target.closest('.appointment-block .popup-buttons .btn-popup.nota');
+    if (!button) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    const block = button.closest('.appointment-block');
+    openNoteModal(block);
+  }, true);
+
+  // Listener delegato "Aggiungi servizi" anche su blocchi creati dinamicamente.
+  document.addEventListener('click', function(e) {
+    const button = e.target.closest('.appointment-block .popup-buttons .btn-popup.aggiungi-servizi');
+    if (!button) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    const block = button.closest('.appointment-block');
+    openAddServicesModal(block);
+  }, true);
+
 });
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -4505,11 +4791,10 @@ document.querySelectorAll('.appointment-block').forEach(block => {
       block.style.zIndex = '11940';
       const tb = block.querySelector('.popup-buttons');
       if (tb) tb.style.setProperty('display', 'flex', 'important');
-      // Determina se siamo in taglia o copia: se esistono celle cut-source → taglia, altrimenti → copia
-      const isCutMode = !!document.querySelector('.selectable-cell.cut-source');
-      const targetClass = isCutMode ? 'sposta' : 'copia';
+      const isNavigatorMode = window.pseudoBlocks && window.pseudoBlocks.length > 0;
       block.querySelectorAll('.btn-popup').forEach(btn => {
-        if (btn.classList.contains(targetClass)) {
+        const shouldShow = isNavigatorMode ? isNavigatorCutActionButton(btn) : btn.classList.contains('copia');
+        if (shouldShow) {
           btn.style.setProperty('display', 'inline-flex', 'important');
           btn.style.setProperty('flex', '0 0 16.6667%', 'important');
           btn.style.setProperty('width', '16.6667%', 'important');
@@ -4588,20 +4873,25 @@ document.querySelectorAll('.popup-buttons').forEach(popup => {
       block.classList.add('active-popup');
     }
   });
-  popup.addEventListener('mouseleave', function() {
+  popup.addEventListener('mouseleave', function(evt) {
     const block = this.closest('.appointment-block');
     if (block && block.hidePopupTimeout) {
       clearTimeout(block.hidePopupTimeout);
       block.hidePopupTimeout = null;
     }
     if (block) {
-      block.classList.remove('active-popup');
-      block.classList.remove('cut-mode-active');
-
-      // In taglia mode: solo classi, niente pulizia stili (lo fa block.mouseleave)
+      // In taglia mode: usa timeout delay per evitare flickering se mouse ritorna al blocco
       if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+        block.hidePopupTimeout = setTimeout(() => {
+          block.classList.remove('active-popup');
+          block.classList.remove('cut-mode-active');
+          block.hidePopupTimeout = null;
+        }, 80);
         return;
       }
+
+      block.classList.remove('active-popup');
+      block.classList.remove('cut-mode-active');
 
       // Stessa pulizia stili inline
       const tb = block.querySelector('.popup-buttons');
@@ -4638,87 +4928,265 @@ document.querySelectorAll('.popup-buttons').forEach(popup => {
   });
 });
 
-document.addEventListener('DOMContentLoaded', function() {
-  const IS_TOUCH = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch(_) { return false; } })();
+function isTouchUiActiveCalendar() {
+  try { return localStorage.getItem('sun_touch_ui') === '1'; } catch (_) { return false; }
+}
 
-  // Enforce Bootstrap tooltips on OFF block internals (desktop default)
-  if (!IS_TOUCH) {
-    const offSelectors = [
-      '.appointment-block.note-off .popup-buttons .btn-popup',
-      '.appointment-block.note-off .my-spia',
-      '.appointment-block.note-off .delete-icon',
-      '.appointment-block.note-off .btn-popup.no-show-button',
-      '.appointment-block.note-off .whatsapp-btn'
-    ];
-    document.querySelectorAll(offSelectors.join(', ')).forEach(el => {
-      // Set attributes if missing to let Bootstrap pick them up
-      if (!el.getAttribute('data-bs-toggle')) el.setAttribute('data-bs-toggle', 'tooltip');
+function isNavigatorCutActionButton(btn) {
+  if (!btn || !btn.classList) return false;
+  return btn.classList.contains('taglia') || btn.classList.contains('sposta') || btn.classList.contains('touch-top-cut');
+}
 
-      // Placement consistent with normal blocks
-      if (!el.getAttribute('data-bs-placement')) {
-        if (el.classList.contains('my-spia') || el.classList.contains('no-show-button')) {
-          el.setAttribute('data-bs-placement', 'right');
-        } else if (el.classList.contains('whatsapp-btn')) {
-          el.setAttribute('data-bs-placement', 'top');
-        } else {
-          el.setAttribute('data-bs-placement', 'bottom');
-        }
+function openDesktopPopupForBlock(block) {
+  if (!block || block.classList.contains('disable-popup')) return;
+
+  if (block.hidePopupTimeout) {
+    clearTimeout(block.hidePopupTimeout);
+    block.hidePopupTimeout = null;
+  }
+
+  if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+    block.classList.add('cut-mode-active');
+  }
+  block.classList.add('active-popup');
+
+  if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+    block.style.zIndex = '11940';
+    const tb = block.querySelector('.popup-buttons');
+    if (tb) tb.style.setProperty('display', 'flex', 'important');
+    const isNavigatorMode = window.pseudoBlocks && window.pseudoBlocks.length > 0;
+    block.querySelectorAll('.btn-popup').forEach(btn => {
+      const shouldShow = isNavigatorMode ? isNavigatorCutActionButton(btn) : btn.classList.contains('copia');
+      if (shouldShow) {
+        btn.style.setProperty('display', 'inline-flex', 'important');
+        btn.style.setProperty('flex', '0 0 16.6667%', 'important');
+        btn.style.setProperty('width', '16.6667%', 'important');
+        btn.style.setProperty('max-width', '16.6667%', 'important');
+        btn.style.setProperty('visibility', 'visible', 'important');
+        btn.style.setProperty('pointer-events', 'auto', 'important');
+      } else {
+        btn.style.setProperty('display', 'none', 'important');
       }
     });
   }
 
-  var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  const cell = block.closest('td.selectable-cell');
+  if (cell && cell.querySelectorAll('.appointment-block').length === 1) {
+    block.style.zIndex = '9999';
+    block.querySelectorAll('.popup-buttons, .btn-popup.whatsapp-btn').forEach(p => {
+      p.style.zIndex = '10000';
+    });
+  }
+}
 
-  tooltipTriggerList.forEach(function(el) {
+function closeDesktopPopupForBlock(block, relatedTarget) {
+  if (!block) return;
 
-    // Inizializzazioni coerenti con i blocchi normali
-    if (el.closest('.client-name')) {
-      new bootstrap.Tooltip(el, {
-        placement: 'bottom',
-        container: 'body',
-        boundary: 'window'
-      });
-    } else if (el.classList.contains('my-spia') || el.classList.contains('no-show-button')) {
-      new bootstrap.Tooltip(el, {
-        placement: 'right',
-        fallbackPlacements: ['left'],
-        container: 'body',
-        boundary: 'window'
-      });
-    } else if (el.classList.contains('whatsapp-btn')) {
-      new bootstrap.Tooltip(el, {
-        placement: 'top',
-        container: 'body',
-        boundary: 'window',
-        fallbackPlacements: [],
-        offset: [-46, 14]
-      });
-    } else {
-      // Per i bottoni nella popup-buttons, apri il tooltip verso l'alto
-      const isPopupBtn = el.closest('.popup-buttons') || el.closest('.popup-buttons-bottom');
-      new bootstrap.Tooltip(el, {
-        placement: isPopupBtn ? 'top' : (el.getAttribute('data-bs-placement') || 'bottom'),
-        container: 'body',
-        boundary: 'window'
-      });
+  if (block.hidePopupTimeout) {
+    clearTimeout(block.hidePopupTimeout);
+    block.hidePopupTimeout = null;
+  }
+
+  if (relatedTarget) {
+    const relBlock = relatedTarget.closest ? relatedTarget.closest('.appointment-block') : null;
+    if (relBlock === block && (relatedTarget.closest('.popup-buttons') || relatedTarget.closest('.popup-buttons-bottom'))) {
+      return;
     }
+  }
 
-    // Mantieni la logica pre‑esistente per il nome cliente
-    if (el.closest('.client-name') && !IS_TOUCH) {
-      el.addEventListener('mouseover', function() {
-        const block = this.closest('.appointment-block');
-        if (!block) return;
-        const popupDiv = block.querySelector('.popup-buttons');
-        if (popupDiv) popupDiv.style.display = 'none';
-      });
-      el.addEventListener('mouseout', function() {
-        const block = this.closest('.appointment-block');
-        if (!block) return;
-        const popupDiv = block.querySelector('.popup-buttons');
-        if (popupDiv) popupDiv.style.display = 'block';
-      });
-    }
+  block.classList.remove('active-popup');
+  block.classList.remove('cut-mode-active');
+
+  if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+    block.style.zIndex = '';
+    const tb = block.querySelector('.popup-buttons');
+    if (tb) tb.style.setProperty('display', 'none', 'important');
+    return;
+  }
+
+  const tb = block.querySelector('.popup-buttons');
+  const bb = block.querySelector('.popup-buttons-bottom');
+  if (tb) {
+    tb.style.removeProperty('display');
+    tb.style.removeProperty('flex-wrap');
+    tb.style.removeProperty('overflow');
+    tb.style.removeProperty('padding');
+    tb.style.removeProperty('align-items');
+  }
+  if (bb) {
+    bb.style.removeProperty('display');
+    bb.style.removeProperty('visibility');
+    bb.style.removeProperty('pointer-events');
+  }
+  block.querySelectorAll('.popup-buttons .btn-popup').forEach(btn => {
+    btn.style.removeProperty('display');
+    btn.style.removeProperty('visibility');
+    btn.style.removeProperty('pointer-events');
+    btn.style.removeProperty('flex');
+    btn.style.removeProperty('width');
+    btn.style.removeProperty('max-width');
+    btn.style.removeProperty('box-sizing');
   });
+
+  const cell = block.closest('td.selectable-cell');
+  if (cell && cell.querySelectorAll('.appointment-block').length === 1) {
+    block.style.zIndex = '';
+    block.querySelectorAll('.popup-buttons, .btn-popup.whatsapp-btn').forEach(p => {
+      p.style.zIndex = '';
+    });
+  }
+}
+
+// Delegato desktop: popup hover anche per blocchi creati dinamicamente.
+document.addEventListener('mouseover', function(e) {
+  if (isTouchUiActiveCalendar()) return;
+  const popup = e.target.closest('.popup-buttons');
+  const block = popup ? popup.closest('.appointment-block') : e.target.closest('.appointment-block');
+  if (!block) return;
+  const related = e.relatedTarget;
+  if (related && related.closest && related.closest('.appointment-block') === block) return;
+  openDesktopPopupForBlock(block);
+}, true);
+
+document.addEventListener('mouseout', function(e) {
+  if (isTouchUiActiveCalendar()) return;
+  const popup = e.target.closest('.popup-buttons');
+  const block = popup ? popup.closest('.appointment-block') : e.target.closest('.appointment-block');
+  if (!block) return;
+
+  if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+    const related = e.relatedTarget;
+    if (related) {
+      const relBlock = related.closest ? related.closest('.appointment-block') : null;
+      if (relBlock === block && (related.closest('.popup-buttons') || related.closest('.popup-buttons-bottom'))) {
+        return;
+      }
+    }
+    if (block.hidePopupTimeout) {
+      clearTimeout(block.hidePopupTimeout);
+      block.hidePopupTimeout = null;
+    }
+    block.hidePopupTimeout = setTimeout(() => {
+      block.classList.remove('active-popup');
+      block.classList.remove('cut-mode-active');
+      block.hidePopupTimeout = null;
+    }, 80);
+    return;
+  }
+
+  closeDesktopPopupForBlock(block, e.relatedTarget);
+}, true);
+
+// Delegato desktop: classi dragging anche per blocchi creati dinamicamente.
+document.addEventListener('dragstart', function(e) {
+  const block = e.target.closest('.appointment-block');
+  if (block) block.classList.add('dragging');
+}, true);
+
+document.addEventListener('dragend', function(e) {
+  const block = e.target.closest('.appointment-block');
+  if (block) block.classList.remove('dragging');
+}, true);
+
+function initCalendarDesktopTooltips(root = document) {
+  const isTouch = (() => {
+    try {
+      return localStorage.getItem('sun_touch_ui') === '1' || document.body.classList.contains('touch-ui');
+    } catch (_) {
+      return document.body.classList.contains('touch-ui');
+    }
+  })();
+  if (isTouch || !window.bootstrap || !bootstrap.Tooltip) return;
+
+  const selector = [
+    '.calendar-table .appointment-block .btn-popup',
+    '.calendar-table .appointment-block .my-spia',
+    '.calendar-table .appointment-block .delete-icon',
+    '.calendar-table .appointment-block .assign-client-link',
+    '.calendar-table .appointment-block .client-info-link',
+    '.calendar-table .appointment-block [data-bs-toggle="tooltip"]',
+    '.calendar-table .appointment-block [title]',
+    '.calendar-table .appointment-block [data-bs-original-title]'
+  ].join(', ');
+
+  const nodes = [];
+  if (root.matches && root.matches(selector)) nodes.push(root);
+  if (root.querySelectorAll) nodes.push(...root.querySelectorAll(selector));
+
+  nodes.forEach(el => {
+    const hasTooltipText = !!(el.getAttribute('title') || el.getAttribute('data-bs-original-title'));
+    if (!hasTooltipText) return;
+
+    if (!el.getAttribute('data-bs-toggle')) {
+      el.setAttribute('data-bs-toggle', 'tooltip');
+    }
+
+    if (!el.getAttribute('data-bs-placement')) {
+      if (el.classList.contains('my-spia') || el.classList.contains('no-show-button')) {
+        el.setAttribute('data-bs-placement', 'right');
+      } else if (el.classList.contains('whatsapp-btn')) {
+        el.setAttribute('data-bs-placement', 'top');
+      } else {
+        const isPopupBtn = !!(el.closest('.popup-buttons') || el.closest('.popup-buttons-bottom'));
+        el.setAttribute('data-bs-placement', isPopupBtn ? 'top' : 'bottom');
+      }
+    }
+
+    try {
+      const existing = bootstrap.Tooltip.getInstance(el);
+      if (existing) existing.dispose();
+    } catch (_) {}
+
+    try {
+      const opts = {
+        placement: el.getAttribute('data-bs-placement') || 'bottom',
+        container: 'body',
+        boundary: 'window'
+      };
+      if (el.classList.contains('whatsapp-btn')) {
+        opts.fallbackPlacements = [];
+        opts.offset = [-46, 14];
+      }
+      if (el.classList.contains('my-spia') || el.classList.contains('no-show-button')) {
+        opts.fallbackPlacements = ['left'];
+      }
+      new bootstrap.Tooltip(el, opts);
+    } catch (_) {}
+  });
+}
+
+window.initCalendarDesktopTooltips = initCalendarDesktopTooltips;
+
+document.addEventListener('DOMContentLoaded', function() {
+  const IS_TOUCH = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch(_) { return false; } })();
+
+  if (!IS_TOUCH) {
+    initCalendarDesktopTooltips(document);
+
+    const table = document.querySelector('.calendar-table');
+    if (table && !window.__calendarTooltipObserverInstalled) {
+      const tooltipObserver = new MutationObserver((mutations) => {
+        mutations.forEach(m => {
+          m.addedNodes && m.addedNodes.forEach(node => {
+            if (node && node.nodeType === 1) initCalendarDesktopTooltips(node);
+          });
+        });
+      });
+      tooltipObserver.observe(table, { childList: true, subtree: true });
+      window.__calendarTooltipObserverInstalled = true;
+    }
+
+    if (!window.__calendarTooltipLazyInitInstalled) {
+      document.addEventListener('mouseover', function(e) {
+        const target = e.target && e.target.closest ? e.target.closest('.calendar-table .appointment-block [title], .calendar-table .appointment-block [data-bs-toggle="tooltip"]') : null;
+        if (!target || !window.bootstrap || !bootstrap.Tooltip) return;
+        try {
+          if (!bootstrap.Tooltip.getInstance(target)) initCalendarDesktopTooltips(target);
+        } catch (_) {}
+      }, true);
+      window.__calendarTooltipLazyInitInstalled = true;
+    }
+  }
 });
 
 function openNoteModal(block) {
@@ -4742,17 +5210,6 @@ function openNoteModal(block) {
   bsModal.show();
   console.log("Modal aperto");
 }
-
-document.addEventListener('DOMContentLoaded', function() {
-    // Aggiunge l'event listener per il pulsante "nota" nei popup dei blocchi appuntamento
-    document.querySelectorAll('.appointment-block .popup-buttons .btn-popup.nota').forEach(button => {
-        button.addEventListener('click', function(e) {
-            e.stopPropagation(); // Impedisce la propagazione del click
-            const block = this.closest('.appointment-block');
-            openNoteModal(block);
-        });
-    });
-});
 
 document.addEventListener('DOMContentLoaded', function () {
     var noteTooltipList = [].slice.call(document.querySelectorAll('.appt-note')); 
@@ -4807,11 +5264,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // Aggiorna subito dataset + tooltip
     try { window.onAppointmentNoteSaved(appointmentId, noteText); } catch (_) {}
 
-    // Se il blocco è in stato 2, evita il reload e lascia la UI aggiornata
     const block = document.querySelector(`.appointment-block[data-appointment-id="${appointmentId}"]`);
-    const isStatus2 = block && String(block.getAttribute('data-status')) === '2';
-    if (!isStatus2) {
-        location.reload();
+    if (block) {
+      // Aggiorna la nota nel blocco
+      block.setAttribute('data-note', noteText);
+      // Se è un blocco OFF, aggiorna subito il titolo visibile (senza refresh)
+      if (block.classList.contains('note-off') && typeof initOffBlockTitle === 'function') {
+        initOffBlockTitle(block);
+      }
+      const noteIndicator = block.querySelector('.note-indicator');
+      if (noteIndicator) {
+        const hasNote = !!String(noteText || '').trim();
+        noteIndicator.style.display = hasNote ? 'block' : '';
+      }
     }
 })
         .catch(error => {
@@ -4907,16 +5372,6 @@ function changeAppointmentColor(block) {
       });
   }
 }
-  
-  document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.btn-popup.colore').forEach(function(button) {
-      button.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const block = this.closest('.appointment-block');
-        changeAppointmentColor(block);
-      });
-    });
-  });
   
   // Applica il colore del font a tutti i blocchi appuntamento
   document.addEventListener("DOMContentLoaded", function() {
@@ -5067,18 +5522,7 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 });
 
-function computeFontColor(hexColor) {
-    if (!hexColor) return "black";
-    hexColor = hexColor.replace("#", "");
-    if (hexColor.length < 6) return "black";
-
-    const r = parseInt(hexColor.substring(0, 2), 16);
-    const g = parseInt(hexColor.substring(2, 4), 16);
-    const b = parseInt(hexColor.substring(4, 6), 16);
-
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    return brightness > 204 ? "rgba(0, 0, 0, 0.7)" : "#ffffff";
-}
+// computeFontColor è definita una sola volta più sopra.
 
 function removePseudoBlock(index) {
   window.pseudoBlocks.splice(index, 1);
@@ -5747,6 +6191,7 @@ function renderPseudoBlocksList() {
 
   if (!Array.isArray(window.pseudoBlocks) || window.pseudoBlocks.length === 0) {
     document.body.classList.remove('pseudo-active');
+    document.body.classList.remove('force-popup-buttons');
     container.style.display = 'none';
     // Rimuovi i dati dal localStorage
     localStorage.removeItem('selectedClientIdNav');
@@ -5760,6 +6205,7 @@ function renderPseudoBlocksList() {
   }
 
   document.body.classList.add('pseudo-active');
+  document.body.classList.add('force-popup-buttons');
 
   if (!window.commonPseudoBlockColor && window.pseudoBlocks.length > 0) {
     window.commonPseudoBlockColor = window.pseudoBlocks[0].color;
@@ -5930,6 +6376,31 @@ function saveCutBlockBackup(apptBackup) {
   const arr = _loadCutBlocks();
   arr.push(apptBackup);
   _saveCutBlocks(arr);
+}
+
+function removeCutBlockBackupByAppointmentId(appointmentId) {
+  const id = String(appointmentId || '');
+  if (!id) return;
+  const arr = _loadCutBlocks();
+  if (!Array.isArray(arr) || arr.length === 0) return;
+  const filtered = arr.filter(b => String((b && b.appointment_id) || '') !== id);
+  _saveCutBlocks(filtered);
+}
+
+function refreshCutSourceHighlightsFromStorage() {
+  try {
+    clearCutSourceHighlights();
+    restoreCutHighlights();
+  } catch (_) {}
+}
+
+function consumeCutPseudoBlockOrigin(pseudoBlock) {
+  const appointmentId = String(
+    pseudoBlock?._origin_appointment_id || pseudoBlock?._origin_backup?.appointment_id || ''
+  );
+  if (!appointmentId) return;
+  removeCutBlockBackupByAppointmentId(appointmentId);
+  refreshCutSourceHighlightsFromStorage();
 }
 
 // Ricrea tutti i cutBlocks memorizzati (usato su "Svuota" o al load se necessario)
@@ -6165,7 +6636,7 @@ if (blocksInCell.length >= 2) {
                     duration: blk.duration,
                     colore: commonColor,
                     note: blk.note || "",
-                    status: blk.status || 0
+                  status: (!blk.clientId && !blk.serviceId) ? 0 : (blk.status || 0)
                 };
 
 // ✅ FIX: Usa direttamente pacchettoSedutaId se già presente nel blocco
@@ -6187,6 +6658,7 @@ else if (window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_dispo
     }
 }
 
+                window.__suspendCalendarMutationSync = Number(window.__suspendCalendarMutationSync || 0) + 1;
                 fetch('/calendar/create', {
                     method: 'POST',
                     headers: {
@@ -6205,11 +6677,12 @@ else if (window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_dispo
                 })
 .then(async appointment => {
     console.log("Appuntamento creato per pseudo-blocco selezionato:", appointment);
+  const consumedPseudoBlock = blk;
     appointment.duration = appointment.duration || blk.duration;
     appointment.colore = appointment.colore || commonColor;
     appointment.colore_font = appointment.colore_font || computeFontColor(commonColor);
     appointment.note = appointment.note || blk.note || "";
-    appointment.service_tag = appointment.service_tag || blk.tag || blk.serviceName;
+    appointment.service_tag = appointment.service_tag || blk.tag || '';
 
     // Accumula il servizio appena creato per il memo WhatsApp finale
     if (!window._createdServicesForWhatsapp) window._createdServicesForWhatsapp = [];
@@ -6222,58 +6695,16 @@ else if (window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_dispo
     renderPseudoBlocksList();
     if (typeof saveNavigatorState === 'function') { try { saveNavigatorState(); } catch(e) {} }
 
+    // Assicura i campi (se la risposta non li riporta) prima del rendering
+    appointment.client_name = appointment.client_name || blk.clientName;
+    appointment.service_tag = appointment.service_tag || blk.tag || '';
+
     // Crea il blocco nel calendario (solo una volta)
     const newBlock = createAppointmentBlockElement(appointment, operatorId, hour, minute);
     cell.appendChild(newBlock);
     arrangeBlocksInCell(cell);
-    const noShowBtn = newBlock.querySelector('.no-show-button');
-    if (noShowBtn) noShowBtn.style.display = 'none';
 
-    // Assicura i campi (se la risposta non li riporta)
-appointment.client_name = appointment.client_name || blk.clientName;
-appointment.service_tag = appointment.service_tag || blk.tag || blk.serviceName;
-
-// Inietta subito il contenuto (cliente + servizio) visibile prima del reload
-(function injectImmediateContent() {
-  const fontColor = '#FFFFFF'; // testo bianco richiesto
-  let content = newBlock.querySelector('.appointment-content');
-  if (!content) {
-    content = document.createElement('div');
-    content.className = 'appointment-content';
-    newBlock.appendChild(content);
-  }
-  content.innerHTML = '';
-
-  if (appointment.client_name) {
-    const pClient = document.createElement('p');
-    pClient.className = 'client-name';
-    const a = document.createElement('a');
-    a.href = '#';
-    const apptId = Number(appointment.id) || null;
-    a.textContent = String(appointment.client_name);
-    a.style.color = fontColor;
-    a.addEventListener('click', e => {
-      e.preventDefault();
-      if (apptId) openModifyPopup(apptId);
-    });
-    pClient.appendChild(a);
-    content.appendChild(pClient);
-  }
-
-  if (appointment.service_tag) {
-    const pService = document.createElement('p');
-    const strong = document.createElement('strong');
-    strong.textContent = String(appointment.service_tag);
-    pService.appendChild(strong);
-    pService.style.color = fontColor;
-    content.appendChild(pService);
-  }
-
-  // Forza font bianco temporaneo senza cambiare il background esistente
-  newBlock.style.color = fontColor;
-  content.style.color = fontColor;
-  content.querySelectorAll('a,strong').forEach(el => el.style.color = fontColor);
-})();
+    consumeCutPseudoBlockOrigin(consumedPseudoBlock);
 
     // Se restano pseudoblocchi: termina (niente WhatsApp, niente reload)
     if (window.pseudoBlocks.length > 0) {
@@ -6392,24 +6823,32 @@ if (blk.pacchettoSedutaId) {
 window.location.href = `${basePath}pacchetti/detail/${blk.pacchettoId}`;
 return;
 } else {
-    // Nessun pacchetto: ricarica la pagina per visualizzare l'appuntamento creato
-    // (sia per COPIA che per TAGLIA: dopo il popup WhatsApp serve un reload 
-    //  per aggiornare il calendario e rimuovere l'highlight dalla cella sorgente)
-    setTimeout(() => {
-        location.reload();
-    }, 100);
+    // Nessun pacchetto: il blocco è già nel DOM grazie a createAppointmentBlockElement (sopra).
+    // Rimuovi gli highlight da eventuali celle sorgente di un'operazione taglia/copia.
+    if (typeof clearCutSourceHighlights === 'function') clearCutSourceHighlights();
+    // Scorri alla posizione del nuovo blocco senza ricaricare la pagina
+    if (typeof scrollToHourMinute === 'function') {
+        const timeParts = startTimeStr.split(':').map(Number);
+        if (!isNaN(timeParts[0]) && !isNaN(timeParts[1])) {
+            scrollToHourMinute(timeParts[0], timeParts[1]);
+        }
+    }
+    window.isCreatingAppointment = false;
 }
 
-  }).catch(err => {
+    }).catch(err => {
       console.error(err);
       alert("Errore creazione: " + err.message);
       window.isCreatingAppointment = false; // PATCH: Sblocca click su errore
-  });
+    }).finally(() => {
+      window.__suspendCalendarMutationSync = Math.max(0, Number(window.__suspendCalendarMutationSync || 0) - 1);
+    });
 
             } else {
                 // Se nessun pseudo-blocco è selezionato, esegue la creazione multipla (macro-blocco)
                 const totalBlocks = window.pseudoBlocks.length;
                 const totalDuration = window.pseudoBlocks.reduce((acc, b) => acc + b.duration, 0);
+                window.__suspendCalendarMutationSync = Number(window.__suspendCalendarMutationSync || 0) + 1;
                 const requests = window.pseudoBlocks.map(blk => {
                     const startTimeStr = minutesToTime(startTimeInMin);
                     startTimeInMin += blk.duration;
@@ -6422,7 +6861,7 @@ return;
                         duration: blk.duration,
                         colore: commonColor,
                         note: blk.note || "",
-                        status: blk.status || 0
+                      status: (!blk.clientId && !blk.serviceId) ? 0 : (blk.status || 0)
                     };
 
 // *** FIX: Se blk ha già pacchettoSedutaId (da checkPendingSedutaFromPacchetto), usalo direttamente! ***
@@ -6567,7 +7006,7 @@ Promise.all(requests)
         // NUOVO: Abbina l'appuntamento con il suo pseudoblock originale utilizzando l'indice
         const originalPseudoBlock = pseudoBlocksData[index];
         if (originalPseudoBlock) {
-            appointment.service_tag = originalPseudoBlock.tag || originalPseudoBlock.serviceName;
+            appointment.service_tag = originalPseudoBlock.tag || appointment.service_tag || '';
             appointment.service_name = originalPseudoBlock.serviceName;
             appointment.client_name = originalPseudoBlock.clientName;
         }
@@ -6577,105 +7016,21 @@ Promise.all(requests)
             const blockEl = createAppointmentBlockElement(appointment, operatorId, appointmentHour, appointmentMinute);
             console.log(`[${index}] Blocco creato:`, blockEl); // [3]
             
-const blockColor = appointment.colore || commonColor;
-const fontColor = appointment.colore_font || computeFontColor(blockColor);
-
-blockEl.style.backgroundColor = blockColor;
-blockEl.style.color = fontColor;
-blockEl.setAttribute('data-colore', blockColor);
-blockEl.setAttribute('data-colore_font', fontColor);
-            
-// Applica il colore anche al contenuto del blocco
-const contentEl = blockEl.querySelector('.appointment-content');
-if (contentEl) {
-    contentEl.style.color = fontColor;
-    const links = contentEl.querySelectorAll('a');
-    links.forEach(link => link.style.color = fontColor);
-                
-// Sovrascriviamo immediatamente il contenuto HTML con i dati corretti senza iniezioni di html non sanificato
-if (appointment.client_name && appointment.service_tag) {
-    contentEl.innerHTML = '';
-
-    const pClient = document.createElement('p');
-    pClient.className = 'client-name';
-
-    const a = document.createElement('a');
-    a.href = '#';
-    const apptId = Number(appointment.id) || null;
-    a.addEventListener('click', function(e) {
-      e.preventDefault();
-      if (apptId) openModifyPopup(apptId);
-    });
-    a.style.color = computeFontColor(commonColor);
-    a.textContent = String(appointment.client_name);
-
-    pClient.appendChild(a);
-
-    const pService = document.createElement('p');
-    const strong = document.createElement('strong');
-    strong.textContent = String(appointment.service_tag);
-    pService.appendChild(strong);
-
-    contentEl.appendChild(pClient);
-    contentEl.appendChild(pService);
-}
-            }
-            
             targetCell.appendChild(blockEl);
             // Organizza i blocchi nella cella dopo aver aggiunto quello nuovo
             arrangeBlocksInCell(targetCell);
-            const noShowBtn = blockEl.querySelector('.no-show-button');
-if (noShowBtn) noShowBtn.style.display = 'none';
         } else {
             console.warn(`Cella non trovata per orario ${appointmentHour}:${appointmentMinute}`);
             // Fallback: aggiunge comunque il blocco alla cella iniziale
             const blockEl = createAppointmentBlockElement(appointment, operatorId, appointmentHour, appointmentMinute);
             console.log(`[${index}] Blocco creato (fallback):`, blockEl); // [3]
             
-            // Applica immediatamente i colori al blocco visivamente
-            blockEl.style.backgroundColor = commonColor;
-            blockEl.style.color = computeFontColor(commonColor);
-            
-            // Applica il colore anche al contenuto del blocco
-            const contentEl = blockEl.querySelector('.appointment-content');
-            if (contentEl) {
-                contentEl.style.color = computeFontColor(commonColor);
-                const links = contentEl.querySelectorAll('a');
-                links.forEach(link => link.style.color = computeFontColor(commonColor));
-                
-                // NUOVO: Sovrascrive immediatamente il contenuto HTML con i dati corretti
-if (appointment.client_name && appointment.service_tag) {
-    contentEl.innerHTML = '';
-
-    const pClient = document.createElement('p');
-    pClient.className = 'client-name';
-
-    const a = document.createElement('a');
-    a.href = '#';
-    const apptId = Number(appointment.id) || null;
-    a.addEventListener('click', function(e) {
-      e.preventDefault();
-      if (apptId) openModifyPopup(apptId);
-    });
-    a.style.color = computeFontColor(commonColor);
-    a.textContent = String(appointment.client_name);
-
-    pClient.appendChild(a);
-
-    const pService = document.createElement('p');
-    const strong = document.createElement('strong');
-    strong.textContent = String(appointment.service_tag);
-    pService.appendChild(strong);
-
-    contentEl.appendChild(pClient);
-    contentEl.appendChild(pService);
-}
-            }
-            
             initialCell.appendChild(blockEl);
             arrangeBlocksInCell(initialCell);
         }
     });
+
+      pseudoBlocksData.forEach(pb => consumeCutPseudoBlockOrigin(pb));
     
     // Svuota l'Appointment Navigator se non ci sono più pseudo-blocchi
     // Svuota l'Appointment Navigator se non ci sono più pseudo-blocchi
@@ -6750,15 +7105,20 @@ if (appointment.client_name && appointment.service_tag) {
         }
     }
 
-    // Aggiungiamo un reload ritardato per assicurarci che tutto venga visualizzato correttamente
-    setTimeout(() => {
-        location.reload();
-    }, 500);
+    // Blocchi già inseriti nel DOM sopra. Rimuovi highlight taglia/copia e scorri.
+    if (typeof clearCutSourceHighlights === 'function') clearCutSourceHighlights();
+    if (typeof scrollToHourMinute === 'function') {
+        scrollToHourMinute(hour, minute);
+    }
+    window.isCreatingAppointment = false;
 })
                 .catch(err => {
                     console.error(err);
                     alert("Errore nella creazione multipla: " + err.message);
                     window.isCreatingAppointment = false;
+                })
+                .finally(() => {
+                  window.__suspendCalendarMutationSync = Math.max(0, Number(window.__suspendCalendarMutationSync || 0) - 1);
                 });
             }
         }
@@ -6767,210 +7127,292 @@ if (appointment.client_name && appointment.service_tag) {
 
 function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
   const block = document.createElement('div');
+  const duration = parseInt(appointment.duration, 10) || 15;
+  const status = Number(appointment.status ?? appointment.stato ?? 0) || 0;
+  const colore = appointment.colore || '#FFFFFF';
+  const coloreFont = appointment.colore_font || computeFontColor(colore);
+
+  const fallbackFullName = (appointment.client_name || '').toString().trim();
+  const fallbackNameParts = fallbackFullName.split(/\s+/).filter(Boolean);
+  const clientNome = (appointment.client_nome || fallbackNameParts[0] || '').toString().trim();
+  const clientCognome = (appointment.client_cognome || fallbackNameParts.slice(1).join(' ') || '').toString().trim();
+  const displayClientName = `${clientNome} ${clientCognome}`.trim() || fallbackFullName.replace(/\s+\+?\d[\d\s-]{6,}$/, '').trim();
+  const clientPhone = (appointment.client_cellulare || '').toString().trim();
+  const serviceTag = (appointment.service_tag || appointment.servizio_tag || '').toString().trim();
+  const serviceName = (appointment.service_name || '').toString().trim();
+
+  const isDummyByName = clientNome.toLowerCase() === 'dummy' && clientCognome.toLowerCase() === 'dummy';
+  const isOffBlock =
+    appointment.is_off === true ||
+    (appointment.client_name || '').toString().trim().toLowerCase() === 'off' ||
+    (appointment.service_name || '').toString().trim().toLowerCase() === 'off' ||
+    isDummyByName ||
+    ((appointment.client_id == null || appointment.service_id == null) && !!(appointment.note || '').trim());
+
+  const isDeletedClient = !!appointment.client_is_deleted;
+
   block.className = 'appointment-block';
+  if (status === 2) block.classList.add('status-2');
+  if (isOffBlock) block.classList.add('note-off');
+  if (isDeletedClient) block.classList.add('disable-popup');
+  block.classList.add((coloreFont || '').toLowerCase() === '#ffffff' || (coloreFont || '').toLowerCase() === '#fff' || (coloreFont || '').toLowerCase() === 'white' ? 'dark-bg' : 'light-bg');
+
+  block.setAttribute('draggable', isDeletedClient ? 'false' : 'true');
+  block.setAttribute('data-status', String(status));
+  block.setAttribute('data-colore', colore);
+  block.setAttribute('data-colore_font', coloreFont);
   block.setAttribute('data-appointment-id', appointment.id);
-  block.setAttribute('data-duration', appointment.duration);
-  block.setAttribute('data-service-id', appointment.service_id);
-  block.setAttribute('data-client-id', appointment.client_id);
+  block.setAttribute('data-duration', String(duration));
+  if (appointment.service_id != null) block.setAttribute('data-service-id', appointment.service_id);
+  if (serviceName) block.setAttribute('data-service-name', serviceName);
+  if (serviceTag) block.setAttribute('data-service-tag', serviceTag);
+  if (appointment.client_id != null) block.setAttribute('data-client-id', appointment.client_id);
+  if (clientNome) block.setAttribute('data-client-nome', clientNome);
+  if (clientCognome) block.setAttribute('data-client-cognome', clientCognome);
+  if (clientPhone) block.setAttribute('data-client-cellulare', clientPhone);
   block.setAttribute('data-operator-id', operatorId);
   block.setAttribute('data-hour', hour);
   block.setAttribute('data-minute', minute);
-  block.setAttribute('data-source', appointment.source || '');
-  block.setAttribute('data-status', appointment.status || 0); 
-  if (appointment.note) {
-      block.setAttribute('data-note', appointment.note);
-  }
+  block.setAttribute('data-source', appointment.source || 'gestionale');
+  if (appointment.note) block.setAttribute('data-note', appointment.note);
+  if (appointment.created_at) block.setAttribute('data-created-at', appointment.created_at);
+  if (appointment.last_edit) block.setAttribute('data-last-edit', appointment.last_edit);
 
-  // PATCH: Salva il nome del servizio per recuperarlo correttamente nel Navigator (Cut/Paste)
-  if (appointment.service_name) {
-      block.setAttribute('data-service-name', appointment.service_name);
-  }
-
-  // --- LOGICA UNIFORME PER COLORE FONT SU SFONDI CHIARI ---
-  let colore = appointment.colore;
-  let coloreFont = appointment.colore_font;
-
-if (colore) {
-  coloreFont = computeFontColor(colore);
-}
-
-  block.setAttribute('data-colore', colore);
-  block.setAttribute('data-colore_font', coloreFont);
-  block.style.backgroundColor = colore || '';
-  block.style.color = coloreFont;
-  
-  // Calcola l'altezza in base alla durata (ad es. 60 minuti = 4 quarter)
-  const quarterHeight = getQuarterPx(); // Es. 60px per quarter
-  const duration = parseInt(appointment.duration, 10) || 15;
+  const quarterHeight = getQuarterPx();
   const heightPx = (duration / 15) * quarterHeight;
   block.style.height = `${heightPx}px`;
-  
-  // Posiziona il blocco in modo assoluto rispetto alla cella (la cella deve avere position: relative)
   block.style.position = 'absolute';
   block.style.left = '0px';
   block.style.top = '0px';
-  
-  // Imposta il colore di sfondo e il colore del font
-  block.style.backgroundColor = appointment.colore || '';
-  if (appointment.colore_font) {
-      block.style.color = appointment.colore_font;
-  }
-  
-  // Costruisci il contenuto del blocco
+  block.style.backgroundColor = colore;
+  block.style.color = coloreFont;
+
   const popupDiv = document.createElement('div');
   popupDiv.className = 'popup-buttons';
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.className = 'btn-popup delete-appointment-block';
+  deleteBtn.title = 'Elimina appuntamento';
+  deleteBtn.setAttribute('data-bs-toggle', 'tooltip');
+  deleteBtn.setAttribute('data-appointment-id', appointment.id);
+  deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
+  deleteBtn.onclick = function(e) {
+    e.stopPropagation();
+    if (window.deleteAppointment) window.deleteAppointment(String(appointment.id));
+  };
+  popupDiv.appendChild(deleteBtn);
+
+  if (!isDeletedClient) {
+    const spostaBtn = document.createElement('button');
+    spostaBtn.type = 'button';
+    spostaBtn.className = 'btn-popup sposta';
+    spostaBtn.title = 'Togli e sposta';
+    spostaBtn.setAttribute('data-bs-toggle', 'tooltip');
+    spostaBtn.setAttribute('data-appointment-id', appointment.id);
+    spostaBtn.innerHTML = '<i class="bi bi-scissors"></i>';
+    popupDiv.appendChild(spostaBtn);
+
+    const copiaBtn = document.createElement('button');
+    copiaBtn.type = 'button';
+    copiaBtn.className = 'btn-popup copia';
+    copiaBtn.title = 'Copia blocco';
+    copiaBtn.setAttribute('data-bs-toggle', 'tooltip');
+    copiaBtn.setAttribute('data-appointment-id', appointment.id);
+    copiaBtn.innerHTML = '<i class="bi bi-files"></i>';
+    popupDiv.appendChild(copiaBtn);
+
+    const coloreBtn = document.createElement('button');
+    coloreBtn.type = 'button';
+    coloreBtn.className = 'btn-popup colore';
+    coloreBtn.title = 'Imposta colore';
+    coloreBtn.setAttribute('data-bs-toggle', 'tooltip');
+    coloreBtn.setAttribute('data-appointment-id', appointment.id);
+    coloreBtn.innerHTML = '<i class="bi bi-palette"></i>';
+    popupDiv.appendChild(coloreBtn);
+
+    const pagBtn = document.createElement('button');
+    pagBtn.type = 'button';
+    pagBtn.className = 'btn-popup pagamento';
+    pagBtn.title = 'Porta in cassa';
+    pagBtn.setAttribute('data-bs-toggle', 'tooltip');
+    pagBtn.setAttribute('data-appointment-id', appointment.id);
+    pagBtn.innerHTML = '<i class="bi bi-currency-euro"></i>';
+    popupDiv.appendChild(pagBtn);
+
+    const addSrvBtn = document.createElement('button');
+    addSrvBtn.type = 'button';
+    addSrvBtn.className = 'btn-popup aggiungi-servizi';
+    addSrvBtn.title = 'Aggiungi Servizi';
+    addSrvBtn.setAttribute('data-bs-toggle', 'tooltip');
+    addSrvBtn.setAttribute('data-appointment-id', appointment.id);
+    addSrvBtn.innerHTML = '<i class="bi bi-plus"></i>';
+    popupDiv.appendChild(addSrvBtn);
+
+    const notaBtn = document.createElement('button');
+    notaBtn.type = 'button';
+    notaBtn.className = 'btn-popup nota';
+    notaBtn.title = 'Nota appuntamento';
+    notaBtn.setAttribute('data-bs-toggle', 'tooltip');
+    notaBtn.setAttribute('data-appointment-id', appointment.id);
+    notaBtn.innerHTML = '<i class="bi bi-pencil-square"></i>';
+    notaBtn.onclick = function(e) {
+      e.stopPropagation();
+      if (window.openNoteModal) window.openNoteModal(block);
+    };
+    popupDiv.appendChild(notaBtn);
+  }
+
   block.appendChild(popupDiv);
-  
+
+  const whatsappWrap = document.createElement('div');
+  if (!isOffBlock && !isDeletedClient) {
+    const waBtn = document.createElement('button');
+    waBtn.type = 'button';
+    waBtn.className = 'btn-popup whatsapp-btn';
+    waBtn.setAttribute('data-appointment-id', appointment.id);
+    waBtn.setAttribute('title', 'Invia WhatsApp');
+    waBtn.setAttribute('data-bs-toggle', 'tooltip');
+    waBtn.setAttribute('data-client-nome', displayClientName);
+    waBtn.setAttribute('data-client-cellulare', clientPhone);
+    waBtn.setAttribute('data-date', appointment.start_date_display || '');
+    waBtn.setAttribute('data-hour', String(hour).padStart(2, '0'));
+    waBtn.setAttribute('data-minute', String(minute).padStart(2, '0'));
+    waBtn.innerHTML = '<i class="bi bi-whatsapp"></i>';
+    whatsappWrap.appendChild(waBtn);
+  }
+  block.appendChild(whatsappWrap);
+
+  const deleteIcon = document.createElement('button');
+  deleteIcon.type = 'button';
+  deleteIcon.className = 'delete-icon';
+  deleteIcon.title = 'Elimina appuntamento';
+  deleteIcon.setAttribute('data-appointment-id', appointment.id);
+  deleteIcon.setAttribute('data-bs-toggle', 'tooltip');
+  deleteIcon.innerHTML = '<i class="bi bi-trash"></i>';
+  deleteIcon.onclick = function(e) {
+    e.stopPropagation();
+    if (window.deleteAppointment) window.deleteAppointment(String(appointment.id));
+  };
+  block.appendChild(deleteIcon);
+
   const dragHandle = document.createElement('div');
   dragHandle.className = 'drag-handle';
   block.appendChild(dragHandle);
-  
+
+  const noteIndicator = document.createElement('div');
+  noteIndicator.className = 'note-indicator';
+  noteIndicator.innerHTML = '<i class="bi bi-pencil-square"></i>';
+  noteIndicator.onclick = function(e) {
+    e.stopPropagation();
+    if (window.openNoteModal) window.openNoteModal(block);
+  };
+  block.appendChild(noteIndicator);
+
   const contentDiv = document.createElement('div');
   contentDiv.className = 'appointment-content';
-const isOffBlock = (
-  !appointment.client_id || appointment.client_id === "dummy" || appointment.client_id == window.DUMMY_CLIENT_ID ||
-  !appointment.service_id || appointment.service_id === "dummy" || appointment.service_id == window.DUMMY_SERVICE_ID
-);
 
-if (isOffBlock) {
-  const p = document.createElement('p');
-  p.style.textAlign = 'center';
-  p.style.fontWeight = 'bold';
-  p.style.fontSize = '18px';
-  p.textContent = appointment.note || 'BLOCCO OFF';
-  contentDiv.appendChild(p);
-} else {
-  // client name
   const pClient = document.createElement('p');
   pClient.className = 'client-name';
-  if (appointment.client_name) {
-    const a = document.createElement('a');
-    a.href = '#';
-    a.addEventListener('click', function(e){
-      const TOUCH_UI = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch(_) { return false; } })();
-      if (TOUCH_UI) {
-        const block = this.closest('.appointment-block');
-        if (!block.classList.contains('active-popup')) {
-          // do nothing, let block click handle
-          return;
-        }
-      }
-      e.preventDefault();
-      openModifyPopup(appointment.id);
-    });
-    a.textContent = appointment.client_name;
-    pClient.appendChild(a);
+  if (isOffBlock) {
+    const offSpan = document.createElement('span');
+    offSpan.className = 'off-title';
+    offSpan.textContent = (appointment.note || 'OFF').toString().trim() || 'OFF';
+    pClient.appendChild(offSpan);
+  } else if (isDeletedClient) {
+    const assignLink = document.createElement('a');
+    assignLink.href = 'javascript:void(0)';
+    assignLink.className = 'assign-client-link';
+    assignLink.setAttribute('data-bs-toggle', 'tooltip');
+    assignLink.setAttribute('data-bs-placement', 'top');
+    assignLink.setAttribute('title', 'Clicca per assegnare cliente');
+    assignLink.textContent = '?';
+    pClient.appendChild(assignLink);
+  } else {
+    const link = document.createElement('a');
+    link.href = 'javascript:void(0)';
+    link.className = 'client-info-link';
+    link.setAttribute('data-client-nome', clientNome);
+    link.setAttribute('data-client-cognome', clientCognome);
+    link.setAttribute('data-client-cellulare', clientPhone);
+    link.setAttribute('data-service-nome', serviceTag);
+    link.setAttribute('data-service-full_name', serviceName);
+    link.textContent = displayClientName || '';
+    pClient.appendChild(link);
   }
-  // service tag
+  contentDiv.appendChild(pClient);
+
   const pService = document.createElement('p');
   const strong = document.createElement('strong');
-  strong.textContent = appointment.service_tag || appointment.servizio_tag || '';
+  strong.textContent = serviceTag;
   pService.appendChild(strong);
-
-  contentDiv.appendChild(pClient);
   contentDiv.appendChild(pService);
-}
-  
+
+  block.appendChild(contentDiv);
+
+  if (isOffBlock) {
+    const fullText = String(appointment.note || 'OFF').trim() || 'OFF';
+    const MAX_CHARS = 12;
+    const displayText = fullText.length > MAX_CHARS ? (fullText.slice(0, MAX_CHARS) + '...') : fullText;
+
+    let titleEl = block.querySelector('.off-block-title');
+    if (!titleEl) {
+      titleEl = document.createElement('span');
+      titleEl.className = 'off-block-title';
+      block.appendChild(titleEl);
+    }
+
+    titleEl.textContent = displayText;
+    titleEl.setAttribute('data-full-note', fullText);
+    titleEl.setAttribute('title', fullText);
+
+    titleEl.style.position = 'absolute';
+    titleEl.style.top = '50%';
+    titleEl.style.left = '50%';
+    titleEl.style.transform = 'translate(-50%, -50%)';
+    titleEl.style.fontSize = '20px';
+    titleEl.style.fontWeight = 'bold';
+    titleEl.style.color = '#474646';
+    titleEl.style.textAlign = 'center';
+    titleEl.style.textShadow = '1px 1px 2px rgba(17,16,16,0.2)';
+    titleEl.style.cursor = 'pointer';
+    titleEl.style.zIndex = '1000';
+    titleEl.style.pointerEvents = 'auto';
+    titleEl.style.whiteSpace = 'nowrap';
+    titleEl.style.overflow = 'hidden';
+    titleEl.style.textOverflow = 'ellipsis';
+    titleEl.style.maxWidth = 'calc(100% - 12px)';
+    titleEl.style.display = 'inline-block';
+    titleEl.style.boxSizing = 'border-box';
+    titleEl.style.padding = '0 2px';
+
+    titleEl.onclick = function (e) {
+      e.stopPropagation();
+      if (window.openNoteModal) window.openNoteModal(block);
+    };
+  }
+
   const spia = document.createElement('div');
   spia.className = 'my-spia';
-  spia.setAttribute('title', 'cliente in istituto');
+  spia.setAttribute('data-bs-toggle', 'tooltip');
+  spia.setAttribute('title', 'Segna cliente in istituto');
   block.appendChild(spia);
-  
-  const noShowBtn = document.createElement('button');
-  noShowBtn.className = 'btn-popup no-show-button';
-  noShowBtn.setAttribute('data-appointment-id', appointment.id);
-  // crea l'icona in modo sicuro
-  const xIcon = document.createElement('i');
-  xIcon.className = 'bi bi-x';
-  // svuota contenuto precedente e aggiungi l'icona
-  noShowBtn.innerHTML = '';
-  noShowBtn.appendChild(xIcon);
-  block.appendChild(noShowBtn);
 
-new bootstrap.Tooltip(noShowBtn, {
-  placement: 'right',
-  fallbackPlacements: ['left'],
-  container: 'body',
-  boundary: 'window'
-});
-  
   const resizeHandle = document.createElement('div');
   resizeHandle.className = 'resize-handle';
   block.appendChild(resizeHandle);
-  
-  if (!block.classList.contains('note-off')) {
-    // Crea il pulsante cestino
-    const bgColor = block.getAttribute('data-colore') || window.getComputedStyle(block).backgroundColor || '#fff';
-    const iconColor = computeFontColor(bgColor);
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'btn-popup delete-appointment-block';
-    const delIcon = document.createElement('i');
-    delIcon.className = 'bi bi-trash';
-    delIcon.style.fontSize = '1.5em';
-    delIcon.style.color = 'black';
-    deleteBtn.innerHTML = '';
-    deleteBtn.appendChild(delIcon);
-    deleteBtn.style.position = 'absolute';
-    deleteBtn.style.top = '4px';
-    deleteBtn.style.left = '4px';
-    deleteBtn.style.backgroundColor = 'transparent';
 
-    // Gestione del click sul pulsante di elimina
-    deleteBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const appointmentId = block.getAttribute('data-appointment-id');
-        if (!appointmentId) return;
-
-        // Rileva modalità desktop "default" (non touch e schermo ampio)
-        const isTouchUi = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch (_) { return document.body.classList.contains('touch-ui'); } })();
-        const isDesktopDefault = !isTouchUi && window.innerWidth >= 1200;
-
-        if (isDesktopDefault) {
-            // Memorizza il target corrente globalmente per il modal
-            window.__deleteOrNoShow_current = {
-                appointmentId: appointmentId,
-                blockSelector: `.appointment-block[data-appointment-id="${appointmentId}"]`
-            };
-
-            // Se il modal esiste, aprilo; altrimenti fallback alla cancellazione diretta
-            const modalEl = document.getElementById('DeleteOrNoShowModal');
-            if (modalEl) {
-                if (!window.__DeleteOrNoShow_modal_instance) {
-                    window.__DeleteOrNoShow_modal_instance = new bootstrap.Modal(modalEl, { keyboard: false });
-                }
-                // Aggiorna eventuali attribute utili per debugging/visual
-                modalEl.setAttribute('data-appointment-id', appointmentId);
-                window.__DeleteOrNoShow_modal_instance.show();
-                return;
-            }
-            // se non troviamo modal -> fallback al comportamento diretto
-        }
-
-        // Comportamento legacy: esegui la cancellazione immediata (usato in touch/mobile o se modal non presente)
-        deleteBtn.disabled = true;
-        deleteAppointment(appointmentId)
-          .then(() => {
-            if (typeof fetchCalendarData === 'function') fetchCalendarData();
-          })
-          .catch(err => {
-            console.error('Eliminazione fallita:', err);
-            deleteBtn.disabled = false;
-            alert('Eliminazione fallita: ' + (err.message || err));
-          });
-    });
-
-    block.appendChild(deleteBtn);
-}
-
-  if (noShowBtn) {
-    const blockHeight = block.offsetHeight || parseInt(block.style.height, 10) || 60;
-    noShowBtn.style.height = `${blockHeight}px`;
-    noShowBtn.style.lineHeight = `${blockHeight}px`;
-    noShowBtn.style.fontSize = `${Math.max(16, Math.floor(blockHeight * 0.5))}px`;
-    noShowBtn.style.display = 'flex';
-    noShowBtn.style.alignItems = 'center';
-    noShowBtn.style.justifyContent = 'center';
-  }
+  const chainBtn = document.createElement('button');
+  chainBtn.className = 'btn-chain-blocks';
+  chainBtn.style.position = 'absolute';
+  chainBtn.style.bottom = '4px';
+  chainBtn.style.right = '4px';
+  chainBtn.style.display = 'none';
+  chainBtn.setAttribute('title', 'Collega blocchi appuntamento consecutivi');
+  chainBtn.onclick = function() {
+    if (typeof window.chainBlocks === 'function') window.chainBlocks();
+  };
+  block.appendChild(chainBtn);
 
   return block;
 }
@@ -7384,11 +7826,12 @@ const groupBlocks = Array.from(new Set([...blocksInCell, ...contiguousBlocks]))
     
     const appointmentId = block.getAttribute('data-appointment-id');
     if (!appointmentId) return;
+    if (typeof isAppointmentMutationPending === 'function' && isAppointmentMutationPending(appointmentId)) return;
     
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
     
     // Aggiorna il backend per questo blocco
-    fetch(`/calendar/update_status/${appointmentId}`, {
+    withAppointmentMutationLock(appointmentId, () => fetch(`/calendar/update_status/${appointmentId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -7452,11 +7895,8 @@ const groupBlocks = Array.from(new Set([...blocksInCell, ...contiguousBlocks]))
       
       updateBlinkForBlock(block);
       
-      // Se il blocco passa da stato 3 a 1, ricarica la pagina (se richiesto)
-      if (currentStatus === 3 && newStatus === 1) {
-        location.reload();
-      }
-    })
+      // Nessun reload: il blocco è già aggiornato in-place.
+    }), { type: 'status' })
     .catch(error => {
       console.error("Errore nell'aggiornamento di my-spia per block:", error);
       const spia = block.querySelector('.my-spia');
@@ -7740,8 +8180,9 @@ const groupBlocks = Array.from(new Set([...blocksInCell, ...contiguousBlocks]));
       // Invia la richiesta per aggiornare lo stato nel backend
 const bgColor = block.getAttribute('data-colore') || window.getComputedStyle(block).backgroundColor || "#fff";
 const fontColor = block.getAttribute('data-colore_font') || window.getComputedStyle(block).color || "#000";
+if (typeof isAppointmentMutationPending === 'function' && isAppointmentMutationPending(appointmentId)) return;
 
-fetch(`/calendar/update_status/${appointmentId}`, {
+withAppointmentMutationLock(appointmentId, () => fetch(`/calendar/update_status/${appointmentId}`, {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -7773,7 +8214,8 @@ fetch(`/calendar/update_status/${appointmentId}`, {
 })
 .catch(error => {
   console.error("Errore aggiornamento no-show per id:", appointmentId, error);
-});
+}), { type: 'status' })
+;
     });
   
     // Nascondi il tooltip dopo il click
@@ -7912,7 +8354,8 @@ document.addEventListener('click', function(e) {
     }
 
     // Aggiorna lo stato sul backend per ogni blocco
-    fetch(`/calendar/update_status/${appointmentId}`, {
+    if (typeof isAppointmentMutationPending === 'function' && isAppointmentMutationPending(appointmentId)) return;
+    withAppointmentMutationLock(appointmentId, () => fetch(`/calendar/update_status/${appointmentId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -7931,7 +8374,7 @@ document.addEventListener('click', function(e) {
     .catch(error => {
       console.error("Errore aggiornamento (no-show) per blocco:", appointmentId, error);
       if (spia) spia.setAttribute('title', tooltips[currentStatus]);
-    });
+    }), { type: 'status' });
   });
 }, true);
 
@@ -8104,7 +8547,8 @@ function setNoShow(appointmentId) {
     }
     
     // Invia la richiesta per aggiornare lo stato del blocco
-    fetch(`/calendar/update_status/${id}`, {
+    if (typeof isAppointmentMutationPending === 'function' && isAppointmentMutationPending(id)) return;
+    withAppointmentMutationLock(id, () => fetch(`/calendar/update_status/${id}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -8129,7 +8573,7 @@ function setNoShow(appointmentId) {
       if (spia) {
         spia.setAttribute('title', tooltips[baseStatus]);
       }
-    });
+    }), { type: 'status' });
   });
 }
 
@@ -8398,13 +8842,17 @@ function moveBlocksToTarget() {
       }
     }, 300);
 
-    // NUOVO: Aggiorna i dati per evitare problemi visivi (se persistono problemi visivi ricarica dopo un breve timeout)
-    setTimeout(() => location.reload(), 500);
+    // Aggiorna i dati senza reload forzato
+    if (typeof fetchCalendarData === 'function') {
+      setTimeout(() => fetchCalendarData(), 250);
+    }
   })
   .catch(error => {
     console.error("Errore durante lo spostamento dei blocchi:", error);
     alert("Errore durante il salvataggio. La pagina verrà ricaricata.");
-    setTimeout(() => location.reload(), 1000);
+    if (typeof fetchCalendarData === 'function') {
+      setTimeout(() => fetchCalendarData(), 300);
+    }
   });
 }
 
@@ -8550,6 +8998,11 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
   window.selectedClientIdNav = null;
   window.selectedClientNameNav = "";
   window.pseudoBlocks = [];
+  window.commonPseudoBlockColor = null;
+  window.originBlockColor = null;
+  window.addServiceStatus = undefined;
+  document.body.classList.remove('pseudo-active');
+  document.body.classList.remove('force-popup-buttons');
 
   const clientSearchInputNav = document.getElementById('clientSearchInputNav');
   if (clientSearchInputNav) {
@@ -8586,10 +9039,7 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
   // Persist state pulito
   try { saveNavigatorState(); } catch(e) { /* ignore */ }
 
-  // NEW: ricarica SOLO quando lo svuotamento è manuale (tasto "Svuota")
-  if (confirmRestore) {
-    setTimeout(() => location.reload(), 50);
-  }
+  // Nessun reload: stato navigator già resettato in-place.
 }
 
 window.addCutSourceHighlight = addCutSourceHighlight;
@@ -8678,7 +9128,9 @@ async function copyAsNewPseudoBlock(block, isCut = false) {
   const _rawClientName = block.querySelector('.appointment-content .client-name a')?.textContent || block.getAttribute('data-client-nome') || '';
   const clientName = String(_rawClientName).replace(/\s+/g, ' ').trim() || 'Cliente';
   const serviceId = block.getAttribute('data-service-id');
-  const serviceName = block.getAttribute('data-service-name') || block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent || "Servizio";
+  const serviceName = block.getAttribute('data-service-name') || 'Servizio';
+  const serviceTagFromAttr = (block.getAttribute('data-service-tag') || '').toString().trim();
+  const serviceTagFromUi = (block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent || '').toString().trim();
   const duration = parseInt(block.getAttribute('data-duration'), 10) || 15;
   const color = block.getAttribute('data-colore') || '#FFFFFF';
   let note = block.getAttribute('data-note') || '';
@@ -8776,12 +9228,8 @@ async function copyAsNewPseudoBlock(block, isCut = false) {
     }
   }
 
-  // Ottieni il tag del servizio
-  let serviceTag = serviceName;
-  const fullServiceText = block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent;
-  if (fullServiceText && fullServiceText.includes(' - ')) {
-    serviceTag = fullServiceText.split(' - ')[0].trim();
-  }
+  // Ottieni il tag del servizio: usa prima dato esplicito, poi testo UI, infine fallback.
+  let serviceTag = serviceTagFromAttr || serviceTagFromUi || serviceName;
 
   // Crea il nuovo pseudo-blocco
   const newPseudoBlock = {
@@ -8838,6 +9286,7 @@ function addCutSourceHighlight(cell) {
 function clearCutSourceHighlights() {
   try {
     document.querySelectorAll('.selectable-cell.cut-source').forEach(c => c.classList.remove('cut-source'));
+    document.querySelectorAll('.selectable-cell .cut-source-overlay').forEach(ov => ov.remove());
     if (window.__cutSourceCellsSet && typeof window.__cutSourceCellsSet.clear === 'function') {
       window.__cutSourceCellsSet.clear();
     }
@@ -8899,11 +9348,11 @@ function addCutSourceHighlightRange(block) {
 }
 
 async function cutAsNewPseudoBlock(block) {
-  if (!block) return;
+  if (!block) return false;
   const appointmentId = block.getAttribute('data-appointment-id');
   if (!appointmentId) {
     console.error("ID appuntamento mancante");
-    return;
+    return false;
   }
 
   // Evidenzia tutte le celle coperte dal blocco
@@ -8919,7 +9368,8 @@ async function cutAsNewPseudoBlock(block) {
     client_id: block.getAttribute('data-client-id') || null,
     client_name: String(block.getAttribute('data-client-nome') || block.querySelector('.appointment-content .client-name a')?.textContent || '').replace(/\s+/g,' ').trim(),
     service_id: block.getAttribute('data-service-id') || null,
-    service_name: block.getAttribute('data-service-name') || block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent || '',
+    service_name: block.getAttribute('data-service-name') || '',
+    service_tag: block.getAttribute('data-service-tag') || block.querySelector('.appointment-content p:nth-child(2) strong')?.textContent || '',
     duration: parseInt(block.getAttribute('data-duration') || '15', 10),
     operator_id: block.getAttribute('data-operator-id') || null,
     hour: block.getAttribute('data-hour') || null,
@@ -8934,7 +9384,7 @@ async function cutAsNewPseudoBlock(block) {
     pacchettoNome: pacchettoNome
   };
 
-await copyAsNewPseudoBlock(block, true);
+  await copyAsNewPseudoBlock(block, true);
 
   try {
     if (!Array.isArray(window.pseudoBlocks)) window.pseudoBlocks = [];
@@ -8967,69 +9417,105 @@ await copyAsNewPseudoBlock(block, true);
     console.warn('cutAsNewPseudoBlock: failed to persist backup', e);
   }
 
-  const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-  fetch(`/calendar/delete/${appointmentId}`, {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'X-CSRFToken': csrfToken
-    }
-  })
-  .then(response => {
-    if (response.ok) {
+  const originalParent = block.parentNode;
+  const originalNextSibling = block.nextSibling;
+  if (originalParent) {
+    try {
       block.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(elem => {
         const tooltipInstance = bootstrap.Tooltip.getInstance(elem);
         if (tooltipInstance) tooltipInstance.dispose();
       });
-      const notePopup = document.querySelector(`.note-popup[data-appointment-id="${appointmentId}"]`);
-      if (notePopup) notePopup.remove();
-      block.remove();
-      arrangeBlocksInCell(block.parentNode);
-      saveNavigatorState();
-    } else {
-      return response.text().then(text => { 
-        throw new Error(text || "Errore durante l'eliminazione");
-      });
+    } catch (_) {}
+    originalParent.removeChild(block);
+    try { arrangeBlocksInCell(originalParent); } catch (_) {}
+  }
+
+  const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+  try {
+    const response = await fetch(`/calendar/delete/${appointmentId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      }
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || "Errore durante l'eliminazione");
     }
-  })
-  .catch(error => {
+
+    const notePopup = document.querySelector(`.note-popup[data-appointment-id="${appointmentId}"]`);
+    if (notePopup) notePopup.remove();
+    saveNavigatorState();
+    return true;
+  } catch (error) {
     console.error("Errore:", error);
+
+    if (originalParent) {
+      if (originalNextSibling && originalNextSibling.parentNode === originalParent) {
+        originalParent.insertBefore(block, originalNextSibling);
+      } else {
+        originalParent.appendChild(block);
+      }
+      try { arrangeBlocksInCell(originalParent); } catch (_) {}
+    }
+
+    try {
+      if (Array.isArray(window.pseudoBlocks)) {
+        const idx = window.pseudoBlocks.findIndex(pb =>
+          String(pb?._origin_appointment_id || '') === String(appointmentId) ||
+          String(pb?._origin_backup?.appointment_id || '') === String(appointmentId)
+        );
+        if (idx >= 0) {
+          window.pseudoBlocks.splice(idx, 1);
+          renderPseudoBlocksList();
+        }
+      }
+      removeCutBlockBackupByAppointmentId(appointmentId);
+      refreshCutSourceHighlightsFromStorage();
+      saveNavigatorState();
+    } catch (_) {}
+
     alert(error.message);
-  });
+    return false;
+  }
 }
 
 function copyAndPasteBlockOff() {
   // Aggiungi un gestore di eventi a tutti i blocchi OFF esistenti
   document.querySelectorAll('.appointment-block.note-off').forEach(block => {
-    // Aggiungi un pulsante di copia direttamente nei blocchi OFF
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'btn-popup copy-off-block';
-    
-    // AGGIUNTA: Tooltip Bootstrap
-    copyBtn.setAttribute('data-bs-toggle', 'tooltip');
-    copyBtn.setAttribute('data-bs-placement', 'top');
-    copyBtn.setAttribute('title', 'Copia blocco OFF');
+    // Aggiungi (una sola volta) un pulsante di copia direttamente nei blocchi OFF
+    let copyBtn = block.querySelector('.copy-off-block');
+    if (!copyBtn) {
+      copyBtn = document.createElement('button');
+      copyBtn.className = 'btn-popup copy-off-block';
 
-    const icon = document.createElement('i');
-    icon.className = 'bi bi-files';
-    icon.style.fontSize = '1.5em';
-    icon.style.color = 'black';
-    copyBtn.appendChild(icon);
-    
-    copyBtn.style.position = 'absolute';
-    copyBtn.style.top = '4px';
-    copyBtn.style.right = '4px';
-    copyBtn.style.backgroundColor = 'transparent';
-    
-    // Evita duplicati
-    if (!block.querySelector('.copy-off-block')) {
+      // AGGIUNTA: Tooltip Bootstrap
+      copyBtn.setAttribute('data-bs-toggle', 'tooltip');
+      copyBtn.setAttribute('data-bs-placement', 'top');
+      copyBtn.setAttribute('title', 'Copia blocco OFF');
+
+      const icon = document.createElement('i');
+      icon.className = 'bi bi-files';
+      icon.style.fontSize = '1.5em';
+      icon.style.color = 'black';
+      copyBtn.appendChild(icon);
+
+      copyBtn.style.position = 'absolute';
+      copyBtn.style.top = '4px';
+      copyBtn.style.right = '4px';
+      copyBtn.style.backgroundColor = 'transparent';
+
       block.appendChild(copyBtn);
-      // Inizializza tooltip
       if (window.bootstrap && window.bootstrap.Tooltip) {
         new window.bootstrap.Tooltip(copyBtn);
       }
     }
-    
+
+    if (copyBtn.dataset.offCopyBound === '1') return;
+    copyBtn.dataset.offCopyBound = '1';
+
     // Gestore per il click sul pulsante di copia
     copyBtn.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -9061,94 +9547,242 @@ function copyAndPasteBlockOff() {
       setTimeout(() => msg.remove(), 400);
     });
   });
-  
-  // Gestisci il click sulle celle per incollare il blocco OFF
-  document.querySelectorAll('.selectable-cell').forEach(cell => {
-    cell.addEventListener('click', function(e) {
-      
+
+  // Gestisci il click sulle celle per incollare il blocco OFF (bind UNA sola volta)
+  if (window.__offPasteCellHandlerBound) return;
+  window.__offPasteCellHandlerBound = true;
+
+  document.addEventListener('click', function(e) {
+    const cell = e.target.closest('.selectable-cell');
+    if (!cell) return;
+
     // Verifica se siamo in modalità incolla blocco OFF
-    if (document.body.classList.contains('paste-off-block-mode')) {
-      e.stopPropagation(); // Impedisci altri handler
-      e.preventDefault();
+    if (!document.body.classList.contains('paste-off-block-mode')) return;
 
-      // Recupera i dati del blocco OFF
-      const offBlockDataStr = localStorage.getItem('copiedOffBlock');
-      if (!offBlockDataStr) {
-        document.body.classList.remove('paste-off-block-mode');
-        return;
-      }
+    // Evita doppio invio se un altro handler ha già avviato la creazione
+    if (window.__offPasteInFlight) return;
 
-      const offBlockData = JSON.parse(offBlockDataStr);
+    e.stopPropagation();
+    e.preventDefault();
 
-      // Verifica che sia effettivamente un blocco OFF
-      if (offBlockData.type !== 'OFF_BLOCK') {
-        document.body.classList.remove('paste-off-block-mode');
-        return;
-      }
-        
-        // Raccogli i dati necessari per creare il nuovo blocco OFF
-        const operatorId = cell.getAttribute('data-operator-id');
-        const hour = cell.getAttribute('data-hour');
-        const minute = cell.getAttribute('data-minute');
-        const date = cell.getAttribute('data-date') || selectedDate;
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        
-        
-      // Prepara i dati per la richiesta
-      const payload = {
-        client_id: null,
-        service_id: null,
-        operator_id: operatorId,
-        appointment_date: date,
-        start_time: `${hour}:${minute}`,
-        duration: offBlockData.duration,
-        colore: offBlockData.color,
-        note: offBlockData.note,
-        titolo: offBlockData.note
-      };
-
-      // Invia la richiesta per creare il nuovo blocco OFF
-      fetch('/calendar/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': csrfToken
-        },
-        body: JSON.stringify(payload)
-      })
-      .then(resp => {
-        if (!resp.ok) {
-          return resp.json().then(err => {
-            throw new Error(err.error || "Errore nella creazione del blocco OFF");
-          });
-        }
-        return resp.json();
-      })
-      .then(appointment => {
-        console.log("Blocco OFF creato:", appointment);
-        document.body.classList.remove('paste-off-block-mode');
-        location.reload();
-      })
-      .catch(err => {
-        console.error(err);
-        alert("Errore nella creazione del blocco OFF: " + err.message);
-        document.body.classList.remove('paste-off-block-mode');
-      });
+    // Recupera i dati del blocco OFF
+    const offBlockDataStr = localStorage.getItem('copiedOffBlock');
+    if (!offBlockDataStr) {
+      document.body.classList.remove('paste-off-block-mode');
+      return;
     }
+
+    const offBlockData = JSON.parse(offBlockDataStr);
+    if (offBlockData.type !== 'OFF_BLOCK') {
+      document.body.classList.remove('paste-off-block-mode');
+      return;
+    }
+
+    const operatorId = cell.getAttribute('data-operator-id');
+    const hour = cell.getAttribute('data-hour');
+    const minute = cell.getAttribute('data-minute');
+    const date = cell.getAttribute('data-date') || selectedDate;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+    const payload = {
+      client_id: null,
+      service_id: null,
+      operator_id: operatorId,
+      appointment_date: date,
+      start_time: `${hour}:${minute}`,
+      duration: offBlockData.duration,
+      colore: offBlockData.color,
+      note: offBlockData.note,
+      titolo: offBlockData.note
+    };
+
+    // Chiudi subito la modalità per evitare doppi click durante la request
+    document.body.classList.remove('paste-off-block-mode');
+    window.__offPasteInFlight = true;
+
+    fetch('/calendar/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify(payload)
+    })
+    .then(resp => {
+      if (!resp.ok) {
+        return resp.json().then(err => {
+          throw new Error(err.error || "Errore nella creazione del blocco OFF");
+        });
+      }
+      return resp.json();
+    })
+    .then(appointment => {
+      console.log("Blocco OFF creato:", appointment);
+      if (typeof createAppointmentBlockElement === 'function') {
+        const apptHour = parseInt(hour, 10);
+        const apptMinute = parseInt(minute, 10);
+        const newBlock = createAppointmentBlockElement(appointment, operatorId, apptHour, apptMinute);
+        cell.appendChild(newBlock);
+        if (typeof arrangeBlocksInCell === 'function') arrangeBlocksInCell(cell);
+        if (typeof initOffBlockUI === 'function') initOffBlockUI(newBlock);
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Errore nella creazione del blocco OFF: " + err.message);
+    })
+    .finally(() => {
+      window.__offPasteInFlight = false;
+    });
   }, true);
-});
+}
+
+function initOffDeleteButton(block) {
+  if (!block || !block.classList || !block.classList.contains('note-off')) return;
+
+  let deleteBtn = block.querySelector('.delete-off-block');
+  if (!deleteBtn) {
+    deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn-popup delete-off-block';
+    deleteBtn.setAttribute('data-bs-toggle', 'tooltip');
+    deleteBtn.setAttribute('data-bs-placement', 'top');
+    deleteBtn.setAttribute('title', 'Elimina blocco OFF');
+
+    const icon = document.createElement('i');
+    icon.className = 'bi bi-trash';
+    icon.style.fontSize = '1.5em';
+    icon.style.color = 'black';
+    deleteBtn.appendChild(icon);
+
+    deleteBtn.style.position = 'absolute';
+    deleteBtn.style.top = '5px';
+    deleteBtn.style.left = '4px';
+    deleteBtn.style.backgroundColor = 'transparent';
+    block.appendChild(deleteBtn);
+
+    if (window.bootstrap && window.bootstrap.Tooltip) {
+      new window.bootstrap.Tooltip(deleteBtn);
+    }
+  }
+
+  if (deleteBtn.dataset.offDeleteBound === '1') return;
+  deleteBtn.dataset.offDeleteBound = '1';
+
+  deleteBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+
+    const appointmentId = block.getAttribute('data-appointment-id');
+    deleteBtn.disabled = true;
+
+    if (appointmentId) {
+      deleteAppointment(appointmentId)
+        .then(() => {
+          if (typeof fetchCalendarData === 'function') fetchCalendarData();
+        })
+        .catch(err => {
+          console.error('Eliminazione blocco OFF fallita:', err);
+          deleteBtn.disabled = false;
+          alert('Eliminazione fallita: ' + (err.message || err));
+        });
+    }
+
+    if (window.pseudoBlocks && Array.isArray(window.pseudoBlocks)) {
+      const index = window.pseudoBlocks.findIndex(pb =>
+        !pb.clientId && !pb.serviceId &&
+        pb.note === (block.getAttribute('data-note') || "")
+      );
+      if (index !== -1) {
+        window.pseudoBlocks.splice(index, 1);
+        renderPseudoBlocksList();
+      }
+    }
+
+    if (!appointmentId) {
+      block.remove();
+    }
+  });
+}
+
+function initOffBlockTitle(block) {
+  if (!block || !block.classList || !block.classList.contains('note-off')) return;
+
+  try {
+    const fullText = String(block.getAttribute('data-note') || block.getAttribute('data-titolo') || 'BLOCCO OFF');
+    const MAX_CHARS = 12;
+    const displayText = fullText.length > MAX_CHARS ? (fullText.slice(0, MAX_CHARS) + '...') : fullText;
+
+    let titleEl = block.querySelector('.off-block-title');
+    if (!titleEl) {
+      titleEl = document.createElement('span');
+      titleEl.className = 'off-block-title';
+      block.appendChild(titleEl);
+    }
+
+    titleEl.textContent = displayText;
+    titleEl.setAttribute('data-full-note', fullText);
+    titleEl.setAttribute('title', fullText);
+
+    titleEl.style.position = 'absolute';
+    titleEl.style.top = '50%';
+    titleEl.style.left = '50%';
+    titleEl.style.transform = 'translate(-50%, -50%)';
+    titleEl.style.fontSize = '20px';
+    titleEl.style.fontWeight = 'bold';
+    titleEl.style.color = '#474646';
+    titleEl.style.textAlign = 'center';
+    titleEl.style.textShadow = '1px 1px 2px rgba(17,16,16,0.2)';
+    titleEl.style.cursor = 'pointer';
+    titleEl.style.zIndex = '1000';
+    titleEl.style.pointerEvents = 'auto';
+    titleEl.style.whiteSpace = 'nowrap';
+    titleEl.style.overflow = 'hidden';
+    titleEl.style.textOverflow = 'ellipsis';
+    titleEl.style.maxWidth = 'calc(100% - 12px)';
+    titleEl.style.display = 'inline-block';
+    titleEl.style.boxSizing = 'border-box';
+    titleEl.style.padding = '0 2px';
+
+    titleEl.removeEventListener('click', titleEl._offClickHandler);
+    titleEl._offClickHandler = function (e) {
+      e.stopPropagation();
+      if (window.openNoteModal) window.openNoteModal(block);
+    };
+    titleEl.addEventListener('click', titleEl._offClickHandler, true);
+  } catch (err) {
+    console.warn('init off-block-title failed for block', block, err);
+  }
+}
+
+function initOffBlockUI(block) {
+  if (!block || !block.classList || !block.classList.contains('note-off')) return;
+  initOffDeleteButton(block);
+  initOffBlockTitle(block);
+}
+
+function initAllOffBlocksUI() {
+  document.querySelectorAll('.appointment-block.note-off').forEach(initOffBlockUI);
 }
 
 // Chiama la funzione all'avvio per inizializzare i comportamenti
-document.addEventListener('DOMContentLoaded', copyAndPasteBlockOff);
+document.addEventListener('DOMContentLoaded', function() {
+  copyAndPasteBlockOff();
+  initAllOffBlocksUI();
+});
 
 // Aggiungi osservatore per inizializzare i pulsanti anche sui blocchi aggiunti dinamicamente
 const offBlockObserver = new MutationObserver((mutations) => {
   mutations.forEach(mutation => {
     if (mutation.addedNodes && mutation.addedNodes.length > 0) {
       mutation.addedNodes.forEach(node => {
-        if (node.nodeType === 1 && node.classList && node.classList.contains('note-off')) {
-          copyAndPasteBlockOff();
+        if (node.nodeType === 1 && node.classList) {
+          if (node.classList.contains('note-off')) {
+            copyAndPasteBlockOff();
+            initOffBlockUI(node);
+          }
+          node.querySelectorAll?.('.appointment-block.note-off')?.forEach(function(offNode) {
+            copyAndPasteBlockOff();
+            initOffBlockUI(offNode);
+          });
         }
       });
     }
@@ -9163,137 +9797,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.appointment-block.note-off').forEach(block => {
-    if (!block.querySelector('.delete-off-block')) {
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'btn-popup delete-off-block';
-      
-      // AGGIUNTA: Tooltip Bootstrap
-      deleteBtn.setAttribute('data-bs-toggle', 'tooltip');
-      deleteBtn.setAttribute('data-bs-placement', 'top');
-      deleteBtn.setAttribute('title', 'Elimina blocco OFF');
-
-      const icon = document.createElement('i');
-      icon.className = 'bi bi-trash';
-      icon.style.fontSize = '1.5em';
-      icon.style.color = 'black';
-      deleteBtn.appendChild(icon);
-      
-      deleteBtn.style.position = 'absolute';
-      deleteBtn.style.top = '5px';
-      deleteBtn.style.left = '4px';
-      deleteBtn.style.backgroundColor = 'transparent'
-      
-      // Aggiungi il pulsante al blocco OFF
-      block.appendChild(deleteBtn);
-      
-      // Inizializza tooltip
-      if (window.bootstrap && window.bootstrap.Tooltip) {
-        new window.bootstrap.Tooltip(deleteBtn);
-      }
-      
-      // Gestione del click sul pulsante di elimina
-      deleteBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        
-        // Se il blocco ha un ID, elimina anche dal database
-        const appointmentId = block.getAttribute('data-appointment-id');
-        deleteBtn.disabled = true;
-        if (appointmentId) {
-          deleteAppointment(appointmentId)
-            .then(() => {
-              // aggiorna i dati dal server senza mostrare reload visibile
-              if (typeof fetchCalendarData === 'function') fetchCalendarData();
-            })
-            .catch(err => {
-              console.error('Eliminazione blocco OFF fallita:', err);
-              deleteBtn.disabled = false;
-              alert('Eliminazione fallita: ' + (err.message || err));
-            });
-        }
-        
-        // Rimuovi il blocco dagli pseudo-blocchi, se presente
-if (window.pseudoBlocks && Array.isArray(window.pseudoBlocks)) {
-  const index = window.pseudoBlocks.findIndex(pb =>
-    !pb.clientId && !pb.serviceId &&
-    pb.note === (block.getAttribute('data-note') || "")
-  );
-  if (index !== -1) {
-    window.pseudoBlocks.splice(index, 1);
-    renderPseudoBlocksList();
-  }
-}
-        
-        // Rimuovi il blocco dal DOM
-        if (!appointmentId) {
-          block.remove();
-        }
-      });
-    }
-  });
-});
-
-document.addEventListener('DOMContentLoaded', function() {
-  // Per ogni blocco OFF, aggiungi l'elemento titolo se non esiste già
-  document.querySelectorAll('.appointment-block.note-off').forEach(block => {
-    try {
-      const fullText = String(block.getAttribute('data-note') || block.getAttribute('data-titolo') || 'BLOCCO OFF');
-      const MAX_CHARS = 12;
-      const displayText = fullText.length > MAX_CHARS ? (fullText.slice(0, MAX_CHARS) + '...') : fullText;
-
-      let titleEl = block.querySelector('.off-block-title');
-      if (!titleEl) {
-        titleEl = document.createElement('span');
-        titleEl.className = 'off-block-title';
-        block.appendChild(titleEl);
-      }
-
-      // Testo visualizzato (troncato)
-      titleEl.textContent = displayText;
-      // Conserva il testo completo per modal/tooltip/debug
-      titleEl.setAttribute('data-full-note', fullText);
-      titleEl.setAttribute('title', fullText);
-
-      // Stili per forzare ellipsis e centro, compatibili con layout esistente
-      titleEl.style.position = 'absolute';
-      titleEl.style.top = '50%';
-      titleEl.style.left = '50%';
-      titleEl.style.transform = 'translate(-50%, -50%)';
-      titleEl.style.fontSize = '20px';
-      titleEl.style.fontWeight = 'bold';
-      titleEl.style.color = '#474646';
-      titleEl.style.textAlign = 'center';
-      titleEl.style.textShadow = '1px 1px 2px rgba(17,16,16,0.2)';
-      titleEl.style.cursor = 'pointer';
-      titleEl.style.zIndex = '1000';
-      titleEl.style.pointerEvents = 'auto';
-
-      // IMPORTANT: constraints per evitare overflow del testo oltre i bordi del blocco
-      titleEl.style.whiteSpace = 'nowrap';
-      titleEl.style.overflow = 'hidden';
-      titleEl.style.textOverflow = 'ellipsis';
-      // lascia un piccolo padding interno e limita la larghezza al contenitore
-      titleEl.style.maxWidth = 'calc(100% - 12px)';
-      titleEl.style.display = 'inline-block';
-      titleEl.style.boxSizing = 'border-box';
-      titleEl.style.padding = '0 2px';
-
-      // Click sul titolo -> apre il modal con la nota completa
-      // rimuovo listener duplicati prima di aggiungerne uno nuovo
-      titleEl.removeEventListener('click', titleEl._offClickHandler);
-      titleEl._offClickHandler = function (e) {
-        e.stopPropagation();
-        openNoteModal(block);
-      };
-      titleEl.addEventListener('click', titleEl._offClickHandler, true);
-
-    } catch (err) {
-      // Non bloccare l'esecuzione in caso di errore su un singolo blocco
-      console.warn('init off-block-title failed for block', block, err);
-    }
-  });
-});
 
 function saveNavigatorState() {
   try {
@@ -9527,33 +10030,8 @@ document.addEventListener('DOMContentLoaded', function() {
       if (popupBtns) popupBtns.style.display = '';
     };
 
-    // Rimuovi onclick precedente se presente
+    // Click gestito dal listener delegato globale (unico), qui evitiamo bind duplicati.
     deleteBtn.onclick = null;
-
-    // Aggiungi listener per aprire modal in desktop default
-    deleteBtn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      const appointmentId = block.getAttribute('data-appointment-id');
-      if (!appointmentId) return;
-
-      // Rileva modalità desktop "default" (non touch e schermo ampio)
-      const isTouchUi = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch (_) { return document.body.classList.contains('touch-ui'); } })();
-      const isDesktopDefault = !isTouchUi && window.innerWidth >= 1200;
-
-      if (isDesktopDefault) {
-        // Apri il modal
-        const modalEl = document.getElementById('DeleteOrNoShowModal');
-        if (modalEl && typeof bootstrap !== 'undefined') {
-          window.__deleteOrNoShow_current = { appointmentId: appointmentId, sourceElement: deleteBtn };
-          window.__DeleteOrNoShow_modal_instance = window.__DeleteOrNoShow_modal_instance || new bootstrap.Modal(modalEl, { backdrop: 'static' });
-          try { window.__DeleteOrNoShow_modal_instance.show(); } catch (e) { console.warn('show DeleteOrNoShow failed', e); }
-          return;
-        }
-      }
-
-      // Fallback
-      deleteAppointment(appointmentId);
-    });
   });
 });
 
@@ -9900,9 +10378,13 @@ function aggiornaStatoAppuntamenti(ids) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.btn-popup.whatsapp-btn').forEach(function(btn) {
-    btn.addEventListener('click', async function(e) {
-      e.stopPropagation();
+  document.addEventListener('click', async function(e) {
+    const btn = e.target.closest('.btn-popup.whatsapp-btn');
+    if (!btn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
 
       // FONTE UNICA: blocco genitore del bottone
       const block = btn.closest('.appointment-block');
@@ -10081,8 +10563,7 @@ if (ordered.length) servizi_text = ordered.map(s => `• ${s}`).join('\n');
       }
 
       window.open(url, '_blank');
-    });
-  });
+  }, true);
 });
 
 function scrollToHourMinute(hour, minute) {
@@ -10163,35 +10644,6 @@ document.addEventListener('DOMContentLoaded', function() {
       scrollToHourMinute(hour, minute);
     }, 90);
   }
-});
-
-document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.appointment-block').forEach(function(block) {
-    block.addEventListener('mouseenter', function() {
-      // Trova la cella contenitore
-      const cell = block.closest('td.selectable-cell');
-      if (!cell) return;
-      // Conta i blocchi nella cella
-      const blocksInCell = cell.querySelectorAll('.appointment-block');
-      if (blocksInCell.length === 1) {
-        // Solo se è l'unico blocco nella cella
-        block.style.zIndex = 9999;
-        const popups = block.querySelectorAll('.popup-buttons, .btn-popup.whatsapp-btn');
-        popups.forEach(p => p.style.zIndex = 10000);
-      }
-    });
-    block.addEventListener('mouseleave', function() {
-      // Trova la cella contenitore
-      const cell = block.closest('td.selectable-cell');
-      if (!cell) return;
-      const blocksInCell = cell.querySelectorAll('.appointment-block');
-      if (blocksInCell.length === 1) {
-        block.style.zIndex = '';
-        const popups = block.querySelectorAll('.popup-buttons, .btn-popup.whatsapp-btn');
-        popups.forEach(p => p.style.zIndex = '');
-      }
-    });
-  });
 });
 
 document.addEventListener('shown.bs.tooltip', function (e) {
@@ -11377,8 +11829,25 @@ document.addEventListener('DOMContentLoaded', function () {
       if (failed.length > 0) {
         console.warn('Alcuni blocchi non sono stati eliminati:', failed);
       }
-      // Reload dopo eliminazione multipla
-      setTimeout(function() { location.reload(); }, 100);
+      // Nessun reload: riallinea il layout delle celle coinvolte
+      var touchedCells = new Set();
+      allIds.forEach(function(aid) {
+        var selector = '.selectable-cell .appointment-block[data-appointment-id="' + aid + '"]';
+        var removed = document.querySelector(selector);
+        var parentCell = removed ? removed.closest('.selectable-cell') : null;
+        if (parentCell) touchedCells.add(parentCell);
+      });
+
+      // In caso i blocchi siano già rimossi, ricalcola globalmente in modo sicuro
+      if (touchedCells.size === 0) {
+        document.querySelectorAll('.selectable-cell').forEach(function(cell) {
+          if (typeof arrangeBlocksInCell === 'function') arrangeBlocksInCell(cell);
+        });
+      } else {
+        touchedCells.forEach(function(cell) {
+          if (typeof arrangeBlocksInCell === 'function') arrangeBlocksInCell(cell);
+        });
+      }
     });
 
     window.__deleteOrNoShow_current = null;

@@ -2157,9 +2157,8 @@ document.addEventListener('DOMContentLoaded', function() {
   if (btnReset) {
     btnReset.addEventListener('click', function(e) {
       e.preventDefault();
-      // Importante: non svuotare il DOM dello pseudoscontrino prima del reload
-      resetModifichePseudoscontrino({ skipRebuild: true, silent: true });
-      setTimeout(() => { location.reload(); }, 120);
+      // Ripristino locale senza reload
+      resetModifichePseudoscontrino({ skipRebuild: false, silent: true });
     });
   }
 });

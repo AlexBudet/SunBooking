@@ -6,6 +6,18 @@
 
   const CSRF = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
+  function isTouchUiSettingEnabled() {
+    try { return localStorage.getItem('sun_touch_ui') === '1'; }
+    catch(_) { return false; }
+  }
+
+  function ensureTouchUiClass() {
+    if (!isTouchUiSettingEnabled()) return;
+    if (document.body) document.body.classList.add('touch-ui');
+  }
+
+  ensureTouchUiClass();
+
  // Helper sicuro per icone Bootstrap (evita innerHTML)
   function biIcon(name) {
     const i = document.createElement('i');
@@ -333,7 +345,7 @@ function _filterStatus2TopBarButtons(topBar) {
 
 function ensureTopBarForTouch(block) {
   let topBar = block.querySelector('.popup-buttons');
-  const isOff = block.classList.contains('note-off');
+  const isOff = block.classList.contains('note-off') || block.classList.contains('off');
 
   if (!topBar) {
     topBar = document.createElement('div');
@@ -496,7 +508,7 @@ cut.style.display = 'inline-block';
     const id = block.getAttribute('data-appointment-id');
     if (!id) return;
     try {
-      const res = await fetch(`/calendar/edit/${encodeURIComponent(id)}`, {
+      const res = await window.withAppointmentMutationLock(id, () => fetch(`/calendar/edit/${encodeURIComponent(id)}`, {
         method: 'POST',
         headers: {
           'Content-Type':'application/json',
@@ -506,7 +518,7 @@ cut.style.display = 'inline-block';
         },
         credentials: 'same-origin',
         body: JSON.stringify({ duration: newDuration })
-      });
+      }), { type: 'duration' });
       if (!res.ok) {
         const txt = await res.text().catch(()=>'');
         console.error('setDuration error', res.status, txt);
@@ -532,7 +544,7 @@ async function setOffDuration(block, newDuration) {
   const apptId = block.getAttribute('data-appointment-id');
   try {
     if (apptId) {
-      const res = await fetch(`/calendar/adjust-duration/${encodeURIComponent(apptId)}`, {
+      const res = await window.withAppointmentMutationLock(apptId, () => fetch(`/calendar/adjust-duration/${encodeURIComponent(apptId)}`, {
         method: 'POST',
         headers: {
           'Content-Type':'application/json',
@@ -542,7 +554,7 @@ async function setOffDuration(block, newDuration) {
         },
         credentials: 'same-origin',
         body: JSON.stringify({ adjustment: newDuration }) // durata totale in minuti
-      });
+      }), { type: 'duration' });
       if (!res.ok) {
         const txt = await res.text().catch(()=> '');
         console.error('setOffDuration error', res.status, txt);
@@ -571,11 +583,91 @@ function changeOffDurationByQuarter(block, deltaQuarters) {
   return setOffDuration(block, next);
 }
 
+// Costruisce i pulsanti della bottom bar clonando le azioni principali dalla top bar.
+// Fallback robusto: se mancano bottoni o listener originali, non lancia errori.
+function buildBottomButtons(block) {
+  const buttons = [];
+  const appointmentId = block.getAttribute('data-appointment-id') || '';
+
+  // 1) Allunga di un quarter
+  buttons.push(makeBottomBtn('touch-resize-down', 'Aumenta durata di 15 min', 'arrow-down', () => {
+    const current = parseInt(block.getAttribute('data-duration') || '15', 10);
+    setDuration(block, current + 15);
+  }));
+
+  // 2) WhatsApp
+  const waBtn = document.createElement('button');
+  waBtn.type = 'button';
+  waBtn.className = 'btn-popup whatsapp-btn touch-bottom-wa';
+  waBtn.title = 'Invia WhatsApp';
+  waBtn.appendChild(biIcon('whatsapp'));
+  waBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const src = block.querySelector('.btn-popup.whatsapp-btn');
+    if (src) {
+      try { src.click(); } catch (_) {}
+    }
+    closeAllPopups();
+  }, true);
+  buttons.push(waBtn);
+
+  // 3) My-spia
+  const mySpiaBtn = document.createElement('button');
+  mySpiaBtn.type = 'button';
+  mySpiaBtn.className = 'btn-popup touch-my-spia';
+  mySpiaBtn.title = 'Segna cliente in istituto';
+  mySpiaBtn.appendChild(biIcon('person-check'));
+  mySpiaBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const spia = block.querySelector('.my-spia');
+    if (spia) {
+      try { spia.click(); } catch (_) {}
+    }
+    closeAllPopups();
+  }, true);
+  buttons.push(mySpiaBtn);
+
+  // 4) No-show
+  const noShowBtn = document.createElement('button');
+  noShowBtn.type = 'button';
+  noShowBtn.className = 'btn-popup touch-no-show';
+  noShowBtn.title = 'Cliente non arrivato';
+  if (appointmentId) noShowBtn.setAttribute('data-appointment-id', appointmentId);
+  noShowBtn.appendChild(biIcon('person-x'));
+  buttons.push(noShowBtn);
+
+  // 5) Accorcia di un quarter
+  buttons.push(makeBottomBtn('touch-resize-up', 'Riduci durata di 15 min', 'arrow-up', () => {
+    const current = parseInt(block.getAttribute('data-duration') || '15', 10);
+    setDuration(block, current - 15);
+  }));
+
+  // 6) Nota (in bottom, delete resta in top)
+  const noteBtn = document.createElement('button');
+  noteBtn.type = 'button';
+  noteBtn.className = 'btn-popup nota touch-bottom-note';
+  noteBtn.title = 'Nota appuntamento';
+  noteBtn.appendChild(biIcon('pencil-square'));
+  noteBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof window.openNoteModal === 'function') {
+      try { window.openNoteModal(block); } catch (_) {}
+    }
+    closeAllPopups();
+  }, true);
+  buttons.push(noteBtn);
+
+  return buttons;
+}
+
   // Costruisce la barra inferiore (6 pulsanti)
 function ensureBottomBar(block) {
   let topBar = block.querySelector('.popup-buttons');
   const status = block.getAttribute('data-status');
-  const isOff = block.classList.contains('note-off');
+  const isOff = block.classList.contains('note-off') || block.classList.contains('off');
 
   if (status === '2') {
     const existing = block.querySelector('.popup-buttons-bottom');
@@ -608,14 +700,18 @@ function ensureBottomBar(block) {
     return;
   }
 
-  if (block.querySelector('.popup-buttons-bottom')) return;
+  const existingBottom = block.querySelector('.popup-buttons-bottom');
+  if (existingBottom) {
+    try { existingBottom.remove(); } catch (_) {}
+  }
 
   const bar = document.createElement('div');
   bar.className = 'popup-buttons-bottom';
   bar.style.display = 'none';
 
   // Costruisci i 6 pulsanti in modo sicuro
-  buildBottomButtons(block).forEach(b => bar.appendChild(b));
+  const bottomButtons = buildBottomButtons(block);
+  bottomButtons.forEach(b => bar.appendChild(b));
   block.appendChild(bar);
 }
 
@@ -643,6 +739,11 @@ function initTouchOnBlock(block){
   if (!block._touchToggleBound) {
     block.addEventListener('click', (e) => {
       console.log('=== CLICK SU BLOCCO ===', 'status:', block.getAttribute('data-status'));
+      const blockApptId = block.getAttribute('data-appointment-id');
+      if (blockApptId && typeof window.isAppointmentMutationPending === 'function' && window.isAppointmentMutationPending(blockApptId)) {
+        e.stopPropagation();
+        return;
+      }
       
       // BLOCCA se in modalità copia (solo COPIA visibile)
       if (block.hasAttribute('data-copia-mode')) {
@@ -745,17 +846,23 @@ if (!wasActive) {
   }
 }
 
+function reinitializeTouchUIBlocks(root = document) {
+  ensureTouchUiClass();
+  normalizeTooltips(root);
+  initMySpiaTouch(root);
+  if (!isTouchUiSettingEnabled()) return;
+  if (root.classList?.contains('appointment-block')) initTouchOnBlock(root);
+  root.querySelectorAll?.('.appointment-block').forEach(initTouchOnBlock);
+}
+
+window.__reinitializeTouchUIBlocks = reinitializeTouchUIBlocks;
+
 document.addEventListener('DOMContentLoaded', function(){
 
+  ensureTouchUiClass();
+
     // Rimuovi i tooltip Bootstrap su tutti i bottoni già presenti
-  normalizeTooltips(document);
-
-    // Inizializza la modalità touch per i blocchi in istituto (cassa.html)
-  initMySpiaTouch(document);
-
-  if (document.body.classList.contains('touch-ui')) {
-    document.querySelectorAll('.appointment-block').forEach(initTouchOnBlock);
-  }
+  reinitializeTouchUIBlocks(document);
 
 // Observer per blocchi aggiunti dinamicamente
   const obs = new MutationObserver(muts => {
@@ -775,6 +882,10 @@ document.addEventListener('DOMContentLoaded', function(){
     });
   });
   obs.observe(document.body, {childList:true, subtree:true});
+
+  window.addEventListener('touchModeForced', () => {
+    setTimeout(() => reinitializeTouchUIBlocks(document), 0);
+  });
 });
 
 // --- START: global handler che chiude i popup dopo ogni interazione (capture) ---

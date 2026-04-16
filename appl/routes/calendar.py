@@ -394,11 +394,8 @@ def create_appointment():
         def _norm_note(s):
             if s is None:
                 return None
-            # preserva i caratteri unicode senza escape
-            try:
-                return json.dumps(s, ensure_ascii=False)[1:-1]
-            except Exception:
-                return str(s)
+            txt = str(s).strip()
+            return txt if txt else None
 
         # --- payload base ---
         raw_client_id = data.get('client_id')
@@ -444,15 +441,24 @@ def create_appointment():
             first_created = None
 
             for pb in pseudoblocks:
-                pb_color = (pb.get('colore') or colore) if isinstance(pb, dict) else colore
+                pb_color = (pb.get('colore') or pb.get('color') or colore) if isinstance(pb, dict) else colore
                 try:
                     pb_duration = int(pb.get('duration', duration))
                 except Exception:
                     pb_duration = duration
 
+                pb_client_id = _norm_id(pb.get('clientId') if isinstance(pb, dict) else None) \
+                                or _norm_id(pb.get('client_id') if isinstance(pb, dict) else None) \
+                                or client_id
+
                 pb_service_id = _norm_id(pb.get('serviceId') if isinstance(pb, dict) else None) \
                                 or _norm_id(pb.get('service_id') if isinstance(pb, dict) else None) \
                                 or service_id
+
+                pb_is_off = (pb_client_id is None) and (pb_service_id is None)
+                pb_note = _norm_note(pb.get('note') if isinstance(pb, dict) else None) or note
+                if pb_is_off:
+                    pb_note = pb_note or _norm_note(pb.get('title') if isinstance(pb, dict) else None) or 'OFF'
 
                 # Stato per blocco
                 pb_status_raw = pb.get('status') if isinstance(pb, dict) else None
@@ -471,14 +477,14 @@ def create_appointment():
                 )
 
                 new_appt = Appointment(
-                    client_id=client_id,
+                    client_id=pb_client_id,
                     operator_id=operator_id,
                     service_id=pb_service_id,
                     start_time=current_start,
                     _duration=int(pb_duration),
                     colore=pb_color,
-                    colore_font=colore_font,
-                    note=note,
+                    colore_font=compute_font_color(pb_color),
+                    note=pb_note,
                     stato=inherited_status,
                     pacchetto_seduta_id=pb_pacchetto_seduta_id
                 )
@@ -487,7 +493,7 @@ def create_appointment():
 
                 # Se il client “dummy/0” (placeholder) è stato richiesto nel payload originale
                 if raw_client_id in ("dummy", "0"):
-                    new_appt.note = (data.get('titolo') or '').strip()
+                    new_appt.note = (data.get('titolo') or '').strip() or new_appt.note
 
                 db.session.add(new_appt)
                 created_appts.append(new_appt)
@@ -529,11 +535,26 @@ def create_appointment():
                     {
                         "id": appt.id,
                         "client_name": f"{appt.client.cliente_nome} {appt.client.cliente_cognome}" if appt.client else "OFF",
+                        "client_nome": appt.client.cliente_nome if appt.client else "",
+                        "client_cognome": appt.client.cliente_cognome if appt.client else "",
+                        "client_cellulare": appt.client.cliente_cellulare if appt.client else "",
                         "service_name": appt.service.servizio_nome if appt.service else "OFF",
+                        "service_tag": appt.service.servizio_tag if appt.service else "",
                         "start_time": appt.start_time.strftime('%H:%M'),
                         "duration": appt.duration,
                         "operator_id": appt.operator_id,
-                        "status": appt.stato.value if hasattr(appt.stato, "value") else appt.stato
+                        "note": appt.note,
+                        "status": appt.stato.value if hasattr(appt.stato, "value") else appt.stato,
+                        "colore": appt.colore,
+                        "colore_font": appt.colore_font,
+                        "client_id": appt.client_id,
+                        "service_id": appt.service_id,
+                        "source": appt.source.value if hasattr(appt.source, "value") else (appt.source or "gestionale"),
+                        "is_off": bool(
+                            appt.client is not None and appt.service is not None and
+                            (getattr(appt.client, "cliente_nome", "").strip().lower() == "dummy") and
+                            (getattr(appt.client, "cliente_cognome", "").strip().lower() == "dummy")
+                        )
                     }
                     for appt in created_appts
                 ]
@@ -598,12 +619,26 @@ def create_appointment():
         response_data = {
             "id": new_appt.id,
             "client_name": f"{new_appt.client.cliente_nome} {new_appt.client.cliente_cognome}" if new_appt.client else "OFF",
+            "client_nome": new_appt.client.cliente_nome if new_appt.client else "",
+            "client_cognome": new_appt.client.cliente_cognome if new_appt.client else "",
+            "client_cellulare": new_appt.client.cliente_cellulare if new_appt.client else "",
             "service_name": new_appt.service.servizio_nome if new_appt.service else "OFF",
+            "service_tag":  new_appt.service.servizio_tag  if new_appt.service else "",
             "start_time": start_time.strftime('%H:%M'),
             "duration": new_appt.duration,
             "operator_id": new_appt.operator_id,
             "note": new_appt.note,
-            "status": new_appt.stato.value if hasattr(new_appt.stato, "value") else new_appt.stato
+            "status": new_appt.stato.value if hasattr(new_appt.stato, "value") else new_appt.stato,
+            "colore":      new_appt.colore,
+            "colore_font": new_appt.colore_font,
+            "client_id":   new_appt.client_id,
+            "service_id":  new_appt.service_id,
+            "source": new_appt.source.value if hasattr(new_appt.source, "value") else (new_appt.source or "gestionale"),
+            "is_off": bool(
+                new_appt.client is not None and new_appt.service is not None and
+                (getattr(new_appt.client, "cliente_nome", "").strip().lower() == "dummy") and
+                (getattr(new_appt.client, "cliente_cognome", "").strip().lower() == "dummy")
+            ),
         }
         
         # Aggiungi info pacchetto se presente
@@ -1446,6 +1481,67 @@ def next_appointments_for_client(client_id):
             "costo": appt.service.servizio_prezzo if appt.service else "",
             "stato": appt.stato.value if hasattr(appt.stato, "value") else appt.stato
         })
+    return jsonify(result)
+
+@calendar_bp.route('/api/appointments', methods=['GET'])
+def calendar_appointments_by_date():
+    """Restituisce tutti gli appuntamenti del giorno per sincronizzare il calendario lato client."""
+    date_str = request.args.get('date', datetime.today().strftime('%Y-%m-%d'))
+
+    try:
+        selected_date = datetime.strptime(date_str, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({"error": "Formato data non valido (usa YYYY-MM-DD)"}), 400
+
+    start_dt = selected_date
+    end_dt = selected_date + timedelta(days=1)
+
+    appointments = Appointment.query.filter(
+        Appointment.start_time >= start_dt,
+        Appointment.start_time < end_dt,
+        Appointment.is_cancelled_by_client == False
+    ).options(
+        joinedload(Appointment.client),
+        joinedload(Appointment.service),
+        joinedload(Appointment.operator)
+    ).all()
+
+    result = []
+    for appt in appointments:
+        is_off = bool(
+            appt.client is not None and appt.service is not None and
+            (getattr(appt.client, "cliente_nome", "").strip().lower() == "dummy") and
+            (getattr(appt.client, "cliente_cognome", "").strip().lower() == "dummy")
+        )
+
+        source_val = appt.source.value if hasattr(appt.source, "value") else (appt.source or "gestionale")
+        status_val = appt.stato.value if hasattr(appt.stato, "value") else appt.stato
+
+        result.append({
+            "id": appt.id,
+            "client_name": f"{appt.client.cliente_nome} {appt.client.cliente_cognome}" if appt.client else "OFF",
+            "client_nome": appt.client.cliente_nome if appt.client else "",
+            "client_cognome": appt.client.cliente_cognome if appt.client else "",
+            "client_cellulare": appt.client.cliente_cellulare if appt.client else "",
+            "client_is_deleted": bool(appt.client.is_deleted) if appt.client else False,
+            "service_name": appt.service.servizio_nome if appt.service else "OFF",
+            "service_tag": appt.service.servizio_tag if appt.service else "",
+            "start_time": appt.start_time.strftime('%H:%M'),
+            "duration": appt.duration,
+            "operator_id": appt.operator_id,
+            "appointment_date": appt.start_time.strftime('%Y-%m-%d'),
+            "note": appt.note or "",
+            "status": status_val,
+            "colore": appt.colore,
+            "colore_font": appt.colore_font,
+            "client_id": appt.client_id,
+            "service_id": appt.service_id,
+            "source": source_val,
+            "is_off": is_off,
+            "created_at": to_rome(appt.created_at).isoformat() if appt.created_at else None,
+            "last_edit": to_rome(appt.last_edit).isoformat() if appt.last_edit else None,
+        })
+
     return jsonify(result)
 
 @calendar_bp.route('/api/online-appointments-by-booking-date', methods=['GET'])
