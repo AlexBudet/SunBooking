@@ -2204,7 +2204,8 @@ function selectClient(clientId, fullName) {
       infoBtn.setAttribute('aria-label', 'Info cliente');
       infoBtn.innerText = 'i';
       infoBtn.style.position = 'absolute';
-      infoBtn.style.right = '10px';
+      // posizionato a circa 5px dal bordo destro del testo (lascia spazio al pulsante "+" ~35px)
+      infoBtn.style.right = '40px';
       infoBtn.style.top = '50%';
       infoBtn.style.transform = 'translateY(-50%)';
       infoBtn.style.zIndex = '10';
@@ -3548,10 +3549,11 @@ function openModifyPopup(appointmentId) {
   labelNew.textContent = 'Nuovo cliente:';
   groupNew.appendChild(labelNew);
 
+  // inputContainer è il wrapper relativo entro cui si posiziona la dropdown
   const inputContainer = document.createElement('div');
+  inputContainer.style.position = 'relative';
   inputContainer.style.display = 'flex';
   inputContainer.style.alignItems = 'center';
-  inputContainer.style.position = 'relative';
 
   const inputNew = document.createElement('input');
   inputNew.type = 'text';
@@ -3559,10 +3561,11 @@ function openModifyPopup(appointmentId) {
   inputNew.className = 'form-control';
   inputNew.placeholder = 'Nome, cognome o cellulare...';
   inputNew.autocomplete = 'off';
-  inputNew.style.width = 'calc(100% - 40px)'; // Ristringe l'input per lasciare spazio al pulsante
+  inputNew.style.flex = '1';
+  inputNew.style.paddingRight = '40px'; // spazio per il pulsante "+"
   inputContainer.appendChild(inputNew);
 
-  // Pulsante "+" per aggiungere nuovo cliente (posizionato fuori dal form, accanto all'input)
+  // Pulsante "+": position absolute dentro inputContainer
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className = 'btn btn-outline-success btn-add-client-square btn-add-client-nav';
@@ -3584,12 +3587,20 @@ function openModifyPopup(appointmentId) {
   });
   inputContainer.appendChild(addBtn);
 
-  groupNew.appendChild(inputContainer);
-
+  // Dropdown: position absolute, ancorata sotto inputContainer
   const resultsDiv = document.createElement('div');
   resultsDiv.id = 'clientResults';
   resultsDiv.className = 'results-dropdown';
-  groupNew.appendChild(resultsDiv);
+  resultsDiv.style.position = 'absolute';
+  resultsDiv.style.top = '100%';
+  resultsDiv.style.left = '0';
+  resultsDiv.style.right = '0';
+  resultsDiv.style.zIndex = '1055';
+  resultsDiv.style.maxHeight = '220px';
+  resultsDiv.style.overflowY = 'auto';
+  inputContainer.appendChild(resultsDiv);
+
+  groupNew.appendChild(inputContainer);
 
   form.appendChild(groupNew);
 
@@ -11455,39 +11466,38 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
-document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.client-info-link').forEach(link => {
-    link.addEventListener('click', function(e){
-      const TOUCH_UI = (() => { try { return localStorage.getItem('sun_touch_ui') === '1'; } catch(_) { return false; } })();
-      const block = this.closest('.appointment-block');
-      if (!block) return;
+// Delegated listener per click su nome cliente — funziona anche su blocchi creati dinamicamente
+document.addEventListener('click', function(e) {
+  const link = e.target && e.target.closest && e.target.closest('.client-info-link');
+  if (!link) return;
 
-      if (TOUCH_UI) {
-        // Modalità touch-ui: primo click attiva popup, secondo apre modal
-        if (!block.classList.contains('active-popup')) {
-          e.preventDefault();
-          // toggle popups
-          if (typeof setActivePopupAndTooltip === 'function') {
-            setActivePopupAndTooltip(block);
-          } else {
-            block.classList.add('active-popup');
-          }
-          return;
-        }
-        // Popup attivi: apri modal
-      } else {
-        // Modalità default: apri sempre modal
-      }
+  const block = link.closest('.appointment-block');
+  if (!block) return;
 
-      // Apri modal (comune a entrambe le modalità quando permesso)
-      e.preventDefault();
-      const apptId = block.getAttribute('data-appointment-id');
-      if (apptId && typeof openModifyPopup === 'function') {
-        openModifyPopup(apptId);
-      }
-    }, true); // capture per priorità
-  });
-});
+  // I blocchi con cliente eliminato (.disable-popup) hanno un handler separato — non toccare
+  if (block.classList.contains('disable-popup')) return;
+
+  const isTouchUI = document.body.classList.contains('touch-ui');
+
+  if (isTouchUI) {
+    // Primo click sul blocco (non ancora attivo): lasciamo che initTouchOnBlock attivi il popup
+    if (!block.classList.contains('active-popup')) return;
+
+    // Secondo click su nome cliente a blocco già attivo: apri modal riassegnazione
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+    const apptId = block.getAttribute('data-appointment-id');
+    if (apptId && typeof openModifyPopup === 'function') openModifyPopup(apptId);
+    return;
+  }
+
+  // Modalità default: apri subito il modal riassegnazione
+  e.preventDefault();
+  e.stopPropagation();
+  const apptId = block.getAttribute('data-appointment-id');
+  if (apptId && typeof openModifyPopup === 'function') openModifyPopup(apptId);
+}, true);
 
 document.addEventListener('click', function(e){
   const c = e.target.closest('.selectable-cell.calendar-closed');
