@@ -2957,6 +2957,10 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
           data.pseudoblocks = pseudoblocks;
         }
 
+        // Evita doppio render: in questo flusso usiamo un solo refresh controllato
+        // invece dell'inserimento manuale + sync automatico mutation.
+        window.__suspendCalendarMutationSync = Number(window.__suspendCalendarMutationSync || 0) + 1;
+
         fetch('/calendar/create', {
           method: 'POST',
           headers: {
@@ -3015,9 +3019,8 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
           }
           
           // Comportamento standard (quando NON deriva da pacchetto):
-          // Inserisce i blocchi direttamente nel DOM senza ricaricare la pagina.
+          // riallinea il calendario dal backend una sola volta.
           const doInsertBlocks = () => {
-            let insertedAtLeastOne = false;
             let firstScrollTime = null;
 
             createdAppointments.forEach((appointmentItem, idx) => {
@@ -3029,56 +3032,26 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
               const bMinute = timeMatch
                 ? parseInt(timeMatch[2], 10)
                 : parseInt(appointmentItem.minute ?? data.minute ?? minute, 10);
-              const opId = appointmentItem.operator_id || data.operator_id || operatorId;
-
-              // Componi l'oggetto con tutti i campi attesi da createAppointmentBlockElement.
-              const blockData = Object.assign({}, appointmentItem, {
-                colore: appointmentItem.colore || data.colore,
-                colore_font: appointmentItem.colore_font || data.colore_font,
-                client_id: appointmentItem.client_id != null ? appointmentItem.client_id : (data.client_id || null),
-                service_id: appointmentItem.service_id != null ? appointmentItem.service_id : (data.service_id || null),
-                client_name: appointmentItem.client_name || data.client_name || '',
-                service_name: appointmentItem.service_name || data.service_name || '',
-                service_tag: appointmentItem.service_tag || '',
-                status: appointmentItem.status || 0,
-              });
 
               if (isNaN(bHour) || isNaN(bMinute)) {
                 console.warn('doInsertBlocks: orario non valido, skip blocco', appointmentItem.start_time);
                 return;
               }
 
-              let targetCell = null;
-              if (typeof findCellAt === 'function') {
-                targetCell = findCellAt(opId, bHour, bMinute);
-              }
-              if (!targetCell) {
-                const dateSel = appointmentItem.appointment_date || data.appointment_date || data.date || date || selectedDate;
-                targetCell = document.querySelector(`.selectable-cell[data-operator-id="${opId}"][data-date="${dateSel}"][data-hour="${bHour}"][data-minute="${bMinute}"]`);
-              }
-
-              if (!targetCell) {
-                console.warn('doInsertBlocks: cella non trovata per operatore', opId, 'ora', bHour, bMinute);
-                return;
-              }
-
-              const newBlock = createAppointmentBlockElement(blockData, opId, bHour, bMinute);
-              targetCell.appendChild(newBlock);
-              arrangeBlocksInCell(targetCell);
-              insertedAtLeastOne = true;
-
               if (idx === 0) {
                 firstScrollTime = { hour: bHour, minute: bMinute };
               }
             });
 
-            if (!insertedAtLeastOne && typeof fetchCalendarData === 'function') {
+            if (typeof fetchCalendarData === 'function') {
               fetchCalendarData();
             }
 
-            // Scorri alla posizione del primo blocco creato senza reload
+            // Attendi il render e poi scorri alla posizione del primo blocco creato
             if (firstScrollTime && typeof scrollToHourMinute === 'function') {
-              scrollToHourMinute(firstScrollTime.hour, firstScrollTime.minute);
+              setTimeout(() => {
+                scrollToHourMinute(firstScrollTime.hour, firstScrollTime.minute);
+              }, 220);
             }
 
             // Chiudi il modal Bootstrap correttamente
@@ -3105,6 +3078,10 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
         })
         .catch(error => {
           alert(error.message);
+        })
+        .finally(() => {
+          const next = Number(window.__suspendCalendarMutationSync || 0) - 1;
+          window.__suspendCalendarMutationSync = next > 0 ? next : 0;
         });
       });
     }
