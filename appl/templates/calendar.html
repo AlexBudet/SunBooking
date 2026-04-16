@@ -522,6 +522,23 @@
                     <button class="btn btn-secondary" onclick="setDayOffCalendar()">Imposta come Giorno di
                         Riposo</button>
                 </div>
+
+                <!-- VISUALIZZAZIONE RAPIDA TURNI -->
+                <div class="shifts-month-calendar-section mt-4 pt-3" id="shiftsMonthCalendarSection" style="border-top: 1px solid rgba(135,100,124,0.18);">
+                    <div class="shifts-month-header">
+                        <button type="button" class="shifts-month-nav-btn" id="shiftsMonthPrev" aria-label="Mese precedente">&#8249;</button>
+                        <span class="shifts-month-title" id="shiftsMonthTitle"></span>
+                        <button type="button" class="shifts-month-nav-btn" id="shiftsMonthNext" aria-label="Mese successivo">&#8250;</button>
+                    </div>
+                    <div class="shifts-month-grid-wrap">
+                        <div class="shifts-month-dow-row">
+                            <div>Lun</div><div>Mar</div><div>Mer</div><div>Gio</div><div>Ven</div><div>Sab</div><div>Dom</div>
+                        </div>
+                        <div class="shifts-month-grid" id="shiftsMonthGrid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

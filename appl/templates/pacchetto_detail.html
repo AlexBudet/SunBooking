@@ -3566,6 +3566,7 @@ document.getElementById('btnWhatsapp').addEventListener('click', async function(
   const rateTotali = {{ pacchetto.rate|length }};
   const ratePagate = {{ pacchetto.rate|selectattr('is_pagata')|list|length }};
   const importoTotale = {{ pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo or 0 }};
+  const importoTotaleLordo = {{ pacchetto.costo_totale_lordo or 0 }};
   const importoPagato = {{ pacchetto.rate|selectattr('is_pagata')|map(attribute='importo')|sum }};
   
   // Trova prossima seduta
@@ -3682,6 +3683,7 @@ Ti aspettiamo! 💆‍♀️
       .replace(/{rate_totali}/g, rateTotali)
       .replace(/{importo_pagato}/g, importoPagato.toFixed(2))
       .replace(/{importo_totale}/g, importoTotale.toFixed(2))
+      .replace(/{importo_da_listino}/g, importoTotaleLordo.toFixed(2))
       .replace(/{prossima_seduta}/g, prossimaSeduta)
       .replace(/{credito_residuo}/g, creditoResiduo.toFixed(2))
       .replace(/{credito_iniziale}/g, creditoIniziale.toFixed(2))

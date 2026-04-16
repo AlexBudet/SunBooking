@@ -3955,3 +3955,229 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
     background: linear-gradient(135deg, #f8e8f0 0%, #f0e4eb 100%) !important;
     border-bottom: 1px solid rgba(135, 100, 124, 0.15) !important;
 }
+
+/* ===================== VISUALIZZAZIONE RAPIDA TURNI — Calendario mensile ===================== */
+
+/* Nasconde la sezione su schermi piccoli (<1200px) */
+@media (max-width: 1199px) {
+  .shifts-month-calendar-section {
+    display: none !important;
+  }
+}
+
+/* Floating picker (mese / anno) */
+.shifts-floating-picker {
+  background: #fff;
+  border: 1px solid rgba(135, 100, 124, 0.3);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  padding: 10px;
+  min-width: 180px;
+}
+.shifts-picker-month-grid,
+.shifts-picker-year-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.shifts-picker-year-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.shifts-picker-btn {
+  background: #f8f0f5;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 5px 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #5a3a50;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  text-align: center;
+}
+.shifts-picker-btn:hover {
+  background: #f0d8e8;
+  border-color: rgba(135,100,124,0.35);
+}
+.shifts-picker-btn.active {
+  background: linear-gradient(135deg, #8b4f7a, #c47ca0);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* Celle giorni: cursore pointer */
+.shifts-month-cell {
+  cursor: pointer;
+}
+.shifts-month-cell:hover {
+  filter: brightness(0.93);
+}
+
+.shifts-month-calendar-section {
+  padding-top: 8px;
+}
+
+.shifts-month-section-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #8b4f7a;
+  margin-bottom: 10px;
+  opacity: 0.85;
+}
+
+.shifts-month-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.shifts-month-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #6b3a5a;
+  text-transform: uppercase;
+  min-width: 160px;
+  text-align: center;
+}
+
+.shifts-month-nav-btn {
+  background: linear-gradient(135deg, #f8e8f0 0%, #f0e4eb 100%);
+  border: 1px solid rgba(135, 100, 124, 0.3);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 1.3rem;
+  line-height: 1;
+  color: #8b4f7a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  padding: 0;
+}
+.shifts-month-nav-btn:hover {
+  background: linear-gradient(135deg, #f0d4e6 0%, #e8d0de 100%);
+  color: #6b3a5a;
+  box-shadow: 0 2px 8px rgba(135, 100, 124, 0.18);
+}
+
+.shifts-month-grid-wrap {
+  width: 100%;
+}
+
+.shifts-month-dow-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  margin-bottom: 3px;
+}
+.shifts-month-dow-row div {
+  text-align: center;
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a07090;
+  padding: 2px 0;
+}
+
+.shifts-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.shifts-month-cell {
+  border-radius: 7px;
+  padding: 4px 3px 5px;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+  border: 1px solid transparent;
+  background: #fafafa;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.shifts-month-cell.shifts-month-empty {
+  background: transparent;
+  border-color: transparent;
+  pointer-events: none;
+}
+
+.shifts-month-cell.shifts-month-on,
+.shifts-month-cell.shifts-month-default {
+  border-color: #1976d2;
+  background: #f0f7ff;
+}
+
+.shifts-month-cell.shifts-month-full {
+  border-color: #1976d2;
+  background: #f8f0f0;
+}
+
+.shifts-month-cell.shifts-month-off {
+  border-color: #d0a0b0;
+  background: #fdf5f8;
+}
+
+.shifts-month-cell.shifts-month-today {
+  border-color: #8b4f7a !important;
+  background: #f6fffb;
+  box-shadow: 0 0 0 2px #8b4f7a inset;
+}
+
+.shifts-month-day-num {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #333;
+  line-height: 1;
+  margin-bottom: 1px;
+}
+.shifts-month-cell.shifts-month-today .shifts-month-day-num {
+  color: #8b4f7a;
+}
+
+.shifts-month-label {
+  font-size: 0.63rem;
+  font-weight: 600;
+  color: #1976d2;
+  text-align: center;
+  line-height: 1.2;
+  word-break: break-all;
+}
+.shifts-month-default-label {
+  color: #1976d2;
+  font-weight: 600;
+}
+.shifts-month-full-label {
+  color: #e53935;
+  font-weight: 800;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+}
+.shifts-month-off-label {
+  color: #b06080;
+  font-weight: 700;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+}
+
+.shifts-month-loading {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: #aaa;
+  font-size: 0.88rem;
+  padding: 18px 0;
+}

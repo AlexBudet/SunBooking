@@ -232,11 +232,17 @@
     <label for="marketing_message" class="form-label">Messaggio WhatsApp</label>
     <textarea class="form-control" id="marketing_message" name="marketing_message" rows="10" placeholder="Scrivi il messaggio...">{{ marketing_message or '' }}</textarea>
     <div class="form-text">
-        <span data-bs-toggle="tooltip" data-bs-html="true" 
-          title="<code>{{'{{nome}}'}}</code> = Nome<br><code>{{'{{cognome}}'}}</code> = Cognome<br><code>{{'{{giorni_assenza}}'}}</code> = giorni assenza<br><code>{{'{{totale_visite}}'}}</code> = visite<br><code>{{'{{totale_speso}}'}}</code> = speso<br><code>{{'{{centro}}'}}</code> = centro" 
-          style="cursor: help; text-decoration: underline dotted;">
-        ℹ️ Variabili disponibili
-        </span>
+        <div class="fw-semibold mb-1">Variabili disponibili</div>
+        <div class="d-flex flex-wrap gap-1">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertMarketingVariable('{{'{{nome}}'}}')">Nome</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertMarketingVariable('{{'{{cognome}}'}}')">Cognome</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertMarketingVariable('{{'{{giorni_assenza}}'}}')">Giorni assenza</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertMarketingVariable('{{'{{ultimo_servizio}}'}}')">Ultimo servizio</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertMarketingVariable('{{'{{totale_visite}}'}}')">Totale visite</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertMarketingVariable('{{'{{totale_speso}}'}}')">Totale speso</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertMarketingVariable('{{'{{servizio_preferito}}'}}')">Servizio preferito</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertMarketingVariable('{{'{{centro}}'}}')">Centro</button>
+        </div>
     </div>
 </div>
 
@@ -329,11 +335,12 @@
                         <label for="new_client_message" class="form-label">Template messaggio di benvenuto</label>
                         <textarea class="form-control" id="new_client_message" name="new_client_message" rows="8">{{ new_client_message or default_welcome_message }}</textarea>
 <div class="form-text mb-3">
-    <span data-bs-toggle="tooltip" data-bs-html="true" 
-          title="<code>{{'{{nome}}'}}</code> = Nome Cliente<br><code>{{'{{centro}}'}}</code> = Nome Istituto<br><code>{{'{{link_recensione}}'}}</code> = link Google" 
-          style="cursor: help; text-decoration: underline dotted;">
-        ℹ️ Variabili disponibili
-    </span>
+    <div class="fw-semibold mb-1">Variabili disponibili</div>
+    <div class="d-flex flex-wrap gap-1">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertNewClientVariable('{{'{{nome}}'}}')">Nome Cliente</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertNewClientVariable('{{'{{centro}}'}}')">Nome Istituto</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertNewClientVariable('{{'{{link_recensione}}'}}')">Link recensione</button>
+    </div>
 </div>
 
                         <!-- Anteprima -->
@@ -380,6 +387,12 @@
 <br><br>
 <!-- CSS aggiuntivo -->
 <style>
+/* Override locale: nei card-header i titoli devono restare bianchi e senza ombra */
+.settings-glam .card-header h4 {
+    color: #ffffff !important;
+    text-shadow: none !important;
+}
+
 .filter-section {
     transition: all 0.3s ease;
 }
@@ -416,6 +429,32 @@
 
 <!-- JavaScript -->
 <script>
+function insertAtCursorById(textareaId, value) {
+    const textarea = document.getElementById(textareaId);
+    if (!textarea) return;
+
+    textarea.focus();
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const text = textarea.value || '';
+
+    textarea.value = text.slice(0, start) + value + text.slice(end);
+    const newPos = start + value.length;
+    textarea.selectionStart = newPos;
+    textarea.selectionEnd = newPos;
+
+    // Aggiorna eventuali anteprime/listener già presenti
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function insertMarketingVariable(variable) {
+    insertAtCursorById('marketing_message', variable);
+}
+
+function insertNewClientVariable(variable) {
+    insertAtCursorById('new_client_message', variable);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     
     // Carica statistiche invii giornalieri
