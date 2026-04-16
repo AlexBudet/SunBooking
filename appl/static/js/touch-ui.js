@@ -210,9 +210,8 @@ function installInterceptClientNameClicks() {
     const block = link.closest('.appointment-block');
     if (!block) return;
 
-    // Stato 0 (cambio cliente) solo se blocco già attivo
+    // Apri modal SOLO se blocco già attivo (qualsiasi stato)
     if (!block.classList.contains('active-popup')) return;
-    if (String(block.getAttribute('data-status')) !== '0') return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -764,41 +763,17 @@ function initTouchOnBlock(block){
       
       console.log('>>> isTouchUI:', isTouchUI, 'isPaid:', isPaid, 'clientLink:', !!clientLink);
 
-// Click sul nome cliente in stato 2 (pagato): apri modal, non chiudere popup
+// Click sul nome cliente in stato 2 (pagato):
+// - primo click: attiva popup (casca nel toggle sotto)
+// - secondo click (blocco già attivo): apri modal riassegnazione
 if (isTouchUI && isPaid && clientLink) {
-  e.preventDefault();
-  e.stopPropagation();
-  if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-
-  // Attiva il blocco se non lo è ancora (mostra eventuali barre top; bottom bar già nascosta per stato 2)
-  if (!block.classList.contains('active-popup')) {
-    closeAllPopups();
-    block.classList.add('active-popup');
-    block.style.zIndex = '9400';
-    const topBar = block.querySelector('.popup-buttons');
-    const bottomBar = block.querySelector('.popup-buttons-bottom');
-    if (topBar) {
-      topBar.style.zIndex = '9410';
-      _filterStatus2TopBarButtons(topBar);
-    }
-    if (bottomBar) bottomBar.style.zIndex = '9410';
+  if (block.classList.contains('active-popup')) {
+    // Secondo click: delegated handler in calendar.js si occupa di aprire openModifyPopup
+    // Lasciamo che l'evento propaghi fino a quel listener
+    return;
   }
-
-        // Apri modal info cliente robustamente
-        const cid = block.getAttribute('data-client-id') || clientLink.getAttribute('data-client-id') || '';
-        if (typeof window.openClientInfoMobileModal === 'function') {
-          window.openClientInfoMobileModal(block);
-          return;
-        }
-        if (typeof window.showClientInfoModal === 'function' && cid) {
-            window.showClientInfoModal(cid);
-            return;
-        }
-        if (typeof window.showClientInfoForBlock === 'function') {
-          window.showClientInfoForBlock(block);
-        }
-        return;
-      }
+  // Primo click: cade nel toggle sotto (attiva popup come al solito)
+}
 
 // Click sul resto del blocco: toggle popup
 console.log('>>> CLICK CORPO BLOCCO, isPaid?', isPaid, 'status:', block.getAttribute('data-status'));
