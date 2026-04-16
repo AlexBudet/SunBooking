@@ -11466,6 +11466,31 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
+// Delegated listener per mouseenter su nome cliente — mostra tooltip info in default mode
+document.addEventListener('mouseenter', function(e) {
+  const link = e.target && e.target.closest && e.target.closest('.client-info-link');
+  if (!link) return;
+
+  const isTouchUI = document.body.classList.contains('touch-ui');
+  if (isTouchUI) return; // Solo default mode
+
+  const block = link.closest('.appointment-block');
+  if (!block) return;
+
+  if (typeof window.showClientInfoForBlock === 'function') {
+    window.showClientInfoForBlock(block);
+  }
+}, true);
+
+// Delegated listener per mouseleave su nome cliente — nascondi tooltip
+document.addEventListener('mouseleave', function(e) {
+  const link = e.target && e.target.closest && e.target.closest('.client-info-link');
+  if (!link) return;
+
+  const popup = document.getElementById('clientInfoPopup');
+  if (popup) popup.style.display = 'none';
+}, true);
+
 // Delegated listener per click su nome cliente — funziona anche su blocchi creati dinamicamente
 document.addEventListener('click', function(e) {
   const link = e.target && e.target.closest && e.target.closest('.client-info-link');
