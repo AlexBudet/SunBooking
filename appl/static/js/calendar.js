@@ -5410,9 +5410,41 @@ function openNoteModal(block) {
   }
   noteTextarea.value = existingNote;
 
-  const bsModal = new bootstrap.Modal(modalEl);
+  const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl, {
+    backdrop: true,
+    keyboard: true,
+    focus: true,
+  });
   bsModal.show();
   console.log("Modal aperto");
+}
+
+function forceCloseNoteModal(modalEl) {
+  if (!modalEl) return;
+  try {
+    const inst = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+    if (inst) inst.hide();
+  } catch (_) {}
+
+  // Cleanup difensivo: evita overlay bloccato quando il modal non completa la transizione.
+  setTimeout(() => {
+    try {
+      modalEl.classList.remove('show');
+      modalEl.setAttribute('aria-hidden', 'true');
+      modalEl.removeAttribute('aria-modal');
+      modalEl.style.display = 'none';
+
+      const hasAnyShownModal = document.querySelector('.modal.show');
+      if (!hasAnyShownModal) {
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('padding-right');
+      }
+
+      document.querySelectorAll('.modal-backdrop').forEach(b => {
+        try { b.parentNode && b.parentNode.removeChild(b); } catch (_) {}
+      });
+    } catch (_) {}
+  }, 120);
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -5460,10 +5492,7 @@ document.addEventListener('DOMContentLoaded', function() {
         })
 .then(data => {
     console.log('Nota salvata:', data);
-    const bsModal = bootstrap.Modal.getInstance(modalEl);
-    if (bsModal) {
-        bsModal.hide();
-    }
+  forceCloseNoteModal(modalEl);
 
     // Aggiorna subito dataset + tooltip
     try { window.onAppointmentNoteSaved(appointmentId, noteText); } catch (_) {}
@@ -5488,6 +5517,16 @@ document.addEventListener('DOMContentLoaded', function() {
             alert(error.message);
         });
     });
+
+    // Invio da tastiera: evita submit impliciti che possono lasciare backdrop sporchi.
+    const noteForm = document.getElementById('EditApptNoteForm');
+    if (noteForm && !noteForm.dataset.boundSubmit) {
+      noteForm.dataset.boundSubmit = '1';
+      noteForm.addEventListener('submit', function(ev) {
+        ev.preventDefault();
+        saveNoteBtn.click();
+      });
+    }
 });
 
 document.addEventListener("DOMContentLoaded", function() {
