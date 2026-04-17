@@ -1137,6 +1137,19 @@ function arrangeBlocksInCell(cell) {
     
     if (blocks.length === 0) return;
 
+    // Normalizza eventuali stili inline residui che possono lasciare nascosto il tasto WhatsApp
+    // dopo molte operazioni senza refresh.
+    blocks.forEach(block => {
+      block.querySelectorAll('.btn-popup.whatsapp-btn').forEach(btn => {
+        btn.style.removeProperty('display');
+        btn.style.removeProperty('visibility');
+        btn.style.removeProperty('pointer-events');
+      });
+      if (!(window.pseudoBlocks && window.pseudoBlocks.length > 0)) {
+        block.classList.remove('cut-mode-active');
+      }
+    });
+
     // Se c'è un solo blocco, occupa tutta la cella
     if (blocks.length === 1) {
         blocks[0].style.setProperty('width', '100%', 'important');
@@ -1193,6 +1206,8 @@ function renderAppointmentsFromServer(appointments, date) {
   const cells = document.querySelectorAll('.selectable-cell');
   if (!cells || cells.length === 0) return;
 
+  clearCalendarFloatingArtifacts();
+
   // Reset completo dei blocchi per riallinearli alla stessa fonte dati del refresh pagina.
   document.querySelectorAll('.selectable-cell .appointment-block').forEach(block => block.remove());
 
@@ -1221,6 +1236,7 @@ function renderAppointmentsFromServer(appointments, date) {
     if (!targetCell) return;
 
     const blockEl = createAppointmentBlockElement(appt, opId, bHour, bMinute);
+    resetAppointmentPopupInlineStyles(blockEl);
     targetCell.appendChild(blockEl);
     touchedCells.add(targetCell);
 
@@ -4197,6 +4213,57 @@ async function withAppointmentMutationLock(appointmentId, action, meta) {
 window.isAppointmentMutationPending = isAppointmentMutationPending;
 window.withAppointmentMutationLock = withAppointmentMutationLock;
 
+function clearCalendarFloatingArtifacts() {
+  // Remove residual Bootstrap tooltips and custom info popups.
+  document.querySelectorAll('.tooltip').forEach(t => {
+    try { t.parentNode && t.parentNode.removeChild(t); } catch (_) {}
+  });
+  const small = document.getElementById('clientInfoPopup');
+  if (small) small.style.display = 'none';
+  const big = document.getElementById('clientHistoryPopup');
+  if (big) big.style.display = 'none';
+}
+
+function resetAppointmentPopupInlineStyles(block) {
+  if (!block) return;
+  const tb = block.querySelector('.popup-buttons');
+  const bb = block.querySelector('.popup-buttons-bottom');
+  if (tb) {
+    tb.style.removeProperty('display');
+    tb.style.removeProperty('flex-wrap');
+    tb.style.removeProperty('overflow');
+    tb.style.removeProperty('padding');
+    tb.style.removeProperty('align-items');
+    tb.style.removeProperty('z-index');
+  }
+  if (bb) {
+    bb.style.removeProperty('display');
+    bb.style.removeProperty('visibility');
+    bb.style.removeProperty('pointer-events');
+  }
+  block.querySelectorAll('.popup-buttons .btn-popup').forEach(btn => {
+    btn.style.removeProperty('display');
+    btn.style.removeProperty('visibility');
+    btn.style.removeProperty('pointer-events');
+    btn.style.removeProperty('flex');
+    btn.style.removeProperty('width');
+    btn.style.removeProperty('max-width');
+    btn.style.removeProperty('box-sizing');
+    btn.style.removeProperty('z-index');
+  });
+  block.querySelectorAll('.btn-popup.whatsapp-btn').forEach(btn => {
+    btn.style.removeProperty('display');
+    btn.style.removeProperty('visibility');
+    btn.style.removeProperty('pointer-events');
+    btn.style.removeProperty('z-index');
+  });
+  block.classList.remove('active-popup');
+  block.classList.remove('cut-mode-active');
+  block.style.removeProperty('z-index');
+}
+
+window.clearCalendarFloatingArtifacts = clearCalendarFloatingArtifacts;
+
 function deleteAppointment(appointmentId) {
     if (!appointmentId) {
         console.error("ID appuntamento mancante");
@@ -4205,6 +4272,8 @@ function deleteAppointment(appointmentId) {
     if (!confirm("Confermi di voler eliminare l'appuntamento?")) {
         return;
     }
+
+    clearCalendarFloatingArtifacts();
 
     const csrfMeta = document.querySelector('meta[name="csrf-token"]');
     const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
@@ -4235,9 +4304,11 @@ function deleteAppointment(appointmentId) {
         throw new Error(body || `HTTP ${response.status}`);
     })
     .then(result => {
+      clearCalendarFloatingArtifacts();
         // Rimuovi sempre il blocco dal DOM (idempotente client-side)
         const block = document.querySelector(`.appointment-block[data-appointment-id="${appointmentId}"]`);
         if (block) {
+        resetAppointmentPopupInlineStyles(block);
             // dispose tooltip se presente
             block.querySelectorAll('[data-bs-toggle="tooltip"], .delete-appointment-block').forEach(el => {
                 try {
@@ -4288,6 +4359,7 @@ function deleteAppointment(appointmentId) {
     })
     .catch(err => {
         console.error("Errore deleteAppointment:", err);
+      clearCalendarFloatingArtifacts();
         // Non rimuovere il blocco in caso di errore diverso da 404: lascia il DOM consistente e segnala
         // (se vuoi, puoi forzare la rimozione per 404 già gestita sopra)
         alert(err.message || 'Errore durante l\'eliminazione');
@@ -5083,6 +5155,8 @@ function isNavigatorCutActionButton(btn) {
 function openDesktopPopupForBlock(block) {
   if (!block || block.classList.contains('disable-popup')) return;
 
+  resetAppointmentPopupInlineStyles(block);
+
   if (block.hidePopupTimeout) {
     clearTimeout(block.hidePopupTimeout);
     block.hidePopupTimeout = null;
@@ -5140,36 +5214,7 @@ function closeDesktopPopupForBlock(block, relatedTarget) {
   block.classList.remove('active-popup');
   block.classList.remove('cut-mode-active');
 
-  if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
-    block.style.zIndex = '';
-    const tb = block.querySelector('.popup-buttons');
-    if (tb) tb.style.setProperty('display', 'none', 'important');
-    return;
-  }
-
-  const tb = block.querySelector('.popup-buttons');
-  const bb = block.querySelector('.popup-buttons-bottom');
-  if (tb) {
-    tb.style.removeProperty('display');
-    tb.style.removeProperty('flex-wrap');
-    tb.style.removeProperty('overflow');
-    tb.style.removeProperty('padding');
-    tb.style.removeProperty('align-items');
-  }
-  if (bb) {
-    bb.style.removeProperty('display');
-    bb.style.removeProperty('visibility');
-    bb.style.removeProperty('pointer-events');
-  }
-  block.querySelectorAll('.popup-buttons .btn-popup').forEach(btn => {
-    btn.style.removeProperty('display');
-    btn.style.removeProperty('visibility');
-    btn.style.removeProperty('pointer-events');
-    btn.style.removeProperty('flex');
-    btn.style.removeProperty('width');
-    btn.style.removeProperty('max-width');
-    btn.style.removeProperty('box-sizing');
-  });
+  resetAppointmentPopupInlineStyles(block);
 
   const cell = block.closest('td.selectable-cell');
   if (cell && cell.querySelectorAll('.appointment-block').length === 1) {
@@ -5223,12 +5268,28 @@ document.addEventListener('mouseout', function(e) {
 // Delegato desktop: classi dragging anche per blocchi creati dinamicamente.
 document.addEventListener('dragstart', function(e) {
   const block = e.target.closest('.appointment-block');
-  if (block) block.classList.add('dragging');
+  if (block) {
+    clearCalendarFloatingArtifacts();
+    resetAppointmentPopupInlineStyles(block);
+    block.classList.add('dragging');
+  }
 }, true);
 
 document.addEventListener('dragend', function(e) {
   const block = e.target.closest('.appointment-block');
-  if (block) block.classList.remove('dragging');
+  if (block) {
+    block.classList.remove('dragging');
+    resetAppointmentPopupInlineStyles(block);
+  }
+  clearCalendarFloatingArtifacts();
+}, true);
+
+document.addEventListener('pointerdown', function(e) {
+  const trg = e.target.closest('.appointment-block .btn-popup, .appointment-block .delete-icon, .appointment-block .resize-handle, .appointment-block .drag-handle');
+  if (!trg) return;
+  clearCalendarFloatingArtifacts();
+  const block = trg.closest('.appointment-block');
+  if (block) resetAppointmentPopupInlineStyles(block);
 }, true);
 
 function initCalendarDesktopTooltips(root = document) {
@@ -6371,6 +6432,22 @@ function showServicesDropdownNav(services) {
     });
   }
 
+function restoreDefaultAppointmentPopupMode() {
+  document.body.classList.remove('force-popup-buttons');
+  document.querySelectorAll('.appointment-block').forEach(block => {
+    try {
+      if (typeof resetAppointmentPopupInlineStyles === 'function') {
+        resetAppointmentPopupInlineStyles(block);
+      } else {
+        block.classList.remove('cut-mode-active');
+        block.classList.remove('active-popup');
+      }
+    } catch (_) {}
+  });
+  try { if (typeof window.closeAllPopups === 'function') window.closeAllPopups(); } catch (_) {}
+  try { if (typeof clearCalendarFloatingArtifacts === 'function') clearCalendarFloatingArtifacts(); } catch (_) {}
+}
+
 function renderPseudoBlocksList() {
   const container = document.getElementById('selectedServicesList');
   if (!container) return;
@@ -6378,6 +6455,7 @@ function renderPseudoBlocksList() {
   if (!Array.isArray(window.pseudoBlocks) || window.pseudoBlocks.length === 0) {
     document.body.classList.remove('pseudo-active');
     document.body.classList.remove('force-popup-buttons');
+    restoreDefaultAppointmentPopupMode();
     container.style.display = 'none';
     // Rimuovi i dati dal localStorage
     localStorage.removeItem('selectedClientIdNav');
@@ -9232,6 +9310,7 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
   window.addServiceStatus = undefined;
   document.body.classList.remove('pseudo-active');
   document.body.classList.remove('force-popup-buttons');
+  restoreDefaultAppointmentPopupMode();
 
   const clientSearchInputNav = document.getElementById('clientSearchInputNav');
   if (clientSearchInputNav) {

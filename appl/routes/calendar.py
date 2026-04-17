@@ -106,7 +106,18 @@ def _build_pacchetto_tooltip_data(pacchetto_seduta):
     if pacchetto and getattr(pacchetto, 'sedute', None):
         sedute = [s for s in pacchetto.sedute if s and s.id is not None]
         if sedute:
-            sedute_ordinate = sorted(sedute, key=lambda s: s.id)
+            # Ordine cronologico reale:
+            # 1) sedute con data_trattamento prima di quelle senza data
+            # 2) data anteriore prima di data posteriore
+            # 3) tie-break stabile su id
+            sedute_ordinate = sorted(
+                sedute,
+                key=lambda s: (
+                    0 if s.data_trattamento else 1,
+                    s.data_trattamento or datetime.max,
+                    s.id,
+                ),
+            )
             sedute_totali = len(sedute_ordinate)
             for idx, sed in enumerate(sedute_ordinate, start=1):
                 if sed.id == pacchetto_seduta.id:
@@ -906,13 +917,14 @@ def delete_appointment(appointment_id):
         if not appt:
             return jsonify({"error": "Appuntamento non trovato"}), 404
 
-        # Se l'appuntamento è collegato a una seduta pacchetto, cancella la data_trattamento
+        # Se l'appuntamento è collegato a una seduta pacchetto, cancella la data_trattamento e resetta stato
         if appt.pacchetto_seduta_id:
             seduta = db.session.get(PacchettoSeduta, appt.pacchetto_seduta_id)
             if seduta:
                 seduta.data_trattamento = None
-                seduta.operatore_id = None  # Opzionale: resetta anche l'operatore
-                app.logger.info(f"Cancellata data_trattamento dalla seduta {seduta.id} del pacchetto {seduta.pacchetto_id}")
+                seduta.operatore_id = None
+                seduta.stato = 1  # SedutaStatus.Presente
+                app.logger.info(f"Cancellata data_trattamento e stato resetato per seduta {seduta.id} del pacchetto {seduta.pacchetto_id}")
 
         db.session.delete(appt)
         db.session.commit()
