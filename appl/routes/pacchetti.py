@@ -553,21 +553,37 @@ def api_create_pacchetto():
     db.session.add(pacchetto)
     db.session.flush()
     
-    # Aggiungi sedute (servizi con quantità)
+    # Aggiungi sedute (servizi con quantità) in ordine alternato ABAB
     ordine = 1
+    # Costruisce le liste espanse per ogni servizio
+    expanded = []
     for s in data['servizi']:
         service = Service.query.get(s['id'])
         if not service:
             continue
         for _ in range(s['quantita']):
-            seduta = PacchettoSeduta(
-                pacchetto_id=pacchetto.id,
-                service_id=s['id'],
-                ordine=ordine,
-                stato=SedutaStatus.Presente.value
-            )
-            db.session.add(seduta)
-            ordine += 1
+            expanded.append(s['id'])
+    # Ordine alternato: zip e interleave delle liste per servizio
+    from itertools import zip_longest
+    service_ids_distinct = list(dict.fromkeys(s['id'] for s in data['servizi'] if Service.query.get(s['id'])))
+    groups = []
+    for sid in service_ids_distinct:
+        g = [s['id'] for s in data['servizi'] if s['id'] == sid]
+        qty = next((s['quantita'] for s in data['servizi'] if s['id'] == sid), 0)
+        svc = Service.query.get(sid)
+        if svc:
+            groups.append([sid] * qty)
+    # interleave ABAB
+    alternated = [item for row in zip_longest(*groups) for item in row if item is not None]
+    for sid in alternated:
+        seduta = PacchettoSeduta(
+            pacchetto_id=pacchetto.id,
+            service_id=sid,
+            ordine=ordine,
+            stato=SedutaStatus.Presente.value
+        )
+        db.session.add(seduta)
+        ordine += 1
     
     # Sconto regola
     sconto_tipo_raw = data.get('sconto_tipo', '')

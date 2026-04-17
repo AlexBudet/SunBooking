@@ -344,6 +344,25 @@ tr.seduta-stato-4 td,
 tr.seduta-effettuata td {
   background-color: #f5f5f5 !important;
 }
+/* Indicatore visivo drag-over */
+tr.drag-over-above {
+  border-top: 3px solid #0d6efd !important;
+  box-shadow: 0 -2px 6px rgba(13,110,253,0.25);
+}
+tr.drag-over-below {
+  border-bottom: 3px solid #0d6efd !important;
+  box-shadow: 0 2px 6px rgba(13,110,253,0.25);
+}
+tr[draggable="true"] {
+  cursor: grab;
+}
+tr[draggable="true"]:active {
+  cursor: grabbing;
+}
+tr.dragging {
+  opacity: 0.45;
+  background-color: #dbeafe !important;
+}
 /* Rate pagate - stile disabilitato */
 tr.rata-pagata {
   background-color: #e9ecef !important;
@@ -466,9 +485,10 @@ display: none;
   <div class="dropdown d-inline-block">
     <a href="#" class="action-icon dropdown-toggle" id="btnDisclaimerDropdown" 
        style="color: #6f42c1; font-size: 1.5rem;" 
-       data-bs-toggle="dropdown" aria-expanded="false"
-       title="Consenso Informato">
-      <i class="bi bi-file-earmark-medical"></i>
+       data-bs-toggle="dropdown" aria-expanded="false">
+      <i class="bi bi-file-earmark-medical"
+         data-bs-toggle="tooltip" data-bs-placement="bottom"
+         title="Consenso Informato"></i>
       <span id="consensoBadge" class="position-absolute translate-middle badge rounded-pill bg-success" style="display:none; font-size: 0.5rem; top: 5px; right: -5px;">
         ✓
       </span>
@@ -2240,27 +2260,52 @@ document.addEventListener('click', function (e) {
 
 tbody.addEventListener('dragstart', function (e) {
   draggedRow = e.target.closest('tr');
-  if (draggedRow) draggedRow.classList.add('dragging');
+  if (draggedRow) {
+    draggedRow.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  }
 });
 tbody.addEventListener('dragend', function () {
   if (draggedRow) {
     draggedRow.classList.remove('dragging');
     draggedRow = null;
   }
+  // Rimuovi tutti gli indicatori visivi residui
+  tbody.querySelectorAll('.drag-over-above, .drag-over-below').forEach(r => {
+    r.classList.remove('drag-over-above', 'drag-over-below');
+  });
 });
 
     tbody.addEventListener('dragover', function (e) {
       e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      // Rimuovi indicatori precedenti
+      tbody.querySelectorAll('.drag-over-above, .drag-over-below').forEach(r => {
+        r.classList.remove('drag-over-above', 'drag-over-below');
+      });
+      const afterElement = getDragAfterElement(tbody, e.clientY);
+      if (!afterElement) {
+        const rows = tbody.querySelectorAll('tr[data-id]');
+        const lastRow = rows[rows.length - 1];
+        if (lastRow && lastRow !== draggedRow) lastRow.classList.add('drag-over-below');
+      } else if (afterElement !== draggedRow) {
+        afterElement.classList.add('drag-over-above');
+      }
+    });
+
+    tbody.addEventListener('drop', function (e) {
+      e.preventDefault();
+      // Rimuovi indicatori visivi
+      tbody.querySelectorAll('.drag-over-above, .drag-over-below').forEach(r => {
+        r.classList.remove('drag-over-above', 'drag-over-below');
+      });
+      // Inserisci fisicamente la riga nella nuova posizione
       const afterElement = getDragAfterElement(tbody, e.clientY);
       if (!afterElement) {
         tbody.appendChild(draggedRow);
       } else {
         tbody.insertBefore(draggedRow, afterElement);
       }
-    });
-
-    tbody.addEventListener('drop', function (e) {
-      e.preventDefault();
       const rows = Array.from(tbody.querySelectorAll('tr[data-id]'));
       const order = rows.map(r => parseInt(r.dataset.id));
       fetch(`/pacchetti/api/pacchetti/${pacchettoId}/sedute/ordine`, {
