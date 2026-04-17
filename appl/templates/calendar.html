@@ -269,9 +269,12 @@
                       {% if appt.pacchetto_seduta %}
                       data-pacchetto-seduta-id="{{ appt.pacchetto_seduta.id }}"
                       data-pacchetto-id="{{ appt.pacchetto_seduta.pacchetto_id }}"
-                      data-pacchetto-nome="{{ appt.pacchetto_seduta.pacchetto.nome_pacchetto|e }}"
-                      data-pacchetto-servizio="{{ appt.pacchetto_seduta.servizio_nome|e }}"
-                      data-pacchetto-seduta-numero="{{ appt.pacchetto_seduta.numero_seduta }}"
+                      data-pacchetto-nome="{{ appt.pacchetto_seduta.pacchetto.nome|e if appt.pacchetto_seduta.pacchetto else '' }}"
+                      data-pacchetto-servizio="{{ appt.pacchetto_seduta.service.servizio_nome|e if appt.pacchetto_seduta.service else '' }}"
+                      data-pacchetto-seduta-numero="{{ appt.pacchetto_seduta.ordine }}"
+                      data-pacchetto-created-on="{{ appt.pacchetto_tooltip_created_on or '' }}"
+                      data-pacchetto-seduta-progressivo="{{ appt.pacchetto_tooltip_seduta_progressivo or '' }}"
+                      data-pacchetto-sedute-totali="{{ appt.pacchetto_tooltip_sedute_totali or '' }}"
                       {% endif %}
                  >
 <div class="popup-buttons">
@@ -389,7 +392,7 @@
 <i class="bi bi-box-seam pacchetto-badge" 
    data-bs-toggle="tooltip"
    data-bs-html="true"
-   title="<strong>📦 {{ appt.pacchetto_seduta.pacchetto.nome|e }}</strong><br>Servizio: {{ appt.pacchetto_seduta.service.servizio_nome|e if appt.pacchetto_seduta.service else '' }}<br>Seduta {{ appt.pacchetto_seduta.ordine }} di {{ appt.pacchetto_seduta.pacchetto.sedute|length }}"
+  title="Pacchetto creato il {{ appt.pacchetto_tooltip_created_on or '-' }}<br>Seduta {{ appt.pacchetto_tooltip_seduta_progressivo or appt.pacchetto_seduta.ordine }} di {{ appt.pacchetto_tooltip_sedute_totali or (appt.pacchetto_seduta.pacchetto.sedute|length if appt.pacchetto_seduta.pacchetto else '') }}"
    style="margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;"></i>
 {% endif %}
 {% if appt.client_id and prepagate_per_cliente.get(appt.client_id) %}

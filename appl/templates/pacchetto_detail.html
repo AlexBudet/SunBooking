@@ -1879,6 +1879,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (data.message) {
           // Ricarica la pagina per aggiornare lo status del pacchetto (bordi, colori)
           location.reload();
+        } else {
           // Rollback se errore
           checkbox.checked = !isEffettuata;
           const oldStato = calcolaStatoSeduta(dataISO, !isEffettuata);
