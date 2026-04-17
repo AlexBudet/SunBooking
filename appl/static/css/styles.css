@@ -1663,9 +1663,14 @@ button.client-info-btn {
   margin-left: auto;
 }
 
+/* In compact quarter mode, keep note icon visible only when the appointment has a note. */
 body.quarter-55 .appointment-block .note-indicator {
-    display: none !important;
-  }
+  display: none !important;
+}
+
+body.quarter-55 .appointment-block:not(.note-off):not(.off)[data-note]:not([data-note=""]) .note-indicator {
+  display: inline-block !important;
+}
 
 .appointment-block .client-name {
   position: relative;

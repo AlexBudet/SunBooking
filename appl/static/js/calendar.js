@@ -7424,6 +7424,7 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
   const noteIndicator = document.createElement('div');
   noteIndicator.className = 'note-indicator';
   noteIndicator.innerHTML = '<i class="bi bi-pencil-square"></i>';
+  noteIndicator.style.display = (appointment.note && String(appointment.note).trim().length > 0) ? 'block' : 'none';
   noteIndicator.onclick = function(e) {
     e.stopPropagation();
     if (window.openNoteModal) window.openNoteModal(block);
