@@ -2238,6 +2238,36 @@ function selectClient(clientId, fullName) {
 }
 
 function selectService(serviceId, serviceName, serviceDuration) {
+  function applyPacchettoMetaToPseudoBlock(blockEl, pacchettoSelezionato, sid) {
+    if (!blockEl) return;
+    // Pulizia stato precedente
+    blockEl.removeAttribute('data-pacchetto-seduta-id');
+    blockEl.removeAttribute('data-pacchetto-id');
+    blockEl.removeAttribute('data-pacchetto-nome');
+    const oldBadge = blockEl.querySelector('.pseudo-pacchetto-badge');
+    if (oldBadge) oldBadge.remove();
+
+    if (!pacchettoSelezionato || !Array.isArray(pacchettoSelezionato.sedute_disponibili)) return;
+
+    const sedutaMatch = pacchettoSelezionato.sedute_disponibili.find(
+      s => String(s.service_id) === String(sid)
+    );
+    if (!sedutaMatch) return;
+
+    const pacchettoId = pacchettoSelezionato.pacchetto_id;
+    const pacchettoNome = pacchettoSelezionato.pacchetto_nome || 'Pacchetto';
+
+    blockEl.setAttribute('data-pacchetto-seduta-id', String(sedutaMatch.seduta_id));
+    blockEl.setAttribute('data-pacchetto-id', String(pacchettoId || ''));
+    blockEl.setAttribute('data-pacchetto-nome', String(pacchettoNome));
+
+    const badge = document.createElement('i');
+    badge.className = 'bi bi-box-seam pseudo-pacchetto-badge';
+    badge.style.cssText = 'margin-left:8px;font-size:0.9em;opacity:0.75;cursor:help;';
+    badge.title = `📦 ${pacchettoNome} - seduta collegata`;
+    blockEl.appendChild(badge);
+  }
+
   document.getElementById('serviceSearchInput').value = serviceName;
   document.getElementById('service_id').value = serviceId;
   document.getElementById('serviceResults').style.display = 'none';
@@ -2276,6 +2306,7 @@ pseudoBlock.appendChild(document.createTextNode(' ' + String(serviceDuration) + 
   pseudoBlock.dataset.service = serviceName;
   pseudoBlock.dataset.duration = serviceDuration;
   pseudoBlock.dataset.serviceId = serviceId; 
+  pseudoBlock.dataset.clientId = document.getElementById('client_id')?.value || '';
 
   // Pulsante X per eliminare il blocco
   var deleteBtn = document.createElement('button');
@@ -2308,6 +2339,25 @@ pseudoBlock.appendChild(document.createTextNode(' ' + String(serviceDuration) + 
   pseudoBlock.appendChild(deleteBtn);
 
   pseudoContainer.appendChild(pseudoBlock);
+
+  // Ripristina richiesta associazione pacchetto anche nel flusso MODAL.
+  const clientIdModal = document.getElementById('client_id')?.value;
+  if (clientIdModal && String(clientIdModal).trim() !== '' && String(clientIdModal) !== '0') {
+    checkPacchettiDisponibili(clientIdModal, [serviceId])
+      .then(pacchetti => {
+        if (Array.isArray(pacchetti) && pacchetti.length > 0) {
+          mostraPopupSelezionePacchetto(pacchetti, (pacchettoSelezionato) => {
+            window.pacchettoSelezionato = pacchettoSelezionato || null;
+            applyPacchettoMetaToPseudoBlock(pseudoBlock, pacchettoSelezionato, serviceId);
+          });
+        } else {
+          window.pacchettoSelezionato = null;
+        }
+      })
+      .catch(() => {
+        // In caso di errore non bloccare la creazione del blocco lato UI.
+      });
+  }
 
   document.getElementById('serviceSearchInput').value = '';
 }
@@ -3042,7 +3092,9 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
               clientId: block.dataset.clientId || block.getAttribute('data-client-id'),
               duration: block.dataset.duration,
               start: block.dataset.start,
-              colore: block.dataset.colore
+              colore: block.dataset.colore,
+              pacchetto_seduta_id: block.dataset.pacchettoSedutaId || block.getAttribute('data-pacchetto-seduta-id') || null,
+              pacchetto_id: block.dataset.pacchettoId || block.getAttribute('data-pacchetto-id') || null
             });
           });
           data.pseudoblocks = pseudoblocks;
@@ -4734,16 +4786,29 @@ async function onCutClick(e) {
 })();
 
 document.addEventListener('DOMContentLoaded', function() {
+  function goToPacchettoDetailWithWarning(pacchettoId) {
+    if (!pacchettoId) return;
+    const ok = window.confirm(
+      'Questo appuntamento e collegato a una seduta di pacchetto.\n\n' +
+      'Per procedere correttamente, apri il pacchetto e marca la seduta come EFFETTUATA.\n\n' +
+      'Vuoi aprire ora la scheda pacchetto?'
+    );
+    if (ok) {
+      window.location.href = `/pacchetti/detail/${pacchettoId}`;
+    }
+  }
+
   // Listener delegato per pulsante "Vai al pacchetto" (appuntamenti seduta pacchetto)
   document.addEventListener('click', function(e) {
     const btn = e.target.closest('.btn-popup.vai-pacchetto');
     if (!btn) return;
     e.stopPropagation();
+    e.stopImmediatePropagation();
     e.preventDefault();
     const block = btn.closest('.appointment-block');
     const pacchettoId = block?.getAttribute('data-pacchetto-id') || btn.getAttribute('data-pacchetto-id');
     if (pacchettoId) {
-      window.location.href = `/pacchetti/detail/${pacchettoId}`;
+      goToPacchettoDetailWithWarning(pacchettoId);
     }
   }, true);
 
@@ -4761,7 +4826,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const pacchettoId = block.getAttribute('data-pacchetto-id') || button.getAttribute('data-pacchetto-id');
     if (pacchettoId) {
-      window.location.href = `/pacchetti/detail/${pacchettoId}`;
+      goToPacchettoDetailWithWarning(pacchettoId);
       return;
     }
 
@@ -7261,6 +7326,14 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
   const clientPhone = (appointment.client_cellulare || '').toString().trim();
   const serviceTag = (appointment.service_tag || appointment.servizio_tag || '').toString().trim();
   const serviceName = (appointment.service_name || '').toString().trim();
+  const pacchettoSedutaId = (appointment.pacchetto_seduta_id || appointment.pacchettoSedutaId || '').toString().trim();
+  const pacchettoId = (appointment.pacchetto_id || appointment.pacchettoId || '').toString().trim();
+  const pacchettoNome = (appointment.pacchetto_nome || appointment.pacchettoNome || '').toString().trim();
+  const pacchettoServizio = (appointment.pacchetto_servizio || appointment.pacchettoServizio || '').toString().trim();
+  const pacchettoSedutaNumero = (appointment.pacchetto_seduta_numero || appointment.pacchettoSedutaNumero || '').toString().trim();
+  const pacchettoCreatedOn = (appointment.pacchetto_created_on || appointment.pacchettoCreatedOn || '').toString().trim();
+  const pacchettoSedutaProgressivo = String(appointment.pacchetto_seduta_progressivo || appointment.pacchettoSedutaProgressivo || '').trim();
+  const pacchettoSeduteTotali = String(appointment.pacchetto_sedute_totali || appointment.pacchettoSeduteTotali || '').trim();
 
   const isDummyByName = clientNome.toLowerCase() === 'dummy' && clientCognome.toLowerCase() === 'dummy';
   const isOffBlock =
@@ -7296,6 +7369,14 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
   block.setAttribute('data-minute', minute);
   block.setAttribute('data-source', appointment.source || 'gestionale');
   if (appointment.note) block.setAttribute('data-note', appointment.note);
+  if (pacchettoSedutaId) block.setAttribute('data-pacchetto-seduta-id', pacchettoSedutaId);
+  if (pacchettoId) block.setAttribute('data-pacchetto-id', pacchettoId);
+  if (pacchettoNome) block.setAttribute('data-pacchetto-nome', pacchettoNome);
+  if (pacchettoServizio) block.setAttribute('data-pacchetto-servizio', pacchettoServizio);
+  if (pacchettoSedutaNumero) block.setAttribute('data-pacchetto-seduta-numero', pacchettoSedutaNumero);
+  if (pacchettoCreatedOn) block.setAttribute('data-pacchetto-created-on', pacchettoCreatedOn);
+  if (pacchettoSedutaProgressivo) block.setAttribute('data-pacchetto-seduta-progressivo', pacchettoSedutaProgressivo);
+  if (pacchettoSeduteTotali) block.setAttribute('data-pacchetto-sedute-totali', pacchettoSeduteTotali);
   if (appointment.created_at) block.setAttribute('data-created-at', appointment.created_at);
   if (appointment.last_edit) block.setAttribute('data-last-edit', appointment.last_edit);
 
@@ -7354,10 +7435,12 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
 
     const pagBtn = document.createElement('button');
     pagBtn.type = 'button';
-    pagBtn.className = 'btn-popup pagamento';
-    pagBtn.title = 'Porta in cassa';
+    const hasPacchetto = !!(pacchettoId || pacchettoSedutaId);
+    pagBtn.className = hasPacchetto ? 'btn-popup pagamento vai-pacchetto' : 'btn-popup pagamento';
+    pagBtn.title = hasPacchetto ? 'VAI AL PACCHETTO' : 'Porta in cassa';
     pagBtn.setAttribute('data-bs-toggle', 'tooltip');
     pagBtn.setAttribute('data-appointment-id', appointment.id);
+    if (pacchettoId) pagBtn.setAttribute('data-pacchetto-id', pacchettoId);
     pagBtn.innerHTML = '<i class="bi bi-currency-euro"></i>';
     popupDiv.appendChild(pagBtn);
 
@@ -7451,6 +7534,30 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
     assignLink.textContent = '?';
     pClient.appendChild(assignLink);
   } else {
+    if (pacchettoSedutaId || pacchettoId) {
+      const pacchettoBadge = document.createElement('i');
+      pacchettoBadge.className = 'bi bi-box-seam pacchetto-badge';
+      pacchettoBadge.setAttribute('data-bs-toggle', 'tooltip');
+      pacchettoBadge.setAttribute('data-bs-html', 'true');
+      const titleParts = [];
+      if (pacchettoCreatedOn) {
+        titleParts.push(`Pacchetto creato il ${pacchettoCreatedOn}`);
+      }
+      if (pacchettoSedutaProgressivo && pacchettoSeduteTotali) {
+        titleParts.push(`Seduta ${pacchettoSedutaProgressivo} di ${pacchettoSeduteTotali}`);
+      } else if (pacchettoSedutaNumero && pacchettoSeduteTotali) {
+        titleParts.push(`Seduta ${pacchettoSedutaNumero} di ${pacchettoSeduteTotali}`);
+      } else if (pacchettoSedutaNumero) {
+        titleParts.push(`Seduta ${pacchettoSedutaNumero}`);
+      }
+      if (titleParts.length === 0) {
+        titleParts.push('Pacchetto collegato');
+      }
+      pacchettoBadge.setAttribute('title', titleParts.join('<br>'));
+      pacchettoBadge.style.cssText = 'margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;';
+      pClient.appendChild(pacchettoBadge);
+    }
+
     const link = document.createElement('a');
     link.href = 'javascript:void(0)';
     link.className = 'client-info-link';

@@ -2,7 +2,7 @@
 from collections import defaultdict
 from flask import Blueprint, logging, make_response, session, render_template, request, redirect, url_for, jsonify, flash, abort
 from flask_caching import Cache
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from datetime import date, time as dtime
 from datetime import datetime, timedelta, time, timezone
 from decimal import Decimal
@@ -85,6 +85,43 @@ def random_color():
     b = random.randint(0, 255)
     return f"#{r:02x}{g:02x}{b:02x}"
 
+
+def _build_pacchetto_tooltip_data(pacchetto_seduta):
+    """Costruisce i dati minimi da mostrare nel tooltip del badge pacchetto."""
+    if not pacchetto_seduta:
+        return {
+            "created_on": None,
+            "seduta_progressivo": None,
+            "sedute_totali": None,
+        }
+
+    pacchetto = pacchetto_seduta.pacchetto
+    created_on = None
+    seduta_progressivo = None
+    sedute_totali = None
+
+    if pacchetto and pacchetto.data_sottoscrizione:
+        created_on = pacchetto.data_sottoscrizione.strftime('%d/%m/%Y')
+
+    if pacchetto and getattr(pacchetto, 'sedute', None):
+        sedute = [s for s in pacchetto.sedute if s and s.id is not None]
+        if sedute:
+            sedute_ordinate = sorted(sedute, key=lambda s: s.id)
+            sedute_totali = len(sedute_ordinate)
+            for idx, sed in enumerate(sedute_ordinate, start=1):
+                if sed.id == pacchetto_seduta.id:
+                    seduta_progressivo = idx
+                    break
+
+    if seduta_progressivo is None and pacchetto_seduta.ordine:
+        seduta_progressivo = pacchetto_seduta.ordine
+
+    return {
+        "created_on": created_on,
+        "seduta_progressivo": seduta_progressivo,
+        "sedute_totali": sedute_totali,
+    }
+
 @calendar_bp.route('/', methods=['GET'])
 def calendar_home():
     # Recupera la data come stringa e poi converti in datetime
@@ -121,7 +158,7 @@ def calendar_home():
         joinedload(Appointment.client),
         joinedload(Appointment.service),
         joinedload(Appointment.operator),
-        joinedload(Appointment.pacchetto_seduta).joinedload(PacchettoSeduta.pacchetto)
+        joinedload(Appointment.pacchetto_seduta).joinedload(PacchettoSeduta.pacchetto).selectinload(Pacchetto.sedute)
     ).all()
 
     for appt in appointments:
@@ -133,6 +170,11 @@ def calendar_home():
                     appt.last_edit = appt.created_at + timedelta(minutes=1)
             except Exception:
                 pass
+
+        tooltip_data = _build_pacchetto_tooltip_data(appt.pacchetto_seduta)
+        appt.pacchetto_tooltip_created_on = tooltip_data["created_on"]
+        appt.pacchetto_tooltip_seduta_progressivo = tooltip_data["seduta_progressivo"]
+        appt.pacchetto_tooltip_sedute_totali = tooltip_data["sedute_totali"]
 
     # Prepara i dati degli appuntamenti per il rendering
     appointment_data = []
@@ -550,6 +592,14 @@ def create_appointment():
                         "client_id": appt.client_id,
                         "service_id": appt.service_id,
                         "source": appt.source.value if hasattr(appt.source, "value") else (appt.source or "gestionale"),
+                        "pacchetto_seduta_id": appt.pacchetto_seduta_id,
+                        "pacchetto_id": appt.pacchetto_seduta.pacchetto_id if appt.pacchetto_seduta else None,
+                        "pacchetto_nome": appt.pacchetto_seduta.pacchetto.nome if appt.pacchetto_seduta and appt.pacchetto_seduta.pacchetto else None,
+                        "pacchetto_servizio": appt.pacchetto_seduta.service.servizio_nome if appt.pacchetto_seduta and appt.pacchetto_seduta.service else None,
+                        "pacchetto_seduta_numero": appt.pacchetto_seduta.ordine if appt.pacchetto_seduta else None,
+                        "pacchetto_created_on": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["created_on"],
+                        "pacchetto_seduta_progressivo": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["seduta_progressivo"],
+                        "pacchetto_sedute_totali": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["sedute_totali"],
                         "is_off": bool(
                             appt.client is not None and appt.service is not None and
                             (getattr(appt.client, "cliente_nome", "").strip().lower() == "dummy") and
@@ -634,6 +684,14 @@ def create_appointment():
             "client_id":   new_appt.client_id,
             "service_id":  new_appt.service_id,
             "source": new_appt.source.value if hasattr(new_appt.source, "value") else (new_appt.source or "gestionale"),
+            "pacchetto_seduta_id": new_appt.pacchetto_seduta_id,
+            "pacchetto_id": new_appt.pacchetto_seduta.pacchetto_id if new_appt.pacchetto_seduta else None,
+            "pacchetto_nome": new_appt.pacchetto_seduta.pacchetto.nome if new_appt.pacchetto_seduta and new_appt.pacchetto_seduta.pacchetto else None,
+            "pacchetto_servizio": new_appt.pacchetto_seduta.service.servizio_nome if new_appt.pacchetto_seduta and new_appt.pacchetto_seduta.service else None,
+            "pacchetto_seduta_numero": new_appt.pacchetto_seduta.ordine if new_appt.pacchetto_seduta else None,
+            "pacchetto_created_on": _build_pacchetto_tooltip_data(new_appt.pacchetto_seduta)["created_on"],
+            "pacchetto_seduta_progressivo": _build_pacchetto_tooltip_data(new_appt.pacchetto_seduta)["seduta_progressivo"],
+            "pacchetto_sedute_totali": _build_pacchetto_tooltip_data(new_appt.pacchetto_seduta)["sedute_totali"],
             "is_off": bool(
                 new_appt.client is not None and new_appt.service is not None and
                 (getattr(new_appt.client, "cliente_nome", "").strip().lower() == "dummy") and
@@ -1622,7 +1680,8 @@ def calendar_appointments_by_date():
     ).options(
         joinedload(Appointment.client),
         joinedload(Appointment.service),
-        joinedload(Appointment.operator)
+        joinedload(Appointment.operator),
+        joinedload(Appointment.pacchetto_seduta).joinedload(PacchettoSeduta.pacchetto).selectinload(Pacchetto.sedute)
     ).all()
 
     result = []
@@ -1656,6 +1715,14 @@ def calendar_appointments_by_date():
             "client_id": appt.client_id,
             "service_id": appt.service_id,
             "source": source_val,
+            "pacchetto_seduta_id": appt.pacchetto_seduta_id,
+            "pacchetto_id": appt.pacchetto_seduta.pacchetto_id if appt.pacchetto_seduta else None,
+            "pacchetto_nome": appt.pacchetto_seduta.pacchetto.nome if appt.pacchetto_seduta and appt.pacchetto_seduta.pacchetto else None,
+            "pacchetto_servizio": appt.pacchetto_seduta.service.servizio_nome if appt.pacchetto_seduta and appt.pacchetto_seduta.service else None,
+            "pacchetto_seduta_numero": appt.pacchetto_seduta.ordine if appt.pacchetto_seduta else None,
+            "pacchetto_created_on": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["created_on"],
+            "pacchetto_seduta_progressivo": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["seduta_progressivo"],
+            "pacchetto_sedute_totali": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["sedute_totali"],
             "is_off": is_off,
             "created_at": to_rome(appt.created_at).isoformat() if appt.created_at else None,
             "last_edit": to_rome(appt.last_edit).isoformat() if appt.last_edit else None,

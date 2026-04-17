@@ -871,7 +871,20 @@ def pacchetto_detail(id):
         operatori_map = {o.id: f"{o.user_nome}" for o in operatori_db}
 
     # Costruisci sedute usando i dati già caricati (zero query aggiuntive)
-    sedute_ordinate = sorted(pacchetto.sedute, key=lambda s: s.ordine or 0)
+    # Ordine gerarchico richiesto:
+    # 1) seduta effettuata prima delle non effettuate
+    # 2) data anteriore prima della posteriore
+    # 3) a parita, usa ordine storico come tie-breaker
+    sedute_ordinate = sorted(
+        pacchetto.sedute,
+        key=lambda s: (
+            0 if s.stato == SedutaStatus.Effettuata.value else 1,
+            0 if s.data_trattamento else 1,
+            s.data_trattamento or datetime.max,
+            s.ordine or 0,
+            s.id
+        )
+    )
     sedute = []
     for s in sedute_ordinate:
         sedute.append({
@@ -1072,17 +1085,26 @@ def api_update_seduta(id, seduta_id):
             except Exception:
                 return jsonify({'error': 'Formato data non valido'}), 400
 
+    nuovo_stato = None
     if 'stato' in data:
-        seduta.stato = data['stato']
+        try:
+            nuovo_stato = int(data['stato'])
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Valore stato non valido'}), 400
+        seduta.stato = nuovo_stato
 
     # Aggiungi voce history con dettaglio azione
-    if 'stato' in data and data['stato'] == SedutaStatus.Effettuata.value:
+    if nuovo_stato == SedutaStatus.Effettuata.value:
         aggiungi_history(pacchetto, f"Seduta {seduta.ordine} effettuata")
         
         # Cerca l'appuntamento che ha pacchetto_seduta_id = seduta.id
         appointment = Appointment.query.filter_by(pacchetto_seduta_id=seduta.id).first()
         if appointment:
             appointment.stato = AppointmentStatus.PAGATO
+    elif nuovo_stato is not None:
+        appointment = Appointment.query.filter_by(pacchetto_seduta_id=seduta.id).first()
+        if appointment and appointment.stato == AppointmentStatus.PAGATO:
+            appointment.stato = AppointmentStatus.DEFAULT
     else:
         aggiungi_history(pacchetto, f"Modificata seduta {seduta.ordine}")
     aggiorna_status_pacchetto(pacchetto)
