@@ -2121,8 +2121,16 @@ def set_bookings():
                    joinedload(Service.servizio_sottocategoria).load_only(Subcategory.nome)
                )
                .filter(Service.is_deleted == False)
-               .order_by(func.lower(Service.servizio_nome))
                .all())
+
+    servizi = sorted(
+        servizi,
+        key=lambda s: (
+            (s.servizio_sottocategoria.nome.lower() if getattr(s, 'servizio_sottocategoria', None) and s.servizio_sottocategoria.nome else ''),
+            (s.servizio_categoria.value if getattr(s, 'servizio_categoria', None) else ''),
+            (s.servizio_nome or '').lower()
+        )
+    )
 
     counts = dict(db.session.query(
         Service.id,
@@ -2139,10 +2147,16 @@ def set_bookings():
 
     servizi_tabella = []
     for s in servizi:
+        nome = s.servizio_nome or ''
+        sottocategoria = s.servizio_sottocategoria.nome if s.servizio_sottocategoria else ''
+        # Escludi servizi dummy e servizi senza sottocategoria
+        if nome.lower().strip() == 'dummy' or not sottocategoria:
+            continue
         servizi_tabella.append({
             "id": s.id,
-            "nome": s.servizio_nome,
-            "sottocategoria": s.servizio_sottocategoria.nome if s.servizio_sottocategoria else "",
+            "nome": nome,
+            "categoria": s.servizio_categoria.value if getattr(s, 'servizio_categoria', None) else "",
+            "sottocategoria": sottocategoria,
             "is_visible_online": getattr(s, "is_visible_online", True),
             "operatori_count": int(counts.get(s.id, 0)),
         })
@@ -2188,12 +2202,157 @@ def update_service_visibility():
     db.session.commit()
     return {'success': True}
 
+@settings_bp.route('/update_category_visibility', methods=['POST'])
+def update_category_visibility():
+    data = request.get_json(silent=True) or {}
+    categoria = (data.get('categoria') or '').strip()
+    value = bool(data.get('value', False))
+
+    if not categoria:
+        return {'success': False, 'error': 'Categoria mancante'}, 400
+
+    services = Service.query.filter(
+        Service.is_deleted == False
+    ).all()
+    services = [
+        s for s in services
+        if getattr(s, 'servizio_categoria', None) and s.servizio_categoria.value == categoria
+    ]
+
+    for service in services:
+        service.is_visible_online = value
+
+    db.session.commit()
+    return {'success': True, 'updated': len(services)}
+
+@settings_bp.route('/update_subcategory_visibility', methods=['POST'])
+def update_subcategory_visibility():
+    data = request.get_json(silent=True) or {}
+    sottocategoria = (data.get('sottocategoria') or '').strip()
+    value = bool(data.get('value', False))
+
+    if not sottocategoria:
+        return {'success': False, 'error': 'Sottocategoria mancante'}, 400
+
+    services = Service.query.options(
+        joinedload(Service.servizio_sottocategoria).load_only(Subcategory.nome)
+    ).filter(Service.is_deleted == False).all()
+    services = [
+        s for s in services
+        if getattr(s, 'servizio_sottocategoria', None)
+        and (s.servizio_sottocategoria.nome or '') == sottocategoria
+    ]
+
+    for service in services:
+        service.is_visible_online = value
+
+    db.session.commit()
+    return {'success': True, 'updated': len(services)}
+
 @settings_bp.route('/get_service_operators/<int:service_id>')
 def get_service_operators(service_id):
     service = db.session.get(Service, service_id)
     if not service:
         return jsonify(operator_ids=[])
     return jsonify(operator_ids=[op.id for op in service.operators if getattr(op, 'is_visible', False) and not getattr(op, 'is_deleted', False)])
+
+@settings_bp.route('/get_category_operators/<path:categoria>')
+def get_category_operators(categoria):
+    services = Service.query.filter(
+        Service.is_deleted == False
+    ).all()
+    services = [
+        s for s in services
+        if getattr(s, 'servizio_categoria', None) and s.servizio_categoria.value == categoria
+    ]
+    if not services:
+        return jsonify(operator_ids=[])
+
+    first = services[0]
+    operator_ids = [
+        op.id for op in first.operators
+        if getattr(op, 'is_visible', False) and not getattr(op, 'is_deleted', False)
+    ]
+    return jsonify(operator_ids=operator_ids)
+
+@settings_bp.route('/get_subcategory_operators/<path:sottocategoria>')
+def get_subcategory_operators(sottocategoria):
+    services = Service.query.options(
+        joinedload(Service.servizio_sottocategoria).load_only(Subcategory.nome)
+    ).filter(Service.is_deleted == False).all()
+    services = [
+        s for s in services
+        if getattr(s, 'servizio_sottocategoria', None)
+        and (s.servizio_sottocategoria.nome or '') == sottocategoria
+    ]
+    if not services:
+        return jsonify(operator_ids=[])
+
+    first = services[0]
+    operator_ids = [
+        op.id for op in first.operators
+        if getattr(op, 'is_visible', False) and not getattr(op, 'is_deleted', False)
+    ]
+    return jsonify(operator_ids=operator_ids)
+
+@settings_bp.route('/update_category_operators', methods=['POST'])
+def update_category_operators():
+    data = request.get_json(silent=True) or {}
+    categoria = (data.get('categoria') or '').strip()
+    ids = [int(x) for x in (data.get('operator_ids') or [])]
+
+    if not categoria:
+        return {'success': False, 'error': 'Categoria mancante'}, 400
+
+    new_ops = db.session.query(Operator).filter(
+        Operator.id.in_(ids),
+        Operator.is_visible == True,
+        Operator.is_deleted == False
+    ).all()
+
+    services = Service.query.filter(
+        Service.is_deleted == False
+    ).all()
+    services = [
+        s for s in services
+        if getattr(s, 'servizio_categoria', None) and s.servizio_categoria.value == categoria
+    ]
+
+    for service in services:
+        service.operators = new_ops
+
+    db.session.commit()
+    return {'success': True, 'updated': len(services)}
+
+@settings_bp.route('/update_subcategory_operators', methods=['POST'])
+def update_subcategory_operators():
+    data = request.get_json(silent=True) or {}
+    sottocategoria = (data.get('sottocategoria') or '').strip()
+    ids = [int(x) for x in (data.get('operator_ids') or [])]
+
+    if not sottocategoria:
+        return {'success': False, 'error': 'Sottocategoria mancante'}, 400
+
+    new_ops = db.session.query(Operator).filter(
+        Operator.id.in_(ids),
+        Operator.is_visible == True,
+        Operator.is_deleted == False
+    ).all()
+
+    services = Service.query.options(
+        joinedload(Service.servizio_sottocategoria).load_only(Subcategory.nome)
+    ).filter(Service.is_deleted == False).all()
+    services = [
+        s for s in services
+        if getattr(s, 'servizio_sottocategoria', None)
+        and (s.servizio_sottocategoria.nome or '') == sottocategoria
+    ]
+
+    for service in services:
+        service.operators = new_ops
+
+    db.session.commit()
+    return {'success': True, 'updated': len(services)}
 
 @settings_bp.route('/update_booking_rules', methods=['POST'])
 def update_booking_rules():
@@ -2211,33 +2370,28 @@ def update_booking_rules():
     # Prezzo
     business_info.booking_max_prezzo = float(prezzo.get('max', 0)) if prezzo.get('active') else 0
 
-    # Tipo regola: block ha priorità su warning, altrimenti none
+    # Tipo regola separato per DURATA e PREZZO.
+    # Priorita: block > warning > none
     if durata.get('block'):
-        business_info.booking_rule_type = 'block'
-        business_info.booking_rule_message = durata.get('block_msg', '')
+        business_info.booking_rule_type_durata = 'block'
     elif durata.get('warning'):
-        business_info.booking_rule_type = 'warning'
-        business_info.booking_rule_message = durata.get('warning_msg', '')
-    elif prezzo.get('block'):
-        business_info.booking_rule_type = 'block'
-        business_info.booking_rule_message = prezzo.get('block_msg', '')
-    elif prezzo.get('warning'):
-        business_info.booking_rule_type = 'warning'
-        business_info.booking_rule_message = prezzo.get('warning_msg', '')
+        business_info.booking_rule_type_durata = 'warning'
     else:
-        business_info.booking_rule_type = 'none'
-        business_info.booking_rule_message = ''
+        business_info.booking_rule_type_durata = 'none'
+
+    if prezzo.get('block'):
+        business_info.booking_rule_type_prezzo = 'block'
+    elif prezzo.get('warning'):
+        business_info.booking_rule_type_prezzo = 'warning'
+    else:
+        business_info.booking_rule_type_prezzo = 'none'
 
     message_durata = (durata.get('warning_msg', '') or durata.get('block_msg', '')).strip()
     if not message_durata:
         message_durata = "none"
-    business_info.booking_rule_message_durata = message_durata
-
     message_prezzo = (prezzo.get('warning_msg', '') or prezzo.get('block_msg', '')).strip()
     if not message_prezzo:
         message_prezzo = "none"
-    business_info.booking_rule_message_prezzo = message_prezzo
-
     business_info.booking_rule_message_durata = message_durata
     business_info.booking_rule_message_prezzo = message_prezzo
 
@@ -2554,10 +2708,10 @@ def pacchetti_settings():
     disclaimer = getattr(business_info, 'whatsapp_template_pacchetti_disclaimer', None) if business_info else None
     giorni = getattr(business_info, 'pacchetti_giorni_abbandono', 90) if business_info else 90
     
-    # Carica solo servizi attivi, visibili online e non dummy
+    # Carica tutti i servizi attivi/non dummy.
+    # La visibilita online non deve nasconderli dalla sezione disclaimer pacchetti.
     servizi = Service.query.filter(
         Service.is_deleted == False,
-        Service.is_visible_online == True,
         Service.servizio_nome != 'dummy'
     ).order_by(Service.servizio_nome).all()
     
@@ -2699,6 +2853,27 @@ def api_save_servizio_disclaimer(servizio_id):
     db.session.commit()
     
     return jsonify({'success': True, 'message': 'Disclaimer salvato'})
+
+@settings_bp.route('/api/servizi/categoria/<path:categoria>/disclaimer', methods=['POST'])
+def api_save_categoria_disclaimer(categoria):
+    """Applica lo stesso disclaimer a tutti i servizi di una categoria."""
+    data = request.get_json(silent=True) or {}
+    disclaimer = data.get('disclaimer', '').strip()
+
+    services = Service.query.filter(Service.is_deleted == False).all()
+    services = [
+        s for s in services
+        if getattr(s, 'servizio_categoria', None) and s.servizio_categoria.value == categoria
+    ]
+
+    if not services:
+        return jsonify({'success': False, 'error': 'Nessun servizio trovato per la categoria'}), 404
+
+    for servizio in services:
+        servizio.servizio_disclaimer = disclaimer if disclaimer else None
+
+    db.session.commit()
+    return jsonify({'success': True, 'updated': len(services), 'message': 'Disclaimer categoria salvato'})
 
 @settings_bp.route('/api/pacchetti/<int:pacchetto_id>/disclaimer_data', methods=['GET'])
 def api_get_disclaimer_data(pacchetto_id):

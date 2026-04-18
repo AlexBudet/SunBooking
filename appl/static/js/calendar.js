@@ -6042,10 +6042,15 @@ function selectServiceNav(serviceId, serviceName, serviceDuration, serviceTag) {
                       
                       // ✅ FIX: Assegna SUBITO pacchettoSedutaId e pacchettoId ai pseudoblocchi
                       if (pacchettoSelezionato && pacchettoSelezionato.sedute_disponibili && window.pseudoBlocks) {
+                          // Ordina per ordine ASC: prende sempre la seduta con numero d'ordine più basso disponibile
+                          const sedute_sorted = [...pacchettoSelezionato.sedute_disponibili].sort((a, b) => (a.ordine || 0) - (b.ordine || 0));
+                          // Traccia le sedute già assegnate in questa sessione per evitare duplicati
+                          const sedute_usate = new Set();
                           window.pseudoBlocks.forEach(blk => {
-                              const sedutaMatch = pacchettoSelezionato.sedute_disponibili.find(
-                                  s => String(s.service_id) === String(blk.serviceId)
+                              const sedutaMatch = sedute_sorted.find(
+                                  s => String(s.service_id) === String(blk.serviceId) && !sedute_usate.has(s.seduta_id)
                               );
+                              if (sedutaMatch) sedute_usate.add(sedutaMatch.seduta_id);
                               if (sedutaMatch) {
                                   blk.pacchettoSedutaId = sedutaMatch.seduta_id;
                                   blk.pacchettoId = pacchettoSelezionato.pacchetto_id;

@@ -867,6 +867,34 @@ def pacchetto_detail(id):
 
     # Aggiorna lo status del pacchetto prima di mostrare la pagina
     aggiorna_status_pacchetto(pacchetto)
+
+    # ── SECOND CHECK: sincronizza sedute con appuntamenti in calendario ──────
+    # Carica tutti gli Appointment collegati alle sedute di questo pacchetto
+    seduta_ids = [s.id for s in pacchetto.sedute]
+    appointments_linked = {}
+    if seduta_ids:
+        appts = Appointment.query.filter(
+            Appointment.pacchetto_seduta_id.in_(seduta_ids),
+            Appointment.is_cancelled_by_client == False
+        ).all()
+        for appt in appts:
+            appointments_linked[appt.pacchetto_seduta_id] = appt
+
+    # Sincronizza data_trattamento e operatore_id dalla seduta verso l'appuntamento (fonte di verità = calendario)
+    changed = False
+    for seduta in pacchetto.sedute:
+        appt = appointments_linked.get(seduta.id)
+        if appt:
+            if seduta.data_trattamento != appt.start_time:
+                seduta.data_trattamento = appt.start_time
+                changed = True
+            if seduta.operatore_id != appt.operator_id:
+                seduta.operatore_id = appt.operator_id
+                changed = True
+    if changed:
+        db.session.commit()
+    # ── FINE SECOND CHECK ────────────────────────────────────────────────────
+
     db.session.commit()
 
     def format_data_it(d):
@@ -887,22 +915,15 @@ def pacchetto_detail(id):
         operatori_map = {o.id: f"{o.user_nome}" for o in operatori_db}
 
     # Costruisci sedute usando i dati già caricati (zero query aggiuntive)
-    # Ordine gerarchico richiesto:
-    # 1) seduta effettuata prima delle non effettuate
-    # 2) data anteriore prima della posteriore
-    # 3) a parita, usa ordine storico come tie-breaker
-    sedute_ordinate = sorted(
-        pacchetto.sedute,
-        key=lambda s: (
-            0 if s.stato == SedutaStatus.Effettuata.value else 1,
-            0 if s.data_trattamento else 1,
-            s.data_trattamento or datetime.max,
-            s.ordine or 0,
-            s.id
-        )
-    )
+    # Regola di ordinamento:
+    # - Usa il campo `ordine` (impostato dal D&D) come chiave primaria per tutte le sedute
+    # - Le sedute con appuntamento in calendar NON sono draggabili, quindi il loro ordine
+    #   relativo tra loro è garantito dalla procedura di booking (ordine cronologico).
+    # - Le sedute senza appuntamento possono stare ovunque (prima o dopo quelle con appuntamento).
+    sedute_ordinate = sorted(pacchetto.sedute, key=lambda s: (s.ordine or 0, s.id))
     sedute = []
     for s in sedute_ordinate:
+        appt = appointments_linked.get(s.id)
         sedute.append({
             'id': s.id,
             'ordine': s.ordine,
@@ -913,7 +934,9 @@ def pacchetto_detail(id):
             'stato': s.stato,
             'data_trattamento': s.data_trattamento.strftime('%Y-%m-%d') if s.data_trattamento else None,
             'operatore_id': s.operatore_id,
-            'operatore_nome': operatori_map.get(s.operatore_id) if s.operatore_id else None
+            'operatore_nome': operatori_map.get(s.operatore_id) if s.operatore_id else None,
+            'appointment_id': appt.id if appt else None,
+            'appointment_start': appt.start_time.strftime('%d/%m/%Y %H:%M') if appt else None,
         })
 
     # Ordina rate: prima le pagate (per data_pagamento), poi le non pagate (per id)
@@ -1340,16 +1363,25 @@ def check_pacchetti_disponibili():
         for pacchetto in pacchetti:
             
             sedute_disponibili = []
-            for seduta in pacchetto.sedute:
-                # Converti service_ids in interi per confronto corretto
-                service_ids_int = [int(sid) for sid in service_ids]
-                if seduta.service_id in service_ids_int and seduta.stato != SedutaStatus.Effettuata:
-                    sedute_disponibili.append({
-                        'seduta_id': seduta.id,
-                        'service_id': seduta.service_id,
-                        'service_nome': seduta.service.servizio_nome if seduta.service else 'Servizio',
-                        'ordine': seduta.ordine
-                    })
+            # Converti service_ids in interi una volta sola
+            service_ids_int = [int(sid) for sid in service_ids]
+            # Ordina per ordine ASC così .find() nel JS prende sempre la seduta con ordine più basso
+            sedute_ordinate = sorted(pacchetto.sedute, key=lambda s: s.ordine)
+            for seduta in sedute_ordinate:
+                if seduta.service_id not in service_ids_int:
+                    continue
+                # Escludi sedute già Effettuate
+                if seduta.stato == SedutaStatus.Effettuata.value:
+                    continue
+                # Escludi sedute già collegate a un appuntamento in calendario
+                if seduta.appointment is not None:
+                    continue
+                sedute_disponibili.append({
+                    'seduta_id': seduta.id,
+                    'service_id': seduta.service_id,
+                    'service_nome': seduta.service.servizio_nome if seduta.service else 'Servizio',
+                    'ordine': seduta.ordine
+                })
             
             if sedute_disponibili:
                 risultati.append({

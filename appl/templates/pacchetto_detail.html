@@ -75,6 +75,17 @@
   color: #ffffff !important;
 }
 
+/* Righe con appuntamento in calendario: non draggabili, evidenziate */
+tr.has-calendar-appt {
+  cursor: default !important;
+}
+tr.has-calendar-appt > td:first-child {
+  border-left: 3px solid #0d6efd;
+}
+tr.has-calendar-appt[draggable="false"] {
+  opacity: 1;
+}
+
 /* Header tabella sedute quando pacchetto è completato */
 .status-completato #seduteTable thead th {
   background-color: #7e7e7e !important;
@@ -716,13 +727,19 @@ display: none;
 </thead>
 <tbody>
   {% for s in pacchetto.sedute %}
-  <tr draggable="true" data-id="{{ s.id }}" data-stato="{{ s.stato }}" data-data="{{ s.data_trattamento or '' }}"
-      class="status-row status-{{ pacchetto.status|lower }} seduta-stato-{{ s.stato }}"
+  <tr draggable="{{ 'false' if s.appointment_id else 'true' }}"
+      data-id="{{ s.id }}" data-stato="{{ s.stato }}" data-data="{{ s.data_trattamento or '' }}"
+      data-appointment-id="{{ s.appointment_id or '' }}"
+      class="status-row status-{{ pacchetto.status|lower }} seduta-stato-{{ s.stato }}{% if s.appointment_id %} has-calendar-appt{% endif %}"
       {% if s.stato == 4 %}data-bs-toggle="tooltip" data-bs-placement="left" title="Seduta già effettuata"{% endif %}
       {% if s.stato == 3 %}data-bs-toggle="tooltip" data-bs-placement="left" title="Seduta saltata (data passata senza essere effettuata)"{% endif %}>
-    <td class="data-cell" 
-        {% if not s.data_trattamento %}data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca per scegliere data e fissare in agenda"{% endif %}>
-      {{ s.data_trattamento|default('—') }}
+    <td class="data-cell" data-date="{{ s.data_trattamento or '' }}"
+        {% if not s.data_trattamento and not s.appointment_id %}data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca per scegliere data e fissare in agenda"{% endif %}>
+      {% if s.appointment_id %}
+        <span title="Appuntamento fissato in agenda">📅 {{ s.appointment_start }}</span>
+      {% else %}
+        {{ s.data_trattamento|default('—') }}
+      {% endif %}
     </td>
     <td>{{ s.service_nome }}</td>
     <td class="n-star"></td>
@@ -1465,6 +1482,15 @@ function updateRateWithSedutaRef(sedutaIndex, newDate) {
 function normalizeDateCells() {
   document.querySelectorAll('#seduteTable tbody tr[data-id]').forEach(row => {
     const cell = row.querySelector('.data-cell');
+    // Righe con appuntamento in calendario: dataset.date è già impostato dall'attributo HTML,
+    // e il contenuto (span con 📅) non va toccato.
+    if (row.dataset.appointmentId) {
+      // Assicura che dataset.date sia valorizzato per populateNStar
+      if (!cell.dataset.date && cell.dataset.date !== undefined) {
+        // già impostato dall'attributo data-date nel template
+      }
+      return;
+    }
     const text = (cell.textContent || '').trim();
     if (text && text !== '—' && /^\d{4}-\d{2}-\d{2}$/.test(text)) {
       cell.dataset.date = text;
@@ -2259,7 +2285,13 @@ document.addEventListener('click', function (e) {
     let draggedRow = null;
 
 tbody.addEventListener('dragstart', function (e) {
-  draggedRow = e.target.closest('tr');
+  const row = e.target.closest('tr');
+  // Blocca drag sulle righe con appuntamento in calendario
+  if (row && row.dataset.appointmentId) {
+    e.preventDefault();
+    return;
+  }
+  draggedRow = row;
   if (draggedRow) {
     draggedRow.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
@@ -2299,8 +2331,10 @@ tbody.addEventListener('dragend', function () {
       tbody.querySelectorAll('.drag-over-above, .drag-over-below').forEach(r => {
         r.classList.remove('drag-over-above', 'drag-over-below');
       });
-      // Inserisci fisicamente la riga nella nuova posizione
+
       const afterElement = getDragAfterElement(tbody, e.clientY);
+
+      // Inserisci fisicamente la riga nella nuova posizione
       if (!afterElement) {
         tbody.appendChild(draggedRow);
       } else {
