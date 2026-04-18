@@ -7569,7 +7569,9 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
   const block = document.createElement('div');
   const duration = parseInt(appointment.duration, 10) || 15;
   const status = Number(appointment.status ?? appointment.stato ?? 0) || 0;
-  const colore = appointment.colore || '#FFFFFF';
+  const source = String(appointment.source || '').trim().toLowerCase();
+  const defaultColor = (source === 'web') ? '#007bff' : '#FFFFFF';
+  const colore = appointment.colore || defaultColor;
   const coloreFont = appointment.colore_font || computeFontColor(colore);
 
   const fallbackFullName = (appointment.client_name || '').toString().trim();
