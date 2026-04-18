@@ -918,13 +918,20 @@ def delete_appointment(appointment_id):
             return jsonify({"error": "Appuntamento non trovato"}), 404
 
         # Se l'appuntamento è collegato a una seduta pacchetto, cancella la data_trattamento e resetta stato
+        # PROTEZIONE: non toccare mai le sedute già Effettuate (stato == 4)
         if appt.pacchetto_seduta_id:
             seduta = db.session.get(PacchettoSeduta, appt.pacchetto_seduta_id)
             if seduta:
-                seduta.data_trattamento = None
-                seduta.operatore_id = None
-                seduta.stato = 1  # SedutaStatus.Presente
-                app.logger.info(f"Cancellata data_trattamento e stato resetato per seduta {seduta.id} del pacchetto {seduta.pacchetto_id}")
+                if seduta.stato == 4:  # SedutaStatus.Effettuata — irrevocabile
+                    app.logger.warning(
+                        f"Tentativo di reset su seduta già Effettuata {seduta.id} "
+                        f"(pacchetto {seduta.pacchetto_id}) — ignorato per protezione integrità"
+                    )
+                else:
+                    seduta.data_trattamento = None
+                    seduta.operatore_id = None
+                    seduta.stato = 1  # SedutaStatus.Presente
+                    app.logger.info(f"Cancellata data_trattamento e stato resetato per seduta {seduta.id} del pacchetto {seduta.pacchetto_id}")
 
         db.session.delete(appt)
         db.session.commit()

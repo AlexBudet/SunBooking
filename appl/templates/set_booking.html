@@ -90,34 +90,68 @@
 </div>
   <br><br><br>
   <h2>Operatori selezionabili per servizio</h2>
-  <table class="table sortable" id="booking-table">
+  <table class="table" id="booking-table">
     <thead>
       <tr>
-        <th>Servizio <span class="sort-icons">▲<br>▼</span></th>
-        <th>Sottocategoria <span class="sort-icons">▲<br>▼</span></th>
-        <th>Visibile online <span class="sort-icons">▲<br>▼</span></th>
-        <th>Operatori associati <span class="sort-icons">▲<br>▼</span></th>
+        <th>Servizio</th>
+        <th>Sottocategoria</th>
+        <th>Visibile online</th>
+        <th>Operatori associati</th>
+        <th>Azioni</th>
       </tr>
     </thead>
     <tbody>
-      {% for servizio in servizi_tabella %}
-      <tr>
-        <td>{{ servizio.nome }}</td>
-        <td>{{ servizio.sottocategoria }}</td>
-<td>
-  <span style="display:none">{% if servizio.is_visible_online %}1{% else %}0{% endif %}</span>
-  <input type="checkbox" class="toggle-visible-online"
-         data-id="{{ servizio.id }}"
-         {% if servizio.is_visible_online %}checked{% endif %}>
-</td>
+      {% for grouped in servizi_tabella|groupby('sottocategoria') %}
+      {% set _sub_count = grouped.list[0].operatori_count if grouped.list else 0 %}
+      {% set _all_visible = grouped.list|selectattr('is_visible_online')|list|length == grouped.list|length %}
+      <tr class="table-secondary subcategory-row" data-sc="{{ grouped.grouper }}" style="cursor:pointer">
         <td>
-            <button class="btn btn-outline-primary btn-sm operatori-btn"
-                    data-id="{{ servizio.id }}"
-                    data-nome="{{ servizio.nome }}">
-            {{ servizio.operatori_count }}
-            </button>
+          <span class="sc-toggle" style="margin-right:6px; font-weight:bold; font-size:1.1em;">−</span>
+          <strong>Sottocategoria: {{ grouped.grouper }}</strong>
+        </td>
+        <td></td>
+        <td>
+          <input type="checkbox" class="toggle-visible-online-subcategory"
+                 data-sottocategoria="{{ grouped.grouper }}"
+                 {% if _all_visible %}checked{% endif %}>
+        </td>
+        <td>
+          <button class="btn btn-outline-primary btn-sm operatori-btn-subcategory"
+                  data-sottocategoria="{{ grouped.grouper }}">
+            {{ _sub_count }}
+          </button>
+        </td>
+        <td>
+          <button class="btn btn-outline-secondary btn-sm applica-tutti-btn"
+                  data-sottocategoria="{{ grouped.grouper }}"
+                  data-bs-toggle="tooltip"
+                  data-bs-trigger="hover"
+                  data-bs-placement="top"
+                  title="Applica le impostazioni a tutti i servizi per questa sottocategoria">
+            Applica a tutti
+          </button>
         </td>
       </tr>
+      {% for servizio in grouped.list %}
+      <tr class="service-row" data-sc="{{ grouped.grouper }}">
+        <td>{{ servizio.nome }}</td>
+        <td>{{ servizio.sottocategoria }}</td>
+        <td>
+          <span style="display:none">{% if servizio.is_visible_online %}1{% else %}0{% endif %}</span>
+          <input type="checkbox" class="toggle-visible-online"
+                 data-id="{{ servizio.id }}"
+                 {% if servizio.is_visible_online %}checked{% endif %}>
+        </td>
+        <td>
+          <button class="btn btn-outline-primary btn-sm operatori-btn-service"
+                  data-id="{{ servizio.id }}"
+                  data-nome="{{ servizio.nome }}">
+            {{ servizio.operatori_count }}
+          </button>
+        </td>
+        <td></td>
+      </tr>
+      {% endfor %}
       {% endfor %}
     </tbody>
   </table>
@@ -147,132 +181,181 @@
 </div>
 
 <style>
-.sort-icons {
-  font-size: 10px;
-  line-height: 10px;
-  display: inline-block;
-  vertical-align: middle;
-  margin-left: 2px;
-  color: #888;
-  user-select: none;
-}
-th {
-  position: relative;
-}
 </style>
 
 <script src="https://unpkg.com/tablesort@5.2.1/dist/tablesort.min.js"></script>
 <meta name="csrf-token" display="none"content="{{ csrf_token() }}">
 
 <script>
-const operatori = {{ operatori|tojson }};
-const serviziOperatori = {
-  {% for servizio in servizi_tabella %}
-    {{ servizio.id }}: {{ servizio.operators|map(attribute="id")|list|tojson }},
-  {% endfor %}
-};
+var __operatoriData = {{ operatori|tojson }};
+const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-let currentServiceId = null;
+// Apre il modal operatori per una sottocategoria (salva in localStorage al submit)
+function openOperatoriModal(fetchUrl, labelText, onSubmit) {
+  document.getElementById('serviceName').textContent = labelText;
+  fetch(fetchUrl)
+    .then(r => r.json())
+    .then(data => {
+      const selectedOps = data.operator_ids || [];
+      let html = '';
+      __operatoriData.forEach(op => {
+        html += `<div class="form-check">
+          <input class="form-check-input" type="checkbox" value="${op.id}" id="op_${op.id}"
+            ${selectedOps.includes(op.id) ? 'checked' : ''}>
+          <label class="form-check-label" for="op_${op.id}">${op.nome} ${op.cognome}</label>
+        </div>`;
+      });
+      document.getElementById('operator-list').innerHTML = html;
 
-document.querySelectorAll('.operatori-btn').forEach(btn => {
-  btn.addEventListener('click', function() {
-    const serviceId = this.dataset.id;
-    currentServiceId = serviceId;
-    const serviceName = this.dataset.nome;
-    document.getElementById('serviceName').textContent = serviceName;
-
-    fetch(`/settings/get_service_operators/${serviceId}`)
-      .then(r => r.json())
-      .then(data => {
-        const selectedOps = data.operator_ids || [];
-        let html = '';
-        operatori.forEach(op => {
-          html += `
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" value="${op.id}" id="op_${op.id}"
-                ${selectedOps.includes(op.id) ? "checked" : ""}>
-              <label class="form-check-label" for="op_${op.id}">
-                ${op.nome} ${op.cognome}
-              </label>
-            </div>`;
-        });
-        document.getElementById('operator-list').innerHTML = html;
-
-        // Pulsante Copia
-        document.getElementById('copy-operatori').onclick = function() {
+      document.getElementById('copy-operatori').onclick = function() {
         const checked = Array.from(document.querySelectorAll('#operator-list input:checked')).map(i => i.value);
         localStorage.setItem('operatori_copiati', JSON.stringify(checked));
-        };
-
-        // Pulsante Incolla
-        document.getElementById('paste-operatori').onclick = function() {
+      };
+      document.getElementById('paste-operatori').onclick = function() {
         const copiati = JSON.parse(localStorage.getItem('operatori_copiati') || '[]');
         document.querySelectorAll('#operator-list input[type="checkbox"]').forEach(chk => {
-            chk.checked = copiati.includes(chk.value);
+          chk.checked = copiati.includes(chk.value);
         });
-        };
+      };
 
-        document.getElementById('operator-associate-form').onsubmit = function(e){
-          e.preventDefault();
-          const checked = Array.from(document.querySelectorAll('#operator-list input:checked')).map(i => i.value);
-          fetch('/settings/update_service_operators', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            },
-            body: JSON.stringify({service_id: serviceId, operator_ids: checked})
-          }).then(r=>r.json()).then(resp=>{
-            if(resp.success){ location.reload(); }
-          });
-        };
-        new bootstrap.Modal(document.getElementById('operatorModal')).show();
-      });
+      document.getElementById('operator-associate-form').onsubmit = function(e) {
+        e.preventDefault();
+        const checked = Array.from(document.querySelectorAll('#operator-list input:checked')).map(i => i.value);
+        onSubmit(checked);
+      };
+      new bootstrap.Modal(document.getElementById('operatorModal')).show();
+    });
+}
+
+// Bottone numero operatori per SOTTOCATEGORIA (salva in localStorage)
+document.querySelectorAll('.operatori-btn-subcategory').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const sc = this.dataset.sottocategoria;
+    openOperatoriModal(
+      `/settings/get_subcategory_operators/${encodeURIComponent(sc)}`,
+      `Sottocategoria: ${sc}`,
+      function(checked) {
+        localStorage.setItem('ops_sc_' + sc, JSON.stringify(checked));
+        // aggiorna il numero visualizzato nel bottone
+        btn.textContent = checked.length;
+        bootstrap.Modal.getInstance(document.getElementById('operatorModal')).hide();
+      }
+    );
   });
 });
 
-// Svuota la clipboard solo quando si lascia la pagina
-window.addEventListener('beforeunload', function() {
-  sessionStorage.removeItem('operatori_copiati');
+// Bottone numero operatori per SERVIZIO SINGOLO (salva direttamente)
+document.querySelectorAll('.operatori-btn-service').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const serviceId = this.dataset.id;
+    const nomeSvc = this.dataset.nome;
+    openOperatoriModal(
+      `/settings/get_service_operators/${serviceId}`,
+      nomeSvc,
+      function(checked) {
+        fetch('/settings/update_service_operators', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+          body: JSON.stringify({service_id: serviceId, operator_ids: checked})
+        }).then(r => r.json()).then(resp => {
+          if (resp.success) {
+            btn.textContent = checked.length;
+            bootstrap.Modal.getInstance(document.getElementById('operatorModal')).hide();
+          }
+        });
+      }
+    );
+  });
 });
 
-  // Gestione visibilità online
-  document.querySelectorAll('.toggle-visible-online').forEach(chk => {
-    chk.addEventListener('change', function(){
-      fetch('/settings/update_service_visibility', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: JSON.stringify({service_id: this.dataset.id, value: this.checked})
-      });
+// Bottone "Applica a tutti": propaga visibilità + operatori a tutti i servizi della sottocategoria
+document.querySelectorAll('.applica-tutti-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const sc = this.dataset.sottocategoria;
+    const chkVis = document.querySelector(`.toggle-visible-online-subcategory[data-sottocategoria="${sc}"]`);
+    const visible = chkVis ? chkVis.checked : true;
+    const opIds = JSON.parse(localStorage.getItem('ops_sc_' + sc) || '[]');
+
+    const visPromise = fetch('/settings/update_subcategory_visibility', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+      body: JSON.stringify({sottocategoria: sc, value: visible})
+    }).then(r => r.json());
+
+    const opsPromise = fetch('/settings/update_subcategory_operators', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+      body: JSON.stringify({sottocategoria: sc, operator_ids: opIds})
+    }).then(r => r.json());
+
+    Promise.all([visPromise, opsPromise]).then(([r1, r2]) => {
+      if (r1.success && r2.success) {
+        localStorage.removeItem('ops_sc_' + sc);
+        location.reload();
+      }
     });
   });
+});
 
-  // Inizializza Tablesort (solo una volta!)
-  new Tablesort(document.getElementById('booking-table'));
+// Gestione visibilità singolo servizio
+document.querySelectorAll('.toggle-visible-online').forEach(chk => {
+  chk.addEventListener('change', function() {
+    fetch('/settings/update_service_visibility', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+      body: JSON.stringify({service_id: this.dataset.id, value: this.checked})
+    });
+  });
+});
+
+// Collassa/espandi righe servizio al click sulla riga sottocategoria
+document.querySelectorAll('.subcategory-row').forEach(function(row) {
+  row.addEventListener('click', function(e) {
+    // Non collassare se si clicca su checkbox o bottoni
+    if (e.target.closest('button') || e.target.closest('input')) return;
+    const sc = this.dataset.sc;
+    const toggle = this.querySelector('.sc-toggle');
+    const isExpanded = toggle.textContent === '−';
+    document.querySelectorAll('.service-row[data-sc="' + sc + '"]').forEach(function(r) {
+      r.style.display = isExpanded ? 'none' : '';
+    });
+    toggle.textContent = isExpanded ? '+' : '−';
+  });
+});
+
+// Inizializza Tablesort
+new Tablesort(document.getElementById('booking-table'));
+
+// Inizializza tooltip Bootstrap
+document.addEventListener('DOMContentLoaded', function() {
+  var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipTriggerList.map(function(el) {
+    let originalTitle = el.getAttribute('title') || '';
+    return new bootstrap.Tooltip(el, { title: originalTitle });
+  });
+});
 </script>
+
 <script>
 document.getElementById('save-booking-rules').onclick = function() {
   const data = {
-  durata: {
-    active: document.getElementById('active-durata').checked,
-    max: document.getElementById('durata-max').value,
-    warning: document.getElementById('warning-durata').checked,
-    block: document.getElementById('block-durata').checked,
-    warning_msg: document.getElementById('warning-msg-durata').value || "",
-    block_msg: document.getElementById('block-msg-durata').value || ""
-  },
-  prezzo: {
-    active: document.getElementById('active-prezzo').checked,
-    max: document.getElementById('prezzo-max').value,
-    warning: document.getElementById('warning-prezzo').checked,
-    block: document.getElementById('block-prezzo').checked,
-    warning_msg: document.getElementById('warning-msg-prezzo').value || "",
-    block_msg: document.getElementById('block-msg-prezzo').value || ""
-  }
-};
+    durata: {
+      active: document.getElementById('active-durata').checked,
+      max: document.getElementById('durata-max').value,
+      warning: document.getElementById('warning-durata').checked,
+      block: document.getElementById('block-durata').checked,
+      warning_msg: document.getElementById('warning-msg-durata').value || "",
+      block_msg: document.getElementById('block-msg-durata').value || ""
+    },
+    prezzo: {
+      active: document.getElementById('active-prezzo').checked,
+      max: document.getElementById('prezzo-max').value,
+      warning: document.getElementById('warning-prezzo').checked,
+      block: document.getElementById('block-prezzo').checked,
+      warning_msg: document.getElementById('warning-msg-prezzo').value || "",
+      block_msg: document.getElementById('block-msg-prezzo').value || ""
+    }
+  };
   fetch('/settings/update_booking_rules', {
     method: 'POST',
     headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')},
@@ -283,7 +366,6 @@ document.getElementById('save-booking-rules').onclick = function() {
   });
 };
 
-// Logica: se si seleziona "Blocca", cancella l'ultimo pseudoblocco e mostra solo il messaggio di blocco
 ['block-durata', 'block-prezzo'].forEach(id => {
   document.getElementById(id).addEventListener('change', function() {
     if(this.checked){
@@ -293,7 +375,6 @@ document.getElementById('save-booking-rules').onclick = function() {
   });
 });
 
-// Warning disattiva blocca
 ['warning-durata', 'warning-prezzo'].forEach(id => {
   document.getElementById(id).addEventListener('change', function() {
     if(this.checked){

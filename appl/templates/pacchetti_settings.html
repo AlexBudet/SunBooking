@@ -270,14 +270,30 @@ Ti aspettiamo! 💆‍♀️
 
         <div class="row">
           <div class="col-md-4">
+            <label for="selectCategoriaDisclaimer" class="form-label">Categoria:</label>
+            <select class="form-select mb-2" id="selectCategoriaDisclaimer">
+              <option value="">-- Seleziona categoria --</option>
+              {% for gruppo in servizi|groupby('servizio_categoria.value') %}
+              <option value="{{ gruppo.grouper }}">{{ gruppo.grouper }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-outline-primary btn-sm mb-3 w-100" type="button" onclick="applyCategoriaDisclaimer()">
+              <i class="bi bi-collection"></i> Applica disclaimer a tutta la categoria
+            </button>
+
             <label for="selectServizio" class="form-label">Seleziona Servizio:</label>
             <select class="form-select" id="selectServizio" onchange="loadServizioDisclaimer()">
               <option value="">-- Seleziona un servizio --</option>
-              {% for servizio in servizi %}
-              <option value="{{ servizio.id }}" data-disclaimer="{{ servizio.servizio_disclaimer or '' }}">
-                {{ servizio.servizio_nome }}
-                {% if servizio.servizio_disclaimer %}✓{% endif %}
+              {% for gruppo in servizi|groupby('servizio_categoria.value') %}
+              <optgroup label="{{ gruppo.grouper }}">
+              {% for servizio in gruppo.list %}
+              <option value="{{ servizio.id }}"
+                      data-category="{{ servizio.servizio_categoria.value if servizio.servizio_categoria else '' }}"
+                      data-disclaimer="{{ servizio.servizio_disclaimer or '' }}">
+                {{ servizio.servizio_nome }}{% if servizio.servizio_disclaimer %} ✓{% endif %}
               </option>
+              {% endfor %}
+              </optgroup>
               {% endfor %}
             </select>
             <small class="text-muted">✓ = disclaimer già configurato</small>
@@ -1302,6 +1318,47 @@ async function clearServizioDisclaimer() {
   
   document.getElementById('servizioDisclaimer').value = '';
   await saveServizioDisclaimer();
+}
+
+async function applyCategoriaDisclaimer() {
+  const categoria = document.getElementById('selectCategoriaDisclaimer').value;
+  const disclaimer = document.getElementById('servizioDisclaimer').value.trim();
+
+  if (!categoria) {
+    alert('⚠️ Seleziona una categoria');
+    return;
+  }
+
+  if (!confirm(`Applicare questo disclaimer a tutti i servizi della categoria "${categoria}"?`)) return;
+
+  try {
+    const response = await fetch(`/settings/api/servizi/categoria/${encodeURIComponent(categoria)}/disclaimer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({ disclaimer: disclaimer })
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      // Aggiorna option locali per coerenza UI immediata
+      document.querySelectorAll('#selectServizio option[data-category]').forEach(option => {
+        if (option.dataset.category === categoria) {
+          option.dataset.disclaimer = disclaimer;
+          const nomeBase = option.textContent.replace('✓', '').trim();
+          option.textContent = disclaimer ? `${nomeBase} ✓` : nomeBase;
+        }
+      });
+      alert(`✅ Disclaimer applicato a ${data.updated} servizi della categoria ${categoria}`);
+    } else {
+      alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
+    }
+  } catch (error) {
+    console.error('Errore:', error);
+    alert('❌ Errore di connessione');
+  }
 }
 </script>
 {% endblock %}
