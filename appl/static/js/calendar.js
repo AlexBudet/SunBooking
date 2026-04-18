@@ -511,11 +511,100 @@ async function checkPacchettiDisponibili(clientId, serviceIds) {
   }
 }
 
+// Cache per evitare chiamate ripetute durante la digitazione nelle ricerche servizi.
+const __pacchettoServiceIdsCacheByClient = new Map();
+
+async function getPacchettoServiceIdsForClient(clientId, serviceIds) {
+  const cid = String(clientId || '').trim();
+  if (!cid) return new Set();
+
+  const ids = Array.from(new Set((Array.isArray(serviceIds) ? serviceIds : [])
+    .map(v => String(v || '').trim())
+    .filter(Boolean)));
+  if (ids.length === 0) return new Set();
+
+  if (!__pacchettoServiceIdsCacheByClient.has(cid)) {
+    __pacchettoServiceIdsCacheByClient.set(cid, new Set());
+  }
+  const cachedSet = __pacchettoServiceIdsCacheByClient.get(cid);
+
+  // Verifica solo gli id non ancora in cache.
+  const missing = ids.filter(id => !cachedSet.has(id));
+  if (missing.length > 0) {
+    const pacchetti = await checkPacchettiDisponibili(cid, missing);
+    if (Array.isArray(pacchetti)) {
+      pacchetti.forEach(p => {
+        (p?.sedute_disponibili || []).forEach(s => {
+          const sid = String(s?.service_id ?? '').trim();
+          if (sid) cachedSet.add(sid);
+        });
+      });
+    }
+  }
+
+  const result = new Set();
+  ids.forEach(id => {
+    if (cachedSet.has(id)) result.add(id);
+  });
+  return result;
+}
+window.getPacchettoServiceIdsForClient = getPacchettoServiceIdsForClient;
+
+function buildServiceDropdownLabel(item, options) {
+  const {
+    name = '',
+    duration = '',
+    price = '',
+    daysText = '',
+    hasPacchetto = false
+  } = options || {};
+
+  item.innerHTML = '';
+  item.style.display = 'flex';
+  item.style.alignItems = 'center';
+  item.style.justifyContent = 'space-between';
+  item.style.gap = '8px';
+
+  const left = document.createElement('span');
+  left.style.display = 'inline-flex';
+  left.style.alignItems = 'center';
+  left.style.gap = '6px';
+  left.style.minWidth = '0';
+
+  const main = document.createElement('span');
+  const baseText = duration
+    ? `${name} - ${duration} min${price ? ` - €${price}` : ''}`
+    : `${name}${price ? ` - €${price}` : ''}`;
+  main.textContent = baseText;
+  left.appendChild(main);
+
+  if (hasPacchetto) {
+    const icon = document.createElement('i');
+    icon.className = 'bi bi-box-seam';
+    icon.style.cssText = 'font-size:0.85em;opacity:0.75;cursor:help;';
+    icon.title = 'Servizio disponibile in un pacchetto attivo';
+    left.appendChild(icon);
+  }
+
+  item.appendChild(left);
+
+  if (daysText) {
+    const right = document.createElement('small');
+    right.style.opacity = '0.65';
+    right.style.whiteSpace = 'nowrap';
+    right.textContent = daysText;
+    item.appendChild(right);
+  }
+}
+window.buildServiceDropdownLabel = buildServiceDropdownLabel;
+
 // Mostra popup per selezione pacchetto (se ce ne sono più di uno)
 function mostraPopupSelezionePacchetto(pacchetti, callback) {
   // Crea il modal dinamicamente
   const modalId = 'SelectPacchettoModal';
   let modalEl = document.getElementById(modalId);
+  const createApptModalEl = document.getElementById('CreateAppointmentModal');
+  const createApptWasOpen = !!(createApptModalEl && createApptModalEl.classList.contains('show'));
   
   if (modalEl) {
     modalEl.remove();
@@ -525,6 +614,8 @@ function mostraPopupSelezionePacchetto(pacchetti, callback) {
   modalEl.id = modalId;
   modalEl.className = 'modal fade';
   modalEl.tabIndex = -1;
+  // Deve stare sopra al modal di creazione appuntamento (25000)
+  modalEl.style.zIndex = '26050';
   modalEl.innerHTML = `
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
@@ -608,9 +699,27 @@ function mostraPopupSelezionePacchetto(pacchetti, callback) {
     callback(null); // Non associare nessun pacchetto
   });
 
-  const bsModal = new bootstrap.Modal(modalEl);
+  const bsModal = new bootstrap.Modal(modalEl, {
+    backdrop: true,
+    keyboard: true,
+    focus: true
+  });
+
+  modalEl.addEventListener('shown.bs.modal', () => {
+    // Porta anche il backdrop sopra al create modal, ma sotto al modal pacchetto.
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    const lastBackdrop = backdrops && backdrops.length ? backdrops[backdrops.length - 1] : null;
+    if (lastBackdrop) {
+      lastBackdrop.style.zIndex = '26040';
+    }
+  });
   
   modalEl.addEventListener('hidden.bs.modal', () => {
+    // Se il create modal era già aperto prima della disambiguazione, assicurati che torni in primo piano.
+    if (createApptWasOpen && createApptModalEl && !createApptModalEl.classList.contains('show')) {
+      const createInst = bootstrap.Modal.getOrCreateInstance(createApptModalEl, { focus: true });
+      createInst.show();
+    }
     modalEl.remove();
   });
   
@@ -5285,6 +5394,15 @@ document.addEventListener('dragend', function(e) {
 }, true);
 
 document.addEventListener('pointerdown', function(e) {
+  const isTouchUi = (() => {
+    try {
+      return localStorage.getItem('sun_touch_ui') === '1' || document.body.classList.contains('touch-ui');
+    } catch (_) {
+      return document.body.classList.contains('touch-ui');
+    }
+  })();
+  if (isTouchUi) return;
+
   const trg = e.target.closest('.appointment-block .btn-popup, .appointment-block .delete-icon, .appointment-block .resize-handle, .appointment-block .drag-handle');
   if (!trg) return;
   clearCalendarFloatingArtifacts();
@@ -6140,7 +6258,7 @@ function handleServiceSearchNav(query) {
 
   fetch(`/calendar/api/search-services/${encodeURIComponent(query)}`)
     .then(r => r.json())
-    .then(services => {
+    .then(async (services) => {
       // Svuota contenitore
       resultsContainer.innerHTML = '';
 
@@ -6153,6 +6271,12 @@ function handleServiceSearchNav(query) {
         return;
       }
 
+      const clientIdNav = String(window.selectedClientIdNav || '').trim();
+      const serviceIds = (Array.isArray(services) ? services : []).map(s => String(s?.id ?? '')).filter(Boolean);
+      const pacchettoServiceIds = clientIdNav
+        ? await window.getPacchettoServiceIdsForClient(clientIdNav, serviceIds)
+        : new Set();
+
       services.forEach(service => {
         const item = document.createElement('div');
         item.className = 'dropdown-item';
@@ -6163,10 +6287,12 @@ function handleServiceSearchNav(query) {
         const price = (service.price ?? '').toString();
         const tag = (service.tag ?? '').toString();
 
-        // Testo puro
-        item.textContent = duration
-          ? `${name} - ${duration} min - €${price}`
-          : `${name}${price ? ' - €' + price : ''}`;
+        window.buildServiceDropdownLabel(item, {
+          name,
+          duration,
+          price,
+          hasPacchetto: pacchettoServiceIds.has(id)
+        });
 
         // Listener sicuro (niente onclick inline)
         item.addEventListener('click', () => {
@@ -6367,7 +6493,7 @@ async function fetchClientLastDate(clientId) {
 }
   
   // showServicesDropdownNav: scrive i risultati nel contenitore e li rende cliccabili
-function showServicesDropdownNav(services) {
+async function showServicesDropdownNav(services) {
   const resultsContainer = document.getElementById('serviceResultsNav');
   if (!resultsContainer) return;
   resultsContainer.innerHTML = '';
@@ -6392,6 +6518,12 @@ function showServicesDropdownNav(services) {
     return;
   }
 
+  const clientIdNav = String(window.selectedClientIdNav || '').trim();
+  const serviceIds = filteredServices.map(sv => String(sv?.id ?? '')).filter(Boolean);
+  const pacchettoServiceIds = clientIdNav
+    ? await window.getPacchettoServiceIdsForClient(clientIdNav, serviceIds)
+    : new Set();
+
   filteredServices.forEach(sv => {
     const item = document.createElement('div');
     item.className = 'dropdown-item';
@@ -6402,7 +6534,12 @@ function showServicesDropdownNav(services) {
     const tag = String(sv.tag ?? '');
     const daysText = formatDaysSince(sv.last_date);
 
-    item.textContent = (duration ? `${name} - ${duration} min` : name) + daysText;
+    window.buildServiceDropdownLabel(item, {
+      name,
+      duration,
+      daysText,
+      hasPacchetto: pacchettoServiceIds.has(id)
+    });
     item.dataset.serviceId = id;
     item.dataset.serviceName = name;
     item.dataset.serviceDuration = duration;
@@ -7991,7 +8128,7 @@ function loadServicesForModal() {
   }
 }
 
-function showServicesDropdownModal(services) {
+async function showServicesDropdownModal(services) {
   const resultsContainer = document.getElementById('serviceResults');
   if (!resultsContainer) return;
   resultsContainer.innerHTML = '';
@@ -8005,6 +8142,12 @@ function showServicesDropdownModal(services) {
     return;
   }
 
+  const clientIdModal = String(document.getElementById('client_id')?.value || '').trim();
+  const serviceIds = (Array.isArray(services) ? services : []).map(s => String(s?.id ?? '')).filter(Boolean);
+  const pacchettoServiceIds = clientIdModal
+    ? await window.getPacchettoServiceIdsForClient(clientIdModal, serviceIds)
+    : new Set();
+
   services.forEach(service => {
     const item = document.createElement('div');
     item.className = 'dropdown-item';
@@ -8013,7 +8156,12 @@ function showServicesDropdownModal(services) {
     const duration = String(service.duration ?? '');
     const daysText = formatDaysSince(service.last_date);
 
-    item.textContent = (duration ? `${name} - ${duration} min` : `${name}`) + daysText;
+    window.buildServiceDropdownLabel(item, {
+      name,
+      duration,
+      daysText,
+      hasPacchetto: pacchettoServiceIds.has(id)
+    });
     item.dataset.serviceId = id;
     item.dataset.serviceName = name;
     item.dataset.serviceDuration = duration;
@@ -8043,15 +8191,20 @@ function handleServiceSearchModal(query) {
   }
   fetch(`/calendar/api/search-services/${encodeURIComponent(query)}`)
       .then(response => response.json())
-      .then(services => {
+      .then(async (services) => {
           if (!Array.isArray(services) || services.length === 0) {
               const div = document.createElement('div');
-div.className = 'dropdown-item';
-div.textContent = someVar; // safe
-resultsContainer.appendChild(div);
+              div.className = 'dropdown-item';
+              div.textContent = 'Nessun risultato';
+              resultsContainer.appendChild(div);
           } else {
 // versione sicura
 resultsContainer.innerHTML = '';
+const clientIdModal = String(document.getElementById('client_id')?.value || '').trim();
+const serviceIds = services.map(s => String(s?.id ?? '')).filter(Boolean);
+const pacchettoServiceIds = clientIdModal
+  ? await window.getPacchettoServiceIdsForClient(clientIdModal, serviceIds)
+  : new Set();
 services.slice(0, 10).forEach(service => {
   console.log("Service object:", service); // conserva il log
 
@@ -8062,10 +8215,11 @@ services.slice(0, 10).forEach(service => {
   const name     = String(service.name ?? '');
   const duration = String(service.duration ?? '');
 
-  // testo puro
-  item.textContent = duration
-    ? `${name} - ${duration} min`
-    : `${name}`;
+  window.buildServiceDropdownLabel(item, {
+    name,
+    duration,
+    hasPacchetto: pacchettoServiceIds.has(id)
+  });
 
   // click handler al posto di onclick inline
   item.addEventListener('click', () => {
