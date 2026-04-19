@@ -24,9 +24,9 @@
 {% endwith %}
 <div id="clientHistoryPopup" style="display:none; z-index:99999; background:#fff; border-radius:6px; border: 2px solid #222; padding:8px 12px;"></div>
                      <div class="d-flex align-items-start mb-3" style="gap: 4px; width: 100%;">
-  <!-- Quarter Navigator -->
+  <!-- Quarter Navigator (DEPRECATO: disabilitato permanentemente) -->
 <div id="quarterNavigator"
-     style="position: fixed; top: 15px; right: 26vw; min-width: 120px; display: flex; flex-direction: row; align-items: center; justify-content: center; margin-top: 0; z-index: 13040;">
+     style="position: fixed; top: 15px; right: 26vw; min-width: 120px; display: none !important; flex-direction: row; align-items: center; justify-content: center; margin-top: 0; z-index: 13040;">
   <button type="button"
           style="background: transparent; border: none; color: #222; font-size: 1.1em; padding: 2px 6px; line-height: 1;"
           onclick="changeQuarterHeight(-5)">−</button>
@@ -1993,16 +1993,21 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch(e) {}
   })();
   
-  // Nascondi Zoom Navigator se disabilitato in Settings
+  // Zoom Navigator disabilitato permanentemente
   (function(){
     try {
-      var zoomVal = localStorage.getItem('sun_zoom_navigator');
-      if (zoomVal === '0') {
-        document.addEventListener('DOMContentLoaded', function(){
-          var nav = document.getElementById('quarterNavigator');
-          if (nav) nav.style.display = 'none';
-        });
-      }
+      document.addEventListener('DOMContentLoaded', function(){
+        var nav = document.getElementById('quarterNavigator');
+        if (nav) nav.style.display = 'none';
+      });
+      // Logica precedente mantenuta per eventuale ripristino:
+      // var zoomVal = localStorage.getItem('sun_zoom_navigator');
+      // if (zoomVal === '0') {
+      //   document.addEventListener('DOMContentLoaded', function(){
+      //     var nav = document.getElementById('quarterNavigator');
+      //     if (nav) nav.style.display = 'none';
+      //   });
+      // }
     } catch(e) {}
   })();
 </script>
