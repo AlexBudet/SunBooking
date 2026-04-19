@@ -7747,7 +7747,13 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
     waBtn.setAttribute('data-bs-toggle', 'tooltip');
     waBtn.setAttribute('data-client-nome', displayClientName);
     waBtn.setAttribute('data-client-cellulare', clientPhone);
-    waBtn.setAttribute('data-date', appointment.start_date_display || '');
+    waBtn.setAttribute(
+  'data-date',
+  appointment.start_date_display ||
+  (appointment.appointment_date ? String(appointment.appointment_date).split('T')[0].split('-').reverse().join('/') : '') ||
+  (appointment.date ? String(appointment.date).split('T')[0].split('-').reverse().join('/') : '') ||
+  ''
+);
     waBtn.setAttribute('data-hour', String(hour).padStart(2, '0'));
     waBtn.setAttribute('data-minute', String(minute).padStart(2, '0'));
     waBtn.innerHTML = '<i class="bi bi-whatsapp"></i>';
