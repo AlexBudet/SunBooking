@@ -1164,8 +1164,8 @@ Dopo aver impostato i filtri usa il tasto **VAI** per ricalcolare tutti i widget
     },
 
     "report_sezioni_principali": {
-        "title": "📈 Report: sezioni principali e KPI",
-        "content": """In alto trovi le <span class=\"help-strong-dark\">tile KPI</span> e sotto i pulsanti di sezione.
+        "title": "📈 Report: sezioni principali e pannelli KPI",
+        "content": """In alto trovi i <span class=\"help-strong-dark\">pannelli KPI</span> (in precedenza indicati anche come tile) e sotto i pulsanti di sezione.
 
 <span class=\"help-strong-dark\">Che cosa significa KPI?</span>
 KPI è l'acronimo di <span class=\"help-strong-dark\">Key Performance Indicator</span>, cioè <span class=\"help-strong-dark\">Indicatore Chiave di Performance</span>.
@@ -1176,25 +1176,25 @@ Nel Report, i KPI mostrano ad esempio:
 • passaggi in cassa
 • trend o scostamento
 
-Le <span class=\"help-strong-dark\">tile</span> sono i riquadri KPI: ogni tile riassume un dato e il relativo significato operativo.""",
+I <span class=\"help-strong-dark\">pannelli KPI</span> sono i riquadri riassuntivi: ogni pannello mostra un dato chiave e il relativo significato operativo.""",
     },
 
     "report_previsioni_tile_edit": {
-        "title": "🧠 Report: calcoli previsionali e gestione tile",
+        "title": "🧠 Report: calcoli previsionali e gestione pannelli KPI",
         "content": """La parte previsionale confronta i dati correnti con obiettivi e andamento temporale.
 
 In termini operativi:
 • il sistema legge i dati reali disponibili nel periodo selezionato
 • li confronta con un target di riferimento
-• mostra la differenza nelle tile (trend/scostamento)
+• mostra la differenza nei pannelli KPI (trend/scostamento)
 
-<span class=\"help-strong-dark\">Come leggere una tile previsionale</span>
+<span class=\"help-strong-dark\">Come leggere un pannello previsionale</span>
 • valore principale: dato attuale
 • testo secondario: contesto (giorno/periodo)
 • trend: sei sopra o sotto target
 
 <span class=\"help-strong-dark\">Come si modificano</span>
-Le tile non si modificano "a mano" direttamente dal widget: si aggiornano cambiando filtri e impostazioni disponibili nel report/settings (quando abilitate per il tuo ruolo).""",
+I pannelli non si modificano "a mano" direttamente dal widget: si aggiornano cambiando filtri e impostazioni disponibili nel report/settings (quando abilitate per il tuo ruolo).""",
     },
 
     "report_corrispettivi_ufficiali": {
@@ -1277,8 +1277,32 @@ Per invii amministrativi, usa sempre la vista Corrispettivi del periodo corretto
     • <span class="help-strong-dark">Info Azienda</span>: dati centro, informazioni usate nei documenti e nelle integrazioni
     • <span class="help-strong-dark">Utenti</span>: creazione account e assegnazione ruolo (solo admin/owner)
 
-    I ruoli influenzano ciò che ogni persona può vedere o fare, ad esempio in Cassa, Report e negli strumenti fiscali avanzati.""",
+    I ruoli influenzano ciò che ogni persona può vedere o fare, ad esempio in Cassa, Report e negli strumenti fiscali avanzati.
+
+    <span class="help-strong-dark">Differenze pratiche tra ruoli</span>
+    • <span class="help-strong-dark">user</span>: operatività quotidiana con funzioni limitate
+    • <span class="help-strong-dark">admin/owner</span>: accesso esteso a configurazioni, utenti, strumenti fiscali e funzioni avanzate
+
+    Buona pratica CRM: assegna permessi minimi necessari per ruolo, evitando account condivisi.""",
         },
+
+    "tools_users_ruoli": {
+        "title": "👥 Tools: utenti, ruoli e accessi admin",
+        "content": """La gestione utenti è un punto chiave per sicurezza e tracciabilità operativa.
+
+<span class="help-strong-dark help-subtitle-pill">▸ CHI FA COSA</span>
+• <span class="help-strong-dark">user</span>: usa il gestionale nelle attività quotidiane con accesso controllato
+• <span class="help-strong-dark">admin/owner</span>: può configurare utenti, permessi, impostazioni critiche e funzioni avanzate
+
+<span class="help-strong-dark help-subtitle-pill">▸ PERCHÉ È IMPORTANTE</span>
+Nei CRM moderni la separazione ruoli riduce errori, migliora audit e aumenta sicurezza dati.
+
+<span class="help-strong-dark help-subtitle-pill">▸ BEST PRACTICE CONSIGLIATE</span>
+• un account per ogni persona (no account condivisi)
+• permessi minimi necessari (principio del minimo privilegio)
+• revisione periodica degli accessi attivi
+• disattivazione rapida utenti non più operativi""",
+    },
 
     "tools_touch_updates": {
         "title": "🆕 Tools: aggiornamenti app",
@@ -1328,6 +1352,34 @@ Se la finestra non si chiude entro ~30 secondi, chiudila manualmente come indica
 <span class="help-hint-label">Consiglio:</span>
 <span class="help-hint-text">Documenta questa sequenza in una checklist interna: accelera onboarding di nuovi collaboratori e nuove aperture.</span>
 </div>""",
+    },
+
+    # ========== GENERALI ==========
+    "generali_panorama": {
+        "title": "ℹ️ Generali: panoramica rapida",
+        "content": """La sezione Generali raccoglie informazioni varie, utili a tutto il team:
+
+• credits e contatti
+• informazioni tecniche di base
+• note operative su installazione/hosting
+
+Questa sezione è pensata per onboarding un rapido e un successivo allineamento interno.""",
+    },
+
+    "generali_crediti_tecnica_hosting": {
+        "title": "🧩 Generali: credits, info tecniche e hosting",
+        "content": """<span class="help-strong-dark help-subtitle-pill">▸ CREDITS E SUPPORTO</span>
+Tosca è stato sviluppato da Alessio Budetta, gestore di centri estetici e programmatore, a partire dal 2024.
+
+<span class="help-strong-dark help-subtitle-pill">▸ INFO TECNICHE (ALTO LIVELLO)</span>
+Tosca segue logiche tipiche dei CRM moderni:
+• separazione tra moduli operativi (Agenda, Cassa, Report, Tools)
+• gestione ruoli/permessi
+• software on-premise (locale) o cloud (web), con sincronizzazione dati sempre in cloud (web)
+
+<span class="help-strong-dark help-subtitle-pill">▸ DOVE È HOSTATO</span>
+I database e la web app di Tosca sono hostati su server professionali, con salvataggio dati giornalieri.
+""",
     },
 }
 
@@ -1387,6 +1439,7 @@ def get_topics_by_category():
             "tools_panorama",
             "tools_clienti_servizi_operatori",
             "tools_info_azienda_utenti",
+            "tools_users_ruoli",
             "tools_touch_updates",
             "tools_workflow_consigliato",
             "client_settings",
@@ -1394,6 +1447,10 @@ def get_topics_by_category():
             "service_categories",
             "service_vs_products",
             "service_duration"
+        ],
+        "Generali": [
+            "generali_panorama",
+            "generali_crediti_tecnica_hosting"
         ],
         "Booking via Web": [
             "booking_panorama",
@@ -1413,7 +1470,7 @@ def get_topics_by_category():
             "marketing_variables",
             "marketing_filtri_template"
         ],
-        "Touch": [
+        "Versione Touch": [
             "agenda_touch_mode"
         ],
     }

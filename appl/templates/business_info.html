@@ -221,11 +221,13 @@
   <small style="margin-left:8px; color:#666;">Abilita interfaccia touch per i blocchi agenda (su questo computer)</small>
 </div>
 <br>
+<!-- Zoom Navigator disabilitato permanentemente (non più usato)
 <div class="desktop-only-setting" style="display: flex; gap: 8px; align-items: center;">
   <label for="zoomNavigatorEnabled">Zoom Navigator:</label>
   <input type="checkbox" id="zoomNavigatorEnabled" checked>
   <small style="margin-left:8px; color:#666;">Mostra controlli zoom (+/−) nell'agenda (su questo computer)</small>
 </div>
+-->
 <style>
   @media (max-width: 1200px) {
     .desktop-only-setting { display: none !important; }
@@ -496,17 +498,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       }
       
-      // Zoom Navigator (default: visibile)
-      const zoomKey = 'sun_zoom_navigator';
-      const zoomEl = document.getElementById('zoomNavigatorEnabled');
-      if (zoomEl) {
-        const zoomVal = localStorage.getItem(zoomKey);
-        zoomEl.checked = (zoomVal === null || zoomVal === '1');
-        zoomEl.addEventListener('change', () => {
-          localStorage.setItem(zoomKey, zoomEl.checked ? '1' : '0');
-          alert('Impostazione salvata. Ricarica l\'agenda per applicare.');
-        });
-      }
+      // Zoom Navigator disabilitato permanentemente: forza OFF e mantiene codice legacy commentato
+      localStorage.setItem('sun_zoom_navigator', '0');
+      // const zoomKey = 'sun_zoom_navigator';
+      // const zoomEl = document.getElementById('zoomNavigatorEnabled');
+      // if (zoomEl) {
+      //   const zoomVal = localStorage.getItem(zoomKey);
+      //   zoomEl.checked = (zoomVal === null || zoomVal === '1');
+      //   zoomEl.addEventListener('change', () => {
+      //     localStorage.setItem(zoomKey, zoomEl.checked ? '1' : '0');
+      //     alert('Impostazione salvata. Ricarica l\'agenda per applicare.');
+      //   });
+      // }
       
       // Refresh Button (default: visibile)
       const refreshKey = 'sun_refresh_button';
