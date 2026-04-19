@@ -33,6 +33,7 @@
                     {% elif category == "Report" %}📊
                     {% elif category == "Pacchetti" %}🎁
                     {% elif category == "Tools" %}🧰
+                    {% elif category == "Touch" %}🖐️
                     {% elif category == "Booking via Web" %}🌐
                     {% elif category == "WhatsApp e Marketing" %}💬
                     {% endif %}
@@ -585,6 +586,15 @@
     font-weight: 800;
 }
 
+.help-subtitle-pill {
+    display: inline-block;
+    background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%);
+    border: 1px solid #f9a8d4;
+    border-radius: 10px;
+    padding: 4px 10px;
+    margin: 6px 0;
+}
+
 /* ========== BOX HINT/CONSIGLIO ========== */
 .help-hint-box {
     background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
@@ -649,6 +659,18 @@
     padding: 8px 16px;
     border-radius: 10px;
     box-shadow: 0 2px 8px rgba(190, 24, 93, 0.15);
+}
+
+.help-topic-link {
+    color: #be185d;
+    font-weight: 800;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
+
+.help-topic-link:hover {
+    color: #9d174d;
 }
 
 .help-inline-block:nth-of-type(even) .help-highlight {
@@ -793,6 +815,26 @@ const STATIC_BASE = "{{ url_for('static', filename='img/help/') }}";
 let currentCategory = null;
 let currentTopicIndex = 0;
 let searchFromCategory = null;
+
+function findTopicByKey(topicKey) {
+    for (const [categoryName, catData] of Object.entries(HELP_DATA)) {
+        const topicIndex = catData.topics.findIndex(t => t.key === topicKey);
+        if (topicIndex !== -1) {
+            return { categoryName, topicIndex };
+        }
+    }
+    return null;
+}
+
+function openTopicByKey(topicKey) {
+    const target = findTopicByKey(topicKey);
+    if (!target) return false;
+    currentCategory = target.categoryName;
+    currentTopicIndex = target.topicIndex;
+    renderTopic();
+    showView('viewTopic');
+    return false;
+}
 
 // ========== RICERCA ==========
 function onSearchInput(query) {
@@ -954,7 +996,9 @@ function renderTopic() {
     // Aggiorna titolo
     document.getElementById('topicTitle').textContent = topic.title;
     
-    // Trasforma i markup [[TESTO|chiave_immagine]] in blocchi testo + immagine inline
+    // Trasforma i markup [[TESTO|chiave]] in:
+    // 1) blocchi testo + immagine inline (se la chiave esiste in HELP_IMAGES)
+    // 2) link interno a un topic (se la chiave corrisponde a un topic key)
     let content = topic.content;
     content = content.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, function(match, text, imageKey) {
         const images = HELP_IMAGES[imageKey];
@@ -971,6 +1015,10 @@ function renderTopic() {
                     </div>
                 </div>
                 <p>`;
+        }
+        const topicTarget = findTopicByKey(imageKey);
+        if (topicTarget) {
+            return `<a href="#" class="help-topic-link" onclick="return openTopicByKey('${imageKey}')">${text}</a>`;
         }
         return `<strong class="help-highlight">${text}</strong>`;
     });

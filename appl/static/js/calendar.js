@@ -10970,6 +10970,53 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       }
 
+      // Fallback robusti per data/ora quando i data-* non sono ancora riallineati (es. senza reload pagina)
+      function normalizeDateForWhatsapp(raw) {
+        const s = String(raw || '').trim();
+        if (!s) return '';
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+        // Gestisce "YYYY-MM-DD" o stringhe ISO
+        const isoLike = s.includes('T') ? s.split('T')[0] : s;
+        const m = isoLike.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) {
+          return [
+            String(d.getDate()).padStart(2, '0'),
+            String(d.getMonth() + 1).padStart(2, '0'),
+            d.getFullYear()
+          ].join('/');
+        }
+        return s;
+      }
+
+      function getCalendarViewDateRaw() {
+        const desktop = document.getElementById('date')?.value;
+        const mobile = document.getElementById('dateMobile')?.value;
+        return desktop || mobile || window.selectedAppointmentDate || (typeof selectedDate !== 'undefined' ? selectedDate : '') || '';
+      }
+
+      if ((!hour || !minute) && block) {
+        hour = (block.getAttribute('data-hour') || hour || '').toString().padStart(2, '0');
+        minute = (block.getAttribute('data-minute') || minute || '').toString().padStart(2, '0');
+        ora = (hour && minute) ? `${hour}:${minute}` : '';
+      }
+
+      if (!data && block) {
+        const opId = block.getAttribute('data-operator-id') || '';
+        const hNum = parseInt(hour, 10);
+        const mNum = parseInt(minute, 10);
+        if (opId && !isNaN(hNum) && !isNaN(mNum)) {
+          const cell = document.querySelector(`.selectable-cell[data-operator-id="${opId}"][data-hour="${hNum}"][data-minute="${mNum}"]`);
+          data = (cell && cell.getAttribute('data-date')) || data;
+        }
+      }
+
+      if (!data) {
+        data = getCalendarViewDateRaw();
+      }
+      data = normalizeDateForWhatsapp(data);
+
       let servizi_text = '';
       try {
         if (block) {

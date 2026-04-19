@@ -12,46 +12,38 @@ HELP_TOPICS = {
     
     # ========== CALENDARIO ==========
 "calendar_create_appointment": {
-    "title": "✏️ Come creare un appuntamento con CLICK SU CELLA VUOTA",
-    "content": """Per creare rapidamente un appuntamento standard:
+    "title": "✏️ Crea un Appuntamento in Agenda",
+    "content": """Hai due modi per creare un appuntamento in Agenda: il <span class="help-strong-dark">click su cella vuota</span> per la creazione rapida, oppure il <span class="help-strong-dark">Navigator Appuntamenti</span> per flussi più articolati.
 
-1️⃣ fai <span class=\"help-strong-dark\">click su una cella vuota</span>
-2️⃣ si apre il modal <span class=\"help-strong-dark\">Crea Appuntamento</span>
-3️⃣ nel campo cliente scrivi almeno 3 caratteri e seleziona il nominativo corretto
+<span class="help-strong-dark help-subtitle-pill">▸ Click su cella vuota (metodo rapido)</span>
+1️⃣ fai <span class="help-strong-dark">click su una cella vuota</span>
+2️⃣ si apre il modal <span class="help-strong-dark">Crea Appuntamento</span>
+3️⃣ nel campo cliente scrivi almeno 3 caratteri e seleziona il nominativo (oppure crea un nuovo cliente al volo con il <span class="help-strong-dark">tasto verde "+"</span>)
 4️⃣ nel campo servizio scrivi almeno 3 caratteri e scegli il trattamento
 5️⃣ se vuoi, aggiungi più mini-blocchi servizio nello stesso modal
 6️⃣ conferma la creazione
 
-<span class=\"help-strong-dark\">Che cosa succede nel modal</span>
-• il sistema precompila già operatore, data e orario partendo dalla cella cliccata
-• quando selezioni il cliente, la ricerca servizi diventa il passaggio successivo naturale
-• puoi anche creare un <span class=\"help-strong-dark\">Blocco OFF</span> se non stai prenotando un cliente
+Il sistema precompila già operatore, data e orario partendo dalla cella cliccata. Puoi anche creare un <span class="help-strong-dark">Blocco OFF</span> se non stai prenotando un cliente.
 
-Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>, dopo la conferma può comparire la richiesta per inviare un memo automatico al cliente.""",
-},
+<span class="help-strong-dark help-subtitle-pill">▸ Navigator Appuntamenti (metodo flessibile)</span>
+Il <span class="help-strong-dark">Navigator Appuntamenti</span> è il riquadro in alto a destra nell'Agenda. Conviene usarlo quando devi preparare uno o più servizi prima di decidere dove posizionarli, oppure lavorare con più servizi, spostare o copiare blocchi esistenti. **[[NAVIGATOR APPUNTAMENTI|navigator_appuntamenti]]**
 
-"calendar_appointment_navigator": {
-        "title": "✏️ Come creare appuntamenti con il NAVIGATOR APPUNTAMENTI",
-    "content": """Il <span class=\"help-strong-dark\">Navigator Appuntamenti</span> è il metodo più flessibile quando devi preparare uno o più servizi e poi decidere dove posizionarli. **[[NAVIGATOR APPUNTAMENTI|navigator_appuntamenti]]**
-
-<span class=\"help-strong-dark\">Quando conviene usarlo</span>
-• per creare appuntamenti con più servizi
-• per spostare o copiare blocchi esistenti
-• per aggiungere servizi allo stesso cliente
-• per lavorare più comodamente rispetto al modal singolo
-
-<span class=\"help-strong-dark\">Flusso corretto</span>
-1. cerca il cliente
+Flusso:
+1. cerca il cliente **[[CAMPO DI RICERCA CLIENTE|campo_ricerca_cliente]]**
 2. seleziona uno o più servizi
 3. controlla i mini-blocchi nel riquadro basso
 4. muovi il mouse sulle celle vuote del calendario
 5. clicca per posizionare
 
-<span class=\"help-strong-dark\">Mini-blocchi</span>
-Ogni mini-blocco rappresenta un servizio pronto da inserire. Se ne prepari più di uno, Tosca mostra l'ombra di posizionamento per aiutarti a capire dove finiranno in agenda.
+Ogni mini-blocco rappresenta un servizio pronto da inserire. Se ne prepari più di uno, l'ombra di posizionamento ti mostra dove finiranno in agenda. Per posizionare solo un servizio specifico, seleziona il singolo mini-blocco prima del click sulla griglia.
 
-Se vuoi posizionare solo un servizio specifico, seleziona il singolo mini-blocco prima del click sulla griglia. **[[CAMPO DI RICERCA CLIENTE|campo_ricerca_cliente]]**""",
-    },
+Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>, dopo la conferma può comparire la richiesta per inviare un memo automatico al cliente.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Se devi inserire una persona nuova senza uscire dal flusso Agenda, vai direttamente a <span class="help-strong-dark">[[AGGIUNGI NUOVO CLIENTE|client_new]]</span>.</span>
+</div>""",
+},
 
 "calendar_drag": {
     "title": "🖱️ Spostare un appuntamento? Facilissimo!",
@@ -80,33 +72,54 @@ Se vuoi posizionare solo un servizio specifico, seleziona il singolo mini-blocco
     },
 
 "calendar_block_buttons": {
-    "title": "⬆️ Pulsanti sopra al blocco appuntamento",
-    "content": """I **PULSANTI** che appaiono sopra al blocco appuntamento al passaggio del mouse sono fondamentali per gestire gli appuntamenti in modo rapido ed efficiente!
+    "title": "Blocco Appuntamento - I PULSANTI",
+    "content": """Qui trovi una guida unica ai pulsanti del blocco appuntamento, con distinzione tra pulsanti popup e pulsanti interni (dentro il blocco).
 
-• ✂️ **TOGLI E SPOSTA** → Taglia il blocco e lo mette nel Navigator per spostarlo altrove, perfetto per spostare un appuntamento ad un altro giorno
-• 📋 **COPIA BLOCCO** → Copia il blocco nel Navigator per duplicarlo e posizionare lo stesso appuntamento in un'altra parte del calendario, principalmente usato per prenotare gli stessi servizi allo stesso cliente in altre date
-• 🎨 **IMPOSTA COLORE** → Cambia il colore del blocco appuntamento. Se usi uno sfondo molto chiaro le lettere del blocco diventeranno scure, non c'è pericolo... sbizzarrisciti! 👩‍🎨
-• ➕ **AGGIUNGI (Aggiungi Servizi)**
- **AGGIUNGI SERVIZI** → Aggiunge altri servizi per lo stesso cliente, da Navigator in alto a destra sopra il calendario
-• 📝 **NOTA APPUNTAMENTO** → Aggiunge o modifica una nota per questo appuntamento (occhio a non confondere le **note cliente** che rimangono fisse e visibili per ogni appuntamento prenotato dal cliente, con le **note appuntamento** che si impostano da qui, e sono visibili solo per quel singolo blocco appuntamento)
-•  **€** **PORTA IN CASSA** → Porta il servizio relativo al blocco e gli altri contigui per quel cliente in cassa per il pagamento. A pagamento effettuato il blocco diventerà grigio chiaro con scritte in grigio, vuol dire che il pagamento per quei servizi è stato effettuato! ps: funzione disponibile solo su versione installata, non per versione web!
-e inoltre...
-📱 **Pulsante a lato del blocco**
-• 💬 **INVIA WHATSAPP** → disponibile solo con <span class="help-strong-dark">modulo opzionale WhatsApp</span>, invia un promemoria al cliente
-""",
-},
+<span class="help-strong-dark help-subtitle-pill">▸ Elenco rapido: pulsanti popup (al passaggio puntatore sul blocco)</span>
+• ✂️ TOGLI E SPOSTA
+• 📋 COPIA BLOCCO
+• 🎨 IMPOSTA COLORE
+• ➕ AGGIUNGI SERVIZI
+• 📝 NOTA APPUNTAMENTO
+• € PORTA IN CASSA
+• 💬 INVIA WHATSAPP (modulo opzionale WhatsApp)
 
-"calendar_block_tooltip": {
-    "title": "🖱️ Tooltip sul nome cliente",
-    "content": """Passa il mouse sul nome del cliente e appare un **TOOLTIP CON INFORMAZIONI** con:
-• 🕰️ Data e ora di creazione (ed eventualmente di ultima modifica) di quel blocco appuntamento
-• 👤 Nome e Cognome del cliente associato
-• 📝 Note Cliente (se presenti)
-• 📞 Numero di telefono
-• 📅 Data e ora dell'appuntamento
-• 💇 Servizio associato al blocco appuntamento
-• 📝 Note Appuntamento (se presenti)
-""",
+<span class="help-strong-dark help-subtitle-pill">▸ Elenco rapido: pulsanti interni al blocco</span>
+• 🗑️ CESTINO (in alto a sinistra)
+• ◯ CLIENTE IN ISTITUTO (in alto a destra)
+• 👤 NOME CLIENTE (al centro)
+
+<span class="help-strong-dark help-subtitle-pill">▸ Pulsanti Popup sul blocco</span>
+<span class="help-strong-dark">✂️ TOGLI E SPOSTA</span>
+Taglia il blocco e lo trasforma in mini-blocco nel Navigator Appuntamenti. Il blocco sparisce temporaneamente dalla cella (con ombra di riferimento) e puoi riposizionarlo dove vuoi.
+
+<span class="help-strong-dark">📋 COPIA BLOCCO</span>
+Copia il blocco nel Navigator lasciando l'originale al suo posto. Utile per duplicare rapidamente lo stesso appuntamento su altre date.
+
+<span class="help-strong-dark">🎨 IMPOSTA COLORE</span>
+Cambia colore al blocco. Se il colore è chiaro/scuro, il testo si adatta automaticamente per restare leggibile.
+
+<span class="help-strong-dark">➕ AGGIUNGI SERVIZI</span>
+Apre il Navigator già precompilato con il cliente del blocco corrente, così puoi aggiungere altri servizi senza rifare la ricerca cliente.
+
+<span class="help-strong-dark">📝 NOTA APPUNTAMENTO</span>
+Aggiunge/modifica la nota del singolo appuntamento. È distinta dalle note cliente (che sono permanenti e legate all'anagrafica).
+
+<span class="help-strong-dark">€ PORTA IN CASSA</span>
+Porta in Cassa il servizio del blocco (e gli eventuali contigui dello stesso cliente) per il pagamento.
+
+<span class="help-strong-dark">💬 INVIA WHATSAPP</span>
+Disponibile solo con <span class="help-strong-dark">modulo opzionale WhatsApp</span>, invia un promemoria al cliente.
+
+<span class="help-strong-dark help-subtitle-pill">▸ Pulsanti interni al blocco</span>
+<span class="help-strong-dark">🗑️ CESTINO</span>
+Apre il menu azioni del blocco: elimina singolo blocco, elimina gruppo contiguo (quando presente), imposta No-Show o annulla.
+
+<span class="help-strong-dark">◯ CLIENTE IN ISTITUTO</span>
+Indica che il cliente è arrivato in istituto; da qui gestisci lo stato operativo di presenza.
+
+<span class="help-strong-dark">👤 NOME CLIENTE</span>
+Con click sul nome puoi aprire la finestra per riassegnare l'appuntamento (e gli altri della stessa data) a un altro cliente.""",
 },
 
 "calendar_block_click": {
@@ -130,25 +143,38 @@ e inoltre...
         "title": "✂️ Maneggiare i blocchi appuntamenti: le funzioni 'Togli e Sposta', 'Copia Blocco' e 'Aggiungi Servizio'",
         "content": """Sopra ogni blocco appuntamento trovi tre pulsanti fondamentali per gestire gli appuntamenti in modo rapido ed efficiente!
 
-✂️ **TAGLIA (Togli e Sposta)**
+<span class="help-strong-dark help-subtitle-pill">✂️ TAGLIA (Togli e Sposta)</span>
 Cliccando su questo pulsante, i blocchi appuntamento **scompaiono** dal calendario (lasciando un'ombra al loro posto) e vengono trasformati in **mini-blocchi** visibili nel **Navigator Appuntamenti** in alto a destra.
 Da lì puoi riposizionarli dove preferisci: basta muovere il mouse su una cella vuota del calendario e cliccare per confermare la nuova posizione.
 Puoi tagliare anche più blocchi appuntamento e spostarli tutti con un click in agenda! Vedrai un'**ombra** sulle celle di calendario in prossimità del puntatore dove verranno creati i blocchi, e un'ombra sulle celle da cui sono stati tagliati i blocchi. Se annulli l'operazione (per es. con SVUOTA da Navigator Appuntamenti) i blocchi appuntamento torneranno al loro posto originario!
 
-📋 **COPIA (Copia Blocco)**
+<span class="help-strong-dark help-subtitle-pill">📋 COPIA (Copia Blocco)</span>
 Funziona in modo simile a "Taglia", ma **lascia i blocchi originali al loro posto**!
 I blocchi vengono copiati come mini-blocchi nel Navigator Appuntamenti, pronti per essere posizionati su un'altra data.
 **Esempio pratico:** un cliente vuole prenotare lo stesso trattamento una volta al mese per diversi mesi? Copia il blocco e posizionalo velocemente sulle date successive. Fatto in pochi secondi! 🚀
 
-➕ **AGGIUNGI (Aggiungi Servizi)**
+<span class="help-strong-dark help-subtitle-pill">➕ AGGIUNGI (Aggiungi Servizi)</span>
 Cliccando su "Aggiungi", si apre il **Navigator Appuntamenti** già **pre-caricato con il nome del cliente** del blocco da cui hai cliccato.
 In questo modo puoi aggiungere altri servizi allo stesso cliente per lo stesso appuntamento, senza doverlo cercare di nuovo.
 Ideale quando il cliente decide di aggiungere un trattamento extra! 💆""",
     },
 
     "calendar_note": {
-        "title": "📝 Le note: cliente e appuntamento",
-        "content": """In Tosca puoi aggiungere due tipi di note, entrambe visibili nel tooltip informativo del blocco appuntamento!
+        "title": "📝 Tooltip e Note nel blocco appuntamento",
+        "content": """In Tosca puoi visualizzare informazioni e aggiungere due tipi di note, tutte visibili nel tooltip informativo del blocco appuntamento!
+
+<span class="help-strong-dark help-subtitle-pill">▸ TOOLTIP SUL NOME CLIENTE</span>
+Passa il mouse sul nome del cliente e appare un **TOOLTIP CON INFORMAZIONI** con informazioni utili su quel blocco appuntamento:
+• 🕰️ Data e ora di creazione (ed eventualmente di ultima modifica) di quel blocco appuntamento
+• 👤 Nome e Cognome del cliente associato
+• 📝 Note Cliente (se presenti)
+• 📞 Numero di telefono
+• 📅 Data e ora dell'appuntamento
+• 💇 Servizio associato al blocco appuntamento
+• 📝 Note Appuntamento (se presenti)
+
+<span class="help-strong-dark help-subtitle-pill">▸ NOTE: CLIENTE E APPUNTAMENTO</span>
+In Tosca puoi aggiungere due tipi di note, entrambe visibili nel tooltip informativo:
 
 👤 **NOTE CLIENTE**
 Sono note permanenti legate al cliente, utili per informazioni che valgono sempre (es: allergie, preferenze, richieste particolari).
@@ -286,19 +312,42 @@ Tutto collegato, zero errori! ✨""",
     
     # ========== CLIENTI ==========
     "client_search": {
-        "title": "🔍 Trovare un cliente",
-        "content": """Inizia a scrivere e... magia! ✨
+        "title": "🔍 Ricerca cliente in Agenda + Nuovo cliente + Info rapida",
+        "content": """Questa è la guida unica per tutto il flusso cliente in Agenda: ricerca, inserimento rapido nuovo cliente e finestra info.
 
-Nei campi di ricerca cliente, puoi cercare cliente per
+<span class="help-strong-dark help-subtitle-pill">▸ RICERCA CLIENTE IN AGENDA</span>
+Nei campi di ricerca cliente, puoi cercare per:
 • Nome (es: "Maria")
-• Cognome (es: "Rossi")  
+• Cognome (es: "Rossi")
 • Telefono (es: "333")
 
-Bastano 3 lettere (o i primi 3 numeri del cellulare) e i risultati corrispondenti appaiono subito sotto!
+Bastano 3 lettere (o i primi 3 numeri del cellulare) e i risultati corrispondenti appaiono subito sotto.
+
+<span class="help-strong-dark help-subtitle-pill">▸ AGGIUNGI NUOVO CLIENTE (TASTO +)</span>
+Il modo più veloce per aggiungere un nuovo cliente è usare il **TASTO +** accanto al campo di ricerca cliente nella finestra di creazione appuntamento o nel Navigator Appuntamenti in Agenda.
+
+Da lì, basta scrivere **NOME, COGNOME e CELLULARE**: il cliente viene subito aggiunto alla rubrica.
+
+Se il cellulare è già presente per un altro cliente, compare un messaggio di avviso (non è ammesso lo stesso numero di cellulare per più clienti).
+
+Il **SESSO** viene capito automaticamente dal nome (ma puoi correggerlo nelle impostazioni).
+
+Verifica sempre il <span class="help-strong-dark">cellulare</span>: è un dato fondamentale per contatto, recall e, se attivo il modulo opzionale, anche per l'invio WhatsApp.
+
+<span class="help-strong-dark help-subtitle-pill">▸ FINESTRA INFO CLIENTE (ICONA i)</span>
+Al click sull'**ICONA "i"** a fianco dei risultati della ricerca cliente si apre una finestra dove puoi visualizzare e modificare rapidamente i dati del cliente.
+
+Puoi modificare **NOME, COGNOME, CELLULARE ed EMAIL** nei campi in alto, e aggiungere o modificare la **NOTA SALVATA** per quel cliente.
+
+Più sotto trovi:
+• **Prossimi appuntamenti prenotati** per quel cliente
+• **Storico appuntamenti** per quel cliente
+
+Cliccando sulle righe della tabella, la vista Agenda si sposta direttamente nella giornata selezionata.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Cerca solo con le prime lettere e scrivine altre solo se non vedi ancora il risultato che cercavi... è più veloce! 😉</span>
+<span class="help-hint-text">Cerca con poche lettere e usa subito + o icona i: fai tutto da Agenda senza saltare tra più schermate.</span>
 </div>""",
     },
     
@@ -312,9 +361,11 @@ Se il cellulare è già presente per un altro cliente, vieni avvisato con un mes
 
 Il **SESSO** viene capito automaticamente dal nome (ma puoi correggerlo nelle impostazioni)
 
+Verifica sempre il <span class="help-strong-dark">cellulare</span>: è un dato fondamentale per contatto, recall e, se attivo il modulo opzionale, anche per l'invio WhatsApp.
+
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Verifica sempre il cellulare: e' un dato fondamentale per contatto, recall e, se attivo il modulo opzionale, anche per l'invio WhatsApp.</span>
+<span class="help-hint-text">Se vuoi vedere il flusso completo da Agenda (click cella vuota e Navigator), apri <span class="help-strong-dark">[[CREA BLOCCO APPUNTAMENTO|calendar_create_appointment]]</span>.</span>
 </div>
 
 Puoi inserire clienti anche da **Impostazioni → Clienti** (tab "Clienti"), dove trovi molte altre funzioni avanzate per la gestione e modifica dei dati cliente.
@@ -336,17 +387,32 @@ Così hai tutto sotto controllo e puoi gestire i dati cliente in modo semplice e
 },
 
     "client_history": {
-        "title": "📊 Vedere lo storico cliente",
-        "content": """Vuoi sapere tutto di un cliente? Ecco come!
+        "title": "📊 Storico cliente: lettura rapida e uso operativo",
+        "content": """Questa sezione ti guida sulla lettura dello storico cliente, utile per decisioni veloci durante la giornata.
 
-Vai in **Impostazioni → Clienti**, cerca il cliente e clicca su "**STORICO**":
+<span class="help-strong-dark help-subtitle-pill">▸ COSA VEDI NELLO STORICO</span>
+Aprendo lo storico cliente trovi in un unico punto:
+• 📅 appuntamenti passati, con le date registrate in istituto
+• 💰 totale speso
+• 💆 operatori associati
+• 📝 dati cliente e note salvate
 
-📅 Tutti gli appuntamenti passati, con la data in cui sono stati registrati in istituto
-💰 Quanto ha speso in totale
-💆 Gli operatori associati
-📝 I dati cliente e le note che hai salvato
+<span class="help-strong-dark help-subtitle-pill">▸ COME APRIRLO</span>
+Percorso rapido:
+1️⃣ vai in **Impostazioni → Clienti**
+2️⃣ cerca il cliente nella tabella-rubrica
+3️⃣ clicca il pulsante **STORICO** sulla riga del cliente
 
-Perfetto per capire le abitudini dei tuoi clienti! 🎯""",
+<span class="help-strong-dark help-subtitle-pill">▸ COME USARLO IN MODO SMART</span>
+Usa lo storico per:
+• proporre richiami in base alle abitudini
+• verificare frequenza e spesa prima di una proposta commerciale
+• contestualizzare meglio le richieste del cliente prima del nuovo appuntamento
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Prima di confermare una nuova prenotazione, controlla al volo storico + note: la consulenza risulta più personalizzata e professionale.</span>
+</div>""",
     },
 
     "client_settings": {
@@ -366,6 +432,10 @@ Usa il campo di ricerca in basso per trovare i clienti. Nella tabella puoi veder
 • Tutti i dati anagrafici inseriti
 • **Data di inserimento** in rubrica
 • **Ultimo passaggio** in istituto
+
+Per il flusso operativo completo in Agenda (ricerca cliente, tasto + e finestra info), vedi <span class="help-strong-dark">[[RICERCA CLIENTE IN AGENDA|client_search]]</span>.
+
+Per la lettura guidata dello storico cliente, vedi <span class="help-strong-dark">[[STORICO CLIENTE IN AGENDA|client_history]]</span>.
 
 🔘 **TASTI AZIONE**
 Per ogni cliente hai a disposizione questi pulsanti:
@@ -890,54 +960,114 @@ L'idea corretta è questa: l'Agenda è la vista operativa del lavoro giornaliero
     },
 
     "agenda_turni": {
-        "title": "🕒 Agenda: impostare i turni (anche da Settings)",
-        "content": """I turni sono ciò che definisce quando un operatore è prenotabile.
+        "title": "🕒 Impostare i turni degli operatori",
+        "content": """I turni definiscono quando un operatore è disponibile per nuove prenotazioni. Gli appuntamenti si potranno creare <span class=\"help-strong-dark\">solo</span> negli orari di turno impostati.
 
-Puoi gestirli in due modi:
-• <span class=\"help-strong-dark\">da Agenda</span>, cliccando il nome operatore in intestazione
-• <span class=\"help-strong-dark\">da Settings → Operatori</span>, dove hai anche la parte anagrafica e gestionale
+<span class=\"help-strong-dark help-subtitle-pill\">▸ IMPOSTARE TURNI DA TOOLS/OPERATORI</span>
+Da qui gestisci i turni di base di ogni operatore, insieme all'anagrafica e alle altre impostazioni.
 
-<span class=\"help-strong-dark\">Effetto pratico</span>
-Le celle fuori turno non diventano disponibili per nuove prenotazioni.
+Flusso:
+1️⃣ vai in <span class=\"help-strong-dark\">Tools → Operatori</span>
+2️⃣ seleziona l'operatore
+3️⃣ imposta gli orari nei giorni della settimana
+4️⃣ usa i <span class=\"help-strong-dark\">preset</span> per velocizzare (es. \"9-18 pausa 12\")
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ IMPOSTARE TURNI DA CLICK SU NOME OPERATORE IN AGENDA</span>
+Clicca il nome dell'operatore nell'intestazione colonna: si apre il pannello turno del giorno, dove puoi modificare l'orario oppure impostare un giorno di riposo.
+
+È il metodo più rapido per gestire <span class=\"help-strong-dark\">variazioni occasionali</span> senza toccare le impostazioni globali.
+
+Sempre nella stessa finestra, troverai la sezione <span class=\"help-strong-dark\">Visualizzazione rapida per operatore</span>, che mostra un calendario mensile con i turni impostati, così puoi verificare a colpo d'occhio la copertura di ogni operatore.
 
 <span class=\"help-strong-dark\">Buona pratica</span>
-1. imposta i turni standard
-2. usa l'Agenda per le eccezioni giornaliere
-3. usa i Blocchi OFF solo per impegni di servizio, non per sostituire la logica dei turni""",
+• imposta i turni standard da Tools → Operatori
+• usa l'Agenda per le eccezioni giornaliere
+• usa i Blocchi OFF solo per impegni di servizio, non per sostituire la logica dei turni
+
+<div class=\"help-hint-box\">
+<span class=\"help-hint-label\">Consiglio:</span>
+<span class=\"help-hint-text\">Crea preset con nomi descrittivi (es. \"9-18 pausa 12\") e risparmia tempo ogni volta che devi impostare un turno ricorrente.</span>
+</div>""",
+    },
+
+    "agenda_touch_mode": {
+        "title": "📱 Agenda in modalità TOUCH: differenze operative",
+        "content": """La modalità TOUCH cambia il modo in cui interagisci con i blocchi appuntamento.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ MODALITÀ TOUCH: COME E QUANDO ATTIVARLA</span>
+È consigliata quando usi schermi touch/tablet (anche iPad in contesti kiosk) oppure quando alcune operatrici sono più a proprio agio con il tocco rispetto al mouse.
+
+<span class=\"help-strong-dark\">Attivazione da Tools</span>
+Percorso:
+1️⃣ vai in <span class=\"help-strong-dark\">Tools → Info Azienda</span>
+2️⃣ cerca l'opzione <span class=\"help-strong-dark\">Touch-screen</span>
+3️⃣ attiva il checkbox <span class=\"help-strong-dark\">\"Abilita interfaccia touch per i blocchi agenda\"</span>
+4️⃣ ricarica l'Agenda
+
+Nota: l'impostazione è salvata <span class=\"help-strong-dark\">su questo computer</span>.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ DIFFERENZE OPERATIVE IN MODALITÀ TOUCH</span>
+In modalità touch non lavori con hover/passaggio mouse come su desktop classico.
+
+Flusso tipico:
+1️⃣ fai <span class=\"help-strong-dark\">click sul blocco appuntamento</span>
+2️⃣ il blocco diventa attivo
+3️⃣ compaiono i comandi rapidi nelle <span class=\"help-strong-dark\">barre del blocco (sopra e sotto)</span>
+
+Azioni tipiche disponibili:
+• allunga/accorcia durata di 15 minuti
+• cliente in istituto
+• no-show
+• copia/elimina/taglia
+
+Nella pratica: prima selezioni il blocco, poi tocchi i pulsanti contestuali.
+
+<div class=\"help-hint-box\">
+<span class=\"help-hint-label\">Consiglio:</span>
+<span class=\"help-hint-text\">È altamente raccomandato usare un computer con mouse, senza touch-screen, per maggiore comodità e stabilità operativa. Su schermi touch usurati o poco calibrati possono comparire sfarfallamenti e comportamenti anomali.</span>
+</div>""",
     },
 
     # ========== CASSA (DETTAGLIO OPERATIVO) ==========
     "cassa_filtri_ricerca": {
-        "title": "🔎 Cassa: filtri superiori e campo ricerca servizi",
-        "content": """La parte alta della Cassa serve a <span class=\"help-strong-dark\">costruire velocemente la bozza scontrino</span>.
+        "title": "🧾 Cassa: bozza scontrino, metodi di pagamento e stampa",
+        "content": """Qui trovi il flusso completo in 3 parti, senza passaggi separati.
 
-Hai due strumenti principali:
-• <span class=\"help-strong-dark\">campo Cerca servizio</span>: ricerca veloce con autocomplete
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PARTE 1: Creare la bozza scontrino</span>
+Usa i controlli in alto:
+• <span class=\"help-strong-dark\">campo CERCA</span>: ricerca veloce con autocomplete di Servizi e Prodotti
 • <span class=\"help-strong-dark\">filtri rapidi</span>: Frequenti, Ultimi, Solarium, Estetica, Prodotti
 
-Sotto questi controlli compare il contenitore pulsanti servizi, che cambia in base al filtro selezionato.
+Sotto i filtri compaiono i <span class=\"help-strong-dark\">pulsanti servizi/prodotti</span>, che cambiano in base al filtro selezionato.
+Ogni click su un pulsante aggiunge la voce nella bozza.
 
-Uso corretto:
-1. scegli filtro oppure cerca per nome
-2. clicca sui servizi/prodotti da aggiungere
-3. controlla subito la bozza nella card principale""",
-    },
+In alternativa, puoi partire da Agenda: clicca <span class=\"help-strong-dark\">€ Porta in Cassa</span> su un blocco appuntamento e i servizi vengono caricati automaticamente.
 
-    "cassa_bozza_scontrino": {
-        "title": "🧾 Cassa: creazione bozza scontrino (pseudo-scontrino)",
-        "content": """La <span class=\"help-strong-dark\">bozza scontrino</span> è il riquadro centrale in cui prepari il documento prima della conferma.
-
-Che cosa contiene:
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PARTE 2: Rifinire la bozza e impostare il pagamento</span>
+Nella bozza puoi gestire:
 • righe servizi/prodotti
-• cliente selezionato
-• operatore selezionato
-• prezzi, sconti, metodi di pagamento, totale
+• cliente e operatore selezionati
+• prezzo e sconto percentuale (es. 10 = 10%)
+• metodo di pagamento
 
-La bozza può nascere in due modi:
-• <span class=\"help-strong-dark\">manuale</span>: aggiungendo voci dalla Cassa
-• <span class=\"help-strong-dark\">da Agenda</span>: portando uno o più blocchi in Cassa
+Metodi supportati:
+• Cash = pagamento in contanti 💵
+• POS = pagamento con carta/bancomat 💳
+• Bank = bonifico, assegno, pagamento online, ecc. 📱
+• Prepagata = disponibile solo se il cliente ha una carta prepagata 💳
 
-Nel codice storico trovi il termine "pseudo-scontrino", ma per l'uso quotidiano pensa a questa sezione come alla <span class=\"help-strong-dark\">bozza operativa dello scontrino</span>.""",
+Quando la bozza scontrino viene creata a partire da appuntamenti in Agenda, compaiono anche dei tasti aggiuntivi per gestire le modifiche:
+• <span class=\"help-strong-dark\">Salva Modifiche</span>
+• <span class=\"help-strong-dark\">Reset</span>
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PARTE 3: Confermare, registrare il pagamento e stampare</span>
+Quando la bozza scontrino è pronta:
+1. clicca <span class=\"help-strong-dark\">CONFERMA</span> (o Avanti)
+2. verifica il riepilogo
+3. clicca <span class=\"help-strong-dark\">Stampa</span> per emettere lo scontrino
+
+Se previsto dal flusso fiscale, può comparire la <span class=\"help-strong-dark\">Lotteria Scontrini</span>.
+I documenti non fiscali/test sono trattati in modo distinto nel Registro.""",
     },
 
     "cassa_myspia_save_reset": {
@@ -949,7 +1079,7 @@ Serve per:
 • aprire il gruppo cliente presente in istituto
 • portare i servizi relativi nella bozza scontrino
 
-Quando la bozza nasce da appuntamenti Agenda compaiono due pulsanti importanti:
+Quando la bozza scontrino viene creata a partire da appuntamenti in Agenda, compaiono anche dei tasti aggiuntivi per gestire le modifiche:
 • <span class=\"help-strong-dark\">Salva Modifiche</span>: conserva la versione modificata della bozza
 • <span class=\"help-strong-dark\">Reset</span>: ricostruisce la bozza partendo dai dati originali del calendario
 
@@ -957,31 +1087,21 @@ Questa logica è utile quando, prima di stampare, cambi prezzi, righe o metodi m
     },
 
     "cassa_sconti_metodi_stampa_test": {
-        "title": "🧮 Cassa: sconti, metodi pagamento, stampa e modalità test",
+        "title": "🧮 Cassa: sconti e metodi di pagamento",
         "content": """Ogni riga della bozza può essere rifinita prima della conferma.
 
 <span class=\"help-strong-dark\">Per singola riga puoi gestire</span>
 • prezzo
-• sconto percentuale
+• sconto percentuale (basta scrivere il numero nel campo sconto, es. 10 per 10%)
 • metodo di pagamento
 
 <span class=\"help-strong-dark\">Metodi pagamento supportati</span>
-• Cash
-• POS
-• Bank
-• Prepagata (se disponibile per il cliente)
+• Cash = pagamento in contanti 💵
+• POS = pagamento con carta, bancomat ecc. 💳
+• Bank = altro tipo di pagamento: bonifico, assegno, pagamento online, ecc. 📱
+• Prepagata (solo quando c'è una CARTA PREPAGATA associata al cliente) 💳
 
-In basso trovi anche i bottoni rapidi per applicare il metodo a tutte le righe e leggere i subtotali per metodo.
-
-Flusso corretto:
-1. prepara la bozza
-2. clicca <span class=\"help-strong-dark\">CONFERMA</span>
-3. controlla il riepilogo
-4. manda in stampa con il bottone stampante
-
-Se previsto dal flusso fiscale, può comparire anche la <span class=\"help-strong-dark\">Lotteria Scontrini</span>.
-
-I documenti non fiscali o di test vengono trattati in modo distinto e nel registro hanno comportamento/visualizzazione differente rispetto ai fiscali.""",
+In basso trovi anche i bottoni rapidi per applicare il metodo a tutte le righe e leggere i subtotali per metodo.""",
     },
 
     "cassa_registro_ruoli": {
@@ -1160,6 +1280,38 @@ Per invii amministrativi, usa sempre la vista Corrispettivi del periodo corretto
     I ruoli influenzano ciò che ogni persona può vedere o fare, ad esempio in Cassa, Report e negli strumenti fiscali avanzati.""",
         },
 
+    "tools_touch_updates": {
+        "title": "🆕 Tools: aggiornamenti app",
+        "content": """In <span class=\"help-strong-dark\">Tools → Info Azienda</span> trovi la sezione <span class=\"help-strong-dark\">Aggiornamenti App</span> (istanza locale).
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ AGGIORNAMENTI APP: COME FUNZIONA</span>
+Nella sezione <span class=\"help-strong-dark\">Aggiornamenti App</span> (istanza locale) trovi:
+• versione attuale
+• pulsante <span class=\"help-strong-dark\">Controlla aggiornamenti</span>
+• se disponibile, pulsante <span class=\"help-strong-dark\">Aggiorna ora</span>
+• note di rilascio e stato download/installazione
+
+Messaggi tipici:
+• nessun aggiornamento disponibile
+• sei già alla versione più recente
+• aggiornamento disponibile ma file non trovato (contattare supporto)
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COSA FARE QUANDO C'È UN AGGIORNAMENTO</span>
+Flusso consigliato:
+1️⃣ clicca <span class=\"help-strong-dark\">Controlla aggiornamenti</span>
+2️⃣ leggi versione e note rilascio
+3️⃣ clicca <span class=\"help-strong-dark\">Aggiorna ora</span> e conferma
+4️⃣ attendi download e installazione automatica
+5️⃣ quando l'app si chiude, attendi circa 1 minuto e riavvia Tosca
+
+Se la finestra non si chiude entro ~30 secondi, chiudila manualmente come indicato nel messaggio a schermo.
+
+<div class=\"help-hint-box\">
+<span class=\"help-hint-label\">Consiglio:</span>
+<span class=\"help-hint-text\">Esegui gli aggiornamenti in un momento di bassa operatività (es. fine giornata), così eviti interruzioni durante il lavoro in Agenda/Cassa.</span>
+</div>""",
+    },
+
         "tools_workflow_consigliato": {
         "title": "🧭 Tools: ordine consigliato di configurazione",
         "content": """Se stai configurando Tosca da zero, l'ordine più sensato è questo:
@@ -1197,30 +1349,22 @@ def get_topics_by_category():
     """Restituisce gli argomenti organizzati per categoria"""
     return {
         "Agenda": [
-            "agenda_create_modify_delete",
             "calendar_create_appointment",
-            "calendar_appointment_navigator",
+            "client_search",
+            "client_history",
+            "calendar_block_buttons",
             "agenda_turni",
-            "operator_shifts",
             "calendar_drag",
             "calendar_status",
-            "calendar_block_buttons",
-            "calendar_block_tooltip",
-            "calendar_block_click",
-            "funzioni_blocchi",
             "calendar_note",
             "calendar_paid_block",
             "calendar_off_block"
         ],
         "Cassa": [
             "cassa_filtri_ricerca",
-            "cassa_bozza_scontrino",
             "cassa_myspia_save_reset",
-            "cassa_sconti_metodi_stampa_test",
             "cassa_registro_ruoli",
             "cassa_strumenti_fiscali_rch",
-            "cassa_crea_scontrino",
-            "cassa_pagamento",
             "cassa_blocchi_appuntamento"
         ],
         "Report": [
@@ -1243,11 +1387,8 @@ def get_topics_by_category():
             "tools_panorama",
             "tools_clienti_servizi_operatori",
             "tools_info_azienda_utenti",
+            "tools_touch_updates",
             "tools_workflow_consigliato",
-            "client_new",
-            "client_search",
-            "client_info_window",
-            "client_history",
             "client_settings",
             "service_create",
             "service_categories",
@@ -1271,5 +1412,8 @@ def get_topics_by_category():
             "marketing_send",
             "marketing_variables",
             "marketing_filtri_template"
+        ],
+        "Touch": [
+            "agenda_touch_mode"
         ],
     }
