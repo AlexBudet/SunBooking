@@ -5738,7 +5738,12 @@ function changeAppointmentColor(block) {
   document.addEventListener("DOMContentLoaded", function() {
     document.querySelectorAll('.appointment-block').forEach(function(block) {
       var bgColor = block.getAttribute("data-colore") || "#ffffff";
-      block.style.color = computeFontColor(bgColor);
+      var fontColor = computeFontColor(bgColor);
+      block.style.color = fontColor;
+      block.setAttribute('data-colore_font', fontColor);
+      // Aggiorna anche la classe dark-bg/light-bg
+      block.classList.remove('dark-bg', 'light-bg');
+      block.classList.add(fontColor.toLowerCase() === '#ffffff' ? 'dark-bg' : 'light-bg');
     });
   });
 
@@ -7577,7 +7582,9 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
   const source = String(appointment.source || '').trim().toLowerCase();
   const defaultColor = (source === 'web') ? '#007bff' : '#FFFFFF';
   const colore = appointment.colore || defaultColor;
-  const coloreFont = appointment.colore_font || computeFontColor(colore);
+  // Ricalcola sempre il font color dal background — non fidarsi del valore salvato nel DB
+  // che potrebbe essere obsoleto se il colore di sfondo è cambiato dopo la creazione.
+  const coloreFont = computeFontColor(colore);
 
   const fallbackFullName = (appointment.client_name || '').toString().trim();
   const fallbackNameParts = fallbackFullName.split(/\s+/).filter(Boolean);
