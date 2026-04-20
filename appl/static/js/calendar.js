@@ -7602,6 +7602,24 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
   const pacchettoCreatedOn = (appointment.pacchetto_created_on || appointment.pacchettoCreatedOn || '').toString().trim();
   const pacchettoSedutaProgressivo = String(appointment.pacchetto_seduta_progressivo || appointment.pacchettoSedutaProgressivo || '').trim();
   const pacchettoSeduteTotali = String(appointment.pacchetto_sedute_totali || appointment.pacchettoSeduteTotali || '').trim();
+  const prepagateCards = Array.isArray(appointment.prepagate_cards)
+    ? appointment.prepagate_cards
+    : (Array.isArray(appointment.prepagateCards) ? appointment.prepagateCards : []);
+
+  function _escapeBadgeHtml(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function _formatEuro(v) {
+    const n = Number(v || 0);
+    if (!Number.isFinite(n)) return '0,00';
+    return n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
 
   const isDummyByName = clientNome.toLowerCase() === 'dummy' && clientCognome.toLowerCase() === 'dummy';
   const isOffBlock =
@@ -7830,6 +7848,33 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
       pacchettoBadge.setAttribute('title', titleParts.join('<br>'));
       pacchettoBadge.style.cssText = 'margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;';
       pClient.appendChild(pacchettoBadge);
+    }
+
+    if (prepagateCards.length > 0) {
+      const prepagataBadge = document.createElement('i');
+      prepagataBadge.className = 'bi bi-credit-card prepagata-badge';
+      prepagataBadge.setAttribute('data-bs-toggle', 'tooltip');
+      prepagataBadge.setAttribute('data-bs-html', 'true');
+
+      const rows = prepagateCards.map(function(card) {
+        const nome = _escapeBadgeHtml(card && card.nome ? card.nome : 'Carta');
+        const saldo = _formatEuro(card && card.credito_residuo);
+        const scadenza = (card && card.data_scadenza) ? ` (scad. ${_escapeBadgeHtml(card.data_scadenza)})` : '';
+        return `${nome}: <strong>€${saldo}</strong>${scadenza}`;
+      });
+
+      const creditoTotale = Number.isFinite(Number(appointment.prepagata_credito_totale))
+        ? Number(appointment.prepagata_credito_totale)
+        : prepagateCards.reduce((sum, card) => sum + (Number(card && card.credito_residuo) || 0), 0);
+
+      let tooltipHtml = `<strong>💳 Carta Prepagata</strong><br>${rows.join('<br>')}`;
+      if (prepagateCards.length > 1) {
+        tooltipHtml += `<br><strong>Totale: €${_formatEuro(creditoTotale)}</strong>`;
+      }
+
+      prepagataBadge.setAttribute('title', tooltipHtml);
+      prepagataBadge.style.cssText = 'margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;color:#0d6efd;';
+      pClient.appendChild(prepagataBadge);
     }
 
     const link = document.createElement('a');

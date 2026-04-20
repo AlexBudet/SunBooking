@@ -3256,6 +3256,36 @@ function generaPdfPacchetto(stampaDiretta = false) {
 async function generaDisclaimerPdf(stampaDiretta = false) {
   console.log('=== INIZIO generaDisclaimerPdf ===');
   const { jsPDF } = window.jspdf;
+
+  // Normalizza il testo per il PDF: decode entita HTML, rimuove caratteri anomali e uniforma gli spazi.
+  function normalizePdfText(input) {
+    if (input === null || input === undefined) return '';
+
+    let text = String(input)
+      .replace(/\r\n?/g, '\n')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\u00A0/g, ' ');
+
+    const entityDecoder = document.createElement('textarea');
+    for (let i = 0; i < 3; i++) {
+      if (!/&(?:#\d+|#x[\da-fA-F]+|[a-zA-Z][a-zA-Z0-9]+);/.test(text)) break;
+      entityDecoder.innerHTML = text;
+      const decoded = entityDecoder.value;
+      if (decoded === text) break;
+      text = decoded;
+    }
+
+    // Fix principali sequenze mojibake/codifica errata viste in input copiati da altre fonti.
+    text = text
+      .replace(/â€™|â€˜|\u2019|\u2018/g, "'")
+      .replace(/â€œ|â€\u009d|\u201C|\u201D/g, '"')
+      .replace(/â€“|\u2013/g, '-')
+      .replace(/â€”|\u2014/g, ' - ')
+      .replace(/â€¦|\u2026/g, '...')
+      .replace(/Â/g, '');
+
+    return text;
+  }
   
   // Recupera il template disclaimer e i dati dal server
   let templateData;
@@ -3287,8 +3317,8 @@ async function generaDisclaimerPdf(stampaDiretta = false) {
   const seduteTotali = {{ pacchetto.sedute|length }};
   const importoTotale = "{{ '%.2f'|format(pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo) }}";
   const importoTotaleLordo = "{{ '%.2f'|format(pacchetto.costo_totale_lordo) }}";
-  const centroNome = templateData.centro_nome || 'Centro Estetico';
-  const centroIndirizzo = templateData.centro_indirizzo || '';
+  const centroNome = normalizePdfText(templateData.centro_nome || 'Centro Estetico');
+  const centroIndirizzo = normalizePdfText(templateData.centro_indirizzo || '');
   
   // Template di default se non salvato in DB
   const defaultTemplate = `CONSENSO INFORMATO PER TRATTAMENTI ESTETICI
@@ -3321,15 +3351,22 @@ _______________________________
 Firma del cliente`;
 
   // Usa template da DB o default
-  let template = templateData.template || defaultTemplate;
+  let template = normalizePdfText(templateData.template || defaultTemplate);
+
+  const clienteNomeNormalized = normalizePdfText(clienteNome);
+  const clienteCognomeNormalized = normalizePdfText(clienteCognome);
+  const clienteCellulareNormalized = normalizePdfText(clienteCellulare);
+  const programmaNomeNormalized = normalizePdfText(programmaNome);
+  const serviziTextNormalized = normalizePdfText(templateData.servizi_text || '');
+  const disclaimersTextNormalized = normalizePdfText(templateData.disclaimers_text || 'Nessuna controindicazione specifica.');
   
   // Sostituisci tutte le variabili
-  const disclaimerText = template
-    .replace(/{cliente_nome}/g, clienteNome)
-    .replace(/{cliente_cognome}/g, clienteCognome)
-    .replace(/{cliente_cellulare}/g, clienteCellulare)
-    .replace(/{pacchetto_nome}/g, programmaNome)
-    .replace(/{pacchetto_servizi}/g, templateData.servizi_text || '')
+  const disclaimerText = normalizePdfText(template
+    .replace(/{cliente_nome}/g, clienteNomeNormalized)
+    .replace(/{cliente_cognome}/g, clienteCognomeNormalized)
+    .replace(/{cliente_cellulare}/g, clienteCellulareNormalized)
+    .replace(/{pacchetto_nome}/g, programmaNomeNormalized)
+    .replace(/{pacchetto_servizi}/g, serviziTextNormalized)
     .replace(/{sedute_totali}/g, seduteTotali)
     .replace(/{importo_totale}/g, importoTotale)
     .replace(/{importo_totale_lordo}/g, importoTotaleLordo)
@@ -3337,7 +3374,7 @@ Firma del cliente`;
     .replace(/{centro_nome}/g, centroNome)
     .replace(/{centro_indirizzo}/g, centroIndirizzo)
     .replace(/{data_odierna}/g, dataOdierna)
-    .replace(/{disclaimers_servizi}/g, templateData.disclaimers_text || 'Nessuna controindicazione specifica.');
+    .replace(/{disclaimers_servizi}/g, disclaimersTextNormalized));
   
   // Genera PDF
   const doc = new jsPDF({
