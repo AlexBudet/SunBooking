@@ -133,6 +133,33 @@ def _build_pacchetto_tooltip_data(pacchetto_seduta):
         "sedute_totali": sedute_totali,
     }
 
+
+def _get_active_prepagate_by_client_ids(client_ids):
+    """Ritorna mappa client_id -> elenco carte prepagate attive con credito residuo."""
+    result = {}
+    ids = [cid for cid in (client_ids or []) if cid]
+    if not ids:
+        return result
+
+    prepagate_attive = Pacchetto.query.filter(
+        Pacchetto.client_id.in_(ids),
+        Pacchetto.tipo == PacchettoTipo.Prepagata,
+        Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo]),
+        Pacchetto.credito_residuo > 0
+    ).all()
+
+    for p in prepagate_attive:
+        if p.client_id not in result:
+            result[p.client_id] = []
+        result[p.client_id].append({
+            'id': p.id,
+            'nome': p.nome,
+            'credito_residuo': float(p.credito_residuo) if p.credito_residuo else 0,
+            'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None
+        })
+
+    return result
+
 @calendar_bp.route('/', methods=['GET'])
 def calendar_home():
     # Recupera la data come stringa e poi converti in datetime
@@ -581,6 +608,9 @@ def create_appointment():
                             }
             
             db.session.commit()
+
+            created_client_ids = {appt.client_id for appt in created_appts if appt.client_id}
+            prepagate_per_cliente_created = _get_active_prepagate_by_client_ids(created_client_ids)
             
             response_data = {
                 "message": "Appuntamenti creati con successo!",
@@ -611,6 +641,8 @@ def create_appointment():
                         "pacchetto_created_on": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["created_on"],
                         "pacchetto_seduta_progressivo": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["seduta_progressivo"],
                         "pacchetto_sedute_totali": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["sedute_totali"],
+                        "prepagate_cards": prepagate_per_cliente_created.get(appt.client_id, []),
+                        "prepagata_credito_totale": float(sum((c.get('credito_residuo') or 0) for c in prepagate_per_cliente_created.get(appt.client_id, []))),
                         "is_off": bool(
                             appt.client is not None and appt.service is not None and
                             (getattr(appt.client, "cliente_nome", "").strip().lower() == "dummy") and
@@ -677,6 +709,8 @@ def create_appointment():
                     'sedutaOrdine': seduta.ordine
                 }
 
+        single_prepagate_cards = _get_active_prepagate_by_client_ids({new_appt.client_id}).get(new_appt.client_id, [])
+
         response_data = {
             "id": new_appt.id,
             "client_name": f"{new_appt.client.cliente_nome} {new_appt.client.cliente_cognome}" if new_appt.client else "OFF",
@@ -703,6 +737,8 @@ def create_appointment():
             "pacchetto_created_on": _build_pacchetto_tooltip_data(new_appt.pacchetto_seduta)["created_on"],
             "pacchetto_seduta_progressivo": _build_pacchetto_tooltip_data(new_appt.pacchetto_seduta)["seduta_progressivo"],
             "pacchetto_sedute_totali": _build_pacchetto_tooltip_data(new_appt.pacchetto_seduta)["sedute_totali"],
+            "prepagate_cards": single_prepagate_cards,
+            "prepagata_credito_totale": float(sum((c.get('credito_residuo') or 0) for c in single_prepagate_cards)),
             "is_off": bool(
                 new_appt.client is not None and new_appt.service is not None and
                 (getattr(new_appt.client, "cliente_nome", "").strip().lower() == "dummy") and
@@ -1703,8 +1739,14 @@ def calendar_appointments_by_date():
         joinedload(Appointment.pacchetto_seduta).joinedload(PacchettoSeduta.pacchetto).selectinload(Pacchetto.sedute)
     ).all()
 
+    client_ids_oggi = {appt.client_id for appt in appointments if appt.client_id}
+    prepagate_per_cliente = _get_active_prepagate_by_client_ids(client_ids_oggi)
+
     result = []
     for appt in appointments:
+        carte_cliente = prepagate_per_cliente.get(appt.client_id, [])
+        credito_totale = float(sum((c.get('credito_residuo') or 0) for c in carte_cliente))
+
         is_off = bool(
             appt.client is not None and appt.service is not None and
             (getattr(appt.client, "cliente_nome", "").strip().lower() == "dummy") and
@@ -1742,6 +1784,8 @@ def calendar_appointments_by_date():
             "pacchetto_created_on": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["created_on"],
             "pacchetto_seduta_progressivo": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["seduta_progressivo"],
             "pacchetto_sedute_totali": _build_pacchetto_tooltip_data(appt.pacchetto_seduta)["sedute_totali"],
+            "prepagate_cards": carte_cliente,
+            "prepagata_credito_totale": credito_totale,
             "is_off": is_off,
             "created_at": to_rome(appt.created_at).isoformat() if appt.created_at else None,
             "last_edit": to_rome(appt.last_edit).isoformat() if appt.last_edit else None,

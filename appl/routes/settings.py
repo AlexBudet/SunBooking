@@ -1163,12 +1163,20 @@ def client_history():
         appointments = Appointment.query.filter_by(
             client_id=client.id,
             stato=AppointmentStatus.PAGATO
+        ).options(
+            joinedload(Appointment.operator),
+            joinedload(Appointment.service)
         ).filter(Appointment.is_cancelled_by_client == False).order_by(Appointment.start_time.desc()).all()
 
         for appt in appointments:
-            service = db.session.get(Service, appt.service_id)
+            service = appt.service
             costo = None
-            operatore_nome = None
+
+            # L'operatore deve provenire sempre dall'appuntamento calendario.
+            operatore_nome = (appt.operator.user_nome or "").strip() if appt.operator else None
+            if not operatore_nome and appt.operator_id:
+                op = db.session.get(Operator, appt.operator_id)
+                operatore_nome = (op.user_nome or "").strip() if op else None
 
             receipts = db.session.query(Receipt).filter_by(cliente_id=client.id).order_by(Receipt.created_at.desc()).all()
             for receipt in receipts:
@@ -1179,11 +1187,9 @@ def client_history():
                        (voce.get('service_id') == appt.service_id) or \
                        (voce.get('nome') == (service.servizio_nome if service else None)):
                         costo = voce.get('prezzo', None)
-                        # Recupera l'operatore dal receipt
-                        if receipt.operatore:
+                        # Solo fallback per vecchi dati anomali senza operatore su appointment.
+                        if not operatore_nome and receipt.operatore:
                             operatore_nome = (receipt.operatore.user_nome or "").strip()
-                        else:
-                            operatore_nome = None
                         break
                 if costo is not None:
                     break

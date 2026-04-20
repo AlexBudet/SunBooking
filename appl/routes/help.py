@@ -18,12 +18,12 @@ HELP_TOPICS = {
 <span class="help-strong-dark help-subtitle-pill">▸ Click su cella vuota (metodo rapido)</span>
 1️⃣ fai <span class="help-strong-dark">click su una cella vuota</span>
 2️⃣ si apre il modal <span class="help-strong-dark">Crea Appuntamento</span>
-3️⃣ nel campo cliente scrivi almeno 3 caratteri e seleziona il nominativo (oppure crea un nuovo cliente al volo con il <span class="help-strong-dark">tasto verde "+"</span>)
+3️⃣ nel campo cliente scrivi almeno 3 caratteri e seleziona il nominativo (oppure crea un nuovo cliente al volo con il tasto <span class="help-calendar-btn plus">+</span>)
 4️⃣ nel campo servizio scrivi almeno 3 caratteri e scegli il trattamento
-5️⃣ se vuoi, aggiungi più mini-blocchi servizio nello stesso modal
+5️⃣ per ogni servizio che cliccherai dai risultati della ricerca, saranno creati dei <span class="help-strong-dark">mini-blocchi</span> visibili nella parte in basso del Navigator.
 6️⃣ conferma la creazione
 
-Il sistema precompila già operatore, data e orario partendo dalla cella cliccata. Puoi anche creare un <span class="help-strong-dark">Blocco OFF</span> se non stai prenotando un cliente.
+Il sistema precompila già operatore, data e orario partendo dalla cella cliccata. Puoi anche creare un <span class="help-strong-dark">[[BLOCCO OFF|calendar_off_block]]</span> se non stai prenotando un cliente.
 
 <span class="help-strong-dark help-subtitle-pill">▸ Navigator Appuntamenti (metodo flessibile)</span>
 Il <span class="help-strong-dark">Navigator Appuntamenti</span> è il riquadro in alto a destra nell'Agenda. Conviene usarlo quando devi preparare uno o più servizi prima di decidere dove posizionarli, oppure lavorare con più servizi, spostare o copiare blocchi esistenti. **[[NAVIGATOR APPUNTAMENTI|navigator_appuntamenti]]**
@@ -35,7 +35,7 @@ Flusso:
 4. muovi il mouse sulle celle vuote del calendario
 5. clicca per posizionare
 
-Ogni mini-blocco rappresenta un servizio pronto da inserire. Se ne prepari più di uno, l'ombra di posizionamento ti mostra dove finiranno in agenda. Per posizionare solo un servizio specifico, seleziona il singolo mini-blocco prima del click sulla griglia.
+Ogni mini-blocco rappresenta un servizio pronto da inserire. Se ne prepari più di uno, l'<span class="help-strong-dark">ombra di posizionamento</span> ti mostra dove finiranno in agenda. Per posizionare solo un servizio specifico, seleziona il singolo mini-blocco prima del click sulla griglia.
 
 Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>, dopo la conferma può comparire la richiesta per inviare un memo automatico al cliente.
 
