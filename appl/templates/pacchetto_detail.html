@@ -3089,20 +3089,125 @@ function generaPdfPacchetto(stampaDiretta = false) {
     unit: 'pt',
     format: 'a4'
   });
+
+  function normalizePdfText(input) {
+    if (input === null || input === undefined) return '';
+    let text = String(input)
+      .replace(/\r\n?/g, '\n')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\u00A0/g, ' ')
+      .trim();
+
+    const entityDecoder = document.createElement('textarea');
+    for (let i = 0; i < 2; i++) {
+      if (!/&(?:#\d+|#x[\da-fA-F]+|[a-zA-Z][a-zA-Z0-9]+);/.test(text)) break;
+      entityDecoder.innerHTML = text;
+      const decoded = entityDecoder.value;
+      if (decoded === text) break;
+      text = decoded;
+    }
+    return text;
+  }
+
+  function formatDateForPdf(rawValue) {
+    const value = normalizePdfText(rawValue);
+    if (!value || value === '—') return value || '—';
+
+    // Gia formato gg/mm/aaaa (opzionale ora)
+    let m = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\D.*)?$/);
+    if (m) {
+      return `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3]}`;
+    }
+
+    // Formati con trattino o punto: gg-mm-aaaa / gg.mm.aaaa
+    m = value.match(/^(\d{1,2})[-.](\d{1,2})[-.](\d{4})(?:\D.*)?$/);
+    if (m) {
+      return `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3]}`;
+    }
+
+    // Formato ISO: aaaa-mm-gg (opzionale tempo)
+    m = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);
+    if (m) {
+      return `${m[3].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[1]}`;
+    }
+
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      const gg = String(parsed.getDate()).padStart(2, '0');
+      const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+      const aa = parsed.getFullYear();
+      return `${gg}/${mm}/${aa}`;
+    }
+
+    return value;
+  }
+
+  function toSafeFilePart(rawValue) {
+    const normalized = normalizePdfText(rawValue)
+      .replace(/[\\/:*?"<>|]+/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return normalized || 'dato';
+  }
+
+  function formatDateForPdf(rawValue) {
+    const value = normalizePdfText(rawValue);
+    if (!value) return '—';
+
+    // Gia formato gg/mm/aaaa (opzionale ora)
+    let m = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\D.*)?$/);
+    if (m) {
+      return `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3]}`;
+    }
+
+    // Formati con trattino o punto: gg-mm-aaaa / gg.mm.aaaa
+    m = value.match(/^(\d{1,2})[-.](\d{1,2})[-.](\d{4})(?:\D.*)?$/);
+    if (m) {
+      return `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3]}`;
+    }
+
+    // Formati ISO: aaaa-mm-gg (opzionale tempo)
+    m = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);
+    if (m) {
+      return `${m[3].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[1]}`;
+    }
+
+    // Tentativo finale di parsing Date
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      const gg = String(parsed.getDate()).padStart(2, '0');
+      const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+      const aa = parsed.getFullYear();
+      return `${gg}/${mm}/${aa}`;
+    }
+
+    return value;
+  }
+
+  function toSafeFilePart(rawValue) {
+    const normalized = normalizePdfText(rawValue)
+      .replace(/[\\/:*?"<>|]+/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return normalized || 'dato';
+  }
   
   // Dati dal template
-  const clienteNome = "{{ pacchetto.client_nome|escapejs }}";
-  const clienteTel = "{{ pacchetto.client_cellulare|escapejs if pacchetto.client_cellulare else '—' }}";
-  const programmaNome = "{{ pacchetto.nome|escapejs }}";
-  const dataCreazione = "{{ pacchetto.data_sottoscrizione|escapejs }}";
-  const costoLordo = "€{{ '%.2f'|format(pacchetto.costo_totale_lordo) }}";
-  const costoScontato = document.getElementById('prezzoScontato')?.textContent || "€{{ '%.2f'|format(pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo) }}";
-  const note = document.getElementById('noteEditor')?.value || "";
+  const clienteNome = normalizePdfText("{{ pacchetto.client_nome|escapejs }}");
+  const clienteTel = normalizePdfText("{{ pacchetto.client_cellulare|escapejs if pacchetto.client_cellulare else '—' }}");
+  const programmaNome = normalizePdfText("{{ pacchetto.nome|escapejs }}");
+  const dataCreazioneRaw = "{{ pacchetto.data_sottoscrizione|escapejs }}";
+  const dataCreazione = formatDateForPdf(dataCreazioneRaw);
+  const costoLordo = normalizePdfText("€{{ '%.2f'|format(pacchetto.costo_totale_lordo) }}");
+  const costoScontato = normalizePdfText(document.getElementById('prezzoScontato')?.textContent || "€{{ '%.2f'|format(pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo) }}");
+  const note = normalizePdfText(document.getElementById('noteEditor')?.value || "");
   
   // Estrai cognome per nome file
   const parti = clienteNome.trim().split(' ');
   const cognome = parti.length > 1 ? parti[parti.length - 1] : parti[0];
-  const nomeFile = `${cognome}_${programmaNome.replace(/\s+/g, '_')}_${dataCreazione.replace(/\s+/g, '_')}.pdf`;
+  const nomeFile = `${toSafeFilePart(cognome)}_${toSafeFilePart(programmaNome)}_${toSafeFilePart(dataCreazione)}.pdf`;
   
   let yPos = 40;
   
@@ -3154,10 +3259,10 @@ function generaPdfPacchetto(stampaDiretta = false) {
   // Raccogli dati sedute dalla tabella
   const seduteRows = [];
   document.querySelectorAll('#seduteTable tbody tr[data-id]').forEach(row => {
-    const data = row.querySelector('.data-cell')?.textContent.trim() || '—';
-    const trattamento = row.querySelectorAll('td')[1]?.textContent.trim() || '';
-    const nStar = row.querySelector('.n-star')?.textContent.trim() || '';
-    const operatore = row.querySelector('.operatore-cell')?.textContent.trim() || '';
+    const data = formatDateForPdf(row.querySelector('.data-cell')?.textContent.trim() || '');
+    const trattamento = normalizePdfText(row.querySelectorAll('td')[1]?.textContent.trim() || '');
+    const nStar = normalizePdfText(row.querySelector('.n-star')?.textContent.trim() || '');
+    const operatore = normalizePdfText(row.querySelector('.operatore-cell')?.textContent.trim() || '');
     const effettuata = row.querySelector('.effettuata-check')?.checked ? 'Sì' : 'No';
     seduteRows.push([data, trattamento, nStar, operatore, effettuata]);
   });
@@ -3200,7 +3305,7 @@ function generaPdfPacchetto(stampaDiretta = false) {
     const importo = importoInput ? `€${parseFloat(importoInput.value).toFixed(2)}` : '—';
     const stato = row.classList.contains('rata-pagata') ? 'Pagata' : 'Da pagare';
     const dataCell = row.querySelectorAll('td')[3];
-    const data = dataCell?.textContent.trim() || '—';
+    const data = formatDateForPdf(dataCell?.textContent.trim() || '');
     rateRows.push([`Rata ${idx + 1}`, importo, stato, data]);
   });
   
@@ -3312,8 +3417,9 @@ async function generaDisclaimerPdf(stampaDiretta = false) {
   const clienteCognome = nameParts.slice(1).join(' ').trim() || '';
   const clienteCellulare = "{{ pacchetto.client_cellulare|escapejs if pacchetto.client_cellulare else '—' }}";
   const programmaNome = "{{ pacchetto.nome|escapejs }}";
-  const dataOdierna = new Date().toLocaleDateString('it-IT');
-  const dataSottoscrizione = "{{ pacchetto.data_sottoscrizione|escapejs if pacchetto.data_sottoscrizione else '—' }}";
+  const dataOdierna = formatDateForPdf(new Date().toISOString().slice(0, 10));
+  const dataSottoscrizioneRaw = "{{ pacchetto.data_sottoscrizione|escapejs if pacchetto.data_sottoscrizione else '—' }}";
+  const dataSottoscrizione = formatDateForPdf(dataSottoscrizioneRaw);
   const seduteTotali = {{ pacchetto.sedute|length }};
   const importoTotale = "{{ '%.2f'|format(pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo) }}";
   const importoTotaleLordo = "{{ '%.2f'|format(pacchetto.costo_totale_lordo) }}";
@@ -3641,8 +3747,8 @@ allParagraphs.forEach(paragraph => {
 });
   
   // Salva o stampa
-  const clienteFullName = `${clienteNome} ${clienteCognome}`.trim().replace(/\s+/g, '_');
-  const nomeFile = `Disclaimer_${clienteFullName}_${programmaNome.replace(/\s+/g, '_')}.pdf`;
+  const clienteFullName = `${clienteNomeNormalized} ${clienteCognomeNormalized}`.trim();
+  const nomeFile = `Disclaimer_${toSafeFilePart(clienteFullName)}_${toSafeFilePart(programmaNomeNormalized)}.pdf`;
   
   if (stampaDiretta) {
     doc.autoPrint();
