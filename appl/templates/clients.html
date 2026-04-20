@@ -221,12 +221,12 @@
 
 <!-- Modal Storico Appuntamenti Cliente -->
 <div class="modal fade" tabindex="-1" id="ClientHistoryModal">
-  <div class="modal-dialog modal-xl">
-    <div class="modal-content">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:90vw; height:90vh;">
+        <div class="modal-content" style="height:100%; max-height:90vh; display:flex; flex-direction:column;">
       <div class="modal-header">
         <h3 class="modal-title">Storico Appuntamenti Cliente</h3>
       </div>
-      <div class="modal-body" id="clientHistoryBody" style="max-height: 600px; overflow-y: auto;">
+            <div class="modal-body" id="clientHistoryBody" style="flex:1 1 auto; overflow:hidden; min-height:0;">
         <div class="text-center text-muted">Caricamento...</div>
       </div>
       <div class="modal-footer">
@@ -262,15 +262,30 @@
   user-select: none;
 }
 th {
-  position: relative;
+    position: relative;
 }
-  #ClientHistoryModal {
-    max-height: 390px; /* 3 card da circa 120-130px + margini */
-    overflow-y: auto;
-  }
-  #clientHistoryBody .card {
-    margin-bottom: 10px;
-  }
+    #ClientHistoryModal {
+        max-height: none;
+        overflow: visible;
+    }
+
+#clientHistoryBody .card {
+        margin-bottom: 10px;
+}
+
+#clientHistoryBody .history-date-link,
+#clientHistoryBody .history-date-link:visited,
+#clientHistoryBody .history-date-link:active {
+    color: inherit;
+    text-decoration: none;
+    cursor: default;
+}
+
+#clientHistoryBody .history-date-link:hover {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
 </style>
 <script src="{{ url_for('static', filename='js/app_tour.js') }}"></script>
 <script>
@@ -538,7 +553,7 @@ document.querySelectorAll('.gender-cell').forEach(cell => {
                         return;
                     }
 body.innerHTML = `
-  <div style="overflow-x:auto;">
+    <div style="max-height:100%; overflow-y:auto; overflow-x:auto; width:100%;">
     <table class="table table-striped align-middle">
       <thead>
         <tr>
@@ -566,7 +581,11 @@ let dataFormattata = formatDateIT(dataStr);
 
 return `
   <tr>
-    <td>${dataFormattata}</td>
+        <td>
+            <a class="history-date-link" href="{{ url_for('calendar.calendar_home') }}?date=${encodeURIComponent(dataStr)}&ora=${encodeURIComponent((oraStr || '').slice(0,5))}">
+                ${dataFormattata}
+            </a>
+        </td>
     <td>${oraStr}</td>
     <td>${item.servizio || '-'}</td>
     <td>${item.costo !== null ? (parseFloat(item.costo).toFixed(2) + ' €') : '-'}</td>
@@ -933,7 +952,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             }
 
                             const tableHtml = `
-                                <div style="overflow-x:auto;">
+                                <div style="max-height:100%; overflow-y:auto; overflow-x:auto; width:100%;">
                                     <table class="table table-striped align-middle">
                                         <thead>
                                             <tr>
@@ -953,7 +972,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
                                                 return `
                                                     <tr>
-                                                        <td>${dataFormattata}</td>
+                                                        <td>
+                                                            <a class="history-date-link" href="{{ url_for('calendar.calendar_home') }}?date=${encodeURIComponent(dataStr)}&ora=${encodeURIComponent((oraStr || '').slice(0,5))}">
+                                                                ${dataFormattata}
+                                                            </a>
+                                                        </td>
                                                         <td>${oraStr}</td>
                                                         <td>${item.servizio || '-'}</td>
                                                         <td>${item.costo !== null ? (parseFloat(item.costo).toFixed(2) + ' €') : '-'}</td>
