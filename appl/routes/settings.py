@@ -372,6 +372,8 @@ def set_business_info():
 
         business_info.business_name = request.form.get('business_name')
         business_info.website = request.form.get('website')
+        business_info.web_app = request.form.get('web_app')
+        business_info.web_booking_page = request.form.get('web_booking_page')
         business_info.address = request.form.get('address')
         business_info.cap = request.form.get('cap')
         business_info.province = request.form.get('province')

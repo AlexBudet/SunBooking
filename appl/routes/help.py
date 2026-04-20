@@ -41,7 +41,7 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Se devi inserire una persona nuova senza uscire dal flusso Agenda, vai direttamente a <span class="help-strong-dark">[[AGGIUNGI NUOVO CLIENTE|client_new]]</span>.</span>
+<span class="help-hint-text">Se devi inserire una persona nuova senza uscire dal flusso Agenda, vai direttamente a <span class="help-strong-dark">[[AGGIUNGI NUOVO CLIENTE|client_search]]</span>.</span>
 </div>""",
 },
 
@@ -316,15 +316,15 @@ Tutto collegato, zero errori! ✨""",
         "content": """Questa è la guida unica per tutto il flusso cliente in Agenda: ricerca, inserimento rapido nuovo cliente e finestra info.
 
 <span class="help-strong-dark help-subtitle-pill">▸ RICERCA CLIENTE IN AGENDA</span>
-Nei campi di ricerca cliente, puoi cercare per:
+Nei campi di <span>ricerca cliente</span>, puoi cercare per:
 • Nome (es: "Maria")
 • Cognome (es: "Rossi")
 • Telefono (es: "333")
 
 Bastano 3 lettere (o i primi 3 numeri del cellulare) e i risultati corrispondenti appaiono subito sotto.
 
-<span class="help-strong-dark help-subtitle-pill">▸ AGGIUNGI NUOVO CLIENTE (TASTO +)</span>
-Il modo più veloce per aggiungere un nuovo cliente è usare il **TASTO +** accanto al campo di ricerca cliente nella finestra di creazione appuntamento o nel Navigator Appuntamenti in Agenda.
+<span class="help-strong-dark help-subtitle-pill">▸ AGGIUNGI NUOVO CLIENTE</span>
+Il modo più veloce per aggiungere un nuovo cliente è usare il tasto <span class="help-calendar-btn plus">+</span> accanto al campo di ricerca cliente nella finestra di creazione appuntamento o nel Navigator Appuntamenti in Agenda.
 
 Da lì, basta scrivere **NOME, COGNOME e CELLULARE**: il cliente viene subito aggiunto alla rubrica.
 
@@ -334,8 +334,8 @@ Il **SESSO** viene capito automaticamente dal nome (ma puoi correggerlo nelle im
 
 Verifica sempre il <span class="help-strong-dark">cellulare</span>: è un dato fondamentale per contatto, recall e, se attivo il modulo opzionale, anche per l'invio WhatsApp.
 
-<span class="help-strong-dark help-subtitle-pill">▸ FINESTRA INFO CLIENTE (ICONA i)</span>
-Al click sull'**ICONA "i"** a fianco dei risultati della ricerca cliente si apre una finestra dove puoi visualizzare e modificare rapidamente i dati del cliente.
+<span class="help-strong-dark help-subtitle-pill">▸ FINESTRA INFO CLIENTE</span>
+Al click sull'icona <span class="help-calendar-btn info">i</span> a fianco dei risultati della ricerca cliente si apre una finestra dove puoi visualizzare e modificare rapidamente i dati del cliente.
 
 Puoi modificare **NOME, COGNOME, CELLULARE ed EMAIL** nei campi in alto, e aggiungere o modificare la **NOTA SALVATA** per quel cliente.
 
@@ -347,7 +347,7 @@ Cliccando sulle righe della tabella, la vista Agenda si sposta direttamente nell
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Cerca con poche lettere e usa subito + o icona i: fai tutto da Agenda senza saltare tra più schermate.</span>
+<span class="help-hint-text">Cerca il cliente con poche lettere e selezionalo dalla lista, oppure usa <span class="help-calendar-btn plus">+</span> per aggiungerlo in rubrica se non c'è, infine clicca l'icona <span class="help-calendar-btn info">i</span> per info, storico e appuntamenti: fai tutto da Agenda senza saltare tra più schermate.</span>
 </div>""",
     },
     
@@ -449,92 +449,389 @@ Qui hai il controllo totale sulla tua rubrica clienti! 📋""",
     
     # ========== PACCHETTI ==========
     "pacchetto_panorama": {
-        "title": "🎁 Pacchetti: panoramica generale",
-        "content": """La sezione Pacchetti serve a gestire due grandi strumenti commerciali:
+        "title": "🎁 Come creare un pacchetto",
+        "content": """Questa guida copre la creazione del <span class="help-strong-dark">Pacchetto servizi</span> vero e proprio: cioè un programma a sedute che vuoi vendere a un cliente, con eventuale sconto commerciale, omaggi e piano rateale.
 
-• <span class="help-strong-dark">Pacchetti servizi</span>
-• <span class="help-strong-dark">Carte prepagate</span>
+<span class="help-strong-dark help-subtitle-pill">▸ CREAZIONE BASE</span>
+Flusso standard:
+1️⃣ entra in <span class="help-strong-dark">Pacchetti</span>
+2️⃣ clicca per creare un nuovo pacchetto
+3️⃣ seleziona il cliente
+4️⃣ scegli i servizi che faranno parte del programma
+5️⃣ imposta <span class="help-strong-dark">quantità sedute</span>, automaticamente verrà calcolato il costo totale da listino del pacchetto
 
-Qui puoi creare programmi venduti in anticipo, seguirne avanzamento, controllare pagamenti, sedute e stato generale del cliente.
 
-In pratica Pacchetti è il ponte tra vendita, Agenda e Cassa.""",
-    },
+<span class="help-strong-dark help-subtitle-pill">▸ SCONTO O SEDUTE OMAGGIO?</span>
+Subito dopo, potrai scegliere tra due modi principali per rendere il pacchetto più conveniente:
 
-    "pacchetto_create": {
-        "title": "📦 Creare un pacchetto",
-        "content": """Per creare un pacchetto:
+• applicare uno <span class="help-strong-dark">SCONTO</span> sul totale del prezzo del pacchetto
 
-1️⃣ entra nella sezione <span class="help-strong-dark">Pacchetti</span>
-2️⃣ apri il modal di nuovo pacchetto
-3️⃣ scegli il cliente
-4️⃣ decidi se stai creando un programma a sedute oppure una carta/prepagata
-5️⃣ compila nome, servizi, quantità, listino, eventuale sconto e struttura pagamento
-6️⃣ salva
+oppure
 
-Durante la creazione puoi impostare anche elementi commerciali come omaggi, rate o promozioni, in base al tipo di pacchetto.""",
-    },
+• lasciare il prezzo pieno ma aggiungere una o più <span class="help-strong-dark">SEDUTE OMAGGIO</span>
 
-    "pacchetto_stati_dettaglio": {
-        "title": "🧾 Pacchetti: stati, dettaglio, sedute e rate",
-        "content": """Ogni pacchetto ha uno <span class="help-strong-dark">stato</span> e una scheda dettaglio.
 
-Stati tipici:
-• preventivo
-• attivo
-• completato
-• abbandonato
-
-Nel dettaglio pacchetto puoi seguire:
-• sedute effettuate e residue
-• rate pagate e mancanti
-• prossime date
-• storico modifiche operative
-
-Questa pagina è quella da consultare quando vuoi capire a colpo d'occhio quanto è stato usato e quanto resta da saldare o consumare.""",
-    },
-    
-    "pacchetto_uso": {
-        "title": "✂️ Usare un pacchetto",
-        "content": """L'uso quotidiano del pacchetto avviene soprattutto passando da Agenda e Cassa.
-
-Quando prenoti un cliente con pacchetto attivo:
-1️⃣ seleziona il cliente
-2️⃣ scegli un servizio compatibile
-3️⃣ Tosca controlla se esiste una copertura da pacchetto
-4️⃣ quando il flusso viene confermato, la seduta o il credito vengono scalati secondo le regole previste
-
-Così eviti conteggi manuali e mantieni allineati appuntamento, pagamento e residuo pacchetto.
+<span class="help-strong-dark help-subtitle-pill">▸ PACCHETTI GIÀ PREIMPOSTATI DA TOOLS</span>
+Se dalle impostazioni in <span class="help-strong-dark">Tools / Pacchetti</span> sono già stati impostate tipologie di pacchetto ricorrenti, puoi selezionare quelle per velocizzare (le vedrai in "Tipo Sconto" nella sezione in fondo, "Promo Salvate").
+È la soluzione migliore quando vendi spesso lo stesso programma (es. 10 sedute corpo, 6 sedute viso, ciclo laser, ecc.), perché riduce errori e mantiene una proposta commerciale standardizzata.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Controlla periodicamente i pacchetti attivi con residuo basso: aiuta a proporre rinnovi in modo naturale al momento giusto.</span>
+<span class="help-hint-text">Quando il pacchetto è ricorrente, conviene creare prima una struttura standard in Tools / Pacchetti e poi personalizzare solo cliente, rate e data delle sedute.</span>
+</div>
+
+Si può poi selezionare un'<span class="help-strong-dark">operatrice preferita</span> per quel pacchetto, che sarà proposta come default in agenda quando si prenotano le sedute collegate al pacchetto.
+
+Infine per creare il pacchetto cliccare su <span class="help-strong-dark">SALVA</span>
+""",
+    },
+
+    "pacchetto_tools_settings": {
+        "title": "⚙️ Impostazioni del Pacchetto",
+        "content": """Prima di vendere un pacchetto al cliente, conviene configurare bene le sue impostazioni in <span class="help-strong-dark">Tools / Pacchetti</span>.
+
+<span class="help-strong-dark help-subtitle-pill">⚙️ ▸ COSA TROVI IN TOOLS / PACCHETTI</span>
+Qui puoi:
+• creare e gestire i modelli pacchetti dalla sezione <span class="help-strong-dark">Promo Personalizzate</span>
+• inserire le <span class="help-strong-dark">controindicazioni</span> per ogni servizio nella sezione <span class="help-strong-dark">Template Disclaimer / Consenso Informato</span>
+• modificare il template del consenso informato tramite il campo <span class="help-strong-dark">Disclaimer del servizio</span>
+• configurare <span class="help-strong-dark">Template WhatsApp</span> e memo collegati per inviare un riassunto al cliente via Whatsapp
+
+<span class="help-strong-dark help-subtitle-pill">⚙️ ▸ PERCHÉ FARLO PRIMA</span>
+Più lavori bene qui, meno dovrai improvvisare quando sei con il cliente!
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">I testi e i modelli impostati in questa sezione si possono riutilizzare automaticamente durante la creazione del pacchetto, la stampa del consenso e l'invio dei memo.</span>
+</div>""",
+    },
+
+    "pacchetto_create": {
+        "title": "📝 Gestire il Consenso Informato",
+        "content": """Per molti pacchetti è utile, o necessario, collegare un <span class="help-strong-dark">consenso informato</span> firmato dal cliente. Dalla pagina del Pacchetto creato per il cliente potrai scaricare, far firmare e caricare il documento.
+
+<span class="help-strong-dark help-subtitle-pill">📝 ▸ FLUSSO OPERATIVO CONSIGLIATO</span>
+1️⃣ prepara il testo corretto in <span class="help-strong-dark">Tools / Pacchetti</span> (controindicazioni e template)
+2️⃣ genera o scarica il consenso informato del cliente direttamente dalla scheda pacchetto. Per ogni servizio incluso nel pacchetto, il sistema aggiunge automaticamente le controindicazioni già impostate
+3️⃣ stampalo e fallo firmare dal cliente in istituto
+4️⃣ scannerizzalo oppure fotografalo bene anche dal cellulare
+5️⃣ caricalo sul computer, poi da Tosca sempre tramite il tasto del consenso informato lo potrai caricare, e sarà tenuto in memoria nel database di Tosca
+
+<span class="help-strong-dark help-subtitle-pill">📝 ▸ SCANSIONE DA CELLULARE</span>
+Se non hai uno scanner a portata di mano, va benissimo usare il telefono:
+• inquadra il foglio dritto
+• usa una buona luce
+• evita ombre e pieghe
+• preferisci PDF o immagine ben leggibile per salvare, e invialo al computer via email o WhatsApp
+
+L'obiettivo non è solo archiviare, ma poter recuperare il consenso in modo chiaro anche dopo mesi.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Meglio caricare subito il consenso appena firmato, invece di rimandare: quando il pacchetto parte davvero, tutta la documentazione è già in ordine.</span>
+</div>""",
+    },
+
+    "pacchetto_stati_dettaglio": {
+        "title": "🎨 Colori STATUS pacchetti, sezioni e tooltip",
+        "content": """La pagina Pacchetti non serve solo a vedere l'elenco: ti aiuta a leggere velocemente lo stato commerciale e operativo di ogni programma.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COLORI / STATUS</span>
+I colori e gli status servono per capire in un colpo d'occhio se il pacchetto è:
+🟡 <span class="help-strong-dark">PREVENTIVO</span> = non ancora pagato o non ancora effettuata la prima seduta
+🔵 <span class="help-strong-dark">ATTIVO</span> = pacchetto in corso
+⚫ <span class="help-strong-dark">COMPLETATO</span> = pacchetto con tutte le sedute effettuate e già pagato
+🔴 <span class="help-strong-dark">ABBANDONATO</span> = pacchetto non aggiornato da almeno TOT giorni (i giorni si possono impostare come admin da Tools / Pacchetti)
+
+Il significato preciso dipende dalla configurazione già impostata nel modulo, ma la logica è questa: il colore ti fa capire subito se devi lavorarci sopra oppure no.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA TROVI IN TOOLS/PACCHETTI</span>
+Di norma nella pagina trovi:
+• elenco pacchetti
+• stato del pacchetto
+• cliente collegato
+• sedute nel pacchetto
+• data di creazione
+• prezzo da listino e prezzo scontato
+
+gli admin potranno inoltre ELIMINARE I PACCHETTI dalla tabella: è un'operazione da fare con cautela, altamente sconsigliata
+
+<span class="help-strong-dark help-subtitle-pill">▸ NOTE INFORMATIVE AL PASSAGGIO DEL MOUSE</span>
+Al passaggio del mouse su alcuni elementi della pagina Tools/Pacchetti si apriranno finestrelle nere con note esplicative: servono proprio a spiegare campi e pulsanti in caso di dubbio.
+
+Questa è la sezione giusta da consultare quando vuoi una <span class="help-strong-dark">lettura rapida</span> di cosa è attivo, cosa è quasi finito e cosa richiede follow-up.
+
+da qui basterà <span class="help-strong-dark">cliccare sul pacchetto</span> per entrare nel dettaglio e gestire sedute, pagamenti, memo e tutto il resto!
+""",
+    },
+    
+    "pacchetto_uso": {
+        "title": "📅 Come segnare un appuntamento collegato a un Pacchetto",
+        "content": """Un pacchetto è davvero utile quando viene collegato bene anche alla parte Agenda.
+
+<span class="help-strong-dark help-subtitle-pill">▸ PARTENDO DA PACCHETTO</span>
+Dal pacchetto puoi preparare o avviare la prenotazione di una seduta collegata.
+
+Questo approccio è comodo quando:
+• stai lavorando dal dettaglio del pacchetto
+• vuoi essere sicuro di usare una seduta compatibile
+• vuoi controllare prima residuo e situazione commerciale
+
+<span class="help-strong-dark help-subtitle-pill">▸ PARTENDO DA AGENDA</span>
+Puoi anche lavorare al contrario, cioè da Agenda:
+1️⃣ selezioni il cliente
+2️⃣ scegli un servizio
+3️⃣ se quel servizio rientra in un pacchetto attivo, Tosca ti mostra la logica pacchetto disponibile
+
+Nella pratica, in Agenda compare l'<span class="help-strong-dark">icona pacchetto</span> quando il servizio può essere collegato a un pacchetto del cliente.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA SUCCEDE POI</span>
+Quando il collegamento è corretto:
+• la seduta viene associata al pacchetto giusto
+• il residuo si aggiorna secondo le regole del programma
+• eviti scarichi manuali o confusione tra sedute pagate e non pagate
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Se il cliente ha più programmi attivi, controlla sempre bene quale pacchetto stai usando prima di confermare l'appuntamento: così lo scarico resta pulito e coerente.</span>
 </div>""",
     },
     
+    "pacchetto_pagamento": {
+        "title": "💶 Come pagare un pacchetto e come funzionano le rate",
+        "content": """La vendita del pacchetto non è solo "creazione": deve essere collegata bene anche alla parte economica.
+
+<span class="help-strong-dark help-subtitle-pill">▸ PAGAMENTO IMMEDIATO O RATEALE</span>
+Un pacchetto può essere:
+• pagato tutto subito
+• pagato in più rate
+• avviato con acconto e saldo successivo
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Imposta sempre le rate in modo da incassare un importo superiore a quello delle singole sedute! Questo ti eviterà perdite economiche in caso di pacchetto abbandonato...</span>
+</div>
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME LEGGERE LE RATE</span>
+Nel dettaglio pacchetto devi poter controllare rapidamente:
+• quanto è già stato incassato
+• quanto manca ancora
+• quante rate sono previste
+• quali risultano ancora aperte
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME SI PAGA UNA RATA</span>
+Le rate <span class="help-strong-dark">non si pagano direttamente dall'Agenda</span>: devono essere portate in Cassa manualmente.
+
+Flusso corretto:
+1️⃣ apri il dettaglio del pacchetto
+2️⃣ individua la rata da incassare
+3️⃣ portala in Cassa tramite l'apposita azione
+4️⃣ registra il pagamento normalmente (Cash, POS, Bank)
+
+<span class="help-strong-dark help-subtitle-pill">▸ SEDUTA DA AGENDA → PORTA IN PACCHETTO</span>
+Quando da Agenda clicchi <span class="help-strong-dark">€ Porta in Cassa</span> su un appuntamento <span class="help-strong-dark">collegato a un pacchetto</span>, il flusso cambia rispetto a un normale scontrino:
+
+invece di aprire la Cassa, si apre il <span class="help-strong-dark">dettaglio del pacchetto</span>.
+
+Da lì dovrai:
+1️⃣ individuare la seduta corrispondente nella lista
+2️⃣ cliccare il box per segnare la seduta come <span class="help-strong-dark">effettuata</span>
+
+Questo tiene distinti i due piani operativi:
+• <span class="help-strong-dark">consumo sedute</span> → si gestisce dal pacchetto
+• <span class="help-strong-dark">pagamento rate</span> → si gestisce dalla Cassa
+
+<span class="help-strong-dark help-subtitle-pill">▸ BUONA LOGICA OPERATIVA</span>
+Non sempre consumo sedute e pagamento rate coincidono: il cliente può avere sedute già prenotabili ma rate ancora aperte, in base alla tua politica commerciale.
+
+<span class="help-strong-dark help-subtitle-pill">▸ DOVE CONTROLLARE</span>
+Controlla sempre il dettaglio pacchetto prima di intervenire se hai dubbi su:
+• rate mancanti
+• importo residuo
+• blocchi commerciali
+• stato generale del programma
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Quando vendi a rate, concorda subito una logica chiara con il cliente e registrala bene nel pacchetto: evita equivoci tra sedute già fatte e importi ancora da saldare.</span>
+</div>""",
+    },
+
+    "pacchetto_memo": {
+        "title": "💬 Memo pacchetto: WhatsApp, PDF e stampa",
+        "content": """Dopo aver creato un pacchetto, spesso conviene consegnare al cliente un riepilogo chiaro del programma acquistato.
+
+<span class="help-strong-dark help-subtitle-pill">💬 ▸ INVIO MEMO VIA WHATSAPP</span>
+Se il modulo WhatsApp è attivo, puoi usare il memo per inviare al cliente un riepilogo del pacchetto o delle sedute.
+
+È utile per ricordare:
+• nome del pacchetto
+• sedute previste
+• eventuali residui
+• note utili o promemoria organizzativi
+
+<span class="help-strong-dark help-subtitle-pill">📄 ▸ SCARICARE MEMO SEDUTE IN PDF</span>
+Quando ti serve un documento più ordinato o archiviabile, puoi scaricare il memo sedute in <span class="help-strong-dark">PDF</span>.
+
+Questo è comodo quando vuoi:
+• consegnarlo al cliente
+• salvarlo in archivio
+• inviarlo manualmente da altri canali
+
+<span class="help-strong-dark help-subtitle-pill">🖨️ ▸ STAMPA</span>
+In alternativa puoi stampare il memo direttamente, per far avere al cliente un riepilogo cartaceo del percorso acquistato.
+
+Tra WhatsApp, PDF e stampa scegli in base alla situazione:
+• WhatsApp = rapido
+• PDF = ordinato e condivisibile
+• stampa = consegna immediata in istituto
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Dai sempre al cliente un riepilogo semplice del pacchetto: riduce domande successive e rende più chiara la percezione del valore acquistato.</span>
+</div>""",
+    },
+
     "prepagata": {
-        "title": "💳 Carta prepagata",
-        "content": """La carta prepagata funziona come un credito cliente disponibile nel tempo.
+        "title": "💳 Prepagate: panoramica operativa completa",
+        "content": """La <span class="help-strong-dark">prepagata</span> non è un pacchetto a sedute: è un <span class="help-strong-dark">credito economico</span> che il cliente usa nel tempo.
 
-Come si usa:
-1️⃣ carichi un importo iniziale
-2️⃣ il cliente usa servizi o prodotti compatibili
-3️⃣ in Cassa puoi scegliere <span class="help-strong-dark">Prepagata</span> come metodo di pagamento
-4️⃣ il saldo residuo si aggiorna automaticamente
+<span class="help-strong-dark help-subtitle-pill">▸ DIFFERENZA CHIAVE RISPETTO AL PACCHETTO</span>
+• il pacchetto ragiona soprattutto per <span class="help-strong-dark">sedute / programma</span>
+• la prepagata ragiona soprattutto per <span class="help-strong-dark">saldo economico residuo</span>
 
-È utile per fidelizzazione, regali e clienti abituali che vogliono lasciare credito disponibile.""",
+<span class="help-strong-dark help-subtitle-pill">▸ COME SI CREA</span>
+1️⃣ apri la sezione Pacchetti / Prepagate
+2️⃣ seleziona il cliente
+3️⃣ imposta importo caricato
+4️⃣ salva la carta o il credito
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME SI USA</span>
+La prepagata viene poi richiamata soprattutto in Cassa, dove puoi scegliere <span class="help-strong-dark">Prepagata</span> come metodo di pagamento.
+
+Il sistema scala il credito usato e aggiorna il residuo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ RICARICHE, RESIDUO E CONTROLLO</span>
+Devi poter controllare rapidamente:
+• importo iniziale
+• eventuali ricariche successive
+• movimenti effettuati
+• saldo residuo
+
+<span class="help-strong-dark help-subtitle-pill">▸ USO OPERATIVO CORRETTO</span>
+La prepagata è ideale per:
+• clienti abituali
+• buoni regalo
+• credito lasciato disponibile per servizi/prodotti futuri
+
+Quando la usi, ragiona sempre come su un portafoglio cliente: non si scaricano sedute, si scala denaro.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Se un cliente usa spesso credito residuo, controlla il saldo prima di chiudere la vendita: una lettura chiara del residuo evita contestazioni e fa percepire ordine professionale.</span>
+</div>""",
+    },
+
+    "prepagata_create": {
+        "title": "💳 Come creare una prepagata",
+        "content": """Per creare una prepagata devi ragionare in termini di <span class="help-strong-dark">credito caricato</span>, non di numero sedute.
+
+Flusso base:
+1️⃣ entra nella sezione Pacchetti / Prepagate
+2️⃣ crea una nuova prepagata
+3️⃣ seleziona il cliente
+4️⃣ imposta l'importo iniziale
+5️⃣ salva
+
+Se previsto dalla tua organizzazione commerciale, puoi usare anche una logica da:
+• buono regalo
+• credito promozionale
+• carta cliente ricaricabile
+
+Questa è la configurazione giusta quando il cliente non sta acquistando un protocollo chiuso, ma vuole lasciare credito disponibile da usare nel tempo.""",
+    },
+
+    "prepagata_uso": {
+        "title": "📅 Collegare servizi e appuntamenti a una prepagata",
+        "content": """La prepagata si usa soprattutto a valle del lavoro operativo, cioè quando il cliente consuma servizi o prodotti.
+
+Nella pratica:
+• l'appuntamento si gestisce normalmente in Agenda
+• il collegamento economico avviene soprattutto in <span class="help-strong-dark">Cassa</span>
+
+Quando il cliente arriva al pagamento:
+1️⃣ apri la bozza scontrino
+2️⃣ verifica che il cliente abbia una prepagata disponibile
+3️⃣ scegli <span class="help-strong-dark">Prepagata</span> come metodo di pagamento
+4️⃣ conferma lo scarico del credito
+
+Così il servizio resta normale a livello Agenda, ma il consumo economico viene preso dal saldo della prepagata.""",
+    },
+
+    "prepagata_pagamento": {
+        "title": "💶 Prepagate: pagamenti, ricariche e saldo residuo",
+        "content": """La vita economica della prepagata ruota intorno a tre elementi:
+• carico iniziale
+• eventuali ricariche
+• scarichi successivi in Cassa
+
+<span class="help-strong-dark help-subtitle-pill">▸ PAGARE CON PREPAGATA</span>
+Quando il cliente usa il credito:
+• in Cassa selezioni <span class="help-strong-dark">Prepagata</span>
+• il sistema scala l'importo usato
+• il residuo viene aggiornato
+
+<span class="help-strong-dark help-subtitle-pill">▸ RICARICARE</span>
+Quando il saldo si abbassa, puoi caricare nuovo credito e continuare a usare la stessa logica carta/portafoglio.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA CONTROLLARE SEMPRE</span>
+• saldo residuo
+• movimenti effettuati
+• eventuali usi anomali o dubbi cliente
+
+La regola pratica è semplice: ogni volta che la prepagata viene usata, il cliente deve poter capire chiaramente quanto aveva e quanto resta.""",
+    },
+
+    "prepagata_controllo": {
+        "title": "🎯 Prepagate: controlli utili, memo e lettura rapida",
+        "content": """Una buona gestione della prepagata non è solo incasso: è anche chiarezza nel tempo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ LETTURA RAPIDA</span>
+Quando apri la scheda o la sezione relativa, dovresti leggere subito:
+• cliente associato
+• importo caricato
+• saldo residuo
+• movimenti principali
+
+<span class="help-strong-dark help-subtitle-pill">▸ MEMO O RIEPILOGO</span>
+Quando serve, conviene consegnare o inviare un riepilogo semplice del credito residuo, soprattutto nei casi in cui il cliente usa la prepagata a distanza di settimane o mesi.
+
+<span class="help-strong-dark help-subtitle-pill">▸ QUANDO CONTROLLARLA</span>
+Meglio dare un'occhiata a una prepagata:
+• prima della chiusura scontrino
+• quando il cliente chiede quanto credito resta
+• quando il saldo sta per finire e può essere proposta una ricarica
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">La prepagata funziona benissimo quando il cliente percepisce sempre trasparenza: saldo chiaro, movimenti leggibili e nessuna incertezza su quanto resta.</span>
+</div>""",
     },
 
     "pacchetto_settings": {
-        "title": "⚙️ Pacchetti: impostazioni, promo e template",
-        "content": """Nelle <span class="help-strong-dark">Impostazioni Pacchetti</span> puoi configurare la parte commerciale e comunicativa del modulo.
+        "title": "⚙️ Tools / Pacchetti: impostazioni, modelli e configurazioni utili",
+        "content": """La sezione <span class="help-strong-dark">Tools / Pacchetti</span> è il punto in cui prepari il terreno prima della vendita vera e propria.
 
-Qui trovi, ad esempio:
-• regole per stato "abbandonato"
-• promo personalizzate
-• template WhatsApp per riepilogo pacchetto
-• template per carte prepagate
+Qui conviene configurare tutto ciò che poi rende il lavoro più rapido e uniforme:
+• modelli pacchetto ricorrenti
+• regole commerciali
+• testi e parti documentali
+• memo o template collegati
+• controindicazioni e contenuti per consenso informato
 
-Questa sezione è utile per standardizzare il modo in cui il centro vende e comunica i pacchetti.""",
+Più lavori bene in questa sezione, meno dovrai improvvisare quando sei con il cliente davanti.
+
+Questa non è la schermata dove "usi" il pacchetto: è la schermata dove lo <span class="help-strong-dark">prepari bene</span> per farlo funzionare in modo ordinato in Pacchetti, Agenda, Cassa e comunicazioni.""",
     },
     
     # ========== WHATSAPP ==========
@@ -1072,18 +1369,19 @@ I documenti non fiscali/test sono trattati in modo distinto nel Registro.""",
 
     "cassa_myspia_save_reset": {
         "title": "💾 Cassa: Clienti in istituto + Salva/Reset bozza",
-        "content": """A destra trovi il riquadro <span class=\"help-strong-dark\">Clienti in istituto</span>.
+        "content": """In basso a destra trovi il riquadro <span class=\"help-strong-dark help-subtitle-pill\">Clienti in istituto</span>
 
-Serve per:
-• vedere rapidamente chi è arrivato
-• aprire il gruppo cliente presente in istituto
-• portare i servizi relativi nella bozza scontrino
+Mostra gli appuntamenti per ogni cliente che in Agenda è indicato come <span class=\"help-strong-dark\">presente in istituto</span>. Puoi usarlo per:
+
+• tornare in Agenda con il tasto &nbsp;<span class=\"help-strong-dark\"><i class="bi bi-calendar2-week"></i></span>
+• portare i servizi relativi nella bozza scontrino con il tasto <span class=\"help-strong-dark\"><i class="bi bi-currency-euro"></i></span>
 
 Quando la bozza scontrino viene creata a partire da appuntamenti in Agenda, compaiono anche dei tasti aggiuntivi per gestire le modifiche:
+
 • <span class=\"help-strong-dark\">Salva Modifiche</span>: conserva la versione modificata della bozza
 • <span class=\"help-strong-dark\">Reset</span>: ricostruisce la bozza partendo dai dati originali del calendario
 
-Questa logica è utile quando, prima di stampare, cambi prezzi, righe o metodi ma vuoi mantenere coerenza con l'origine Agenda.""",
+Questa logica è utile quando, prima di stampare, cambi prezzi, righe o metodi ma vuoi mantenere coerenza con l'Agenda.""",
     },
 
     "cassa_sconti_metodi_stampa_test": {
@@ -1122,7 +1420,7 @@ Nel dettaglio scontrino puoi leggere righe, metodi di pagamento, totale e stato 
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Rivedi il Registro Scontrini ogni giorno prima della chiusura: riduce errori e correzioni a posteriori.</span>
+<span class="help-hint-text">Controlla il Registro Scontrini ogni volta sorgesse un dubbio su uno scontrino già stampato: riduce errori e correzioni a posteriori.</span>
 </div>""",
     },
 
@@ -1390,11 +1688,9 @@ def get_help(topic):
         "content": "Contenuto non disponibile per questo argomento. Contatta il supporto!",
     })
 
-
 def get_all_topics():
     """Restituisce tutti gli argomenti help"""
     return HELP_TOPICS
-
 
 # filepath: c:\Program Files\SunBooking\appl\routes\help.py
 def get_topics_by_category():
@@ -1429,10 +1725,17 @@ def get_topics_by_category():
         ],
         "Pacchetti": [
             "pacchetto_panorama",
+            "pacchetto_tools_settings",
             "pacchetto_create",
+            "pacchetto_memo",
+            "pacchetto_pagamento",
             "pacchetto_stati_dettaglio",
             "pacchetto_uso",
             "prepagata",
+            "prepagata_create",
+            "prepagata_uso",
+            "prepagata_pagamento",
+            "prepagata_controllo",
             "pacchetto_settings"
         ],
         "Tools": [

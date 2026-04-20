@@ -95,6 +95,14 @@
       <td><input type="text" id="website" name="website" value="{{ business_info.website if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
     </tr>
     <tr>
+      <td><label for="web_app">Sito Web App Tosca Online:</label></td>
+      <td><input type="text" id="web_app" name="web_app" value="{{ business_info.web_app if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
+      <td><label for="web_booking_page">Sito Booking Online:</label></td>
+      <td><input type="text" id="web_booking_page" name="web_booking_page" value="{{ business_info.web_booking_page if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+    </tr>
+    <tr>
       <td><label for="address">Indirizzo:</label></td>
       <td><input type="text" id="address" name="address" value="{{ business_info.address if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
     </tr>
