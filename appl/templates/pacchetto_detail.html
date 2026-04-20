@@ -7,14 +7,6 @@
 <div class="container mt-3">
     <h3 class="mt-2">&nbsp;&nbsp;&nbsp;Dettaglio Pacchetto</h3>
   <style>
-    .neomorphic-div {
-      background: rgb(255, 255, 255);
-      border-radius: 20px;
-      box-shadow: 5px 5px 10px #eeeeee, -5px -5px 10px #ffffff;
-      padding: 1.2rem;
-      text-align: center;
-      margin-top: 1.2rem;
-    }
     .neomorphic-div.programma-card {
       border: 2px solid transparent;
     }
@@ -30,67 +22,76 @@
       pointer-events: none;
       opacity: 0.6;
     }
-    
-    .neomorphic-div.programma-card {
-      border: 2px solid transparent;
+
+    .programma-card.status-attivo {
+      border-color: #81e1ff;
+    }
+    .programma-card.status-preventivo:hover {
+      background-color: #fff7cc;
+    }
+    .programma-card.status-attivo:hover {
+      background-color: #e7f7ff;
+    }
+    .programma-card.status-abbandonato:hover {
+      background-color: #ffe5e5;
+    }
+    .programma-card.status-completato:hover {
+      background-color: #5c5c5c;
+      color: #ffffff;
+    }
+    .programma-card.status-completato:hover a,
+    .programma-card.status-completato:hover h5,
+    .programma-card.status-completato:hover b {
+      color: #ffffff;
     }
 
-    .programma-card.status-preventivo { border-color: #ffdb10; }
-    .programma-card.status-attivo { border-color: #81e1ff; }
-    .programma-card.status-completato { border-color: #7e7e7e; background-color: #b1b1b1; color: white;}
-    .programma-card.status-abbandonato { border-color: #ff0000; }
+    .status-row {
+      transition: background-color .15s ease, color .15s ease;
+    }
+    .status-row.status-preventivo.dragging > td {
+      background-color: #fff7cc !important;
+    }
+    .status-row.status-attivo:hover > td,
+    .status-row.status-attivo.dragging > td {
+      background-color: #e8f8ff !important;
+    }
+    .status-row.status-abbandonato:hover > td,
+    .status-row.status-abbandonato.dragging > td {
+      background-color: #ffe5e5 !important;
+    }
+    .status-row.status-completato:hover > td,
+    .status-row.status-completato.dragging > td {
+      background-color: #5c5c5c !important;
+      color: #ffffff !important;
+    }
+    .status-row.status-completato:hover > td * {
+      color: #ffffff !important;
+    }
 
-    .programma-card.status-preventivo:hover { background-color: #fff7cc; }
-    .programma-card.status-attivo:hover { background-color: #e7f7ff; }
-    .programma-card.status-abbandonato:hover { background-color: #ffe5e5; }
-    .programma-card.status-completato:hover { background-color: #5c5c5c; color: #ffffff; }
-    .programma-card.status-completato:hover a,
-    .programma-card.status-completato:hover h4,
-    .programma-card.status-completato:hover h5,
-    .programma-card.status-completato:hover b { color: #ffffff; }
+    /* Sfondo grigio permanente per righe sedute quando pacchetto è completato */
+    .status-row.status-completato > td {
+      background-color: #b1b1b1 !important;
+      color: #ffffff !important;
+    }
+    .status-row.status-completato > td * {
+      color: #ffffff !important;
+    }
 
-.status-row { transition: background-color .15s ease, color .15s ease; }
+    tr.has-calendar-appt {
+      cursor: default !important;
+    }
+    tr.has-calendar-appt > td:first-child {
+      border-left: 3px solid #0d6efd;
+    }
+    tr.has-calendar-appt[draggable="false"] {
+      opacity: 1;
+    }
 
-.status-row.status-preventivo:hover > td,
-.status-row.status-preventivo.dragging > td { background-color: #fff7cc !important; }
-
-.status-row.status-attivo:hover > td,
-.status-row.status-attivo.dragging > td { background-color: #e8f8ff !important; }
-
-.status-row.status-abbandonato:hover > td,
-.status-row.status-abbandonato.dragging > td { background-color: #ffe5e5 !important; }
-
-.status-row.status-completato:hover > td,
-.status-row.status-completato.dragging > td { background-color: #5c5c5c !important; color: #ffffff !important; }
-
-.status-row.status-completato:hover > td *,
-.status-row.status-completato.dragging > td * { color: #ffffff !important; }
-
-/* Sfondo grigio permanente per righe sedute quando pacchetto è completato */
-.status-row.status-completato > td {
-  background-color: #b1b1b1 !important;
-  color: #ffffff !important;
-}
-.status-row.status-completato > td * {
-  color: #ffffff !important;
-}
-
-/* Righe con appuntamento in calendario: non draggabili, evidenziate */
-tr.has-calendar-appt {
-  cursor: default !important;
-}
-tr.has-calendar-appt > td:first-child {
-  border-left: 3px solid #0d6efd;
-}
-tr.has-calendar-appt[draggable="false"] {
-  opacity: 1;
-}
-
-/* Header tabella sedute quando pacchetto è completato */
-.status-completato #seduteTable thead th {
-  background-color: #7e7e7e !important;
-  color: #ffffff !important;
-}
+    /* Header tabella sedute quando pacchetto è completato */
+    .status-completato #seduteTable thead th {
+      background-color: #7e7e7e !important;
+      color: #ffffff !important;
+    }
 
     .custom-dropdown {
       position: absolute;
@@ -105,8 +106,8 @@ tr.has-calendar-appt[draggable="false"] {
     }
     .custom-dropdown ul {
       list-style: none;
-      margin: 0;
       padding: 0;
+      margin: 0;
     }
     .custom-dropdown li {
       padding: 8px 12px;
@@ -126,85 +127,34 @@ tr.has-calendar-appt[draggable="false"] {
       vertical-align: middle;
     }
 
- .date-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.2);
-  z-index: 1000;
-}
-.date-modal {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 1001;
-  background: #fff;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-  padding: 12px;
-  width: 420px;               /* widened modal */
-  max-width: 90vw;
-  display: block;
-}
-/* Center the table in the modal and remove all borders */
-.date-table {
-  border-collapse: collapse;
-  margin: 0 auto;          /* centers the table */
-  width: auto;             /* let content define width */
-  max-width: 360px;        /* comfortably narrower than the modal */
-}
-
-.date-table tr,
-.date-table td {
-  border: none !important; /* ensure no borders */
-}
-
-.date-table td {
-  padding: 0;              /* keep compact spacing */
-}
-
-/* Toggle utility used by the inline calendar */
-.hidden {
-  display: none;
-}
-
-#daySelect {
-  width: 80px;
-}
-
-#monthSelect {
-  width: 110px;
-}
-
-#yearSelect {
-  width: 80px;
-}
-
-    .rata-data-cell {
-      cursor: pointer;
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 4px;
-      transition: background-color 0.15s ease;
+    .date-modal-backdrop {
+      inset: 0;
+      background: rgba(0,0,0,0.2);
+      z-index: 1000;
     }
-    .rata-data-cell:hover {
-      background-color: #e9ecef;
-    }
-
-    .rata-date-modal {
-      position: fixed;
+    .date-modal {
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
       z-index: 1001;
       background: #fff;
-      border: 1px solid #ccc;
       border-radius: 6px;
       box-shadow: 0 6px 18px rgba(0,0,0,0.2);
-      padding: 16px;
-      width: 360px;
-      max-width: 90vw;
+      padding: 12px;
+      width: 420px;
+      display: block;
+    }
+    .date-table {
+      border-collapse: collapse;
+      margin: 0 auto;
+      width: auto;
+    }
+    .date-table tr,
+    .date-table td {
+      border: none !important;
+    }
+    .date-table td {
+      padding: 0;
     }
 
     .seduta-option {
@@ -3096,6 +3046,12 @@ function generaPdfPacchetto(stampaDiretta = false) {
       .replace(/\r\n?/g, '\n')
       .replace(/[\u200B-\u200D\uFEFF]/g, '')
       .replace(/\u00A0/g, ' ')
+      .replace(/â€™|â€˜|\u2019|\u2018/g, "'")
+      .replace(/â€œ|â€\u009d|\u201C|\u201D/g, '"')
+      .replace(/â€“|\u2013/g, '-')
+      .replace(/â€”|\u2014/g, '-')
+      .replace(/â€¦|\u2026/g, '...')
+      .replace(/Â/g, '')
       .trim();
 
     const entityDecoder = document.createElement('textarea');
@@ -3110,79 +3066,30 @@ function generaPdfPacchetto(stampaDiretta = false) {
   }
 
   function formatDateForPdf(rawValue) {
-    const value = normalizePdfText(rawValue);
-    if (!value || value === '—') return value || '—';
+    const value = normalizePdfText(rawValue).replace(/\s+/g, '');
+    if (!value || value === '—') return '—';
 
-    // Gia formato gg/mm/aaaa (opzionale ora)
-    let m = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\D.*)?$/);
-    if (m) {
-      return `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3]}`;
+    let match = value.match(/(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4})/);
+    if (match) {
+      const parts = match[1].split(/[\/.-]/);
+      return `${parts[0].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[2]}`;
     }
 
-    // Formati con trattino o punto: gg-mm-aaaa / gg.mm.aaaa
-    m = value.match(/^(\d{1,2})[-.](\d{1,2})[-.](\d{4})(?:\D.*)?$/);
-    if (m) {
-      return `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3]}`;
+    match = value.match(/(\d{4}-\d{1,2}-\d{1,2})/);
+    if (match) {
+      const parts = match[1].split('-');
+      return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
     }
 
-    // Formato ISO: aaaa-mm-gg (opzionale tempo)
-    m = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);
-    if (m) {
-      return `${m[3].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[1]}`;
+    const digitsOnly = value.replace(/[^0-9]/g, '');
+    if (/^\d{8}$/.test(digitsOnly)) {
+      if (value.indexOf('-') === 4) {
+        return `${digitsOnly.slice(6, 8)}/${digitsOnly.slice(4, 6)}/${digitsOnly.slice(0, 4)}`;
+      }
+      return `${digitsOnly.slice(0, 2)}/${digitsOnly.slice(2, 4)}/${digitsOnly.slice(4, 8)}`;
     }
 
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-      const gg = String(parsed.getDate()).padStart(2, '0');
-      const mm = String(parsed.getMonth() + 1).padStart(2, '0');
-      const aa = parsed.getFullYear();
-      return `${gg}/${mm}/${aa}`;
-    }
-
-    return value;
-  }
-
-  function toSafeFilePart(rawValue) {
-    const normalized = normalizePdfText(rawValue)
-      .replace(/[\\/:*?"<>|]+/g, '_')
-      .replace(/\s+/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_+|_+$/g, '');
-    return normalized || 'dato';
-  }
-
-  function formatDateForPdf(rawValue) {
-    const value = normalizePdfText(rawValue);
-    if (!value) return '—';
-
-    // Gia formato gg/mm/aaaa (opzionale ora)
-    let m = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\D.*)?$/);
-    if (m) {
-      return `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3]}`;
-    }
-
-    // Formati con trattino o punto: gg-mm-aaaa / gg.mm.aaaa
-    m = value.match(/^(\d{1,2})[-.](\d{1,2})[-.](\d{4})(?:\D.*)?$/);
-    if (m) {
-      return `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3]}`;
-    }
-
-    // Formati ISO: aaaa-mm-gg (opzionale tempo)
-    m = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);
-    if (m) {
-      return `${m[3].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[1]}`;
-    }
-
-    // Tentativo finale di parsing Date
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-      const gg = String(parsed.getDate()).padStart(2, '0');
-      const mm = String(parsed.getMonth() + 1).padStart(2, '0');
-      const aa = parsed.getFullYear();
-      return `${gg}/${mm}/${aa}`;
-    }
-
-    return value;
+    return '—';
   }
 
   function toSafeFilePart(rawValue) {
@@ -3198,7 +3105,7 @@ function generaPdfPacchetto(stampaDiretta = false) {
   const clienteNome = normalizePdfText("{{ pacchetto.client_nome|escapejs }}");
   const clienteTel = normalizePdfText("{{ pacchetto.client_cellulare|escapejs if pacchetto.client_cellulare else '—' }}");
   const programmaNome = normalizePdfText("{{ pacchetto.nome|escapejs }}");
-  const dataCreazioneRaw = "{{ pacchetto.data_sottoscrizione|escapejs }}";
+  const dataCreazioneRaw = "{{ pacchetto.data_sottoscrizione.strftime('%d/%m/%Y') if pacchetto.data_sottoscrizione else '—' }}";
   const dataCreazione = formatDateForPdf(dataCreazioneRaw);
   const costoLordo = normalizePdfText("€{{ '%.2f'|format(pacchetto.costo_totale_lordo) }}");
   const costoScontato = normalizePdfText(document.getElementById('prezzoScontato')?.textContent || "€{{ '%.2f'|format(pacchetto.costo_totale_scontato or pacchetto.costo_totale_lordo) }}");
@@ -3259,7 +3166,8 @@ function generaPdfPacchetto(stampaDiretta = false) {
   // Raccogli dati sedute dalla tabella
   const seduteRows = [];
   document.querySelectorAll('#seduteTable tbody tr[data-id]').forEach(row => {
-    const data = formatDateForPdf(row.querySelector('.data-cell')?.textContent.trim() || '');
+    const dataCell = row.querySelector('.data-cell');
+    const data = formatDateForPdf(dataCell?.dataset.date || dataCell?.textContent.trim() || '');
     const trattamento = normalizePdfText(row.querySelectorAll('td')[1]?.textContent.trim() || '');
     const nStar = normalizePdfText(row.querySelector('.n-star')?.textContent.trim() || '');
     const operatore = normalizePdfText(row.querySelector('.operatore-cell')?.textContent.trim() || '');
@@ -3304,8 +3212,8 @@ function generaPdfPacchetto(stampaDiretta = false) {
     const importoInput = row.querySelector('.rata-importo-input');
     const importo = importoInput ? `€${parseFloat(importoInput.value).toFixed(2)}` : '—';
     const stato = row.classList.contains('rata-pagata') ? 'Pagata' : 'Da pagare';
-    const dataCell = row.querySelectorAll('td')[3];
-    const data = formatDateForPdf(dataCell?.textContent.trim() || '');
+    const rataDateCell = row.querySelector('.rata-data-cell') || row.querySelectorAll('td')[3];
+    const data = formatDateForPdf(rataDateCell?.dataset.date || rataDateCell?.textContent.trim() || '');
     rateRows.push([`Rata ${idx + 1}`, importo, stato, data]);
   });
   
