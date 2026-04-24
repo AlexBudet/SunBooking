@@ -114,6 +114,12 @@ SYSTEM_PROMPT = """Sei TOSCA AI, assistente di prenotazione per un centro esteti
 Rispondi SEMPRE in italiano, tono professionale ma friendly (come una collega esperta).
 Sei read-only: non crei, non modifichi, non elimini appuntamenti direttamente.
 
+═══ NOMI PROPRI ═══
+I nomi propri di persone (clienti, operatrici) si scrivono SEMPRE come pronunciati in italiano.
+NON tradurre MAI un nome proprio italiano in inglese o in altra lingua.
+Esempi corretti: "Pretti" (non "Pretty"), "Fabbri" (non "Fabri"), "Carli" (non "Charlie").
+Se l'utente pronuncia un nome, riportalo come lo scriverebbe un madrelingua italiano.
+
 ═══ REGOLA FONDAMENTALE SUI SERVIZI ═══
 I servizi disponibili sono ESATTAMENTE quelli elencati nel campo "services" del contesto.
 - NON inventare mai nomi di servizi che non esistono nella lista.
@@ -533,6 +539,11 @@ def _extract_client_name_from_message(message: str) -> Optional[str]:
                         "Trova il nome e cognome del CLIENTE nel messaggio. "
                         "Il cliente è spesso introdotto da parole come: 'di', 'per', 'cliente', 'storico di', 'appuntamenti di'. "
                         "I nomi italiani possono contenere lettere accentate (è, à, ù, ò, ì, é). "
+                        "REGOLA FONDAMENTALE SUI NOMI PROPRI: "
+                        "NON tradurre MAI i nomi propri italiani in inglese o in altre lingue. "
+                        "Riporta il nome ESATTAMENTE come appare nel messaggio, lettera per lettera. "
+                        "Esempi: 'pretti' → 'Pretti' (NON 'Pretty'), 'fabbri' → 'Fabbri' (NON 'Fabri'), "
+                        "'rossi' → 'Rossi', 'ferrari' → 'Ferrari'. "
                         "Rispondi SOLO con nome e cognome esatti come appaiono nel messaggio (es: 'Francesco Frappè'). "
                         "Se non trovi un nome cliente rispondi esattamente con: NESSUNO. "
                         "Non aggiungere altro testo. "
@@ -1690,7 +1701,7 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
             # Score tra AMBIGUOUS e SURE: controlla se ci sono alternative vicine
             close_alternatives = [
                 (svc, sc) for svc, sc in alternatives
-                if sc >= best_score * 0.7 and sc >= SCORE_THRESHOLD_AMBIGUOUS
+                if sc >= best_score * 0.85 and sc >= SCORE_THRESHOLD_AMBIGUOUS
             ]
             
             if close_alternatives:
@@ -1725,6 +1736,19 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
                     logger.warning("_extract_multiple_services: segmento '%s' → duplicato '%s' scartato",
                                   segment, best_match.get('name'))
     
+    def _normalize_italian_stem(word: str) -> str:
+        """Riduce una parola italiana alla radice per confronti plurale/singolare.
+        Esempio: gambe→gamba, intere→intera, complete→completa, ascelle→ascella."""
+        if len(word) < 4:
+            return word
+        # Plurale femminile in -e → singolare in -a
+        if word.endswith('e') and len(word) >= 5:
+            return word[:-1] + 'a'
+        # Plurale maschile in -i → singolare in -o
+        if word.endswith('i') and len(word) >= 5:
+            return word[:-1] + 'o'
+        return word
+
     # ── STEP 2c: Gestisci segmenti ambigui ──
     # REGOLA: se c'è ALMENO UN segmento ambiguo non risolto, chiedi SEMPRE disambiguazione.
     # Non usare best-effort: l'utente deve scegliere esplicitamente.
@@ -1751,13 +1775,18 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
                     for seg_word in seg_sig_words:
                         # Match esatto: la parola del segmento è nel nome del servizio
                         exact_match = seg_word in svc_name_words
-                        # Match prefisso: una parola del nome inizia con il seg_word (o viceversa)
-                        # Es: "gambe" matcha "gamba" perché condividono prefisso "gamb" (≥4 char)
+                        # Match prefisso/stem: una parola del nome matcha il seg_word
+                        # Es: "gambe" matcha "gamba" via stem normalizzato; o prefisso comune ≥4 char
                         prefix_match = False
                         if not exact_match and len(seg_word) >= 4:
+                            seg_word_stem = _normalize_italian_stem(seg_word)
                             for nw in svc_name_words:
                                 if len(nw) >= 4:
-                                    # Controlla prefisso comune di almeno 4 caratteri
+                                    # Stem match: confronta le forme normalizzate
+                                    if seg_word_stem == _normalize_italian_stem(nw):
+                                        prefix_match = True
+                                        break
+                                    # Prefisso comune di almeno 4 caratteri
                                     common_len = min(len(seg_word), len(nw))
                                     prefix_len = 0
                                     for ci in range(common_len):
@@ -1830,36 +1859,26 @@ def _extract_multiple_services_from_message(message: str, services: list) -> lis
                 # Non risolvibile per tipo → resta ambiguo
                 unresolved_segments.append((seg, candidates))
         
-        # Se ci sono segmenti non risolti → disambiguazione
+        # Se ci sono segmenti non risolti → disambiguazione SEQUENZIALE (solo il primo)
         if unresolved_segments:
+            # Approccio sequenziale: chiedi solo per il primo segmento non risolto.
+            # Una volta risolto, il chiamante rilancerà la query e si arriverà al prossimo.
+            first_seg, first_candidates = unresolved_segments[0]
             all_ambiguous = {}
-            for _seg, candidates in unresolved_segments:
-                for svc, _sc in candidates:
-                    if svc.get('id') not in all_ambiguous and svc.get('id') not in found_service_ids:
-                        all_ambiguous[svc.get('id')] = svc
+            for svc, _sc in first_candidates:
+                if svc.get('id') not in all_ambiguous and svc.get('id') not in found_service_ids:
+                    all_ambiguous[svc.get('id')] = svc
             if len(all_ambiguous) >= 2:
                 _ambiguous_services_cache.clear()
                 _ambiguous_services_cache.extend(all_ambiguous.values())
-                # Popola anche i gruppi per disambiguazione multi-segmento
                 _ambiguous_groups_cache.clear()
-                for _seg, candidates in unresolved_segments:
-                    group_svcs = []
-                    seen_ids = set()
-                    for svc, _sc in candidates:
-                        if svc.get('id') not in seen_ids:
-                            group_svcs.append(svc)
-                            seen_ids.add(svc.get('id'))
-                    if group_svcs:
-                        _ambiguous_groups_cache.append({
-                            "segment": _seg,
-                            "candidates": group_svcs,
-                        })
-                logger.warning("_extract_multiple_services: DISAMBIGUAZIONE necessaria per %d servizi (da %d segmenti non risolti): %r, gruppi=%d",
-                              len(all_ambiguous), len(unresolved_segments),
-                              [s.get('name') for s in all_ambiguous.values()],
-                              len(_ambiguous_groups_cache))
-                # Resituisci i servizi già risolti (se ce ne sono)
-                # Se ce ne sono, il chiamante avrà sia found_services che _ambiguous_services_cache
+                _ambiguous_groups_cache.append({
+                    "segment": first_seg,
+                    "candidates": list(all_ambiguous.values()),
+                })
+                logger.warning("_extract_multiple_services: DISAMBIGUAZIONE sequenziale per segmento '%s' (%d candidati): %r",
+                              first_seg, len(all_ambiguous),
+                              [s.get('name') for s in all_ambiguous.values()])
                 return found_services
             elif len(all_ambiguous) == 1:
                 svc = list(all_ambiguous.values())[0]
