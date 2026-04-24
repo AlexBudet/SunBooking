@@ -20,11 +20,22 @@
 </head>
 <body>
   <div class="container">
-    <h1>TOSCA - Seleziona Negozio</h1>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+      <h1 style="margin:0;">TOSCA - Seleziona Negozio</h1>
+      <a href="/owner-login"
+         title="Setup Owner — accesso riservato"
+         style="display:flex; align-items:center; justify-content:center;
+                width:42px; height:42px; border-radius:8px; background:#eee;
+                color:#555; text-decoration:none; font-size:1.35em;
+                border:1px solid #d0d0d0; flex-shrink:0;"
+         aria-label="Setup Owner">⚙</a>
+    </div>
     <p>Scegli il negozio per accedere:</p>
     {% if db_links and db_links|length > 0 %}
       {% for link in db_links %}
+      <div style="margin: 10px 0;">
         <a href="{{ link.url }}" class="db-link">{{ link.label }}</a>
+      </div>
       {% endfor %}
     {% else %}
       <p class="empty">Nessun database configurato. Verifica il file .env.</p>

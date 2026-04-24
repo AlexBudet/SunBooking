@@ -9,6 +9,7 @@
   <h3><i class="bi bi-whatsapp text-success"></i> Connessione WhatsApp Business</h3>
 
   {% if not config.get('HIDE_CASSA') %}
+  {% if module_web_enabled %}
   <div id="whatsapp-connection-section" class="card mb-4">
     <div class="card-body">
       
@@ -89,6 +90,7 @@
   {% endif %}
 
 </div><!-- fine container 1 -->
+{% endif %}{# module_web_enabled #}
 
 <br>
 <hr>
@@ -101,12 +103,22 @@
     <div class="mb-3">
       <label for="whatsapp_message" class="form-label">Da inviare manualmente tramite pulsante da calendario</label>
       <textarea class="form-control" id="whatsapp_message" name="whatsapp_message" rows="5" required>{{ whatsapp_message or "Buongiorno {{nome}}, ecco un memo per il tuo appuntamento del {{data}} alle ore {{ora}}. Ci vediamo presto! Sun Booking" }}</textarea>
+      <div class="mt-2 d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message', '{{'{{nome}}'}}')">{{'{{'}}nome{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message', '{{'{{data}}'}}')">{{'{{'}}data{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message', '{{'{{ora}}'}}')">{{'{{'}}ora{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message', '{{'{{servizi}}'}}')">{{'{{'}}servizi{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message', '{{'{{sito}}'}}')">{{'{{'}}sito{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message', '{{'{{nome_istituto}}'}}')">{{'{{'}}nome_istituto{{'}}'}}</button>
+      </div>
       <div class="form-text">
         Puoi usare le variabili:<br>
         <code>{{"{{nome}}"}}</code> = nome cliente,
         <code>{{"{{data}}"}}</code> = data appuntamento,
         <code>{{"{{ora}}"}}</code> = orario appuntamento
         <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
+        <code>{{"{{sito}}"}}</code> = sito web istituto,
+        <code>{{"{{nome_istituto}}"}}</code> = nome istituto
       </div>
     </div>
     <button type="submit" class="btn btn-success">Salva messaggio</button>
@@ -114,6 +126,7 @@
 
 </div><!-- fine container 2 -->
 
+{% if module_web_enabled %}
 <br>
 <hr>
 
@@ -135,6 +148,14 @@
     <div class="mb-3">
       <label for="whatsapp_message_auto" class="form-label">Testo messaggio automatico</label>
       <textarea class="form-control" id="whatsapp_message_auto" name="whatsapp_message_auto" rows="5" required>{{ whatsapp_message_auto or "Ciao {{nome}}, la tua prenotazione per il {{data}} alle ore {{ora}} è stata registrata! Grazie da Sun Booking." }}</textarea>
+      <div class="mt-2 d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_auto', '{{'{{nome}}'}}')">{{'{{'}}nome{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_auto', '{{'{{data}}'}}')">{{'{{'}}data{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_auto', '{{'{{ora}}'}}')">{{'{{'}}ora{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_auto', '{{'{{servizi}}'}}')">{{'{{'}}servizi{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_auto', '{{'{{sito}}'}}')">{{'{{'}}sito{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_auto', '{{'{{nome_istituto}}'}}')">{{'{{'}}nome_istituto{{'}}'}}</button>
+      </div>
       <div class="form-text">
         Questo messaggio verrà inviato automaticamente via WhatsApp ogni volta che viene creato un appuntamento in calendario.<br>
         Puoi usare le variabili:<br>
@@ -142,6 +163,8 @@
         <code>{{"{{data}}"}}</code> = data appuntamento,
         <code>{{"{{ora}}"}}</code> = orario appuntamento,
         <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
+        <code>{{"{{sito}}"}}</code> = sito web istituto,
+        <code>{{"{{nome_istituto}}"}}</code> = nome istituto
       </div>
     </div>
     <button type="submit" class="btn btn-success">Salva messaggio automatico</button>
@@ -168,6 +191,14 @@
     <div class="mb-3">
       <label for="whatsapp_message_morning" class="form-label">Testo messaggio reminder</label>
       <textarea class="form-control" id="whatsapp_message_morning" name="whatsapp_message_morning" rows="5" required>{{ whatsapp_message_morning or "Ciao {{nome}}, la tua prenotazione per il {{data}} alle ore {{ora}} è stata registrata! Grazie da Sun Booking." }}</textarea>
+      <div class="mt-2 d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_morning', '{{'{{nome}}'}}')">{{'{{'}}nome{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_morning', '{{'{{data}}'}}')">{{'{{'}}data{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_morning', '{{'{{ora}}'}}')">{{'{{'}}ora{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_morning', '{{'{{servizi}}'}}')">{{'{{'}}servizi{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_morning', '{{'{{sito}}'}}')">{{'{{'}}sito{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('whatsapp_message_morning', '{{'{{nome_istituto}}'}}')">{{'{{'}}nome_istituto{{'}}'}}</button>
+      </div>
       <div class="form-text">
         Questo messaggio verrà inviato automaticamente via WhatsApp secondo le impostazioni.<br>
         Puoi usare le variabili:<br>
@@ -175,6 +206,8 @@
         <code>{{"{{data}}"}}</code> = data appuntamento,
         <code>{{"{{ora}}"}}</code> = orario appuntamento,
         <code>{{"{{servizi}}"}}</code> = lista servizi prenotati
+        <code>{{"{{sito}}"}}</code> = sito web istituto,
+        <code>{{"{{nome_istituto}}"}}</code> = nome istituto
       </div>
     </div>
     <button type="submit" class="btn btn-success">Salva messaggio automatico</button>
@@ -213,9 +246,21 @@
     <div class="mb-3">
       <label for="operator_whatsapp_message_template" class="form-label">Template messaggio operatori</label>
       <textarea id="operator_whatsapp_message_template" name="operator_whatsapp_message_template" class="form-control" rows="6">{{ business_info.operator_whatsapp_message_template or tpl_default }}</textarea>
+      <div class="mt-2 d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('operator_whatsapp_message_template', '{{'{{operatore}}'}}')">{{'{{'}}operatore{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('operator_whatsapp_message_template', '{{'{{data}}'}}')">{{'{{'}}data{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('operator_whatsapp_message_template', '{{'{{ora_inizio}}'}}')">{{'{{'}}ora_inizio{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('operator_whatsapp_message_template', '{{'{{ora_fine}}'}}')">{{'{{'}}ora_fine{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('operator_whatsapp_message_template', '{{'{{sezione_primo_app}}'}}')">{{'{{'}}sezione_primo_app{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('operator_whatsapp_message_template', '{{'{{sezione_pausa}}'}}')">{{'{{'}}sezione_pausa{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('operator_whatsapp_message_template', '{{'{{ora_primo_app}}'}}')">{{'{{'}}ora_primo_app{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('operator_whatsapp_message_template', '{{'{{primo_app}}'}}')">{{'{{'}}primo_app{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('operator_whatsapp_message_template', '{{'{{sito}}'}}')">{{'{{'}}sito{{'}}'}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="insertWaTag('operator_whatsapp_message_template', '{{'{{nome_istituto}}'}}')">{{'{{'}}nome_istituto{{'}}'}}</button>
+      </div>
       <div class="form-text">
         Variabili disponibili:<br>
-        <code>{{"{{operatore}}"}}</code>, <code>{{"{{data}}"}}</code>, <code>{{"{{ora_inizio}}"}}</code>, <code>{{"{{ora_fine}}"}}</code>, <code>{{"{{sezione_primo_app}}"}}</code>, <code>{{"{{sezione_pausa}}"}}</code><br>
+        <code>{{"{{operatore}}"}}</code>, <code>{{"{{data}}"}}</code>, <code>{{"{{ora_inizio}}"}}</code>, <code>{{"{{ora_fine}}"}}</code>, <code>{{"{{sezione_primo_app}}"}}</code>, <code>{{"{{sezione_pausa}}"}}</code>, <code>{{"{{sito}}"}}</code> = sito web istituto, <code>{{"{{nome_istituto}}"}}</code> = nome istituto<br>
         <small class="text-muted">Variabili singole (se preferisci comporre manualmente): <code>{{"{{ora_primo_app}}"}}</code>, <code>{{"{{primo_app}}"}}</code></small>
       </div>
     </div>
@@ -248,11 +293,26 @@
   <br><br><br><br>
 
 </div><!-- fine container 5 -->
+{% endif %}{# module_web_enabled #}
 
 
 <!-- ==================== SCRIPT JS ==================== -->
 
 <script>
+function insertWaTag(textareaId, value) {
+  const textarea = document.getElementById(textareaId);
+  if (!textarea) return;
+  textarea.focus();
+  const start = textarea.selectionStart || 0;
+  const end = textarea.selectionEnd || 0;
+  const text = textarea.value || '';
+  textarea.value = text.slice(0, start) + value + text.slice(end);
+  const newPos = start + value.length;
+  textarea.selectionStart = newPos;
+  textarea.selectionEnd = newPos;
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 (function() {
   // === Toggle whatsapp_modal_disable ===
   const cb = document.getElementById('whatsapp_modal_disable');
@@ -291,11 +351,10 @@
   if (!cb) return;
 
   function saveReminder(enabled) {
-    const tokenInput = document.querySelector('input[name="csrf_token"]');
-    const csrf = tokenInput ? tokenInput.value : '';
-    const params = new URLSearchParams();
-    params.set('csrf_token', csrf);
-    params.set('whatsapp_message_morning', msgTextarea ? (msgTextarea.value || '') : '');
+  const tokenInput = document.querySelector('input[name="csrf_token"]');
+  const csrf = tokenInput ? tokenInput.value : '';
+  const params = new URLSearchParams();
+  params.set('whatsapp_message_morning', msgTextarea ? (msgTextarea.value || '') : '');
     if (timeInput && timeInput.value) {
       params.set('whatsapp_morning_reminder_time', timeInput.value);
     }
@@ -305,7 +364,10 @@
     return fetch("{{ url_for('settings.whatsapp') }}", {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: { 
+  'Content-Type': 'application/x-www-form-urlencoded',
+  'X-CSRFToken': csrf
+},
       body: params.toString()
     })
     .then(resp => {

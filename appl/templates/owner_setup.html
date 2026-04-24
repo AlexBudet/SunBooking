@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>TOSCA — Setup Owner</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 30px 20px 60px;
+      background: #f0f2f5;
+      min-height: 100vh;
+    }
+    h1 { color: #2f3b4b; margin-bottom: 4px; }
+    .header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .subtitle { color: #777; font-size: 0.92em; margin: 0; }
+    .btn-logout {
+      padding: 7px 16px;
+      background: #e72c64;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 0.9em;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .btn-logout:hover { background: #c01f50; }
+
+    /* TABLE */
+    .owner-table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.07);
+    }
+    thead th {
+      background: #2f3b4b;
+      color: #fff;
+      font-size: 0.85em;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 12px 14px;
+      text-align: center;
+      white-space: nowrap;
+    }
+    thead th:first-child { text-align: left; }
+    tbody tr { border-bottom: 1px solid #f0f0f0; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #f8f9fc; }
+    td {
+      padding: 14px 14px;
+      vertical-align: middle;
+      font-size: 0.95em;
+    }
+    td.center { text-align: center; }
+
+    /* Centro info */
+    .centro-name { font-weight: 700; color: #2f3b4b; }
+    .db-info {
+      font-size: 0.8em;
+      color: #888;
+      margin-top: 3px;
+      word-break: break-all;
+    }
+    .reveal-btn {
+      background: none;
+      border: 1px solid #bbb;
+      border-radius: 5px;
+      padding: 2px 8px;
+      cursor: pointer;
+      font-size: 0.78em;
+      color: #555;
+      margin-left: 6px;
+      white-space: nowrap;
+    }
+    .reveal-btn:hover { background: #eee; }
+
+    /* Modulo checkbox + data */
+    .module-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .module-toggle {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+    .module-toggle input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: #ccc;
+      border-radius: 24px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .slider:before {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: 3px;
+      bottom: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .module-toggle input:checked + .slider { background: #2ec56c; }
+    .module-toggle input:checked + .slider:before { transform: translateX(20px); }
+
+    .date-input {
+      border: 1px solid #d0d0d0;
+      border-radius: 5px;
+      padding: 4px 7px;
+      font-size: 0.82em;
+      color: #444;
+      width: 120px;
+      text-align: center;
+    }
+    .date-input:focus { border-color: #e72c64; outline: none; }
+
+    /* Save button per riga */
+    .save-row-btn {
+      padding: 8px 18px;
+      background: #2f3b4b;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 0.88em;
+      font-weight: 600;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .save-row-btn:hover { background: #e72c64; }
+    .save-row-btn.saved { background: #2ec56c; }
+
+    /* Compliance badge */
+    .badge-ok          { display:inline-block; background:#d4edda; color:#155724; border:1px solid #c3e6cb; border-radius:20px; padding:3px 10px; font-size:0.8em; font-weight:700; white-space:nowrap; }
+    .badge-warning     { display:inline-block; background:#fff3cd; color:#856404; border:1px solid #ffc107; border-radius:20px; padding:3px 10px; font-size:0.8em; font-weight:700; white-space:nowrap; }
+    .badge-overdue     { display:inline-block; background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; border-radius:20px; padding:3px 10px; font-size:0.8em; font-weight:700; white-space:nowrap; }
+    .badge-unconfigured{ display:inline-block; background:#d4edda; color:#155724; border:1px solid #c3e6cb; border-radius:20px; padding:3px 10px; font-size:0.8em; font-weight:700; white-space:nowrap; }
+    .badge-owner       { display:inline-block; background:#d4edda; color:#155724; border:1px solid #c3e6cb; border-radius:20px; padding:3px 10px; font-size:0.8em; font-weight:700; white-space:nowrap; }
+
+    /* Pallino status nel pulsante Contratto */
+    .billing-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle; flex-shrink:0; }
+    .billing-dot-ok, .billing-dot-owner { background:#2ec56c; }
+    .billing-dot-unconfigured { background:#fff; border:1.5px solid #aaa; }
+    .billing-dot-warning  { background:#ffc107; }
+    .billing-dot-overdue  { background:#dc3545; animation:pulse-red 1.4s ease-in-out infinite; }
+    @keyframes pulse-red { 0%,100%{ box-shadow:0 0 0 2px rgba(220,53,69,.25); } 50%{ box-shadow:0 0 0 5px rgba(220,53,69,.07); } }
+    .btn-billing { display:inline-flex; align-items:center; padding:6px 12px; background:#6f42c1; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:0.82em; font-weight:600; white-space:nowrap; margin-top:4px; gap:4px; }
+    .btn-billing:hover { background:#5a32a3; }
+
+    /* Owner DB banner nel modal */
+    .owner-db-banner { background:#d4edda; border:1px solid #c3e6cb; border-radius:8px; padding:12px 16px; margin-bottom:16px; display:flex; align-items:center; gap:10px; }
+    .owner-db-banner label { font-weight:700; color:#155724; cursor:pointer; margin:0; display:flex; align-items:center; gap:8px; font-size:0.95em; }
+    .owner-db-banner input[type=checkbox] { width:17px; height:17px; cursor:pointer; }
+
+    /* Billing modal */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:10000; align-items:flex-start; justify-content:center; padding:30px 16px; overflow-y:auto; }
+    .modal-overlay.open { display:flex; }
+    .modal-card { background:#fff; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.18); width:100%; max-width:780px; display:flex; flex-direction:column; }
+    .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 24px 14px; border-bottom:1px solid #eee; }
+    .modal-header h2 { margin:0; font-size:1.1em; color:#2f3b4b; }
+    .modal-close { background:none; border:none; font-size:1.5em; cursor:pointer; color:#888; line-height:1; }
+    .modal-close:hover { color:#222; }
+    .modal-tabs { display:flex; border-bottom:1px solid #e0e0e0; padding:0 24px; gap:0; }
+    .modal-tab { padding:10px 18px; cursor:pointer; font-size:0.88em; font-weight:600; color:#666; border-bottom:3px solid transparent; transition:all 0.15s; }
+    .modal-tab.active { color:#2f3b4b; border-bottom-color:#e72c64; }
+    .modal-tab:hover { color:#2f3b4b; }
+    .modal-body { padding:22px 24px; }
+    .modal-tab-pane { display:none; }
+    .modal-tab-pane.active { display:block; }
+    .billing-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media(max-width:600px) { .billing-grid { grid-template-columns:1fr; } }
+    .billing-field label { display:block; font-size:0.82em; font-weight:600; color:#555; margin-bottom:4px; }
+    .billing-field input { width:100%; padding:7px 10px; border:1px solid #d0d0d0; border-radius:5px; font-size:0.9em; box-sizing:border-box; }
+    .billing-field input:focus { border-color:#6f42c1; outline:none; }
+    .billing-field .api-hint { font-size:0.75em; color:#aaa; margin-top:3px; }
+    .billing-section-title { font-size:0.85em; font-weight:700; color:#2f3b4b; text-transform:uppercase; letter-spacing:0.04em; margin:18px 0 10px; border-bottom:1px solid #f0f0f0; padding-bottom:6px; }
+    .billing-table { width:100%; border-collapse:collapse; font-size:0.85em; }
+    .billing-table th { background:#f8f9fa; color:#555; text-align:left; padding:7px 10px; font-size:0.8em; text-transform:uppercase; letter-spacing:0.03em; }
+    .billing-table td { padding:7px 10px; border-bottom:1px solid #f0f0f0; vertical-align:middle; }
+    .billing-table tr:last-child td { border-bottom:none; }
+    .billing-add-row { display:grid; gap:8px; margin-top:10px; }
+    .billing-add-row input, .billing-add-row select { padding:7px 9px; border:1px solid #d0d0d0; border-radius:5px; font-size:0.85em; }
+    .btn-add-small { padding:6px 14px; background:#2ec56c; color:#fff; border:none; border-radius:5px; font-size:0.82em; font-weight:700; cursor:pointer; }
+    .btn-add-small:hover { background:#22a558; }
+    .btn-del { background:none; border:none; color:#c0392b; cursor:pointer; font-size:1em; padding:2px 6px; }
+    .btn-del:hover { background:#fdecea; border-radius:4px; }
+    .btn-toggle-paid { background:none; border:1px solid #ccc; border-radius:4px; cursor:pointer; padding:2px 8px; font-size:0.78em; }
+    .btn-save-billing { padding:9px 22px; background:#2f3b4b; color:#fff; border:none; border-radius:7px; font-size:0.9em; font-weight:700; cursor:pointer; margin-top:16px; }
+    .btn-save-billing:hover { background:#e72c64; }
+    .compliance-summary { background:#f8f9fa; border-radius:8px; padding:14px 18px; margin-top:18px; }
+    .compliance-summary .row { display:flex; justify-content:space-between; font-size:0.88em; margin-bottom:4px; }
+    .compliance-summary .total-row { font-weight:700; font-size:0.95em; border-top:1px solid #dee2e6; margin-top:8px; padding-top:8px; }
+    .api-placeholder { display:flex; align-items:center; gap:10px; padding:10px 14px; background:#f8f4ff; border:1px dashed #b39ddb; border-radius:6px; margin-top:10px; font-size:0.82em; color:#7c5cbf; }
+    .api-placeholder button { padding:5px 12px; background:#6f42c1; color:#fff; border:none; border-radius:5px; font-size:0.82em; cursor:not-allowed; opacity:0.6; }
+
+    /* Add tenant form */
+    .btn-show-add {
+      padding: 9px 20px; background: #2f3b4b; color: #fff;
+      border: none; border-radius: 8px; font-size: 0.92em;
+      font-weight: 600; cursor: pointer; transition: background 0.15s;
+      margin-top: 24px; display: inline-block;
+    }
+    .btn-show-add:hover { background: #e72c64; }
+    .add-form-card {
+      background: #fff; border-radius: 10px;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.07);
+      padding: 24px 28px; margin-top: 14px; display: none;
+    }
+    .add-form-card h3 { margin: 0 0 18px; color: #2f3b4b; font-size: 1.05em; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    @media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }
+    .form-field label { display: block; font-size: 0.85em; font-weight: 600; color: #3a3a3a; margin-bottom: 5px; }
+    .form-field input, .form-field textarea {
+      width: 100%; padding: 8px 10px; border: 1px solid #d0d0d0;
+      border-radius: 6px; font-size: 0.92em; outline: none; transition: border-color 0.15s;
+      box-sizing: border-box;
+    }
+    .form-field input:focus, .form-field textarea:focus { border-color: #e72c64; }
+    .form-field textarea { resize: vertical; font-family: monospace; font-size: 0.82em; min-height: 70px; }
+    .form-field .hint { font-size: 0.78em; color: #999; margin-top: 4px; }
+    .form-actions { display: flex; gap: 10px; margin-top: 18px; align-items: center; }
+    .btn-submit-add {
+      padding: 9px 22px; background: #2ec56c; color: #fff;
+      border: none; border-radius: 7px; font-size: 0.9em;
+      font-weight: 700; cursor: pointer; transition: background 0.15s;
+    }
+    .btn-submit-add:hover { background: #22a558; }
+    .btn-submit-add:disabled { background: #aaa; cursor: not-allowed; }
+    .btn-cancel-add {
+      padding: 9px 18px; background: #f0f0f0; color: #555;
+      border: 1px solid #ddd; border-radius: 7px; font-size: 0.9em; cursor: pointer;
+    }
+    .btn-cancel-add:hover { background: #e0e0e0; }
+    .add-status {
+      padding: 10px 14px; border-radius: 6px; font-size: 0.88em; display: none;
+    }
+    .add-status.loading { background: #e8f4fd; color: #0b4f75; border: 1px solid #b8e1ff; display: block; }
+    .add-status.error { background: #fdecea; color: #611a15; border: 1px solid #f5c6cb; display: block; }
+
+    /* Toast feedback */
+    #toast {
+      position: fixed;
+      bottom: 22px;
+      right: 22px;
+      background: #2f3b4b;
+      color: #fff;
+      padding: 12px 22px;
+      border-radius: 8px;
+      font-size: 0.92em;
+      display: none;
+      z-index: 9999;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    }
+    #toast.error { background: #c0392b; }
+  </style>
+</head>
+<body>
+  <div class="header-bar">
+    <div>
+      <h1>⚙️ Setup Owner</h1>
+      <p class="subtitle">Configurazione moduli contratto per ogni negozio cliente</p>
+    </div>
+    <a href="/owner-logout" class="btn-logout">Esci dal Setup Owner</a>
+  </div>
+
+  <div class="owner-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left; min-width:160px;">CLIENTE</th>
+          <th style="min-width:110px;">LOCALITA'</th>
+          <th style="min-width:80px;">TENANT</th>
+          <th style="min-width:90px;">USER</th>
+          <th style="min-width:100px;">PWRD</th>
+          <th style="min-width:220px;">STRINGA di CONNESSIONE</th>
+          <th style="min-width:90px;">STATO</th>
+          <th>BASE<br><small style="font-weight:400;opacity:.8">Agenda + Report + Clienti</small></th>
+          <th>WEB<br><small style="font-weight:400;opacity:.8">WhatsApp + Booking + Marketing</small></th>
+          <th>PACCHETTI<br><small style="font-weight:400;opacity:.8">Pacchetti + Prepagate</small></th>
+          <th>AZIONI</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tenants %}
+        <tr data-idx="{{ t.idx }}">
+          <!-- CLIENTE -->
+          <td>
+            <div class="centro-name">{{ t.business_name }}</div>
+          </td>
+
+          <!-- LOCALITA' -->
+          <td>{{ t.localita or '—' }}</td>
+
+          <!-- TENANT -->
+          <td class="center"><span style="font-family:monospace;font-size:0.95em;font-weight:700;">{{ t.idx }}</span></td>
+
+          <!-- USER -->
+          <td><span style="font-family:monospace;font-size:0.88em;">{{ t.db_user }}</span></td>
+
+          <!-- PWRD -->
+          <td class="center">
+            <span id="pwd-{{ t.idx }}">••••••••</span>
+            <button class="reveal-btn" data-idx="{{ t.idx }}" data-field="password" onclick="revealField('pwd-{{ t.idx }}', {{ t.idx }}, 'password', this)">👁</button>
+          </td>
+
+          <!-- STRINGA di CONNESSIONE -->
+          <td>
+            <div class="db-info" style="margin:0;">
+              <span id="uri-{{ t.idx }}">{{ t.uri_masked }}</span>
+              <button class="reveal-btn" data-idx="{{ t.idx }}" data-field="uri" onclick="revealField('uri-{{ t.idx }}', {{ t.idx }}, 'uri', this)">👁 Mostra</button>
+            </div>
+          </td>
+
+          <!-- STATO compliance -->
+          <td class="center">
+            {% if t.compliance == 'owner' %}
+              <span class="badge-owner" id="badge-{{ t.idx }}">🏠 Owner</span>
+            {% elif t.compliance == 'ok' %}
+              <span class="badge-ok" id="badge-{{ t.idx }}">🟢 Pagamenti OK</span>
+            {% elif t.compliance == 'warning' %}
+              <span class="badge-warning" id="badge-{{ t.idx }}">🟡 In attesa</span>
+            {% elif t.compliance == 'overdue' %}
+              <span class="badge-overdue" id="badge-{{ t.idx }}">🔴 Scaduto</span>
+            {% else %}
+              <span class="badge-unconfigured" id="badge-{{ t.idx }}">⚪ Non partito</span>
+            {% endif %}
+          </td>
+
+          <!-- Modulo BASE -->
+          <td class="center">
+            <div class="module-cell">
+              <label class="module-toggle">
+                <input type="checkbox" class="mod-check" data-mod="base"
+                       {% if t.module_base_enabled %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <input type="date" class="date-input" data-mod="base-date"
+                     value="{{ t.module_base_activated_on or '' }}"
+                     placeholder="Data att.">
+            </div>
+          </td>
+
+          <!-- Modulo WEB -->
+          <td class="center">
+            <div class="module-cell">
+              <label class="module-toggle">
+                <input type="checkbox" class="mod-check" data-mod="web"
+                       {% if t.module_web_enabled %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <input type="date" class="date-input" data-mod="web-date"
+                     value="{{ t.module_web_activated_on or '' }}"
+                     placeholder="Data att.">
+            </div>
+          </td>
+
+          <!-- Modulo PACCHETTI -->
+          <td class="center">
+            <div class="module-cell">
+              <label class="module-toggle">
+                <input type="checkbox" class="mod-check" data-mod="pacchetti"
+                       {% if t.module_pacchetti_enabled %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <input type="date" class="date-input" data-mod="pacchetti-date"
+                     value="{{ t.module_pacchetti_activated_on or '' }}"
+                     placeholder="Data att.">
+            </div>
+          </td>
+
+          <!-- AZIONI -->
+          <td class="center" style="white-space:nowrap;">
+            <button class="save-row-btn" onclick="saveRow({{ t.idx }}, this)">Salva</button>
+            <br>
+            <button class="btn-billing" id="btn-billing-{{ t.idx }}" onclick="openBilling({{ t.idx }}, '{{ t.business_name|e }}')"><span class="billing-dot billing-dot-{{ t.compliance }}"></span>Contratto</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== BILLING MODAL ===== -->
+  <div class="modal-overlay" id="billingModal" onclick="if(event.target===this)closeBilling()">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>💳 Contratto &amp; Pagamenti — <span id="modalTitle"></span></h2>
+        <button class="modal-close" onclick="closeBilling()">×</button>
+      </div>
+
+      <div class="modal-tabs">
+        <div class="modal-tab active" onclick="switchTab('contratto')">Contratto</div>
+        <div class="modal-tab" onclick="switchTab('fatture')">Fatture</div>
+        <div class="modal-tab" onclick="switchTab('pagamenti')">Pagamenti</div>
+      </div>
+
+      <div class="modal-body">
+
+        <!-- TAB: CONTRATTO -->
+        <div class="modal-tab-pane active" id="tab-contratto">
+          <div class="owner-db-banner">
+            <label>
+              <input type="checkbox" id="b_is_owner_db" onchange="toggleOwnerDb(this.checked)">
+              🏠 Database di proprietà owner — non fatturabile (stato sempre 🟢)
+            </label>
+          </div>
+          <div id="billing-contract-fields">
+          <div class="billing-grid">
+            <div class="billing-field">
+              <label>Data attivazione utenza</label>
+              <input type="date" id="b_activation_date">
+            </div>
+            <div class="billing-field">
+              <label>Data partenza contratto</label>
+              <input type="date" id="b_contract_start_date">
+            </div>
+            <div class="billing-field">
+              <label>Totale Starter 6 mesi (€)</label>
+              <input type="number" id="b_starter_total" min="0" step="0.01" placeholder="es. 500.00">
+            </div>
+            <div class="billing-field">
+              <label>Data scadenza Starter (6 mesi)</label>
+              <input type="date" id="b_starter_expiry_date">
+            </div>
+            <div class="billing-field">
+              <label>Canone SaaS mensile (€)</label>
+              <input type="number" id="b_saas_monthly_amount" min="0" step="0.01" placeholder="es. 49.00">
+            </div>
+            <div class="billing-field">
+              <label>Prossimo rinnovo SaaS</label>
+              <input type="date" id="b_saas_next_renewal">
+            </div>
+            <div class="billing-field">
+              <label>Giorni max per pagamento <small style="color:#aaa;">(giallo→rosso)</small></label>
+              <input type="number" id="b_max_payment_days" min="1" max="180" placeholder="15" step="1">
+              <div class="api-hint">Giorni dalla data fattura entro cui il pagamento è "In attesa" (🟡). Oltre: "Scaduto" (🔴).</div>
+            </div>
+          </div>
+
+          <div class="billing-section-title">Integrazioni API</div>
+          <div class="billing-grid">
+            <div class="billing-field">
+              <label>FiscoZen Contact ID</label>
+              <input type="text" id="b_fiscozen_contact_id" placeholder="ID cliente su FiscoZen">
+              <div class="api-hint">Sarà usato per sincronizzare fatture via API FiscoZen</div>
+            </div>
+            <div class="billing-field">
+              <label>Revolut Account Ref</label>
+              <input type="text" id="b_revolut_account_ref" placeholder="Riferimento conto Revolut">
+              <div class="api-hint">Sarà usato per confronto fattura/pagamento via API Revolut</div>
+            </div>
+          </div>
+          <div class="api-placeholder">
+            🔗 <span>Sincronizzazione automatica con <strong>FiscoZen</strong> e <strong>Revolut</strong> — disponibile nella prossima versione</span>
+            <button disabled>Sincronizza</button>
+          </div>
+
+          </div><!-- /billing-contract-fields -->
+          <button class="btn-save-billing" onclick="saveBillingContract()">Salva contratto</button>
+        </div>
+
+        <!-- TAB: FATTURE -->
+        <div class="modal-tab-pane" id="tab-fatture">
+          <table class="billing-table" id="invoiceTable">
+            <thead>
+              <tr>
+                <th>N° Fattura</th>
+                <th>Data</th>
+                <th>Descrizione</th>
+                <th>Importo</th>
+                <th>Stato</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="invoiceBody"></tbody>
+          </table>
+
+          <div class="billing-section-title" style="margin-top:20px;">Aggiungi fattura</div>
+          <div class="billing-add-row" style="grid-template-columns:110px 120px 1fr 90px auto;">
+            <input type="text" id="inv_number" placeholder="N° fattura">
+            <input type="date" id="inv_date">
+            <input type="text" id="inv_desc" placeholder="Descrizione">
+            <input type="number" id="inv_amount" placeholder="€" min="0" step="0.01">
+            <button class="btn-add-small" onclick="addInvoice()">+ Aggiungi</button>
+          </div>
+          <div class="api-placeholder" style="margin-top:14px;">
+            🔗 <span><strong>FiscoZen</strong>: importazione automatica fatture emesse — prossima versione</span>
+            <button disabled>Importa da FiscoZen</button>
+          </div>
+        </div>
+
+        <!-- TAB: PAGAMENTI -->
+        <div class="modal-tab-pane" id="tab-pagamenti">
+          <table class="billing-table" id="paymentTable">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Importo</th>
+                <th>Metodo</th>
+                <th>Riferimento</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="paymentBody"></tbody>
+          </table>
+
+          <div class="billing-section-title" style="margin-top:20px;">Registra pagamento</div>
+          <div class="billing-add-row" style="grid-template-columns:120px 90px 120px 1fr auto;">
+            <input type="date" id="pay_date">
+            <input type="number" id="pay_amount" placeholder="€" min="0" step="0.01">
+            <select id="pay_method">
+              <option value="Bonifico">Bonifico</option>
+              <option value="Revolut">Revolut</option>
+              <option value="Contanti">Contanti</option>
+              <option value="Carta">Carta</option>
+              <option value="Altro">Altro</option>
+            </select>
+            <input type="text" id="pay_ref" placeholder="Riferimento / SEPA ID">
+            <button class="btn-add-small" onclick="addPayment()">+ Registra</button>
+          </div>
+          <div class="api-placeholder" style="margin-top:14px;">
+            🔗 <span><strong>Revolut</strong>: confronto automatico fattura/pagamento — prossima versione</span>
+            <button disabled>Sincronizza Revolut</button>
+          </div>
+        </div>
+
+        <!-- RIEPILOGO COMPLIANCE (sempre visibile in fondo) -->
+        <div class="compliance-summary" id="complianceSummary">
+          <div class="row"><span>Totale fatturato</span><span id="cs_invoiced">€ 0,00</span></div>
+          <div class="row"><span>Totale pagato</span><span id="cs_paid">€ 0,00</span></div>
+          <div class="row total-row">
+            <span>Saldo residuo</span>
+            <span id="cs_balance">€ 0,00</span>
+          </div>
+          <div style="margin-top:10px; text-align:center; font-weight:700;" id="cs_status"></div>
+        </div>
+
+      </div><!-- /modal-body -->
+    </div><!-- /modal-card -->
+  </div><!-- /modal-overlay -->
+
+  <!-- Sezione aggiungi nuovo cliente -->
+  <button class="btn-show-add" onclick="toggleAddForm()">➕ Aggiungi nuovo cliente</button>
+
+  <div class="add-form-card" id="addTenantForm">
+    <h3>Nuovo cliente</h3>
+    <div class="form-grid">
+      <div class="form-field">
+        <label for="new_business_name">Nome negozio *</label>
+        <input id="new_business_name" type="text" placeholder="Es. Salone Rossi">
+      </div>
+      <div class="form-field">
+        <label for="new_city">Città</label>
+        <input id="new_city" type="text" placeholder="Es. Milano">
+      </div>
+    </div>
+    <div class="form-field">
+      <label for="new_uri">Stringa di connessione PostgreSQL *</label>
+      <textarea id="new_uri" placeholder="postgresql://user:password@server.postgres.database.azure.com/nome_database"></textarea>
+      <div class="hint">Il database deve essere già creato su Azure. Includi la password nella stringa (es. <code>postgresql://utente:PASSWORD@server.postgres.database.azure.com/nome_db</code>). L'app creerà tutte le tabelle automaticamente.</div>
+    </div>
+    <div class="add-status" id="addStatus"></div>
+    <div class="form-actions">
+      <button class="btn-submit-add" id="btnAddTenant" onclick="addTenant()">Aggiungi</button>
+      <button class="btn-cancel-add" onclick="toggleAddForm()">Annulla</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    function getRowData(idx) {
+      const row = document.querySelector(`tr[data-idx="${idx}"]`);
+      function checked(mod) {
+        return row.querySelector(`input[data-mod="${mod}"]`).checked;
+      }
+      function dateVal(mod) {
+        return row.querySelector(`input[data-mod="${mod}-date"]`).value || null;
+      }
+      return {
+        module_base_enabled: checked('base'),
+        module_web_enabled: checked('web'),
+        module_pacchetti_enabled: checked('pacchetti'),
+        module_base_activated_on: dateVal('base'),
+        module_web_activated_on: dateVal('web'),
+        module_pacchetti_activated_on: dateVal('pacchetti'),
+      };
+    }
+
+    async function saveRow(idx, btn) {
+      const data = getRowData(idx);
+      btn.disabled = true;
+      btn.textContent = 'Salvo...';
+      try {
+        const resp = await fetch(`/owner-setup/save/${idx}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const json = await resp.json();
+        if (json.ok) {
+          btn.textContent = '✓ Salvato';
+          btn.classList.add('saved');
+          showToast('Impostazioni salvate per DB ' + idx);
+          setTimeout(() => {
+            btn.textContent = 'Salva';
+            btn.classList.remove('saved');
+            btn.disabled = false;
+          }, 2000);
+        } else {
+          showToast('Errore: ' + (json.error || 'sconosciuto'), true);
+          btn.textContent = 'Salva';
+          btn.disabled = false;
+        }
+      } catch (e) {
+        showToast('Errore di rete: ' + e, true);
+        btn.textContent = 'Salva';
+        btn.disabled = false;
+      }
+    }
+
+    async function revealField(spanId, idx, field, btn) {
+      const span = document.getElementById(spanId);
+      if (btn.dataset.revealed === '1') {
+        span.textContent = span.dataset.masked || span.textContent;
+        btn.textContent = field === 'uri' ? '👁 Mostra' : '👁';
+        btn.dataset.revealed = '0';
+        return;
+      }
+      try {
+        const resp = await fetch(`/owner-setup/reveal-password/${idx}`, { method: 'POST' });
+        const json = await resp.json();
+        if (json.uri) {
+          let value = json.uri;
+          if (field === 'password') {
+            const m = json.uri.match(/^[a-z][a-z0-9+\-.]*:\/\/[^:@]*:([^@]*)@/i);
+            value = m ? decodeURIComponent(m[1]) : '(nessuna)';
+          }
+          span.dataset.masked = span.textContent;
+          span.textContent = value;
+          btn.textContent = '🙈 Nascondi';
+          btn.dataset.revealed = '1';
+          setTimeout(() => {
+            span.textContent = span.dataset.masked || span.textContent;
+            btn.textContent = field === 'uri' ? '👁 Mostra' : '👁';
+            btn.dataset.revealed = '0';
+          }, 30000);
+        } else {
+          showToast('Errore: ' + (json.error || 'sconosciuto'), true);
+        }
+      } catch (e) {
+        showToast('Errore di rete', true);
+      }
+    }
+
+    // ===== BILLING MODAL =====
+    let _billingIdx = null;
+
+    function switchTab(name) {
+      document.querySelectorAll('.modal-tab').forEach((t, i) => {
+        const names = ['contratto', 'fatture', 'pagamenti'];
+        t.classList.toggle('active', names[i] === name);
+      });
+      document.querySelectorAll('.modal-tab-pane').forEach(p => {
+        p.classList.toggle('active', p.id === 'tab-' + name);
+      });
+    }
+
+    async function openBilling(idx, title) {
+      _billingIdx = idx;
+      document.getElementById('modalTitle').textContent = title;
+      document.getElementById('billingModal').classList.add('open');
+      switchTab('contratto');
+      await refreshBilling();
+    }
+
+    function closeBilling() {
+      document.getElementById('billingModal').classList.remove('open');
+      _billingIdx = null;
+    }
+
+    async function refreshBilling() {
+      if (!_billingIdx) return;
+      try {
+        const resp = await fetch(`/owner-setup/billing/${_billingIdx}`);
+        const d = await resp.json();
+        // Contratto
+        ['activation_date','contract_start_date','starter_expiry_date','starter_total',
+         'saas_monthly_amount','saas_next_renewal','max_payment_days',
+         'fiscozen_contact_id','revolut_account_ref'].forEach(f => {
+          const el = document.getElementById('b_' + f);
+          if (el) el.value = d[f] || '';
+        });
+        const ownerCk = document.getElementById('b_is_owner_db');
+        if (ownerCk) { ownerCk.checked = !!d.is_owner_db; toggleOwnerDb(ownerCk.checked); }
+        // Fatture
+        renderInvoices(d.invoices || []);
+        // Pagamenti
+        renderPayments(d.payments || []);
+        // Riepilogo
+        renderCompliance(d);
+      } catch(e) { showToast('Errore caricamento dati billing', true); }
+    }
+
+    function renderInvoices(invoices) {
+      const tb = document.getElementById('invoiceBody');
+      tb.innerHTML = '';
+      invoices.forEach(inv => {
+        const tr = document.createElement('tr');
+        const paidLabel = inv.paid
+          ? '<span style="color:#155724;font-weight:700;">✓ Pagata</span>'
+          : '<span style="color:#721c24;">✗ Non pagata</span>';
+        tr.innerHTML = `
+          <td>${escHtml(inv.number || '—')}</td>
+          <td>${escHtml(inv.date || '—')}</td>
+          <td>${escHtml(inv.description || '—')}</td>
+          <td><strong>€ ${Number(inv.amount).toFixed(2)}</strong></td>
+          <td>
+            ${paidLabel}
+            <button class="btn-toggle-paid" onclick="toggleInvoicePaid('${inv.id}')" title="Cambia stato">${inv.paid ? '↩ Segna non pagata' : '✓ Segna pagata'}</button>
+          </td>
+          <td><button class="btn-del" onclick="deleteInvoice('${inv.id}')" title="Elimina">🗑</button></td>`;
+        tb.appendChild(tr);
+      });
+      if (!invoices.length) {
+        tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:14px;">Nessuna fattura registrata</td></tr>';
+      }
+    }
+
+    function renderPayments(payments) {
+      const tb = document.getElementById('paymentBody');
+      tb.innerHTML = '';
+      payments.forEach(pay => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escHtml(pay.date || '—')}</td>
+          <td><strong>€ ${Number(pay.amount).toFixed(2)}</strong></td>
+          <td>${escHtml(pay.method || '—')}</td>
+          <td style="font-family:monospace;font-size:0.82em;">${escHtml(pay.reference || '—')}</td>
+          <td><button class="btn-del" onclick="deletePayment('${pay.id}')" title="Elimina">🗑</button></td>`;
+        tb.appendChild(tr);
+      });
+      if (!payments.length) {
+        tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:14px;">Nessun pagamento registrato</td></tr>';
+      }
+    }
+
+    function renderCompliance(d) {
+      const fmt = v => '€ ' + Number(v || 0).toFixed(2).replace('.', ',');
+      document.getElementById('cs_invoiced').textContent = fmt(d.total_invoiced);
+      document.getElementById('cs_paid').textContent = fmt(d.total_paid);
+      const bal = Number(d.balance || 0);
+      document.getElementById('cs_balance').textContent = fmt(bal);
+      document.getElementById('cs_balance').style.color = bal > 0 ? '#c0392b' : '#155724';
+      const statusEl = document.getElementById('cs_status');
+      const c = d.compliance;
+      if (c === 'owner')         statusEl.innerHTML = '<span class="badge-owner">🏠 Database Owner — nessuna fatturazione richiesta</span>';
+      else if (c === 'ok')       statusEl.innerHTML = '<span class="badge-ok">🟢 Pagamenti OK — contratto in regola</span>';
+      else if (c === 'warning')  statusEl.innerHTML = '<span class="badge-warning">🟡 In attesa pagamento — entro i termini contrattuali</span>';
+      else if (c === 'overdue')  statusEl.innerHTML = '<span class="badge-overdue">🔴 Pagamento SCADUTO — oltre il termine massimo</span>';
+      else                       statusEl.innerHTML = '<span class="badge-unconfigured">⚪ Non partito — contratto non ancora attivato</span>';
+      // Aggiorna badge e pallino nella tabella principale
+      const badge = document.getElementById('badge-' + _billingIdx);
+      if (badge) {
+        const map = {
+          owner: ['badge-owner','🏠 Owner'], ok: ['badge-ok','🟢 Pagamenti OK'],
+          warning: ['badge-warning','🟡 In attesa'], overdue: ['badge-overdue','🔴 Scaduto'],
+          unconfigured: ['badge-unconfigured','⚪ Non partito']
+        };
+        const [cls, label] = map[c] || map.unconfigured;
+        badge.className = cls;
+        badge.textContent = label;
+      }
+      // Aggiorna pallino nel pulsante Contratto
+      const btnBilling = document.getElementById('btn-billing-' + _billingIdx);
+      if (btnBilling) {
+        const dot = btnBilling.querySelector('.billing-dot');
+        if (dot) {
+          const dotMap = { ok:'billing-dot-ok', warning:'billing-dot-warning',
+                           overdue:'billing-dot-overdue', owner:'billing-dot-owner',
+                           unconfigured:'billing-dot-unconfigured' };
+          dot.className = 'billing-dot ' + (dotMap[c] || 'billing-dot-unconfigured');
+        }
+      }
+    }
+
+    function toggleOwnerDb(checked) {
+      const fields = document.getElementById('billing-contract-fields');
+      fields.style.opacity = checked ? '0.4' : '1';
+      fields.style.pointerEvents = checked ? 'none' : 'auto';
+    }
+
+    async function saveBillingContract() {
+      const fields = ['activation_date','contract_start_date','starter_expiry_date','starter_total',
+                      'saas_monthly_amount','saas_next_renewal','max_payment_days',
+                      'fiscozen_contact_id','revolut_account_ref'];
+      const data = {};
+      fields.forEach(f => { data[f] = document.getElementById('b_' + f).value || null; });
+      data.is_owner_db = document.getElementById('b_is_owner_db').checked;
+      try {
+        const resp = await fetch(`/owner-setup/billing/${_billingIdx}`, {
+          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
+        });
+        const json = await resp.json();
+        if (json.ok) { showToast('Contratto salvato'); await refreshBilling(); }
+        else showToast('Errore: ' + (json.error || ''), true);
+      } catch(e) { showToast('Errore di rete', true); }
+    }
+
+    async function addInvoice() {
+      const data = {
+        number: document.getElementById('inv_number').value.trim(),
+        date: document.getElementById('inv_date').value,
+        description: document.getElementById('inv_desc').value.trim(),
+        amount: document.getElementById('inv_amount').value,
+        paid: false
+      };
+      if (!data.amount || !data.date) { showToast('Data e importo obbligatori', true); return; }
+      try {
+        const resp = await fetch(`/owner-setup/billing/${_billingIdx}/invoice`, {
+          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
+        });
+        const json = await resp.json();
+        if (json.ok) {
+          ['inv_number','inv_date','inv_desc','inv_amount'].forEach(id => { document.getElementById(id).value = ''; });
+          await refreshBilling();
+        } else showToast('Errore: ' + (json.error || ''), true);
+      } catch(e) { showToast('Errore di rete', true); }
+    }
+
+    async function toggleInvoicePaid(invId) {
+      try {
+        await fetch(`/owner-setup/billing/${_billingIdx}/invoice/${invId}/toggle`, { method: 'POST' });
+        await refreshBilling();
+      } catch(e) { showToast('Errore di rete', true); }
+    }
+
+    async function deleteInvoice(invId) {
+      if (!confirm('Eliminare questa fattura?')) return;
+      try {
+        await fetch(`/owner-setup/billing/${_billingIdx}/invoice/${invId}`, { method: 'DELETE' });
+        await refreshBilling();
+      } catch(e) { showToast('Errore di rete', true); }
+    }
+
+    async function addPayment() {
+      const data = {
+        date: document.getElementById('pay_date').value,
+        amount: document.getElementById('pay_amount').value,
+        method: document.getElementById('pay_method').value,
+        reference: document.getElementById('pay_ref').value.trim()
+      };
+      if (!data.amount || !data.date) { showToast('Data e importo obbligatori', true); return; }
+      try {
+        const resp = await fetch(`/owner-setup/billing/${_billingIdx}/payment`, {
+          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
+        });
+        const json = await resp.json();
+        if (json.ok) {
+          ['pay_date','pay_amount','pay_ref'].forEach(id => { document.getElementById(id).value = ''; });
+          await refreshBilling();
+        } else showToast('Errore: ' + (json.error || ''), true);
+      } catch(e) { showToast('Errore di rete', true); }
+    }
+
+    async function deletePayment(payId) {
+      if (!confirm('Eliminare questo pagamento?')) return;
+      try {
+        await fetch(`/owner-setup/billing/${_billingIdx}/payment/${payId}`, { method: 'DELETE' });
+        await refreshBilling();
+      } catch(e) { showToast('Errore di rete', true); }
+    }
+
+    function toggleAddForm() {
+      const form = document.getElementById('addTenantForm');
+      const visible = form.style.display === 'block';
+      form.style.display = visible ? 'none' : 'block';
+      if (!visible) document.getElementById('new_business_name').focus();
+    }
+
+    function setAddStatus(msg, type) {
+      const el = document.getElementById('addStatus');
+      el.textContent = msg;
+      el.className = 'add-status ' + (type || '');
+    }
+
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function addRowToTable(t) {
+      const today = t.module_base_activated_on || new Date().toISOString().split('T')[0];
+      const tbody = document.querySelector('table tbody');
+      const tr = document.createElement('tr');
+      tr.dataset.idx = t.idx;
+      tr.innerHTML = `
+        <td><div class="centro-name">${escHtml(t.business_name)}</div></td>
+        <td>${escHtml(t.localita || '—')}</td>
+        <td class="center"><span style="font-family:monospace;font-size:0.95em;font-weight:700;">${t.idx}</span></td>
+        <td><span style="font-family:monospace;font-size:0.88em;">${escHtml(t.db_user)}</span></td>
+        <td class="center">
+          <span id="pwd-${t.idx}">••••••••</span>
+          <button class="reveal-btn" onclick="revealField('pwd-${t.idx}', ${t.idx}, 'password', this)">👁</button>
+        </td>
+        <td>
+          <div class="db-info" style="margin:0;">
+            <span id="uri-${t.idx}">${escHtml(t.uri_masked)}</span>
+            <button class="reveal-btn" onclick="revealField('uri-${t.idx}', ${t.idx}, 'uri', this)">👁 Mostra</button>
+          </div>
+        </td>
+        <td class="center"><span class="badge-unconfigured" id="badge-${t.idx}">⚪ Non partito</span></td>
+        <td class="center">
+          <div class="module-cell">
+            <label class="module-toggle"><input type="checkbox" class="mod-check" data-mod="base" checked><span class="slider"></span></label>
+            <input type="date" class="date-input" data-mod="base-date" value="${today}">
+          </div>
+        </td>
+        <td class="center">
+          <div class="module-cell">
+            <label class="module-toggle"><input type="checkbox" class="mod-check" data-mod="web" checked><span class="slider"></span></label>
+            <input type="date" class="date-input" data-mod="web-date" value="${today}">
+          </div>
+        </td>
+        <td class="center">
+          <div class="module-cell">
+            <label class="module-toggle"><input type="checkbox" class="mod-check" data-mod="pacchetti" checked><span class="slider"></span></label>
+            <input type="date" class="date-input" data-mod="pacchetti-date" value="${today}">
+          </div>
+        </td>
+        <td class="center" style="white-space:nowrap;">
+          <button class="save-row-btn" onclick="saveRow(${t.idx}, this)">Salva</button>
+          <br>
+          <button class="btn-billing" id="btn-billing-${t.idx}" onclick="openBilling(${t.idx}, '${escHtml(t.business_name)}')"><span class="billing-dot billing-dot-unconfigured"></span>Contratto</button>
+        </td>`;
+      tbody.appendChild(tr);
+    }
+
+    async function addTenant() {
+      const business_name = document.getElementById('new_business_name').value.trim();
+      const city = document.getElementById('new_city').value.trim();
+      const uri = document.getElementById('new_uri').value.trim();
+      const btn = document.getElementById('btnAddTenant');
+
+      if (!business_name) { setAddStatus('Nome negozio obbligatorio.', 'error'); return; }
+      if (!uri || !uri.startsWith('postgresql')) { setAddStatus('URI non valida: deve iniziare con postgresql://', 'error'); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Inizializzazione DB…';
+      setAddStatus('Connessione al database e creazione tabelle in corso…', 'loading');
+
+      try {
+        const resp = await fetch('/owner-setup/add-tenant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ business_name, city, uri })
+        });
+        const json = await resp.json();
+        if (json.ok) {
+          setAddStatus('', '');
+          addRowToTable(json);
+          document.getElementById('new_business_name').value = '';
+          document.getElementById('new_city').value = '';
+          document.getElementById('new_uri').value = '';
+          document.getElementById('addTenantForm').style.display = 'none';
+          showToast(`"${json.business_name}" aggiunto e operativo su /s/${json.idx}`);
+        } else {
+          setAddStatus('Errore: ' + (json.error || 'sconosciuto'), 'error');
+        }
+      } catch (e) {
+        setAddStatus('Errore di rete: ' + e, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Aggiungi';
+      }
+    }
+
+    function showToast(msg, isError = false) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = isError ? 'error' : '';
+      t.style.display = 'block';
+      setTimeout(() => { t.style.display = 'none'; }, 3500);
+    }
+  </script>
+</body>
+</html>

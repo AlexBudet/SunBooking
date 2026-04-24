@@ -13,12 +13,18 @@
 <a href="{{ url_for('settings.services') }}" class="neo-btn{% if request.endpoint == 'settings.services' %} active{% endif %}">Servizi</a>
 <a href="{{ url_for('settings.clients') }}" class="neo-btn{% if request.endpoint == 'settings.clients' %} active{% endif %}">Clienti</a>
 <a href="{{ url_for('settings.whatsapp') }}" class="neo-btn marketing-link{% if request.endpoint == 'settings.whatsapp' %} active{% endif %}">WhatsApp</a>
+{% if module_pacchetti_enabled %}
 <a href="{{ url_for('settings.pacchetti_settings') }}" class="neo-btn{% if request.endpoint == 'settings.pacchetti_settings' %} active{% endif %}">Pacchetti</a>
+{% endif %}
+{% if module_web_enabled %}
 <a href="{{ url_for('settings.marketing') }}" class="neo-btn{% if request.endpoint == 'settings.marketing' %} active{% endif %}">Marketing</a>
+{% endif %}
 <a href="{{ url_for('settings.business_info') }}" class="neo-btn{% if request.endpoint == 'settings.business_info' %} active{% endif %}">Info Azienda</a>
 <a href="{{ url_for('settings.help_page') }}" class="neo-btn{% if request.endpoint == 'settings.help_page' %} active{% endif %}">Centro Assistenza</a>
 {% if not (current_user and current_user.ruolo.value == 'user') %}
+  {% if module_web_enabled %}
   <a href="{{ url_for('settings.set_bookings') }}" class="neo-btn{% if request.endpoint == 'settings.set_bookings' %} active{% endif %}">Booking Web</a>
+  {% endif %}
   <a href="{{ url_for('settings.manage_users') }}" class="neo-btn{% if request.endpoint == 'settings.manage_users' %} active{% endif %}">Utenti</a>
 {% endif %}
 </div>
