@@ -68,58 +68,36 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 ⚫ **Nero a puntini, scritta in bianco** → Il cliente non si è presentato: No-Show! 😢
 🔵 **Blu** → colore tipico degli appuntamenti provenienti dal <span class="help-strong-dark">modulo opzionale Booking via Web</span>
 
-**Per cambiare stato ad un blocco appuntamento prosegui nella lettura per vedere le funzioni nascoste di ogni blocco...""",
+**Per cambiare stato ad un blocco appuntamento prosegui nella lettura per vedere le funzioni nascoste di ogni blocco...
+
+<div class="help-approfondimento-box">
+<span class="help-approfondimento-label">Approfondimenti — leggere il calendario</span><br>
+<span class="help-approfondimento-text">
+<strong>Linea rossa orizzontale</strong> → è l'indicatore dell'ora corrente, si sposta in tempo reale durante la giornata.<br>
+<strong>Ogni casella equivale a 15 minuti</strong>: quattro caselle formano un'ora. L'altezza di un blocco corrisponde alla durata del servizio.<br>
+<strong>Una colonna per ogni operatore</strong>: il nome è visibile nell'intestazione in cima alla colonna.<br>
+<strong>Cella vuota</strong>: un click apre direttamente la finestra di creazione appuntamento, precompilata con operatore e orario.
+</span>
+</div>""",
     },
 
 "calendar_block_buttons": {
     "title": "Blocco Appuntamento - I PULSANTI",
-    "content": """Qui trovi una guida unica ai pulsanti del blocco appuntamento, con distinzione tra pulsanti popup e pulsanti interni (dentro il blocco).
+    "content": """I pulsanti **popup** compaiono passando il puntatore sul blocco; i pulsanti **interni** sono sempre visibili dentro il blocco stesso.
 
-<span class="help-strong-dark help-subtitle-pill">▸ Elenco rapido: pulsanti popup (al passaggio puntatore sul blocco)</span>
-• ✂️ TOGLI E SPOSTA
-• 📋 COPIA BLOCCO
-• 🎨 IMPOSTA COLORE
-• ➕ AGGIUNGI SERVIZI
-• 📝 NOTA APPUNTAMENTO
-• € PORTA IN CASSA
-• 💬 INVIA WHATSAPP (modulo opzionale WhatsApp)
-
-<span class="help-strong-dark help-subtitle-pill">▸ Elenco rapido: pulsanti interni al blocco</span>
-• 🗑️ CESTINO (in alto a sinistra)
-• ◯ CLIENTE IN ISTITUTO (in alto a destra)
-• 👤 NOME CLIENTE (al centro)
-
-<span class="help-strong-dark help-subtitle-pill">▸ Pulsanti Popup sul blocco</span>
-<span class="help-strong-dark">✂️ TOGLI E SPOSTA</span>
-Taglia il blocco e lo trasforma in mini-blocco nel Navigator Appuntamenti. Il blocco sparisce temporaneamente dalla cella (con ombra di riferimento) e puoi riposizionarlo dove vuoi.
-
-<span class="help-strong-dark">📋 COPIA BLOCCO</span>
-Copia il blocco nel Navigator lasciando l'originale al suo posto. Utile per duplicare rapidamente lo stesso appuntamento su altre date.
-
-<span class="help-strong-dark">🎨 IMPOSTA COLORE</span>
-Cambia colore al blocco. Se il colore è chiaro/scuro, il testo si adatta automaticamente per restare leggibile.
-
-<span class="help-strong-dark">➕ AGGIUNGI SERVIZI</span>
-Apre il Navigator già precompilato con il cliente del blocco corrente, così puoi aggiungere altri servizi senza rifare la ricerca cliente.
-
-<span class="help-strong-dark">📝 NOTA APPUNTAMENTO</span>
-Aggiunge/modifica la nota del singolo appuntamento. È distinta dalle note cliente (che sono permanenti e legate all'anagrafica).
-
-<span class="help-strong-dark">€ PORTA IN CASSA</span>
-Porta in Cassa il servizio del blocco (e gli eventuali contigui dello stesso cliente) per il pagamento.
-
-<span class="help-strong-dark">💬 INVIA WHATSAPP</span>
-Disponibile solo con <span class="help-strong-dark">modulo opzionale WhatsApp</span>, invia un promemoria al cliente.
+<span class="help-strong-dark help-subtitle-pill">▸ Pulsanti popup — compaiono al passaggio del puntatore</span>
+<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-scissors"></i></span> **TOGLI E SPOSTA** — Taglia il blocco e lo deposita nel Navigator come mini-blocco. Il posto originale resta segnato da un'ombra; riposiziona il blocco dove vuoi cliccando su una cella libera.
+<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-files"></i></span> **COPIA BLOCCO** — Copia il blocco nel Navigator lasciando l'originale al suo posto. Utile per duplicare rapidamente lo stesso appuntamento su altre date o orari.
+<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-palette"></i></span> **IMPOSTA COLORE** — Apre il selettore colore del blocco. Il colore del testo si adatta automaticamente per restare leggibile su qualsiasi sfondo.
+<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-currency-euro"></i></span> **PORTA IN CASSA** — Porta in Cassa il servizio del blocco (e gli eventuali blocchi contigui dello stesso cliente) per il pagamento.
+<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-plus"></i></span> **AGGIUNGI SERVIZI** — Apre il Navigator già precompilato con il cliente del blocco, per aggiungere altri servizi senza rifare la ricerca.
+<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-pencil-square"></i></span> **NOTA APPUNTAMENTO** — Aggiunge o modifica la nota del singolo appuntamento, distinta dalle note permanenti dell'anagrafica cliente.
+<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-whatsapp"></i></span> **INVIA WHATSAPP** — Solo con il <span class="help-strong-dark">modulo opzionale WhatsApp</span>: invia un promemoria diretto al cliente.
 
 <span class="help-strong-dark help-subtitle-pill">▸ Pulsanti interni al blocco</span>
-<span class="help-strong-dark">🗑️ CESTINO</span>
-Apre il menu azioni del blocco: elimina singolo blocco, elimina gruppo contiguo (quando presente), imposta No-Show o annulla.
-
-<span class="help-strong-dark">◯ CLIENTE IN ISTITUTO</span>
-Indica che il cliente è arrivato in istituto; da qui gestisci lo stato operativo di presenza.
-
-<span class="help-strong-dark">👤 NOME CLIENTE</span>
-Con click sul nome puoi aprire la finestra per riassegnare l'appuntamento (e gli altri della stessa data) a un altro cliente.""",
+<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-trash"></i></span> **CESTINO** (in alto a sinistra) — Apre il menu azioni: elimina il singolo blocco, elimina il gruppo contiguo se presente, oppure imposta No-Show.
+<span style="display:inline-block;width:16px;height:16px;border-radius:50%;border:1px solid rgba(0,0,0,0.4);background:rgba(0,0,0,0.08);vertical-align:middle;pointer-events:none;margin-right:5px;"></span> **CLIENTE IN ISTITUTO** (pallino in alto a destra) — Clicca per mostrare che il cliente è arrivato in istituto, il cerchiò si riempirà di giallo lampeggiante. Dopo l'ora corrente, se ancora in istituto, diventerò rosso lampeggiante ma non cambierà nulla, è solo un indicatore.
+**NOME CLIENTE** (al centro del blocco) — Un click sul nome apre la finestra per riassegnare l'appuntamento (e gli altri della stessa data) a un altro cliente.""",
 },
 
 "calendar_block_click": {
