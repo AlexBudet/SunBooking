@@ -7929,6 +7929,8 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
   contentDiv.appendChild(pService);
 
   block.appendChild(contentDiv);
+  contentDiv.style.color = coloreFont;
+  contentDiv.querySelectorAll('a').forEach(a => { a.style.color = coloreFont; });
 
   if (isOffBlock) {
     const fullText = String(appointment.note || 'OFF').trim() || 'OFF';

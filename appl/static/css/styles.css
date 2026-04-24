@@ -1359,6 +1359,17 @@ body.modal-open #quarterNavigator {
     z-index: 1 !important;
 }
 
+.navigator-section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #a37a94;
+    margin-bottom: 6px;
+    margin-top: 2px;
+    user-select: none;
+}
+
 .clear-navigator-btn {
     display: none;
     padding: 4px 12px;

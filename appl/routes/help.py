@@ -60,7 +60,7 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 
     "calendar_status": {
         "title": "🎨 I colori dei blocchi appuntamento - cosa significano",
-        "content": """Ogni colore ti dice subito lo stato del blocco appunbtamento:
+        "content": """Ogni colore ti dice subito lo stato del blocco appuntamento:
 
 🟢🟤🔴🟡 **Colorato** → L'appuntamento è programmato (il colore si può modificare)
 ⚪ **Grigio chiaro, scritta in grigio** → Tutto fatto e pagato ✓
@@ -297,15 +297,15 @@ Puoi anche dividere il pagamento su più metodi! 💡""",
         "content": """La cassa si collega automaticamente agli appuntamenti!
 
 **Come funziona:**
-• Quando completi un appuntamento, puoi portare uno o più servizi associati a quel cliente cliccando sul tasto sopra al blocco "Vai in Cassa"
-• I servizi dell'appuntamento vengono caricati automaticamente
+• Quando vuoi pagare un appuntamento, clicca il tasto <span class="help-strong-dark">€ Porta in Cassa</span> che appare sopra al blocco
+• I servizi dell'appuntamento vengono caricati automaticamente nella bozza scontrino
 • Il cliente e l'operatore sono già selezionati
 
-**Per pagare un appuntamento:**
-1️⃣ Clicca sull'appuntamento nel calendario
-2️⃣ Seleziona **"Vai alla cassa"** o **"Completa e paga"**
-3️⃣ Verifica i servizi e il totale
-4️⃣ Registra il pagamento
+**Flusso completo:**
+1️⃣ Passa il mouse sul blocco appuntamento in Agenda
+2️⃣ Clicca <span class="help-strong-dark">€ Porta in Cassa</span>
+3️⃣ Verifica i servizi e imposta il metodo di pagamento
+4️⃣ Clicca <span class="help-strong-dark">Conferma</span> e poi <span class="help-strong-dark">Stampa</span>
 
 Tutto collegato, zero errori! ✨""",
     },
@@ -846,11 +846,11 @@ Questa non è la schermata dove "usi" il pacchetto: è la schermata dove lo <spa
         "title": "💬 WhatsApp: panoramica del modulo opzionale",
         "content": """La sezione <span class="help-strong-dark">WhatsApp e Marketing</span> appartiene a un <span class="help-strong-dark">modulo opzionale separato</span> rispetto al gestionale standard.
 
-Se il modulo non e' attivo:
+Se il modulo non è attivo:
 • non compaiono le funzioni di invio WhatsApp
 • non vengono mostrati i flussi automatici relativi ai messaggi
 
-Se il modulo e' attivo, puoi gestire:
+Se il modulo è attivo, puoi gestire:
 • connessione account WhatsApp Business
 • messaggi manuali e automatici
 • reminder giornalieri
@@ -869,10 +869,10 @@ Flusso base:
 4️⃣ dal telefono apri WhatsApp → Dispositivi collegati
 5️⃣ inquadra il QR
 
-Quando la connessione e' attiva, la schermata mostra lo stato collegato e il numero associato.
+Quando la connessione è attiva, la schermata mostra lo stato collegato e il numero associato.
 
 Nota operativa:
-• nella versione desktop locale sono disponibili piu' opzioni di connessione
+• nella versione desktop locale sono disponibili più opzioni di connessione
 • il telefono/account deve restare correttamente connesso per permettere gli invii
 
 <div class="help-hint-box">
@@ -890,7 +890,7 @@ I principali sono:
 • messaggio automatico alla conferma appuntamento
 • reminder giornaliero
 
-Ogni template puo' usare variabili come:
+Ogni template può usare variabili come:
 • {{nome}}
 • {{data}}
 • {{ora}}
@@ -906,7 +906,7 @@ Questo ti permette di mantenere un messaggio coerente ma personalizzato per ogni
     
     "whatsapp_auto": {
         "title": "⏰ Promemoria automatici",
-        "content": """Con il modulo attivo puoi automatizzare piu' tipi di invio.
+        "content": """Con il modulo attivo puoi automatizzare più tipi di invio.
 
 <span class="help-strong-dark">Conferma automatica</span>
 Messaggio inviato al momento della creazione appuntamento, se il flusso lo prevede.
@@ -915,7 +915,7 @@ Messaggio inviato al momento della creazione appuntamento, se il flusso lo preve
 Puoi attivare un invio automatico a orario fisso ogni giorno, usando il template dedicato.
 
 <span class="help-strong-dark">Opzione utile</span>
-Puoi anche disattivare la richiesta di conferma WhatsApp nel modal di creazione appuntamento, se vuoi un flusso piu' rapido.
+Puoi anche disattivare la richiesta di conferma WhatsApp nel modal di creazione appuntamento, se vuoi un flusso più rapido.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
@@ -925,7 +925,7 @@ Puoi anche disattivare la richiesta di conferma WhatsApp nel modal di creazione 
 
     "whatsapp_operatori": {
         "title": "👩‍💼 WhatsApp: memo turni operatori",
-        "content": """Il modulo puo' inviare automaticamente ai singoli operatori il riepilogo del turno del giorno successivo.
+        "content": """Il modulo può inviare automaticamente ai singoli operatori il riepilogo del turno del giorno successivo.
 
 Configurazioni principali:
 • attivazione generale memo turni
@@ -933,7 +933,7 @@ Configurazioni principali:
 • template messaggio operatori
 • scelta degli operatori abilitati a riceverlo
 
-E' una funzione utile per organizzare il team senza dover inviare manualmente i turni ogni sera.
+È una funzione utile per organizzare il team senza dover inviare manualmente i turni ogni sera.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
@@ -944,28 +944,28 @@ E' una funzione utile per organizzare il team senza dover inviare manualmente i 
     # ========== MARKETING ==========
     "marketing_panorama": {
         "title": "📣 Marketing: panoramica del modulo opzionale",
-        "content": """La parte Marketing e' inclusa nello stesso <span class="help-strong-dark">modulo opzionale WhatsApp</span>.
+        "content": """La parte Marketing è inclusa nello stesso <span class="help-strong-dark">modulo opzionale WhatsApp</span>.
 
 Serve a inviare campagne mirate ai clienti usando filtri e template.
 
-Non fa parte del gestionale standard: se il modulo non e' attivo, questa sezione non rientra nei flussi operativi base di Agenda e Cassa.
+Non fa parte del gestionale standard: se il modulo non è attivo, questa sezione non rientra nei flussi operativi base di Agenda e Cassa.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Definisci 2-3 campagne tipo (riattivazione, promo stagionale, fedelta') e riusale come base per risparmiare tempo.</span>
+<span class="help-hint-text">Definisci 2-3 campagne tipo (riattivazione, promo stagionale, fedeltà) e riusale come base per risparmiare tempo.</span>
 </div>""",
     },
 
     "marketing_send": {
         "title": "📣 Inviare messaggi marketing",
-        "content": """La schermata Marketing e' divisa in tre parti:
+        "content": """La schermata Marketing è divisa in tre parti:
 
 • <span class="help-strong-dark">filtri clienti</span>
 • <span class="help-strong-dark">risultati selezionabili</span>
 • <span class="help-strong-dark">template messaggio e anteprima</span>
 
 Flusso corretto:
-1️⃣ attiva uno o piu' filtri
+1️⃣ attiva uno o più filtri
 2️⃣ cerca i clienti
 3️⃣ seleziona i destinatari
 4️⃣ scegli o scrivi il template
@@ -976,10 +976,10 @@ Flusso corretto:
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Meglio una campagna ben mirata che molti invii generici. Qualita' del target prima della quantita'.</span>
+<span class="help-hint-text">Meglio una campagna ben mirata che molti invii generici. Qualità del target prima della quantità.</span>
 </div>""",
     },
-    
+
     "marketing_variables": {
         "title": "✨ Personalizzare i messaggi",
         "content": """Le variabili trasformano un messaggio generico in un messaggio personalizzato.
@@ -996,7 +996,7 @@ Variabili tipiche:
 • {{totale_visite}}
 • {{totale_speso}}
 
-Usale con criterio: poche variabili, ma ben scelte, rendono la comunicazione molto piu' efficace.
+Usale con criterio: poche variabili, ma ben scelte, rendono la comunicazione molto più efficace.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
@@ -1017,7 +1017,7 @@ Esempi di filtri presenti:
 • nuovi clienti
 • genere
 
-In piu' puoi:
+In più puoi:
 • usare template predefiniti
 • salvare i tuoi template personalizzati
 • vedere l'anteprima sul primo cliente selezionato prima dell'invio
@@ -1031,14 +1031,14 @@ In piu' puoi:
     # ========== BOOKING ONLINE ==========
     "booking_panorama": {
         "title": "🌐 Booking via Web: panoramica del modulo opzionale",
-        "content": """La sezione <span class="help-strong-dark">Booking via Web</span> e' un <span class="help-strong-dark">modulo opzionale separato</span> dal gestionale standard.
+        "content": """La sezione <span class="help-strong-dark">Booking via Web</span> è un <span class="help-strong-dark">modulo opzionale separato</span> dal gestionale standard.
 
-Se il modulo non e' attivo:
+Se il modulo non è attivo:
 • non compare il flusso prenotazioni web
 • non vengono mostrati gli elementi collegati alle prenotazioni online
 • in Agenda non compaiono gli elementi specifici del booking web
 
-Se il modulo e' attivo, puoi pubblicare servizi online, gestire regole e associare operatori prenotabili.
+Se il modulo è attivo, puoi pubblicare servizi online, gestire regole e associare operatori prenotabili.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
@@ -1056,7 +1056,7 @@ Se il modulo e' attivo, puoi pubblicare servizi online, gestire regole e associa
 4️⃣ configura le regole di prenotazione
 5️⃣ pubblica e condividi il link booking
 
-Il link puo' essere usato su sito, social, Google Business e canali del centro.
+Il link può essere usato su sito, social, Google Business e canali del centro.
 
 Questo modulo consente ai clienti di richiedere prenotazioni anche fuori dagli orari di apertura.
 
@@ -1070,15 +1070,15 @@ Questo modulo consente ai clienti di richiedere prenotazioni anche fuori dagli o
         "title": "⚙️ Regole prenotazione online",
         "content": """Le regole booking servono a proteggere l'agenda da prenotazioni online non adatte.
 
-    Regole principali disponibili:
-    • durata massima prenotabile
-    • prezzo massimo prenotabile
+Regole principali disponibili:
+• durata massima prenotabile
+• prezzo massimo prenotabile
 
-    Per ciascuna regola puoi scegliere se:
-    • mostrare solo un <span class="help-strong-dark">warning</span>
-    • oppure <span class="help-strong-dark">bloccare</span> la prenotazione
+Per ciascuna regola puoi scegliere se:
+• mostrare solo un <span class="help-strong-dark">warning</span>
+• oppure <span class="help-strong-dark">bloccare</span> la prenotazione
 
-    Inoltre puoi personalizzare il messaggio mostrato al cliente, cosi' il sito comunica chiaramente il motivo della limitazione.
+Inoltre puoi personalizzare il messaggio mostrato al cliente, così il sito comunica chiaramente il motivo della limitazione.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
@@ -1090,12 +1090,12 @@ Questo modulo consente ai clienti di richiedere prenotazioni anche fuori dagli o
         "title": "👩‍💼 Booking via Web: servizi visibili e operatori associati",
         "content": """Nel pannello Booking Web trovi una tabella servizi dedicata al modulo online.
 
-    Qui puoi decidere:
-    • se un servizio e' visibile online
-    • quanti operatori sono associati a quel servizio
-    • quali operatori possono essere prenotati dal cliente via web
+Qui puoi decidere:
+• se un servizio è visibile online
+• quanti operatori sono associati a quel servizio
+• quali operatori possono essere prenotati dal cliente via web
 
-    Questo e' un punto chiave: un servizio pubblicato online senza corretta associazione operatori non produrra' un'esperienza di prenotazione coerente.
+Questo è un punto chiave: un servizio pubblicato online senza corretta associazione operatori non produrrà un'esperienza di prenotazione coerente.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
@@ -1107,11 +1107,11 @@ Questo modulo consente ai clienti di richiedere prenotazioni anche fuori dagli o
         "title": "🧭 Booking via Web: cosa compare in Agenda e cosa no",
         "content": """Le funzioni del Booking via Web devono essere lette come <span class="help-strong-dark">aggiuntive</span> rispetto all'Agenda standard.
 
-    Se il modulo non e' attivo:
-    • non devi aspettarti la presenza di elementi dedicati al booking web
-    • la normale Agenda continua a funzionare senza icone o tabelle collegate al mondo online
+Se il modulo non è attivo:
+• non devi aspettarti la presenza di elementi dedicati al booking web
+• la normale Agenda continua a funzionare senza icone o tabelle collegate al mondo online
 
-    Se il modulo e' attivo, alcuni blocchi o pannelli possono mostrare informazioni specifiche del booking web, ma questi contenuti appartengono a questa sezione e non alla guida Agenda standard.
+Se il modulo è attivo, alcuni blocchi o pannelli possono mostrare informazioni specifiche del booking web, ma questi contenuti appartengono a questa sezione e non alla guida Agenda standard.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
