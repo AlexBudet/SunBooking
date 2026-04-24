@@ -34,7 +34,7 @@
 
 <div class="d-flex flex-row align-items-start flex-wrap" style="min-height: 400px; gap: 16px; padding: 1em;">
   <!-- Bozza Scontrino -->
-  <div style="flex: 1 1 500px; min-width: 450px; max-width: 850px;">
+  <div style="flex: 1 1 500px; min-width: 450px; max-width: 850px; position: relative;">
     <div class="card neumorphic-card h-100">
       <div class="card-body">
         <!-- Operatore -->
@@ -96,6 +96,12 @@
           </div>
         </div>
       </div>
+    </div>
+    <div id="bozzaScontrinoLabel" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-trigger="hover"
+         data-bs-html="true"
+         title="&lt;b&gt;BOZZA SCONTRINO&lt;/b&gt;&lt;br&gt;&lt;br&gt;Componi uno scontrino e manda in stampa"
+         style="margin-top: 1px; text-align: center; user-select: none;">
+      <h5 style="color: #aaa; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; margin: 0; padding: 2px 0;">BOZZA SCONTRINO</h5>
     </div>
   </div>
 
@@ -311,12 +317,14 @@
 </div>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // Inizializza tooltip per i campi operatore e cliente
+  // Inizializza tooltip per i campi operatore, cliente e label Bozza Scontrino
   if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
     const operatorInput = document.getElementById('operatorSelectInput');
     const clientInput = document.getElementById('clientSearchInputCassa');
     if (operatorInput) new bootstrap.Tooltip(operatorInput);
     if (clientInput) new bootstrap.Tooltip(clientInput);
+    const bozzaLabel = document.getElementById('bozzaScontrinoLabel');
+    if (bozzaLabel) new bootstrap.Tooltip(bozzaLabel, { container: 'body', boundary: 'window', html: true });
   }
   
   // Verifica che gli elementi esistano (solo per admin/owner)
@@ -626,7 +634,9 @@ document.addEventListener('DOMContentLoaded', function() {
   cursor: pointer;
 }
 
-.card.neumorphic-card:hover,
+.card.neumorphic-card:hover {
+  box-shadow:  4px 4px 16px #d1d9e6, -4px -4px 16px #ffffff, 0 0 0 2px #ffd60033;
+}
 .myspia-blocco:hover {
   box-shadow:  4px 4px 16px #d1d9e6, -4px -4px 16px #ffffff, 0 0 0 2px #ffd60033;
   cursor: pointer;

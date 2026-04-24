@@ -40,7 +40,12 @@
           onclick="changeQuarterHeight(5)">+</button>
 </div>
   <!-- Navigator Appuntamenti -->
-  <div id="appointmentNavigator" class="appointmentNavigator">
+  <div id="appointmentNavigator" class="appointmentNavigator"
+       data-bs-toggle="tooltip"
+       data-bs-placement="left"
+       data-bs-trigger="hover"
+       data-bs-html="true"
+       title="&lt;b&gt;NAVIGATOR APPUNTAMENTI&lt;/b&gt;&lt;br&gt;&lt;br&gt;Digita nome cliente, nome servizio e seleziona per creare blocchi da piazzare in calendario">
     <!-- Campo cerca cliente -->
     <div style="margin-bottom: 10px; position: relative;">
       <input 
@@ -98,9 +103,13 @@
 <!-- NAVIGAZIONE CALENDARIO -->
 <div class="calendar-navigation sticky-nav">
     <!-- Freccia sinistra (giorno precedente) -->
-    <a href="{{ url_for('calendar.calendar_home', date=day_before_str) }}" class="arrow-nav arrow-left">&lt;</a>
+    <a href="{{ url_for('calendar.calendar_home', date=day_before_str) }}" class="arrow-nav arrow-left"
+       data-bs-toggle="tooltip" data-bs-placement="bottom" title="Giorno precedente">&lt;</a>
     <!-- Campo data visibile con giorno della settimana -->
-    <div class="calendar-date-container">
+    <div class="calendar-date-container"
+         data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
+         data-bs-html="true"
+         title="&lt;b&gt;NAVIGATORE DATA&lt;/b&gt;&lt;br&gt;&lt;br&gt;Clicca per selezionare la data">
         <!-- DESKTOP VERSION -->
         <div id="dateNavDesktop">
             <input type="text" id="date" name="date" value="{{ selected_date_str }}" class="calendar-date-input">
@@ -115,10 +124,12 @@
         </div>
     </div>
     <!-- Freccia destra (giorno successivo) -->
-    <a href="{{ url_for('calendar.calendar_home', date=day_after_str) }}" class="arrow-nav arrow-right">&gt;</a>
+    <a href="{{ url_for('calendar.calendar_home', date=day_after_str) }}" class="arrow-nav arrow-right"
+       data-bs-toggle="tooltip" data-bs-placement="bottom" title="Giorno successivo">&gt;</a>
     <!-- Pulsante per tornare a oggi: visualizza solo se la data corrente non è quella odierna -->
     {% if selected_date_str != today_str %}
-    &nbsp;<a href="{{ url_for('calendar.calendar_home', date=today_str) }}" class="btn-today">Vai a OGGI</a>
+    &nbsp;<a href="{{ url_for('calendar.calendar_home', date=today_str) }}" class="btn-today"
+             data-bs-toggle="tooltip" data-bs-placement="bottom" title="Torna a oggi">Vai a OGGI</a>
     {% endif %}
   <!-- Pulsante Web: visibile solo se modulo WEB attivo -->
   {% if module_web_enabled %}
@@ -3242,5 +3253,43 @@ document.addEventListener('DOMContentLoaded', function() {
   color: #c0392b;
 }
 </style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const isTouch = (function() {
+    try { return localStorage.getItem('sun_touch_ui') === '1'; } catch(_) { return false; }
+  })();
+  if (isTouch || !window.bootstrap || !bootstrap.Tooltip) return;
+
+  const navTooltipEls = [
+    document.getElementById('appointmentNavigator'),
+    document.querySelector('.arrow-nav.arrow-left'),
+    document.querySelector('.arrow-nav.arrow-right'),
+    document.querySelector('.calendar-date-container'),
+    document.querySelector('.btn-today')
+  ];
+  navTooltipEls.forEach(function(el) {
+    if (!el) return;
+    try {
+      new bootstrap.Tooltip(el, {
+        container: 'body',
+        boundary: 'window',
+        html: el.dataset.bsHtml === 'true',
+        delay: { show: 700, hide: 100 }
+      });
+    } catch(_) {}
+  });
+
+  const webBtn = document.getElementById('btnWebInformatica');
+  if (webBtn) {
+    try {
+      new bootstrap.Tooltip(webBtn, {
+        container: 'body',
+        boundary: 'window',
+        html: webBtn.dataset.bsHtml === 'true'
+      });
+    } catch(_) {}
+  }
+});
+</script>
 
 {% endblock %}
