@@ -679,6 +679,37 @@
     font-weight: 600;
 }
 
+/* ========== BOX APPROFONDIMENTO ========== */
+.help-approfondimento-box {
+    background: linear-gradient(135deg, #fff1f7 0%, #fde2ee 100%);
+    border: 2px solid #f472b6;
+    border-radius: 16px;
+    display: block;
+    padding: 4px 14px 8px 14px;
+    margin: 10px 0;
+}
+
+.help-approfondimento-label {
+    font-family: 'Chalkboard SE', 'Nunito', cursive;
+    font-weight: 800;
+    font-size: 1rem;
+    color: #be185d;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: inline;
+    line-height: 1;
+}
+
+.help-approfondimento-text {
+    color: #831843;
+    font-weight: 600;
+    line-height: 1.22;
+}
+
+.help-approfondimento-box br {
+    line-height: 1;
+}
+
 /* ========== BLOCCHI TESTO + IMMAGINE INLINE ========== */
 .help-inline-block {
     display: flex;
@@ -895,7 +926,7 @@ const CATEGORY_DESCRIPTIONS = {
     "Cassa": "Gestisci da qui pagamenti e scontrini in pochi passaggi, impostando metodo di pagamento, sconti e utilizzando altri strumenti fiscali integrati.",
     "Report": "Pannelli con indicatori di performance, corrispettivi e analisi operative per leggere l'andamento del centro e prendere le decisioni migliori.",
     "Pacchetti": "Configura e controlla i pacchetti e le prepagate per i tuoi clienti: stato, utilizzo, residui e comunicazioni col cliente in un'unica sezione.",
-    "Tools": "Imposta da qui tutti i dati del gestionale: clienti, servizi, operatori, utenti e configurazioni operative del centro, oltre alla messaggistica e al marketing.",
+    "Tools": "Imposta da qui tutti i dati del gestionale: clienti, servizi, operatori, utenti e configurazioni del centro, messaggistica e marketing. Qui sotto trovi un topic per ogni sezione",
     "Generali": "Informazioni aggiuntive, note tecniche e riferimenti utili per onboarding, supporto e allineamento del team.",
     "Booking via Web": "Imposta a tuo piacimento le prenotazioni online: servizi pubblicati, regole, operatori e integrazione con l'Agenda.",
     "WhatsApp e Marketing": "Imposta da qui i messaggi manuali/automatici e le campagne mirate via Whatsapp, con template e filtri di invio.",
@@ -903,14 +934,22 @@ const CATEGORY_DESCRIPTIONS = {
 };
 
 const STATIC_BASE = "{{ url_for('static', filename='img/help/') }}";
+const WEB_BOOKING_PAGE_URL = {{ web_booking_page_url|default('', true)|tojson }};
 
 let currentCategory = null;
 let currentTopicIndex = 0;
 let searchFromCategory = null;
 
+// Alias chiavi legacy -> chiavi topic correnti, per mantenere attivi i link storici.
+const TOPIC_KEY_ALIASES = {
+    tools_users_ruoli: 'tools_tab_utenti',
+    tools_touch_updates: 'tools_tab_info_azienda'
+};
+
 function findTopicByKey(topicKey) {
+    const normalizedKey = TOPIC_KEY_ALIASES[topicKey] || topicKey;
     for (const [categoryName, catData] of Object.entries(HELP_DATA)) {
-        const topicIndex = catData.topics.findIndex(t => t.key === topicKey);
+        const topicIndex = catData.topics.findIndex(t => t.key === normalizedKey);
         if (topicIndex !== -1) {
             return { categoryName, topicIndex };
         }
@@ -1034,7 +1073,24 @@ function openCategory(categoryName, catIndex) {
     
     // Aggiorna titolo
     document.getElementById('categoryTitle').textContent = categoryName;
-    document.getElementById('categoryDescription').textContent = CATEGORY_DESCRIPTIONS[categoryName] || '';
+    const categoryDescriptionEl = document.getElementById('categoryDescription');
+    const baseDescription = CATEGORY_DESCRIPTIONS[categoryName] || '';
+    if (categoryName === 'Booking via Web' && WEB_BOOKING_PAGE_URL) {
+        const escapedDesc = String(baseDescription)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        const escapedUrl = String(WEB_BOOKING_PAGE_URL)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        categoryDescriptionEl.innerHTML = `${escapedDesc} <a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" class="help-topic-link">Apri pagina prenotazioni</a>`;
+    } else {
+        categoryDescriptionEl.textContent = baseDescription;
+    }
     
     // Genera lista topics (prime 5 visibili, il resto espandibile)
     const list = document.getElementById('topicsList');

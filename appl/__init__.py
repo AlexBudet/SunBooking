@@ -167,6 +167,46 @@ def create_app(db_uri: str | None = None):
         current_user = db.session.get(User, user_id) if user_id else None
         return dict(current_user=current_user)
 
+    # ---- CONTEXT PROCESSOR: flag moduli owner (letti da tabella OWNER) ----
+    @app.context_processor
+    def inject_module_flags():
+        try:
+            from appl.models import OWNER
+            owner_cfg = OWNER.query.first()
+            if owner_cfg:
+                return {
+                    'module_web_enabled': owner_cfg.module_web_enabled,
+                    'module_pacchetti_enabled': owner_cfg.module_pacchetti_enabled,
+                }
+        except Exception:
+            pass
+        return {
+            'module_web_enabled': True,
+            'module_pacchetti_enabled': True,
+        }
+
+    # ---- BEFORE REQUEST: blocco route se modulo disabilitato ----
+    @app.before_request
+    def enforce_module_access():
+        try:
+            from appl.models import OWNER
+            owner_cfg = OWNER.query.first()
+            if not owner_cfg:
+                return
+            path = request.path or ''
+            # Pacchetti disabilitati: blocca /pacchetti/*
+            if not owner_cfg.module_pacchetti_enabled:
+                if path.startswith('/pacchetti'):
+                    return redirect(url_for('calendar.calendar_home'))
+            # Modulo WEB disabilitato: blocca pagine WhatsApp, Marketing, Booking Web
+            if not owner_cfg.module_web_enabled:
+                blocked = ('/settings/marketing',
+                           '/settings/set_bookings', '/whatsapp_per_operatori')
+                if any(path.startswith(p) for p in blocked):
+                    return redirect(url_for('calendar.calendar_home'))
+        except Exception:
+            pass
+
 # ---- ROUTE LANDING registrata nella app factory (minima, per WSGI) ----
     _login_attempts = {}  # username -> {'count': int, 'first': timestamp}
     MAX_LOGIN_ATTEMPTS = int(os.getenv('MAX_LOGIN_ATTEMPTS', '10'))

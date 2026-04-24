@@ -369,7 +369,7 @@
                 <div class="col-md-6">
                     <label class="form-label fw-bold">Limite massimo invii giornalieri</label>
                     <div class="input-group">
-                        <input type="number" class="form-control" id="max_daily_sends" 
+                        <input type="number" class="form-control" id="max_daily_sends"
                                value="{{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 30 }}"
                                min="1" max="100">
                         <button class="btn btn-primary" type="button" id="btnSaveMaxSends">
@@ -382,6 +382,76 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- SEZIONE 4: IMMAGINI MARKETING -->
+    <div class="card mb-4 shadow-sm border-0" style="background: linear-gradient(135deg, #f8f9ff 0%, #fff3f8 100%); border: 1.5px solid #e0d7ff !important;">
+        <div class="card-body p-4">
+            <div class="row align-items-center g-4">
+
+                <!-- Icona e titolo -->
+                <div class="col-lg-1 text-center d-none d-lg-block">
+                    <div style="font-size: 3rem; line-height:1;">🖼️</div>
+                </div>
+
+                <!-- Testo principale -->
+                <div class="col-lg-7">
+                    <h5 class="fw-bold mb-1" style="color: #5a3fa0;">
+                        Vuoi aggiungere un'immagine alla tua campagna marketing?
+                    </h5>
+                    <p class="text-muted mb-3" style="font-size: 0.95rem;">
+                        Un'immagine accattivante aumenta l'impatto dei tuoi messaggi WhatsApp e rende le promozioni
+                        più riconoscibili. Tosca può supportarti su tre fronti:
+                    </p>
+                    <div class="row g-2">
+                        <div class="col-sm-4">
+                            <div class="d-flex align-items-start gap-2 p-2 bg-white rounded shadow-sm h-100">
+                                <span style="font-size:1.3rem; flex-shrink:0;">📱</span>
+                                <div>
+                                    <div class="fw-semibold" style="font-size:0.85rem;">WhatsApp Marketing</div>
+                                    <div class="text-muted" style="font-size:0.78rem;">Integrazione immagine nei messaggi di campagna</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-4">
+                            <div class="d-flex align-items-start gap-2 p-2 bg-white rounded shadow-sm h-100">
+                                <span style="font-size:1.3rem; flex-shrink:0;">🌐</span>
+                                <div>
+                                    <div class="fw-semibold" style="font-size:0.85rem;">Sito Web</div>
+                                    <div class="text-muted" style="font-size:0.78rem;">Banner, slider e promozioni visive sul tuo sito</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-4">
+                            <div class="d-flex align-items-start gap-2 p-2 bg-white rounded shadow-sm h-100">
+                                <span style="font-size:1.3rem; flex-shrink:0;">📅</span>
+                                <div>
+                                    <div class="fw-semibold" style="font-size:0.85rem;">Portale Prenotazioni</div>
+                                    <div class="text-muted" style="font-size:0.78rem;">Promozioni visibili ai clienti durante la prenotazione online</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CTA -->
+                <div class="col-lg-4 text-center">
+                    <p class="text-muted mb-3" style="font-size: 0.88rem;">
+                        Contatta il team Tosca per ricevere una consulenza gratuita e scoprire come integrare
+                        le immagini nel tuo marketing digitale.
+                    </p>
+                    <a href="mailto:alessio.budetta@gmail.com?subject=Richiesta integrazione immagini marketing&body=Ciao, vorrei informazioni su come integrare immagini nelle campagne WhatsApp marketing e nel portale prenotazioni."
+                       class="btn btn-lg w-100 fw-semibold mb-2"
+                       style="background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border: none;">
+                        <i class="bi bi-envelope me-2"></i>Richiedi supporto a Tosca
+                    </a>
+                    <small class="text-muted">
+                        <i class="bi bi-shield-check me-1 text-success"></i>Risposta entro 24h lavorative
+                    </small>
+                </div>
+
+            </div>
+        </div>
+    </div>
 
 </div>
 <br><br>

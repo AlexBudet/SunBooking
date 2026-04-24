@@ -2631,7 +2631,7 @@ def _build_operator_targets_for_tomorrow(require_phone: bool = True):
     
     return targets
 
-def _render_operator_msg(tpl: str, target: dict):
+def _render_operator_msg(tpl: str, target: dict, business_info=None):
     tpl = (tpl or "")
     
     lines = []
@@ -2669,6 +2669,8 @@ def _render_operator_msg(tpl: str, target: dict):
         .replace("{{ora_pausa}}", target.get("pausa_time") or "")
         .replace("{{pausa}}", target.get("pausa_label") or "")
         .replace("{{sezione_pausa}}", pausa_section)
+        .replace("{{sito}}", (business_info.website or "") if business_info else "")
+        .replace("{{nome_istituto}}", (business_info.business_name or "") if business_info else "")
     )
 
 @settings_bp.route('/api/operator_notifications/preview', methods=['GET'], endpoint='preview_operator_notifications')
@@ -2688,7 +2690,7 @@ def preview_operator_notifications():
     full = str(request.args.get('full', '') or '').lower() in ('1', 'true', 'yes', 'on')
     preview = []
     for t in targets:
-        msg = _render_operator_msg(tpl, t)
+        msg = _render_operator_msg(tpl, t, business_info=bi)
         item = {
             "operator_id": t["operator_id"],
             "operatore": t["operatore_nome"],
@@ -4115,17 +4117,78 @@ def convert_markdown(text):
 
 @settings_bp.route('/help')
 def help_page():
+    user_id = session.get('user_id')
+    current_user = db.session.get(User, user_id) if user_id else None
+
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    business_name = (getattr(business_info, 'business_name', '') or '').strip()
+    booking_page_url = (getattr(business_info, 'web_booking_page', '') or '').strip()
+    if booking_page_url and not re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*://', booking_page_url):
+        booking_page_url = 'https://' + booking_page_url
+
     # Converti markdown in HTML per ogni topic
     topics = {}
     for key, topic in get_all_topics().items():
+        content = convert_markdown(topic.get("content", ""))
+
+        # Link diretto alla pagina prenotazioni negozio (solo se configurata in BusinessInfo).
+        if key == 'tools_tab_booking_web' and booking_page_url:
+            import html as _html
+            safe_url = _html.escape(booking_page_url, quote=True)
+            safe_business_name = _html.escape(business_name or 'Negozio')
+            booking_link_block = (
+                f'<span class="help-strong-dark help-subtitle-pill">▸ PAGINA PRENOTAZIONI PERSONALIZZATA per {safe_business_name}</span>'
+                f'<br><a href="{safe_url}" target="_blank" rel="noopener noreferrer" class="help-topic-link">{safe_url}</a><br><br>'
+            )
+            content = booking_link_block + content
+
         topics[key] = {
             "title": topic.get("title", ""),
-            "content": convert_markdown(topic.get("content", "")),
+            "content": content,
             "image": topic.get("image"),
             "video": topic.get("video")
         }
     categories = get_topics_by_category()
-    return render_template('help.html', topics=topics, categories=categories, help_images=HELP_IMAGES)
+
+    # Per il ruolo user, nasconde sezioni Help non disponibili nell'app.
+    if current_user and current_user.ruolo.value == 'user':
+        if 'Tools' in categories:
+            categories['Tools'] = [
+                k for k in categories['Tools']
+                if k not in {'tools_tab_booking_web', 'tools_tab_utenti'}
+            ]
+        categories.pop('Booking via Web', None)
+
+    # Nasconde sezioni help se il relativo modulo è disabilitato per questo tenant.
+    try:
+        from appl.models import OWNER
+        owner_cfg = OWNER.query.first()
+        if owner_cfg:
+            if not owner_cfg.module_web_enabled:
+                categories.pop('Booking via Web', None)
+                categories.pop('WhatsApp e Marketing', None)
+                if 'Tools' in categories:
+                    categories['Tools'] = [
+                        k for k in categories['Tools']
+                        if k not in {'tools_tab_booking_web', 'tools_tab_whatsapp', 'tools_tab_marketing'}
+                    ]
+            if not owner_cfg.module_pacchetti_enabled:
+                categories.pop('Pacchetti', None)
+                if 'Tools' in categories:
+                    categories['Tools'] = [
+                        k for k in categories['Tools']
+                        if k not in {'tools_tab_pacchetti'}
+                    ]
+    except Exception:
+        pass
+
+    return render_template(
+        'help.html',
+        topics=topics,
+        categories=categories,
+        help_images=HELP_IMAGES,
+        web_booking_page_url=booking_page_url
+    )
 
 
 @settings_bp.route('/api/help/<topic>', methods=['GET'])

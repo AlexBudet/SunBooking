@@ -452,6 +452,8 @@ Qui hai il controllo totale sulla tua rubrica clienti! 📋""",
         "title": "🎁 Come creare un pacchetto",
         "content": """Questa guida copre la creazione del <span class="help-strong-dark">Pacchetto servizi</span> vero e proprio: cioè un programma a sedute che vuoi vendere a un cliente, con eventuale sconto commerciale, omaggi e piano rateale.
 
+Se vuoi prima configurare modelli e impostazioni pacchetti, vai a <span class="help-strong-dark">[[TOOLS / PACCHETTI|tools_tab_pacchetti]]</span>.
+
 <span class="help-strong-dark help-subtitle-pill">▸ CREAZIONE BASE</span>
 Flusso standard:
 1️⃣ entra in <span class="help-strong-dark">Pacchetti</span>
@@ -502,7 +504,7 @@ Più lavori bene qui, meno dovrai improvvisare quando sei con il cliente!
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">I testi e i modelli impostati in questa sezione si possono riutilizzare automaticamente durante la creazione del pacchetto, la stampa del consenso e l'invio dei memo.</span>
+<span class="help-hint-text">I testi e i modelli impostati in questa sezione si possono riutilizzare automaticamente durante la creazione del pacchetto, la stampa del consenso e l'invio dei memo. Dove presenti, i pulsanti-tag inseriscono i tag con parentesi graffe nel punto del cursore, evitando di riscriverli manualmente.</span>
 </div>""",
     },
 
@@ -831,7 +833,12 @@ Qui conviene configurare tutto ciò che poi rende il lavoro più rapido e unifor
 
 Più lavori bene in questa sezione, meno dovrai improvvisare quando sei con il cliente davanti.
 
-Questa non è la schermata dove "usi" il pacchetto: è la schermata dove lo <span class="help-strong-dark">prepari bene</span> per farlo funzionare in modo ordinato in Pacchetti, Agenda, Cassa e comunicazioni.""",
+Questa non è la schermata dove "usi" il pacchetto: è la schermata dove lo <span class="help-strong-dark">prepari bene</span> per farlo funzionare in modo ordinato in Pacchetti, Agenda, Cassa e comunicazioni.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Quando lavori sui template, usa i pulsanti-tag (se disponibili): con un click il tag con parentesi graffe viene inserito vicino al puntatore nel campo testo, così non devi riscrivere ogni variabile.</span>
+</div>""",
     },
     
     # ========== WHATSAPP ==========
@@ -893,7 +900,7 @@ Questo ti permette di mantenere un messaggio coerente ma personalizzato per ogni
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Mantieni i template brevi e chiari: una frase di conferma, data/ora e call-to-action sono spesso sufficienti.</span>
+<span class="help-hint-text">Mantieni i template brevi e chiari: una frase di conferma, data/ora e call-to-action sono spesso sufficienti. Cliccando uno dei pulsanti-tag, nel punto del cursore viene inserito automaticamente il tag completo con parentesi graffe, senza riscriverlo ogni volta.</span>
 </div>""",
     },
     
@@ -993,7 +1000,7 @@ Usale con criterio: poche variabili, ma ben scelte, rendono la comunicazione mol
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Evita template con troppe variabili: se un dato manca, il messaggio rischia di risultare meno naturale.</span>
+<span class="help-hint-text">Evita template con troppe variabili: se un dato manca, il messaggio rischia di risultare meno naturale. Cliccando uno dei pulsanti-tag, nel punto del cursore compare subito il tag con parentesi graffe, pronto da usare.</span>
 </div>""",
     },
 
@@ -1017,7 +1024,7 @@ In piu' puoi:
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Prima di inviare a molti clienti, esegui sempre un micro-test su un gruppo ristretto e controlla il testo finale.</span>
+<span class="help-hint-text">Prima di inviare a molti clienti, esegui sempre un micro-test su un gruppo ristretto e controlla il testo finale. Per compilare più velocemente i template, usa i pulsanti-tag: inseriscono i tag con parentesi graffe direttamente vicino al puntatore nel campo testo.</span>
 </div>""",
     },
     
@@ -1414,7 +1421,7 @@ Che cosa puoi fare:
 
 <span class=\"help-strong-dark\">Differenze per ruolo</span>
 • <span class=\"help-strong-dark\">user</span>: vista più limitata, senza strumenti critici
-• <span class=\"help-strong-dark\">admin/owner</span>: più strumenti, tra cui eliminazione nei casi consentiti e console RCH
+• <span class=\"help-strong-dark\">admin</span>: più strumenti, tra cui eliminazione nei casi consentiti e console RCH
 
 Nel dettaglio scontrino puoi leggere righe, metodi di pagamento, totale e stato fiscale del documento.
 
@@ -1432,7 +1439,7 @@ Nel dettaglio scontrino puoi leggere righe, metodi di pagamento, totale e stato 
 • <span class=\"help-strong-dark\">Registro DGFE</span>
 • <span class=\"help-strong-dark\">Chiusura Giornaliera</span>
 • <span class=\"help-strong-dark\">Annulla Scontrino</span>
-• <span class=\"help-strong-dark\">Console RCH</span> (solo admin/owner)
+• <span class=\"help-strong-dark\">Console RCH</span> (solo admin)
 
 Che cosa fanno:
 • DGFE: legge la memoria fiscale del giorno
@@ -1521,7 +1528,7 @@ L'export Corrispettivi è pensato proprio per essere inviato comodamente al comm
 • <span class=\"help-strong-dark\">Clienti</span>: indicatori legati alla clientela
 • <span class=\"help-strong-dark\">Operatori</span>: performance per operatore
 
-Alcuni pulsanti sono visibili solo a ruoli abilitati (admin/owner).""",
+Alcuni pulsanti sono visibili solo a ruoli abilitati (admin).""",
     },
 
     "report_esportazione_lettura": {
@@ -1540,16 +1547,398 @@ Per invii amministrativi, usa sempre la vista Corrispettivi del periodo corretto
 
     # ========== TOOLS / SETTINGS ==========
     "tools_panorama": {
-        "title": "🧰 Tools: panoramica della sezione Settings",
-        "content": """La sezione Tools raccoglie le impostazioni strutturali del gestionale:
+        "title": "🧰 Tools: guida completa tab per tab",
+        "content": """La sezione Tools (Settings) contiene tutti i tab di configurazione del gestionale. Qui sotto trovi una guida completa con <span class=\"help-strong-dark\">una sottosezione per ogni tab</span>, spiegando le varie parti visibili in pagina e il loro uso pratico.
 
-    • Operatori
-    • Servizi
-    • Clienti
-    • Info Azienda
-    • Utenti (ruoli abilitati)
+<span class=\"help-strong-dark help-subtitle-pill\">▸ OPERATORI</span>
+In questo tab gestisci l'anagrafica del team e l'operatività in agenda.
+• elenco operatori: tabella con i profili già inseriti
+• campi anagrafici: nome, colore, stato attivo/non attivo
+• visibilità in agenda: decide in quali viste compare l'operatore
+• ordine di visualizzazione: posizione delle colonne in Agenda
+• turni e memo: configurazioni utili a copertura oraria e promemoria interni
+• azioni riga: modifica o eliminazione del singolo operatore
 
-    È il punto in cui si definiscono le basi operative su cui poi lavorano Agenda, Cassa, Report e, se attivi, anche i moduli opzionali.""",
+<span class=\"help-strong-dark help-subtitle-pill\">▸ SERVIZI</span>
+Qui definisci tutto ciò che poi può essere venduto o prenotato.
+• tabella servizi: catalogo dei trattamenti presenti
+• creazione/modifica servizio: nome, durata, prezzo e descrizione
+• classificazione: categoria e sottocategoria per analisi/report
+• opzioni operative: attivo/non attivo, visibilità e ordinamento
+• pulsanti azione: salva, aggiorna, elimina
+• area ricerca/filtri (se presente): per trovare rapidamente un servizio
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ CLIENTI</span>
+Sezione dedicata alla base clienti e alla loro manutenzione.
+• ricerca clienti: per nome, telefono o altri riferimenti
+• elenco risultati: vista rapida con accesso diretto alla scheda
+• scheda cliente: dati anagrafici, contatti, note e informazioni utili
+• storico cliente: appuntamenti, passaggi e dati collegati
+• strumenti operativi: modifica, eliminazione, eventuale esportazione
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ WHATSAPP</span>
+Tab disponibile quando è attivo il modulo dedicato.
+• stato connessione: verifica se il canale è attivo
+• area configurazione: parametri di collegamento e impostazioni invio
+• template/messaggi: testi riutilizzabili per comunicazioni frequenti
+• pulsanti test/invio: controllo rapido del funzionamento
+• note operative: eventuali avvisi su modulo opzionale o permessi
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PACCHETTI</span>
+Configurazione della struttura pacchetti prima della vendita.
+• impostazioni generali: regole base dei pacchetti
+• modelli preimpostati: strutture ricorrenti pronte all'uso
+• parametri commerciali: sconti, rate, validità e logiche collegate
+• testi e note standard: contenuti ricorrenti da riutilizzare
+• controlli finali: verifica coerenza prima dell'uso in Cassa/Agenda
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ MARKETING</span>
+Tab dedicato alle comunicazioni promozionali e ai filtri contatto.
+• editor messaggio: composizione contenuti campagna
+• variabili dinamiche: personalizzazione automatica del testo
+• filtri destinatari: selezione target clienti
+• template salvati: riuso rapido di comunicazioni già pronte
+• pulsanti invio/simulazione: controllo e lancio campagna
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ INFO AZIENDA</span>
+Raccoglie i dati identificativi del centro e alcune utilità di sistema.
+• dati aziendali: ragione sociale, contatti, informazioni intestazione
+• impostazioni documentali: dati usati in stampe e riepiloghi
+• sezione aggiornamenti app: controllo versione e update (istanza locale)
+• avvisi di stato: messaggi su aggiornamento disponibile o non disponibile
+• azioni principali: salva dati e avvia controllo aggiornamenti
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ BOOKING WEB</span>
+Tab visibile ai ruoli abilitati, legato al <span class=\"help-strong-dark\">modulo opzionale Booking via Web</span>.
+• attivazione/disattivazione: gestione disponibilità prenotazione online
+• regole booking: vincoli, finestre e logiche di pubblicazione
+• associazione servizi/operatori: cosa può essere prenotato online
+• impostazioni operative: comportamento del flusso prenotazione web
+• controlli finali: verifica configurazione prima di andare online
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ UTENTI</span>
+Tab visibile ai ruoli admin per accessi e sicurezza.
+• elenco account: utenti attivi e relativi ruoli
+• creazione utente: nuovo accesso con credenziali dedicate
+• gestione ruolo: profilo user o admin in base alle responsabilità
+• azioni amministrative: reset dati accesso, disattivazione, aggiornamenti
+• principi consigliati: un account per persona, permessi minimi necessari
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ CENTRO ASSISTENZA</span>
+È il tab di supporto integrato in cui ti trovi ora.
+• home categorie: ingresso rapido per area funzionale
+• ricerca guide: campo di ricerca per parole chiave
+• vista categoria: elenco argomenti correlati
+• vista topic: pagina guida con navigazione precedente/successivo
+• utilità finali: contatto supporto e riattivazione tour guidato
+
+<div class=\"help-hint-box\">
+<span class=\"help-hint-label\">Consiglio:</span>
+<span class=\"help-hint-text\">Per una configurazione ordinata, segui questa sequenza: Operatori → Servizi → Clienti → Info Azienda → Utenti, poi completa i tab opzionali (WhatsApp, Pacchetti, Marketing, Booking Web).</span>
+</div>""",
+    },
+
+    "tools_tab_operatori": {
+        "title": "👩‍💼 OPERATORI: cosa trovi in pagina e come usarla",
+        "content": """Questo tab serve per gestire persone e risorse che compaiono in Agenda.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ FORM "AGGIUNGI OPERATORE"</span>
+Nella parte alta trovi il form di inserimento:
+• tipo operatore (estetista o macchinario/solarium)
+• nome
+• cognome (mostrato per estetista)
+• cellulare (mostrato per estetista)
+• pulsante aggiunta
+
+Il form adatta i campi in base al tipo selezionato: per i macchinari alcuni campi non sono richiesti.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ TABELLA OPERATORI</span>
+Nella tabella centrale vedi:
+• nome e cognome
+• tipo
+• cellulare (visibile in base al ruolo)
+• flag <span class=\"help-strong-dark\">Visibile in Agenda</span>
+• flag <span class=\"help-strong-dark\">Invia Memo turni</span> (quando applicabile)
+• azioni: Modifica, Elimina, Turni
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COMANDI OPERATIVI IMPORTANTI</span>
+• <span class=\"help-strong-dark\">Visibile in Agenda</span>: decide se l'operatore compare nelle colonne Agenda
+• <span class=\"help-strong-dark\">Memo turni</span>: disponibile solo in condizioni valide (operatore idoneo, visibile e con numero)
+• <span class=\"help-strong-dark\">Turni</span>: apre il modal per la gestione turni senza uscire dal tab
+
+Per il dettaglio sui turni vedi anche: <span class=\"help-strong-dark\">[[IMPOSTARE I TURNI OPERATORI|agenda_turni]]</span>.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PERMESSI</span>
+In base al ruolo, alcune azioni possono essere limitate o mostrate in sola lettura (es. modifica/eliminazione).""",
+    },
+
+    "tools_tab_servizi": {
+        "title": "💆 SERVIZI: form, tabella, descrizioni e sottocategorie",
+        "content": """Questo tab gestisce il catalogo operativo usato in Agenda, Cassa, Report e moduli opzionali.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ FORM "AGGIUNGI SERVIZIO"</span>
+Campi principali in alto:
+• nome servizio
+• abbreviazione/tag
+• durata (in minuti, inclusa opzione senza durata)
+• prezzo
+• categoria
+• sottocategoria
+• pulsante Aggiungi Servizio
+
+<span class=\"help-approfondimento-box\"><span class=\"help-approfondimento-label\">Approfondimento:</span><span class=\"help-approfondimento-text\"><br><span class=\"help-strong-dark\">1) CATEGORIE E SOTTOCATEGORIE</span><br>Le categorie ti aiutano a organizzare i servizi in macro-aree, mentre le sottocategorie servono per una classificazione più precisa (esempio: categoria Estetica, sottocategoria Manicure).<br>Usarle bene migliora velocità di ricerca, chiarezza in Cassa e lettura nei Report.<br><span class=\"help-strong-dark\">2) PRODOTTI vs SERVIZI</span><br>Un <span class=\"help-strong-dark\">servizio</span> normalmente ha durata e impatta la pianificazione Agenda.<br>Un <span class=\"help-strong-dark\">prodotto</span> non occupa tempo in Agenda (nessuna durata) ed è gestito come voce di vendita in Cassa.<br>Distinguere correttamente i due tipi evita errori in prenotazione, incasso e reportistica.</span></span>
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ RICERCA SERVIZI</span>
+Subito sotto trovi la casella di ricerca per nome o tag: utile quando il listino è ampio.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ TABELLA SERVIZI</span>
+La tabella mostra:
+• nome
+• abbreviazione
+• categoria
+• sottocategoria
+• durata
+• prezzo
+• azioni
+
+Nelle azioni trovi:
+• <span class=\"help-strong-dark\">Descrizione</span> (apre un modal editor del testo servizio)
+• <span class=\"help-strong-dark\">Modifica</span>
+• <span class=\"help-strong-dark\">Elimina</span> (eliminazione logica)
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ GESTIONE SOTTOCATEGORIE</span>
+Con il pulsante dedicato apri una sezione con:
+• form creazione sottocategoria
+• tabella sottocategorie esistenti
+• eliminazione sottocategoria
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ SCARICA LISTINO PREZZI</span>
+In fondo pagina puoi esportare il listino in TXT/PDF, con opzione per includere le descrizioni.""",
+    },
+
+    "tools_tab_clienti": {
+        "title": "👤 CLIENTI: inserimento, ricerca, note, storico e duplicati",
+        "content": """Questo tab è il centro di gestione anagrafica clienti.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ FORM "AGGIUNGI NUOVO CLIENTE"</span>
+In alto trovi il form con campi:
+• nome (obbligatorio)
+• cognome (obbligatorio)
+• cellulare (obbligatorio)
+• data di nascita
+• email
+• pulsante Aggiungi Cliente
+
+Il salvataggio applica controlli: in particolare su nome/cognome/cellulare e verifica numero già presente.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COME GESTISCE I DOPPI CELLULARI</span>
+Il sistema controlla i duplicati sul numero normalizzato (es. varianti con spazi/prefisso) e, se trova un cliente già associato, blocca l'inserimento con messaggio di avviso.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ CASELLA "CERCA CLIENTI REGISTRATI"</span>
+Nella ricerca sotto al form puoi filtrare rapidamente la tabella clienti (nome/cognome e dati utili alla selezione veloce).
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ TABELLA CLIENTI: DATI VISUALIZZATI</span>
+La tabella mostra colonne come:
+• nome, cognome, cellulare
+• email
+• data nascita
+• sesso
+• data creazione
+• passaggi
+• ultimo passaggio
+• azioni
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ AZIONI SU OGNI CLIENTE</span>
+• <span class=\"help-strong-dark\">Modifica</span>: apre la scheda di editing completa
+• <span class=\"help-strong-dark\">Elimina</span>: rimozione logica del cliente (soft delete)
+• <span class=\"help-strong-dark\">Note</span>: apre modal dedicato note cliente
+• <span class=\"help-strong-dark\">Storico</span>: apre modal appuntamenti storici del cliente
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PERMESSI</span>
+Le azioni possono variare in base al ruolo attivo (utente operativo o amministrativo). Se non hai diritti su un comando, va richiesto adeguamento permessi all'admin.""",
+    },
+
+    "tools_tab_whatsapp": {
+        "title": "💬 WHATSAPP: connessione, test e uso operativo",
+        "content": """Questo tab è dedicato al <span class=\"help-strong-dark\">modulo opzionale WhatsApp</span>.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PARTI PRINCIPALI DELLA PAGINA</span>
+• stato connessione canale
+• parametri di collegamento/configurazione
+• pulsanti di connessione/disconnessione/test
+• aree informative su stato sessione e errori
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COSA SI PUÒ FARE DA QUI</span>
+• avviare o verificare la connessione
+• controllare che il canale sia pronto all'invio
+• diagnosticare problemi di sessione
+
+Per i flussi completi di messaggistica e automazioni vai anche a:
+• <span class=\"help-strong-dark\">[[WHATSAPP: PANORAMICA|whatsapp_panorama]]</span>
+• <span class=\"help-strong-dark\">[[WHATSAPP: CONNESSIONE|whatsapp_connect]]</span>
+• <span class=\"help-strong-dark\">[[WHATSAPP: TEMPLATE|whatsapp_messaggi_template]]</span>
+• <span class=\"help-strong-dark\">[[WHATSAPP: AUTOMAZIONI|whatsapp_auto]]</span>""",
+    },
+
+    "tools_tab_pacchetti": {
+        "title": "🎁 PACCHETTI: configurazioni prima della vendita",
+        "content": """Questo tab prepara tutte le regole che poi userai quando crei e vendi pacchetti.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PARTI DELLA PAGINA</span>
+• impostazioni generali pacchetti
+• modelli e promo salvate
+• parametri commerciali e condizioni
+• sezioni di testo/controindicazioni/template
+• tooltip esplicativi sui campi più delicati
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COSA SI PUÒ FARE</span>
+• creare strutture standard riutilizzabili
+• impostare regole coerenti per vendita e gestione
+• uniformare testi e condizioni operative
+• velocizzare il lavoro in Cassa/Pacchetti
+
+Approfondimenti:
+• <span class=\"help-strong-dark\">[[TOOLS / PACCHETTI: IMPOSTAZIONI|pacchetto_settings]]</span>
+• <span class=\"help-strong-dark\">[[CONFIGURAZIONE PACCHETTI|pacchetto_tools_settings]]</span>
+• <span class=\"help-strong-dark\">[[CREARE PACCHETTO|pacchetto_create]]</span>""",
+    },
+
+    "tools_tab_marketing": {
+        "title": "📣 MARKETING: campagne, filtri e template",
+        "content": """Questo tab raccoglie gli strumenti per comunicazioni mass marketing ai clienti.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PARTI DELLA PAGINA</span>
+• editor messaggio
+• filtri destinatari
+• variabili dinamiche
+• gestione template salvati
+• pulsanti anteprima/invio
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COSA SI PUÒ FARE</span>
+• preparare messaggi promozionali riutilizzabili
+• inviare comunicazioni segmentate per target
+• personalizzare i testi con variabili cliente
+• mantenere uno storico template interno
+
+Approfondimenti:
+• <span class=\"help-strong-dark\">[[MARKETING: PANORAMICA|marketing_panorama]]</span>
+• <span class=\"help-strong-dark\">[[MARKETING: INVIO|marketing_send]]</span>
+• <span class=\"help-strong-dark\">[[MARKETING: VARIABILI|marketing_variables]]</span>
+• <span class=\"help-strong-dark\">[[MARKETING: FILTRI E TEMPLATE|marketing_filtri_template]]</span>""",
+    },
+
+    "tools_tab_info_azienda": {
+        "title": "🏢 INFO AZIENDA: dati impresa, touch e aggiornamenti",
+        "content": """Questo tab contiene i dati identificativi dell'attività e impostazioni tecniche locali.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ DATI AZIENDALI</span>
+Qui compili/aggiorni informazioni anagrafiche dell'azienda usate nel gestionale e in varie stampe.
+
+I campi aziendali sono modificabili dagli utenti con ruolo <span class=\"help-strong-dark\">admin</span>. Alcuni dati (es. <span class=\"help-strong-dark\">nome attività</span>, <span class=\"help-strong-dark\">email</span>, <span class=\"help-strong-dark\">sito web</span>) possono comparire anche nei documenti prodotti da Tosca e, se attivo il modulo online, nel sito di Booking Web visibile ai clienti.
+
+Per questo è importante inserire diciture esatte e professionali (evita abbreviazioni casuali o refusi).
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ LOGO NEGOZIO</span>
+In questa sezione puoi caricare/aggiornare il <span class=\"help-strong-dark\">logo del negozio</span>.
+
+Se è attivo il modulo Booking Web, il logo può essere mostrato anche nel sito prenotazioni cliente.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ ORARI ISTITUTO</span>
+Qui compili/aggiorni gli <span class=\"help-strong-dark\">orari di apertura e chiusura dell'istituto</span>, utilizzati nel gestionale e nelle comunicazioni ai clienti, oltre che gli orari di apertura e chiusura e le ore visualizzate nella pagina Agenda.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ STAMPANTE FISCALE: IP E PING RCH</span>
+Nel tab trovi anche i campi tecnici legati alla stampante fiscale, in particolare:
+• <span class=\"help-strong-dark\">IP stampante fiscale</span>
+• test di connessione / <span class=\"help-strong-dark\">Ping RCH</span>
+
+Questi controlli servono per verificare rapidamente se la stampante risponde in rete prima di operazioni fiscali in Cassa.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ OPZIONE TOUCH (LOCALE)</span>
+Nel tab è presente la configurazione della modalità touch per Agenda (utile su schermi touch).
+Per il dettaglio operativo: <span class=\"help-strong-dark\">[[AGENDA MODALITÀ TOUCH|agenda_touch_mode]]</span>.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ AGGIORNAMENTI APP</span>
+In questa pagina trovi anche la sezione aggiornamenti locali con controllo versione, note rilascio e avvio update.
+Trovi istruzioni e pulsanti direttamente in questa sezione della pagina.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ BUONA PRATICA</span>
+Aggiorna i dati aziendali prima di attivare nuovi moduli e pianifica gli update in orari di bassa operatività.""",
+    },
+
+    "tools_tab_centro_assistenza": {
+        "title": "🆘 CENTRO ASSISTENZA: come usare bene le guide",
+        "content": """Questo tab apre il sistema guida integrato dell'applicazione.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ HOME GUIDE</span>
+Mostra le categorie principali (Agenda, Cassa, Report, Tools, ecc.).
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ RICERCA</span>
+La barra cerca parole chiave in tutti i topic e porta direttamente al risultato utile.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ NAVIGAZIONE PER CATEGORIA</span>
+Aprendo una categoria, trovi la lista topic e puoi entrare nel dettaglio di ogni guida.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PAGINA TOPIC</span>
+Ogni guida ha:
+• titolo e contenuto
+• navigazione precedente/successivo
+• eventuale condivisione WhatsApp del topic
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ UTILITY FINALI</span>
+In home trovi anche:
+• contatto supporto
+• riattivazione tour guidato""",
+    },
+
+    "tools_tab_booking_web": {
+        "title": "🌐 BOOKING WEB: setup modulo prenotazione online",
+        "content": """Tab visibile a ruoli abilitati (admin) e legato al <span class=\"help-strong-dark\">modulo opzionale Booking via Web</span>.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PARTI DELLA PAGINA</span>
+• configurazione generale booking online
+• regole e vincoli prenotazione
+• tabella servizi pubblicabili
+• associazione operatori ai servizi pubblicati
+• controlli stato e salvataggio
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COSA SI PUÒ FARE</span>
+• decidere cosa rendere prenotabile online
+• impostare regole coerenti con Agenda interna
+• verificare che i servizi online abbiano operatori associati
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ MENU SCELTA SERVIZIO NEL BOOKING</span>
+Nel menu di scelta servizio della pagina di prenotazione vengono visualizzate anche le <span class=\"help-strong-dark\">informazioni del servizio</span>.
+Queste informazioni si inseriscono/modificano in <span class=\"help-strong-dark\">Tools / Servizi</span> (campo descrizione servizio).
+
+Approfondimenti:
+• <span class=\"help-strong-dark\">[[BOOKING WEB: SETUP|booking_setup]]</span>
+• <span class=\"help-strong-dark\">[[BOOKING WEB: REGOLE|booking_rules]]</span>
+• <span class=\"help-strong-dark\">[[BOOKING WEB: SERVIZI E OPERATORI|booking_servizi_operatori]]</span>
+&nbsp;""",
+    },
+
+    "tools_tab_utenti": {
+        "title": "👥 UTENTI: account, ruoli, password e cancellazione",
+        "content": """Questo tab è dedicato alla gestione accessi applicazione.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ TABELLA UTENTI</span>
+Mostra account esistenti con ruolo assegnato e principali azioni disponibili.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ AGGIUNTA UTENTE</span>
+Con il form dedicato puoi creare nuovi account e assegnare un ruolo.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ GESTIONE RUOLI E LIMITI</span>
+Le azioni dipendono dal ruolo di chi opera:
+• admin: permessi estesi con limiti su alcune operazioni sensibili
+• user: accesso operativo limitato
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ AZIONI DISPONIBILI</span>
+• cambio password utente
+• eliminazione account (se consentita dal ruolo)
+• revisione ruoli in ottica sicurezza
+
+Guida collegata:
+• <span class=\"help-strong-dark\">[[UTENTI, RUOLI E ACCESSI ADMIN|tools_users_ruoli]]</span>""",
     },
 
     "tools_clienti_servizi_operatori": {
@@ -1573,13 +1962,13 @@ Per invii amministrativi, usa sempre la vista Corrispettivi del periodo corretto
         "content": """Da questa area puoi configurare:
 
     • <span class="help-strong-dark">Info Azienda</span>: dati centro, informazioni usate nei documenti e nelle integrazioni
-    • <span class="help-strong-dark">Utenti</span>: creazione account e assegnazione ruolo (solo admin/owner)
+    • <span class="help-strong-dark">Utenti</span>: creazione account e assegnazione ruolo (solo admin)
 
     I ruoli influenzano ciò che ogni persona può vedere o fare, ad esempio in Cassa, Report e negli strumenti fiscali avanzati.
 
     <span class="help-strong-dark">Differenze pratiche tra ruoli</span>
     • <span class="help-strong-dark">user</span>: operatività quotidiana con funzioni limitate
-    • <span class="help-strong-dark">admin/owner</span>: accesso esteso a configurazioni, utenti, strumenti fiscali e funzioni avanzate
+    • <span class="help-strong-dark">admin</span>: accesso esteso a configurazioni, utenti, strumenti fiscali e funzioni avanzate
 
     Buona pratica CRM: assegna permessi minimi necessari per ruolo, evitando account condivisi.""",
         },
@@ -1590,7 +1979,7 @@ Per invii amministrativi, usa sempre la vista Corrispettivi del periodo corretto
 
 <span class="help-strong-dark help-subtitle-pill">▸ CHI FA COSA</span>
 • <span class="help-strong-dark">user</span>: usa il gestionale nelle attività quotidiane con accesso controllato
-• <span class="help-strong-dark">admin/owner</span>: può configurare utenti, permessi, impostazioni critiche e funzioni avanzate
+• <span class="help-strong-dark">admin</span>: può configurare utenti, permessi, impostazioni critiche e funzioni avanzate
 
 <span class="help-strong-dark help-subtitle-pill">▸ PERCHÉ È IMPORTANTE</span>
 Nei CRM moderni la separazione ruoli riduce errori, migliora audit e aumenta sicurezza dati.
@@ -1725,7 +2114,6 @@ def get_topics_by_category():
         ],
         "Pacchetti": [
             "pacchetto_panorama",
-            "pacchetto_tools_settings",
             "pacchetto_create",
             "pacchetto_memo",
             "pacchetto_pagamento",
@@ -1739,17 +2127,16 @@ def get_topics_by_category():
             "pacchetto_settings"
         ],
         "Tools": [
-            "tools_panorama",
-            "tools_clienti_servizi_operatori",
-            "tools_info_azienda_utenti",
-            "tools_users_ruoli",
-            "tools_touch_updates",
-            "tools_workflow_consigliato",
-            "client_settings",
-            "service_create",
-            "service_categories",
-            "service_vs_products",
-            "service_duration"
+            "tools_tab_operatori",
+            "tools_tab_servizi",
+            "tools_tab_clienti",
+            "tools_tab_whatsapp",
+            "tools_tab_pacchetti",
+            "tools_tab_marketing",
+            "tools_tab_info_azienda",
+            "tools_tab_centro_assistenza",
+            "tools_tab_booking_web",
+            "tools_tab_utenti"
         ],
         "Generali": [
             "generali_panorama",

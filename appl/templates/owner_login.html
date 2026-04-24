@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>TOSCA — Setup Owner Login</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 40px 20px;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+      padding: 36px 32px 28px;
+      width: 100%;
+      max-width: 400px;
+    }
+    .card-icon {
+      font-size: 2em;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    h2 {
+      text-align: center;
+      margin: 0 0 6px;
+      font-size: 1.25em;
+      color: #2f3b4b;
+    }
+    .subtitle {
+      text-align: center;
+      font-size: 0.88em;
+      color: #666;
+      margin-bottom: 22px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.9em;
+      margin-top: 14px;
+      margin-bottom: 4px;
+      color: #3a3a3a;
+    }
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #d0d0d0;
+      border-radius: 6px;
+      font-size: 1em;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus { border-color: #e72c64; }
+    .error-box {
+      background: #fdecea;
+      border: 1px solid #f5c6cb;
+      color: #611a15;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 0.9em;
+      margin-bottom: 14px;
+    }
+    button[type="submit"] {
+      width: 100%;
+      margin-top: 20px;
+      padding: 11px;
+      background: #e72c64;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1em;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button[type="submit"]:hover { background: #c01f50; }
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 16px;
+      font-size: 0.88em;
+      color: #888;
+      text-decoration: none;
+    }
+    .back-link:hover { color: #333; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-icon">⚙️</div>
+    <h2>Setup Owner</h2>
+    <p class="subtitle">Accesso riservato — inserisci le credenziali owner<br>del negozio selezionato</p>
+
+    {% if error %}
+    <div class="error-box">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" autocomplete="off">
+      <label for="username">Username owner</label>
+      <input id="username" name="username" type="text" required autofocus
+             value="{{ (request.form.username or '')|e }}">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required>
+      <button type="submit">Entra nel Setup Owner</button>
+    </form>
+    <a href="/landing-web" class="back-link">← Torna alla selezione negozio</a>
+  </div>
+</body>
+</html>

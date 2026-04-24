@@ -1010,33 +1010,44 @@ def send_to_rch():
 
     # Prepara response con info per redirect a pacchetto se necessario
     response = {"results": results, "reset_voci": True}
-    
-    # PRIORITA' 1: Redirect a prepagata se è stata attivata/ricaricata
-    if redirect_pacchetto_id:
-        response["redirect_to_pacchetto"] = redirect_pacchetto_id
-        response["prepagata_attivata"] = True
-        current_app.logger.info(f"Redirect impostato a prepagata {redirect_pacchetto_id}")
-    # PRIORITA' 2: Se c'è un pacchetto con rata modificata
-    elif pacchetto_ids_modificati:
-        pacchetto_id = list(pacchetto_ids_modificati)[0]
-        response["redirect_to_pacchetto"] = pacchetto_id
-        response["rata_importo_modificato"] = True
-    # PRIORITA' 3: Se c'era una rata, redirect al pacchetto
-    elif any(v.get('rata_id') for v in voci):
-        for v in voci:
-            if v.get('rata_id'):
-                rata = PacchettoRata.query.get(int(v['rata_id']))
-                if rata:
-                    response["redirect_to_pacchetto"] = rata.pacchetto_id
+
+    # Verifica se il modulo pacchetti è abilitato per questo tenant
+    _pacchetti_abilitati = True
+    try:
+        from appl.models import OWNER
+        _owner_cfg = OWNER.query.first()
+        if _owner_cfg:
+            _pacchetti_abilitati = bool(_owner_cfg.module_pacchetti_enabled)
+    except Exception:
+        pass
+
+    if _pacchetti_abilitati:
+        # PRIORITA' 1: Redirect a prepagata se è stata attivata/ricaricata
+        if redirect_pacchetto_id:
+            response["redirect_to_pacchetto"] = redirect_pacchetto_id
+            response["prepagata_attivata"] = True
+            current_app.logger.info(f"Redirect impostato a prepagata {redirect_pacchetto_id}")
+        # PRIORITA' 2: Se c'è un pacchetto con rata modificata
+        elif pacchetto_ids_modificati:
+            pacchetto_id = list(pacchetto_ids_modificati)[0]
+            response["redirect_to_pacchetto"] = pacchetto_id
+            response["rata_importo_modificato"] = True
+        # PRIORITA' 3: Se c'era una rata, redirect al pacchetto
+        elif any(v.get('rata_id') for v in voci):
+            for v in voci:
+                if v.get('rata_id'):
+                    rata = PacchettoRata.query.get(int(v['rata_id']))
+                    if rata:
+                        response["redirect_to_pacchetto"] = rata.pacchetto_id
+                        break
+        # PRIORITA' 4: Cerca prepagata_id o ricarica nelle voci (fallback)
+        if not response.get("redirect_to_pacchetto"):
+            for v in voci:
+                pid = v.get('prepagata_id') or v.get('ricarica_prepagata_id')
+                if pid:
+                    response["redirect_to_pacchetto"] = int(pid)
+                    current_app.logger.info(f"Redirect fallback a prepagata {pid}")
                     break
-    # PRIORITA' 4: Cerca prepagata_id o ricarica nelle voci (fallback)
-    if not response.get("redirect_to_pacchetto"):
-        for v in voci:
-            pid = v.get('prepagata_id') or v.get('ricarica_prepagata_id')
-            if pid:
-                response["redirect_to_pacchetto"] = int(pid)
-                current_app.logger.info(f"Redirect fallback a prepagata {pid}")
-                break
     
     # Salva idempotency solo se non ci sono errori nei risultati
     if idempotency_key and not any("error" in str(r).lower() for r in results):

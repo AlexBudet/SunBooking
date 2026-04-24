@@ -63,6 +63,9 @@ dist_*/**/*.exe
 # Node (se presente)
 node_modules/
 
+# Billing data — plain JSON mai in repo (esiste solo owner_billing.enc cifrato)
+owner_billing.json
+
 # File locali vari non versionati
 waitress-serve
 sviluppo/

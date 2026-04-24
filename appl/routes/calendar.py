@@ -344,7 +344,8 @@ def calendar_home():
         services=services_data,
         shifts_by_operator=shifts_by_operator,
         whatsapp_message=whatsapp_message,
-        prepagate_per_cliente=prepagate_per_cliente
+        prepagate_per_cliente=prepagate_per_cliente,
+        business_info=business_info
     )
 
 @calendar_bp.route('/api/search-services/<query>', methods=['GET'])
@@ -2378,6 +2379,14 @@ def format_data_italiana(dt):
 
 @calendar_bp.route('/send-whatsapp-auto', methods=['POST'])
 def send_whatsapp_auto():
+    try:
+        from ..models import OWNER
+        owner_cfg = OWNER.query.first()
+        if owner_cfg and not owner_cfg.module_web_enabled:
+            return jsonify({'disabled': True, 'message': 'Modulo WEB disabilitato'}), 200
+    except Exception:
+        pass
+
     data = request.get_json(force=True)
     app.logger.info(f"[WHATSAPP] Richiesta ricevuta: {data}")
     numero = data.get('numero')
@@ -2560,9 +2569,11 @@ def send_whatsapp_auto():
     except Exception:
         servizi_str = ""
 
+    # Recupera business_info per i placeholder (serve sempre, non solo se messaggio manca)
+    business_info = BusinessInfo.query.first()
+
     # Se il messaggio non è fornito, usa il template AUTOMATICO da settings
     if not messaggio:
-        business_info = BusinessInfo.query.first()
         if business_info and getattr(business_info, "whatsapp_message_auto", None):
             messaggio = business_info.whatsapp_message_auto
         else:
@@ -2576,6 +2587,8 @@ def send_whatsapp_auto():
         .replace("{{data}}", data_app_italiana or "")
         .replace("{{ora}}", ora or "")
         .replace("{{servizi}}", ("\n" + servizi_str + "\n") if servizi_str else "")
+        .replace("{{sito}}", (business_info.website or "") if business_info else "")
+        .replace("{{nome_istituto}}", (business_info.business_name or "") if business_info else "")
     )
 
     try:

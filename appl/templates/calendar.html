@@ -120,7 +120,8 @@
     {% if selected_date_str != today_str %}
     &nbsp;<a href="{{ url_for('calendar.calendar_home', date=today_str) }}" class="btn-today">Vai a OGGI</a>
     {% endif %}
-  <!-- Pulsante Web: AGGIUNGI QUI -->
+  <!-- Pulsante Web: visibile solo se modulo WEB attivo -->
+  {% if module_web_enabled %}
 <button id="btnWebInformatica"
         class="btn btn-outline-secondary"
         title="<b>PRENOTAZIONI DA WEB</b><br><br>Clicca per gestire le prenotazioni online"
@@ -136,6 +137,7 @@
     <span class="visually-hidden">appuntamenti web pendenti</span>
   </span>
 </button>
+  {% endif %}
 </div>
 </div>
 
@@ -239,6 +241,7 @@
                               {% if selected_date.strftime('%A') in closing_days %} calendar-closed{% endif %}"
                     data-operator-id="{{ operator.id }}" data-hour="{{ hour }}" data-minute="{{ quarter * 15 }}"
                     data-operator-name="{{ operator.user_nome }} {{ operator.user_cognome }}"
+                  data-operator-first-name="{{ operator.user_nome }}"
                     data-date="{{ selected_date_str }}">
                     <!-- Aggiungi gli appuntamenti solo se la cella è attiva -->
                     {% for appt in appointments if appt.operator_id == operator.id %}
@@ -299,7 +302,7 @@
             data-appointment-id="{{ appt.id }}">
       <i class="bi bi-palette"></i>
     </button>
-    {% if appt.pacchetto_seduta %}
+    {% if appt.pacchetto_seduta and module_pacchetti_enabled %}
     <button type="button" class="btn-popup pagamento vai-pacchetto" 
             title="<b>VAI AL PACCHETTO</b>. <br><br>PS: per mettere in grigio il blocco seleziona Seduta Effettuata nella schermata del pacchetto" 
             data-bs-toggle="tooltip"
@@ -932,10 +935,14 @@
 
 <script>
   window.whatsappMessageTemplate = {{ whatsapp_message|tojson }};
+  window.businessName = {{ (business_info.business_name if business_info and business_info.business_name else '')|tojson }};
+  window.businessWebsite = {{ (business_info.website if business_info and business_info.website else '')|tojson }};
+  window.modulePacchettiEnabled = {{ 'true' if module_pacchetti_enabled else 'false' }};
+  window.moduleWebEnabled = {{ 'true' if module_web_enabled else 'false' }};
 </script>
 <script>
   // Imposta l'endpoint dal url_for del blueprint (assicurati che questa riga sia prima dell'inclusione di calendar.js)
-  window.apiWhatsappSettingUrl = "{{ url_for('settings.api_whatsapp_setting') }}";
+  window.apiWhatsappSettingUrl = {% if module_web_enabled %}"{{ url_for('settings.api_whatsapp_setting') }}"{% else %}null{% endif %};
 </script>
 <script src="{{ url_for('static', filename='js/calendar.js') }}"></script>
 <script>
@@ -2224,7 +2231,7 @@ function configureMobileModalButtons(modal, block) {
     table.innerHTML = '';
     const tr = document.createElement('tr');
     
-    if (hasPacchetto) {
+    if (hasPacchetto && window.modulePacchettiEnabled !== false) {
       // Se c'è un pacchetto, mostra 3 bottoni: NOTE, COPIA, PACCHETTO
       const pacchettoId = block.getAttribute('data-pacchetto-id');
       

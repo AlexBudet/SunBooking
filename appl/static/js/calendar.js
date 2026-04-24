@@ -176,6 +176,16 @@ window.lastClickPosition = null;
 window._lastBlocksCountPerCell = window._lastBlocksCountPerCell || new Map();
 window.CLIENT_ID_BOOKING = null;
 
+function isPacchettiModuleEnabled() {
+  return window.modulePacchettiEnabled !== false;
+}
+window.isPacchettiModuleEnabled = isPacchettiModuleEnabled;
+
+function isWebModuleEnabled() {
+  return window.moduleWebEnabled !== false;
+}
+window.isWebModuleEnabled = isWebModuleEnabled;
+
 // Variabile per tracciare il pacchetto selezionato durante la creazione appuntamento
 window.pacchettoSelezionato = null;
 
@@ -290,6 +300,10 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribut
 // Controlla se stiamo arrivando da pacchetto_detail per creare una seduta
 (function checkPendingSedutaFromPacchetto() {
   try {
+    if (!isPacchettiModuleEnabled()) {
+      localStorage.removeItem('pendingSedutaFromPacchetto');
+      return;
+    }
     const pendingSedutaJSON = localStorage.getItem('pendingSedutaFromPacchetto');
     if (!pendingSedutaJSON) return;
     
@@ -481,6 +495,9 @@ fetch('/calendar/api/client-id-booking', {
 
 // Verifica se il cliente ha pacchetti con sedute disponibili per i servizi selezionati
 async function checkPacchettiDisponibili(clientId, serviceIds) {
+  if (!isPacchettiModuleEnabled()) {
+    return [];
+  }
   if (!clientId || !serviceIds || serviceIds.length === 0) {
     return [];
   }
@@ -2863,6 +2880,10 @@ document.addEventListener('DOMContentLoaded', bindNoteToggle);
 window._whatsappModalDisabledCache = null;
 
 function fetchWhatsappModalDisabled() {
+  if (!isWebModuleEnabled()) {
+    window._whatsappModalDisabledCache = true;
+    return Promise.resolve(true);
+  }
   // MOBILE: forza disabilitato
   if (window.matchMedia && window.matchMedia('(max-width: 1199.98px)').matches) {
     window._whatsappModalDisabledCache = true;
@@ -2887,6 +2908,9 @@ function fetchWhatsappModalDisabled() {
 }
 
 function chiediInvioWhatsappAuto() {
+  if (!isWebModuleEnabled()) {
+    return Promise.resolve(false);
+  }
   // MOBILE: nessuna conferma, sempre false
   if (window.matchMedia && window.matchMedia('(max-width: 1199.98px)').matches) {
     return Promise.resolve(false);
@@ -3036,6 +3060,7 @@ document.querySelectorAll('.selectable-cell').forEach(cell => {
     // Raccogli i dati dalla cella
     const operatorId = cell.getAttribute('data-operator-id');
     const operatorName = cell.getAttribute('data-operator-name') || '';
+    const operatorFirstName = cell.getAttribute('data-operator-first-name') || operatorName;
     const hour = cell.getAttribute('data-hour');
     const minute = cell.getAttribute('data-minute');
     const date = cell.getAttribute('data-date') || selectedDate;
@@ -3056,7 +3081,7 @@ function escapeHtml(v) {
 // Sostituisci i placeholder con versioni escape
 const html = template
   .replace(/{{operator_id}}/g, escapeHtml(operatorId))
-  .replace(/{{operator_name}}/g, escapeHtml(operatorName))
+  .replace(/{{operator_name}}/g, escapeHtml(operatorFirstName))
   .replace(/{{date}}/g, escapeHtml(date))
   .replace(/{{start_time}}/g, escapeHtml(start_time))
   .replace(/{{hour}}/g, escapeHtml(hour))
@@ -3072,7 +3097,7 @@ setTimeout(function() {
   const hourDisplay = document.getElementById('hour-display');
   if (hourDisplay) hourDisplay.textContent = start_time;
   const operatorDisplay = document.getElementById('operator-display');
-  if (operatorDisplay) operatorDisplay.textContent = operatorName;
+  if (operatorDisplay) operatorDisplay.textContent = operatorFirstName;
   // Eventuali input hidden aggiuntivi:
   const operatorIdInput = document.getElementById('appointmentOperatorId');
   if (operatorIdInput) operatorIdInput.value = operatorId;
@@ -3258,7 +3283,7 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
           }
           
           // Gestisci redirect a pacchetto se presente
-          if (responsePayload && responsePayload.pacchettoInfo) {
+          if (isPacchettiModuleEnabled() && responsePayload && responsePayload.pacchettoInfo) {
             const pInfo = responsePayload.pacchettoInfo;
             
             const doRedirectToPacchetto = () => {
@@ -4478,6 +4503,9 @@ function deleteAppointment(appointmentId) {
 window.deleteAppointment = deleteAppointment;
 
 async function inviaWhatsappAutoSeRichiesto(appointment, data, csrfToken) {
+  if (!isWebModuleEnabled()) {
+    return;
+  }
   let numero = (appointment && appointment.client_cellulare) ? appointment.client_cellulare : "";
   if (!numero && data && data.client_id) {
     try {
@@ -6717,7 +6745,7 @@ function renderPseudoBlocksList() {
       left.appendChild(document.createTextNode(' - '));
       
       // *** NUOVO: Aggiungi icona pacchetto se collegato a seduta ***
-      if (block.pacchettoSedutaId) {
+      if (isPacchettiModuleEnabled() && block.pacchettoSedutaId) {
         const pacchettoIcon = document.createElement('i');
         pacchettoIcon.className = 'bi bi-box-seam';
         pacchettoIcon.style.cssText = 'margin-right:4px;font-size:0.85em;opacity:0.7;';
@@ -6898,9 +6926,13 @@ async function restoreCutBlocks() {
 }
 
 function chiediInvioWhatsappNavigator() {
+  if (!isWebModuleEnabled()) {
+    return Promise.resolve(false);
+  }
   return new Promise(resolve => {
     // Rimuovi eventuale popup precedente
     const existing = document.getElementById('whatsappNavigatorConfirm');
+
     if (existing) existing.remove();
 
     // Crea il popup
@@ -7721,7 +7753,7 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
 
     const pagBtn = document.createElement('button');
     pagBtn.type = 'button';
-    const hasPacchetto = !!(pacchettoId || pacchettoSedutaId);
+    const hasPacchetto = isPacchettiModuleEnabled() && !!(pacchettoId || pacchettoSedutaId);
     pagBtn.className = hasPacchetto ? 'btn-popup pagamento vai-pacchetto' : 'btn-popup pagamento';
     pagBtn.title = hasPacchetto ? 'VAI AL PACCHETTO' : 'Porta in cassa';
     pagBtn.setAttribute('data-bs-toggle', 'tooltip');
@@ -7826,7 +7858,7 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
     assignLink.textContent = '?';
     pClient.appendChild(assignLink);
   } else {
-    if (pacchettoSedutaId || pacchettoId) {
+    if (isPacchettiModuleEnabled() && (pacchettoSedutaId || pacchettoId)) {
       const pacchettoBadge = document.createElement('i');
       pacchettoBadge.className = 'bi bi-box-seam pacchetto-badge';
       pacchettoBadge.setAttribute('data-bs-toggle', 'tooltip');
@@ -7850,7 +7882,7 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
       pClient.appendChild(pacchettoBadge);
     }
 
-    if (prepagateCards.length > 0) {
+    if (isPacchettiModuleEnabled() && prepagateCards.length > 0) {
       const prepagataBadge = document.createElement('i');
       prepagataBadge.className = 'bi bi-credit-card prepagata-badge';
       prepagataBadge.setAttribute('data-bs-toggle', 'tooltip');
@@ -11189,7 +11221,9 @@ if (ordered.length) servizi_text = ordered.map(s => `• ${s}`).join('\n');
         .replace("{{nome}}", nomeFmt)
         .replace("{{data}}", data)
         .replace("{{ora}}", ora)
-        .replace("{{servizi}}", servizi_text ? ("\n" + servizi_text + "\n") : "");
+        .replace("{{servizi}}", servizi_text ? ("\n" + servizi_text + "\n") : "")
+        .replace("{{sito}}", window.businessWebsite || "")
+        .replace("{{nome_istituto}}", window.businessName || "");
 
       const url = `https://wa.me/${numeroNorm.replace(/^\+/, '')}?text=${encodeURIComponent(testo)}`;
 
