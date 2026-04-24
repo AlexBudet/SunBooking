@@ -990,9 +990,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function updateCurrentTimeIndicator() {
     // Usa l'orario di apertura definito in business_info
-    const agendaStart = "{{ business_info.active_opening_time.strftime('%H:%M') if business_info and business_info.active_opening_time else '08:00' }}";
+    const agendaStart = "{{ opening_time.strftime('%H:%M') if opening_time else '08:00' }}";
     const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const _italyParts = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(now);
+    const currentMinutes = parseInt(_italyParts.find(p => p.type === 'hour').value) * 60 + parseInt(_italyParts.find(p => p.type === 'minute').value);
 
     // Converte l'orario di apertura in minuti
     let [startHour, startMinute] = agendaStart.split(':').map(Number);
