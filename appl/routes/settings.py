@@ -1617,6 +1617,7 @@ def whatsapp():
         whatsapp_message=whatsapp_message,
         whatsapp_message_auto=whatsapp_message_auto,
         whatsapp_message_morning=whatsapp_message_morning,
+        tpl_default=_OPERATOR_TPL_DEFAULT,
         saved=saved,
         saved_auto=saved_auto
     )
@@ -2491,6 +2492,14 @@ def whatsapp_per_operatori():
         whatsapp_message_morning=whatsapp_message_morning
     )
 
+_OPERATOR_TPL_DEFAULT = (
+    "Ciao {{operatore}},\n\n"
+    "Domani {{data}} il tuo turno sarà: {{ora_inizio}}-{{ora_fine}}\n\n"
+    "{{sezione_pausa}}"
+    "{{sezione_primo_app}}\n\n"
+    "Buon lavoro!"
+)
+
 def _normalize_for_wbiz(numero: str):
     raw = (str(numero or '')).strip().replace(' ', '')
     if not raw:
@@ -2649,7 +2658,7 @@ def _render_operator_msg(tpl: str, target: dict, business_info=None):
 
     pausa_section = ""
     if target.get("pausa_time"):
-        pausa_section = f"Pausa alle {target.get('pausa_time')}"
+        pausa_section = f"Pausa alle {target.get('pausa_time')}\n"
 
     # Sezione primo appuntamento condizionale
     primo_app_section = ""
@@ -2676,14 +2685,7 @@ def _render_operator_msg(tpl: str, target: dict, business_info=None):
 @settings_bp.route('/api/operator_notifications/preview', methods=['GET'], endpoint='preview_operator_notifications')
 def preview_operator_notifications():
     bi = BusinessInfo.query.first()
-    tpl_default = (
-    "Ciao {{operatore}},\n\n"
-    "Domani {{data}} il tuo turno sarà: {{ora_inizio}}-{{ora_fine}}\n\n"
-    "{{sezione_pausa}}"
-    "{{sezione_primo_app}}\n\n"
-    "Buon lavoro!"
-    )
-    tpl = (getattr(bi, 'operator_whatsapp_message_template', '') or tpl_default)
+    tpl = (getattr(bi, 'operator_whatsapp_message_template', '') or _OPERATOR_TPL_DEFAULT)
 
     targets = _build_operator_targets_for_tomorrow(require_phone=False)
 
