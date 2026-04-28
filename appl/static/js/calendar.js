@@ -2529,8 +2529,29 @@ function toggleNavigator() {
         // Salva stato in localStorage
         localStorage.setItem('navigatorCollapsed', 'true');
     }
+    updateNavTooltipState();
 }
 window.toggleNavigator = toggleNavigator;
+
+function updateNavTooltipState() {
+  const navEl = document.getElementById('appointmentNavigator');
+  if (!navEl || !window.bootstrap || !bootstrap.Tooltip) return;
+  const tt = bootstrap.Tooltip.getInstance(navEl);
+  if (!tt) return;
+
+  const isCollapsed = navEl.classList.contains('collapsed');
+  const hasClient   = !!(document.getElementById('clientSearchInputNav')?.value.trim());
+  const hasService  = !!(document.getElementById('serviceInputNav')?.value.trim());
+  const hasPseudoBlocks = (window.pseudoBlocks || []).length > 0;
+
+  if (!isCollapsed && !hasClient && !hasService && !hasPseudoBlocks) {
+    tt.enable();
+  } else {
+    tt.hide();
+    tt.disable();
+  }
+}
+window.updateNavTooltipState = updateNavTooltipState;
 
 /**
  * Espande il Navigator se è in stato collassato
@@ -10430,6 +10451,7 @@ function saveNavigatorState() {
   } catch (e) {
     console.warn('saveNavigatorState failed', e);
   }
+  if (typeof updateNavTooltipState === 'function') updateNavTooltipState();
 }
 
 function restoreNavigatorState() {

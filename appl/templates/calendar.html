@@ -3278,6 +3278,8 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     } catch(_) {}
   });
+  // Abilita il tooltip del navigator solo se è vuoto all'avvio
+  if (typeof updateNavTooltipState === 'function') updateNavTooltipState();
 
   const webBtn = document.getElementById('btnWebInformatica');
   if (webBtn) {
