@@ -1239,67 +1239,82 @@ addClientForm.addEventListener('submit', function(event) {
     }
   });
   
-function arrangeBlocksInCell(cell) {
-    if (!cell) return;
-
-       // Ottieni info cella
-    const cellHour = parseInt(cell.getAttribute('data-hour'), 10);
-    const cellMinute = parseInt(cell.getAttribute('data-minute'), 10);
-    const cellStart = cellHour * 60 + cellMinute;
-    const cellEnd = cellStart + 15; // quarter di 15 minuti
-
-    // Trova tutti i blocchi che OCCUPANO questa cella (anche se non partono qui)
-    const blocks = Array.from(cell.parentNode.querySelectorAll('.appointment-block'))
-        .filter(block => {
-            const blockHour = parseInt(block.getAttribute('data-hour'), 10);
-            const blockMinute = parseInt(block.getAttribute('data-minute'), 10);
-            const blockStart = blockHour * 60 + blockMinute;
-            const blockDuration = parseInt(block.getAttribute('data-duration'), 10) || 15;
-            const blockEnd = blockStart + blockDuration;
-            // Sovrapposizione: il blocco copre almeno in parte la cella
-            return blockEnd > cellStart && blockStart < cellEnd &&
-                   block.getAttribute('data-operator-id') === cell.getAttribute('data-operator-id');
+function refreshOverlapLayout(operatorId, date) {
+    const all = Array.from(document.querySelectorAll('.appointment-block'))
+        .filter(b => {
+            if (String(b.getAttribute('data-operator-id')) !== String(operatorId)) return false;
+            if (date) {
+                const blockDate = b.parentNode && b.parentNode.getAttribute
+                    ? b.parentNode.getAttribute('data-date') : null;
+                if (blockDate && blockDate !== date) return false;
+            }
+            if (b.classList.contains('note-off')) return false;
+            return true;
         });
-    
-    if (blocks.length === 0) return;
 
-    // Normalizza eventuali stili inline residui che possono lasciare nascosto il tasto WhatsApp
-    // dopo molte operazioni senza refresh.
-    blocks.forEach(block => {
-      block.querySelectorAll('.btn-popup.whatsapp-btn').forEach(btn => {
-        btn.style.removeProperty('display');
-        btn.style.removeProperty('visibility');
-        btn.style.removeProperty('pointer-events');
-      });
-      if (!(window.pseudoBlocks && window.pseudoBlocks.length > 0)) {
-        block.classList.remove('cut-mode-active');
-      }
+    all.forEach(b => {
+        b.querySelectorAll('.btn-popup.whatsapp-btn').forEach(btn => {
+            btn.style.removeProperty('display');
+            btn.style.removeProperty('visibility');
+            btn.style.removeProperty('pointer-events');
+        });
+        if (!(window.pseudoBlocks && window.pseudoBlocks.length > 0))
+            b.classList.remove('cut-mode-active');
     });
 
-    // Se c'è un solo blocco, occupa tutta la cella
-    if (blocks.length === 1) {
-        blocks[0].style.setProperty('width', '100%', 'important');
-        blocks[0].style.setProperty('left', '0%', 'important');
-        blocks[0].style.setProperty('z-index', '1', 'important');
-        blocks[0].setAttribute('data-width', '100%');
-        blocks[0].setAttribute('data-left', '0%');
-        blocks[0].setAttribute('data-zindex', '1');
-        return;
-    }
+    // Reset tutti a larghezza piena
+    all.forEach(b => {
+        b.style.setProperty('width', '100%', 'important');
+        b.style.setProperty('left', '0%', 'important');
+        b.setAttribute('data-width', '100%');
+        b.setAttribute('data-left', '0%');
+        if (!b.classList.contains('active-popup')) {
+            b.style.setProperty('z-index', '1', 'important');
+            b.setAttribute('data-zindex', '1');
+        }
+    });
 
-    // Se ci sono due blocchi o più, tutti vanno al 50%
-    for (let i = 0; i < blocks.length; i++) {
-        blocks[i].style.setProperty('width', '50%', 'important');
-        blocks[i].style.setProperty('left', (i === 0 ? '0%' : '50%'), 'important');
-        blocks[i].style.setProperty('z-index', (i + 1).toString(), 'important');
-        blocks[i].setAttribute('data-width', '50%');
-        blocks[i].setAttribute('data-left', (i === 0 ? '0%' : '50%'));
-        blocks[i].setAttribute('data-zindex', (i + 1).toString());
-    }
+    // Applica 50% a ogni coppia (o gruppo) di blocchi con almeno un quarter sovrapposto
+    all.forEach(block => {
+        const bStart = getBlockStartTime(block);
+        const bEnd   = getBlockEndTime(block);
+        const group  = all.filter(o => getBlockEndTime(o) > bStart && getBlockStartTime(o) < bEnd);
+        if (group.length <= 1) return;
+        group.sort((a, b) => {
+            const d = getBlockStartTime(a) - getBlockStartTime(b);
+            if (d !== 0) return d;
+            return (a.getAttribute('data-client-id') || '').localeCompare(b.getAttribute('data-client-id') || '');
+        });
+        const idx  = group.indexOf(block);
+        const left = idx === 0 ? '0%' : '50%';
+        block.style.setProperty('width', '50%', 'important');
+        block.style.setProperty('left',  left,  'important');
+        block.setAttribute('data-width', '50%');
+        block.setAttribute('data-left',  left);
+        if (!block.classList.contains('active-popup')) {
+            block.style.setProperty('z-index', (idx + 1).toString(), 'important');
+            block.setAttribute('data-zindex', (idx + 1).toString());
+        }
+    });
 }
-  
-  // Esponi la funzione globalmente
-  window.arrangeBlocksInCell = arrangeBlocksInCell;
+window.refreshOverlapLayout = refreshOverlapLayout;
+
+function arrangeBlocksInCell(cell) {
+    if (!cell) return;
+    const opId = cell.getAttribute('data-operator-id');
+    const date = cell.getAttribute('data-date');
+    if (opId && date) refreshOverlapLayout(opId, date);
+}
+window.arrangeBlocksInCell = arrangeBlocksInCell;
+
+function arrangeAllBlocks() {
+    const seen = new Set();
+    document.querySelectorAll('.selectable-cell').forEach(cell => {
+        const key = `${cell.getAttribute('data-operator-id')}|${cell.getAttribute('data-date')}`;
+        if (!seen.has(key)) { seen.add(key); arrangeBlocksInCell(cell); }
+    });
+}
+window.arrangeAllBlocks = arrangeAllBlocks;
 
   // Funzione per alternare lo stato di selezione del pseudoblocco
 function togglePseudoBlockSelection(event) {
@@ -1401,7 +1416,7 @@ function renderAppointmentsFromServer(appointments, date) {
     Promise.all([...promises, appointmentsPromise])
         .then(() => {
             // Applica il ridimensionamento dopo il rendering
-            arrangeBlocksInCell();
+            arrangeAllBlocks();
             // Ripristina i pseudo-blocchi
             restoreNavigatorState();
         })
@@ -3455,7 +3470,7 @@ function startCustomDragFromHandle(block, e) {
     customDraggedBlock = block;
   }
 
-  customDraggedBlock.style.zIndex = '9999';
+  customDraggedBlock.style.setProperty('z-index', '9999', 'important');
   wasDragged = false;
   customDragStartX = e.clientX;
   customDragStartY = e.clientY;
@@ -3544,11 +3559,22 @@ document.addEventListener('mouseup', async function(e) {
   window._isDraggingBlock = false;
   if (!wasDragged) return;
 
-  // Nascondi temporaneamente l'elemento per individuare la cella sottostante
+  // Nascondi il blocco trascinato e tutti i blocchi che coprono il cursore,
+  // finché elementFromPoint non restituisce la cella sottostante effettiva.
+  const tempHidden = [];
   customDraggedBlock.style.display = 'none';
-  const dropTarget = document.elementFromPoint(e.clientX, e.clientY);
-  customDraggedBlock.style.display = '';
-  
+  tempHidden.push(customDraggedBlock);
+  let dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+  let _loopGuard = 0;
+  while (dropTarget && _loopGuard++ < 20) {
+      const overBlock = dropTarget.closest('.appointment-block');
+      if (!overBlock) break;
+      overBlock.style.display = 'none';
+      tempHidden.push(overBlock);
+      dropTarget = document.elementFromPoint(e.clientX, e.clientY);
+  }
+  tempHidden.forEach(b => b.style.display = '');
+
   let newCell = dropTarget ? dropTarget.closest('.selectable-cell') : null;
   if (!newCell) {
       newCell = customDraggedBlock.__oldParent;
