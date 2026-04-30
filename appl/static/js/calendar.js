@@ -679,6 +679,7 @@ function mostraPopupSelezionePacchetto(pacchetti, callback) {
       
       // Svuota il navigator
       window.pseudoBlocks = [];
+      window.navigatorCopyMode = false;
       window.selectedClientIdNav = null;
       window.selectedClientNameNav = "";
       window.commonPseudoBlockColor = null;
@@ -4681,12 +4682,13 @@ document.addEventListener('click', function(e) {
     } else if (typeof copyAsNewPseudoBlock === 'function') {
       copyAsNewPseudoBlock(block);
     }
+    window.navigatorCopyMode = true;
 
     // Espandi Navigator se collassato
     if (typeof window.expandNavigatorIfCollapsed === 'function') {
       window.expandNavigatorIfCollapsed();
     }
-    
+
     // Marca come processato
     block.setAttribute('data-copia-mode-done', '1');
     block.removeAttribute('data-copia-mode');
@@ -4760,6 +4762,7 @@ document.addEventListener('click', function(e) {
   } else if (typeof copyAsNewPseudoBlock === 'function') {
     copyAsNewPseudoBlock(block);
   }
+  window.navigatorCopyMode = true;
 
   // Espandi Navigator se collassato
   if (typeof window.expandNavigatorIfCollapsed === 'function') {
@@ -4838,6 +4841,8 @@ async function onCutClick(e) {
   e.preventDefault();
   e.stopPropagation();
   e.stopImmediatePropagation();
+
+  window.navigatorCopyMode = false;
 
   const TOUCH = isTouchUI();
 
@@ -5181,8 +5186,9 @@ document.querySelectorAll('.appointment-block').forEach(block => {
     }
     // Non attivare popup per blocchi con cliente eliminato
     if (block.classList.contains('disable-popup')) return;
-    // === SOLO TAGLIA MODE: se ci sono pseudoBlocks, aggiungi cut-mode-active PRIMA di active-popup ===
-    if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+    // === NAVIGATOR MODE: mostra taglia o copia a seconda della modalità attiva ===
+    const _isCopyMode = window.navigatorCopyMode === true;
+    if (window.pseudoBlocks && window.pseudoBlocks.length > 0 && !_isCopyMode) {
       block.classList.add('cut-mode-active');
     }
     block.classList.add('active-popup');
@@ -5190,9 +5196,11 @@ document.querySelectorAll('.appointment-block').forEach(block => {
       block.style.zIndex = '11940';
       const tb = block.querySelector('.popup-buttons');
       if (tb) tb.style.setProperty('display', 'flex', 'important');
-      const isNavigatorMode = window.pseudoBlocks && window.pseudoBlocks.length > 0;
+      const _isStatus2 = block.getAttribute('data-status') === '2';
       block.querySelectorAll('.btn-popup').forEach(btn => {
-        const shouldShow = isNavigatorMode ? isNavigatorCutActionButton(btn) : btn.classList.contains('copia');
+        const shouldShow = (_isCopyMode || _isStatus2)
+          ? btn.classList.contains('copia')
+          : isNavigatorCutActionButton(btn);
         if (shouldShow) {
           btn.style.setProperty('display', 'inline-flex', 'important');
           btn.style.setProperty('flex', '0 0 16.6667%', 'important');
@@ -5223,7 +5231,7 @@ document.querySelectorAll('.appointment-block').forEach(block => {
     block.classList.remove('cut-mode-active');
     
     // In "solo taglia mode": nascondi popup-buttons e resetta zIndex
-    if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+    if (window.pseudoBlocks && window.pseudoBlocks.length > 0 && !window.navigatorCopyMode) {
       block.style.zIndex = '';
       const tb = block.querySelector('.popup-buttons');
       if (tb) tb.style.setProperty('display', 'none', 'important');
@@ -5266,7 +5274,7 @@ document.querySelectorAll('.popup-buttons').forEach(popup => {
     }
     if (block) {
       // Aggiungi cut-mode-active PRIMA di active-popup per bloccare CSS whatsapp
-      if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+      if (window.pseudoBlocks && window.pseudoBlocks.length > 0 && !window.navigatorCopyMode) {
         block.classList.add('cut-mode-active');
       }
       block.classList.add('active-popup');
@@ -5280,7 +5288,7 @@ document.querySelectorAll('.popup-buttons').forEach(popup => {
     }
     if (block) {
       // In taglia mode: usa timeout delay per evitare flickering se mouse ritorna al blocco
-      if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+      if (window.pseudoBlocks && window.pseudoBlocks.length > 0 && !window.navigatorCopyMode) {
         block.hidePopupTimeout = setTimeout(() => {
           block.classList.remove('active-popup');
           block.classList.remove('cut-mode-active');
@@ -5346,7 +5354,8 @@ function openDesktopPopupForBlock(block) {
     block.hidePopupTimeout = null;
   }
 
-  if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+  const _isCopyMode = window.navigatorCopyMode === true;
+  if (window.pseudoBlocks && window.pseudoBlocks.length > 0 && !_isCopyMode) {
     block.classList.add('cut-mode-active');
   }
   block.classList.add('active-popup');
@@ -5355,9 +5364,11 @@ function openDesktopPopupForBlock(block) {
     block.style.zIndex = '11940';
     const tb = block.querySelector('.popup-buttons');
     if (tb) tb.style.setProperty('display', 'flex', 'important');
-    const isNavigatorMode = window.pseudoBlocks && window.pseudoBlocks.length > 0;
+    const _isStatus2 = block.getAttribute('data-status') === '2';
     block.querySelectorAll('.btn-popup').forEach(btn => {
-      const shouldShow = isNavigatorMode ? isNavigatorCutActionButton(btn) : btn.classList.contains('copia');
+      const shouldShow = (_isCopyMode || _isStatus2)
+        ? btn.classList.contains('copia')
+        : isNavigatorCutActionButton(btn);
       if (shouldShow) {
         btn.style.setProperty('display', 'inline-flex', 'important');
         btn.style.setProperty('flex', '0 0 16.6667%', 'important');
@@ -7479,6 +7490,7 @@ Promise.all(requests)
     const pseudoBlocksData = [...window.pseudoBlocks];
     console.log("pseudoBlocksData prima del ciclo:", pseudoBlocksData); // [1]
     window.pseudoBlocks = [];
+    window.navigatorCopyMode = false;
     renderPseudoBlocksList();
     
     // Importante: salviamo la cella originale prima di modificarla
@@ -9644,6 +9656,7 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
   window.selectedClientIdNav = null;
   window.selectedClientNameNav = "";
   window.pseudoBlocks = [];
+  window.navigatorCopyMode = false;
   window.commonPseudoBlockColor = null;
   window.originBlockColor = null;
   window.addServiceStatus = undefined;
