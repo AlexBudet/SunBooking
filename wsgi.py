@@ -3,7 +3,7 @@ import os
 import re
 from urllib.parse import urlparse
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, redirect, url_for, request, session
+from flask import Flask, jsonify, render_template, redirect, url_for, request, session, send_from_directory
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from waitress import serve
 from appl import create_app, db
@@ -113,6 +113,14 @@ def root_redirect_to_selected_db():
             target = f"{target}?{q}"
         return redirect(target, code=307)  # preserva POST/PUT/DELETE
     return None
+
+@root_app.route('/favicon.ico')
+def root_favicon():
+    return send_from_directory(
+        os.path.join(base_dir, 'appl', 'static', 'img'),
+        'favicon.ico',
+        mimetype='image/vnd.microsoft.icon'
+    )
 
 @root_app.route('/')
 def root():
