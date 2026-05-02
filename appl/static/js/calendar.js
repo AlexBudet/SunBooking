@@ -4639,15 +4639,44 @@ if (!numero) {
 
 // COPIA - LISTENER DELEGATO (funziona su bottoni esistenti E creati dinamicamente)
 document.addEventListener('click', function(e) {
-  const button = e.target.closest('.appointment-block .popup-buttons .btn-popup.copia');
+  let button = e.target.closest('.appointment-block .popup-buttons .btn-popup.copia');
+
+  // Fallback: se pointer-events ha deviato il click al blocco sottostante (CSS inheritance),
+  // verifica se il click è visivamente posizionato su un btn-popup.copia visibile
+  if (!button && window.pseudoBlocks && window.pseudoBlocks.length > 0) {
+    try {
+      // Cerca in TUTTI i popup-buttons del documento: il popup è posizionato bottom:100%
+      // quindi visivamente sopra il blocco, e e.target può atterrare sul blocco in alto,
+      // non sul blocco il cui popup è stato cliccato.
+      const allPopupBars = document.querySelectorAll('.appointment-block:not(.note-off) .popup-buttons');
+      for (const pb of allPopupBars) {
+        const pbr = pb.getBoundingClientRect();
+        if (pbr.width > 0 && pbr.height > 0 &&
+            e.clientX >= pbr.left && e.clientX <= pbr.right &&
+            e.clientY >= pbr.top  && e.clientY <= pbr.bottom) {
+          const copiaBtn = pb.querySelector('.btn-popup.copia');
+          if (copiaBtn) {
+            const br = copiaBtn.getBoundingClientRect();
+            if (br.width > 0 &&
+                e.clientX >= br.left && e.clientX <= br.right &&
+                e.clientY >= br.top  && e.clientY <= br.bottom) {
+              button = copiaBtn;
+              break;
+            }
+          }
+        }
+      }
+    } catch(_) {}
+  }
+
   if (!button) return;
-  
+
   const block = button.closest('.appointment-block');
   if (!block) return;
 
   // ESCLUDI blocchi OFF: hanno logica separata (copia diretta in touch-ui.js)
   if (block.classList.contains('note-off')) return;
-  
+
   e.preventDefault();
   e.stopPropagation();
   e.stopImmediatePropagation();
@@ -4779,40 +4808,50 @@ document.addEventListener('click', function(e) {
   // Chiudi TUTTI i tooltip Bootstrap
   document.querySelectorAll('.tooltip').forEach(t => t.remove());
 
-  // === APRI SOLO COPIA SUI BLOCCHI CONTIGUI (SOLO TOUCH-UI) ===
+  // === APRI COPIA SUI CONTIGUI (TOUCH ONLY) ===
+  // In desktop il popup appare su hover: ogni click successivo rientra già nel branch normale.
+  // In touch è necessario aprire esplicitamente il popup e marcare i blocchi con data-copia-mode.
   const isTouchUI = (() => {
     try { return localStorage.getItem('sun_touch_ui') === '1' || document.body.classList.contains('touch-ui'); }
     catch(e) { return false; }
   })();
-  
+
   if (isTouchUI) {
-    const contiguousBlocks = typeof getRelevantBlocks === 'function' 
-      ? getRelevantBlocks(block) 
+    // Touch: apri esplicitamente il popup copia sui blocchi contigui
+    const contiguousBlocks = typeof getRelevantBlocks === 'function'
+      ? getRelevantBlocks(block)
       : [block];
-    
     const otherBlocks = contiguousBlocks.filter(b => b !== block);
-    
     if (otherBlocks.length > 0) {
       otherBlocks.forEach(otherBlock => {
-        // Usa la funzione touch-ui
         if (typeof window.openTouchPopupForBlockCopiaOnly === 'function') {
           window.openTouchPopupForBlockCopiaOnly(otherBlock);
         }
       });
-      
-      // Auto-reset dopo 8 secondi
-      setTimeout(() => {
-        document.querySelectorAll('[data-copia-mode]').forEach(ob => {
-          ob.removeAttribute('data-copia-mode');
-          if (typeof window.closeAllPopups === 'function') {
-            window.closeAllPopups();
-          } else {
-            ob.classList.remove('active-popup');
-            ob.style.zIndex = '100';
-          }
-        });
-      }, 8000);
     }
+
+    // Touch: marca TUTTI i blocchi rimanenti con data-copia-mode
+    document.querySelectorAll('.appointment-block').forEach(b => {
+      if (b !== block && !b.hasAttribute('data-copia-mode-done')) {
+        b.setAttribute('data-copia-mode', '1');
+      }
+    });
+
+    // Auto-reset dopo 8 secondi
+    setTimeout(() => {
+      document.querySelectorAll('[data-copia-mode]').forEach(ob => {
+        ob.removeAttribute('data-copia-mode');
+        if (typeof window.closeAllPopups === 'function') {
+          window.closeAllPopups();
+        } else {
+          ob.classList.remove('active-popup');
+          ob.style.zIndex = '100';
+        }
+      });
+      document.querySelectorAll('[data-copia-mode-done]').forEach(ob => {
+        ob.removeAttribute('data-copia-mode-done');
+      });
+    }, 8000);
   }
 }, true); // CAPTURE PHASE - intercetta PRIMA degli altri handler!
   
@@ -5195,7 +5234,10 @@ document.querySelectorAll('.appointment-block').forEach(block => {
     if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
       block.style.zIndex = '11940';
       const tb = block.querySelector('.popup-buttons');
-      if (tb) tb.style.setProperty('display', 'flex', 'important');
+      if (tb) {
+        tb.style.setProperty('display', 'flex', 'important');
+        tb.style.setProperty('pointer-events', 'auto', 'important');
+      }
       const _isStatus2 = block.getAttribute('data-status') === '2';
       block.querySelectorAll('.btn-popup').forEach(btn => {
         const shouldShow = (_isCopyMode || _isStatus2)
@@ -5488,6 +5530,11 @@ document.addEventListener('pointerdown', function(e) {
     }
   })();
   if (isTouchUi) return;
+
+  // In copy/cut mode (pseudoBlocks active) non resettare gli stili inline al pointerdown:
+  // reset rimuove display:none dai bottoni nascosti → tutti i bottoni appaiono nella griglia →
+  // il bottone copia si sposta → al mouseup il click atterra su un elemento diverso.
+  if (window.pseudoBlocks && window.pseudoBlocks.length > 0) return;
 
   const trg = e.target.closest('.appointment-block .btn-popup, .appointment-block .delete-icon, .appointment-block .resize-handle, .appointment-block .drag-handle');
   if (!trg) return;
@@ -9380,6 +9427,24 @@ document.addEventListener('click', function(e) {
 
   const clickedBlock = e.target.closest('.appointment-block:not(.note-off)');
   if (!clickedBlock) return;
+
+  // Non intercettare click che cadono visivamente su una barra popup-buttons visibile.
+  // Anche se pointer-events:none ha deviato e.target al blocco sottostante,
+  // il click va ai gestori del popup button (copia/taglia/ecc.), non al posizionamento.
+  try {
+    // Cerca in TUTTI i popup-buttons del documento: il popup è posizionato bottom:100%
+    // quindi visivamente sopra il blocco, e clickedBlock potrebbe essere il blocco in alto
+    // mentre il popup appartiene al blocco sottostante. Query globale per trovare il match corretto.
+    const popupBars = document.querySelectorAll('.appointment-block .popup-buttons, .appointment-block .popup-buttons-bottom');
+    for (const pb of popupBars) {
+      const r = pb.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0 &&
+          e.clientX >= r.left && e.clientX <= r.right &&
+          e.clientY >= r.top  && e.clientY <= r.bottom) {
+        return;
+      }
+    }
+  } catch(_) {}
 
   const targetCell = clickedBlock.closest('.selectable-cell');
   if (!targetCell) return;
