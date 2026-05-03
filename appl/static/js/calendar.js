@@ -5,6 +5,58 @@
     const S_PREV = 'sun_touch_ui_prev';
 
 // =============================================================
+//   TAP-VS-DRAG GATE (globale): scarta i click sintetizzati da
+//   iOS/Android dopo uno scroll o un long-press. Un click viene
+//   considerato "tap valido" solo se il pointer si è mosso < 10px
+//   e il tempo tra pointerdown e pointerup è < 200ms.
+// =============================================================
+(function installTapVsDragGate(){
+  if (window.__tapVsDragGateInstalled) return;
+  window.__tapVsDragGateInstalled = true;
+
+  const MAX_MOVE_PX = 10;
+  const MAX_PRESS_MS = 200;
+
+  let startX = 0, startY = 0, startT = 0;
+  let lastWasInvalidTap = false;
+
+  document.addEventListener('pointerdown', function(e){
+    if (e.pointerType === 'mouse') {
+      lastWasInvalidTap = false;
+      return;
+    }
+    startX = e.clientX;
+    startY = e.clientY;
+    startT = e.timeStamp || Date.now();
+    lastWasInvalidTap = false;
+  }, true);
+
+  document.addEventListener('pointerup', function(e){
+    if (e.pointerType === 'mouse') {
+      lastWasInvalidTap = false;
+      return;
+    }
+    const dx = Math.abs(e.clientX - startX);
+    const dy = Math.abs(e.clientY - startY);
+    const dt = (e.timeStamp || Date.now()) - startT;
+    lastWasInvalidTap = (dx + dy > MAX_MOVE_PX) || (dt > MAX_PRESS_MS);
+  }, true);
+
+  document.addEventListener('pointercancel', function(e){
+    if (e.pointerType === 'mouse') return;
+    lastWasInvalidTap = true;
+  }, true);
+
+  document.addEventListener('click', function(e){
+    if (!lastWasInvalidTap) return;
+    lastWasInvalidTap = false;
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+  }, true);
+})();
+
+// =============================================================
 //   CONTROLLO CONFLITTI RISORSE SERVIZI (BLOCCO)
 // =============================================================
 
