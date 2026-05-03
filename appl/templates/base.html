@@ -36,6 +36,23 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>TOSCA</title>
         <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
+
+        <!-- PWA: icone Apple e Android -->
+        <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
+        <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='img/icon-192.png') }}">
+        <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='img/icon-512.png') }}">
+
+        <!-- PWA: manifest -->
+        <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+
+        <!-- PWA: meta iOS / fullscreen / barra di stato -->
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="SunBooking">
+        <meta name="application-name" content="SunBooking">
+        <meta name="theme-color" content="#87647c">
+
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-datepicker@1.10.0/dist/css/bootstrap-datepicker.min.css">
