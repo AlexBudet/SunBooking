@@ -191,7 +191,11 @@ def find_user_in_all_tenants(username, password):
                             label = bi.business_name
                     except Exception:
                         pass
-                    matches.append({'idx': int(idx), 'user_id': int(user.id), 'label': label})
+                    try:
+                        role_val = user.ruolo.value if hasattr(user.ruolo, 'value') else str(user.ruolo)
+                    except Exception:
+                        role_val = ''
+                    matches.append({'idx': int(idx), 'user_id': int(user.id), 'label': label, 'role': role_val})
         except Exception:
             continue
     return matches
@@ -376,9 +380,11 @@ def landing_web():
             'label': m['label'],
             'url': f"/select-db/{m['idx']}",
         } for m in allowed]
+        is_owner = any((m.get('role') or '').lower() == 'owner' for m in allowed)
         return render_template('landing_web.html',
                                db_links=links,
                                root_user=root_user,
+                               is_owner=is_owner,
                                hide_cassa=True)
 
     # Altrimenti: form di login
