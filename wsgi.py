@@ -105,7 +105,11 @@ secret = os.getenv('SECRET_KEY') or os.urandom(24)
 use_https = os.getenv('USE_HTTPS', 'false').lower() in ('1', 'true', 'yes')
 
 base_templates = os.path.join(base_dir, 'appl', 'templates')
-root_app = Flask('sunbooking_root', template_folder=base_templates)
+base_static = os.path.join(base_dir, 'appl', 'static')
+root_app = Flask('sunbooking_root',
+                 template_folder=base_templates,
+                 static_folder=base_static,
+                 static_url_path='/static')
 root_app.secret_key = secret
 
 # La root_app non ha Flask-WTF inizializzato: forniamo un csrf_token() no-op
@@ -115,7 +119,7 @@ root_app.jinja_env.globals['csrf_token'] = lambda: ''
 @root_app.before_request
 def root_redirect_to_selected_db():
     path = request.path or '/'
-    if path in ('/', '/landing-web', '/landing-logout') or path.startswith('/select-db/') or path.startswith('/s/') or path.startswith('/owner'):
+    if path in ('/', '/landing-web', '/landing-logout') or path.startswith('/select-db/') or path.startswith('/s/') or path.startswith('/owner') or path.startswith('/static/') or path.startswith('/apple-touch-icon'):
         return None
     dbidx = request.cookies.get('dbidx', '').strip()
     if dbidx and dbidx.isdigit():
