@@ -365,15 +365,25 @@ def create_app(db_uri: str | None = None):
             user = None
         if not user:
             return None
+        # Preserva la sessione root (selezione negozi) attraverso il clear,
+        # così dopo il logout dal child l'utente torna alla scelta negozi senza re-login.
+        preserved_root_user = session.get('root_user')
+        preserved_root_allowed = session.get('root_allowed')
         session.clear()
+        if preserved_root_user is not None:
+            session['root_user'] = preserved_root_user
+        if preserved_root_allowed is not None:
+            session['root_allowed'] = preserved_root_allowed
         session['user_id'] = user_id_token
         session['from_root_landing'] = True
-        # Redirect alla stessa URL ripulita dal parametro
+        # Redirect alla stessa URL ripulita dal parametro.
+        # IMPORTANTE: includere request.script_root (SCRIPT_NAME del mount, es. "/s/1")
+        # altrimenti il redirect andrebbe alla root sbagliata e ripartirebbe il loop di login.
         from urllib.parse import urlencode
         args = request.args.to_dict(flat=True)
         args.pop('_autologin', None)
         clean_qs = urlencode(args)
-        clean_url = request.path + (('?' + clean_qs) if clean_qs else '')
+        clean_url = (request.script_root or '') + request.path + (('?' + clean_qs) if clean_qs else '')
         return redirect(clean_url)
 
     # ---- LOGIN REQUIRED su tutte le route (eccetto whitelist) ----
