@@ -238,6 +238,12 @@ def create_app(db_uri: str | None = None):
     @csrf.exempt
     @app.route('/', methods=['GET', 'POST'])
     def landing():
+        # Se l'utente è già loggato (es. auto-login da landing root), vai diretto al calendario
+        if request.method == 'GET' and session.get('user_id'):
+            try:
+                return redirect(url_for('calendar.calendar_home'))
+            except Exception:
+                pass
         attempts_count = 0
         reset_email = ''
         try:
@@ -330,8 +336,45 @@ def create_app(db_uri: str | None = None):
     # ---- ROUTE LOGOUT registrata nella app factory (minima, per WSGI) ----
     @app.route('/logout')
     def logout():
-        session.pop('user_id', None)
+        came_from_root = session.get('from_root_landing', False)
+        session.clear()
+        if came_from_root:
+            # Torna alla selezione negozi root (la sessione root resta valida)
+            return redirect('/landing-web')
         return redirect(url_for('landing'))
+
+    # ---- AUTO-LOGIN: consume token monouso emesso dalla landing root ----
+    @app.before_request
+    def consume_autologin_token():
+        token = request.args.get('_autologin')
+        if not token:
+            return None
+        try:
+            from appl.autologin import consume_token
+            result = consume_token(token)
+        except Exception:
+            result = None
+        if not result:
+            return None
+        idx_token, user_id_token = result
+        # Verifica che l'utente esista in questo DB (sicurezza extra)
+        try:
+            from appl.models import User as _U
+            user = db.session.get(_U, user_id_token)
+        except Exception:
+            user = None
+        if not user:
+            return None
+        session.clear()
+        session['user_id'] = user_id_token
+        session['from_root_landing'] = True
+        # Redirect alla stessa URL ripulita dal parametro
+        from urllib.parse import urlencode
+        args = request.args.to_dict(flat=True)
+        args.pop('_autologin', None)
+        clean_qs = urlencode(args)
+        clean_url = request.path + (('?' + clean_qs) if clean_qs else '')
+        return redirect(clean_url)
 
     # ---- LOGIN REQUIRED su tutte le route (eccetto whitelist) ----
     @app.before_request

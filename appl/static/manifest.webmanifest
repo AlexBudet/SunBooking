@@ -2,7 +2,7 @@
   "name": "SunBooking",
   "short_name": "SunBooking",
   "description": "Gestionale prenotazioni per centri estetici",
-  "start_url": "/",
+  "start_url": "/landing-web",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
