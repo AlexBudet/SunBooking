@@ -9,7 +9,6 @@ from waitress import serve
 from appl import create_app, db
 from appl.models import BusinessInfo
 from appl.autologin import issue_token as autologin_issue
-import threading
 import time as time_mod
 import json
 import uuid
@@ -199,6 +198,19 @@ def root_favicon():
         os.path.join(base_dir, 'appl', 'static', 'img'),
         'favicon.ico',
         mimetype='image/vnd.microsoft.icon'
+    )
+
+# iOS cerca apple-touch-icon all'origine del sito (non sotto /static).
+# Esponiamo gli alias per evitare il fallback "S" quando si "Aggiungi a Home".
+@root_app.route('/apple-touch-icon.png')
+@root_app.route('/apple-touch-icon-precomposed.png')
+@root_app.route('/apple-touch-icon-180x180.png')
+@root_app.route('/apple-touch-icon-180x180-precomposed.png')
+def root_apple_touch_icon():
+    return send_from_directory(
+        os.path.join(base_dir, 'appl', 'static', 'img'),
+        'apple-touch-icon.png',
+        mimetype='image/png'
     )
 
 @root_app.route('/')

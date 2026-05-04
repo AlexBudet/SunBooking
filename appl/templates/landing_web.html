@@ -114,11 +114,43 @@
       color:#555; text-decoration:none; font-size:1.25em;
       border:1px solid #d0d0d0; flex-shrink:0;
     }
+    .install-btn {
+      display:none;
+      margin-top:12px; padding:10px 16px; width:100%;
+      background:transparent; color:#d6336c; border:1.5px solid #d6336c; border-radius:6px;
+      font-size:0.95em; font-weight:600; cursor:pointer; text-align:center;
+    }
+    .install-btn:hover { background:#d6336c; color:#fff; }
+    .install-btn.is-visible { display:block; }
+
+    .ios-modal {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+      z-index:9999; align-items:center; justify-content:center; padding:16px;
+    }
+    .ios-modal.is-open { display:flex; }
+    .ios-modal-inner {
+      background:#fff; border-radius:10px; padding:20px; max-width:380px; width:100%;
+      box-shadow:0 10px 30px rgba(0,0,0,0.3);
+    }
+    .ios-modal-inner h3 { margin:0 0 12px 0; color:#d6336c; }
+    .ios-modal-inner ol { padding-left:20px; line-height:1.6; }
+    .ios-modal-inner .share-icon {
+      display:inline-block; width:18px; height:18px; vertical-align:-3px;
+      background:#007aff; color:#fff; border-radius:3px; text-align:center;
+      font-weight:bold; line-height:18px; font-size:13px;
+    }
+    .ios-modal-close {
+      margin-top:14px; padding:8px 14px; width:100%;
+      background:#d6336c; color:#fff; border:none; border-radius:6px;
+      font-weight:600; cursor:pointer;
+    }
+
     @media (max-width: 1100px) {
       body { padding: 16px; }
       .container { min-width: 84vw !important; max-width: 96vw !important; width: 84vw !important; margin-top: 30px !important; }
       .container * { font-size: 28px !important; line-height: 1.4 !important; }
       .gear-link { width: 56px !important; height: 56px !important; font-size: 1.5em !important; }
+      .ios-modal-inner * { font-size:18px !important; }
     }
   </style>
 </head>
@@ -174,10 +206,73 @@
       {% endif %}
     {% endif %}
 
+    <button id="installBtn" class="install-btn" type="button">📱 Salva app su cellulare</button>
+
     <hr style="margin-top:24px;">
     <footer style="font-size:0.85em; color:#666;">
       TOSCA — sviluppato da Alessio Budetta, © 2025
     </footer>
   </div>
+
+  <div id="iosModal" class="ios-modal" role="dialog" aria-modal="true">
+    <div class="ios-modal-inner">
+      <h3>Installa Tosca su iPhone</h3>
+      <ol>
+        <li>Tocca l'icona <span class="share-icon">⬆</span> <strong>Condividi</strong> in basso (Safari).</li>
+        <li>Scorri e tocca <strong>"Aggiungi a Home"</strong>.</li>
+        <li>Conferma con <strong>"Aggiungi"</strong> in alto a destra.</li>
+      </ol>
+      <button id="iosModalClose" type="button" class="ios-modal-close">Ho capito</button>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var deferredPrompt = null;
+      var installBtn = document.getElementById('installBtn');
+      var iosModal = document.getElementById('iosModal');
+      var iosModalClose = document.getElementById('iosModalClose');
+
+      var ua = window.navigator.userAgent || '';
+      var isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+      var isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                        || window.navigator.standalone === true;
+
+      if (isStandalone) return; // già installata
+
+      if (isIOS) {
+        installBtn.classList.add('is-visible');
+        installBtn.addEventListener('click', function() {
+          iosModal.classList.add('is-open');
+        });
+        iosModalClose.addEventListener('click', function() {
+          iosModal.classList.remove('is-open');
+        });
+        iosModal.addEventListener('click', function(e) {
+          if (e.target === iosModal) iosModal.classList.remove('is-open');
+        });
+        return;
+      }
+
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBtn.classList.add('is-visible');
+      });
+
+      installBtn.addEventListener('click', function() {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function() {
+          deferredPrompt = null;
+          installBtn.classList.remove('is-visible');
+        });
+      });
+
+      window.addEventListener('appinstalled', function() {
+        installBtn.classList.remove('is-visible');
+      });
+    })();
+  </script>
 </body>
 </html>

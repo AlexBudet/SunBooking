@@ -2,8 +2,27 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>TOSCA - Login</title>
+
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
+
+  <!-- PWA: icone -->
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='img/logo-192.png') }}">
+  <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='img/logo-512.png') }}">
+
+  <!-- PWA: manifest -->
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+
+  <!-- PWA: meta iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tosca">
+  <meta name="application-name" content="Tosca">
+  <meta name="theme-color" content="#d6336c">
   <style>
   :root { --popup-right-offset: 20px; --popup-max-width: 420px; }
   * { box-sizing: border-box; }
@@ -103,6 +122,37 @@
       z-index: 100000;
     }
 
+    .install-btn {
+      display:none;
+      margin-top:12px; padding:10px 16px; width:100%;
+      background:transparent; color:#d6336c; border:1.5px solid #d6336c; border-radius:6px;
+      font-size:0.95em; font-weight:600; cursor:pointer; text-align:center;
+    }
+    .install-btn:hover { background:#d6336c; color:#fff; }
+    .install-btn.is-visible { display:block; }
+
+    .ios-modal {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+      z-index:9999; align-items:center; justify-content:center; padding:16px;
+    }
+    .ios-modal.is-open { display:flex; }
+    .ios-modal-inner {
+      background:#fff; border-radius:10px; padding:20px; max-width:380px; width:100%;
+      box-shadow:0 10px 30px rgba(0,0,0,0.3);
+    }
+    .ios-modal-inner h3 { margin:0 0 12px 0; color:#d6336c; }
+    .ios-modal-inner ol { padding-left:20px; line-height:1.6; }
+    .ios-modal-inner .share-icon {
+      display:inline-block; width:18px; height:18px; vertical-align:-3px;
+      background:#007aff; color:#fff; border-radius:3px; text-align:center;
+      font-weight:bold; line-height:18px; font-size:13px;
+    }
+    .ios-modal-close {
+      margin-top:14px; padding:8px 14px; width:100%;
+      background:#d6336c; color:#fff; border:none; border-radius:6px;
+      font-weight:600; cursor:pointer;
+    }
+
     @media (max-width: 1100px) {
   .container {
     min-width: 84vw !important;
@@ -115,6 +165,7 @@
     line-height: 1.4 !important;
   }
       .flash-popup { right: 12px; top: 12px; max-width: calc(100% - 4px); }
+      .ios-modal-inner * { font-size:20px !important; }
     }
   </style>
 </head>
@@ -148,10 +199,24 @@
       {% endif %}
     </div>
 
+    <button id="installBtn" class="install-btn" type="button">📱 Salva app su cellulare</button>
+
     <hr>
     <footer style="font-size:0.85em; color:#666; margin-top:14px;">
       TOSCA — sviluppato da Alessio Budetta, © 2025
     </footer>
+  </div>
+
+  <div id="iosModal" class="ios-modal" role="dialog" aria-modal="true">
+    <div class="ios-modal-inner">
+      <h3>Installa Tosca su iPhone</h3>
+      <ol>
+        <li>Tocca l'icona <span class="share-icon">⬆</span> <strong>Condividi</strong> in basso (Safari).</li>
+        <li>Scorri e tocca <strong>"Aggiungi a Home"</strong>.</li>
+        <li>Conferma con <strong>"Aggiungi"</strong> in alto a destra.</li>
+      </ol>
+      <button id="iosModalClose" type="button" class="ios-modal-close">Ho capito</button>
+    </div>
   </div>
 
   <!-- Flash popup container -->
@@ -212,6 +277,55 @@
       closeBtn.addEventListener('click', function() { hidePopup(); });
     }
   });
+  </script>
+
+  <script>
+    (function() {
+      var deferredPrompt = null;
+      var installBtn = document.getElementById('installBtn');
+      var iosModal = document.getElementById('iosModal');
+      var iosModalClose = document.getElementById('iosModalClose');
+
+      var ua = window.navigator.userAgent || '';
+      var isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+      var isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                        || window.navigator.standalone === true;
+
+      if (isStandalone) return;
+
+      if (isIOS) {
+        installBtn.classList.add('is-visible');
+        installBtn.addEventListener('click', function() {
+          iosModal.classList.add('is-open');
+        });
+        iosModalClose.addEventListener('click', function() {
+          iosModal.classList.remove('is-open');
+        });
+        iosModal.addEventListener('click', function(e) {
+          if (e.target === iosModal) iosModal.classList.remove('is-open');
+        });
+        return;
+      }
+
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBtn.classList.add('is-visible');
+      });
+
+      installBtn.addEventListener('click', function() {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function() {
+          deferredPrompt = null;
+          installBtn.classList.remove('is-visible');
+        });
+      });
+
+      window.addEventListener('appinstalled', function() {
+        installBtn.classList.remove('is-visible');
+      });
+    })();
   </script>
 </body>
 </html>
