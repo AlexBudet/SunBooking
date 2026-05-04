@@ -2,45 +2,182 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <title>Tosca Web App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>TOSCA</title>
+
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+  <!-- PWA: icone -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/img/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/static/img/icon-512.png">
+
+  <!-- PWA: manifest -->
+  <link rel="manifest" href="/static/manifest.webmanifest">
+
+  <!-- PWA: meta iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SunBooking">
+  <meta name="application-name" content="SunBooking">
+  <meta name="theme-color" content="#87647c">
+
   <style>
-    body { font-family: Arial, sans-serif; margin: 40px; background-color: #f7f7f7; }
-    .container { max-width: 700px; margin: 0 auto; background: white; padding: 20px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-    h1 { text-align: center; }
-    .db-link { display: block; margin: 10px 0; padding: 12px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; text-align: center; }
-    .db-link:hover { background: #0056b3; }
-    .empty { color: #666; text-align: center; margin-top: 20px; }
-    .form-control, input, textarea {
-  user-select: text !important;
-  color: #212529 !important;
-  caret-color: #212529 !important;
-  cursor: text;
-}
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 0;
+      padding: 40px;
+      background-color: #f7f7f7;
+      background-image: url("/static/img/landing-bg.png");
+      background-size: cover;
+      background-position: center center;
+      background-repeat: no-repeat;
+      background-attachment: scroll;
+      min-height: 100vh;
+    }
+    .bg-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.32);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 480px;
+      margin: 0 auto;
+      background: rgba(255,255,255,0.92);
+      padding: 24px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+    h1 { margin: 0 0 6px 0; }
+    h3 { margin: 0 0 18px 0; font-weight: 400; color: #555; }
+    label { display:block; margin-top:10px; font-weight:600; }
+    input[type="text"], input[type="password"] {
+      width:100%; padding:10px; margin-top:6px;
+      border:1px solid #ccc; border-radius:6px; font-size:1em;
+      user-select: text !important; color:#212529 !important;
+      caret-color:#212529 !important; cursor: text;
+    }
+    button.primary {
+      margin-top:16px; padding:10px 16px; width:100%;
+      background:#87647c; color:#fff; border:none; border-radius:6px;
+      font-size:1em; font-weight:600; cursor:pointer;
+    }
+    button.primary:hover { background:#6f5167; }
+    .db-link {
+      display: block;
+      margin: 10px 0;
+      padding: 14px;
+      background: linear-gradient(135deg, #b8809d 0%, #87647c 100%);
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: 600;
+      font-size: 1.05em;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      transition: transform 0.1s ease, box-shadow 0.15s ease;
+    }
+    .db-link:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    }
+    .empty { color:#666; text-align:center; margin-top:20px; }
+    .meta { margin-top:14px; font-size:0.9em; color:#444; }
+    .error-msg {
+      background:#fdecea; color:#611a15; border:1px solid #f5c6cb;
+      padding:10px; border-radius:6px; margin-top:12px;
+    }
+    .top-bar {
+      display:flex; align-items:center; justify-content:space-between;
+      margin-bottom:14px;
+    }
+    .top-bar .user-info {
+      font-size:0.95em; color:#444;
+    }
+    .top-bar .user-info strong { color:#87647c; }
+    .logout-link {
+      color:#87647c; text-decoration:none; font-weight:600;
+      padding:6px 12px; border:1px solid #87647c; border-radius:6px;
+      font-size:0.9em;
+    }
+    .logout-link:hover { background:#87647c; color:#fff; }
+    .gear-link {
+      display:flex; align-items:center; justify-content:center;
+      width:38px; height:38px; border-radius:8px; background:#eee;
+      color:#555; text-decoration:none; font-size:1.25em;
+      border:1px solid #d0d0d0; flex-shrink:0;
+    }
+    @media (max-width: 1100px) {
+      body { padding: 16px; }
+      .container { min-width: 84vw !important; max-width: 96vw !important; width: 84vw !important; margin-top: 30px !important; }
+      .container * { font-size: 28px !important; line-height: 1.4 !important; }
+      .gear-link { width: 56px !important; height: 56px !important; font-size: 1.5em !important; }
+    }
   </style>
 </head>
 <body>
+  <div class="bg-overlay" aria-hidden="true"></div>
+
   <div class="container">
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-      <h1 style="margin:0;">TOSCA - Seleziona Negozio</h1>
-      <a href="/owner-login"
-         title="Setup Owner — accesso riservato"
-         style="display:flex; align-items:center; justify-content:center;
-                width:42px; height:42px; border-radius:8px; background:#eee;
-                color:#555; text-decoration:none; font-size:1.35em;
-                border:1px solid #d0d0d0; flex-shrink:0;"
-         aria-label="Setup Owner">⚙</a>
-    </div>
-    <p>Scegli il negozio per accedere:</p>
-    {% if db_links and db_links|length > 0 %}
-      {% for link in db_links %}
-      <div style="margin: 10px 0;">
-        <a href="{{ link.url }}" class="db-link">{{ link.label }}</a>
+
+    {% if root_user %}
+      {# ===== STATO LOGGATO: mostra negozi filtrati ===== #}
+      <div class="top-bar">
+        <div class="user-info">Utente: <strong>{{ root_user|e }}</strong></div>
+        <a href="/landing-logout" class="logout-link">Esci</a>
       </div>
-      {% endfor %}
+
+      <h1 style="margin-bottom:16px;">Seleziona Negozio</h1>
+
+      {% if db_links and db_links|length > 0 %}
+        {% for link in db_links %}
+          <a href="{{ link.url }}" class="db-link">{{ link.label }}</a>
+        {% endfor %}
+      {% else %}
+        <p class="empty">Nessun negozio disponibile per questo utente.</p>
+      {% endif %}
+
     {% else %}
-      <p class="empty">Nessun database configurato. Verifica il file .env.</p>
+      {# ===== STATO NON LOGGATO: form di login ===== #}
+      <div class="top-bar">
+        <div></div>
+        <a href="/owner-login"
+           title="Setup Owner — accesso riservato"
+           class="gear-link"
+           aria-label="Setup Owner">⚙</a>
+      </div>
+
+      <h1>TOSCA</h1>
+      <h3>La tua amica in salone!</h3>
+
+      <form method="POST" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="username">Username / Email</label>
+        <input id="username" name="username" type="text" required
+               value="{{ (request.form.username or '')|e }}">
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required>
+
+        <button type="submit" class="primary">Accedi</button>
+      </form>
+
+      {% if login_error %}
+        <div class="error-msg">{{ login_error|e }}</div>
+      {% endif %}
     {% endif %}
+
+    <hr style="margin-top:24px;">
+    <footer style="font-size:0.85em; color:#666;">
+      TOSCA — sviluppato da Alessio Budetta, © 2025
+    </footer>
   </div>
 </body>
 </html>

@@ -8,10 +8,19 @@ from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from waitress import serve
 from appl import create_app, db
 from appl.models import BusinessInfo
+from appl.autologin import issue_token as autologin_issue
 import threading
 import time as time_mod
 import json
 import uuid
+from werkzeug.security import check_password_hash
+try:
+    from argon2 import PasswordHasher as _ArgonPH
+    from argon2 import exceptions as _argon_exc
+    _root_ph = _ArgonPH()
+except ImportError:
+    _root_ph = None
+    _argon_exc = None
 
 base_dir = os.path.dirname(__file__)
 env_candidates = [
@@ -100,10 +109,14 @@ base_templates = os.path.join(base_dir, 'appl', 'templates')
 root_app = Flask('sunbooking_root', template_folder=base_templates)
 root_app.secret_key = secret
 
+# La root_app non ha Flask-WTF inizializzato: forniamo un csrf_token() no-op
+# per i template che lo includono (landing_web.html, owner_login.html).
+root_app.jinja_env.globals['csrf_token'] = lambda: ''
+
 @root_app.before_request
 def root_redirect_to_selected_db():
     path = request.path or '/'
-    if path in ('/', '/landing-web') or path.startswith('/select-db/') or path.startswith('/s/') or path.startswith('/owner'):
+    if path in ('/', '/landing-web', '/landing-logout') or path.startswith('/select-db/') or path.startswith('/s/') or path.startswith('/owner'):
         return None
     dbidx = request.cookies.get('dbidx', '').strip()
     if dbidx and dbidx.isdigit():
@@ -113,6 +126,72 @@ def root_redirect_to_selected_db():
             target = f"{target}?{q}"
         return redirect(target, code=307)  # preserva POST/PUT/DELETE
     return None
+
+
+# =============================================================
+#   AUTENTICAZIONE CROSS-TENANT (per la landing root)
+# =============================================================
+_root_login_attempts = {}  # ip -> (count, first_ts)
+ROOT_MAX_ATTEMPTS = 5
+ROOT_WINDOW_SECONDS = 60
+
+
+def _root_is_locked(ip):
+    entry = _root_login_attempts.get(ip)
+    if not entry:
+        return False
+    count, first_ts = entry
+    if time_mod.time() - first_ts > ROOT_WINDOW_SECONDS:
+        _root_login_attempts.pop(ip, None)
+        return False
+    return count >= ROOT_MAX_ATTEMPTS
+
+
+def _root_record_failure(ip):
+    now = time_mod.time()
+    entry = _root_login_attempts.get(ip)
+    if not entry or (now - entry[1] > ROOT_WINDOW_SECONDS):
+        _root_login_attempts[ip] = (1, now)
+    else:
+        _root_login_attempts[ip] = (entry[0] + 1, entry[1])
+
+
+def _verify_password(stored_hash, password):
+    if not stored_hash or not password:
+        return False
+    if _root_ph:
+        try:
+            return _root_ph.verify(stored_hash, password)
+        except Exception:
+            pass
+    try:
+        return check_password_hash(stored_hash, password)
+    except Exception:
+        return False
+
+
+def find_user_in_all_tenants(username, password):
+    """Cerca username+password su tutti i tenant. Ritorna [{idx, user_id, label}, ...]."""
+    if not username or not password:
+        return []
+    matches = []
+    for idx, child in children.items():
+        try:
+            with child.app_context():
+                from appl.models import User as _U
+                user = _U.query.filter_by(username=username).first()
+                if user and _verify_password(user.password, password):
+                    label = db_label(pool.get(idx, ''))
+                    try:
+                        bi = BusinessInfo.query.first()
+                        if bi and bi.business_name:
+                            label = bi.business_name
+                    except Exception:
+                        pass
+                    matches.append({'idx': int(idx), 'user_id': int(user.id), 'label': label})
+        except Exception:
+            continue
+    return matches
 
 @root_app.route('/favicon.ico')
 def root_favicon():
@@ -239,32 +318,81 @@ for idx, uri in pool.items():
 application = DispatcherMiddleware(root_app, mounts)
 app = application
 
-@root_app.route('/landing-web')
+@root_app.route('/landing-web', methods=['GET', 'POST'])
 def landing_web():
-    links = []
-    for idx, uri in pool.items():
-        label = db_label(uri)
-        child = children.get(idx)
-        if child:
-            try:
-                with child.app_context():
-                    info = BusinessInfo.query.first()
-                    if info and getattr(info, 'business_name', None):
-                        label = info.business_name
-            except Exception:
-                pass
-        links.append({
-            "id": str(idx),
-            "label": label,
-            "url": f"/select-db/{idx}"
-        })
-    return render_template('landing_web.html', db_links=links, hide_cassa=True)
+    error = None
+    ip = request.remote_addr or 'unknown'
+
+    # POST: tentativo di login cross-tenant
+    if request.method == 'POST':
+        if _root_is_locked(ip):
+            error = 'Troppi tentativi. Riprova tra poco.'
+        else:
+            username = (request.form.get('username') or '').strip()
+            password = request.form.get('password', '')
+            matches = find_user_in_all_tenants(username, password)
+            if matches:
+                session.clear()
+                session['root_user'] = username
+                session['root_allowed'] = matches  # [{idx, user_id, label}, ...]
+                session.permanent = False
+                # Se è autorizzato a un solo negozio: redirect diretto con auto-login
+                if len(matches) == 1:
+                    only = matches[0]
+                    token = autologin_issue(only['idx'], only['user_id'])
+                    resp = redirect(f"/s/{only['idx']}/?_autologin={token}", code=302)
+                    cookie = f"dbidx={only['idx']}; Path=/; SameSite=Lax"
+                    if use_https:
+                        cookie += "; Secure"
+                    resp.headers.add('Set-Cookie', cookie)
+                    return resp
+                return redirect(url_for('landing_web'))
+            else:
+                _root_record_failure(ip)
+                error = 'Credenziali non valide.'
+
+    # GET: se loggato a livello root, mostra solo i negozi autorizzati
+    root_user = session.get('root_user')
+    allowed = session.get('root_allowed') or []
+    if root_user and allowed:
+        links = [{
+            'id': str(m['idx']),
+            'label': m['label'],
+            'url': f"/select-db/{m['idx']}",
+        } for m in allowed]
+        return render_template('landing_web.html',
+                               db_links=links,
+                               root_user=root_user,
+                               hide_cassa=True)
+
+    # Altrimenti: form di login
+    return render_template('landing_web.html',
+                           db_links=None,
+                           root_user=None,
+                           login_error=error,
+                           hide_cassa=True)
+
+
+@root_app.route('/landing-logout')
+def landing_logout():
+    session.pop('root_user', None)
+    session.pop('root_allowed', None)
+    return redirect(url_for('landing_web'))
+
 
 @root_app.route('/select-db/<idx>')
 def select_db(idx):
     if not idx.isdigit() or int(idx) not in pool:
         return redirect(url_for('landing_web'))
-    resp = redirect(f"/s/{idx}/", code=302)
+    idx_int = int(idx)
+    # Verifica che l'utente root sia autorizzato a questo negozio
+    allowed = session.get('root_allowed') or []
+    match = next((m for m in allowed if int(m.get('idx', -1)) == idx_int), None)
+    if not match:
+        return redirect(url_for('landing_web'))
+    # Emetti token monouso e redirigi al child con auto-login
+    token = autologin_issue(idx_int, int(match['user_id']))
+    resp = redirect(f"/s/{idx}/?_autologin={token}", code=302)
     cookie = "dbidx=" + idx + "; Path=/; SameSite=Lax"
     if use_https:
         cookie += "; Secure"
