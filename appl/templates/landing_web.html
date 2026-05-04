@@ -171,7 +171,15 @@
       {# ===== STATO LOGGATO: mostra negozi filtrati ===== #}
       <div class="top-bar">
         <div class="user-info">Utente: <strong>{{ root_user|e }}</strong></div>
-        <a href="/landing-logout" class="logout-link">Esci</a>
+        <div style="display:flex; align-items:center; gap:8px;">
+          {% if is_owner %}
+            <a href="/owner-login"
+               title="Setup Owner — accesso riservato"
+               class="gear-link"
+               aria-label="Setup Owner">⚙</a>
+          {% endif %}
+          <a href="/landing-logout" class="logout-link">Esci</a>
+        </div>
       </div>
 
       <img src="/static/img/logo-192.png" alt="Tosca" class="brand-logo">
@@ -187,14 +195,6 @@
 
     {% else %}
       {# ===== STATO NON LOGGATO: form di login ===== #}
-      <div class="top-bar">
-        <div></div>
-        <a href="/owner-login"
-           title="Setup Owner — accesso riservato"
-           class="gear-link"
-           aria-label="Setup Owner">⚙</a>
-      </div>
-
       <img src="/static/img/logo-192.png" alt="Tosca" class="brand-logo">
       <h1 style="text-align:center;">TOSCA</h1>
       <h3 style="text-align:center;">La tua amica in salone!</h3>
