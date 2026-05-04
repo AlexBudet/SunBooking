@@ -67,6 +67,15 @@
     body { padding: 16px; }
   }
 
+    .brand-logo {
+      display: block;
+      margin: 0 auto 12px auto;
+      width: 96px; height: 96px;
+      border-radius: 18px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      object-fit: cover;
+    }
+    h1, h3 { text-align:center; }
     label { display:block; margin-top:8px; font-weight:600; }
     input[type="text"], input[type="password"] { width:100%; padding:8px; margin-top:6px; }
     button { margin-top:12px; padding:8px 14px; }
@@ -172,6 +181,7 @@
 <body>
     <div class="bg-overlay" aria-hidden="true"></div>
   <div class="container">
+    <img src="{{ url_for('static', filename='img/logo-192.png') }}" alt="Tosca" class="brand-logo">
     <h1>TOSCA</h1>
     <h3>La tua amica in salone!</h3><br>
 

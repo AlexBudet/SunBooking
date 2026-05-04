@@ -57,6 +57,14 @@
     }
     h1 { margin: 0 0 6px 0; }
     h3 { margin: 0 0 18px 0; font-weight: 400; color: #555; }
+    .brand-logo {
+      display: block;
+      margin: 0 auto 12px auto;
+      width: 96px; height: 96px;
+      border-radius: 18px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      object-fit: cover;
+    }
     label { display:block; margin-top:10px; font-weight:600; }
     input[type="text"], input[type="password"] {
       width:100%; padding:10px; margin-top:6px;
@@ -166,7 +174,8 @@
         <a href="/landing-logout" class="logout-link">Esci</a>
       </div>
 
-      <h1 style="margin-bottom:16px;">Seleziona Negozio</h1>
+      <img src="/static/img/logo-192.png" alt="Tosca" class="brand-logo">
+      <h1 style="margin-bottom:16px; text-align:center;">Seleziona Negozio</h1>
 
       {% if db_links and db_links|length > 0 %}
         {% for link in db_links %}
@@ -186,8 +195,9 @@
            aria-label="Setup Owner">⚙</a>
       </div>
 
-      <h1>TOSCA</h1>
-      <h3>La tua amica in salone!</h3>
+      <img src="/static/img/logo-192.png" alt="Tosca" class="brand-logo">
+      <h1 style="text-align:center;">TOSCA</h1>
+      <h3 style="text-align:center;">La tua amica in salone!</h3>
 
       <form method="POST" autocomplete="off">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
