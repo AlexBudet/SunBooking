@@ -2034,8 +2034,11 @@ def manage_users():
 def change_password(user_id):
     if 'user_id' not in session:
         return redirect(url_for('settings.settings_landing'))
-    current_user = db.session.get(User, user_id)
+    current_user = db.session.get(User, session.get('user_id'))
     user = db.session.get(User, user_id)
+    if not current_user or not user:
+        flash('Utente non trovato.', 'danger')
+        return redirect(url_for('settings.manage_users'))
 
     # Permessi:
     # - owner può cambiare la sua password e quelle di admin/user (non altri owner)
@@ -2054,11 +2057,26 @@ def change_password(user_id):
         return redirect(url_for('settings.manage_users'))
 
     if request.method == 'POST':
-        old = request.form.get('old_password')
-        new = request.form.get('new_password')
-        # Se stai cambiando la tua password, verifica la vecchia
+        old = request.form.get('old_password') or ''
+        new = request.form.get('new_password') or ''
+        if not new:
+            flash('La nuova password non può essere vuota', 'danger')
+            return redirect(url_for('settings.change_password', user_id=user.id))
+        # Se stai cambiando la tua password, verifica la vecchia (robusto su argon2/werkzeug)
         if current_user.id == user.id:
-            if not check_password_hash(user.password, old):
+            ok = False
+            try:
+                ok = check_password_hash(user.password, old)
+            except Exception:
+                ok = False
+            if not ok:
+                try:
+                    from argon2 import PasswordHasher as _PH
+                    _PH().verify(user.password, old)
+                    ok = True
+                except Exception:
+                    ok = False
+            if not ok:
                 flash('Vecchia password errata', 'danger')
                 return redirect(url_for('settings.change_password', user_id=user.id))
         # Se cambi la password di un altro, non serve la vecchia
