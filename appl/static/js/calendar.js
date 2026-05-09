@@ -1485,41 +1485,45 @@ function updateCalendarDisplay(shiftData, operatorId) {
   });
 
     if (closingDays.map(d => d.toLowerCase()).includes(new Date(selectedDate).toLocaleDateString('it-IT', {weekday:'long'}).toLowerCase())) return markUnavailable(0, 1440, operatorId);
-    
-    const cells = document.querySelectorAll(`.selectable-cell[data-operator-id="${operatorId}"]`);
-    
-    // Se non ci sono turni, applica gli orari di default da business_info
-    if (!shiftData || shiftData.length === 0) {
-        const openingTime = timeToMinutes(defaultOpeningTime); // Orario di apertura predefinito dal business_info
-        const closingTime = timeToMinutes(defaultClosingTime); // Orario di chiusura predefinito dal business_info
-    
-        // Applica gli orari di default
-        markUnavailable(0, openingTime, operatorId); // Grigio prima dell'apertura
-        markUnavailable(closingTime, 1440, operatorId); // Grigio dopo la chiusura
+
+    // Filtra i turni "OFF" (start == end, tipicamente 00:00-00:00):
+    // rappresentano il "giorno di riposo" ma non sono turni reali da rendere.
+    const allShifts = Array.isArray(shiftData) ? shiftData : [];
+    const realShifts = allShifts.filter(s => {
+        const start = timeToMinutes(s.start_time || '00:00');
+        const end   = timeToMinutes(s.end_time   || '00:00');
+        return end > start;
+    });
+
+    // Caso 1: nessun turno reale.
+    if (realShifts.length === 0) {
+        if (allShifts.length > 0) {
+            // Esiste almeno un turno ma sono tutti OFF → giorno di riposo, grigia tutto.
+            return markUnavailable(0, 1440, operatorId);
+        }
+        // Nessun turno esplicito → fallback orari default attività.
+        const openingTime = timeToMinutes(defaultOpeningTime);
+        const closingTime = timeToMinutes(defaultClosingTime);
+        markUnavailable(0, openingTime, operatorId);
+        markUnavailable(closingTime, 1440, operatorId);
         return;
     }
 
-    // Ordina i turni per orario di inizio
-    const sortedShifts = shiftData.sort((a, b) =>
+    // Caso 2: ordina i turni reali e grigia gli intervalli prima/tra/dopo.
+    const sortedShifts = realShifts.sort((a, b) =>
         timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
     );
-    
-    // Imposta gli intervalli di disponibilità
-    let lastEndTime = 0; // Tiene traccia della fine dell'ultimo turno
+
+    let lastEndTime = 0;
     sortedShifts.forEach(shift => {
         const startTime = timeToMinutes(shift.start_time);
-        const endTime = timeToMinutes(shift.end_time);
-
-        // Prima dell'inizio del turno (grigio)
+        const endTime   = timeToMinutes(shift.end_time);
+        // Grigio prima dell'inizio del turno (o tra un turno e il successivo)
         markUnavailable(lastEndTime, startTime, operatorId);
-
-        // Durante il turno (disponibile) - non facciamo nulla qui, le celle sono già disponibili di default
-
-        // Dopo la fine del turno (grigio)
-        markUnavailable(endTime, 1440, operatorId); // 1440 = 24 ore in minuti
-
-        lastEndTime = endTime;
+        lastEndTime = Math.max(lastEndTime, endTime);
     });
+    // Grigio dopo l'ultimo turno (UNA sola volta, fuori dal loop)
+    markUnavailable(lastEndTime, 1440, operatorId);
 }
 
 function markUnavailable(startMin, endMin, operatorId) {
