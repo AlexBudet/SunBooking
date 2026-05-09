@@ -758,7 +758,7 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       };
 
       // Modal attesa/retry
-function showPendingModal(key) {
+function showPendingModal(key, expectedTotal) {
   // Nascondi lo spinner RCH prima di mostrare il modal
   if (typeof window.hideRchSpinner === 'function') {
     window.hideRchSpinner();
@@ -776,7 +776,7 @@ function showPendingModal(key) {
   overlay.setAttribute('aria-modal', 'true');
   overlay.style.display = 'block';
   overlay.style.background = 'rgba(0,0,0,0.5)';
-  overlay.style.zIndex = '13000'; 
+  overlay.style.zIndex = '13000';
 
   const dialog = document.createElement('div');
   dialog.className = 'modal-dialog modal-dialog-centered';
@@ -795,7 +795,9 @@ function showPendingModal(key) {
   body.className = 'modal-body';
 
   const p = document.createElement('p');
-  p.textContent = 'La stampante è in attesa (es. cambio carta). Sostituire la carta o risolvere l\'errore e poi premi "Riprova".';
+  p.textContent = 'La stampante è in attesa o ha un documento aperto. '
+    + 'Se la carta è finita o c\'è un errore meccanico, risolvi e premi "Riprova". '
+    + 'Se invece il documento è rimasto aperto, sblocca con il modulo qui sotto.';
   body.appendChild(p);
 
   const flex = document.createElement('div');
@@ -817,6 +819,69 @@ function showPendingModal(key) {
   flex.appendChild(spinner);
   flex.appendChild(msg);
   body.appendChild(flex);
+
+  // --- Sezione "Sblocca e chiudi" (accessibile a qualunque ruolo) ---
+  const closeBox = document.createElement('div');
+  closeBox.style.marginTop = '14px';
+  closeBox.style.padding = '10px';
+  closeBox.style.border = '1px solid #ddd';
+  closeBox.style.borderRadius = '6px';
+  closeBox.style.background = '#fafafa';
+
+  const closeTitle = document.createElement('div');
+  closeTitle.style.fontWeight = '600';
+  closeTitle.style.marginBottom = '6px';
+  closeTitle.textContent = 'Sblocca documento aperto';
+  closeBox.appendChild(closeTitle);
+
+  const closeHint = document.createElement('div');
+  closeHint.style.fontSize = '12px';
+  closeHint.style.color = '#666';
+  closeHint.style.marginBottom = '8px';
+  closeHint.textContent = 'Inserisci l\'importo mostrato sul display della stampante e il metodo di pagamento. Lo scontrino verrà completato e registrato.';
+  closeBox.appendChild(closeHint);
+
+  const row = document.createElement('div');
+  row.className = 'd-flex align-items-center';
+  row.style.gap = '8px';
+  row.style.flexWrap = 'wrap';
+
+  const importoInput = document.createElement('input');
+  importoInput.type = 'number';
+  importoInput.step = '0.01';
+  importoInput.min = '0';
+  importoInput.id = 'rchPendingImporto';
+  importoInput.className = 'form-control form-control-sm';
+  importoInput.style.width = '110px';
+  importoInput.placeholder = 'Importo €';
+  if (typeof expectedTotal === 'number' && expectedTotal > 0) {
+    importoInput.value = expectedTotal.toFixed(2);
+  }
+
+  const metodoSelect = document.createElement('select');
+  metodoSelect.id = 'rchPendingMetodo';
+  metodoSelect.className = 'form-select form-select-sm';
+  metodoSelect.style.width = '120px';
+  ['contanti', 'pos', 'bank'].forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v === 'contanti' ? 'Contanti'
+                    : v === 'pos' ? 'POS'
+                    : 'Bonifico';
+    metodoSelect.appendChild(opt);
+  });
+
+  const btnClose = document.createElement('button');
+  btnClose.id = 'rchPendingCloseBtn';
+  btnClose.type = 'button';
+  btnClose.className = 'btn btn-success btn-sm';
+  btnClose.textContent = 'Chiudi documento';
+
+  row.appendChild(importoInput);
+  row.appendChild(metodoSelect);
+  row.appendChild(btnClose);
+  closeBox.appendChild(row);
+  body.appendChild(closeBox);
 
   const footer = document.createElement('div');
   footer.className = 'modal-footer';
@@ -879,6 +944,43 @@ function showPendingModal(key) {
     } catch {
       btnRetry.disabled = false;
       msg.textContent = 'Errore rete. Riprova.';
+    }
+  });
+
+  btnClose.addEventListener('click', async () => {
+    const importo = parseFloat(importoInput.value) || 0;
+    const metodo = metodoSelect.value || 'contanti';
+    if (importo <= 0) {
+      alert('Inserisci un importo maggiore di zero.');
+      return;
+    }
+    if (!confirm(`Chiudere il documento aperto con € ${importo.toFixed(2)} (${metodo})?`)) return;
+    btnClose.disabled = true;
+    btnRetry.disabled = true;
+    msg.textContent = 'Chiusura in corso...';
+    try {
+      const rr = await fetch('/cassa/rch-console/close-document', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+        },
+        body: JSON.stringify({ importo, metodo })
+      });
+      const dd = await rr.json();
+      if (rr.ok && dd.success) {
+        clearInterval(pollTimer);
+        wrap.remove();
+        fiscaleOkFinalize();
+      } else {
+        btnClose.disabled = false;
+        btnRetry.disabled = false;
+        msg.textContent = 'Chiusura fallita: ' + ((dd && dd.error) || 'errore stampante') + '. Riprova.';
+      }
+    } catch {
+      btnClose.disabled = false;
+      btnRetry.disabled = false;
+      msg.textContent = 'Errore rete durante la chiusura.';
     }
   });
 
@@ -1005,6 +1107,15 @@ function showPendingModal(key) {
         if (!res.ok) {
           stampaLock = false;
           alert((data && data.error) || 'Errore durante la stampa fiscale!');
+          return;
+        }
+
+        // 202 Accepted = stampante in attesa / documento aperto: apri modal
+        if (res.status === 202 || (data && data.pending)) {
+          stampaLock = false;
+          const expectedTotal = (data && typeof data.expected_total === 'number')
+            ? data.expected_total : null;
+          showPendingModal(idempotencyKey, expectedTotal);
           return;
         }
 
