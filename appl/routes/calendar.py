@@ -1244,74 +1244,98 @@ def operator_multi_shifts(operator_id):
     while current_date <= end_date:
         weekday = current_date.strftime('%A').lower()  # es. "monday", "tuesday", ecc.
         if weekday in shifts_data:
-            day_info = shifts_data.get(weekday)
+            day_info = shifts_data.get(weekday) or {}
 
-            # GIORNO OFF: Se il campo 'start' è "NO", tratta il giorno come riposo
-            if day_info.get('start') == "NO":
-                # Elimina il turno esistente per il giorno, se presente
-                shift = OperatorShift.query.filter_by(operator_id=operator_id, shift_date=current_date).first()
-                if shift:
-                    db.session.delete(shift)
-                # Definisci l’intervallo dell’intera giornata
-                day_start = datetime.combine(current_date, datetime.min.time())
-                day_end = datetime.combine(current_date, datetime.max.time())
-                # Elimina tutti i blocchi Appointment con note "PAUSA" o "OFF" per il giorno
-                off_appts = Appointment.query.filter(
-                    Appointment.operator_id == operator_id,
-                    Appointment.start_time >= day_start,
-                    Appointment.start_time <= day_end,
-                    Appointment.note.in_(["PAUSA", "OFF"]),
-                    Appointment.is_cancelled_by_client == False
-                ).all()
-                for appt in off_appts:
-                    db.session.delete(appt)
-                # Crea il blocco OFF per il giorno, usando orario simbolico 00:00
-                new_off = Appointment(
-                    client_id=dummy_client_id,
+            # Regola unica: l'ultima modifica SOVRASCRIVE qualsiasi stato precedente.
+            # Per ogni giorno nel range cancelliamo SEMPRE tutti i turni preesistenti
+            # e i blocchi PAUSA/OFF dummy, poi ricreiamo da zero in base ai dati ricevuti.
+            OperatorShift.query.filter_by(
+                operator_id=operator_id,
+                shift_date=current_date
+            ).delete(synchronize_session=False)
+
+            day_start = datetime.combine(current_date, datetime.min.time())
+            day_end = datetime.combine(current_date, datetime.max.time())
+            Appointment.query.filter(
+                Appointment.operator_id == operator_id,
+                Appointment.start_time >= day_start,
+                Appointment.start_time <= day_end,
+                Appointment.note.in_(["PAUSA", "OFF"]),
+                Appointment.client_id == dummy_client_id,
+                Appointment.is_cancelled_by_client == False
+            ).delete(synchronize_session=False)
+
+            start_val = (day_info.get('start') or '').strip()
+            end_val = (day_info.get('end') or '').strip()
+
+            # Giorno OFF / "Non di turno":
+            # - sentinella legacy "NO"
+            # - orari mancanti
+            # - "00:00"-"00:00" (convenzione corrente del frontend operators.html)
+            is_off = (
+                start_val.upper() == "NO"
+                or end_val.upper() == "NO"
+                or not start_val
+                or not end_val
+                or (start_val == "00:00" and end_val == "00:00")
+            )
+
+            if is_off:
+                # Convenzione: shift_start_time == shift_end_time → giorno di riposo
+                # (stesso pattern usato da setDayOffCalendar / save_operator_shift)
+                zero_time = datetime.strptime("00:00", "%H:%M").time()
+                db.session.add(OperatorShift(
                     operator_id=operator_id,
-                    service_id=dummy_service_id,
-                    start_time=datetime.combine(current_date, datetime.strptime("00:00", "%H:%M").time()),
-                    colore="#FF0000",       # evidenzia il giorno off con questo colore
-                    colore_font="#FFFFFF",
-                    note="OFF"
-                )
-                new_off._duration = 0
-                db.session.add(new_off)
+                    shift_date=current_date,
+                    shift_start_time=zero_time,
+                    shift_end_time=zero_time
+                ))
                 current_date += timedelta(days=1)
                 continue
 
-            # CASO NORMALE: Se sono impostati start e end, crea o aggiorna il turno
-            if day_info.get('start') and day_info.get('end'):
-                shift = OperatorShift.query.filter_by(operator_id=operator_id, shift_date=current_date).first()
-                if not shift:
-                    shift = OperatorShift(operator_id=operator_id, shift_date=current_date)
-                    db.session.add(shift)
-                shift.shift_start_time = datetime.strptime(day_info['start'], '%H:%M').time()
-                shift.shift_end_time = datetime.strptime(day_info['end'], '%H:%M').time()
+            # CASO NORMALE: orari validi → crea il turno
+            try:
+                new_start = datetime.strptime(start_val, '%H:%M').time()
+                new_end = datetime.strptime(end_val, '%H:%M').time()
+            except ValueError:
+                app.logger.warning(
+                    "operator_multi_shifts: orari non validi per %s (start=%r end=%r), giorno saltato",
+                    current_date, start_val, end_val
+                )
+                current_date += timedelta(days=1)
+                continue
 
-                # Se sono impostati pausa (breakStart e breakDuration), crea il blocco OFF per la pausa
-                if day_info.get('breakStart') and day_info.get('breakDuration'):
-                    break_start_time = datetime.strptime(day_info['breakStart'], '%H:%M').time()
+            db.session.add(OperatorShift(
+                operator_id=operator_id,
+                shift_date=current_date,
+                shift_start_time=new_start,
+                shift_end_time=new_end
+            ))
+
+            # Pausa eventuale: breakStart + breakDuration
+            break_start = (day_info.get('breakStart') or '').strip()
+            break_duration = day_info.get('breakDuration')
+            if break_start and break_duration not in (None, '', 0, '0'):
+                try:
+                    break_start_time = datetime.strptime(break_start, '%H:%M').time()
                     break_start_dt = datetime.combine(current_date, break_start_time)
-                    break_duration = int(day_info['breakDuration'])
-                    existing_break = Appointment.query.filter_by(
-                        operator_id=operator_id,
-                        start_time=break_start_dt,
-                        client_id=dummy_client_id,
-                        is_cancelled_by_client=False
-                    ).first()
-                    if not existing_break:
-                        new_break = Appointment(
+                    break_dur_int = int(break_duration)
+                    if break_dur_int > 0:
+                        db.session.add(Appointment(
                             client_id=dummy_client_id,
                             operator_id=operator_id,
                             service_id=dummy_service_id,
                             start_time=break_start_dt,
-                            duration=break_duration,
+                            duration=break_dur_int,
                             colore="#CCCCCC",
                             colore_font="#000000",
                             note="PAUSA"
-                        )
-                        db.session.add(new_break)
+                        ))
+                except (ValueError, TypeError):
+                    app.logger.warning(
+                        "operator_multi_shifts: pausa non valida per %s (start=%r dur=%r), pausa saltata",
+                        current_date, break_start, break_duration
+                    )
         current_date += timedelta(days=1)
 
     try:
