@@ -263,6 +263,16 @@ def registro_corrispettivi():
         'Thursday': 'Giovedì', 'Friday': 'Venerdì', 'Saturday': 'Sabato', 'Sunday': 'Domenica'
     }
 
+    # Carica log riconciliazione per-tenant (best-effort, non blocca il report)
+    recon_log = {}
+    try:
+        bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+        if bi:
+            from appl.routes.cassa import _load_reconciliation_log
+            recon_log = _load_reconciliation_log(bi.id) or {}
+    except Exception:
+        recon_log = {}
+
     rows = []
     cur = start.date()
     last = end.date()
@@ -271,6 +281,19 @@ def registro_corrispettivi():
         totale = data_row['totale']
         prodotti = data_row['prodotti']
         servizi = max(0.0, totale - prodotti)
+
+        recon_entry = recon_log.get(cur.strftime('%Y-%m-%d'))
+        if recon_entry:
+            recon_status = recon_entry.get('status') or 'unknown'
+            recon_run_at = recon_entry.get('run_at')
+            recon_orphans = recon_entry.get('created_orphans', 0)
+            recon_extras = len(recon_entry.get('suspicious_extras', []) or [])
+        else:
+            recon_status = 'pending'  # non ancora riconciliato
+            recon_run_at = None
+            recon_orphans = 0
+            recon_extras = 0
+
         rows.append({
             'data': cur.strftime('%d-%m-%Y'),
             'giorno': giorni_settimana[cur.strftime('%A')],
@@ -280,6 +303,10 @@ def registro_corrispettivi():
             'cash': round(data_row['cash'], 2),
             'digitali': round(data_row['digitali'], 2),
             'altro': round(data_row['altro'], 2),
+            'reconciliation_status': recon_status,
+            'reconciliation_run_at': recon_run_at,
+            'reconciliation_orphans': recon_orphans,
+            'reconciliation_extras': recon_extras,
         })
         cur += timedelta(days=1)
 
@@ -291,7 +318,16 @@ def registro_corrispettivi():
         'digitali': round(sum(r['digitali'] for r in rows), 2),
         'altro': round(sum(r['altro'] for r in rows), 2),
     }
-    return jsonify({'rows': rows, 'totali': totali})
+
+    recon_summary = {
+        'total_days': len(rows),
+        'ok': sum(1 for r in rows if r['reconciliation_status'] == 'ok'),
+        'fixed': sum(1 for r in rows if r['reconciliation_status'] == 'fixed'),
+        'discrepant': sum(1 for r in rows if r['reconciliation_status'] == 'discrepant'),
+        'pending': sum(1 for r in rows if r['reconciliation_status'] == 'pending'),
+        'error': sum(1 for r in rows if r['reconciliation_status'] == 'error'),
+    }
+    return jsonify({'rows': rows, 'totali': totali, 'reconciliation': recon_summary})
 
 @report_bp.route('/report')
 def report():
