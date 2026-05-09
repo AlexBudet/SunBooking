@@ -514,10 +514,18 @@ document.addEventListener('DOMContentLoaded', function() {
         <button id="btnExportPdfCorrispettivi" class="btn btn-danger btn-sm ms-2" title="Esporta in PDF">
   <i class="bi bi-file-earmark-pdf"></i>
 </button>
+        {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
+        <button id="btnReconcileRangeCorrispettivi" class="btn btn-outline-primary btn-sm ms-2"
+                title="Verifica retroattiva DGFE vs DB sui giorni del range (solo giorni non ancora verificati)">
+          <i class="bi bi-arrow-clockwise"></i> Verifica giorni pendenti
+        </button>
+        {% endif %}
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
       </div>
       <div class="modal-body p-3">
+        {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
         <div id="reconciliationBanner" class="alert mb-2 py-2 px-3" style="display:none; font-size:0.9em;"></div>
+        {% endif %}
         <div id="wrapperTabellaCorrispettivi" style="max-height:80vh; overflow-y:auto; width:100%;">
           <table class="table table-bordered table-sm mb-0 sticky-thead" style="width:100%;">
             <thead class="table-dark">
@@ -530,7 +538,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 <th>Di cui cash</th>
                 <th>Di cui digitali</th>
                 <th>Di cui altro (bank)</th>
+                {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
                 <th title="Stato riconciliazione DGFE vs Registro Scontrini">Verifica</th>
+                {% endif %}
               </tr>
             </thead>
             <tbody id="corpoTabellaCorrispettivi"></tbody>
@@ -2048,95 +2058,7 @@ document.addEventListener('DOMContentLoaded', function() {
           });
 
       } else if (modalToShow === "#modalCorrispettivi") {
-        fetch(`/api/registro_corrispettivi?dateFrom=${dateFrom}&dateTo=${dateTo}`)
-          .then(r => r.json())
-          .then(data => {
-            const tbody = document.getElementById('corpoTabellaCorrispettivi');
-            tbody.innerHTML = ''; // Svuota la tabella in modo sicuro
-
-            // Mappa stato riconciliazione -> {label, classe colore}
-            const reconMeta = {
-              ok:         { label: 'Verificato',       cls: 'text-bg-success' },
-              fixed:      { label: 'Verificato (fix)', cls: 'text-bg-warning' },
-              discrepant: { label: 'Discrepanze',      cls: 'text-bg-danger'  },
-              pending:    { label: 'Non verificato',   cls: 'text-bg-secondary' },
-              error:      { label: 'Errore verifica',  cls: 'text-bg-danger'  }
-            };
-
-            data.rows.forEach(row => {
-              const tr = tbody.insertRow();
-              tr.insertCell().textContent = row.data;
-              tr.insertCell().textContent = row.giorno;
-              tr.insertCell().textContent = row.totale.toFixed(2);
-              tr.insertCell().textContent = row.servizi.toFixed(2);
-              tr.insertCell().textContent = row.prodotti.toFixed(2);
-              tr.insertCell().textContent = row.cash.toFixed(2);
-              tr.insertCell().textContent = row.digitali.toFixed(2);
-              tr.insertCell().textContent = row.altro.toFixed(2);
-
-              const statusCell = tr.insertCell();
-              const meta = reconMeta[row.reconciliation_status] || reconMeta.pending;
-              const badge = document.createElement('span');
-              badge.className = 'badge ' + meta.cls;
-              badge.textContent = meta.label;
-              const titleParts = [];
-              if (row.reconciliation_run_at) titleParts.push('Verifica: ' + row.reconciliation_run_at.replace('T',' '));
-              if (row.reconciliation_orphans) titleParts.push('Orfani recuperati: ' + row.reconciliation_orphans);
-              if (row.reconciliation_extras) titleParts.push('Extra DB: ' + row.reconciliation_extras);
-              if (titleParts.length) badge.title = titleParts.join(' | ');
-              statusCell.appendChild(badge);
-            });
-
-            // Aggiungi la riga dei totali
-            const trTotale = tbody.insertRow();
-            trTotale.className = 'ultima-riga-totale';
-            const thTotale = document.createElement('th');
-            thTotale.colSpan = 2;
-            thTotale.textContent = 'Totale';
-            trTotale.appendChild(thTotale);
-            trTotale.insertCell().textContent = (data.totali.totale||0).toFixed(2);
-            trTotale.insertCell().textContent = (data.totali.servizi||0).toFixed(2);
-            trTotale.insertCell().textContent = (data.totali.prodotti||0).toFixed(2);
-            trTotale.insertCell().textContent = (data.totali.cash||0).toFixed(2);
-            trTotale.insertCell().textContent = (data.totali.digitali||0).toFixed(2);
-            trTotale.insertCell().textContent = (data.totali.altro||0).toFixed(2);
-            trTotale.insertCell().textContent = '';
-
-            // Banner riepilogo riconciliazione
-            const banner = document.getElementById('reconciliationBanner');
-            if (banner) {
-              const rec = data.reconciliation || {};
-              const tot = rec.total_days || 0;
-              const ok = rec.ok || 0;
-              const fixed = rec.fixed || 0;
-              const discrepant = rec.discrepant || 0;
-              const pending = rec.pending || 0;
-              const error = rec.error || 0;
-              if (tot === 0) {
-                banner.style.display = 'none';
-              } else if (discrepant + error > 0) {
-                banner.className = 'alert alert-danger mb-2 py-2 px-3';
-                banner.style.display = 'block';
-                banner.textContent = `⚠️ ${discrepant + error} giorni con discrepanze residue su ${tot}. ${ok} ok, ${fixed} riconciliati, ${pending} non verificati.`;
-              } else if (pending > 0) {
-                banner.className = 'alert alert-warning mb-2 py-2 px-3';
-                banner.style.display = 'block';
-                banner.textContent = `${pending} giorni non ancora verificati su ${tot}. La verifica avviene automaticamente alla chiusura giornaliera (Z).`;
-              } else if (fixed > 0) {
-                banner.className = 'alert alert-info mb-2 py-2 px-3';
-                banner.style.display = 'block';
-                banner.textContent = `Tutti i ${tot} giorni verificati: ${ok} ok, ${fixed} riconciliati con orfani recuperati automaticamente.`;
-              } else {
-                banner.className = 'alert alert-success mb-2 py-2 px-3';
-                banner.style.display = 'block';
-                banner.textContent = `✅ Tutti i ${tot} giorni verificati: DB allineato a DGFE.`;
-              }
-            }
-
-            const modal = new bootstrap.Modal(document.querySelector('#modalCorrispettivi'));
-            modal.show();
-            loader.style.display = 'none'; // NASCONDI LOADER
-          });
+        loadCorrispettiviData(dateFrom, dateTo, true);
 
       } else if (modalToShow === "#modalPassaggiCassa") {
         fetch(`/api/report_passaggi_cassa?dateFrom=${dateFrom}&dateTo=${dateTo}`)
@@ -2238,6 +2160,155 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+</script>
+<script>
+  // Flag globale: solo per owner E solo sulla versione on-premise (start.py).
+  // Sul cloud (wsgi.py) hide_cassa=True -> riconciliazione disattivata.
+  window.IS_OWNER = {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}true{% else %}false{% endif %};
+
+  window.loadCorrispettiviData = function(dateFrom, dateTo, openModal) {
+    const loaderEl = document.getElementById('loader');
+    return fetch(`/api/registro_corrispettivi?dateFrom=${dateFrom}&dateTo=${dateTo}`)
+      .then(r => r.json())
+      .then(data => {
+        const tbody = document.getElementById('corpoTabellaCorrispettivi');
+        tbody.innerHTML = '';
+
+        const reconMeta = {
+          ok:         { label: 'Verificato',       cls: 'text-bg-success' },
+          fixed:      { label: 'Verificato (fix)', cls: 'text-bg-warning' },
+          discrepant: { label: 'Discrepanze',      cls: 'text-bg-danger'  },
+          pending:    { label: 'Non verificato',   cls: 'text-bg-secondary' },
+          error:      { label: 'Errore verifica',  cls: 'text-bg-danger'  }
+        };
+
+        data.rows.forEach(row => {
+          const tr = tbody.insertRow();
+          tr.insertCell().textContent = row.data;
+          tr.insertCell().textContent = row.giorno;
+          tr.insertCell().textContent = row.totale.toFixed(2);
+          tr.insertCell().textContent = row.servizi.toFixed(2);
+          tr.insertCell().textContent = row.prodotti.toFixed(2);
+          tr.insertCell().textContent = row.cash.toFixed(2);
+          tr.insertCell().textContent = row.digitali.toFixed(2);
+          tr.insertCell().textContent = row.altro.toFixed(2);
+
+          if (window.IS_OWNER) {
+            const statusCell = tr.insertCell();
+            const status = row.reconciliation_status || 'pending';
+            const meta = reconMeta[status] || reconMeta.pending;
+            const badge = document.createElement('span');
+            badge.className = 'badge ' + meta.cls;
+            badge.textContent = meta.label;
+            const titleParts = [];
+            if (row.reconciliation_run_at) titleParts.push('Verifica: ' + row.reconciliation_run_at.replace('T',' '));
+            if (row.reconciliation_orphans) titleParts.push('Orfani recuperati: ' + row.reconciliation_orphans);
+            if (row.reconciliation_extras) titleParts.push('Extra DB: ' + row.reconciliation_extras);
+            if (titleParts.length) badge.title = titleParts.join(' | ');
+            statusCell.appendChild(badge);
+          }
+        });
+
+        // Riga totali
+        const trTotale = tbody.insertRow();
+        trTotale.className = 'ultima-riga-totale';
+        const thTotale = document.createElement('th');
+        thTotale.colSpan = 2;
+        thTotale.textContent = 'Totale';
+        trTotale.appendChild(thTotale);
+        trTotale.insertCell().textContent = (data.totali.totale||0).toFixed(2);
+        trTotale.insertCell().textContent = (data.totali.servizi||0).toFixed(2);
+        trTotale.insertCell().textContent = (data.totali.prodotti||0).toFixed(2);
+        trTotale.insertCell().textContent = (data.totali.cash||0).toFixed(2);
+        trTotale.insertCell().textContent = (data.totali.digitali||0).toFixed(2);
+        trTotale.insertCell().textContent = (data.totali.altro||0).toFixed(2);
+        if (window.IS_OWNER) {
+          trTotale.insertCell().textContent = '';
+        }
+
+        // Banner riconciliazione (solo owner)
+        const banner = document.getElementById('reconciliationBanner');
+        if (banner && window.IS_OWNER) {
+          const rec = data.reconciliation || {};
+          const tot = rec.total_days || 0;
+          const ok = rec.ok || 0;
+          const fixed = rec.fixed || 0;
+          const discrepant = rec.discrepant || 0;
+          const pending = rec.pending || 0;
+          const error = rec.error || 0;
+          if (tot === 0) {
+            banner.style.display = 'none';
+          } else if (discrepant + error > 0) {
+            banner.className = 'alert alert-danger mb-2 py-2 px-3';
+            banner.style.display = 'block';
+            banner.textContent = `⚠️ ${discrepant + error} giorni con discrepanze residue su ${tot}. ${ok} ok, ${fixed} riconciliati, ${pending} non verificati.`;
+          } else if (pending > 0) {
+            banner.className = 'alert alert-warning mb-2 py-2 px-3';
+            banner.style.display = 'block';
+            banner.textContent = `${pending} giorni non ancora verificati su ${tot}. La verifica avviene automaticamente alla chiusura giornaliera (Z), oppure usa "Verifica giorni pendenti" per farla manualmente.`;
+          } else if (fixed > 0) {
+            banner.className = 'alert alert-info mb-2 py-2 px-3';
+            banner.style.display = 'block';
+            banner.textContent = `Tutti i ${tot} giorni verificati: ${ok} ok, ${fixed} riconciliati con orfani recuperati automaticamente.`;
+          } else {
+            banner.className = 'alert alert-success mb-2 py-2 px-3';
+            banner.style.display = 'block';
+            banner.textContent = `✅ Tutti i ${tot} giorni verificati: DB allineato a DGFE.`;
+          }
+        }
+
+        if (openModal) {
+          const modal = new bootstrap.Modal(document.querySelector('#modalCorrispettivi'));
+          modal.show();
+        }
+        if (loaderEl) loaderEl.style.display = 'none';
+      })
+      .catch(() => {
+        if (loaderEl) loaderEl.style.display = 'none';
+      });
+  };
+
+  // Bottone "Verifica giorni pendenti" (solo owner)
+  const btnReconcileRange = document.getElementById('btnReconcileRangeCorrispettivi');
+  if (btnReconcileRange) {
+    btnReconcileRange.addEventListener('click', async function() {
+      const dateFrom = document.getElementById('dateFrom').value;
+      const dateTo = document.getElementById('dateTo').value;
+      if (!dateFrom || !dateTo) {
+        alert('Seleziona prima un range di date.');
+        return;
+      }
+      if (!confirm(`Verificare DGFE vs Registro Scontrini per i giorni "non verificati" dal ${dateFrom} al ${dateTo}?\n\nVerranno creati Receipt orfani per le entry DGFE non presenti in DB. I giorni futuri vengono saltati.`)) return;
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+      const original = btnReconcileRange.innerHTML;
+      btnReconcileRange.disabled = true;
+      btnReconcileRange.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Verifica in corso...';
+      try {
+        const res = await fetch('/cassa/reconcile-range', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+          },
+          body: JSON.stringify({ dateFrom, dateTo, only_pending: true })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert((data && data.error) || 'Errore durante la verifica retroattiva.');
+        } else {
+          const totOrphans = (data.results || []).reduce((acc, r) => acc + (r.created_orphans || 0), 0);
+          alert(`Verifica completata.\nGiorni elaborati: ${data.processed}\nOrfani creati: ${totOrphans}\nSaltati (gia' verificati): ${data.skipped_already_done}\nSaltati (futuri): ${data.skipped_future}`);
+          // Ricarica la tabella senza riaprire il modal
+          await window.loadCorrispettiviData(dateFrom, dateTo, false);
+        }
+      } catch (err) {
+        alert('Errore di rete: ' + err.message);
+      } finally {
+        btnReconcileRange.disabled = false;
+        btnReconcileRange.innerHTML = original;
+      }
+    });
+  }
 </script>
 <script>
  document.getElementById('btnExportPdfCorrispettivi').addEventListener('click', function() {
