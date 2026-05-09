@@ -1349,6 +1349,79 @@ def _run_post_z_reconciliation():
             pass
         return None
 
+@cassa_bp.route('/cassa/reconcile-range', methods=['POST'])
+def reconcile_range():
+    """Riconciliazione retroattiva su un range di date (solo owner).
+    Body JSON: {dateFrom: 'YYYY-MM-DD', dateTo: 'YYYY-MM-DD', only_pending: bool}
+    Esegue reconcile_day per ogni giorno del range.
+    Se only_pending=True (default), salta i giorni che hanno gia' una entry diversa da 'pending'/'error'.
+    """
+    user_id = session.get("user_id")
+    user = db.session.get(User, user_id)
+    if not user or getattr(user.ruolo, 'value', None) != 'owner':
+        return jsonify({"error": "Accesso riservato all'owner"}), 403
+
+    data = request.get_json(force=True) or {}
+    date_from = (data.get("dateFrom") or "").strip()
+    date_to = (data.get("dateTo") or "").strip()
+    only_pending = bool(data.get("only_pending", True))
+    if not date_from or not date_to:
+        return jsonify({"error": "Date non valide"}), 400
+    try:
+        d_from = datetime.strptime(date_from, "%Y-%m-%d").date()
+        d_to = datetime.strptime(date_to, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "Formato data non valido (YYYY-MM-DD)"}), 400
+    if d_to < d_from:
+        return jsonify({"error": "dateTo precede dateFrom"}), 400
+    # Limite di sicurezza: max 366 giorni in un singolo range
+    if (d_to - d_from).days > 366:
+        return jsonify({"error": "Range troppo ampio (max 366 giorni)"}), 400
+
+    bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+    if not bi:
+        return jsonify({"error": "BusinessInfo non configurata"}), 400
+
+    log_pre = _load_reconciliation_log(bi.id)
+
+    today = date.today()
+    results = []
+    skipped_future = 0
+    skipped_already_done = 0
+    cur = d_from
+    while cur <= d_to:
+        # Non riconciliare il futuro
+        if cur > today:
+            skipped_future += 1
+            cur += timedelta(days=1)
+            continue
+        if only_pending:
+            existing = log_pre.get(cur.strftime("%Y-%m-%d"))
+            if existing and existing.get('status') in ('ok', 'fixed', 'discrepant'):
+                skipped_already_done += 1
+                cur += timedelta(days=1)
+                continue
+        try:
+            summary = reconcile_day(cur, bi)
+            results.append({
+                "date": cur.strftime("%Y-%m-%d"),
+                "status": summary.get("status"),
+                "created_orphans": summary.get("created_orphans", 0),
+                "suspicious_extras": len(summary.get("suspicious_extras", []) or []),
+            })
+        except Exception as exc:
+            current_app.logger.error("reconcile-range: errore su %s: %s", cur, str(exc))
+            results.append({"date": cur.strftime("%Y-%m-%d"), "status": "error", "error": str(exc)})
+        cur += timedelta(days=1)
+
+    return jsonify({
+        "ok": True,
+        "processed": len(results),
+        "skipped_future": skipped_future,
+        "skipped_already_done": skipped_already_done,
+        "results": results
+    })
+
 @cassa_bp.route('/cassa/chiusura-giornaliera', methods=['POST'])
 def chiusura_giornaliera():
     ip, printer_model = _get_printer_config()

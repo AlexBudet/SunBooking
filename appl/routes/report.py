@@ -263,15 +263,23 @@ def registro_corrispettivi():
         'Thursday': 'Giovedì', 'Friday': 'Venerdì', 'Saturday': 'Sabato', 'Sunday': 'Domenica'
     }
 
-    # Carica log riconciliazione per-tenant (best-effort, non blocca il report)
+    # Carica log riconciliazione SOLO per owner E SOLO sulla versione on-premise (start.py).
+    # Sul cloud/wsgi.py il config HIDE_CASSA=True (la stampante non e' raggiungibile),
+    # quindi la riconciliazione non ha senso ed i campi vengono omessi.
+    user_id = session.get("user_id")
+    user = db.session.get(User, user_id)
+    is_local = not bool(current_app.config.get('HIDE_CASSA'))
+    is_owner = is_local and bool(user and getattr(user.ruolo, 'value', None) == 'owner')
+
     recon_log = {}
-    try:
-        bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
-        if bi:
-            from appl.routes.cassa import _load_reconciliation_log
-            recon_log = _load_reconciliation_log(bi.id) or {}
-    except Exception:
-        recon_log = {}
+    if is_owner:
+        try:
+            bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+            if bi:
+                from appl.routes.cassa import _load_reconciliation_log
+                recon_log = _load_reconciliation_log(bi.id) or {}
+        except Exception:
+            recon_log = {}
 
     rows = []
     cur = start.date()
@@ -282,19 +290,7 @@ def registro_corrispettivi():
         prodotti = data_row['prodotti']
         servizi = max(0.0, totale - prodotti)
 
-        recon_entry = recon_log.get(cur.strftime('%Y-%m-%d'))
-        if recon_entry:
-            recon_status = recon_entry.get('status') or 'unknown'
-            recon_run_at = recon_entry.get('run_at')
-            recon_orphans = recon_entry.get('created_orphans', 0)
-            recon_extras = len(recon_entry.get('suspicious_extras', []) or [])
-        else:
-            recon_status = 'pending'  # non ancora riconciliato
-            recon_run_at = None
-            recon_orphans = 0
-            recon_extras = 0
-
-        rows.append({
+        row_obj = {
             'data': cur.strftime('%d-%m-%Y'),
             'giorno': giorni_settimana[cur.strftime('%A')],
             'totale': round(totale, 2),
@@ -303,11 +299,22 @@ def registro_corrispettivi():
             'cash': round(data_row['cash'], 2),
             'digitali': round(data_row['digitali'], 2),
             'altro': round(data_row['altro'], 2),
-            'reconciliation_status': recon_status,
-            'reconciliation_run_at': recon_run_at,
-            'reconciliation_orphans': recon_orphans,
-            'reconciliation_extras': recon_extras,
-        })
+        }
+
+        if is_owner:
+            recon_entry = recon_log.get(cur.strftime('%Y-%m-%d'))
+            if recon_entry:
+                row_obj['reconciliation_status'] = recon_entry.get('status') or 'unknown'
+                row_obj['reconciliation_run_at'] = recon_entry.get('run_at')
+                row_obj['reconciliation_orphans'] = recon_entry.get('created_orphans', 0)
+                row_obj['reconciliation_extras'] = len(recon_entry.get('suspicious_extras', []) or [])
+            else:
+                row_obj['reconciliation_status'] = 'pending'
+                row_obj['reconciliation_run_at'] = None
+                row_obj['reconciliation_orphans'] = 0
+                row_obj['reconciliation_extras'] = 0
+
+        rows.append(row_obj)
         cur += timedelta(days=1)
 
     totali = {
@@ -319,15 +326,17 @@ def registro_corrispettivi():
         'altro': round(sum(r['altro'] for r in rows), 2),
     }
 
-    recon_summary = {
-        'total_days': len(rows),
-        'ok': sum(1 for r in rows if r['reconciliation_status'] == 'ok'),
-        'fixed': sum(1 for r in rows if r['reconciliation_status'] == 'fixed'),
-        'discrepant': sum(1 for r in rows if r['reconciliation_status'] == 'discrepant'),
-        'pending': sum(1 for r in rows if r['reconciliation_status'] == 'pending'),
-        'error': sum(1 for r in rows if r['reconciliation_status'] == 'error'),
-    }
-    return jsonify({'rows': rows, 'totali': totali, 'reconciliation': recon_summary})
+    payload = {'rows': rows, 'totali': totali}
+    if is_owner:
+        payload['reconciliation'] = {
+            'total_days': len(rows),
+            'ok': sum(1 for r in rows if r.get('reconciliation_status') == 'ok'),
+            'fixed': sum(1 for r in rows if r.get('reconciliation_status') == 'fixed'),
+            'discrepant': sum(1 for r in rows if r.get('reconciliation_status') == 'discrepant'),
+            'pending': sum(1 for r in rows if r.get('reconciliation_status') == 'pending'),
+            'error': sum(1 for r in rows if r.get('reconciliation_status') == 'error'),
+        }
+    return jsonify(payload)
 
 @report_bp.route('/report')
 def report():
