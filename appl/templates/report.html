@@ -517,6 +517,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
       </div>
       <div class="modal-body p-3">
+        <div id="reconciliationBanner" class="alert mb-2 py-2 px-3" style="display:none; font-size:0.9em;"></div>
         <div id="wrapperTabellaCorrispettivi" style="max-height:80vh; overflow-y:auto; width:100%;">
           <table class="table table-bordered table-sm mb-0 sticky-thead" style="width:100%;">
             <thead class="table-dark">
@@ -529,6 +530,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <th>Di cui cash</th>
                 <th>Di cui digitali</th>
                 <th>Di cui altro (bank)</th>
+                <th title="Stato riconciliazione DGFE vs Registro Scontrini">Verifica</th>
               </tr>
             </thead>
             <tbody id="corpoTabellaCorrispettivi"></tbody>
@@ -2052,6 +2054,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const tbody = document.getElementById('corpoTabellaCorrispettivi');
             tbody.innerHTML = ''; // Svuota la tabella in modo sicuro
 
+            // Mappa stato riconciliazione -> {label, classe colore}
+            const reconMeta = {
+              ok:         { label: 'Verificato',       cls: 'text-bg-success' },
+              fixed:      { label: 'Verificato (fix)', cls: 'text-bg-warning' },
+              discrepant: { label: 'Discrepanze',      cls: 'text-bg-danger'  },
+              pending:    { label: 'Non verificato',   cls: 'text-bg-secondary' },
+              error:      { label: 'Errore verifica',  cls: 'text-bg-danger'  }
+            };
+
             data.rows.forEach(row => {
               const tr = tbody.insertRow();
               tr.insertCell().textContent = row.data;
@@ -2062,6 +2073,18 @@ document.addEventListener('DOMContentLoaded', function() {
               tr.insertCell().textContent = row.cash.toFixed(2);
               tr.insertCell().textContent = row.digitali.toFixed(2);
               tr.insertCell().textContent = row.altro.toFixed(2);
+
+              const statusCell = tr.insertCell();
+              const meta = reconMeta[row.reconciliation_status] || reconMeta.pending;
+              const badge = document.createElement('span');
+              badge.className = 'badge ' + meta.cls;
+              badge.textContent = meta.label;
+              const titleParts = [];
+              if (row.reconciliation_run_at) titleParts.push('Verifica: ' + row.reconciliation_run_at.replace('T',' '));
+              if (row.reconciliation_orphans) titleParts.push('Orfani recuperati: ' + row.reconciliation_orphans);
+              if (row.reconciliation_extras) titleParts.push('Extra DB: ' + row.reconciliation_extras);
+              if (titleParts.length) badge.title = titleParts.join(' | ');
+              statusCell.appendChild(badge);
             });
 
             // Aggiungi la riga dei totali
@@ -2077,7 +2100,39 @@ document.addEventListener('DOMContentLoaded', function() {
             trTotale.insertCell().textContent = (data.totali.cash||0).toFixed(2);
             trTotale.insertCell().textContent = (data.totali.digitali||0).toFixed(2);
             trTotale.insertCell().textContent = (data.totali.altro||0).toFixed(2);
-            
+            trTotale.insertCell().textContent = '';
+
+            // Banner riepilogo riconciliazione
+            const banner = document.getElementById('reconciliationBanner');
+            if (banner) {
+              const rec = data.reconciliation || {};
+              const tot = rec.total_days || 0;
+              const ok = rec.ok || 0;
+              const fixed = rec.fixed || 0;
+              const discrepant = rec.discrepant || 0;
+              const pending = rec.pending || 0;
+              const error = rec.error || 0;
+              if (tot === 0) {
+                banner.style.display = 'none';
+              } else if (discrepant + error > 0) {
+                banner.className = 'alert alert-danger mb-2 py-2 px-3';
+                banner.style.display = 'block';
+                banner.textContent = `⚠️ ${discrepant + error} giorni con discrepanze residue su ${tot}. ${ok} ok, ${fixed} riconciliati, ${pending} non verificati.`;
+              } else if (pending > 0) {
+                banner.className = 'alert alert-warning mb-2 py-2 px-3';
+                banner.style.display = 'block';
+                banner.textContent = `${pending} giorni non ancora verificati su ${tot}. La verifica avviene automaticamente alla chiusura giornaliera (Z).`;
+              } else if (fixed > 0) {
+                banner.className = 'alert alert-info mb-2 py-2 px-3';
+                banner.style.display = 'block';
+                banner.textContent = `Tutti i ${tot} giorni verificati: ${ok} ok, ${fixed} riconciliati con orfani recuperati automaticamente.`;
+              } else {
+                banner.className = 'alert alert-success mb-2 py-2 px-3';
+                banner.style.display = 'block';
+                banner.textContent = `✅ Tutti i ${tot} giorni verificati: DB allineato a DGFE.`;
+              }
+            }
+
             const modal = new bootstrap.Modal(document.querySelector('#modalCorrispettivi'));
             modal.show();
             loader.style.display = 'none'; // NASCONDI LOADER

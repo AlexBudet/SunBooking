@@ -1,5 +1,7 @@
 from decimal import Decimal
 import json
+import os
+import tempfile
 import html, re, time as pytime
 from flask import Blueprint, app, render_template, jsonify, request, session, abort, current_app
 from appl.models import Appointment, AppointmentStatus, BusinessInfo, Operator, PrinterModel, Service, ServiceCategory, Client, Receipt, Subcategory, User, Pacchetto, PacchettoRata, PacchettoStatus, db
@@ -1331,6 +1333,22 @@ def update_metodo_pagamento(receipt_id):
     db.session.commit()
     return jsonify({'success': True})
 
+def _run_post_z_reconciliation():
+    """Esegue reconcile_day(today) usando la BusinessInfo corrente.
+    Best-effort: non solleva mai eccezioni al chiamante.
+    Ritorna il summary o None."""
+    try:
+        bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+        if not bi:
+            return None
+        return reconcile_day(date.today(), bi)
+    except Exception as exc:
+        try:
+            current_app.logger.error("Reconciliation post-Z fallita: %s", str(exc))
+        except Exception:
+            pass
+        return None
+
 @cassa_bp.route('/cassa/chiusura-giornaliera', methods=['POST'])
 def chiusura_giornaliera():
     ip, printer_model = _get_printer_config()
@@ -1364,7 +1382,9 @@ def chiusura_giornaliera():
 
         # Se non troviamo nulla ma la risposta è 200, assumiamo OK
         if not codes and resp.status_code == 200:
-            return jsonify({"status": "ok", "code": 200, "message": "Chiusura giornaliera completata"}), 200
+            recon = _run_post_z_reconciliation()
+            return jsonify({"status": "ok", "code": 200, "message": "Chiusura giornaliera completata",
+                            "reconciliation": recon}), 200
 
         # Considera 0 e 410 come non fatali (410 = nessuna richiesta codici pendente)
         non_fatali = {0, 200, 410}
@@ -1372,7 +1392,9 @@ def chiusura_giornaliera():
 
         if not fatali:
             # Anche se l'HTTP code non è 200, l'esito è ok: non propagare l'errore al client
-            return jsonify({"status": "ok", "code": 200, "message": "Chiusura giornaliera completata"}), 200
+            recon = _run_post_z_reconciliation()
+            return jsonify({"status": "ok", "code": 200, "message": "Chiusura giornaliera completata",
+                            "reconciliation": recon}), 200
 
         # Errori reali: prova best-effort di sblocco (=C1) e segnala errore
         try:
@@ -1939,6 +1961,215 @@ def _try_lazy_recover(voci, cliente_id, operatore_id, expected_total,
         except Exception:
             pass
         return None
+
+# ============================================================
+# RECONCILIATION DGFE <-> DB (Livello 2: log su file JSON per-tenant)
+# ============================================================
+
+def _reconciliation_dir():
+    """Directory dove salvare i log di riconciliazione.
+    Priorita': SUNBOOKING_RECONCILIATION_DIR env > config > Flask instance_path/reconciliation.
+    Crea la directory se non esiste. Solleva eccezione solo se davvero non scrivibile."""
+    base = (
+        os.environ.get('SUNBOOKING_RECONCILIATION_DIR')
+        or current_app.config.get('RECONCILIATION_DIR')
+        or os.path.join(current_app.instance_path, 'reconciliation')
+    )
+    os.makedirs(base, exist_ok=True)
+    return base
+
+def _reconciliation_file(business_info_id):
+    """Percorso file JSON per il negozio (per-tenant)."""
+    bid = int(business_info_id) if business_info_id is not None else 0
+    return os.path.join(_reconciliation_dir(), f"reconciliation_{bid}.json")
+
+def _load_reconciliation_log(business_info_id):
+    """Legge il log JSON. Ritorna dict {date_str: entry} (vuoto se mancante/corrotto)."""
+    path = _reconciliation_file(business_info_id)
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+        return {}
+    except Exception as exc:
+        try:
+            current_app.logger.warning("Reconciliation log corrotto %s: %s", path, str(exc))
+        except Exception:
+            pass
+        return {}
+
+def _save_reconciliation_log(business_info_id, data):
+    """Scrive il log JSON in modo atomico (tmp + replace)."""
+    path = _reconciliation_file(business_info_id)
+    dir_path = os.path.dirname(path)
+    fd, tmp_path = tempfile.mkstemp(prefix=".recon_", suffix=".json.tmp", dir=dir_path)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        raise
+
+def _set_reconciliation_entry(business_info_id, day_str, entry):
+    """Aggiorna/crea l'entry del giorno e persiste."""
+    log = _load_reconciliation_log(business_info_id)
+    log[day_str] = entry
+    _save_reconciliation_log(business_info_id, log)
+
+def reconcile_day(day_date, business_info):
+    """Riconcilia il giorno con il DGFE della stampante e crea Receipt orfani per le
+    entry mancanti. Persiste un'entry nel log JSON per-tenant.
+    business_info: oggetto BusinessInfo (id, business_name, city, printer_ip, printer_model).
+    Ritorna dict riassuntivo: {status, dgfe_count, db_count, created_orphans, suspicious_extras, run_at}.
+    """
+    started_at = datetime.now()
+    bid = getattr(business_info, 'id', None)
+    ip = getattr(business_info, 'printer_ip', None)
+    raw_model = getattr(business_info, 'printer_model', None)
+    printer_model = _normalize_model(raw_model)
+
+    summary = {
+        "status": "error",
+        "business_info_id": bid,
+        "business_name": getattr(business_info, 'business_name', None),
+        "city": getattr(business_info, 'city', None),
+        "printer_ip": ip,
+        "printer_model": printer_model,
+        "date": day_date.strftime("%Y-%m-%d"),
+        "run_at": started_at.isoformat(timespec='seconds'),
+        "dgfe_count": 0,
+        "db_count": 0,
+        "dgfe_total": 0.0,
+        "db_total": 0.0,
+        "created_orphans": 0,
+        "suspicious_extras": [],
+        "notes": ""
+    }
+
+    if not ip:
+        summary["notes"] = "IP stampante non configurato"
+        try:
+            _set_reconciliation_entry(bid, summary["date"], summary)
+        except Exception:
+            pass
+        return summary
+
+    try:
+        dgfe_entries = _dgfe_entries_for_date(ip, day_date) or []
+    except Exception as exc:
+        summary["notes"] = f"Errore lettura DGFE: {exc}"
+        try:
+            _set_reconciliation_entry(bid, summary["date"], summary)
+        except Exception:
+            pass
+        return summary
+
+    summary["dgfe_count"] = len(dgfe_entries)
+    summary["dgfe_total"] = round(sum(float(e.get("totale_float", 0.0)) for e in dgfe_entries), 2)
+
+    day_start = datetime.combine(day_date, datetime.min.time())
+    day_end = datetime.combine(day_date, datetime.max.time())
+    receipts = Receipt.query.filter(
+        Receipt.created_at >= day_start,
+        Receipt.created_at <= day_end,
+        Receipt.is_fiscale == True
+    ).all()
+    summary["db_count"] = len(receipts)
+    summary["db_total"] = round(sum(float(r.total_amount or 0) for r in receipts), 2)
+
+    # Match DGFE -> DB per totale (+ line_count se disponibile)
+    db_used = set()
+    orphans_created = 0
+    for e in dgfe_entries:
+        try:
+            tot_e = round(float(e.get("totale_float", 0)), 2)
+        except Exception:
+            continue
+        line_e = e.get("line_count")
+        matched_idx = None
+        for idx, r in enumerate(receipts):
+            if idx in db_used:
+                continue
+            try:
+                tot_r = round(float(r.total_amount or 0), 2)
+            except Exception:
+                continue
+            if abs(tot_r - tot_e) >= 0.01:
+                continue
+            if line_e and r.voci is not None:
+                voci_list = r.voci if isinstance(r.voci, list) else []
+                if voci_list and len(voci_list) != line_e:
+                    continue
+            matched_idx = idx
+            break
+        if matched_idx is not None:
+            db_used.add(matched_idx)
+            continue
+
+        # Nessun match: crea Receipt orfano con created_at = data DGFE (non oggi)
+        try:
+            dt = e.get("dataora_dt") or datetime.combine(day_date, datetime.min.time())
+            prog_raw = e.get("progressivo_raw") or ""
+            try:
+                prog_n = int(prog_raw)
+                prog_str = f"DGFE-{prog_n:04d}"
+            except Exception:
+                prog_str = f"DGFE-{prog_raw}" if prog_raw else "DGFE-?"
+            orphan = Receipt(
+                created_at=dt,
+                total_amount=tot_e,
+                is_fiscale=True,
+                voci=[],
+                cliente_id=None,
+                operatore_id=None,
+                numero_progressivo=prog_str
+            )
+            db.session.add(orphan)
+            db.session.commit()
+            orphans_created += 1
+        except Exception as exc:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            current_app.logger.error("reconcile_day: errore creazione orfano: %s", str(exc))
+
+    summary["created_orphans"] = orphans_created
+
+    # Receipt extra (in DB ma non in DGFE) -> log soltanto, niente azione
+    extras = []
+    for idx, r in enumerate(receipts):
+        if idx in db_used:
+            continue
+        extras.append({
+            "id": r.id,
+            "numero_progressivo": str(r.numero_progressivo),
+            "total_amount": float(r.total_amount or 0),
+            "created_at": r.created_at.isoformat(timespec='seconds') if r.created_at else None
+        })
+    summary["suspicious_extras"] = extras
+
+    if orphans_created == 0 and not extras:
+        summary["status"] = "ok"
+    elif orphans_created > 0 and not extras:
+        summary["status"] = "fixed"
+    else:
+        summary["status"] = "discrepant"
+
+    try:
+        _set_reconciliation_entry(bid, summary["date"], summary)
+    except Exception as exc:
+        current_app.logger.error("reconcile_day: scrittura log fallita: %s", str(exc))
+        summary["notes"] = f"Log non scritto: {exc}"
+
+    return summary
 
 @cassa_bp.route('/cassa/rch-retry', methods=['POST'])
 def rch_retry():
