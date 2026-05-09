@@ -147,6 +147,31 @@ def _rch_is_success(resp):
     # Nessun codice trovato: HTTP 200 = OK presumibile
     return getattr(resp, 'status_code', 0) == 200
 
+def _read_progressivo(url, headers, rch_kwargs, max_attempts=8, sleep_s=0.5):
+    """Polla =C453/$0 (e fallback =DGFE/REG) per leggere lastDocF/lastZ.
+    Ritorna (numero_progressivo, numero_z) oppure (None, None) se non leggibile.
+    numero_z e' gia' incrementato di 1 (come fa il flusso esistente)."""
+    for cmd in ("=C453/$0", "=DGFE/REG"):
+        payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
+        for _ in range(max_attempts):
+            pytime.sleep(sleep_s)
+            try:
+                resp = requests.post(url, data=payload.encode('utf-8'), headers=headers,
+                                     timeout=6, **rch_kwargs)
+            except Exception:
+                continue
+            body = resp.text or ""
+            m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', body) or
+                     re.search(r'<C453[^>]*>(\d+)</C453>', body) or
+                     re.search(r'<result>(\d+)</result>', body))
+            m_z = re.search(r'<lastZ>(\d+)</lastZ>', body)
+            if m_doc and m_z:
+                try:
+                    return int(m_doc.group(1)), int(m_z.group(1)) + 1
+                except Exception:
+                    pass
+    return None, None
+
 def clean_str(s):
     # Rimuove apostrofi e caratteri HTML problematici
     return str(s).replace("'", "").replace('"', "").replace("&", "").replace(";", "").replace("<", "").replace(">", "")
@@ -730,6 +755,28 @@ def send_to_rch():
         headers = _rch_headers(printer_model)
         rch_kwargs = _rch_request_kwargs(printer_model)
 
+        # expected_total e line_count usati sia per RCH_PENDING sia per il lazy recover
+        expected_total = round(sum(float(v.get("prezzo", 0)) for v in voci_fiscali), 2)
+        expected_line_count = len(voci_fiscali)
+
+        def _build_pending_entry():
+            return {
+                "payload_xml": payload_vendita,
+                "cliente_id": cliente_id,
+                "operatore_id": operatore_id,
+                "voci": voci_fiscali,
+                "created_ts": pytime.time(),
+                "expected_total": expected_total,
+                "giorno": datetime.now().strftime("%Y-%m-%d"),
+                "line_count": expected_line_count,
+                "printer_ip": ip,
+                "printer_model": printer_model
+            }
+
+        fiscale_recovered = False
+        progressivo_completo = None
+        resp_vendita = None
+
         try:
             resp_vendita = requests.post(
                 url, data=payload_vendita.encode("UTF-8"), headers=headers, timeout=120,
@@ -737,131 +784,134 @@ def send_to_rch():
             )
             current_app.logger.info("RCH risposta: %s", resp_vendita.text[:300] if resp_vendita.text else "(vuoto)")
         except requests.exceptions.Timeout as exc:
-            # TIMEOUT = stampante in attesa (carta, coperchio aperto, ecc.)
-            current_app.logger.warning("RCH TIMEOUT - stampante in attesa: %s", str(exc))
-            if idempotency_key:
-                expected_total = round(sum(float(v.get("prezzo", 0)) for v in voci_fiscali), 2)
-                RCH_PENDING[idempotency_key] = {
-                    "payload_xml": payload_vendita,
-                    "cliente_id": cliente_id,
-                    "operatore_id": operatore_id,
-                    "voci": voci_fiscali,
-                    "created_ts": pytime.time(),
-                    "expected_total": expected_total,
-                    "giorno": datetime.now().strftime("%Y-%m-%d"),
-                    "line_count": len(voci_fiscali),
-                    "printer_ip": ip,
-                    "printer_model": printer_model
-                }
-                return jsonify({
-                    "pending": True,
-                    "reason": "timeout",
-                    "message": "Stampante in attesa (cambio carta?). Risolvere e riprovare.",
-                    "idempotency_key": idempotency_key,
-                    "retry_after": 3
-                }), 202
-            return jsonify({"error": "Stampante in attesa. Controllare carta e riprovare."}), 502
+            # TIMEOUT = la stampante POTREBBE aver gia' chiuso il documento ma la response
+            # non e' arrivata. Provo prima il lazy recover (legge lastDocF + DGFE).
+            current_app.logger.warning("RCH TIMEOUT: tentativo lazy recover... (%s)", str(exc))
+            prog = _try_lazy_recover(voci_fiscali, cliente_id, operatore_id,
+                                     expected_total, expected_line_count, ip, printer_model)
+            if prog:
+                current_app.logger.info("RCH lazy recover OK dopo timeout: progressivo %s", prog)
+                progressivo_completo = prog
+                fiscale_recovered = True
+                results.append({
+                    "message": f"Scontrino fiscale registrato (progressivo {prog})",
+                    "is_fiscale": True
+                })
+            else:
+                if idempotency_key:
+                    RCH_PENDING[idempotency_key] = _build_pending_entry()
+                    return jsonify({
+                        "pending": True,
+                        "reason": "timeout",
+                        "message": "Stampante in attesa (cambio carta?). Risolvere e riprovare.",
+                        "idempotency_key": idempotency_key,
+                        "expected_total": expected_total,
+                        "retry_after": 3
+                    }), 202
+                return jsonify({"error": "Stampante in attesa. Controllare carta e riprovare."}), 502
         except Exception as exc:
-            current_app.logger.warning("RCH non raggiungibile (network): %s", str(exc))
-            if idempotency_key:
-                expected_total = round(sum(float(v.get("prezzo", 0)) for v in voci_fiscali), 2)
-                RCH_PENDING[idempotency_key] = {
-                    "payload_xml": payload_vendita,
-                    "cliente_id": cliente_id,
-                    "operatore_id": operatore_id,
-                    "voci": voci_fiscali,
-                    "created_ts": pytime.time(),
-                    "expected_total": expected_total,
-                    "giorno": datetime.now().strftime("%Y-%m-%d"),
-                    "line_count": len(voci_fiscali),
-                    "printer_ip": ip,
-                    "printer_model": printer_model
-                }
-                return jsonify({
-                    "pending": True,
-                    "reason": "network",
-                    "message": "Stampante non raggiungibile. Attendere e riprovare.",
-                    "idempotency_key": idempotency_key,
-                    "retry_after": 3
-                }), 202
-            return jsonify({"error": "Stampante non raggiungibile. Riprova."}), 502
+            current_app.logger.warning("RCH non raggiungibile (network): tentativo lazy recover... (%s)", str(exc))
+            prog = _try_lazy_recover(voci_fiscali, cliente_id, operatore_id,
+                                     expected_total, expected_line_count, ip, printer_model)
+            if prog:
+                current_app.logger.info("RCH lazy recover OK dopo network error: progressivo %s", prog)
+                progressivo_completo = prog
+                fiscale_recovered = True
+                results.append({
+                    "message": f"Scontrino fiscale registrato (progressivo {prog})",
+                    "is_fiscale": True
+                })
+            else:
+                if idempotency_key:
+                    RCH_PENDING[idempotency_key] = _build_pending_entry()
+                    return jsonify({
+                        "pending": True,
+                        "reason": "network",
+                        "message": "Stampante non raggiungibile. Attendere e riprovare.",
+                        "idempotency_key": idempotency_key,
+                        "expected_total": expected_total,
+                        "retry_after": 3
+                    }), 202
+                return jsonify({"error": "Stampante non raggiungibile. Riprova."}), 502
 
-        # Se non è esplicitamente "OK", considera pending/retryable (es. fine carta, coperchio aperto, ecc.)
-        if not _rch_is_success(resp_vendita):
-            current_app.logger.warning("RCH ha risposto con errore (retryable): %s", resp_vendita.text[:800])
-            if idempotency_key:
-                expected_total = round(sum(float(v.get("prezzo", 0)) for v in voci_fiscali), 2)
-                RCH_PENDING[idempotency_key] = {
-                    "payload_xml": payload_vendita,
-                    "cliente_id": cliente_id,
-                    "operatore_id": operatore_id,
-                    "voci": voci_fiscali,
-                    "created_ts": pytime.time(),
-                    "expected_total": expected_total,
-                    "giorno": datetime.now().strftime("%Y-%m-%d"),
-                    "line_count": len(voci_fiscali),
-                    "printer_ip": ip,
-                    "printer_model": printer_model
-                }
-                return jsonify({
-                    "pending": True,
-                    "reason": "printer_error",
-                    "message": "Stampante in errore. Attendere (es. cambio carta) e riprovare.",
-                    "idempotency_key": idempotency_key,
-                    "retry_after": 3
-                }), 202
-            return jsonify({"error": "Stampante in errore. Riprova."}), 502
+        # Se la prima POST e' andata ma la risposta non e' "OK" (errCode!=0 da qualche parte),
+        # provo lazy recover prima di dare per fallito.
+        if not fiscale_recovered and not _rch_is_success(resp_vendita):
+            current_app.logger.warning("RCH ha risposto con errore: tentativo lazy recover... (body=%s)",
+                                       (resp_vendita.text[:400] if resp_vendita is not None else ""))
+            prog = _try_lazy_recover(voci_fiscali, cliente_id, operatore_id,
+                                     expected_total, expected_line_count, ip, printer_model)
+            if prog:
+                current_app.logger.info("RCH lazy recover OK dopo errore stampante: progressivo %s", prog)
+                progressivo_completo = prog
+                fiscale_recovered = True
+                results.append({
+                    "message": f"Scontrino fiscale registrato (progressivo {prog})",
+                    "is_fiscale": True
+                })
+            else:
+                if idempotency_key:
+                    RCH_PENDING[idempotency_key] = _build_pending_entry()
+                    return jsonify({
+                        "pending": True,
+                        "reason": "printer_error",
+                        "message": "Stampante in errore. Attendere (es. cambio carta) e riprovare.",
+                        "idempotency_key": idempotency_key,
+                        "expected_total": expected_total,
+                        "retry_after": 3
+                    }), 202
+                return jsonify({"error": "Stampante in errore. Riprova."}), 502
 
-        # ---------- lettura progressivo NR DOC ----------
-        numero_progressivo = None
-        numero_z = None
-        for cmd in ("=C453/$0", "=DGFE/REG"):
-            payload_prog = f'''<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'''
-            for _ in range(6):
-                pytime.sleep(0.5)
-                resp = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=5,
-                                     **rch_kwargs)
-                m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp.text) or
-                         re.search(r'<C453[^>]*>(\d+)</C453>', resp.text) or
-                         re.search(r'<result>(\d+)</result>', resp.text))
-                m_z = re.search(r'<lastZ>(\d+)</lastZ>', resp.text)
-                if m_doc and m_z:
-                    numero_progressivo = int(m_doc.group(1))
-                    numero_z = int(m_z.group(1)) + 1
+        if not fiscale_recovered:
+            # ---------- lettura progressivo NR DOC (happy path) ----------
+            numero_progressivo = None
+            numero_z = None
+            for cmd in ("=C453/$0", "=DGFE/REG"):
+                payload_prog = f'''<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'''
+                for _ in range(6):
+                    pytime.sleep(0.5)
+                    resp = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=5,
+                                         **rch_kwargs)
+                    m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp.text) or
+                             re.search(r'<C453[^>]*>(\d+)</C453>', resp.text) or
+                             re.search(r'<result>(\d+)</result>', resp.text))
+                    m_z = re.search(r'<lastZ>(\d+)</lastZ>', resp.text)
+                    if m_doc and m_z:
+                        numero_progressivo = int(m_doc.group(1))
+                        numero_z = int(m_z.group(1)) + 1
+                        break
+                if numero_progressivo is not None and numero_z is not None:
                     break
-            if numero_progressivo is not None and numero_z is not None:
-                break
 
-        if numero_progressivo is None or numero_z is None:
-            return jsonify({"error": "La stampante non ha restituito il progressivo"}), 500
+            if numero_progressivo is None or numero_z is None:
+                return jsonify({"error": "La stampante non ha restituito il progressivo"}), 500
 
-        progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
+            progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
 
-        # ---------- persiste Receipt ----------
-        total_amount = round(sum(float(v.get("prezzo", 0)) for v in voci_fiscali), 2)
-        nuovo_receipt = Receipt(
-            created_at       = datetime.now(),
-            total_amount     = total_amount,
-            is_fiscale       = True,
-            voci             = voci_fiscali,
-            cliente_id       = cliente_id,
-            operatore_id     = operatore_id,
-            numero_progressivo = progressivo_completo  # <-- ora è una stringa tipo 1825-0046
-        )
-        db.session.add(nuovo_receipt)
-        db.session.commit()
-
-        ids_pagati = [v.get("appointment_id") for v in voci_fiscali if v.get("appointment_id")]
-        if ids_pagati:
-            Appointment.query.filter(Appointment.id.in_(ids_pagati)).update(
-                {Appointment.stato: AppointmentStatus.PAGATO}, synchronize_session=False
+            # ---------- persiste Receipt ----------
+            nuovo_receipt = Receipt(
+                created_at       = datetime.now(),
+                total_amount     = expected_total,
+                is_fiscale       = True,
+                voci             = voci_fiscali,
+                cliente_id       = cliente_id,
+                operatore_id     = operatore_id,
+                numero_progressivo = progressivo_completo  # stringa tipo 1825-0046
             )
+            db.session.add(nuovo_receipt)
             db.session.commit()
 
-        results.append({
-            "message": f"Scontrino fiscale registrato (progressivo {progressivo_completo})",
-            "is_fiscale": True
-        })
+            ids_pagati = [v.get("appointment_id") for v in voci_fiscali if v.get("appointment_id")]
+            if ids_pagati:
+                Appointment.query.filter(Appointment.id.in_(ids_pagati)).update(
+                    {Appointment.stato: AppointmentStatus.PAGATO}, synchronize_session=False
+                )
+                db.session.commit()
+
+            results.append({
+                "message": f"Scontrino fiscale registrato (progressivo {progressivo_completo})",
+                "is_fiscale": True
+            })
 
     # =========================
     # 2. SCONTRINO NON FISCALE
@@ -1793,6 +1843,103 @@ def _dgfe_entries_for_date(ip: str, day: date):
     entries.sort(key=lambda e: e["dataora_dt"])
     return entries
 
+def _max_progressivo_doc_in_db_today():
+    """Massimo numero documento (parte dopo il '-') tra i Receipt fiscali odierni.
+    Ritorna 0 se nessun Receipt presente."""
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_end = datetime.combine(date.today(), datetime.max.time())
+    receipts_today = Receipt.query.filter(
+        Receipt.created_at >= today_start,
+        Receipt.created_at <= today_end,
+        Receipt.is_fiscale == True
+    ).all()
+    max_doc = 0
+    for r in receipts_today:
+        try:
+            parts = str(r.numero_progressivo).split('-')
+            if len(parts) == 2:
+                n = int(parts[1])
+                if n > max_doc:
+                    max_doc = n
+        except Exception:
+            pass
+    return max_doc
+
+def _try_lazy_recover(voci, cliente_id, operatore_id, expected_total,
+                      expected_line_count, ip, printer_model):
+    """Tenta di recuperare uno scontrino in caso di risposta ambigua dalla stampante.
+    - Legge lastDocF/lastZ
+    - Se progressivo > max in DB oggi e il DGFE conferma totale (e linee, se disponibili),
+      scrive Receipt in DB, marca Appointment.PAGATO e ritorna progressivo_completo.
+    - Altrimenti ritorna None (il chiamante decidera' se mettere in pending).
+    Nessuna ristampa, nessun comando di scrittura inviato alla stampante.
+    """
+    try:
+        url = _rch_url(ip, printer_model)
+        headers = _rch_headers(printer_model)
+        rch_kwargs = _rch_request_kwargs(printer_model)
+
+        numero_progressivo, numero_z = _read_progressivo(url, headers, rch_kwargs,
+                                                         max_attempts=10, sleep_s=0.5)
+        if numero_progressivo is None or numero_z is None:
+            return None
+
+        progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
+
+        # Se gia' presente in DB con questo progressivo, non duplicare
+        if Receipt.query.filter_by(numero_progressivo=progressivo_completo).first():
+            return None
+
+        # Verifica che il progressivo letto sia effettivamente "nuovo" rispetto a DB
+        if numero_progressivo <= _max_progressivo_doc_in_db_today():
+            return None
+
+        # Conferma DGFE: stesso totale (e numero linee se disponibile)
+        entries = _dgfe_entries_for_date(ip, date.today())
+        if not entries:
+            return None
+        matched = None
+        try:
+            exp_total = round(float(expected_total), 2)
+        except Exception:
+            return None
+        for e in reversed(entries):
+            if abs(e["totale_float"] - exp_total) < 0.01:
+                if expected_line_count and expected_line_count > 0 and e.get("line_count") is not None:
+                    if e["line_count"] != expected_line_count:
+                        continue
+                matched = e
+                break
+        if not matched:
+            return None
+
+        nuovo_receipt = Receipt(
+            created_at=datetime.now(),
+            total_amount=exp_total,
+            is_fiscale=True,
+            voci=voci or [],
+            cliente_id=cliente_id,
+            operatore_id=operatore_id,
+            numero_progressivo=progressivo_completo
+        )
+        db.session.add(nuovo_receipt)
+        db.session.commit()
+
+        ids_pagati = [v.get("appointment_id") for v in (voci or []) if v.get("appointment_id")]
+        if ids_pagati:
+            Appointment.query.filter(Appointment.id.in_(ids_pagati)).update(
+                {Appointment.stato: AppointmentStatus.PAGATO}, synchronize_session=False
+            )
+            db.session.commit()
+
+        return progressivo_completo
+    except Exception as exc:
+        try:
+            current_app.logger.warning("_try_lazy_recover: errore %s", str(exc))
+        except Exception:
+            pass
+        return None
+
 @cassa_bp.route('/cassa/rch-retry', methods=['POST'])
 def rch_retry():
     """
@@ -2104,7 +2251,106 @@ def rch_console_close_document():
             results.append({"cmd": cmd, "success": False, "error": str(e)})
     
     all_success = all(r.get("success") for r in results)
-    return jsonify({"success": all_success, "results": results})
+
+    # Scrittura su Registro Scontrini per allineare DB ↔ AE/DGFE.
+    # Eseguita solo se chiusura andata a buon fine e con importo > 0
+    # (T5/$0 = abbandono documento, nessuno scontrino fiscale emesso da contabilizzare).
+    receipt_progressivo = None
+    db_already_present = False
+    used_pending_key = None
+    if all_success and importo > 0:
+        try:
+            numero_progressivo, numero_z = _read_progressivo(
+                url, headers, rch_kwargs, max_attempts=8, sleep_s=0.5
+            )
+            if numero_progressivo is not None and numero_z is not None:
+                progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
+                existing = Receipt.query.filter_by(
+                    numero_progressivo=progressivo_completo
+                ).first()
+                if existing:
+                    # Caso raro: send-to-rch ha gia' registrato il Receipt e nessuna
+                    # discrepanza; non duplicare.
+                    db_already_present = True
+                    receipt_progressivo = progressivo_completo
+                else:
+                    # Cerca un RCH_PENDING odierno con totale corrispondente, per
+                    # recuperare voci/cliente/operatore. Prendo il piu' recente.
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    matched_key = None
+                    matched_pending = None
+                    for k, p in RCH_PENDING.items():
+                        if p.get("giorno") != today_str:
+                            continue
+                        try:
+                            ptot = float(p.get("expected_total") or 0)
+                        except Exception:
+                            ptot = 0.0
+                        if abs(ptot - importo) < 0.01:
+                            if (matched_pending is None
+                                    or p.get("created_ts", 0) > matched_pending.get("created_ts", 0)):
+                                matched_key = k
+                                matched_pending = p
+
+                    if matched_pending:
+                        voci = matched_pending.get("voci", []) or []
+                        cliente_id = matched_pending.get("cliente_id")
+                        operatore_id = matched_pending.get("operatore_id")
+                        used_pending_key = matched_key
+                    else:
+                        # Receipt orfano: nessun pending in memoria (es. server riavviato,
+                        # o stampante sbloccata in un momento successivo).
+                        voci = []
+                        cliente_id = None
+                        operatore_id = None
+
+                    nuovo_receipt = Receipt(
+                        created_at=datetime.now(),
+                        total_amount=round(importo, 2),
+                        is_fiscale=True,
+                        voci=voci,
+                        cliente_id=cliente_id,
+                        operatore_id=operatore_id,
+                        numero_progressivo=progressivo_completo
+                    )
+                    db.session.add(nuovo_receipt)
+                    db.session.commit()
+
+                    ids_pagati = [v.get("appointment_id") for v in voci if v.get("appointment_id")]
+                    if ids_pagati:
+                        Appointment.query.filter(Appointment.id.in_(ids_pagati)).update(
+                            {Appointment.stato: AppointmentStatus.PAGATO},
+                            synchronize_session=False
+                        )
+                        db.session.commit()
+
+                    if used_pending_key:
+                        # Popola IDEMPOTENCY_STORE cosi' il polling /cassa/rch-status
+                        # del modal pending (se aperto sul frontend) chiude da solo.
+                        IDEMPOTENCY_STORE[used_pending_key] = {
+                            "results": [{
+                                "message": f"Scontrino fiscale registrato (progressivo {progressivo_completo})",
+                                "is_fiscale": True
+                            }],
+                            "reset_voci": True,
+                            "closed_via_console": True
+                        }
+                        RCH_PENDING.pop(used_pending_key, None)
+
+                    receipt_progressivo = progressivo_completo
+        except Exception as exc:
+            current_app.logger.error(
+                "rch_console_close_document: errore scrittura Receipt: %s", str(exc)
+            )
+            # Non far fallire l'operazione: la stampante e' gia' sbloccata.
+
+    return jsonify({
+        "success": all_success,
+        "results": results,
+        "receipt_progressivo": receipt_progressivo,
+        "db_already_present": db_already_present,
+        "used_pending_key": used_pending_key
+    })
 
 
 @cassa_bp.route('/cassa/rch-console/send-raw', methods=['POST'])
