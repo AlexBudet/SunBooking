@@ -2281,42 +2281,288 @@ document.addEventListener('DOMContentLoaded', function() {
   // (sequenziale per non sovraccaricare la stampante).
   // Mostra "Correggi" solo nei giorni con discrepanza tra DB e DGFE.
   // ----------------------------------------------------------------
-  async function _correggiGiorno(isoDay, btnCorreggi, dgfeCell) {
-    if (!confirm(`Allineare il Registro Scontrini al DGFE per il giorno ${isoDay}?\n\nVerranno creati Receipt orfani per le entry DGFE non presenti in DB.`)) return;
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+  function _csrfHeaders() {
+    const t = document.querySelector('meta[name="csrf-token"]')?.content;
+    return t ? {'X-CSRFToken': t} : {};
+  }
+
+  function _updateRigaTotaleDb() {
+    // Ricalcola la somma di "Incasso totale" sulla riga totali a partire dalle data-row
+    const rows = document.querySelectorAll('#corpoTabellaCorrispettivi tr[data-day]');
+    let sum = 0;
+    rows.forEach(r => sum += parseFloat(r.dataset.totaleDb || '0'));
+    const trTot = document.getElementById('rigaTotaleCorrispettivi');
+    if (trTot) {
+      // 3a cella (indice 2) = "Incasso totale"
+      const cell = trTot.cells[2];
+      if (cell) cell.textContent = sum.toFixed(2);
+    }
+  }
+
+  async function _correggiGiorno(isoDay, btnCorreggi, dgfeCell, tr) {
+    const azioniCell = tr ? tr.querySelector('.azioni-cell') : null;
     const original = btnCorreggi.innerHTML;
     btnCorreggi.disabled = true;
     btnCorreggi.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+
     try {
-      const res = await fetch('/cassa/reconcile-range', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-        },
-        body: JSON.stringify({ dateFrom: isoDay, dateTo: isoDay, only_pending: false })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert((data && data.error) || 'Errore durante la correzione.');
+      const r = await fetch(`/cassa/correggi-day/preview?day=${encodeURIComponent(isoDay)}`);
+      const preview = await r.json();
+      if (!r.ok) {
+        alert((preview && preview.error) || 'Errore preview correzione.');
         btnCorreggi.disabled = false;
         btnCorreggi.innerHTML = original;
         return;
       }
-      const result = (data.results && data.results[0]) || {};
-      const orphans = result.created_orphans || 0;
-      alert(`Correzione completata per ${isoDay}.\nOrfani creati: ${orphans}\nStato: ${result.status || 'n/d'}`);
-      // Ricarica la tabella per riflettere il nuovo totale DB e ri-confrontare
-      const dateFrom = document.getElementById('dateFrom').value;
-      const dateTo = document.getElementById('dateTo').value;
-      await window.loadCorrispettiviData(dateFrom, dateTo, false);
-      // Riavvia il caricamento DGFE per allineare i confronti visivamente
-      _loadDgfeForAllRows();
+      if (!preview.dgfe_safe) {
+        alert('DGFE vuoto o non leggibile per quel giorno. Correzione bloccata.\nVerifica la stampante prima di procedere.');
+        btnCorreggi.disabled = false;
+        btnCorreggi.innerHTML = original;
+        return;
+      }
+
+      if (preview.needs_strong_verification) {
+        // Apri modal con confronto dettagliato + conferma typed
+        _showCorreggiStrongModal(preview, tr, btnCorreggi, dgfeCell, azioniCell, original);
+        return;
+      }
+
+      // Sotto soglia: conferma semplice, applica direttamente
+      const ok = confirm(
+        `Applicare correzione per ${isoDay}?\n\n`
+        + `DB attuale: € ${preview.db_total.toFixed(2)}\n`
+        + `DGFE: € ${preview.dgfe_total.toFixed(2)}\n`
+        + `Delta da applicare: € ${preview.delta.toFixed(2)} (${preview.relative}% del DGFE)\n\n`
+        + `Verra' creata/aggiornata una voce dummy nascosta dal Registro Scontrini.`
+      );
+      if (!ok) {
+        btnCorreggi.disabled = false;
+        btnCorreggi.innerHTML = original;
+        return;
+      }
+      await _applyCorrezione(isoDay, null, tr, btnCorreggi, dgfeCell, azioniCell, original);
     } catch (err) {
       alert('Errore di rete: ' + err.message);
       btnCorreggi.disabled = false;
       btnCorreggi.innerHTML = original;
     }
+  }
+
+  async function _applyCorrezione(isoDay, confirmedDelta, tr, btnCorreggi, dgfeCell, azioniCell, originalLabel) {
+    try {
+      const body = { date: isoDay };
+      if (confirmedDelta !== null && confirmedDelta !== undefined) {
+        body.confirmed_delta = confirmedDelta;
+      }
+      const r = await fetch('/cassa/correggi-day/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ..._csrfHeaders() },
+        body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        alert((data && data.error) || 'Errore applicazione correzione.');
+        if (btnCorreggi) {
+          btnCorreggi.disabled = false;
+          btnCorreggi.innerHTML = originalLabel || 'Correggi';
+        }
+        return false;
+      }
+      // Aggiorna row localmente: il nuovo totale DB (incluso ADJ) corrisponde al DGFE
+      const post = data.post || {};
+      const newTotale = post.dgfe_total != null ? post.dgfe_total : (post.db_total + post.delta);
+      if (tr) {
+        tr.dataset.totaleDb = String(newTotale);
+        // Cella "Incasso totale" è cells[2]
+        if (tr.cells[2]) tr.cells[2].textContent = (newTotale || 0).toFixed(2);
+        tr.style.background = '';
+      }
+      if (azioniCell) azioniCell.innerHTML = '';
+      _updateRigaTotaleDb();
+      alert(`Correzione applicata.\nDelta: € ${(data.applied_delta || 0).toFixed(2)}\nAzione: ${data.action}`);
+      return true;
+    } catch (err) {
+      alert('Errore di rete: ' + err.message);
+      if (btnCorreggi) {
+        btnCorreggi.disabled = false;
+        btnCorreggi.innerHTML = originalLabel || 'Correggi';
+      }
+      return false;
+    }
+  }
+
+  function _showCorreggiStrongModal(preview, tr, btnCorreggi, dgfeCell, azioniCell, originalLabel) {
+    // Rimuovi eventuale modal precedente
+    const prev = document.getElementById('correggiDayModal');
+    if (prev) prev.remove();
+
+    const wrap = document.createElement('div');
+    wrap.id = 'correggiDayModal';
+    wrap.className = 'modal fade show';
+    wrap.setAttribute('tabindex', '-1');
+    wrap.style.display = 'block';
+    wrap.style.background = 'rgba(0,0,0,0.55)';
+    wrap.style.zIndex = '13000';
+
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-dialog modal-xl modal-dialog-scrollable';
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.style.background = '#fff5f0';
+    const h5 = document.createElement('h5');
+    h5.className = 'modal-title';
+    h5.textContent = `Correzione corrispettivi del ${preview.date} — Verifica richiesta`;
+    const btnClose = document.createElement('button');
+    btnClose.type = 'button';
+    btnClose.className = 'btn-close';
+    btnClose.addEventListener('click', () => {
+      wrap.remove();
+      if (btnCorreggi) {
+        btnCorreggi.disabled = false;
+        btnCorreggi.innerHTML = originalLabel || 'Correggi';
+      }
+    });
+    header.appendChild(h5);
+    header.appendChild(btnClose);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'modal-body';
+
+    const alertBox = document.createElement('div');
+    alertBox.className = 'alert alert-warning';
+    alertBox.innerHTML = `<strong>⚠️ Discrepanza ${preview.relative}%</strong> supera la soglia ${preview.threshold_pct}%. `
+      + `Confronta gli scontrini DGFE vs DB qui sotto e applica la correzione SOLO se la differenza ti appare giustificata. `
+      + `Per applicare devi digitare esattamente il delta nel campo in fondo.`;
+    body.appendChild(alertBox);
+
+    // Two columns
+    const columnsWrap = document.createElement('div');
+    columnsWrap.className = 'row g-3';
+
+    function buildColumn(title, entries, totale, count, accent) {
+      const col = document.createElement('div');
+      col.className = 'col-md-6';
+      const card = document.createElement('div');
+      card.className = 'card';
+      const cardHeader = document.createElement('div');
+      cardHeader.className = 'card-header';
+      cardHeader.style.background = accent;
+      cardHeader.style.color = '#fff';
+      cardHeader.style.fontWeight = '600';
+      cardHeader.textContent = title;
+      card.appendChild(cardHeader);
+      const cardBody = document.createElement('div');
+      cardBody.className = 'card-body p-0';
+      cardBody.style.maxHeight = '400px';
+      cardBody.style.overflowY = 'auto';
+      const tbl = document.createElement('table');
+      tbl.className = 'table table-sm table-striped mb-0';
+      tbl.style.fontSize = '0.85em';
+      const thead = document.createElement('thead');
+      thead.innerHTML = '<tr><th>Ora</th><th>Progressivo</th><th class="text-end">Totale €</th></tr>';
+      tbl.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      (entries || []).forEach(e => {
+        const tr2 = tbody.insertRow();
+        tr2.insertCell().textContent = e.dataora || '';
+        tr2.insertCell().textContent = e.progressivo || e.numero_progressivo || '';
+        const tdTot = tr2.insertCell();
+        tdTot.textContent = (e.totale || 0).toFixed(2);
+        tdTot.className = 'text-end';
+      });
+      tbl.appendChild(tbody);
+      cardBody.appendChild(tbl);
+      card.appendChild(cardBody);
+      const cardFooter = document.createElement('div');
+      cardFooter.className = 'card-footer d-flex justify-content-between';
+      cardFooter.innerHTML = `<span>${count} scontrini</span><strong>€ ${(totale || 0).toFixed(2)}</strong>`;
+      card.appendChild(cardFooter);
+      col.appendChild(card);
+      return col;
+    }
+
+    columnsWrap.appendChild(buildColumn(
+      'DGFE (RCH stampante)',
+      preview.dgfe_entries,
+      preview.dgfe_total,
+      preview.dgfe_count,
+      '#198754'
+    ));
+    columnsWrap.appendChild(buildColumn(
+      'Database gestionale (esclusi adjustment)',
+      preview.db_entries,
+      preview.db_total,
+      preview.db_count,
+      '#0d6efd'
+    ));
+    body.appendChild(columnsWrap);
+
+    // Delta info
+    const deltaBox = document.createElement('div');
+    deltaBox.className = 'alert alert-secondary mt-3 d-flex justify-content-between align-items-center';
+    deltaBox.innerHTML = `<div><strong>Delta da applicare:</strong> € ${preview.delta.toFixed(2)} (${preview.relative}% del DGFE)</div>`
+      + `<div class="text-muted small">Per confermare digita: <code>${preview.delta.toFixed(2)}</code></div>`;
+    body.appendChild(deltaBox);
+
+    // Confirm input
+    const confirmRow = document.createElement('div');
+    confirmRow.className = 'd-flex align-items-center gap-2 mt-2';
+    const lbl = document.createElement('label');
+    lbl.textContent = 'Conferma delta:';
+    lbl.style.fontWeight = '500';
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'form-control';
+    inp.style.maxWidth = '180px';
+    inp.placeholder = preview.delta.toFixed(2);
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'btn btn-danger';
+    applyBtn.textContent = 'Applica correzione';
+    applyBtn.disabled = true;
+    inp.addEventListener('input', () => {
+      const v = parseFloat(inp.value.replace(',', '.'));
+      const target = preview.delta;
+      applyBtn.disabled = !(isFinite(v) && Math.abs(v - target) < 0.01);
+    });
+    confirmRow.appendChild(lbl);
+    confirmRow.appendChild(inp);
+    confirmRow.appendChild(applyBtn);
+    body.appendChild(confirmRow);
+
+    // Footer
+    const footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    const btnCancel = document.createElement('button');
+    btnCancel.className = 'btn btn-secondary';
+    btnCancel.textContent = 'Annulla';
+    btnCancel.addEventListener('click', () => {
+      wrap.remove();
+      if (btnCorreggi) {
+        btnCorreggi.disabled = false;
+        btnCorreggi.innerHTML = originalLabel || 'Correggi';
+      }
+    });
+    footer.appendChild(btnCancel);
+
+    applyBtn.addEventListener('click', async () => {
+      applyBtn.disabled = true;
+      const v = parseFloat(inp.value.replace(',', '.'));
+      const ok = await _applyCorrezione(preview.date, v, tr, btnCorreggi, dgfeCell, azioniCell, originalLabel);
+      if (ok) wrap.remove();
+      else applyBtn.disabled = false;
+    });
+
+    content.appendChild(header);
+    content.appendChild(body);
+    content.appendChild(footer);
+    dialog.appendChild(content);
+    wrap.appendChild(dialog);
+    document.body.appendChild(wrap);
   }
 
   async function _loadDgfeForAllRows() {
@@ -2363,11 +2609,14 @@ document.addEventListener('DOMContentLoaded', function() {
           // Confronto: se differenza > 0.01 mostra "Correggi"
           if (Math.abs(tot - totaleDb) > 0.01 && azioniCell) {
             tr.style.background = '#fff5f0';
+            // Salviamo dgfeTotal sulla row, utile per future operazioni e per essere
+            // sicuri che la cifra mostrata corrisponda a quella usata dal backend.
+            tr.dataset.dgfeTotal = String(tot);
             const btnCorreggi = document.createElement('button');
             btnCorreggi.className = 'btn btn-sm btn-warning';
             btnCorreggi.textContent = 'Correggi';
             btnCorreggi.title = `DB: ${totaleDb.toFixed(2)} | DGFE: ${tot.toFixed(2)}`;
-            btnCorreggi.addEventListener('click', () => _correggiGiorno(isoDay, btnCorreggi, dgfeCell));
+            btnCorreggi.addEventListener('click', () => _correggiGiorno(isoDay, btnCorreggi, dgfeCell, tr));
             azioniCell.appendChild(btnCorreggi);
           } else {
             tr.style.background = '';
