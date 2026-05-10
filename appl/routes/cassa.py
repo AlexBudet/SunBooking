@@ -5,7 +5,7 @@ import tempfile
 import html, re, time as pytime
 from flask import Blueprint, app, render_template, jsonify, request, session, abort, current_app
 from appl.models import Appointment, AppointmentStatus, BusinessInfo, Operator, PrinterModel, Service, ServiceCategory, Client, Receipt, Subcategory, User, Pacchetto, PacchettoRata, PacchettoStatus, db
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import requests
 import urllib3
 from sqlalchemy import and_, func, or_, text
