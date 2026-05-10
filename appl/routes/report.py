@@ -269,7 +269,9 @@ def registro_corrispettivi():
     user_id = session.get("user_id")
     user = db.session.get(User, user_id)
     is_local = not bool(current_app.config.get('HIDE_CASSA'))
-    is_owner = is_local and bool(user and getattr(user.ruolo, 'value', None) == 'owner')
+    # Visibile a owner E admin sulla versione on-premise (start.py).
+    # Il flag mantiene il nome storico is_owner per non rinominare ovunque, ma copre admin.
+    is_owner = is_local and bool(user and getattr(user.ruolo, 'value', None) in ('owner', 'admin'))
 
     recon_log = {}
     if is_owner:

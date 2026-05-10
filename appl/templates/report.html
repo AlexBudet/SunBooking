@@ -514,7 +514,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button id="btnExportPdfCorrispettivi" class="btn btn-danger btn-sm ms-2" title="Esporta in PDF">
   <i class="bi bi-file-earmark-pdf"></i>
 </button>
-        {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
+        {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
         <button id="btnLoadDgfeCorrispettivi" class="btn btn-outline-primary btn-sm ms-2"
                 title="Legge il totale DGFE da RCH per ogni giorno del range">
           <i class="bi bi-cloud-download"></i> Carica DGFE
@@ -523,7 +523,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
       </div>
       <div class="modal-body p-3">
-        {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
+        {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
         <div id="reconciliationBanner" class="alert mb-2 py-2 px-3" style="display:none; font-size:0.9em;"></div>
         {% endif %}
         <div id="wrapperTabellaCorrispettivi" style="max-height:80vh; overflow-y:auto; width:100%;">
@@ -533,7 +533,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <th>Data</th>
                 <th>Giorno</th>
                 <th>Incasso totale</th>
-                {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
+                {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
                 <th title="Totale fiscale letto dalla DGFE della stampante RCH">DGFE (RCH)</th>
                 {% endif %}
                 <th>Incasso servizi</th>
@@ -541,7 +541,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <th>Di cui cash</th>
                 <th>Di cui digitali</th>
                 <th>Di cui altro (bank)</th>
-                {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
+                {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
                 <th>Azioni</th>
                 {% endif %}
               </tr>
@@ -2167,7 +2167,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
   // Flag globale: solo per owner E solo sulla versione on-premise (start.py).
   // Sul cloud (wsgi.py) hide_cassa=True -> riconciliazione disattivata.
-  window.IS_OWNER = {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}true{% else %}false{% endif %};
+  window.IS_OWNER = {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}true{% else %}false{% endif %};
 
   // Converte 'DD-MM-YYYY' in 'YYYY-MM-DD' per la query DGFE
   function _dataToIso(itDate) {
