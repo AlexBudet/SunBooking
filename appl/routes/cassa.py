@@ -1368,8 +1368,8 @@ def dgfe_total_for_day():
     try:
         user_id = session.get("user_id")
         user = db.session.get(User, user_id)
-        if not user or getattr(user.ruolo, 'value', None) != 'owner':
-            return jsonify({"error": "Accesso riservato all'owner"}), 403
+        if not user or getattr(user.ruolo, 'value', None) not in ('owner', 'admin'):
+            return jsonify({"error": "Accesso riservato a owner/admin"}), 403
 
         day_str = (request.args.get('day') or '').strip()
         if not day_str:
@@ -1498,8 +1498,8 @@ def correggi_day_preview():
     try:
         user_id = session.get("user_id")
         user = db.session.get(User, user_id)
-        if not user or getattr(user.ruolo, 'value', None) != 'owner':
-            return jsonify({"error": "Accesso riservato all'owner"}), 403
+        if not user or getattr(user.ruolo, 'value', None) not in ('owner', 'admin'):
+            return jsonify({"error": "Accesso riservato a owner/admin"}), 403
 
         day_str = (request.args.get('day') or '').strip()
         if not day_str:
@@ -1530,8 +1530,8 @@ def correggi_day_apply():
     try:
         user_id = session.get("user_id")
         user = db.session.get(User, user_id)
-        if not user or getattr(user.ruolo, 'value', None) != 'owner':
-            return jsonify({"error": "Accesso riservato all'owner"}), 403
+        if not user or getattr(user.ruolo, 'value', None) not in ('owner', 'admin'):
+            return jsonify({"error": "Accesso riservato a owner/admin"}), 403
 
         data = request.get_json(force=True, silent=True) or {}
         day_str = (data.get("date") or "").strip()
@@ -1650,8 +1650,8 @@ def reconcile_range():
     try:
         user_id = session.get("user_id")
         user = db.session.get(User, user_id)
-        if not user or getattr(user.ruolo, 'value', None) != 'owner':
-            return jsonify({"error": "Accesso riservato all'owner"}), 403
+        if not user or getattr(user.ruolo, 'value', None) not in ('owner', 'admin'):
+            return jsonify({"error": "Accesso riservato a owner/admin"}), 403
 
         data = request.get_json(force=True, silent=True) or {}
         date_from = (data.get("dateFrom") or "").strip()
