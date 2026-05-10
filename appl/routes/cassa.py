@@ -1127,16 +1127,25 @@ def registro_scontrini():
     giorno_start = datetime.combine(giorno, datetime.min.time())
     giorno_end = datetime.combine(giorno, datetime.max.time())
     
+    # Esclude le voci di adjustment (dummy ADJ-YYYYMMDD create dal "Correggi" nel modal Corrispettivi):
+    # sono fiscali (concorrono ai totali) ma non vanno mostrate qui come scontrini reali.
+    no_adj = or_(
+        Receipt.numero_progressivo.is_(None),
+        ~Receipt.numero_progressivo.like('ADJ-%')
+    )
+
     if user_role == "user":
         scontrini = Receipt.query.filter(
             Receipt.is_fiscale == True,
             Receipt.created_at >= giorno_start,
-            Receipt.created_at <= giorno_end
+            Receipt.created_at <= giorno_end,
+            no_adj
         ).order_by(Receipt.created_at.asc()).all()
     else:
         scontrini = Receipt.query.filter(
             Receipt.created_at >= giorno_start,
-            Receipt.created_at <= giorno_end
+            Receipt.created_at <= giorno_end,
+            no_adj
         ).order_by(Receipt.created_at.asc()).all()
 
     # 4. Normalizza i dati di ogni scontrino
@@ -1388,6 +1397,244 @@ def dgfe_total_for_day():
     except Exception as exc:
         try:
             current_app.logger.exception("dgfe-total: errore non gestito")
+        except Exception:
+            pass
+        return jsonify({"error": f"Errore interno: {exc}"}), 500
+
+
+CORREGGI_DAY_THRESHOLD = 0.15  # 15% sul totale DGFE: sopra → verifica rinforzata richiesta
+
+
+def _adj_progressivo_for_day(day_date):
+    """Progressivo univoco per la dummy ADJ del giorno: 'ADJ-YYYYMMDD'."""
+    return f"ADJ-{day_date.strftime('%Y%m%d')}"
+
+
+def _db_receipts_for_day_no_adj(day_date):
+    """Tutti i Receipt fiscali del giorno escludendo le dummy ADJ-*."""
+    day_start = datetime.combine(day_date, datetime.min.time())
+    day_end = datetime.combine(day_date, datetime.max.time())
+    return Receipt.query.filter(
+        Receipt.created_at >= day_start,
+        Receipt.created_at <= day_end,
+        Receipt.is_fiscale == True,
+        or_(Receipt.numero_progressivo.is_(None),
+            ~Receipt.numero_progressivo.like('ADJ-%'))
+    ).order_by(Receipt.created_at.asc()).all()
+
+
+def _correggi_day_compute(day_date):
+    """Calcola tutto cio' che serve per Correggi su un giorno:
+    DGFE total/entries, DB total/entries (no ADJ), delta, soglia, eventuale ADJ esistente.
+    Ritorna dict (errore -> 'error', altrimenti dati)."""
+    ip, _ = _get_printer_config()
+    if not ip:
+        return {"error": "IP stampante non configurato"}
+
+    entries, diag = _dgfe_entries_with_diag(ip, day_date)
+    if not diag or diag.get("status") not in ("ok", "ej_empty", "ej_no_blocks"):
+        return {
+            "error": f"Lettura DGFE non affidabile ({diag.get('status') if diag else 'unknown'})."
+                     " Riprova fra qualche secondo o controlla la stampante."
+        }
+
+    dgfe_total = round(sum(float(e.get("totale_float", 0) or 0) for e in entries), 2)
+    dgfe_count = len(entries)
+
+    db_receipts = _db_receipts_for_day_no_adj(day_date)
+    db_total = round(sum(float(r.total_amount or 0) for r in db_receipts), 2)
+    db_count = len(db_receipts)
+
+    delta = round(dgfe_total - db_total, 2)
+    # Soglia in valore assoluto rispetto al DGFE; se DGFE = 0 trattiamo come "fuori soglia"
+    if dgfe_total > 0:
+        rel = abs(delta) / dgfe_total
+    else:
+        rel = 1.0 if abs(delta) > 0.01 else 0.0
+    needs_strong = (rel > CORREGGI_DAY_THRESHOLD)
+
+    adj_prog = _adj_progressivo_for_day(day_date)
+    existing_adj = Receipt.query.filter_by(numero_progressivo=adj_prog).first()
+
+    return {
+        "ok": True,
+        "date": day_date.strftime("%Y-%m-%d"),
+        "dgfe_total": dgfe_total,
+        "dgfe_count": dgfe_count,
+        "db_total": db_total,
+        "db_count": db_count,
+        "delta": delta,
+        "relative": round(rel * 100, 2),
+        "threshold_pct": round(CORREGGI_DAY_THRESHOLD * 100, 2),
+        "needs_strong_verification": needs_strong,
+        "dgfe_safe": (dgfe_count > 0),  # se 0, blocchiamo
+        "existing_adj_total": float(existing_adj.total_amount) if existing_adj else None,
+        "dgfe_entries": [
+            {
+                "progressivo": e.get("progressivo_raw"),
+                "dataora": e["dataora_dt"].strftime("%H:%M") if e.get("dataora_dt") else "",
+                "totale": float(e.get("totale_float", 0) or 0),
+                "line_count": e.get("line_count", 0),
+            }
+            for e in entries
+        ],
+        "db_entries": [
+            {
+                "id": r.id,
+                "numero_progressivo": str(r.numero_progressivo) if r.numero_progressivo else "",
+                "dataora": r.created_at.strftime("%H:%M") if r.created_at else "",
+                "totale": float(r.total_amount or 0),
+                "voci_count": len(r.voci) if isinstance(r.voci, list) else 0,
+            }
+            for r in db_receipts
+        ],
+    }
+
+
+@cassa_bp.route('/cassa/correggi-day/preview', methods=['GET'])
+def correggi_day_preview():
+    """Anteprima per il bottone Correggi: confronto DGFE vs DB per un giorno.
+    Owner-only. Query: ?day=YYYY-MM-DD"""
+    try:
+        user_id = session.get("user_id")
+        user = db.session.get(User, user_id)
+        if not user or getattr(user.ruolo, 'value', None) != 'owner':
+            return jsonify({"error": "Accesso riservato all'owner"}), 403
+
+        day_str = (request.args.get('day') or '').strip()
+        if not day_str:
+            return jsonify({"error": "Parametro day mancante"}), 400
+        try:
+            day = datetime.strptime(day_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "Formato data non valido (YYYY-MM-DD)"}), 400
+
+        result = _correggi_day_compute(day)
+        if result.get("error"):
+            return jsonify(result), 400
+        return jsonify(result)
+    except Exception as exc:
+        try:
+            current_app.logger.exception("correggi-day/preview: errore")
+        except Exception:
+            pass
+        return jsonify({"error": f"Errore interno: {exc}"}), 500
+
+
+@cassa_bp.route('/cassa/correggi-day/apply', methods=['POST'])
+def correggi_day_apply():
+    """Applica la correzione: crea/aggiorna/elimina la dummy ADJ-YYYYMMDD.
+    Body: {date: 'YYYY-MM-DD', confirmed_delta?: float}
+    Se la discrepanza supera la soglia, confirmed_delta DEVE corrispondere al delta calcolato.
+    Owner-only."""
+    try:
+        user_id = session.get("user_id")
+        user = db.session.get(User, user_id)
+        if not user or getattr(user.ruolo, 'value', None) != 'owner':
+            return jsonify({"error": "Accesso riservato all'owner"}), 403
+
+        data = request.get_json(force=True, silent=True) or {}
+        day_str = (data.get("date") or "").strip()
+        if not day_str:
+            return jsonify({"error": "Parametro date mancante"}), 400
+        try:
+            day = datetime.strptime(day_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "Formato data non valido (YYYY-MM-DD)"}), 400
+
+        result = _correggi_day_compute(day)
+        if result.get("error"):
+            return jsonify(result), 400
+
+        if not result["dgfe_safe"]:
+            return jsonify({
+                "error": "DGFE vuoto o non leggibile per quel giorno: correzione bloccata. "
+                         "Verifica manualmente prima di procedere."
+            }), 400
+
+        delta = result["delta"]
+        if result["needs_strong_verification"]:
+            confirmed = data.get("confirmed_delta")
+            if confirmed is None:
+                return jsonify({
+                    "error": "Discrepanza oltre soglia: serve conferma esplicita.",
+                    "preview": result
+                }), 409
+            try:
+                confirmed_f = round(float(confirmed), 2)
+            except (TypeError, ValueError):
+                return jsonify({"error": "confirmed_delta non numerico"}), 400
+            if abs(confirmed_f - delta) > 0.01:
+                return jsonify({
+                    "error": f"confirmed_delta {confirmed_f} non corrisponde al delta calcolato {delta}",
+                    "preview": result
+                }), 409
+
+        adj_prog = _adj_progressivo_for_day(day)
+        existing = Receipt.query.filter_by(numero_progressivo=adj_prog).first()
+        action = None
+
+        try:
+            if abs(delta) < 0.01:
+                # Allineato: se c'e' una dummy precedente, la elimino
+                if existing:
+                    db.session.delete(existing)
+                    db.session.commit()
+                    action = "deleted"
+                else:
+                    action = "noop"
+            else:
+                if existing:
+                    existing.total_amount = delta
+                    existing.created_at = datetime.combine(day, datetime.min.time().replace(hour=23, minute=59))
+                    if not isinstance(existing.voci, list):
+                        existing.voci = []
+                    existing.voci = [{
+                        "_dummy_adjustment": True,
+                        "reason": "Allineamento DGFE",
+                        "applied_at": datetime.now().isoformat(timespec='seconds'),
+                        "delta": delta
+                    }]
+                    flag_modified(existing, "voci")
+                    db.session.commit()
+                    action = "updated"
+                else:
+                    new_adj = Receipt(
+                        created_at=datetime.combine(day, datetime.min.time().replace(hour=23, minute=59)),
+                        total_amount=delta,
+                        is_fiscale=True,
+                        voci=[{
+                            "_dummy_adjustment": True,
+                            "reason": "Allineamento DGFE",
+                            "applied_at": datetime.now().isoformat(timespec='seconds'),
+                            "delta": delta
+                        }],
+                        cliente_id=None,
+                        operatore_id=None,
+                        numero_progressivo=adj_prog
+                    )
+                    db.session.add(new_adj)
+                    db.session.commit()
+                    action = "created"
+        except Exception as exc:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            current_app.logger.error("correggi-day/apply: scrittura DB fallita: %s", str(exc))
+            return jsonify({"error": f"Errore scrittura DB: {exc}"}), 500
+
+        # Ricalcola lo stato post-correzione
+        post = _correggi_day_compute(day)
+        return jsonify({
+            "ok": True,
+            "action": action,
+            "applied_delta": delta,
+            "post": post,
+        })
+    except Exception as exc:
+        try:
+            current_app.logger.exception("correggi-day/apply: errore non gestito")
         except Exception:
             pass
         return jsonify({"error": f"Errore interno: {exc}"}), 500
