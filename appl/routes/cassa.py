@@ -1984,15 +1984,23 @@ def _dgfe_entries_with_diag(ip: str, day: date):
     diag["http_status"] = getattr(resp, 'status_code', None)
     body = resp.text or ""
     diag["body_len"] = len(body)
-    diag["body_excerpt"] = body[:600]
+    diag["body_excerpt"] = body[:4000]
+
+    try:
+        current_app.logger.info(
+            "DGFE %s body (first 2000 chars): %s",
+            day, body[:2000].replace('\n', '\\n')
+        )
+    except Exception:
+        pass
 
     ej_match = re.search(r"<EJ[^>]*>(.*?)</EJ>", body, re.DOTALL)
     if not ej_match:
         diag["status"] = "no_ej_block"
         try:
             current_app.logger.warning(
-                "DGFE %s: nessun <EJ> nel body (http=%s len=%s) excerpt=%r",
-                day, diag["http_status"], diag["body_len"], diag["body_excerpt"][:200]
+                "DGFE %s: nessun <EJ> nel body (http=%s len=%s)",
+                day, diag["http_status"], diag["body_len"]
             )
         except Exception:
             pass
@@ -2008,48 +2016,74 @@ def _dgfe_entries_with_diag(ip: str, day: date):
             pass
         return [], diag
 
-    blocchi = [b.strip() for b in dgfe_text.split('\n\n') if b.strip()]
-    diag["blocks"] = len(blocchi)
+    # Parser specifico per il formato DGFE della RCH Print 3.0 RT.
+    # Ogni scontrino fiscale e' delimitato da:
+    #   "DOCUMENTO COMMERCIALE" ... "DOCUMENTO N. ZZZZ-NNNN"
+    # All'interno trova:
+    #   "TOTALE COMPLESSIVO    13,00"
+    #   "DD-MM-YYYY HH:MM"
+    receipt_pattern = re.compile(
+        r'DOCUMENTO\s+COMMERCIALE'         # marker inizio scontrino
+        r'(?P<body>.*?)'                    # corpo (lazy)
+        r'DOCUMENTO\s+N\.\s+(?P<z>\d+)-(?P<n>\d+)',  # marker fine + progressivo Z-DOC
+        re.DOTALL
+    )
+
+    matches = list(receipt_pattern.finditer(dgfe_text))
+    diag["blocks"] = len(matches)
 
     entries = []
     parse_failures = 0
-    for blocco in blocchi:
-        m_dt = re.search(r'DATA:\s*(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})', blocco)
-        if not m_dt:
-            parse_failures += 1
-            continue
-        try:
-            dt = datetime.strptime(m_dt.group(1), '%d/%m/%Y %H:%M')
-        except Exception:
-            parse_failures += 1
-            continue
+    for match in matches:
+        body = match.group('body') or ""
+        z_num = match.group('z')
+        n_num = match.group('n')
+        progressivo = f"{z_num}-{n_num}"
 
-        m_pro = re.search(r'PROGR:\s*(\d+)', blocco)
-        progressivo_raw = m_pro.group(1) if m_pro else None
-
-        m_tot = (re.search(r'TOTALE:\s*([\d\.,]+)', blocco) or
-                 re.search(r'TOT:\s*([\d\.,]+)', blocco) or
-                 re.search(r'TOTALE\s*€:\s*([\d\.,]+)', blocco))
+        # TOTALE COMPLESSIVO (solo dei DOCUMENTI COMMERCIALI; i DOCUMENTI GESTIONALI
+        # di chiusura giornaliera usano "VENDITE" / "GRAN TOTALE" e sono esclusi dal
+        # pattern perche' iniziano con "DOCUMENTO GESTIONALE", non "DOCUMENTO COMMERCIALE")
+        m_tot = re.search(r'TOTALE\s+COMPLESSIVO\s+([\d.,]+)', body)
         if not m_tot:
             parse_failures += 1
             continue
         raw_tot = m_tot.group(1).strip()
         try:
+            # Formato italiano: "1.006,00" -> 1006.00
             tot_float = float(raw_tot.replace('.', '').replace(',', '.'))
         except Exception:
-            parse_failures += 1
-            continue
+            try:
+                tot_float = float(raw_tot)
+            except Exception:
+                parse_failures += 1
+                continue
         tot_float = round(tot_float, 2)
 
-        servizi_lines = re.findall(r'SERVIZIO:\s*(.*?)\s+PREZZO:\s*([\d\.,]+)', blocco)
-        line_count = len(servizi_lines)
+        # Data/ora nel formato "04-05-2026 09:04"
+        m_dt = re.search(r'(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2})', body)
+        dt = None
+        if m_dt:
+            try:
+                dt = datetime(
+                    int(m_dt.group(3)), int(m_dt.group(2)), int(m_dt.group(1)),
+                    int(m_dt.group(4)), int(m_dt.group(5))
+                )
+            except ValueError:
+                dt = None
+        if dt is None:
+            dt = datetime.combine(day, datetime.min.time())
+
+        # Numero voci: conto le righe "<IVA>%   <prezzo>" prima del primo "TOTALE COMPLESSIVO".
+        # In questo formato ogni servizio ha una riga "Nome servizio    22%   13,00"
+        body_before_total = body[:m_tot.start()] if m_tot else body
+        line_count = len(re.findall(r'\b\d+%\s+[\d.,]+', body_before_total))
 
         entries.append({
             "dataora_dt": dt,
             "totale_float": tot_float,
-            "progressivo_raw": progressivo_raw,
+            "progressivo_raw": progressivo,  # formato "ZZZZ-NNNN"
             "line_count": line_count,
-            "raw": blocco
+            "raw": body[:300],
         })
 
     entries.sort(key=lambda e: e["dataora_dt"])
@@ -2057,16 +2091,17 @@ def _dgfe_entries_with_diag(ip: str, day: date):
     diag["parse_failures"] = parse_failures
     if entries:
         diag["status"] = "ok"
-    elif blocchi:
+    elif matches:
         diag["status"] = "parse_failed_all"
     else:
         diag["status"] = "ej_no_blocks"
 
     try:
         current_app.logger.info(
-            "DGFE %s: status=%s blocks=%d parsed=%d failures=%d body_len=%d",
-            day, diag["status"], diag["blocks"], diag["parsed_entries"],
-            diag["parse_failures"], diag["body_len"]
+            "DGFE %s: status=%s receipts=%d parse_failures=%d body_len=%d total_sum=%.2f",
+            day, diag["status"], diag["parsed_entries"],
+            diag["parse_failures"], diag["body_len"],
+            sum(e["totale_float"] for e in entries)
         )
     except Exception:
         pass
@@ -2373,11 +2408,24 @@ def reconcile_day(day_date, business_info):
         try:
             dt = e.get("dataora_dt") or datetime.combine(day_date, datetime.min.time())
             prog_raw = e.get("progressivo_raw") or ""
-            try:
-                prog_n = int(prog_raw)
-                prog_str = f"DGFE-{prog_n:04d}"
-            except Exception:
-                prog_str = f"DGFE-{prog_raw}" if prog_raw else "DGFE-?"
+            # Per la RCH Print 3.0 RT progressivo_raw e' gia' "ZZZZ-NNNN", uguale
+            # al formato che usa il flusso normale (cassa.py:849). Usalo direttamente.
+            if re.match(r'^\d+-\d+$', prog_raw):
+                prog_str = prog_raw
+            else:
+                try:
+                    prog_n = int(prog_raw)
+                    prog_str = f"DGFE-{prog_n:04d}"
+                except Exception:
+                    prog_str = f"DGFE-{prog_raw}" if prog_raw else "DGFE-?"
+
+            # Se un Receipt con quel progressivo esiste gia' (es. flusso normale),
+            # NON duplicare: e' lo stesso scontrino, gia' tracciato, ma con totale
+            # diverso (raro). Salta — sara' segnalato come "extra DB" nella tabella.
+            existing_same_prog = Receipt.query.filter_by(numero_progressivo=prog_str).first()
+            if existing_same_prog:
+                continue
+
             orphan = Receipt(
                 created_at=dt,
                 total_amount=tot_e,
