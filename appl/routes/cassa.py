@@ -1349,6 +1349,50 @@ def _run_post_z_reconciliation():
             pass
         return None
 
+@cassa_bp.route('/cassa/dgfe-total', methods=['GET'])
+def dgfe_total_for_day():
+    """Ritorna il totale fiscale letto dal DGFE della stampante per un singolo giorno.
+    Solo owner. Usa lo stesso meccanismo di /cassa/api/dgfe (comando =C452).
+    Query: ?day=YYYY-MM-DD
+    Response: {date, dgfe_total, dgfe_count, status, http_status, body_len, error}
+    """
+    try:
+        user_id = session.get("user_id")
+        user = db.session.get(User, user_id)
+        if not user or getattr(user.ruolo, 'value', None) != 'owner':
+            return jsonify({"error": "Accesso riservato all'owner"}), 403
+
+        day_str = (request.args.get('day') or '').strip()
+        if not day_str:
+            return jsonify({"error": "Parametro day mancante"}), 400
+        try:
+            day = datetime.strptime(day_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "Formato data non valido (YYYY-MM-DD)"}), 400
+
+        ip, _ = _get_printer_config()
+        if not ip:
+            return jsonify({"error": "IP stampante non configurato"}), 400
+
+        entries, diag = _dgfe_entries_with_diag(ip, day)
+        total = round(sum(float(e.get("totale_float", 0) or 0) for e in entries), 2)
+        return jsonify({
+            "date": day_str,
+            "dgfe_total": total,
+            "dgfe_count": len(entries),
+            "status": diag.get("status"),
+            "http_status": diag.get("http_status"),
+            "body_len": diag.get("body_len"),
+            "error": diag.get("error"),
+        })
+    except Exception as exc:
+        try:
+            current_app.logger.exception("dgfe-total: errore non gestito")
+        except Exception:
+            pass
+        return jsonify({"error": f"Errore interno: {exc}"}), 500
+
+
 @cassa_bp.route('/cassa/reconcile-range', methods=['POST'])
 def reconcile_range():
     """Riconciliazione retroattiva su un range di date (solo owner).
@@ -1873,18 +1917,36 @@ def rch_status():
         return jsonify({"done": False, "pending": True, "retry_after": 3}), 200
     return jsonify({"error": "Not found"}), 404
 
-def _dgfe_entries_for_date(ip: str, day: date):
+def _dgfe_entries_with_diag(ip: str, day: date):
+    """Come _dgfe_entries_for_date ma ritorna (entries, diag) con info diagnostica.
+    diag e' un dict con: status, http_status, body_len, ej_found, blocks, parsed_entries,
+    parse_failures, error, body_excerpt, printer_model, url.
     """
-    Lettura robusta EJ (DGFE) del giorno:
-    - Usa header iso-8859-1 (come endpoint /cassa/api/dgfe)
-    - Raccoglie progressivo, totale normalizzato, timestamp e numero linee SERVIZIO
-    - Tollera formati alternativi di 'TOTALE:' e progressivo
-    """
+    diag = {
+        "status": "unknown",
+        "http_status": None,
+        "body_len": 0,
+        "ej_found": False,
+        "blocks": 0,
+        "parsed_entries": 0,
+        "parse_failures": 0,
+        "error": None,
+        "body_excerpt": "",
+        "printer_model": None,
+        "url": None,
+    }
+    resp = None
     try:
         _, printer_model = _get_printer_config()
+        diag["printer_model"] = printer_model
         url = _rch_url(ip, printer_model)
+        diag["url"] = url
         headers = _rch_dgfe_headers(printer_model)
         rch_kwargs = _rch_request_kwargs(printer_model)
+        try:
+            current_app.logger.info("DGFE read: ip=%s model=%s day=%s", ip, printer_model, day)
+        except Exception:
+            pass
         with requests.Session() as s:
             s.headers.update({'Connection': 'close'})
             if 'verify' in rch_kwargs:
@@ -1902,46 +1964,83 @@ def _dgfe_entries_for_date(ip: str, day: date):
                 s.post(url, data=xml_c1.encode('iso-8859-1'), headers=headers, timeout=4, allow_redirects=False)
             except Exception:
                 pass
-    except requests.exceptions.RequestException:
-        return []
+    except requests.exceptions.RequestException as exc:
+        diag["status"] = "network_error"
+        diag["error"] = str(exc)
+        try:
+            current_app.logger.warning("DGFE read network error per %s: %s", day, str(exc))
+        except Exception:
+            pass
+        return [], diag
+    except Exception as exc:
+        diag["status"] = "unexpected_error"
+        diag["error"] = str(exc)
+        try:
+            current_app.logger.exception("DGFE read errore inatteso per %s", day)
+        except Exception:
+            pass
+        return [], diag
 
+    diag["http_status"] = getattr(resp, 'status_code', None)
     body = resp.text or ""
+    diag["body_len"] = len(body)
+    diag["body_excerpt"] = body[:600]
+
     ej_match = re.search(r"<EJ[^>]*>(.*?)</EJ>", body, re.DOTALL)
-    dgfe_text = ej_match.group(1).strip() if ej_match else ""
+    if not ej_match:
+        diag["status"] = "no_ej_block"
+        try:
+            current_app.logger.warning(
+                "DGFE %s: nessun <EJ> nel body (http=%s len=%s) excerpt=%r",
+                day, diag["http_status"], diag["body_len"], diag["body_excerpt"][:200]
+            )
+        except Exception:
+            pass
+        return [], diag
+
+    diag["ej_found"] = True
+    dgfe_text = ej_match.group(1).strip()
     if not dgfe_text:
-        return []
+        diag["status"] = "ej_empty"
+        try:
+            current_app.logger.info("DGFE %s: <EJ> presente ma vuoto", day)
+        except Exception:
+            pass
+        return [], diag
+
+    blocchi = [b.strip() for b in dgfe_text.split('\n\n') if b.strip()]
+    diag["blocks"] = len(blocchi)
 
     entries = []
-    blocchi = [b.strip() for b in dgfe_text.split('\n\n') if b.strip()]
+    parse_failures = 0
     for blocco in blocchi:
-        # Timestamp
         m_dt = re.search(r'DATA:\s*(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2})', blocco)
         if not m_dt:
+            parse_failures += 1
             continue
         try:
             dt = datetime.strptime(m_dt.group(1), '%d/%m/%Y %H:%M')
         except Exception:
+            parse_failures += 1
             continue
 
-        # Progressivo (può non esserci in casi particolari)
         m_pro = re.search(r'PROGR:\s*(\d+)', blocco)
         progressivo_raw = m_pro.group(1) if m_pro else None
 
-        # Totale: formati possibili (TOTALE:, TOT:, TOTALE €:)
         m_tot = (re.search(r'TOTALE:\s*([\d\.,]+)', blocco) or
                  re.search(r'TOT:\s*([\d\.,]+)', blocco) or
                  re.search(r'TOTALE\s*€:\s*([\d\.,]+)', blocco))
         if not m_tot:
+            parse_failures += 1
             continue
         raw_tot = m_tot.group(1).strip()
-        # normalizza
         try:
             tot_float = float(raw_tot.replace('.', '').replace(',', '.'))
         except Exception:
+            parse_failures += 1
             continue
         tot_float = round(tot_float, 2)
 
-        # Conteggio linee SERVIZIO (per validare numero voci)
         servizi_lines = re.findall(r'SERVIZIO:\s*(.*?)\s+PREZZO:\s*([\d\.,]+)', blocco)
         line_count = len(servizi_lines)
 
@@ -1954,6 +2053,30 @@ def _dgfe_entries_for_date(ip: str, day: date):
         })
 
     entries.sort(key=lambda e: e["dataora_dt"])
+    diag["parsed_entries"] = len(entries)
+    diag["parse_failures"] = parse_failures
+    if entries:
+        diag["status"] = "ok"
+    elif blocchi:
+        diag["status"] = "parse_failed_all"
+    else:
+        diag["status"] = "ej_no_blocks"
+
+    try:
+        current_app.logger.info(
+            "DGFE %s: status=%s blocks=%d parsed=%d failures=%d body_len=%d",
+            day, diag["status"], diag["blocks"], diag["parsed_entries"],
+            diag["parse_failures"], diag["body_len"]
+        )
+    except Exception:
+        pass
+
+    return entries, diag
+
+
+def _dgfe_entries_for_date(ip: str, day: date):
+    """Wrapper retro-compatibile: ritorna solo le entries (vuote in caso di qualunque errore)."""
+    entries, _ = _dgfe_entries_with_diag(ip, day)
     return entries
 
 def _max_progressivo_doc_in_db_today():
@@ -2164,6 +2287,7 @@ def reconcile_day(day_date, business_info):
         "db_total": 0.0,
         "created_orphans": 0,
         "suspicious_extras": [],
+        "dgfe_diagnostic": None,
         "notes": ""
     }
 
@@ -2176,9 +2300,27 @@ def reconcile_day(day_date, business_info):
         return summary
 
     try:
-        dgfe_entries = _dgfe_entries_for_date(ip, day_date) or []
+        dgfe_entries, dgfe_diag = _dgfe_entries_with_diag(ip, day_date)
+        dgfe_entries = dgfe_entries or []
     except Exception as exc:
         summary["notes"] = f"Errore lettura DGFE: {exc}"
+        try:
+            _set_reconciliation_entry(bid, summary["date"], summary)
+        except Exception:
+            pass
+        return summary
+
+    summary["dgfe_diagnostic"] = dgfe_diag
+    # Se la lettura DGFE non e' "ok", non possiamo pretendere riconciliazione affidabile.
+    # In particolare per network_error / no_ej_block la status diventa "error" con nota.
+    dgfe_status = dgfe_diag.get("status") if dgfe_diag else None
+    if dgfe_status in ("network_error", "unexpected_error", "no_ej_block", "parse_failed_all"):
+        summary["notes"] = (
+            f"Lettura DGFE fallita ({dgfe_status}): "
+            f"http={dgfe_diag.get('http_status')} body_len={dgfe_diag.get('body_len')}"
+            + (f" err={dgfe_diag.get('error')}" if dgfe_diag.get('error') else "")
+        )
+        summary["status"] = "error"
         try:
             _set_reconciliation_entry(bid, summary["date"], summary)
         except Exception:
