@@ -515,9 +515,9 @@ document.addEventListener('DOMContentLoaded', function() {
   <i class="bi bi-file-earmark-pdf"></i>
 </button>
         {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
-        <button id="btnReconcileRangeCorrispettivi" class="btn btn-outline-primary btn-sm ms-2"
-                title="Verifica retroattiva DGFE vs DB sui giorni del range (solo giorni non ancora verificati)">
-          <i class="bi bi-arrow-clockwise"></i> Verifica giorni pendenti
+        <button id="btnLoadDgfeCorrispettivi" class="btn btn-outline-primary btn-sm ms-2"
+                title="Legge il totale DGFE da RCH per ogni giorno del range">
+          <i class="bi bi-cloud-download"></i> Carica DGFE
         </button>
         {% endif %}
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
@@ -533,13 +533,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 <th>Data</th>
                 <th>Giorno</th>
                 <th>Incasso totale</th>
+                {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
+                <th title="Totale fiscale letto dalla DGFE della stampante RCH">DGFE (RCH)</th>
+                {% endif %}
                 <th>Incasso servizi</th>
                 <th>Incasso prodotti</th>
                 <th>Di cui cash</th>
                 <th>Di cui digitali</th>
                 <th>Di cui altro (bank)</th>
                 {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
-                <th title="Stato riconciliazione DGFE vs Registro Scontrini">Verifica</th>
+                <th>Azioni</th>
                 {% endif %}
               </tr>
             </thead>
@@ -2166,6 +2169,14 @@ document.addEventListener('DOMContentLoaded', function() {
   // Sul cloud (wsgi.py) hide_cassa=True -> riconciliazione disattivata.
   window.IS_OWNER = {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}true{% else %}false{% endif %};
 
+  // Converte 'DD-MM-YYYY' in 'YYYY-MM-DD' per la query DGFE
+  function _dataToIso(itDate) {
+    if (!itDate || typeof itDate !== 'string') return null;
+    const m = itDate.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    if (!m) return null;
+    return `${m[3]}-${m[2]}-${m[1]}`;
+  }
+
   window.loadCorrispettiviData = function(dateFrom, dateTo, openModal) {
     const loaderEl = document.getElementById('loader');
     return fetch(`/api/registro_corrispettivi?dateFrom=${dateFrom}&dateTo=${dateTo}`)
@@ -2174,19 +2185,23 @@ document.addEventListener('DOMContentLoaded', function() {
         const tbody = document.getElementById('corpoTabellaCorrispettivi');
         tbody.innerHTML = '';
 
-        const reconMeta = {
-          ok:         { label: 'Verificato',       cls: 'text-bg-success' },
-          fixed:      { label: 'Verificato (fix)', cls: 'text-bg-warning' },
-          discrepant: { label: 'Discrepanze',      cls: 'text-bg-danger'  },
-          pending:    { label: 'Non verificato',   cls: 'text-bg-secondary' },
-          error:      { label: 'Errore verifica',  cls: 'text-bg-danger'  }
-        };
-
         data.rows.forEach(row => {
           const tr = tbody.insertRow();
+          const isoDay = _dataToIso(row.data);
+          if (isoDay) tr.dataset.day = isoDay;
+          tr.dataset.totaleDb = String(row.totale || 0);
+
           tr.insertCell().textContent = row.data;
           tr.insertCell().textContent = row.giorno;
           tr.insertCell().textContent = row.totale.toFixed(2);
+
+          if (window.IS_OWNER) {
+            const dgfeCell = tr.insertCell();
+            dgfeCell.className = 'dgfe-cell';
+            dgfeCell.textContent = '—';
+            dgfeCell.style.color = '#888';
+          }
+
           tr.insertCell().textContent = row.servizi.toFixed(2);
           tr.insertCell().textContent = row.prodotti.toFixed(2);
           tr.insertCell().textContent = row.cash.toFixed(2);
@@ -2194,29 +2209,26 @@ document.addEventListener('DOMContentLoaded', function() {
           tr.insertCell().textContent = row.altro.toFixed(2);
 
           if (window.IS_OWNER) {
-            const statusCell = tr.insertCell();
-            const status = row.reconciliation_status || 'pending';
-            const meta = reconMeta[status] || reconMeta.pending;
-            const badge = document.createElement('span');
-            badge.className = 'badge ' + meta.cls;
-            badge.textContent = meta.label;
-            const titleParts = [];
-            if (row.reconciliation_run_at) titleParts.push('Verifica: ' + row.reconciliation_run_at.replace('T',' '));
-            if (row.reconciliation_orphans) titleParts.push('Orfani recuperati: ' + row.reconciliation_orphans);
-            if (row.reconciliation_extras) titleParts.push('Extra DB: ' + row.reconciliation_extras);
-            if (titleParts.length) badge.title = titleParts.join(' | ');
-            statusCell.appendChild(badge);
+            const azioniCell = tr.insertCell();
+            azioniCell.className = 'azioni-cell';
           }
         });
 
         // Riga totali
         const trTotale = tbody.insertRow();
         trTotale.className = 'ultima-riga-totale';
+        trTotale.id = 'rigaTotaleCorrispettivi';
         const thTotale = document.createElement('th');
         thTotale.colSpan = 2;
         thTotale.textContent = 'Totale';
         trTotale.appendChild(thTotale);
         trTotale.insertCell().textContent = (data.totali.totale||0).toFixed(2);
+        if (window.IS_OWNER) {
+          const tdTotDgfe = trTotale.insertCell();
+          tdTotDgfe.className = 'dgfe-tot-cell';
+          tdTotDgfe.textContent = '—';
+          tdTotDgfe.style.color = '#888';
+        }
         trTotale.insertCell().textContent = (data.totali.servizi||0).toFixed(2);
         trTotale.insertCell().textContent = (data.totali.prodotti||0).toFixed(2);
         trTotale.insertCell().textContent = (data.totali.cash||0).toFixed(2);
@@ -2226,34 +2238,30 @@ document.addEventListener('DOMContentLoaded', function() {
           trTotale.insertCell().textContent = '';
         }
 
-        // Banner riconciliazione (solo owner)
+        // Banner riconciliazione (solo owner): semplificato, dipende dal log se presente
         const banner = document.getElementById('reconciliationBanner');
         if (banner && window.IS_OWNER) {
           const rec = data.reconciliation || {};
           const tot = rec.total_days || 0;
-          const ok = rec.ok || 0;
-          const fixed = rec.fixed || 0;
           const discrepant = rec.discrepant || 0;
-          const pending = rec.pending || 0;
           const error = rec.error || 0;
+          const verified = (rec.ok || 0) + (rec.fixed || 0);
           if (tot === 0) {
             banner.style.display = 'none';
           } else if (discrepant + error > 0) {
-            banner.className = 'alert alert-danger mb-2 py-2 px-3';
-            banner.style.display = 'block';
-            banner.textContent = `⚠️ ${discrepant + error} giorni con discrepanze residue su ${tot}. ${ok} ok, ${fixed} riconciliati, ${pending} non verificati.`;
-          } else if (pending > 0) {
             banner.className = 'alert alert-warning mb-2 py-2 px-3';
             banner.style.display = 'block';
-            banner.textContent = `${pending} giorni non ancora verificati su ${tot}. La verifica avviene automaticamente alla chiusura giornaliera (Z), oppure usa "Verifica giorni pendenti" per farla manualmente.`;
-          } else if (fixed > 0) {
+            banner.textContent = `${discrepant + error} giorni segnalati nei controlli automatici (post-Z). Premi "Carica DGFE" per confrontare con la stampante e correggere singolarmente.`;
+          } else if (verified > 0 && verified < tot) {
             banner.className = 'alert alert-info mb-2 py-2 px-3';
             banner.style.display = 'block';
-            banner.textContent = `Tutti i ${tot} giorni verificati: ${ok} ok, ${fixed} riconciliati con orfani recuperati automaticamente.`;
-          } else {
+            banner.textContent = `${verified} su ${tot} giorni con verifica post-Z eseguita. Per gli altri usa "Carica DGFE" per confrontare con la stampante.`;
+          } else if (verified === tot) {
             banner.className = 'alert alert-success mb-2 py-2 px-3';
             banner.style.display = 'block';
-            banner.textContent = `✅ Tutti i ${tot} giorni verificati: DB allineato a DGFE.`;
+            banner.textContent = `✅ Tutti i ${tot} giorni hanno avuto verifica post-Z. Puoi ricontrollare in tempo reale con "Carica DGFE".`;
+          } else {
+            banner.style.display = 'none';
           }
         }
 
@@ -2267,6 +2275,149 @@ document.addEventListener('DOMContentLoaded', function() {
         if (loaderEl) loaderEl.style.display = 'none';
       });
   };
+
+  // ----------------------------------------------------------------
+  // Carica DGFE: per ogni riga della tabella, legge il totale DGFE da RCH
+  // (sequenziale per non sovraccaricare la stampante).
+  // Mostra "Correggi" solo nei giorni con discrepanza tra DB e DGFE.
+  // ----------------------------------------------------------------
+  async function _correggiGiorno(isoDay, btnCorreggi, dgfeCell) {
+    if (!confirm(`Allineare il Registro Scontrini al DGFE per il giorno ${isoDay}?\n\nVerranno creati Receipt orfani per le entry DGFE non presenti in DB.`)) return;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    const original = btnCorreggi.innerHTML;
+    btnCorreggi.disabled = true;
+    btnCorreggi.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+    try {
+      const res = await fetch('/cassa/reconcile-range', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+        },
+        body: JSON.stringify({ dateFrom: isoDay, dateTo: isoDay, only_pending: false })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert((data && data.error) || 'Errore durante la correzione.');
+        btnCorreggi.disabled = false;
+        btnCorreggi.innerHTML = original;
+        return;
+      }
+      const result = (data.results && data.results[0]) || {};
+      const orphans = result.created_orphans || 0;
+      alert(`Correzione completata per ${isoDay}.\nOrfani creati: ${orphans}\nStato: ${result.status || 'n/d'}`);
+      // Ricarica la tabella per riflettere il nuovo totale DB e ri-confrontare
+      const dateFrom = document.getElementById('dateFrom').value;
+      const dateTo = document.getElementById('dateTo').value;
+      await window.loadCorrispettiviData(dateFrom, dateTo, false);
+      // Riavvia il caricamento DGFE per allineare i confronti visivamente
+      _loadDgfeForAllRows();
+    } catch (err) {
+      alert('Errore di rete: ' + err.message);
+      btnCorreggi.disabled = false;
+      btnCorreggi.innerHTML = original;
+    }
+  }
+
+  async function _loadDgfeForAllRows() {
+    const btn = document.getElementById('btnLoadDgfeCorrispettivi');
+    const tbody = document.getElementById('corpoTabellaCorrispettivi');
+    if (!tbody || !btn) return;
+    const rows = Array.from(tbody.querySelectorAll('tr[data-day]'));
+    if (!rows.length) return;
+    const originalLabel = btn.innerHTML;
+    btn.disabled = true;
+    let dgfeTotalSum = 0;
+    let allReadable = true;
+
+    for (let i = 0; i < rows.length; i++) {
+      const tr = rows[i];
+      const isoDay = tr.dataset.day;
+      const totaleDb = parseFloat(tr.dataset.totaleDb || '0');
+      const dgfeCell = tr.querySelector('.dgfe-cell');
+      const azioniCell = tr.querySelector('.azioni-cell');
+      btn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status"></span> ${i+1}/${rows.length}`;
+      if (dgfeCell) {
+        dgfeCell.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+        dgfeCell.style.color = '';
+      }
+      if (azioniCell) azioniCell.innerHTML = '';
+      try {
+        const r = await fetch(`/cassa/dgfe-total?day=${encodeURIComponent(isoDay)}`);
+        const d = await r.json();
+        if (!r.ok || d.error) {
+          if (dgfeCell) {
+            dgfeCell.textContent = 'errore';
+            dgfeCell.style.color = '#c00';
+            dgfeCell.title = 'Stato: ' + (d.status || '?') + (d.error ? ' | ' + d.error : '');
+          }
+          allReadable = false;
+        } else if (d.status === 'ok') {
+          const tot = parseFloat(d.dgfe_total || 0);
+          dgfeTotalSum += tot;
+          if (dgfeCell) {
+            dgfeCell.textContent = tot.toFixed(2);
+            dgfeCell.style.color = '';
+            dgfeCell.title = `${d.dgfe_count} scontrini in DGFE`;
+          }
+          // Confronto: se differenza > 0.01 mostra "Correggi"
+          if (Math.abs(tot - totaleDb) > 0.01 && azioniCell) {
+            tr.style.background = '#fff5f0';
+            const btnCorreggi = document.createElement('button');
+            btnCorreggi.className = 'btn btn-sm btn-warning';
+            btnCorreggi.textContent = 'Correggi';
+            btnCorreggi.title = `DB: ${totaleDb.toFixed(2)} | DGFE: ${tot.toFixed(2)}`;
+            btnCorreggi.addEventListener('click', () => _correggiGiorno(isoDay, btnCorreggi, dgfeCell));
+            azioniCell.appendChild(btnCorreggi);
+          } else {
+            tr.style.background = '';
+          }
+        } else {
+          // ej_empty / no_ej_block / network_error / etc.
+          if (dgfeCell) {
+            dgfeCell.textContent = (d.dgfe_count === 0 && d.status === 'ej_empty') ? '0.00' : (d.status || '?');
+            dgfeCell.style.color = (d.status === 'ej_empty') ? '' : '#c00';
+            dgfeCell.title = `status=${d.status} | http=${d.http_status||'-'} | body_len=${d.body_len||0}` + (d.error ? ' | ' + d.error : '');
+          }
+          if (d.status === 'ej_empty' && Math.abs(0 - totaleDb) > 0.01 && azioniCell) {
+            // DGFE vuoto ma DB ha registri: discrepanza, ma non possiamo correggere (DGFE e' vuoto)
+            tr.style.background = '#fff5f0';
+            azioniCell.textContent = '';
+          } else if (d.status !== 'ej_empty') {
+            allReadable = false;
+          }
+        }
+      } catch (err) {
+        if (dgfeCell) {
+          dgfeCell.textContent = 'errore rete';
+          dgfeCell.style.color = '#c00';
+          dgfeCell.title = err.message;
+        }
+        allReadable = false;
+      }
+    }
+
+    // Aggiorna riga totali
+    const totDgfeCell = document.querySelector('#rigaTotaleCorrispettivi .dgfe-tot-cell');
+    if (totDgfeCell) {
+      if (allReadable) {
+        totDgfeCell.textContent = dgfeTotalSum.toFixed(2);
+        totDgfeCell.style.color = '';
+      } else {
+        totDgfeCell.textContent = dgfeTotalSum.toFixed(2) + ' (parz.)';
+        totDgfeCell.style.color = '#c00';
+        totDgfeCell.title = 'Alcuni giorni non leggibili dalla stampante';
+      }
+    }
+
+    btn.innerHTML = originalLabel;
+    btn.disabled = false;
+  }
+
+  const btnLoadDgfe = document.getElementById('btnLoadDgfeCorrispettivi');
+  if (btnLoadDgfe) {
+    btnLoadDgfe.addEventListener('click', _loadDgfeForAllRows);
+  }
 
   // Bottone "Verifica giorni pendenti" (solo owner)
   const btnReconcileRange = document.getElementById('btnReconcileRangeCorrispettivi');

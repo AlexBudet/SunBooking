@@ -308,11 +308,26 @@ def registro_corrispettivi():
                 row_obj['reconciliation_run_at'] = recon_entry.get('run_at')
                 row_obj['reconciliation_orphans'] = recon_entry.get('created_orphans', 0)
                 row_obj['reconciliation_extras'] = len(recon_entry.get('suspicious_extras', []) or [])
+                row_obj['reconciliation_dgfe_count'] = recon_entry.get('dgfe_count', 0)
+                row_obj['reconciliation_db_count'] = recon_entry.get('db_count', 0)
+                row_obj['reconciliation_notes'] = recon_entry.get('notes', '') or ''
+                diag = recon_entry.get('dgfe_diagnostic') or {}
+                row_obj['reconciliation_dgfe_status'] = diag.get('status') if diag else None
+                row_obj['reconciliation_dgfe_http'] = diag.get('http_status') if diag else None
+                row_obj['reconciliation_dgfe_body_len'] = diag.get('body_len') if diag else None
+                row_obj['reconciliation_dgfe_error'] = diag.get('error') if diag else None
             else:
                 row_obj['reconciliation_status'] = 'pending'
                 row_obj['reconciliation_run_at'] = None
                 row_obj['reconciliation_orphans'] = 0
                 row_obj['reconciliation_extras'] = 0
+                row_obj['reconciliation_dgfe_count'] = 0
+                row_obj['reconciliation_db_count'] = 0
+                row_obj['reconciliation_notes'] = ''
+                row_obj['reconciliation_dgfe_status'] = None
+                row_obj['reconciliation_dgfe_http'] = None
+                row_obj['reconciliation_dgfe_body_len'] = None
+                row_obj['reconciliation_dgfe_error'] = None
 
         rows.append(row_obj)
         cur += timedelta(days=1)
