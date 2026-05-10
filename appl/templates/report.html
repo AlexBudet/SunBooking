@@ -2293,8 +2293,9 @@ document.addEventListener('DOMContentLoaded', function() {
     rows.forEach(r => sum += parseFloat(r.dataset.totaleDb || '0'));
     const trTot = document.getElementById('rigaTotaleCorrispettivi');
     if (trTot) {
-      // 3a cella (indice 2) = "Incasso totale"
-      const cell = trTot.cells[2];
+      // Riga totali: cells[0]=TH 'Totale' (colSpan=2), cells[1]=Incasso totale.
+      // Le celle sono shiftate rispetto alle data-row a causa del colSpan.
+      const cell = trTot.cells[1];
       if (cell) cell.textContent = sum.toFixed(2);
     }
   }
@@ -2622,17 +2623,29 @@ document.addEventListener('DOMContentLoaded', function() {
             tr.style.background = '';
           }
         } else {
-          // ej_empty / no_ej_block / network_error / etc.
+          // ej_empty / ej_no_blocks / no_ej_block / network_error / etc.
+          // ej_empty:    blocco <EJ> presente ma vuoto (giorno senza alcun documento)
+          // ej_no_blocks: <EJ> contiene solo header / DOCUMENTO GESTIONALE (giorno chiuso con
+          //              chiusura fiscale a 0). Entrambi i casi = 0 scontrini commerciali.
+          const noScontriniLegittimo = (d.dgfe_count === 0)
+            && (d.status === 'ej_empty' || d.status === 'ej_no_blocks');
           if (dgfeCell) {
-            dgfeCell.textContent = (d.dgfe_count === 0 && d.status === 'ej_empty') ? '0.00' : (d.status || '?');
-            dgfeCell.style.color = (d.status === 'ej_empty') ? '' : '#c00';
-            dgfeCell.title = `status=${d.status} | http=${d.http_status||'-'} | body_len=${d.body_len||0}` + (d.error ? ' | ' + d.error : '');
+            if (noScontriniLegittimo) {
+              dgfeCell.textContent = '0.00';
+              dgfeCell.style.color = '';
+              dgfeCell.title = `0 scontrini in DGFE (status: ${d.status})`;
+            } else {
+              dgfeCell.textContent = d.status || '?';
+              dgfeCell.style.color = '#c00';
+              dgfeCell.title = `status=${d.status} | http=${d.http_status||'-'} | body_len=${d.body_len||0}` + (d.error ? ' | ' + d.error : '');
+            }
           }
-          if (d.status === 'ej_empty' && Math.abs(0 - totaleDb) > 0.01 && azioniCell) {
-            // DGFE vuoto ma DB ha registri: discrepanza, ma non possiamo correggere (DGFE e' vuoto)
+          if (noScontriniLegittimo && Math.abs(0 - totaleDb) > 0.01 && azioniCell) {
+            // DGFE = 0 ma DB ha registri: discrepanza segnalata in rosa, ma non offriamo
+            // "Correggi" automatico (DGFE vuoto: rischio di azzerare dati validi).
             tr.style.background = '#fff5f0';
             azioniCell.textContent = '';
-          } else if (d.status !== 'ej_empty') {
+          } else if (!noScontriniLegittimo) {
             allReadable = false;
           }
         }
