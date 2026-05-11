@@ -1,22 +1,22 @@
 [
   {
-    "nome": "Blu Notte Chic",
-    "hex": "#0A1A40",
-    "descrizione": "Elegante e intenso, perfetto inverno chic."
+    "nome": "Rosso Corallo",
+    "hex": "#FF5A4F",
+    "descrizione": "Caldo e vitaminico, energia solare estiva."
   },
   {
-    "nome": "Verde Salvia Soft",
-    "hex": "#9AAE9D",
-    "descrizione": "Tenue verde neutro, elegante e moderno."
+    "nome": "Blu Oceano",
+    "hex": "#4FAFEF",
+    "descrizione": "Fresco e luminoso, brezza marina estiva."
   },
   {
-    "nome": "Latte White",
-    "hex": "#F5F5F5",
-    "descrizione": "Minimal e luminoso, colore dell'anno 2026."
+    "nome": "Fucsia Ibisco",
+    "hex": "#E91E8F",
+    "descrizione": "Vivace e tropicale, audace mood mediterraneo."
   },
   {
-    "nome": "Grigio Glacé",
-    "hex": "#B4BAC0",
-    "descrizione": "Grigio ghiacciato sofisticato, mood invernale."
+    "nome": "Pesca Albicocca",
+    "hex": "#FFB38A",
+    "descrizione": "Dolce e radioso, tono pesca delicato d'estate."
   }
 ]

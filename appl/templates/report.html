@@ -3578,7 +3578,7 @@ palette.slice(0, 4).forEach((col, idx) => {
   el.style.display = 'flex';
   el.style.flexDirection = 'column';
   el.style.alignItems = 'center';
-  el.style.width = '90px';
+  el.style.width = '120px';
   el.style.marginLeft = '3px';
   el.style.marginRight = '3px';
 el.textContent = '';
@@ -3599,8 +3599,8 @@ if (typeof col.hex === 'string' && /^#?[0-9a-fA-F]{3,8}$/.test(col.hex)) {
 const descBox = document.createElement('div');
 descBox.className = 'palette-desc';
 Object.assign(descBox.style, {
-  fontSize: '1.1em', color: '#444', textAlign: 'center',
-  minHeight: '32px', maxWidth: '90px', lineHeight: '1.15',
+  fontSize: '1em', color: '#444', textAlign: 'center',
+  minHeight: '32px', maxWidth: '120px', lineHeight: '1.15',
   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal'
 });
 
@@ -3620,9 +3620,10 @@ el.appendChild(descBox);
       container.style.display = 'flex';
       container.style.flexDirection = 'row';
       container.style.justifyContent = 'center';
-      container.style.alignItems = 'flex-start';
-      container.style.gap = '18px';
-      container.style.marginTop = '10px';
+      container.style.alignItems = 'center';
+      container.style.gap = '10px';
+      container.style.flex = '1 1 auto';
+      container.style.width = '100%';
       container.style.flexWrap = 'nowrap';
     });
 });
