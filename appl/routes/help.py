@@ -12,6 +12,7 @@ HELP_TOPICS = {
     
     # ========== CALENDARIO ==========
 "calendar_create_appointment": {
+    "videos": ["1.mp4", "2.mp4"],
     "title": "✏️ Crea un Appuntamento in Agenda",
     "content": """Hai due modi per creare un appuntamento in Agenda: il <span class="help-strong-dark">click su cella vuota</span> per la creazione rapida, oppure il <span class="help-strong-dark">Navigator Appuntamenti</span> per flussi più articolati.
 
@@ -26,10 +27,10 @@ HELP_TOPICS = {
 Il sistema precompila già operatore, data e orario partendo dalla cella cliccata. Puoi anche creare un <span class="help-strong-dark">[[BLOCCO OFF|calendar_off_block]]</span> se non stai prenotando un cliente.
 
 <span class="help-strong-dark help-subtitle-pill">▸ Navigator Appuntamenti (metodo flessibile)</span>
-Il <span class="help-strong-dark">Navigator Appuntamenti</span> è il riquadro in alto a destra nell'Agenda. Conviene usarlo quando devi preparare uno o più servizi prima di decidere dove posizionarli, oppure lavorare con più servizi, spostare o copiare blocchi esistenti. **[[NAVIGATOR APPUNTAMENTI|navigator_appuntamenti]]**
+Il <span class="help-strong-dark">Navigator Appuntamenti</span> è il riquadro in alto a destra nell'Agenda. Conviene usarlo quando devi preparare uno o più servizi prima di decidere dove posizionarli, oppure lavorare con più servizi, spostare o copiare blocchi esistenti.
 
 Flusso:
-1. cerca il cliente **[[CAMPO DI RICERCA CLIENTE|campo_ricerca_cliente]]**
+1. cerca il cliente
 2. seleziona uno o più servizi
 3. controlla i mini-blocchi nel riquadro basso
 4. muovi il mouse sulle celle vuote del calendario
@@ -46,6 +47,7 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 },
 
 "calendar_drag": {
+    "videos": ["3.mp4"],
     "title": "🖱️ Spostare un appuntamento? Facilissimo!",
     "content": """Funziona come sul telefono: tocca, tieni premuto e trascina! 
 
@@ -82,6 +84,7 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
     },
 
 "calendar_block_buttons": {
+    "videos": ["9.mp4"],
     "title": "Blocco Appuntamento - I PULSANTI",
     "content": """I pulsanti **popup** compaiono passando il puntatore sul blocco; i pulsanti **interni** sono sempre visibili dentro il blocco stesso.
 
@@ -101,6 +104,7 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 },
 
 "calendar_block_click": {
+    "videos": ["7.mp4", "8.mp4"],
     "title": "🖱️ Click dentro il blocco appuntamento",
     "content": """• 🗑️ **Cestino** (in alto a sinistra) → Apre una finestra con diverse opzioni:
    - **ELIMINA** il singolo blocco
@@ -118,6 +122,7 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 },
 
     "funzioni_blocchi": {
+        "videos": ["4.mp4", "5.mp4"],
         "title": "✂️ Maneggiare i blocchi appuntamenti: le funzioni 'Togli e Sposta', 'Copia Blocco' e 'Aggiungi Servizio'",
         "content": """Sopra ogni blocco appuntamento trovi tre pulsanti fondamentali per gestire gli appuntamenti in modo rapido ed efficiente!
 
@@ -138,6 +143,7 @@ Ideale quando il cliente decide di aggiungere un trattamento extra! 💆""",
     },
 
     "calendar_note": {
+        "videos": ["6.mp4"],
         "title": "📝 Tooltip e Note nel blocco appuntamento",
         "content": """In Tosca puoi visualizzare informazioni e aggiungere due tipi di note, tutte visibili nel tooltip informativo del blocco appuntamento!
 
@@ -203,6 +209,7 @@ I blocchi pagati hanno meno pulsanti rispetto ai blocchi normali:
     },
 
     "calendar_off_block": {
+        "videos": ["10.mp4"],
         "title": "🚫 I Blocchi OFF - pause e impegni di servizio",
         "content": """I **Blocchi OFF** sono diversi dai blocchi appuntamento: servono per bloccare fasce orarie per attività di servizio come pause, riunioni o altri impegni. In pratica disattivano le celle del calendario, impostandole come "non prenotabili" per i clienti.
 
@@ -235,6 +242,7 @@ Una volta creato, il blocco OFF ha questi controlli:
 
     # ========== CASSA ==========
     "cassa_crea_scontrino": {
+        "videos": ["13.mp4"],
         "title": "🧾 Creare uno scontrino",
         "content": """Creare uno scontrino è semplicissimo!
 
@@ -271,6 +279,7 @@ Puoi anche dividere il pagamento su più metodi! 💡""",
     },
     
     "cassa_blocchi_appuntamento": {
+        "videos": ["14.mp4"],
         "title": "📅 Collegare cassa e appuntamenti",
         "content": """La cassa si collega automaticamente agli appuntamenti!
 
@@ -290,6 +299,7 @@ Tutto collegato, zero errori! ✨""",
     
     # ========== CLIENTI ==========
     "client_search": {
+        "videos": ["17.mp4"],
         "title": "🔍 Ricerca cliente in Agenda + Nuovo cliente + Info rapida",
         "content": """Questa è la guida unica per tutto il flusso cliente in Agenda: ricerca, inserimento rapido nuovo cliente e finestra info.
 
@@ -394,6 +404,7 @@ Usa lo storico per:
     },
 
     "client_settings": {
+        "videos": ["18.mp4"],
         "title": "⚙️ Gestione Clienti da Impostazioni",
         "content": """In **Impostazioni → Clienti** (tab "Clienti") trovi tutte le funzioni avanzate per gestire la tua rubrica clienti!
 
@@ -487,6 +498,7 @@ Più lavori bene qui, meno dovrai improvvisare quando sei con il cliente!
     },
 
     "pacchetto_create": {
+        "videos": ["28.mp4"],
         "title": "📝 Gestire il Consenso Informato",
         "content": """Per molti pacchetti è utile, o necessario, collegare un <span class="help-strong-dark">consenso informato</span> firmato dal cliente. Dalla pagina del Pacchetto creato per il cliente potrai scaricare, far firmare e caricare il documento.
 
@@ -513,6 +525,7 @@ L'obiettivo non è solo archiviare, ma poter recuperare il consenso in modo chia
     },
 
     "pacchetto_stati_dettaglio": {
+        "videos": ["31.mp4"],
         "title": "🎨 Colori STATUS pacchetti, sezioni e tooltip",
         "content": """La pagina Pacchetti non serve solo a vedere l'elenco: ti aiuta a leggere velocemente lo stato commerciale e operativo di ogni programma.
 
@@ -546,6 +559,7 @@ da qui basterà <span class="help-strong-dark">cliccare sul pacchetto</span> per
     },
     
     "pacchetto_uso": {
+        "videos": ["30.mp4"],
         "title": "📅 Come segnare un appuntamento collegato a un Pacchetto",
         "content": """Un pacchetto è davvero utile quando viene collegato bene anche alla parte Agenda.
 
@@ -578,6 +592,7 @@ Quando il collegamento è corretto:
     },
     
     "pacchetto_pagamento": {
+        "videos": ["29.mp4"],
         "title": "💶 Come pagare un pacchetto e come funzionano le rate",
         "content": """La vendita del pacchetto non è solo "creazione": deve essere collegata bene anche alla parte economica.
 
@@ -713,6 +728,7 @@ Quando la usi, ragiona sempre come su un portafoglio cliente: non si scaricano s
     },
 
     "prepagata_create": {
+        "videos": ["32.mp4"],
         "title": "💳 Come creare una prepagata",
         "content": """Per creare una prepagata devi ragionare in termini di <span class="help-strong-dark">credito caricato</span>, non di numero sedute.
 
@@ -837,6 +853,7 @@ Se il modulo è attivo, puoi gestire:
     },
 
     "whatsapp_connect": {
+        "videos": ["33.mp4"],
         "title": "📱 Collegare WhatsApp",
         "content": """Per usare il modulo WhatsApp devi prima collegare l'account Business.
 
@@ -860,6 +877,7 @@ Nota operativa:
     },
 
     "whatsapp_messaggi_template": {
+        "videos": ["34.mp4"],
         "title": "📝 WhatsApp: messaggi manuali e template",
         "content": """Nel modulo puoi configurare diversi testi WhatsApp.
 
@@ -902,6 +920,7 @@ Puoi anche disattivare la richiesta di conferma WhatsApp nel modal di creazione 
     },
 
     "whatsapp_operatori": {
+        "videos": ["36.mp4"],
         "title": "👩‍💼 WhatsApp: memo turni operatori del giorno dopo",
         "content": """Il modulo può inviare ogni sera a ciascun operatore il riepilogo del turno del <span class="help-strong-dark">giorno successivo</span>, con il primo impegno della giornata e l'eventuale pausa.
 
@@ -959,6 +978,7 @@ Non fa parte del gestionale standard: se il modulo non è attivo, questa sezione
     },
 
     "marketing_send": {
+        "videos": ["37.mp4"],
         "title": "📣 Inviare messaggi marketing",
         "content": """La schermata Marketing è divisa in tre parti:
 
@@ -1049,6 +1069,7 @@ Se il modulo è attivo, puoi pubblicare servizi online, gestire regole e associa
     },
 
     "booking_setup": {
+        "videos": ["38.mp4"],
         "title": "🌐 Prenotazioni online",
         "content": """Per attivare il modulo Booking via Web:
 
@@ -1069,6 +1090,7 @@ Questo modulo consente ai clienti di richiedere prenotazioni anche fuori dagli o
     },
     
     "booking_rules": {
+        "videos": ["39.mp4"],
         "title": "⚙️ Regole prenotazione online",
         "content": """Le regole booking servono a proteggere l'agenda da prenotazioni online non adatte.
 
@@ -1142,6 +1164,7 @@ Gli appuntamenti si potranno creare **solo** negli orari di turno!
 # filepath: c:\Program Files\SunBooking\appl\routes\help.py
     # ========== SERVIZI ==========
     "service_create": {
+        "videos": ["19.mp4"],
         "title": "💆 Creare un servizio",
         "content": """Aggiungi i tuoi trattamenti in pochi click!
 
@@ -1266,6 +1289,7 @@ L'idea corretta è questa: l'Agenda è la vista operativa del lavoro giornaliero
     },
 
     "agenda_turni": {
+        "videos": ["11.mp4"],
         "title": "🕒 Impostare i turni degli operatori",
         "content": """I turni definiscono quando un operatore è disponibile per nuove prenotazioni. Gli appuntamenti si potranno creare <span class=\"help-strong-dark\">solo</span> negli orari di turno impostati.
 
@@ -1297,6 +1321,7 @@ Sempre nella stessa finestra, troverai la sezione <span class=\"help-strong-dark
     },
 
     "agenda_touch_mode": {
+        "videos": ["42.mp4"],
         "title": "📱 Agenda in modalità TOUCH: differenze operative",
         "content": """La modalità TOUCH cambia il modo in cui interagisci con i blocchi appuntamento.
 
@@ -1336,6 +1361,7 @@ Nella pratica: prima selezioni il blocco, poi tocchi i pulsanti contestuali.
 
     # ========== CASSA (DETTAGLIO OPERATIVO) ==========
     "cassa_filtri_ricerca": {
+        "videos": ["12.mp4"],
         "title": "🧾 Cassa: bozza scontrino, metodi di pagamento e stampa",
         "content": """Qui trovi il flusso completo in 3 parti, senza passaggi separati.
 
@@ -1394,6 +1420,7 @@ Questa logica è utile quando, prima di stampare, cambi prezzi, righe o metodi m
     },
 
     "cassa_sconti_metodi_stampa_test": {
+        "videos": ["15.mp4"],
         "title": "🧮 Cassa: sconti e metodi di pagamento",
         "content": """Ogni riga della bozza può essere rifinita prima della conferma.
 
@@ -1434,6 +1461,7 @@ Nel dettaglio scontrino puoi leggere righe, metodi di pagamento, totale e stato 
     },
 
     "cassa_strumenti_fiscali_rch": {
+        "videos": ["16.mp4"],
         "title": "🖨️ Cassa: strumenti fiscali, DGFE e console RCH",
         "content": """Nella colonna destra alta della Cassa trovi gli strumenti legati alla stampante fiscale:
 
@@ -1454,6 +1482,7 @@ Questi pulsanti vanno usati con attenzione perché incidono sulla parte fiscale 
 
     # ========== REPORT ==========
     "report_navigazione_filtri": {
+        "videos": ["21.mp4"],
         "title": "📊 Report: navigazione data e filtri avanzati",
         "content": """La pagina Report include una barra di navigazione simile all'Agenda:
 
@@ -1487,6 +1516,7 @@ I <span class=\"help-strong-dark\">pannelli KPI</span> sono i riquadri riassunti
     },
 
     "report_previsioni_tile_edit": {
+        "videos": ["22.mp4"],
         "title": "🧠 Report: calcoli previsionali e gestione pannelli KPI",
         "content": """La parte previsionale confronta i dati correnti con obiettivi e andamento temporale.
 
@@ -1505,6 +1535,7 @@ I pannelli non si modificano "a mano" direttamente dal widget: si aggiornano cam
     },
 
     "report_corrispettivi_ufficiali": {
+        "videos": ["23.mp4"],
         "title": "🧾 Report: sezione Corrispettivi (dati ufficiali)",
         "content": """La sezione <span class=\"help-strong-dark\">Corrispettivi</span> raccoglie i <span class=\"help-strong-dark\">dati ufficiali degli incassi</span> generati dalla cassa.
 
@@ -1534,6 +1565,7 @@ Alcuni pulsanti sono visibili solo a ruoli abilitati (admin).""",
     },
 
     "report_esportazione_lettura": {
+        "videos": ["24.mp4"],
         "title": "🧠 Report: lettura dati ed esportazione",
         "content": """I report sono pensati per controllo giornaliero e analisi periodica.
 
@@ -1641,6 +1673,7 @@ Tab visibile ai ruoli admin per accessi e sicurezza.
     },
 
     "tools_tab_operatori": {
+        "videos": ["20.mp4"],
         "title": "👩‍💼 OPERATORI: cosa trovi in pagina e come usarla",
         "content": """Questo tab serve per gestire persone e risorse che compaiono in Agenda.
 
@@ -1830,6 +1863,7 @@ Approfondimenti:
     },
 
     "tools_tab_info_azienda": {
+        "videos": ["25.mp4"],
         "title": "🏢 INFO AZIENDA: dati impresa, touch e aggiornamenti",
         "content": """Questo tab contiene i dati identificativi dell'attività e impostazioni tecniche locali.
 
@@ -1868,6 +1902,7 @@ Aggiorna i dati aziendali prima di attivare nuovi moduli e pianifica gli update 
     },
 
     "tools_tab_centro_assistenza": {
+        "videos": ["26.mp4"],
         "title": "🆘 CENTRO ASSISTENZA: come usare bene le guide",
         "content": """Questo tab apre il sistema guida integrato dell'applicazione.
 
@@ -1920,6 +1955,7 @@ Approfondimenti:
     },
 
     "tools_tab_utenti": {
+        "videos": ["27.mp4"],
         "title": "👥 UTENTI: account, ruoli, password e cancellazione",
         "content": """Questo tab è dedicato alla gestione accessi applicazione.
 
@@ -2159,6 +2195,7 @@ Gli appuntamenti già passati al momento del click non vengono toccati. Se il li
     },
 
     "booking_pagina_pubblica": {
+        "videos": ["40.mp4"],
         "title": "📱 Cosa vede il cliente sulla pagina di prenotazione",
         "content": """La pagina di prenotazione pubblica è ciò che il cliente apre dal link <span class="help-strong-dark">[[PAGINA PRENOTAZIONI|tools_tab_booking_web]]</span>. Conoscere il flusso aiuta a guidare i clienti al telefono.
 
@@ -2201,6 +2238,7 @@ La pagina ha link a <span class="help-strong-dark">Informativa Privacy</span> e 
     },
 
     "booking_appuntamenti_in_agenda": {
+        "videos": ["41.mp4"],
         "title": "🔵 Come appaiono in Agenda le prenotazioni dal web",
         "content": """Le prenotazioni create dal portale online compaiono in Agenda con caratteristiche specifiche, per distinguerle subito da quelle inserite manualmente.
 
@@ -2234,6 +2272,7 @@ Se il cliente ha prenotato più servizi, in Agenda compaiono tanti blocchi quant
 
     # ========== WHATSAPP - APPROFONDIMENTO MEMO MATTUTINO ==========
     "whatsapp_memo_clienti_mattino": {
+        "videos": ["35.mp4"],
         "title": "🌅 WhatsApp: memo mattutino ai clienti del giorno",
         "content": """Se è attivo il modulo WhatsApp, Tosca può inviare automaticamente a ogni cliente che ha appuntamento oggi un messaggio promemoria, partendo da un orario configurabile.
 

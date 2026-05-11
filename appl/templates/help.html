@@ -629,6 +629,25 @@
     border-color: #dbeafe;
 }
 
+/* Video tutorial associati al topic */
+.help-video-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin: 24px auto 8px;
+}
+
+.help-inline-video {
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    display: block;
+    border-radius: 12px;
+    background: #000;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    border: 3px solid #fce7f3;
+}
+
 /* Formattazione testo */
 .help-topic-body strong {
     color: #be185d;
@@ -906,7 +925,8 @@ const HELP_DATA = {
                 key: "{{ key }}",
                 title: {{ topic.title|tojson }},
                 content: {{ topic.content|tojson }},
-                image: {{ topic.image|default('')|tojson }}
+                image: {{ topic.image|default('')|tojson }},
+                videos: {{ topic.videos|default([], true)|tojson }}
             }{% if not loop.last %},{% endif %}
             {% endfor %}
         ]
@@ -934,6 +954,7 @@ const CATEGORY_DESCRIPTIONS = {
 };
 
 const STATIC_BASE = "{{ url_for('static', filename='img/help/') }}";
+const STATIC_VIDEO_BASE = "{{ url_for('static', filename='video/help/') }}";
 const WEB_BOOKING_PAGE_URL = {{ web_booking_page_url|default('', true)|tojson }};
 
 let currentCategory = null;
@@ -1288,7 +1309,23 @@ function renderTopic() {
         const isGif = topic.image.endsWith('.gif');
         content += `<img src="${STATIC_BASE}${topic.image}" class="help-inline-image ${isGif ? 'gif' : ''}" alt="${topic.title}">`;
     }
-    
+
+    // Aggiungi video tutorial se presenti.
+    // I file devono trovarsi in appl/static/video/help/ con nomi tipo "1.mp4", "2.mp4", ...
+    // Se il file non è ancora stato caricato, il tag <video> mostrerà solo i controlli vuoti:
+    // per evitarlo, il template usa l'evento "error" per nascondere automaticamente
+    // i video assenti, così la pagina resta pulita finché non vengono uploadati.
+    if (Array.isArray(topic.videos) && topic.videos.length > 0) {
+        const videosHtml = topic.videos.map(function(fname) {
+            const src = STATIC_VIDEO_BASE + fname;
+            return `<video class="help-inline-video" controls preload="metadata" playsinline
+                          onerror="this.parentNode.style.display='none'">
+                       <source src="${src}" type="video/mp4">
+                   </video>`;
+        }).join('');
+        content += `<div class="help-video-wrap">${videosHtml}</div>`;
+    }
+
     document.getElementById('topicBody').innerHTML = content;
     
     // Aggiorna pulsanti
