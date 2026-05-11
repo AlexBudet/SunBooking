@@ -4194,11 +4194,13 @@ def help_page():
         pass
 
     # Per il ruolo user: restringe il Centro Assistenza alle sezioni effettivamente
-    # operative da utente (no Report/Pacchetti/Generali/Booking/Touch), filtra Tools
-    # ai soli tab usabili dall'utente, lascia solo marketing_* in "WhatsApp e Marketing"
-    # e sostituisce Info Azienda con una versione di sola lettura.
+    # operative da utente (no Report/Pacchetti/Generali), filtra Tools ai soli tab
+    # usabili dall'utente (escluso tools_tab_booking_web), lascia solo marketing_* in
+    # "WhatsApp e Marketing" e sostituisce Info Azienda con una versione di sola lettura.
+    # Le categorie "Booking via Web" e "Versione Touch" restano visibili integralmente
+    # perché contengono informazioni utili anche al ruolo user.
     if current_user and current_user.ruolo.value == 'user':
-        for _cat in ('Report', 'Pacchetti', 'Generali', 'Booking via Web', 'Versione Touch'):
+        for _cat in ('Report', 'Pacchetti', 'Generali'):
             categories.pop(_cat, None)
 
         if 'Tools' in categories:
