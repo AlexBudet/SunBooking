@@ -4170,16 +4170,7 @@ def help_page():
         }
     categories = get_topics_by_category()
 
-    # Per il ruolo user, nasconde sezioni Help non disponibili nell'app.
-    if current_user and current_user.ruolo.value == 'user':
-        if 'Tools' in categories:
-            categories['Tools'] = [
-                k for k in categories['Tools']
-                if k not in {'tools_tab_booking_web', 'tools_tab_utenti'}
-            ]
-        categories.pop('Booking via Web', None)
-
-    # Nasconde sezioni help se il relativo modulo è disabilitato per questo tenant.
+    # A monte: nasconde sezioni help se il relativo modulo è disabilitato per questo tenant.
     try:
         from appl.models import OWNER
         owner_cfg = OWNER.query.first()
@@ -4201,6 +4192,62 @@ def help_page():
                     ]
     except Exception:
         pass
+
+    # Per il ruolo user: restringe il Centro Assistenza alle sezioni effettivamente
+    # operative da utente (no Report/Pacchetti/Generali/Booking/Touch), filtra Tools
+    # ai soli tab usabili dall'utente, lascia solo marketing_* in "WhatsApp e Marketing"
+    # e sostituisce Info Azienda con una versione di sola lettura.
+    if current_user and current_user.ruolo.value == 'user':
+        for _cat in ('Report', 'Pacchetti', 'Generali', 'Booking via Web', 'Versione Touch'):
+            categories.pop(_cat, None)
+
+        if 'Tools' in categories:
+            user_tools_allowed = {
+                'tools_tab_servizi',
+                'tools_tab_clienti',
+                'tools_tab_marketing',
+                'tools_tab_info_azienda',
+                'tools_tab_centro_assistenza',
+            }
+            categories['Tools'] = [k for k in categories['Tools'] if k in user_tools_allowed]
+            if not categories['Tools']:
+                categories.pop('Tools', None)
+
+        if 'WhatsApp e Marketing' in categories:
+            categories['WhatsApp e Marketing'] = [
+                k for k in categories['WhatsApp e Marketing']
+                if k.startswith('marketing_')
+            ]
+            if not categories['WhatsApp e Marketing']:
+                categories.pop('WhatsApp e Marketing', None)
+
+        if 'tools_tab_info_azienda' in topics:
+            user_info_azienda_md = (
+                "Questo tab mostra i dati identificativi dell'attività e alcune impostazioni tecniche locali. "
+                "Da utente standard la maggior parte dei campi è in **sola lettura**.\n\n"
+                "<span class=\"help-strong-dark help-subtitle-pill\">▸ DATI AZIENDALI (sola lettura)</span>\n"
+                "Puoi consultare i dati dell'azienda (nome, indirizzo, contatti, P.IVA), ma non modificarli. "
+                "Le modifiche sono riservate agli account <span class=\"help-strong-dark\">admin</span> o "
+                "<span class=\"help-strong-dark\">owner</span>.\n\n"
+                "<span class=\"help-strong-dark help-subtitle-pill\">▸ LOGO E ORARI ISTITUTO (sola lettura)</span>\n"
+                "Puoi visualizzare il logo caricato e gli orari di apertura/chiusura impostati. "
+                "La modifica è riservata ad admin/owner.\n\n"
+                "<span class=\"help-strong-dark help-subtitle-pill\">▸ STAMPANTE FISCALE: IP E PING RCH</span>\n"
+                "Puoi consultare l'IP della stampante fiscale ed eseguire il test di connessione "
+                "(<span class=\"help-strong-dark\">Ping RCH</span>) per verificare che la stampante risponda "
+                "prima di operazioni fiscali in Cassa.\n\n"
+                "<span class=\"help-strong-dark help-subtitle-pill\">▸ OPZIONE TOUCH (LOCALE)</span>\n"
+                "Da qui puoi **attivare o disattivare la modalità touch** dell'Agenda: è un'impostazione locale a "
+                "<span class=\"help-strong-dark\">questo computer</span>, utile su schermi touch o tablet. "
+                "Dopo la modifica ricarica l'Agenda.\n\n"
+                "<span class=\"help-strong-dark help-subtitle-pill\">▸ AGGIORNAMENTI APP</span>\n"
+                "Da qui puoi **controllare la disponibilità di aggiornamenti** e avviare il download/installazione "
+                "dalla sezione dedicata."
+            )
+            topics['tools_tab_info_azienda'] = {
+                **topics['tools_tab_info_azienda'],
+                'content': convert_markdown(user_info_azienda_md),
+            }
 
     return render_template(
         'help.html',

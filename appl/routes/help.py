@@ -902,20 +902,44 @@ Puoi anche disattivare la richiesta di conferma WhatsApp nel modal di creazione 
     },
 
     "whatsapp_operatori": {
-        "title": "👩‍💼 WhatsApp: memo turni operatori",
-        "content": """Il modulo può inviare automaticamente ai singoli operatori il riepilogo del turno del giorno successivo.
+        "title": "👩‍💼 WhatsApp: memo turni operatori del giorno dopo",
+        "content": """Il modulo può inviare ogni sera a ciascun operatore il riepilogo del turno del <span class="help-strong-dark">giorno successivo</span>, con il primo impegno della giornata e l'eventuale pausa.
 
-Configurazioni principali:
-• attivazione generale memo turni
-• orario di invio
-• template messaggio operatori
-• scelta degli operatori abilitati a riceverlo
+<span class="help-strong-dark help-subtitle-pill">▸ CONFIGURAZIONE</span>
+Dal pannello WhatsApp imposta:
+• <span class="help-strong-dark">attivazione</span> memo turni operatori
+• <span class="help-strong-dark">orario di invio</span> (es. 20:00)
+• <span class="help-strong-dark">template messaggio</span> con le variabili
 
-È una funzione utile per organizzare il team senza dover inviare manualmente i turni ogni sera.
+Per ogni operatore va inoltre spuntato il flag <span class="help-strong-dark">"Notifica turni via WhatsApp"</span> in <span class="help-strong-dark">[[OPERATORI|tools_tab_operatori]]</span>: senza quello, il singolo non riceve il memo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ CHI RICEVE E CHI NO</span>
+Il memo viene inviato solo a operatori:
+• non cancellati e visibili
+• non di tipo <span class="help-strong-dark">macchinario</span>
+• con il flag di notifica attivo
+• con un <span class="help-strong-dark">turno impostato</span> per il giorno dopo (giorni di riposo esclusi)
+• con cellulare valido in anagrafica
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA CONTIENE IL MESSAGGIO</span>
+Il template viene popolato con il turno e gli appuntamenti del giorno dopo, considerando anche gli OFF interni (es. pausa pranzo). I blocchi sui clienti fittizi/dummy sono esclusi dalla lista impegni.
+
+<span class="help-strong-dark help-subtitle-pill">▸ VARIABILI DISPONIBILI</span>
+• <span class="help-strong-dark">{{operatore}}</span> → nome dell'operatore
+• <span class="help-strong-dark">{{data}}</span> → giorno della settimana e data in italiano (es. "Martedì 12 Marzo")
+• <span class="help-strong-dark">{{ora_inizio}}</span>, <span class="help-strong-dark">{{ora_fine}}</span> → estremi del turno
+• <span class="help-strong-dark">{{ora_primo_app}}</span>, <span class="help-strong-dark">{{primo_app}}</span> → orario ed etichetta del primo appuntamento (saltando OFF)
+• <span class="help-strong-dark">{{ora_pausa}}</span>, <span class="help-strong-dark">{{pausa}}</span> → orario ed etichetta della pausa, se presente
+• <span class="help-strong-dark">{{sezione_pausa}}</span> → blocco "Pausa: HH:MM" già pronto, vuoto se non c'è pausa
+• <span class="help-strong-dark">{{sezione_primo_app}}</span> → frase completa sul primo impegno, vuota se non c'è
+• <span class="help-strong-dark">{{nome_istituto}}</span>, <span class="help-strong-dark">{{sito}}</span> → dati del centro
+
+<span class="help-strong-dark help-subtitle-pill">▸ INVIO 1 MESSAGGIO AL MINUTO</span>
+Come per il memo clienti, anche qui Tosca invia un messaggio al minuto fino a esaurire la coda, per non stressare WhatsApp.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Prima di attivare l'invio per tutti, usa la funzione di preview e verifica il template su 1-2 operatori.</span>
+<span class="help-hint-text">Imposta l'orario del memo a fine giornata (es. 20:00): gli operatori ricevono il turno di domani in tempo per organizzarsi. Prima di attivare per tutti, prova il template con la funzione di anteprima.</span>
 </div>""",
     },
     
@@ -2046,6 +2070,209 @@ Tosca segue logiche tipiche dei CRM moderni:
 I database e la web app di Tosca sono hostati su server professionali, con salvataggio dati giornalieri.
 """,
     },
+
+    # ========== BOOKING VIA WEB - APPROFONDIMENTI OPERATIVI ==========
+    "booking_logica_slot": {
+        "title": "🧮 Come Tosca calcola gli slot disponibili online",
+        "content": """Quando un cliente apre la pagina di prenotazione e sceglie data e servizi, Tosca calcola in tempo reale gli orari proponibili. Capire questa logica aiuta a impostare correttamente turni, servizi e operatori.
+
+<span class="help-strong-dark help-subtitle-pill">▸ PUNTO DI PARTENZA: TURNI DEL GIORNO</span>
+Il sistema parte dai <span class="help-strong-dark">turni di tutti gli operatori visibili</span> per la data scelta, intersecati con gli <span class="help-strong-dark">orari di apertura e chiusura</span> dell'istituto. Se un operatore non ha un turno specifico per quel giorno, viene considerato in turno per l'intera fascia di apertura.
+
+I <span class="help-strong-dark">giorni di chiusura</span> impostati per il negozio escludono completamente la data: nessuno slot viene proposto.
+
+<span class="help-strong-dark help-subtitle-pill">▸ FILTRI DI ESCLUSIONE</span>
+Su ogni intervallo di turno il sistema scarta le finestre occupate:
+• <span class="help-strong-dark">blocchi OFF globali</span> (senza operatore) → bloccano tutte le colonne
+• <span class="help-strong-dark">blocchi OFF di un singolo operatore</span> → bloccano solo quella colonna
+• <span class="help-strong-dark">appuntamenti già esistenti</span> sulla colonna dell'operatore
+• <span class="help-strong-dark">appuntamenti cancellati</span> (soft-delete) non bloccano lo slot
+
+<span class="help-strong-dark help-subtitle-pill">▸ SOLO SERVIZI E OPERATORI ABILITATI</span>
+Vengono considerati solo i servizi con flag <span class="help-strong-dark">"visibile online"</span> e con <span class="help-strong-dark">operatori associati</span>. Un servizio pubblicato senza operatori abilitati non produce slot.
+
+<span class="help-strong-dark help-subtitle-pill">▸ DURATA TOTALE E PASSO 15 MINUTI</span>
+Se il cliente seleziona più servizi, la durata richiesta è la <span class="help-strong-dark">somma di tutte le durate</span>. Lo slot viene proposto solo se l'intera catena entra in un intervallo libero. Il passo di scansione è di <span class="help-strong-dark">15 minuti</span>.
+
+<span class="help-strong-dark help-subtitle-pill">▸ DUE STRATEGIE DI ASSEGNAZIONE OPERATORI</span>
+Per ogni slot candidato Tosca prova due strategie, in ordine di priorità:
+
+1️⃣ <span class="help-strong-dark">Stesso operatore per tutti i servizi</span> (preferita)
+Cerca un operatore abilitato a tutti i servizi richiesti e libero per l'intera catena. È il caso più comodo per il cliente.
+
+2️⃣ <span class="help-strong-dark">A cascata</span> (fallback)
+Se nessun singolo operatore copre tutto, assegna servizio per servizio cercando di rimanere sulla <span class="help-strong-dark">stessa colonna</span> del servizio precedente quando possibile. Se anche questo fallisce su un servizio, lo slot non viene proposto.
+
+<span class="help-strong-dark help-subtitle-pill">▸ OPERATORE PREFERITO DAL CLIENTE</span>
+Se il cliente sceglie esplicitamente un operatore per uno o più servizi, lo slot è valido <span class="help-strong-dark">solo</span> se la sequenza calcolata combacia con le preferenze. Le altre colonne non vengono nemmeno considerate per quei servizi.
+
+<span class="help-strong-dark help-subtitle-pill">▸ FILTRO ORARI PASSATI</span>
+Se la data scelta è oggi, vengono nascosti gli slot la cui partenza è già passata. Le date passate restituiscono sempre lista vuota.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Se un cliente lamenta "non vedo orari disponibili" controlla in ordine: 1) il giorno è chiusura? 2) gli operatori hanno turno? 3) i servizi sono visibili online e hanno operatori associati? 4) la durata totale richiesta entra in un buco libero?</span>
+</div>""",
+    },
+
+    "booking_codice_conferma_e_limiti": {
+        "title": "🔐 Codice email, limiti e annullamento prenotazione",
+        "content": """Per evitare abusi e prenotazioni accidentali, il portale online applica diversi controlli prima e dopo la prenotazione.
+
+<span class="help-strong-dark help-subtitle-pill">▸ CODICE DI CONFERMA VIA EMAIL</span>
+Quando il cliente compila nome, cognome, telefono e email, deve premere <span class="help-strong-dark">"Invia codice di conferma"</span>: Tosca genera un codice numerico a 6 cifre e lo spedisce all'indirizzo email indicato.
+
+Regole sul codice:
+• validità <span class="help-strong-dark">10 minuti</span> dall'invio
+• per inviare un nuovo codice c'è un <span class="help-strong-dark">cooldown di 5 minuti</span>
+• dopo il <span class="help-strong-dark">2° tentativo</span> ravvicinato, il sistema blocca ulteriori invii fino allo scadere del cooldown
+• il codice è legato alla coppia codice ↔ email: se il cliente cambia email deve richiederne uno nuovo
+
+<span class="help-strong-dark help-subtitle-pill">▸ LIMITE PRENOTAZIONI RAVVICINATE</span>
+A protezione del centro, Tosca accetta al massimo <span class="help-strong-dark">3 prenotazioni complete ogni 4 minuti</span> sul portale (per tutto il negozio). Oltre questa soglia, il cliente vede un messaggio che indica fra quanti minuti potrà riprovare. È una difesa contro bot e click ripetuti, non un limite del cliente singolo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ REGOLE DURATA E PREZZO</span>
+Se in <span class="help-strong-dark">[[REGOLE PRENOTAZIONE|booking_rules]]</span> hai impostato un limite di durata o prezzo:
+• tipo <span class="help-strong-dark">warning</span> → il cliente vede un alert ma può proseguire
+• tipo <span class="help-strong-dark">block</span> → il sistema rifiuta la prenotazione mostrando il messaggio configurato
+
+<span class="help-strong-dark help-subtitle-pill">▸ EMAIL DOPO LA PRENOTAZIONE</span>
+A prenotazione conclusa, Tosca invia due email:
+• al <span class="help-strong-dark">cliente</span> → "richiesta ricevuta" con dettagli appuntamenti, totale durata, totale costo e link di annullamento
+• al <span class="help-strong-dark">centro</span> (email dell'azienda) → notifica con nome cliente e riepilogo
+
+Importante: l'email al cliente parla di <span class="help-strong-dark">richiesta</span>, non di conferma automatica. Sarà il centro a confermare via WhatsApp o telefono.
+
+<span class="help-strong-dark help-subtitle-pill">▸ ANNULLAMENTO DA PARTE DEL CLIENTE</span>
+Nell'email di conferma il cliente trova un <span class="help-strong-dark">link di annullamento</span> univoco. Cliccandolo:
+1️⃣ vede la pagina di conferma con data e ora del primo appuntamento
+2️⃣ deve premere <span class="help-strong-dark">"Conferma annullamento"</span>
+3️⃣ tutti gli appuntamenti <span class="help-strong-dark">futuri</span> della stessa sessione di prenotazione vengono cancellati (soft-delete)
+4️⃣ il centro riceve un'email automatica di notifica dell'annullamento
+
+Gli appuntamenti già passati al momento del click non vengono toccati. Se il link è stato già usato o non esiste, il cliente vede "Link non valido o già usato".
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Se un cliente ti dice che non riceve il codice email, fai controllare lo spam e ricorda il cooldown di 5 minuti tra un invio e l'altro. Se l'email è stata digitata male non c'è modo di recuperare: deve ripartire dalla pagina.</span>
+</div>""",
+    },
+
+    "booking_pagina_pubblica": {
+        "title": "📱 Cosa vede il cliente sulla pagina di prenotazione",
+        "content": """La pagina di prenotazione pubblica è ciò che il cliente apre dal link <span class="help-strong-dark">[[PAGINA PRENOTAZIONI|tools_tab_booking_web]]</span>. Conoscere il flusso aiuta a guidare i clienti al telefono.
+
+<span class="help-strong-dark help-subtitle-pill">▸ INTESTAZIONE NEGOZIO</span>
+In alto compaiono:
+• <span class="help-strong-dark">logo</span> del centro (se caricato e con visibilità attiva nel booking)
+• <span class="help-strong-dark">nome azienda</span>
+• <span class="help-strong-dark">indirizzo</span>, eventuale città e <span class="help-strong-dark">telefono</span>
+
+Questi dati arrivano da <span class="help-strong-dark">[[INFO AZIENDA|tools_tab_info_azienda]]</span>: se mancano o sono incompleti, mancheranno anche nella pagina pubblica.
+
+<span class="help-strong-dark help-subtitle-pill">▸ FLUSSO DI PRENOTAZIONE A TAPPE</span>
+La pagina si compone in modo guidato, mostrando un passo alla volta:
+
+1️⃣ <span class="help-strong-dark">Scelta servizio</span> → cerca per nome o sfoglia per sottocategoria. Cliccando "i" si apre la descrizione del servizio.
+2️⃣ <span class="help-strong-dark">Scelta operatore</span> → "Qualsiasi" oppure operatrice specifica fra quelle abilitate al servizio
+3️⃣ <span class="help-strong-dark">Aggiungi altro servizio</span> (opzionale) → si possono accodare più servizi, ognuno con la sua operatrice preferita
+4️⃣ <span class="help-strong-dark">Data</span> → calendario con minimo "oggi"
+5️⃣ <span class="help-strong-dark">Orario</span> → si popola con gli slot calcolati come spiegato in <span class="help-strong-dark">[[LOGICA SLOT|booking_logica_slot]]</span>
+6️⃣ <span class="help-strong-dark">Dati cliente</span> → nome, cognome, telefono, email
+7️⃣ <span class="help-strong-dark">Codice di conferma</span> → vedi <span class="help-strong-dark">[[CODICE E LIMITI|booking_codice_conferma_e_limiti]]</span>
+8️⃣ <span class="help-strong-dark">Conferma prenotazione</span>
+
+<span class="help-strong-dark help-subtitle-pill">▸ ALERT REGOLE</span>
+Se sono attive regole di durata o prezzo (tipo "warning" o "block"), gli alert vengono mostrati in pagina con il <span class="help-strong-dark">messaggio personalizzato</span> impostato dal centro.
+
+<span class="help-strong-dark help-subtitle-pill">▸ PRIVACY E CONDIZIONI</span>
+La pagina ha link a <span class="help-strong-dark">Informativa Privacy</span> e <span class="help-strong-dark">Condizioni di Vendita</span> precompilati con i dati del negozio. Proseguendo con la prenotazione, il cliente le accetta implicitamente.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA NON VEDE IL CLIENTE</span>
+• operatori marcati come <span class="help-strong-dark">non visibili</span> in Tosca
+• operatori di tipo <span class="help-strong-dark">macchinario</span> nella selezione per servizi estetici
+• servizi senza flag <span class="help-strong-dark">visibile online</span>
+• servizi senza operatori associati al booking
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Compila bene la descrizione dei servizi: è ciò che il cliente legge cliccando la "i" prima di prenotare. Un servizio ben descritto riduce le richieste telefoniche di chiarimento.</span>
+</div>""",
+    },
+
+    "booking_appuntamenti_in_agenda": {
+        "title": "🔵 Come appaiono in Agenda le prenotazioni dal web",
+        "content": """Le prenotazioni create dal portale online compaiono in Agenda con caratteristiche specifiche, per distinguerle subito da quelle inserite manualmente.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COLORE BLU</span>
+Tutti gli appuntamenti provenienti dal Booking via Web sono di default <span class="help-strong-dark">blu</span>. Il colore è ricavato dalla sorgente dell'appuntamento (`web`) e ti aiuta a riconoscerli a colpo d'occhio.
+
+<span class="help-strong-dark help-subtitle-pill">▸ CLIENTE FITTIZIO "BOOKING ONLINE"</span>
+Finché il cliente non viene riconosciuto e riassegnato, l'appuntamento è intestato al cliente fittizio <span class="help-strong-dark">BOOKING ONLINE</span>. I dati veri del cliente sono nella <span class="help-strong-dark">nota appuntamento</span>:
+"PRENOTATO DA BOOKING ONLINE - Nome: …, Cognome: …, Telefono: …, Email: … - ha selezionato l'operatrice? Sì/No"
+
+Per assegnare l'appuntamento all'anagrafica reale, clicca sul nome del cliente nel blocco e seleziona la persona corretta (o creala al volo). Da quel momento l'appuntamento è collegato a un cliente vero.
+
+<span class="help-strong-dark help-subtitle-pill">▸ DICITURA "NUOVO CLIENTE"</span>
+Quando un cliente prenota online per la prima volta e poi lo riassegni a una nuova anagrafica, sopra il blocco compare la nota automatica <span class="help-strong-dark">NUOVO CLIENTE</span>, per ricordare a chi è in turno che è una prima visita.
+
+<span class="help-strong-dark help-subtitle-pill">▸ CATENA MULTI-SERVIZIO</span>
+Se il cliente ha prenotato più servizi, in Agenda compaiono tanti blocchi quanti sono i servizi, contigui e collegati dalla stessa <span class="help-strong-dark">sessione di prenotazione</span>. Cancellando uno solo dei blocchi gli altri restano: per disdire l'intera sessione c'è il link nell'email del cliente.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA FARE AL MATTINO</span>
+1️⃣ scorri l'Agenda del giorno e individua i blocchi blu
+2️⃣ verifica le note: nome, cognome, telefono
+3️⃣ se è un cliente già esistente, riassegna l'appuntamento all'anagrafica giusta
+4️⃣ se è un cliente nuovo, crea l'anagrafica e riassegna
+5️⃣ chiama o manda un WhatsApp per confermare definitivamente
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Il booking online genera "richieste", non conferme automatiche: prendi l'abitudine di sbloccare i blocchi blu ogni mattina prima dell'apertura, così non rischi di dimenticare di confermare al cliente.</span>
+</div>""",
+    },
+
+    # ========== WHATSAPP - APPROFONDIMENTO MEMO MATTUTINO ==========
+    "whatsapp_memo_clienti_mattino": {
+        "title": "🌅 WhatsApp: memo mattutino ai clienti del giorno",
+        "content": """Se è attivo il modulo WhatsApp, Tosca può inviare automaticamente a ogni cliente che ha appuntamento oggi un messaggio promemoria, partendo da un orario configurabile.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA SERVE PER ATTIVARLO</span>
+Dal pannello WhatsApp imposta:
+• <span class="help-strong-dark">attivazione</span> del memo mattutino
+• <span class="help-strong-dark">orario di partenza</span> (es. 08:00)
+• <span class="help-strong-dark">template messaggio</span> con le variabili
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME VIENE COSTRUITA LA CODA</span>
+All'orario configurato, Tosca prepara la lista dei clienti da contattare oggi:
+• prende tutti gli appuntamenti del giorno
+• <span class="help-strong-dark">esclude</span> blocchi OFF, blocchi tecnici e cliente fittizio "BOOKING ONLINE"
+• <span class="help-strong-dark">deduplica</span> blocchi contigui dello stesso cliente (un solo messaggio per persona, anche se ha più servizi accodati)
+• prende <span class="help-strong-dark">sempre il cellulare dall'anagrafica</span> del cliente, non dalla nota
+
+<span class="help-strong-dark help-subtitle-pill">▸ INVIO 1 MESSAGGIO AL MINUTO</span>
+Per non saturare WhatsApp e ridurre il rischio di blocchi anti-spam, Tosca invia <span class="help-strong-dark">un messaggio al minuto</span> fino a esaurire la coda. La coda viene costruita una sola volta al giorno, al minuto del reminder; se il sistema viene riavviato dopo, riprende automaticamente dal punto in cui era.
+
+<span class="help-strong-dark help-subtitle-pill">▸ VARIABILI DISPONIBILI NEL TEMPLATE</span>
+Nel testo puoi usare:
+• <span class="help-strong-dark">{{nome}}</span> → nome del cliente (capitalizzato)
+• <span class="help-strong-dark">{{cognome}}</span>
+• <span class="help-strong-dark">{{data}}</span> → DD/MM/YYYY
+• <span class="help-strong-dark">{{ora}}</span> → HH:MM del primo blocco
+• <span class="help-strong-dark">{{servizi}}</span> → lista puntata dei servizi del blocco contiguo
+• <span class="help-strong-dark">{{azienda}}</span> o <span class="help-strong-dark">{{nome_istituto}}</span> → ragione sociale
+• <span class="help-strong-dark">{{sito}}</span> → sito web del centro
+
+<span class="help-strong-dark help-subtitle-pill">▸ CHI NON RICEVE IL MEMO</span>
+• clienti senza cellulare nell'anagrafica (campo vuoto o "000000000")
+• appuntamenti OFF o tecnici
+• prenotazioni online ancora intestate al cliente fittizio "BOOKING ONLINE" (riassegna l'anagrafica prima del memo)
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Imposta l'orario di invio almeno 2-3 ore prima del primo appuntamento, così anche l'ultimo della coda riceve il memo con anticipo utile. Verifica sempre i numeri sulle anagrafiche: il memo legge da lì, non dalla nota dell'appuntamento.</span>
+</div>""",
+    },
 }
 
 def get_help(topic):
@@ -2123,8 +2350,12 @@ def get_topics_by_category():
         "Booking via Web": [
             "booking_panorama",
             "booking_setup",
+            "booking_pagina_pubblica",
+            "booking_logica_slot",
             "booking_rules",
             "booking_servizi_operatori",
+            "booking_codice_conferma_e_limiti",
+            "booking_appuntamenti_in_agenda",
             "booking_agenda_separazione"
         ],
         "WhatsApp e Marketing": [
@@ -2132,6 +2363,7 @@ def get_topics_by_category():
             "whatsapp_connect",
             "whatsapp_messaggi_template",
             "whatsapp_auto",
+            "whatsapp_memo_clienti_mattino",
             "whatsapp_operatori",
             "marketing_panorama",
             "marketing_send",
