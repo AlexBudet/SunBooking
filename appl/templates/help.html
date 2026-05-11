@@ -629,31 +629,22 @@
     border-color: #dbeafe;
 }
 
-/* Video tutorial in cima al topic (subito sotto il titolo).
-   Dimensione contenuta: chi vuole guardarli in grande usa il pulsante
-   "schermo intero" dei controlli nativi del player. */
+/* Video tutorial posizionati vicino al sottotitolo a cui si riferiscono.
+   Larghezza al 96% del contenitore del topic; per dimensione piena resta
+   disponibile il pulsante "schermo intero" dei controlli nativi del player. */
 .help-video-wrap {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin: 0 0 22px;
-    justify-content: flex-start;
+    margin: 12px 0 22px;
+    text-align: center;
 }
 
 .help-inline-video {
-    width: 100%;
-    max-width: 460px;
-    display: block;
+    width: 96%;
+    max-width: 100%;
+    display: inline-block;
     border-radius: 10px;
     background: #000;
     box-shadow: 0 2px 10px rgba(0,0,0,0.10);
     border: 1px solid #f3d9e6;
-}
-
-@media (max-width: 600px) {
-    .help-inline-video {
-        max-width: 100%;
-    }
 }
 
 /* Formattazione testo */
