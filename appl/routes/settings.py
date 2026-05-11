@@ -4167,7 +4167,6 @@ def help_page():
             "content": content,
             "image": topic.get("image"),
             "video": topic.get("video"),
-            "videos": topic.get("videos", []),
         }
     categories = get_topics_by_category()
 

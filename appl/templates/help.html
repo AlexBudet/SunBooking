@@ -629,23 +629,31 @@
     border-color: #dbeafe;
 }
 
-/* Video tutorial associati al topic */
+/* Video tutorial in cima al topic (subito sotto il titolo).
+   Dimensione contenuta: chi vuole guardarli in grande usa il pulsante
+   "schermo intero" dei controlli nativi del player. */
 .help-video-wrap {
     display: flex;
-    flex-direction: column;
-    gap: 16px;
-    margin: 24px auto 8px;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0 0 22px;
+    justify-content: flex-start;
 }
 
 .help-inline-video {
     width: 100%;
-    max-width: 720px;
-    margin: 0 auto;
+    max-width: 460px;
     display: block;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #000;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-    border: 3px solid #fce7f3;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.10);
+    border: 1px solid #f3d9e6;
+}
+
+@media (max-width: 600px) {
+    .help-inline-video {
+        max-width: 100%;
+    }
 }
 
 /* Formattazione testo */
@@ -925,8 +933,7 @@ const HELP_DATA = {
                 key: "{{ key }}",
                 title: {{ topic.title|tojson }},
                 content: {{ topic.content|tojson }},
-                image: {{ topic.image|default('')|tojson }},
-                videos: {{ topic.videos|default([], true)|tojson }}
+                image: {{ topic.image|default('')|tojson }}
             }{% if not loop.last %},{% endif %}
             {% endfor %}
         ]
@@ -1266,10 +1273,25 @@ function renderTopic() {
     document.getElementById('topicTitle').textContent = topic.title;
     
     // Trasforma i markup [[TESTO|chiave]] in:
-    // 1) blocchi testo + immagine inline (se la chiave esiste in HELP_IMAGES)
-    // 2) link interno a un topic (se la chiave corrisponde a un topic key)
+    // 1) video tutorial inline se il markup è [[VIDEO|N]] (N = nome file senza estensione)
+    // 2) blocchi testo + immagine inline (se la chiave esiste in HELP_IMAGES)
+    // 3) link interno a un topic (se la chiave corrisponde a un topic key)
     let content = topic.content;
     content = content.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, function(match, text, imageKey) {
+        // Video tutorial inline: [[VIDEO|1]] -> player video posizionato sul punto
+        // L'evento onerror del <source> nasconde l'intero blocco se il file non è
+        // ancora stato caricato, così la pagina resta pulita fino all'upload.
+        if (text && text.toUpperCase() === 'VIDEO') {
+            const src = STATIC_VIDEO_BASE + imageKey + '.mp4';
+            return `</p>
+                <div class="help-video-wrap">
+                    <video class="help-inline-video" controls preload="metadata" playsinline
+                           onerror="this.parentNode.style.display='none'">
+                        <source src="${src}" type="video/mp4">
+                    </video>
+                </div>
+                <p>`;
+        }
         const images = HELP_IMAGES[imageKey];
         if (images && images.length > 0) {
             // Genera HTML con testo evidenziato e immagine a fianco
@@ -1308,22 +1330,6 @@ function renderTopic() {
     if (topic.image) {
         const isGif = topic.image.endsWith('.gif');
         content += `<img src="${STATIC_BASE}${topic.image}" class="help-inline-image ${isGif ? 'gif' : ''}" alt="${topic.title}">`;
-    }
-
-    // Aggiungi video tutorial se presenti.
-    // I file devono trovarsi in appl/static/video/help/ con nomi tipo "1.mp4", "2.mp4", ...
-    // Se il file non è ancora stato caricato, il tag <video> mostrerà solo i controlli vuoti:
-    // per evitarlo, il template usa l'evento "error" per nascondere automaticamente
-    // i video assenti, così la pagina resta pulita finché non vengono uploadati.
-    if (Array.isArray(topic.videos) && topic.videos.length > 0) {
-        const videosHtml = topic.videos.map(function(fname) {
-            const src = STATIC_VIDEO_BASE + fname;
-            return `<video class="help-inline-video" controls preload="metadata" playsinline
-                          onerror="this.parentNode.style.display='none'">
-                       <source src="${src}" type="video/mp4">
-                   </video>`;
-        }).join('');
-        content += `<div class="help-video-wrap">${videosHtml}</div>`;
     }
 
     document.getElementById('topicBody').innerHTML = content;
