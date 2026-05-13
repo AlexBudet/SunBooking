@@ -2194,6 +2194,34 @@ window.getClientSearchState = getClientSearchState;
 window.abortClientSearchRequest = abortClientSearchRequest;
 window.scheduleClientSearch = scheduleClientSearch;
 
+// Auto-format del campo cliente per numeri di cellulare incollati/digitati
+// con spazi. Dopo 1s di inattivita', se il valore corrente e' "phone-like"
+// (solo cifre e spazi, eventualmente un '+' iniziale), rimuove gli spazi e
+// rilancia la ricerca cliente sul valore pulito. Cosi' un numero incollato
+// come "333 123 4567" diventa "3331234567" e matcha il cliente salvato.
+function attachClientPhoneAutoFormat(inputEl, searchFn) {
+  if (!inputEl || inputEl.__phoneAutoFormatAttached) return;
+  inputEl.__phoneAutoFormatAttached = true;
+  let timer = null;
+  const tryFormat = () => {
+    const raw = (inputEl.value || '').toString();
+    if (!raw || raw.indexOf(' ') === -1) return;
+    if (!/^\+?[\d\s]+$/.test(raw)) return;
+    const cleaned = raw.replace(/\s+/g, '');
+    if (!cleaned || cleaned === raw) return;
+    inputEl.value = cleaned;
+    try { if (typeof searchFn === 'function') searchFn(cleaned); } catch (e) { console.warn('phoneAutoFormat search err', e); }
+    try { inputEl.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {}
+  };
+  const schedule = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(tryFormat, 1000);
+  };
+  inputEl.addEventListener('input', schedule);
+  inputEl.addEventListener('paste', () => setTimeout(schedule, 0));
+}
+window.attachClientPhoneAutoFormat = attachClientPhoneAutoFormat;
+
 function handleClientSearch(query) {
   // fallback sicuro
   query = (query || '').toString().toLowerCase().trim();
@@ -3224,6 +3252,9 @@ if (clientSearchInput && clientResults && typeof window.handleClientSearch === '
   clientSearchInput.addEventListener('keyup', function () {
     window.handleClientSearch(this.value.trim());
   });
+  if (typeof window.attachClientPhoneAutoFormat === 'function') {
+    window.attachClientPhoneAutoFormat(clientSearchInput, window.handleClientSearch);
+  }
 }
 
     // Listener per "Crea blocco OFF"
@@ -10988,6 +11019,9 @@ document.addEventListener('DOMContentLoaded', function() {
   if (clientSearchInput) {
       clientSearchInput.addEventListener('click', openAppointmentNavigator);
       clientSearchInput.addEventListener('input', resetNavigatorTimeout);
+      if (typeof window.attachClientPhoneAutoFormat === 'function') {
+        window.attachClientPhoneAutoFormat(clientSearchInput, window.handleClientSearchNav);
+      }
   }
 
 
