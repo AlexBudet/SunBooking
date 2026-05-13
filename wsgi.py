@@ -12,6 +12,8 @@ from appl.autologin import issue_token as autologin_issue
 import time as time_mod
 import json
 import uuid
+from collections import deque
+from threading import Lock
 from werkzeug.security import check_password_hash
 try:
     from argon2 import PasswordHasher as _ArgonPH
@@ -111,6 +113,9 @@ root_app = Flask('sunbooking_root',
                  static_folder=base_static,
                  static_url_path='/static')
 root_app.secret_key = secret
+root_app.config['SESSION_COOKIE_HTTPONLY'] = True
+root_app.config['SESSION_COOKIE_SECURE'] = use_https
+root_app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # La root_app non ha Flask-WTF inizializzato: forniamo un csrf_token() no-op
 # per i template che lo includono (landing_web.html, owner_login.html).
@@ -425,6 +430,41 @@ import time as _time_mod_wsgi
 
 OWNER_SESSION_MINUTES = 15
 
+# Rate limit per /owner-login (in-memory, sliding window per IP).
+# Dopo MAX tentativi falliti nella finestra, l'IP è bloccato finché il più
+# vecchio tentativo non esce dalla finestra.
+_OWNER_LOGIN_MAX_ATTEMPTS = 5
+_OWNER_LOGIN_WINDOW_SECONDS = 10 * 60
+_OWNER_LOGIN_ATTEMPTS: dict[str, deque] = {}
+_OWNER_LOGIN_LOCK = Lock()
+
+def _owner_login_check_rate(ip: str):
+    """Ritorna (allowed, retry_after_seconds)."""
+    now = _time_mod_wsgi.time()
+    cutoff = now - _OWNER_LOGIN_WINDOW_SECONDS
+    with _OWNER_LOGIN_LOCK:
+        dq = _OWNER_LOGIN_ATTEMPTS.get(ip)
+        if not dq:
+            return True, 0
+        while dq and dq[0] < cutoff:
+            dq.popleft()
+        if not dq:
+            _OWNER_LOGIN_ATTEMPTS.pop(ip, None)
+            return True, 0
+        if len(dq) >= _OWNER_LOGIN_MAX_ATTEMPTS:
+            retry = int(dq[0] + _OWNER_LOGIN_WINDOW_SECONDS - now)
+            return False, max(retry, 1)
+        return True, 0
+
+def _owner_login_record_failure(ip: str):
+    now = _time_mod_wsgi.time()
+    with _OWNER_LOGIN_LOCK:
+        _OWNER_LOGIN_ATTEMPTS.setdefault(ip, deque()).append(now)
+
+def _owner_login_clear(ip: str):
+    with _OWNER_LOGIN_LOCK:
+        _OWNER_LOGIN_ATTEMPTS.pop(ip, None)
+
 def _mask_uri(uri):
     """Maschera la password nella URI del database."""
     try:
@@ -537,6 +577,13 @@ def owner_login():
     error = None
 
     if request.method == 'POST':
+        ip = request.remote_addr or 'unknown'
+        allowed, retry = _owner_login_check_rate(ip)
+        if not allowed:
+            minutes = max(retry // 60, 1)
+            error = f'Troppi tentativi falliti. Riprova tra {minutes} min.'
+            return render_template('owner_login.html', error=error), 429
+
         username = (request.form.get('username') or '').strip()
         password = request.form.get('password', '')
 
@@ -573,10 +620,12 @@ def owner_login():
                 continue
 
         if authenticated:
+            _owner_login_clear(ip)
             session['owner_auth'] = True
             session['owner_expiry'] = _time_mod_wsgi.time() + OWNER_SESSION_MINUTES * 60
             return redirect(url_for('owner_setup'))
         else:
+            _owner_login_record_failure(ip)
             error = 'Credenziali non valide o utente non owner.'
 
     return render_template('owner_login.html', error=error)
