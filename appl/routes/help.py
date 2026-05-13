@@ -311,59 +311,17 @@ Tutto collegato, zero errori! ✨""",
     # ========== CLIENTI ==========
     "client_phone_search": {
         "title": "📞 Numero di cellulare: salvataggio, ricerca e WhatsApp",
-        "content": """Questa guida spiega come Tosca gestisce il <span class="help-strong-dark">numero di cellulare del cliente</span>: come viene salvato, come funziona la ricerca per numero nei campi cliente, come viene normalizzato per l'invio WhatsApp e cosa fa la nuova funzione di <span class="help-strong-dark">auto-formattazione</span>.
+        "content": """<span class="help-strong-dark help-subtitle-pill">▸ FORMATO DEL NUMERO</span>
+Tosca salva sempre il numero <span class="help-strong-dark">senza spazi</span>, indipendentemente da come lo scrivi. Per i numeri italiani basta il numero a <span class="help-strong-dark">10 cifre</span> (es. <span class="help-strong-dark">3331234567</span>): il <span class="help-strong-dark">+39</span> viene aggiunto automaticamente al momento dell'invio WhatsApp. Per i clienti esteri usa <span class="help-strong-dark">+</span> seguito dal prefisso paese (es. <span class="help-strong-dark">+33123456789</span>).
 
-<span class="help-strong-dark help-subtitle-pill">▸ COME VIENE SALVATO IL NUMERO IN ANAGRAFICA</span>
-Indipendentemente da come scrivi il numero (a mano, copia-incolla, con o senza spazi, con o senza prefisso), Tosca lo salva sempre in archivio <span class="help-strong-dark">senza spazi</span>.
+<span class="help-strong-dark help-subtitle-pill">▸ RICERCA PER NUMERO</span>
+Nei campi cliente di <span class="help-strong-dark">Navigator Appuntamenti</span> e <span class="help-strong-dark">Crea Appuntamento</span> puoi cercare per nome, cognome o cellulare (da 3 caratteri).
 
-Esempi:
-• scrivi <span class="help-strong-dark">333 123 4567</span> → in archivio diventa <span class="help-strong-dark">3331234567</span>
-• scrivi <span class="help-strong-dark">+39 333 1234567</span> → in archivio diventa <span class="help-strong-dark">+393331234567</span>
-• scrivi <span class="help-strong-dark">3331234567</span> → resta invariato
-
-Questa normalizzazione vale per <span class="help-strong-dark">tutti i punti di salvataggio</span>: aggiunta veloce in Agenda, modifica da Info Cliente, gestione anagrafica in Impostazioni, prenotazioni dal Booking via Web.
-
-Il <span class="help-strong-dark">prefisso internazionale non è obbligatorio</span>: per i cellulari italiani puoi salvare solo le 10 cifre. Per i clienti esteri, anteponi <span class="help-strong-dark">+</span> seguito dal prefisso paese (es. <span class="help-strong-dark">+33...</span> per la Francia).
-
-<span class="help-strong-dark help-subtitle-pill">▸ RICERCA PER NUMERO NEI CAMPI "CERCA CLIENTE"</span>
-Nei campi di ricerca cliente del <span class="help-strong-dark">Navigator Appuntamenti</span> e del modal <span class="help-strong-dark">Crea Appuntamento</span> puoi cercare digitando:
-• Nome
-• Cognome
-• Numero di cellulare (anche solo le prime 3 cifre)
-
-La ricerca parte da 3 caratteri. Per il numero, basta che la sequenza sia contenuta nel cellulare salvato: digitando <span class="help-strong-dark">123</span> trovi un cliente con cellulare <span class="help-strong-dark">3331234567</span>.
-
-<span class="help-strong-dark">Attenzione agli spazi nella ricerca:</span> se incolli un numero con spazi (es. <span class="help-strong-dark">333 123 4567</span>), il sistema lo interpreta come tre parole separate e cerca solo su nome/cognome — non trovando nessuno. Per evitare questo problema esiste l'auto-formattazione descritta sotto.
-
-<span class="help-strong-dark help-subtitle-pill">▸ AUTO-FORMATTAZIONE DEL CAMPO CLIENTE (1 secondo)</span>
-Quando nel campo cliente scrivi o incolli un valore che contiene <span class="help-strong-dark">solo cifre e spazi</span> (anche con un <span class="help-strong-dark">+</span> iniziale), dopo <span class="help-strong-dark">1 secondo</span> di inattività Tosca:
-1️⃣ <span class="help-strong-dark">rimuove automaticamente gli spazi</span> dal campo (es. <span class="help-strong-dark">333 123 4567</span> → <span class="help-strong-dark">3331234567</span>)
-2️⃣ <span class="help-strong-dark">rilancia la ricerca</span> con il numero pulito, mostrando il cliente corrispondente
-
-L'auto-formattazione si attiva sia mentre digiti sia subito dopo un incolla. È attiva nel campo cliente del <span class="help-strong-dark">Navigator Appuntamenti</span> e del modal <span class="help-strong-dark">Crea Appuntamento</span>.
-
-Se digiti un nome (es. <span class="help-strong-dark">Mario Rossi</span>) l'auto-format <span class="help-strong-dark">non si attiva</span>: la presenza di lettere lo disabilita, così la ricerca per nome/cognome resta intatta.
-
-<span class="help-strong-dark help-subtitle-pill">▸ INVIO WHATSAPP: NORMALIZZAZIONE AUTOMATICA</span>
-Quando Tosca invia un WhatsApp (manuale dall'Agenda o automatico via reminder), il numero viene preparato così:
-• se inizia con <span class="help-strong-dark">+</span> → viene lasciato com'è (prefisso già scelto da te)
-• se inizia con <span class="help-strong-dark">3</span> e ha al massimo 10 cifre → viene assunto italiano, Tosca aggiunge <span class="help-strong-dark">+39</span> davanti
-• se inizia con <span class="help-strong-dark">3</span> e ha più di 10 cifre → viene assunto internazionale, Tosca aggiunge solo <span class="help-strong-dark">+</span>
-• se inizia con <span class="help-strong-dark">00</span> → viene convertito al formato internazionale
-
-Quindi <span class="help-strong-dark">non devi preoccuparti del prefisso quando salvi</span>: per i clienti italiani basta il numero a 10 cifre, Tosca aggiunge <span class="help-strong-dark">+39</span> al momento dell'invio.
-
-<span class="help-strong-dark help-subtitle-pill">▸ QUANDO IL CLIENTE NON VIENE TROVATO</span>
-Se cerchi per numero e non compare nessun risultato, può dipendere da:
-• il numero in archivio è stato salvato in formato diverso (vecchie anagrafiche prima della normalizzazione automatica)
-• hai inserito meno di 3 caratteri
-• il cliente è stato eliminato dalla rubrica
-
-In questi casi apri <span class="help-strong-dark">Impostazioni → Clienti</span>, cerca per nome/cognome e correggi il numero in anagrafica: salvandolo viene automaticamente ripulito dagli spazi.
+Se incolli un numero <span class="help-strong-dark">con spazi</span>, dopo 1 secondo Tosca li rimuove automaticamente e rilancia la ricerca. L'auto-formattazione si disattiva se il campo contiene lettere, così la ricerca per nome resta intatta.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Salva i nuovi numeri italiani come <span class="help-strong-dark">10 cifre senza prefisso e senza spazi</span> (es. <span class="help-strong-dark">3331234567</span>). Per i numeri esteri usa il <span class="help-strong-dark">+</span> seguito da prefisso paese e numero (es. <span class="help-strong-dark">+33123456789</span>). Così la ricerca per numero è sempre rapida e WhatsApp parte senza intoppi.</span>
+<span class="help-hint-text">Salva i numeri italiani come <span class="help-strong-dark">10 cifre senza prefisso</span>: le ricerche saranno più veloci e l'invio WhatsApp automatico.</span>
 </div>""",
     },
 
