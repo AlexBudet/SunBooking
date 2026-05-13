@@ -5,6 +5,7 @@ from sqlalchemy import Boolean, Enum, ForeignKey, Integer, String, Time, Text
 from sqlalchemy.sql import func
 from sqlalchemy import JSON, DateTime
 from sqlalchemy.dialects.postgresql import ENUM
+from sqlalchemy.orm import validates
 from appl import db
 from datetime import timedelta, datetime
 from werkzeug.security import generate_password_hash
@@ -120,6 +121,17 @@ class Client(db.Model):
 
     def __repr__(self):
         return f"<Cliente {self.cliente_nome} {self.cliente_cognome}>"
+
+    @validates('cliente_cellulare')
+    def _strip_cellulare_spaces(self, key, value):
+        # Garantisce che il cellulare sia sempre scritto in DB senza spazi,
+        # qualunque sia la rotta che salva (Agenda, anagrafica, Booking via
+        # Web, update_client_phone, ecc.). split() senza argomenti tratta come
+        # whitespace anche tab, newline e non-breaking space (U+00A0), che
+        # arrivano spesso dal copia-incolla.
+        if value is None:
+            return value
+        return ''.join(str(value).split())
 
     @classmethod
     def get_dummy(cls):
