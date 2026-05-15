@@ -137,6 +137,39 @@
         <p>&copy; 2025 SunBooking</p>
     </footer>
 
+<!-- Modal informativo: formato numeri stranieri per WhatsApp -->
+<div class="modal fade" id="foreignPhoneHelpModal" tabindex="-1" aria-labelledby="foreignPhoneHelpModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title" id="foreignPhoneHelpModalLabel">Numero estero per WhatsApp</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Per inviare correttamente i messaggi WhatsApp a numeri esteri, salva il cellulare nel <strong>formato internazionale</strong>:</p>
+        <ul class="mb-3">
+          <li>Inizia con <code>+</code> seguito dal prefisso del paese</li>
+          <li><strong>Niente spazi</strong>, trattini o parentesi</li>
+          <li><strong>Non usare</strong> <code>00</code> al posto di <code>+</code></li>
+        </ul>
+        <p class="mb-1"><strong>Esempi corretti:</strong></p>
+        <ul class="small mb-3">
+          <li>Italia: <code>+393331234567</code></li>
+          <li>Germania: <code>+491701234567</code></li>
+          <li>Francia: <code>+33612345678</code></li>
+          <li>Svizzera: <code>+41791234567</code></li>
+          <li>Regno Unito: <code>+447700123456</code></li>
+          <li>Spagna: <code>+34612345678</code></li>
+        </ul>
+        <p class="mb-0 text-muted small">Senza il prefisso internazionale corretto, WhatsApp non potra' recapitare il messaggio.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Ho capito</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal OFFLINE globale -->
 <div class="modal fade" id="offlineModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="offlineModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -161,6 +194,42 @@
   window.modulePacchettiEnabled = {{ module_pacchetti_enabled | tojson }};
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  // Mostra il modal "Numero estero per WhatsApp" la prima volta che l'utente
+  // digita o incolla un '+' nei campi cliente/cellulare indicati. La trigger
+  // scatta sulla transizione "no + -> + presente" cosi' non si ripete ad ogni
+  // tasto e si riarma se l'utente cancella e ritenta.
+  (function() {
+    const TARGET_IDS = new Set([
+      'clientSearchInputNav',     // navigator pseudoblock (calendar.html)
+      'cliente_cellulare',        // modal "Aggiungi cliente" calendar.html
+      'cliente_cellulare_pacchetti' // modal "Aggiungi cliente" pacchetti.html
+    ]);
+    function showForeignPhoneHelp() {
+      const modalEl = document.getElementById('foreignPhoneHelpModal');
+      if (!modalEl || !window.bootstrap) return;
+      // Alza il modal sopra qualunque altro modal gia' aperto (es. AddClient).
+      modalEl.style.zIndex = '2055';
+      modalEl.addEventListener('shown.bs.modal', function onShown() {
+        const backs = document.querySelectorAll('.modal-backdrop');
+        const last = backs[backs.length - 1];
+        if (last) last.style.zIndex = '2050';
+        modalEl.removeEventListener('shown.bs.modal', onShown);
+      });
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+    document.addEventListener('input', function(ev) {
+      const t = ev.target;
+      if (!t || !t.id || !TARGET_IDS.has(t.id)) return;
+      const hasPlus = typeof t.value === 'string' && t.value.includes('+');
+      const prev = t.dataset.foreignPhoneShown === '1';
+      if (hasPlus && !prev) showForeignPhoneHelp();
+      t.dataset.foreignPhoneShown = hasPlus ? '1' : '0';
+    });
+  })();
+</script>
+
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.0/jspdf.plugin.autotable.min.js"></script>
