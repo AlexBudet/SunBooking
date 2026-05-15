@@ -16,26 +16,26 @@ HELP_TOPICS = {
     "content": """Hai due modi per creare un appuntamento in Agenda: il <span class="help-strong-dark">click su cella vuota</span> per la creazione rapida, oppure il <span class="help-strong-dark">Navigator Appuntamenti</span> per flussi più articolati.
 
 <span class="help-strong-dark help-subtitle-pill">▸ Click su cella vuota (metodo rapido)</span>
-[[VIDEO|1]]
 1️⃣ fai <span class="help-strong-dark">click su una cella vuota</span>
 2️⃣ si apre il modal <span class="help-strong-dark">Crea Appuntamento</span>
 3️⃣ nel campo cliente scrivi almeno 3 caratteri e seleziona il nominativo (oppure crea un nuovo cliente al volo con il tasto <span class="help-calendar-btn plus">+</span>)
 4️⃣ nel campo servizio scrivi almeno 3 caratteri e scegli il trattamento
 5️⃣ per ogni servizio che cliccherai dai risultati della ricerca, saranno creati dei <span class="help-strong-dark">mini-blocchi</span> visibili nella parte in basso del Navigator.
 6️⃣ conferma la creazione
+[[VIDEO|1]]
 
 Il sistema precompila già operatore, data e orario partendo dalla cella cliccata. Puoi anche creare un <span class="help-strong-dark">[[BLOCCO OFF|calendar_off_block]]</span> se non stai prenotando un cliente.
-
+<br>
 <span class="help-strong-dark help-subtitle-pill">▸ Navigator Appuntamenti (metodo flessibile)</span>
-[[VIDEO|2]]
 Il <span class="help-strong-dark">Navigator Appuntamenti</span> è il riquadro in alto a destra nell'Agenda. Conviene usarlo quando devi preparare uno o più servizi prima di decidere dove posizionarli, oppure lavorare con più servizi, spostare o copiare blocchi esistenti.
 
 Flusso:
-1. cerca il cliente
-2. seleziona uno o più servizi
-3. controlla i mini-blocchi nel riquadro basso
-4. muovi il mouse sulle celle vuote del calendario
-5. clicca per posizionare
+1️⃣ cerca il cliente
+2️⃣ seleziona uno o più servizi
+3️⃣ controlla i mini-blocchi nel riquadro basso
+4️⃣ muovi il mouse sulle celle vuote del calendario
+5️⃣ clicca per posizionare
+[[VIDEO|2]]
 
 Ogni mini-blocco rappresenta un servizio pronto da inserire. Se ne prepari più di uno, l'<span class="help-strong-dark">ombra di posizionamento</span> ti mostra dove finiranno in agenda. Per posizionare solo un servizio specifico, seleziona il singolo mini-blocco prima del click sulla griglia.
 

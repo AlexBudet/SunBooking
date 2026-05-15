@@ -629,18 +629,19 @@
     border-color: #dbeafe;
 }
 
-/* Video tutorial posizionati vicino al sottotitolo a cui si riferiscono.
-   Larghezza al 96% del contenitore del topic; per dimensione piena resta
-   disponibile il pulsante "schermo intero" dei controlli nativi del player. */
+/* Video tutorial inline: dimensione 1:1 (gli attributi width/height vengono
+   impostati via JS post-metadata su videoWidth/videoHeight). Su schermi
+   stretti, max-width:100% li riduce proporzionalmente senza upscale. */
 .help-video-wrap {
-    margin: 12px 0 22px;
+    margin: 4px 0 14px;
     text-align: center;
 }
 
 .help-inline-video {
-    width: 96%;
+    display: block;
+    margin: 0 auto;
     max-width: 100%;
-    display: inline-block;
+    height: auto;
     border-radius: 10px;
     background: #000;
     box-shadow: 0 2px 10px rgba(0,0,0,0.10);
@@ -1274,14 +1275,7 @@ function renderTopic() {
         // ancora stato caricato, così la pagina resta pulita fino all'upload.
         if (text && text.toUpperCase() === 'VIDEO') {
             const src = STATIC_VIDEO_BASE + imageKey + '.mp4';
-            return `</p>
-                <div class="help-video-wrap">
-                    <video class="help-inline-video" controls preload="metadata" playsinline
-                           onerror="this.parentNode.style.display='none'">
-                        <source src="${src}" type="video/mp4">
-                    </video>
-                </div>
-                <p>`;
+            return `</p><div class="help-video-wrap"><video class="help-inline-video" controls muted playsinline preload="metadata" controlsList="nofullscreen nodownload noremoteplayback" disablePictureInPicture ondblclick="return false" oncontextmenu="return false" onerror="this.parentNode.style.display='none'"><source src="${src}" type="video/mp4"></video></div><p>`;
         }
         const images = HELP_IMAGES[imageKey];
         if (images && images.length > 0) {
@@ -1324,14 +1318,48 @@ function renderTopic() {
     }
 
     document.getElementById('topicBody').innerHTML = content;
-    
+    setupInlineVideos();
+
     // Aggiorna pulsanti
     document.getElementById('btnPrev').disabled = currentTopicIndex === 0;
     document.getElementById('btnNext').disabled = currentTopicIndex === total - 1;
-    
+
     // Scroll to top
     document.querySelector('.help-topic-content').scrollTop = 0;
 }
+
+// Autoplay muto quando il video entra nel viewport. Dimensione lasciata al
+// browser: usa le dimensioni intrinseche del file (videoWidth × videoHeight)
+// senza forzature. CSS cappa solo se il video è più largo del contenitore.
+function setupInlineVideos() {
+    const videos = document.querySelectorAll('#topicBody .help-inline-video');
+    if (!videos.length) return;
+
+    videos.forEach(v => { v.muted = true; });
+
+    if (!('IntersectionObserver' in window)) {
+        videos.forEach(v => v.play().catch(() => {}));
+        return;
+    }
+    if (window._helpVideoObserver) window._helpVideoObserver.disconnect();
+    window._helpVideoObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            const v = entry.target;
+            if (entry.isIntersecting) v.play().catch(() => {});
+            else v.pause();
+        });
+    }, { threshold: 0.3 });
+    videos.forEach(v => window._helpVideoObserver.observe(v));
+}
+
+// Safety net: se un browser ignora controlsList="nofullscreen" e va in
+// fullscreen comunque (es. da tastiera), esce subito.
+document.addEventListener('fullscreenchange', () => {
+    const el = document.fullscreenElement;
+    if (el && el.classList && el.classList.contains('help-inline-video')) {
+        document.exitFullscreen().catch(() => {});
+    }
+});
 
 function prevTopic() {
     if (currentTopicIndex > 0) {
