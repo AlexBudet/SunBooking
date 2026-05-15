@@ -312,7 +312,13 @@ Tutto collegato, zero errori! ✨""",
     "client_phone_search": {
         "title": "📞 Numero di cellulare: salvataggio, ricerca e WhatsApp",
         "content": """<span class="help-strong-dark help-subtitle-pill">▸ FORMATO DEL NUMERO</span>
+[[VIDEO|19]]
 Tosca salva sempre il numero <span class="help-strong-dark">senza spazi</span>, indipendentemente da come lo scrivi. Per i numeri italiani basta il numero a <span class="help-strong-dark">10 cifre</span> (es. <span class="help-strong-dark">3331234567</span>): il <span class="help-strong-dark">+39</span> viene aggiunto automaticamente al momento dell'invio WhatsApp. Per i clienti esteri usa <span class="help-strong-dark">+</span> seguito dal prefisso paese (es. <span class="help-strong-dark">+33123456789</span>).
+
+<div class="help-hint-box">
+<span class="help-hint-label">Numeri esteri (WhatsApp):</span>
+<span class="help-hint-text">Se digiti <span class="help-strong-dark">+</span> oppure <span class="help-strong-dark">00</span> nel campo <span class="help-strong-dark">Cellulare</span> dei modal "Aggiungi cliente" (in Agenda e in Pacchetti), si apre automaticamente una guida con esempi di prefissi internazionali. Il formato corretto (es. <span class="help-strong-dark">+393331234567</span>, senza spazi né <span class="help-strong-dark">00</span>) è necessario perché WhatsApp possa recapitare i messaggi a contatti esteri.</span>
+</div>
 
 <span class="help-strong-dark help-subtitle-pill">▸ RICERCA PER NUMERO</span>
 Nei campi cliente di <span class="help-strong-dark">Navigator Appuntamenti</span> e <span class="help-strong-dark">Crea Appuntamento</span> puoi cercare per nome, cognome o cellulare (da 3 caratteri).
@@ -327,9 +333,7 @@ Se incolli un numero <span class="help-strong-dark">con spazi</span>, dopo 1 sec
 
     "client_search": {
         "title": "🔍 Ricerca cliente in Agenda + Nuovo cliente + Info rapida",
-        "content": """[[VIDEO|17]]
-
-Questa è la guida unica per tutto il flusso cliente in Agenda: ricerca, inserimento rapido nuovo cliente e finestra info.
+        "content": """Questa è la guida unica per tutto il flusso cliente in Agenda: ricerca, inserimento rapido nuovo cliente e finestra info.
 
 <span class="help-strong-dark help-subtitle-pill">▸ RICERCA CLIENTE IN AGENDA</span>
 Nei campi di <span>ricerca cliente</span>, puoi cercare per:
@@ -340,6 +344,7 @@ Nei campi di <span>ricerca cliente</span>, puoi cercare per:
 Bastano 3 lettere (o i primi 3 numeri del cellulare) e i risultati corrispondenti appaiono subito sotto.
 
 <span class="help-strong-dark help-subtitle-pill">▸ AGGIUNGI NUOVO CLIENTE</span>
+[[VIDEO|17]]
 Il modo più veloce per aggiungere un nuovo cliente è usare il tasto <span class="help-calendar-btn plus">+</span> accanto al campo di ricerca cliente nella finestra di creazione appuntamento o nel Navigator Appuntamenti in Agenda.
 
 Da lì, basta scrivere **NOME, COGNOME e CELLULARE**: il cliente viene subito aggiunto alla rubrica.
@@ -350,7 +355,13 @@ Il **SESSO** viene capito automaticamente dal nome (ma puoi correggerlo nelle im
 
 Verifica sempre il <span class="help-strong-dark">cellulare</span>: è un dato fondamentale per contatto, recall e, se attivo il modulo opzionale, anche per l'invio WhatsApp.
 
+<div class="help-hint-box">
+<span class="help-hint-label">Numeri esteri (WhatsApp):</span>
+<span class="help-hint-text">Se digiti <span class="help-strong-dark">+</span> oppure <span class="help-strong-dark">00</span> nel campo <span class="help-strong-dark">Cellulare</span>, si apre automaticamente una guida con esempi di prefissi internazionali (Italia, Germania, Francia, Svizzera, UK, Spagna). Il formato corretto (es. <span class="help-strong-dark">+393331234567</span>, senza spazi né <span class="help-strong-dark">00</span>) è necessario perché WhatsApp possa recapitare correttamente i messaggi a contatti esteri.</span>
+</div>
+
 <span class="help-strong-dark help-subtitle-pill">▸ FINESTRA INFO CLIENTE</span>
+[[VIDEO|18]]
 Al click sull'icona <span class="help-calendar-btn info">i</span> a fianco dei risultati della ricerca cliente si apre una finestra dove puoi visualizzare e modificare rapidamente i dati del cliente.
 
 Puoi modificare **NOME, COGNOME, CELLULARE ed EMAIL** nei campi in alto, e aggiungere o modificare la **NOTA SALVATA** per quel cliente.
@@ -372,12 +383,19 @@ Cliccando sulle righe della tabella, la vista Agenda si sposta direttamente nell
     "content": """Il modo più veloce per aggiungere un nuovo cliente è usare il **TASTO +** accanto al campo di ricerca cliente nella finestra di creazione appuntamento o nel Navigator Appuntamenti in Agenda!
 
 Da lì, basta scrivere **NOME, COGNOME e CELLULARE**: il cliente viene subito aggiunto alla tua rubrica clienti!
+[[VIDEO|17]]
 
 Se il cellulare è già presente per un altro cliente, vieni avvisato con un messaggio (non è ammesso lo stesso numero di cellulare per più clienti!).
 
 Il **SESSO** viene capito automaticamente dal nome (ma puoi correggerlo nelle impostazioni)
 
 Verifica sempre il <span class="help-strong-dark">cellulare</span>: è un dato fondamentale per contatto, recall e, se attivo il modulo opzionale, anche per l'invio WhatsApp.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Numeri esteri (WhatsApp):</span>
+<span class="help-hint-text">Se digiti <span class="help-strong-dark">+</span> oppure <span class="help-strong-dark">00</span> nel campo <span class="help-strong-dark">Cellulare</span>, si apre automaticamente una guida con esempi di prefissi internazionali. Il formato corretto (es. <span class="help-strong-dark">+393331234567</span>, senza spazi né <span class="help-strong-dark">00</span>) è necessario perché WhatsApp possa recapitare i messaggi a contatti esteri.</span>
+</div>
+[[VIDEO|19]]
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
@@ -396,7 +414,9 @@ Puoi modificare **NOME, COGNOME, CELLULARE ed EMAIL** nei campi in alto, e aggiu
 
 Più sotto trovi:
 - **Prossimi appuntamenti prenotati** per quel cliente, in una tabella con tutti i dati dell'appuntamento. Cliccando sulla riga relativa, la vista Agenda si sposterà in quella giornata.
+[[VIDEO|21]]
 - **Storico appuntamenti** per quel cliente, anche qui cliccando sulla riga della tabella si sposterà la vista Agenda in quella giornata.
+[[VIDEO|20]]
 
 Così hai tutto sotto controllo e puoi gestire i dati cliente in modo semplice e veloce!
 """,
@@ -433,7 +453,7 @@ Usa lo storico per:
 
     "client_settings": {
         "title": "⚙️ Gestione Clienti da Impostazioni",
-        "content": """[[VIDEO|18]]
+        "content": """[[VIDEO|22]]
 
 In **Impostazioni → Clienti** (tab "Clienti") trovi tutte le funzioni avanzate per gestire la tua rubrica clienti!
 
@@ -528,7 +548,7 @@ Più lavori bene qui, meno dovrai improvvisare quando sei con il cliente!
 
     "pacchetto_create": {
         "title": "📝 Gestire il Consenso Informato",
-        "content": """[[VIDEO|28]]
+        "content": """[[VIDEO|32]]
 
 Per molti pacchetti è utile, o necessario, collegare un <span class="help-strong-dark">consenso informato</span> firmato dal cliente. Dalla pagina del Pacchetto creato per il cliente potrai scaricare, far firmare e caricare il documento.
 
@@ -556,7 +576,7 @@ L'obiettivo non è solo archiviare, ma poter recuperare il consenso in modo chia
 
     "pacchetto_stati_dettaglio": {
         "title": "🎨 Colori STATUS pacchetti, sezioni e tooltip",
-        "content": """[[VIDEO|31]]
+        "content": """[[VIDEO|35]]
 
 La pagina Pacchetti non serve solo a vedere l'elenco: ti aiuta a leggere velocemente lo stato commerciale e operativo di ogni programma.
 
@@ -591,7 +611,7 @@ da qui basterà <span class="help-strong-dark">cliccare sul pacchetto</span> per
     
     "pacchetto_uso": {
         "title": "📅 Come segnare un appuntamento collegato a un Pacchetto",
-        "content": """[[VIDEO|30]]
+        "content": """[[VIDEO|34]]
 
 Un pacchetto è davvero utile quando viene collegato bene anche alla parte Agenda.
 
@@ -625,7 +645,7 @@ Quando il collegamento è corretto:
     
     "pacchetto_pagamento": {
         "title": "💶 Come pagare un pacchetto e come funzionano le rate",
-        "content": """[[VIDEO|29]]
+        "content": """[[VIDEO|33]]
 
 La vendita del pacchetto non è solo "creazione": deve essere collegata bene anche alla parte economica.
 
@@ -762,7 +782,7 @@ Quando la usi, ragiona sempre come su un portafoglio cliente: non si scaricano s
 
     "prepagata_create": {
         "title": "💳 Come creare una prepagata",
-        "content": """[[VIDEO|32]]
+        "content": """[[VIDEO|36]]
 
 Per creare una prepagata devi ragionare in termini di <span class="help-strong-dark">credito caricato</span>, non di numero sedute.
 
@@ -888,7 +908,7 @@ Se il modulo è attivo, puoi gestire:
 
     "whatsapp_connect": {
         "title": "📱 Collegare WhatsApp",
-        "content": """[[VIDEO|33]]
+        "content": """[[VIDEO|37]]
 
 Per usare il modulo WhatsApp devi prima collegare l'account Business.
 
@@ -913,7 +933,7 @@ Nota operativa:
 
     "whatsapp_messaggi_template": {
         "title": "📝 WhatsApp: messaggi manuali e template",
-        "content": """[[VIDEO|34]]
+        "content": """[[VIDEO|38]]
 
 Nel modulo puoi configurare diversi testi WhatsApp.
 
@@ -957,7 +977,7 @@ Puoi anche disattivare la richiesta di conferma WhatsApp nel modal di creazione 
 
     "whatsapp_operatori": {
         "title": "👩‍💼 WhatsApp: memo turni operatori del giorno dopo",
-        "content": """[[VIDEO|36]]
+        "content": """[[VIDEO|40]]
 
 Il modulo può inviare ogni sera a ciascun operatore il riepilogo del turno del <span class="help-strong-dark">giorno successivo</span>, con il primo impegno della giornata e l'eventuale pausa.
 
@@ -1016,7 +1036,7 @@ Non fa parte del gestionale standard: se il modulo non è attivo, questa sezione
 
     "marketing_send": {
         "title": "📣 Inviare messaggi marketing",
-        "content": """[[VIDEO|37]]
+        "content": """[[VIDEO|41]]
 
 La schermata Marketing è divisa in tre parti:
 
@@ -1108,7 +1128,7 @@ Se il modulo è attivo, puoi pubblicare servizi online, gestire regole e associa
 
     "booking_setup": {
         "title": "🌐 Prenotazioni online",
-        "content": """[[VIDEO|38]]
+        "content": """[[VIDEO|42]]
 
 Per attivare il modulo Booking via Web:
 
@@ -1130,7 +1150,7 @@ Questo modulo consente ai clienti di richiedere prenotazioni anche fuori dagli o
     
     "booking_rules": {
         "title": "⚙️ Regole prenotazione online",
-        "content": """[[VIDEO|39]]
+        "content": """[[VIDEO|43]]
 
 Le regole booking servono a proteggere l'agenda da prenotazioni online non adatte.
 
@@ -1205,7 +1225,7 @@ Gli appuntamenti si potranno creare **solo** negli orari di turno!
     # ========== SERVIZI ==========
     "service_create": {
         "title": "💆 Creare un servizio",
-        "content": """[[VIDEO|19]]
+        "content": """[[VIDEO|23]]
 
 Aggiungi i tuoi trattamenti in pochi click!
 
@@ -1364,7 +1384,7 @@ Sempre nella stessa finestra, troverai la sezione <span class=\"help-strong-dark
 
     "agenda_touch_mode": {
         "title": "📱 Agenda in modalità TOUCH: differenze operative",
-        "content": """[[VIDEO|42]]
+        "content": """[[VIDEO|46]]
 
 La modalità TOUCH cambia il modo in cui interagisci con i blocchi appuntamento.
 
@@ -1529,7 +1549,7 @@ Questi pulsanti vanno usati con attenzione perché incidono sulla parte fiscale 
     # ========== REPORT ==========
     "report_navigazione_filtri": {
         "title": "📊 Report: navigazione data e filtri avanzati",
-        "content": """[[VIDEO|21]]
+        "content": """[[VIDEO|25]]
 
 La pagina Report include una barra di navigazione simile all'Agenda:
 
@@ -1564,7 +1584,7 @@ I <span class=\"help-strong-dark\">pannelli KPI</span> sono i riquadri riassunti
 
     "report_previsioni_tile_edit": {
         "title": "🧠 Report: calcoli previsionali e gestione pannelli KPI",
-        "content": """[[VIDEO|22]]
+        "content": """[[VIDEO|26]]
 
 La parte previsionale confronta i dati correnti con obiettivi e andamento temporale.
 
@@ -1584,7 +1604,7 @@ I pannelli non si modificano "a mano" direttamente dal widget: si aggiornano cam
 
     "report_corrispettivi_ufficiali": {
         "title": "🧾 Report: sezione Corrispettivi (dati ufficiali)",
-        "content": """[[VIDEO|23]]
+        "content": """[[VIDEO|27]]
 
 La sezione <span class=\"help-strong-dark\">Corrispettivi</span> raccoglie i <span class=\"help-strong-dark\">dati ufficiali degli incassi</span> generati dalla cassa.
 
@@ -1615,7 +1635,7 @@ Alcuni pulsanti sono visibili solo a ruoli abilitati (admin).""",
 
     "report_esportazione_lettura": {
         "title": "🧠 Report: lettura dati ed esportazione",
-        "content": """[[VIDEO|24]]
+        "content": """[[VIDEO|28]]
 
 I report sono pensati per controllo giornaliero e analisi periodica.
 
@@ -1724,7 +1744,7 @@ Tab visibile ai ruoli admin per accessi e sicurezza.
 
     "tools_tab_operatori": {
         "title": "👩‍💼 OPERATORI: cosa trovi in pagina e come usarla",
-        "content": """[[VIDEO|20]]
+        "content": """[[VIDEO|24]]
 
 Questo tab serve per gestire persone e risorse che compaiono in Agenda.
 
@@ -1915,7 +1935,7 @@ Approfondimenti:
 
     "tools_tab_info_azienda": {
         "title": "🏢 INFO AZIENDA: dati impresa, touch e aggiornamenti",
-        "content": """[[VIDEO|25]]
+        "content": """[[VIDEO|29]]
 
 Questo tab contiene i dati identificativi dell'attività e impostazioni tecniche locali.
 
@@ -1955,7 +1975,7 @@ Aggiorna i dati aziendali prima di attivare nuovi moduli e pianifica gli update 
 
     "tools_tab_centro_assistenza": {
         "title": "🆘 CENTRO ASSISTENZA: come usare bene le guide",
-        "content": """[[VIDEO|26]]
+        "content": """[[VIDEO|30]]
 
 Questo tab apre il sistema guida integrato dell'applicazione.
 
@@ -2009,7 +2029,7 @@ Approfondimenti:
 
     "tools_tab_utenti": {
         "title": "👥 UTENTI: account, ruoli, password e cancellazione",
-        "content": """[[VIDEO|27]]
+        "content": """[[VIDEO|31]]
 
 Questo tab è dedicato alla gestione accessi applicazione.
 
@@ -2250,7 +2270,7 @@ Gli appuntamenti già passati al momento del click non vengono toccati. Se il li
 
     "booking_pagina_pubblica": {
         "title": "📱 Cosa vede il cliente sulla pagina di prenotazione",
-        "content": """[[VIDEO|40]]
+        "content": """[[VIDEO|44]]
 
 La pagina di prenotazione pubblica è ciò che il cliente apre dal link <span class="help-strong-dark">[[PAGINA PRENOTAZIONI|tools_tab_booking_web]]</span>. Conoscere il flusso aiuta a guidare i clienti al telefono.
 
@@ -2294,7 +2314,7 @@ La pagina ha link a <span class="help-strong-dark">Informativa Privacy</span> e 
 
     "booking_appuntamenti_in_agenda": {
         "title": "🔵 Come appaiono in Agenda le prenotazioni dal web",
-        "content": """[[VIDEO|41]]
+        "content": """[[VIDEO|45]]
 
 Le prenotazioni create dal portale online compaiono in Agenda con caratteristiche specifiche, per distinguerle subito da quelle inserite manualmente.
 
@@ -2329,7 +2349,7 @@ Se il cliente ha prenotato più servizi, in Agenda compaiono tanti blocchi quant
     # ========== WHATSAPP - APPROFONDIMENTO MEMO MATTUTINO ==========
     "whatsapp_memo_clienti_mattino": {
         "title": "🌅 WhatsApp: memo mattutino ai clienti del giorno",
-        "content": """[[VIDEO|35]]
+        "content": """[[VIDEO|39]]
 
 Se è attivo il modulo WhatsApp, Tosca può inviare automaticamente a ogni cliente che ha appuntamento oggi un messaggio promemoria, partendo da un orario configurabile.
 
