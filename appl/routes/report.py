@@ -312,6 +312,8 @@ def registro_corrispettivi():
                 row_obj['reconciliation_extras'] = len(recon_entry.get('suspicious_extras', []) or [])
                 row_obj['reconciliation_dgfe_count'] = recon_entry.get('dgfe_count', 0)
                 row_obj['reconciliation_db_count'] = recon_entry.get('db_count', 0)
+                row_obj['reconciliation_dgfe_total'] = float(recon_entry.get('dgfe_total') or 0.0)
+                row_obj['reconciliation_db_total'] = float(recon_entry.get('db_total') or 0.0)
                 row_obj['reconciliation_notes'] = recon_entry.get('notes', '') or ''
                 diag = recon_entry.get('dgfe_diagnostic') or {}
                 row_obj['reconciliation_dgfe_status'] = diag.get('status') if diag else None
@@ -325,6 +327,8 @@ def registro_corrispettivi():
                 row_obj['reconciliation_extras'] = 0
                 row_obj['reconciliation_dgfe_count'] = 0
                 row_obj['reconciliation_db_count'] = 0
+                row_obj['reconciliation_dgfe_total'] = None
+                row_obj['reconciliation_db_total'] = None
                 row_obj['reconciliation_notes'] = ''
                 row_obj['reconciliation_dgfe_status'] = None
                 row_obj['reconciliation_dgfe_http'] = None

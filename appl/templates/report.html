@@ -2198,8 +2198,19 @@ document.addEventListener('DOMContentLoaded', function() {
           if (window.IS_OWNER) {
             const dgfeCell = tr.insertCell();
             dgfeCell.className = 'dgfe-cell';
-            dgfeCell.textContent = '—';
-            dgfeCell.style.color = '#888';
+            const hasRecon = row.reconciliation_dgfe_total != null
+              && ['ok', 'fixed', 'discrepant'].includes(row.reconciliation_status);
+            if (hasRecon) {
+              _renderDgfeCell(dgfeCell, row.reconciliation_dgfe_total, row.totale);
+              const runAt = row.reconciliation_run_at
+                ? row.reconciliation_run_at.replace('T', ' ').slice(0, 16)
+                : '-';
+              dgfeCell.title = `${row.reconciliation_dgfe_count || 0} scontrini in DGFE (verifica post-Z del ${runAt})`;
+              tr.dataset.dgfeTotal = String(row.reconciliation_dgfe_total);
+            } else {
+              dgfeCell.textContent = '—';
+              dgfeCell.style.color = '#888';
+            }
           }
 
           tr.insertCell().textContent = row.servizi.toFixed(2);
@@ -2211,6 +2222,22 @@ document.addEventListener('DOMContentLoaded', function() {
           if (window.IS_OWNER) {
             const azioniCell = tr.insertCell();
             azioniCell.className = 'azioni-cell';
+            const hasRecon = row.reconciliation_dgfe_total != null
+              && ['ok', 'fixed', 'discrepant'].includes(row.reconciliation_status);
+            if (hasRecon
+                && Math.abs((row.reconciliation_dgfe_total || 0) - (row.totale || 0)) > 0.01) {
+              tr.style.background = '#fff5f0';
+              const isoDay = tr.dataset.day;
+              if (isoDay) {
+                const btnCorreggi = document.createElement('button');
+                btnCorreggi.className = 'btn btn-sm btn-warning';
+                btnCorreggi.textContent = 'Correggi';
+                btnCorreggi.title = `DB: ${(row.totale||0).toFixed(2)} | DGFE: ${row.reconciliation_dgfe_total.toFixed(2)}`;
+                btnCorreggi.addEventListener('click',
+                  () => _correggiGiorno(isoDay, btnCorreggi, tr.querySelector('.dgfe-cell'), tr));
+                azioniCell.appendChild(btnCorreggi);
+              }
+            }
           }
         });
 
@@ -2226,8 +2253,19 @@ document.addEventListener('DOMContentLoaded', function() {
         if (window.IS_OWNER) {
           const tdTotDgfe = trTotale.insertCell();
           tdTotDgfe.className = 'dgfe-tot-cell';
-          tdTotDgfe.textContent = '—';
-          tdTotDgfe.style.color = '#888';
+          // Se TUTTE le righe del range hanno gia' un dato DGFE da log riconciliazione,
+          // pre-calcola il totale DGFE; altrimenti lascia '—' (richiede "Carica DGFE").
+          const allPrefilled = data.rows.length > 0 && data.rows.every(r =>
+            r.reconciliation_dgfe_total != null
+            && ['ok', 'fixed', 'discrepant'].includes(r.reconciliation_status)
+          );
+          if (allPrefilled) {
+            const sumDgfe = data.rows.reduce((acc, r) => acc + (r.reconciliation_dgfe_total || 0), 0);
+            _renderDgfeCell(tdTotDgfe, sumDgfe, data.totali.totale || 0);
+          } else {
+            tdTotDgfe.textContent = '—';
+            tdTotDgfe.style.color = '#888';
+          }
         }
         trTotale.insertCell().textContent = (data.totali.servizi||0).toFixed(2);
         trTotale.insertCell().textContent = (data.totali.prodotti||0).toFixed(2);
@@ -2281,6 +2319,20 @@ document.addEventListener('DOMContentLoaded', function() {
   // (sequenziale per non sovraccaricare la stampante).
   // Mostra "Correggi" solo nei giorni con discrepanza tra DB e DGFE.
   // ----------------------------------------------------------------
+  function _renderDgfeCell(cell, dgfeTotal, dbTotal) {
+    cell.innerHTML = '';
+    cell.style.color = '';
+    const valSpan = document.createElement('span');
+    valSpan.textContent = Number(dgfeTotal || 0).toFixed(2);
+    cell.appendChild(valSpan);
+    if (Math.abs((dgfeTotal || 0) - (dbTotal || 0)) <= 0.01) {
+      const check = document.createElement('i');
+      check.className = 'bi bi-check-circle-fill text-success ms-1';
+      check.title = 'DGFE coincide con il totale registrato';
+      cell.appendChild(check);
+    }
+  }
+
   function _csrfHeaders() {
     const t = document.querySelector('meta[name="csrf-token"]')?.content;
     return t ? {'X-CSRFToken': t} : {};
@@ -2603,8 +2655,7 @@ document.addEventListener('DOMContentLoaded', function() {
           const tot = parseFloat(d.dgfe_total || 0);
           dgfeTotalSum += tot;
           if (dgfeCell) {
-            dgfeCell.textContent = tot.toFixed(2);
-            dgfeCell.style.color = '';
+            _renderDgfeCell(dgfeCell, tot, totaleDb);
             dgfeCell.title = `${d.dgfe_count} scontrini in DGFE`;
           }
           // Confronto: se differenza > 0.01 mostra "Correggi"
@@ -2631,8 +2682,7 @@ document.addEventListener('DOMContentLoaded', function() {
             && (d.status === 'ej_empty' || d.status === 'ej_no_blocks');
           if (dgfeCell) {
             if (noScontriniLegittimo) {
-              dgfeCell.textContent = '0.00';
-              dgfeCell.style.color = '';
+              _renderDgfeCell(dgfeCell, 0, totaleDb);
               dgfeCell.title = `0 scontrini in DGFE (status: ${d.status})`;
             } else {
               dgfeCell.textContent = d.status || '?';
