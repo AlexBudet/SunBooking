@@ -1657,6 +1657,23 @@ button.client-info-btn {
     z-index: 26002 !important;
 }
 
+/* Modal informativo "Numero estero per WhatsApp": deve sempre stare SOPRA
+   qualunque altro modal aperto (in particolare AddClientModal a 26000). */
+#foreignPhoneHelpModal {
+    z-index: 27000 !important;
+}
+#foreignPhoneHelpModal .modal-dialog {
+    z-index: 27001 !important;
+}
+#foreignPhoneHelpModal .modal-content {
+    z-index: 27002 !important;
+}
+/* Il backdrop di questo modal viene marcato con la classe foreign-help-backdrop
+   via JS in base.html cosi' possiamo alzarlo sopra a body.modal-open .modal-backdrop. */
+.modal-backdrop.foreign-help-backdrop {
+    z-index: 26999 !important;
+}
+
 #ClientInfoModal .modal-dialog {
   max-width: 960px;
   margin: 1.5rem auto;

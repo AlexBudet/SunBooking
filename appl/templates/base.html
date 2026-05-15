@@ -197,35 +197,53 @@
 
 <script>
   // Mostra il modal "Numero estero per WhatsApp" la prima volta che l'utente
-  // digita o incolla un '+' nei campi cliente/cellulare indicati. La trigger
-  // scatta sulla transizione "no + -> + presente" cosi' non si ripete ad ogni
-  // tasto e si riarma se l'utente cancella e ritenta.
+  // digita/incolla un '+' (in qualsiasi dei 3 campi target) o un '00' (solo
+  // nei due campi cellulare dei modal aggiungi cliente, non nel campo ricerca
+  // del navigator dove '00' puo' essere parte di una ricerca per numero).
+  // La trigger scatta sulla transizione "non match -> match" cosi' non si
+  // ripete ad ogni tasto e si riarma se l'utente cancella e ritenta.
   (function() {
-    const TARGET_IDS = new Set([
-      'clientSearchInputNav',     // navigator pseudoblock (calendar.html)
-      'cliente_cellulare',        // modal "Aggiungi cliente" calendar.html
-      'cliente_cellulare_pacchetti' // modal "Aggiungi cliente" pacchetti.html
-    ]);
+    // Quali pattern far scattare per ogni campo:
+    //  +  : sempre, su tutti i 3 campi
+    //  00 : solo sui campi cellulare dei modal aggiungi cliente
+    const TARGETS = {
+      'clientSearchInputNav':       { plus: true, doubleZero: false },
+      'cliente_cellulare':          { plus: true, doubleZero: true  },
+      'cliente_cellulare_pacchetti':{ plus: true, doubleZero: true  }
+    };
     function showForeignPhoneHelp() {
       const modalEl = document.getElementById('foreignPhoneHelpModal');
       if (!modalEl || !window.bootstrap) return;
-      // Alza il modal sopra qualunque altro modal gia' aperto (es. AddClient).
-      modalEl.style.zIndex = '2055';
+      // Lo z-index del modal e' fissato in styles.css (#foreignPhoneHelpModal:
+      // 27000 !important). Qui ci limitiamo a marcare il backdrop con una
+      // classe dedicata, cosi' la regola CSS .modal-backdrop.foreign-help-backdrop
+      // lo alza sopra a "body.modal-open .modal-backdrop" (che ha 24500 !important).
       modalEl.addEventListener('shown.bs.modal', function onShown() {
         const backs = document.querySelectorAll('.modal-backdrop');
         const last = backs[backs.length - 1];
-        if (last) last.style.zIndex = '2050';
+        if (last) last.classList.add('foreign-help-backdrop');
         modalEl.removeEventListener('shown.bs.modal', onShown);
+      });
+      modalEl.addEventListener('hidden.bs.modal', function onHidden() {
+        document.querySelectorAll('.modal-backdrop.foreign-help-backdrop')
+          .forEach(b => b.classList.remove('foreign-help-backdrop'));
+        modalEl.removeEventListener('hidden.bs.modal', onHidden);
       });
       bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
     document.addEventListener('input', function(ev) {
       const t = ev.target;
-      if (!t || !t.id || !TARGET_IDS.has(t.id)) return;
-      const hasPlus = typeof t.value === 'string' && t.value.includes('+');
+      if (!t || !t.id) return;
+      const cfg = TARGETS[t.id];
+      if (!cfg) return;
+      const v = typeof t.value === 'string' ? t.value : '';
+      // Riconosci '00' SOLO se a inizio stringa (eventuali spazi iniziali ignorati):
+      // cosi' non scatta su numeri italiani che contengono '00' a meta' (es. 333 1234500).
+      const matches = (cfg.plus && v.includes('+'))
+        || (cfg.doubleZero && /^\s*00/.test(v));
       const prev = t.dataset.foreignPhoneShown === '1';
-      if (hasPlus && !prev) showForeignPhoneHelp();
-      t.dataset.foreignPhoneShown = hasPlus ? '1' : '0';
+      if (matches && !prev) showForeignPhoneHelp();
+      t.dataset.foreignPhoneShown = matches ? '1' : '0';
     });
   })();
 </script>
