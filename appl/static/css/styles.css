@@ -98,7 +98,10 @@ display: none
 }
 
 .tooltip {
-    z-index: 22001 !important;
+    /* DEVE stare sopra .appointmentNavigator (z-index 23001), altrimenti i
+       tooltip dei bottoni interni (es. "+" Aggiungi cliente) finiscono nascosti
+       dietro il contenitore quando Popper li flippa in "bottom". */
+    z-index: 23050 !important;
     opacity: 1;
 }
 

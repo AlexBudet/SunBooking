@@ -3265,21 +3265,52 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelector('.arrow-nav.arrow-left'),
     document.querySelector('.arrow-nav.arrow-right'),
     document.querySelector('.calendar-date-container'),
-    document.querySelector('.btn-today')
+    document.querySelector('.btn-today'),
+    document.querySelector('.btn-add-client-nav'),
+    document.getElementById('clearNavigatorBtn'),
+    document.getElementById('navigatorToggleBtn')
   ];
+  const innerNavBtnIds = new Set(['clearNavigatorBtn', 'navigatorToggleBtn']);
   navTooltipEls.forEach(function(el) {
     if (!el) return;
+    const isInnerBtn = innerNavBtnIds.has(el.id)
+      || (el.matches && el.matches('.btn-add-client-nav'));
     try {
       new bootstrap.Tooltip(el, {
         container: 'body',
         boundary: 'window',
         html: el.dataset.bsHtml === 'true',
-        delay: { show: 700, hide: 100 }
+        // Bottoni interni: appaiono velocemente cosi' "vincono" sul tooltip
+        // del contenitore (700ms). Per renderli visibili davanti al navigator
+        // (z-index 23001) la regola .tooltip ha z-index 23050 in styles.css.
+        delay: isInnerBtn ? { show: 200, hide: 100 } : { show: 700, hide: 100 }
       });
     } catch(_) {}
   });
   // Abilita il tooltip del navigator solo se è vuoto all'avvio
   if (typeof updateNavTooltipState === 'function') updateNavTooltipState();
+
+  // Quando l'utente passa sopra un bottone interno con tooltip proprio:
+  //  - hide() chiude eventuale tooltip del contenitore gia' visibile
+  //  - disable() rende inerte anche un eventuale show timer gia' in coda
+  //    (hide() da solo non lo cancella se il tooltip non e' ancora apparso)
+  // Su mouseleave, updateNavTooltipState() ri-abilita il tooltip se le
+  // condizioni lo permettono (campi vuoti, navigator non collassato, ecc.).
+  const navEl = document.getElementById('appointmentNavigator');
+  [
+    document.querySelector('.btn-add-client-nav'),
+    document.getElementById('clearNavigatorBtn'),
+    document.getElementById('navigatorToggleBtn')
+  ].filter(Boolean).forEach(function(btn) {
+    btn.addEventListener('mouseenter', function() {
+      if (!navEl) return;
+      const navTt = bootstrap.Tooltip.getInstance(navEl);
+      if (navTt) { navTt.hide(); navTt.disable(); }
+    });
+    btn.addEventListener('mouseleave', function() {
+      if (typeof updateNavTooltipState === 'function') updateNavTooltipState();
+    });
+  });
 
   const webBtn = document.getElementById('btnWebInformatica');
   if (webBtn) {
