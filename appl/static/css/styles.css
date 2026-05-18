@@ -593,12 +593,18 @@ td {
   left: 0;
   right: 0;
   width: 100%;
-  display: none;                /* visibili solo su hover/active */
+  /* Grid PERMANENTE (anche a riposo) per evitare il flash "ENORME" sul primo
+     hover: le celle 1/6 sono calcolate dal primo render. La barra resta
+     invisibile e non cliccabile finché hover/active non la riveleranno. */
+  display: grid;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
   grid-template-columns: repeat(var(--pb-cols), minmax(0, 1fr));
   gap: var(--pb-gap);
   padding: 0;
   top: auto !important;                     /* annulla top (anche inline) */
-  bottom: 100% !important;  
+  bottom: 100% !important;
 }
 
 
@@ -676,11 +682,15 @@ td {
   line-height: 1 !important;
 }
 
-/* Mantieni visibilità come da logica esistente — escludi cut-mode dove JS usa flex */
-.appointment-block:hover:not(.disable-popup):not(.cut-mode-active) .popup-buttons,
-.appointment-block.active-popup:not(.cut-mode-active) .popup-buttons,
-.appointment-block:not(.cut-mode-active) .popup-buttons:hover {
+/* Mantieni visibilità come da logica esistente — escludi cut-mode dove JS usa flex
+   Esclusi .note-off e .off: gestiscono visibilità popup-buttons separatamente. */
+.appointment-block:hover:not(.disable-popup):not(.cut-mode-active):not(.note-off):not(.off) .popup-buttons,
+.appointment-block.active-popup:not(.cut-mode-active):not(.note-off):not(.off) .popup-buttons,
+.appointment-block:not(.cut-mode-active):not(.note-off):not(.off) .popup-buttons:hover {
   display: grid !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 .appointment-block.dragging .popup-buttons {
@@ -1427,6 +1437,7 @@ body.modal-open #quarterNavigator {
     transform: scale(1.05);
 }
 
+/* #btnRefreshPage disabilitato permanentemente (non piu' usato) - mantenuto per eventuale ripristino
 #btnRefreshPage {
   background: transparent !important;
 }
@@ -1434,6 +1445,7 @@ body.modal-open #quarterNavigator {
 #btnRefreshPage:hover {
   background: transparent !important;
 }
+*/
 
 /* Stato collassato del navigator */
 .appointmentNavigator.collapsed {
@@ -2549,7 +2561,12 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup
   left: 0;
   right: 0;
   width: 100%;
-  display: none;  /* mostra solo su hover/active */
+  /* Grid PERMANENTE per evitare il flash "ENORME" sul primo hover/active.
+     Resta invisibile e non cliccabile finché hover/active non la riveleranno. */
+  display: grid;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
   grid-template-columns: repeat(var(--pb-cols, 6), minmax(0, 1fr));
   gap: var(--pb-gap, 3px);
   padding: 0;
@@ -2586,6 +2603,9 @@ body.touch-ui .appointment-block:hover:not(.disable-popup) .popup-buttons-bottom
 body.touch-ui .appointment-block.active-popup .popup-buttons-bottom,
 body.touch-ui .appointment-block .popup-buttons-bottom:hover {
   display: grid !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 /* status-2: nessun pulsante in basso (resta solo "copia" in alto) */
