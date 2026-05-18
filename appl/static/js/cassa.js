@@ -1171,6 +1171,45 @@ function showPendingModal(key, expectedTotal) {
         }
     }
 
+    // Aggiorna stato "pagato" (2) per gli appuntamenti coinvolti.
+    // Il backend marca PAGATO solo se le voci portano appointment_id; quando si modifica
+    // la bozza sostituendo un servizio, la nuova voce perde l'apptId originale. Usiamo
+    // window.originalAppointmentIds come riferimento autorevole, oltre alle righe correnti.
+    // Deve girare PRIMA di resetScontrino, che azzera originalAppointmentIds.
+    {
+      const _updatePromises = [];
+      document.querySelectorAll('.scontrino-row').forEach(row => {
+        const apptId = row.dataset.appointmentId;
+        if (apptId) {
+          _updatePromises.push(
+            fetch(`/calendar/update_status/${apptId}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+              },
+              body: JSON.stringify({ status: 2 })
+            }).catch(()=>{})
+          );
+        }
+      });
+      if (window.originalAppointmentIds && window.originalAppointmentIds.size > 0) {
+        window.originalAppointmentIds.forEach(apptId => {
+          _updatePromises.push(
+            fetch(`/calendar/update_status/${apptId}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+              },
+              body: JSON.stringify({ status: 2 })
+            }).catch(()=>{})
+          );
+        });
+      }
+      await Promise.allSettled(_updatePromises);
+    }
+
     // Svuota lo pseudoscontrino e sblocca
     resetScontrino(true);
     stampaLock = false;

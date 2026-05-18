@@ -92,15 +92,30 @@
     </tr>
     <tr>
       <td><label for="website">Sito internet:</label></td>
-      <td><input type="text" id="website" name="website" value="{{ business_info.website if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+      <td>
+        <div class="copy-field-wrapper">
+          <input type="text" id="website" name="website" value="{{ business_info.website if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
+          <button type="button" class="copy-field-btn" data-copy-target="website" title="Copia"><i class="bi bi-clipboard"></i></button>
+        </div>
+      </td>
     </tr>
     <tr>
       <td><label for="web_app">Sito Web App Tosca Online:</label></td>
-      <td><input type="text" id="web_app" name="web_app" value="{{ business_info.web_app if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+      <td>
+        <div class="copy-field-wrapper">
+          <input type="text" id="web_app" name="web_app" value="{{ business_info.web_app if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
+          <button type="button" class="copy-field-btn" data-copy-target="web_app" title="Copia"><i class="bi bi-clipboard"></i></button>
+        </div>
+      </td>
     </tr>
     <tr>
       <td><label for="web_booking_page">Sito Booking Online:</label></td>
-      <td><input type="text" id="web_booking_page" name="web_booking_page" value="{{ business_info.web_booking_page if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+      <td>
+        <div class="copy-field-wrapper">
+          <input type="text" id="web_booking_page" name="web_booking_page" value="{{ business_info.web_booking_page if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
+          <button type="button" class="copy-field-btn" data-copy-target="web_booking_page" title="Copia"><i class="bi bi-clipboard"></i></button>
+        </div>
+      </td>
     </tr>
     <tr>
       <td><label for="address">Indirizzo:</label></td>
@@ -120,11 +135,21 @@
     </tr>
     <tr>
       <td><label for="vat_code">P.IVA/Codice Fiscale:</label></td>
-      <td><input type="text" id="vat_code" name="vat_code" value="{{ business_info.vat_code if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+      <td>
+        <div class="copy-field-wrapper">
+          <input type="text" id="vat_code" name="vat_code" value="{{ business_info.vat_code if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
+          <button type="button" class="copy-field-btn" data-copy-target="vat_code" title="Copia"><i class="bi bi-clipboard"></i></button>
+        </div>
+      </td>
     </tr>
     <tr>
       <td><label for="pec_code">PEC/Codice Univoco:</label></td>
-      <td><input type="text" id="pec_code" name="pec_code" value="{{ business_info.pec_code if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
+      <td>
+        <div class="copy-field-wrapper">
+          <input type="text" id="pec_code" name="pec_code" value="{{ business_info.pec_code if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
+          <button type="button" class="copy-field-btn" data-copy-target="pec_code" title="Copia"><i class="bi bi-clipboard"></i></button>
+        </div>
+      </td>
     </tr>
     <tr>
       <td><label for="phone">Telefono:</label></td>
@@ -242,6 +267,7 @@
   }
 </style>
 <br>
+{# Tasto Refresh disabilitato permanentemente (non piu' usato) - mantenuto per eventuale ripristino
 <tr>
   <td><label for="refreshButtonEnabled">Tasto Refresh:</label></td>
   <td>
@@ -249,6 +275,7 @@
     <small style="margin-left:8px; color:#666;">Mostra pulsante aggiorna pagina nella barra di navigazione (su questo computer)</small>
   </td>
 </tr>
+#}
 <br><br><br>
 </div>
 
@@ -519,17 +546,17 @@ document.addEventListener('DOMContentLoaded', function() {
       //   });
       // }
       
-      // Refresh Button (default: visibile)
-      const refreshKey = 'sun_refresh_button';
-      const refreshEl = document.getElementById('refreshButtonEnabled');
-      if (refreshEl) {
-        const refreshVal = localStorage.getItem(refreshKey);
-        refreshEl.checked = (refreshVal === null || refreshVal === '1');
-        refreshEl.addEventListener('change', () => {
-          localStorage.setItem(refreshKey, refreshEl.checked ? '1' : '0');
-          alert('Impostazione salvata. Ricarica la pagina per applicare.');
-        });
-      }
+      // Refresh Button disabilitato permanentemente (non piu' usato) - mantenuto per eventuale ripristino
+      // const refreshKey = 'sun_refresh_button';
+      // const refreshEl = document.getElementById('refreshButtonEnabled');
+      // if (refreshEl) {
+      //   const refreshVal = localStorage.getItem(refreshKey);
+      //   refreshEl.checked = (refreshVal === null || refreshVal === '1');
+      //   refreshEl.addEventListener('change', () => {
+      //     localStorage.setItem(refreshKey, refreshEl.checked ? '1' : '0');
+      //     alert('Impostazione salvata. Ricarica la pagina per applicare.');
+      //   });
+      // }
     } catch(e) {}
   })();
 </script>
@@ -715,5 +742,96 @@ document.addEventListener('DOMContentLoaded', function() {
     label {
       font-weight: bold;
     }
+
+    /* Wrapper input + pulsante Copia */
+    .copy-field-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      max-width: 600px;
+    }
+    .copy-field-wrapper input[type="text"] {
+      flex: 1 1 auto;
+      min-width: 0;
+      width: auto !important;
+      max-width: none !important;
+      margin: 0;
+    }
+    .copy-field-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #f8f9fa;
+      color: #495057;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .copy-field-btn:hover {
+      background: #e9ecef;
+    }
+    .copy-field-btn.copied {
+      background: #28a745;
+      color: #fff;
+      border-color: #28a745;
+    }
 </style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.copy-field-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var targetId = btn.getAttribute('data-copy-target');
+      var input = targetId ? document.getElementById(targetId) : null;
+      if (!input) return;
+      var value = input.value || '';
+      if (!value) return;
+
+      function feedback() {
+        btn.classList.add('copied');
+        var icon = btn.querySelector('i');
+        var orig = icon ? icon.className : '';
+        if (icon) icon.className = 'bi bi-check-lg';
+        setTimeout(function() {
+          btn.classList.remove('copied');
+          if (icon) icon.className = orig;
+        }, 1500);
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value).then(feedback).catch(function() {
+          try {
+            input.removeAttribute('readonly');
+            input.select();
+            document.execCommand('copy');
+            input.blur();
+            if (input.hasAttribute('data-was-readonly')) {
+              input.setAttribute('readonly', '');
+              input.removeAttribute('data-was-readonly');
+            }
+            feedback();
+          } catch (e) {}
+        });
+      } else {
+        try {
+          var wasReadonly = input.hasAttribute('readonly');
+          if (wasReadonly) input.removeAttribute('readonly');
+          input.select();
+          document.execCommand('copy');
+          input.blur();
+          if (wasReadonly) input.setAttribute('readonly', '');
+          feedback();
+        } catch (e) {}
+      }
+    });
+  });
+});
+</script>
 {% endblock %}
