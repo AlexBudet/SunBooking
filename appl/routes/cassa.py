@@ -2290,20 +2290,34 @@ def _dgfe_entries_with_diag(ip: str, day: date):
         # TOTALE COMPLESSIVO (solo dei DOCUMENTI COMMERCIALI; i DOCUMENTI GESTIONALI
         # di chiusura giornaliera usano "VENDITE" / "GRAN TOTALE" e sono esclusi dal
         # pattern perche' iniziano con "DOCUMENTO GESTIONALE", non "DOCUMENTO COMMERCIALE")
-        m_tot = re.search(r'TOTALE\s+COMPLESSIVO\s+([\d.,]+)', body)
+        # Supporta anche segno negativo eventuale (es. "-24,00") che alcune RCH
+        # stampano per i documenti di annullamento/reso.
+        m_tot = re.search(r'TOTALE\s+COMPLESSIVO\s+(-?[\d.,]+)', body)
         if not m_tot:
             parse_failures += 1
             continue
         raw_tot = m_tot.group(1).strip()
+        sign = -1 if raw_tot.startswith('-') else 1
+        raw_tot_abs = raw_tot.lstrip('-').strip()
         try:
             # Formato italiano: "1.006,00" -> 1006.00
-            tot_float = float(raw_tot.replace('.', '').replace(',', '.'))
+            tot_float = sign * float(raw_tot_abs.replace('.', '').replace(',', '.'))
         except Exception:
             try:
-                tot_float = float(raw_tot)
+                tot_float = sign * float(raw_tot_abs)
             except Exception:
                 parse_failures += 1
                 continue
+
+        # I documenti di ANNULLAMENTO/RESO (emessi dalla RCH con il comando =k oppure =r)
+        # appaiono nel DGFE come "DOCUMENTO COMMERCIALE / EMESSO PER ANNULLAMENTO" (o RESO).
+        # Il "TOTALE COMPLESSIVO" e' tipicamente stampato come valore positivo perche' rappresenta
+        # l'importo del documento; fiscalmente pero' e' un rimborso e nel DB SunBooking viene
+        # salvato come total_amount negativo. Forziamo il segno negativo per allineare la somma
+        # DGFE alla somma DB ed evitare falsi delta nella riconciliazione e nel modal Corrispettivi.
+        is_storno = bool(re.search(r'EMESSO\s+PER\s+(?:ANNULLAMENTO|RESO)', body, re.IGNORECASE))
+        if is_storno and tot_float > 0:
+            tot_float = -tot_float
         tot_float = round(tot_float, 2)
 
         # Data/ora nel formato "04-05-2026 09:04"
