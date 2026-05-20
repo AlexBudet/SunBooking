@@ -1,22 +1,25 @@
-[
-  {
-    "nome": "Rosso Corallo",
-    "hex": "#FF5A4F",
-    "descrizione": "Caldo e vitaminico, energia solare estiva."
-  },
-  {
-    "nome": "Blu Oceano",
-    "hex": "#4FAFEF",
-    "descrizione": "Fresco e luminoso, brezza marina estiva."
-  },
-  {
-    "nome": "Fucsia Ibisco",
-    "hex": "#E91E8F",
-    "descrizione": "Vivace e tropicale, audace mood mediterraneo."
-  },
-  {
-    "nome": "Pesca Albicocca",
-    "hex": "#FFB38A",
-    "descrizione": "Dolce e radioso, tono pesca delicato d'estate."
-  }
-]
+{
+  "titolo": "ESTATE 2026",
+  "colori": [
+    {
+      "nome": "Rosso Corallo",
+      "hex": "#FF5A4F",
+      "descrizione": "Caldo e vitaminico, energia solare estiva."
+    },
+    {
+      "nome": "Blu Oceano",
+      "hex": "#4FAFEF",
+      "descrizione": "Fresco e luminoso, brezza marina estiva."
+    },
+    {
+      "nome": "Fucsia Ibisco",
+      "hex": "#E91E8F",
+      "descrizione": "Vivace e tropicale, audace mood mediterraneo."
+    },
+    {
+      "nome": "Pesca Albicocca",
+      "hex": "#FFB38A",
+      "descrizione": "Dolce e radioso, tono pesca delicato d'estate."
+    }
+  ]
+}
