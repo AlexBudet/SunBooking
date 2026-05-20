@@ -100,7 +100,7 @@ I pulsanti **popup** compaiono passando il puntatore sul blocco; i pulsanti **in
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-scissors"></i></span> **TOGLI E SPOSTA** — Taglia il blocco e lo deposita nel Navigator come mini-blocco. Il posto originale resta segnato da un'ombra; riposiziona il blocco dove vuoi cliccando su una cella libera.
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-files"></i></span> **COPIA BLOCCO** — Copia il blocco nel Navigator lasciando l'originale al suo posto. Utile per duplicare rapidamente lo stesso appuntamento su altre date o orari.
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-palette"></i></span> **IMPOSTA COLORE** — Apre il selettore colore del blocco. Il colore del testo si adatta automaticamente per restare leggibile su qualsiasi sfondo.
-<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-currency-euro"></i></span> **PORTA IN CASSA** — Porta in Cassa il servizio del blocco (e gli eventuali blocchi contigui dello stesso cliente) per il pagamento.
+<span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-currency-euro"></i></span> **PORTA IN CASSA** — Porta in Cassa il servizio del blocco (e gli eventuali blocchi contigui dello stesso cliente) per il pagamento. <span class="help-strong-dark">Non è presente nelle versioni online</span>: la Cassa con stampante fiscale funziona solo nella versione locale. Se l'appuntamento è collegato a un <span class="help-strong-dark">pacchetto</span>, al posto del pulsante con l'euro compare il pulsante <span class="help-strong-dark">VAI AL PACCHETTO</span> (icona scatola): non apre la Cassa ma porta al dettaglio del pacchetto, dove segni la seduta come effettuata. Con la <span class="help-strong-dark">prepagata</span> invece il pulsante con l'euro resta: porti il servizio in Cassa e lì scegli <span class="help-strong-dark">Prepagata</span> come metodo di pagamento (la carta è segnalata da un badge accanto al nome del cliente).
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-plus"></i></span> **AGGIUNGI SERVIZI** — Apre il Navigator già precompilato con il cliente del blocco, per aggiungere altri servizi senza rifare la ricerca.
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-pencil-square"></i></span> **NOTA APPUNTAMENTO** — Aggiunge o modifica la nota del singolo appuntamento, distinta dalle note permanenti dell'anagrafica cliente.
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-whatsapp"></i></span> **INVIA WHATSAPP** — Solo con il <span class="help-strong-dark">modulo opzionale WhatsApp</span>: invia un promemoria diretto al cliente.
@@ -414,11 +414,10 @@ Puoi modificare **NOME, COGNOME, CELLULARE ed EMAIL** nei campi in alto, e aggiu
 Più sotto trovi:
 
 <span class="help-strong-dark help-subtitle-pill">▸ PROSSIMI APPUNTAMENTI PRENOTATI</span>
-[[VIDEO|6]]
+[[VIDEO|4]]
 Tabella con tutti i dati dell'appuntamento. Cliccando sulla riga relativa, la vista Agenda si sposterà in quella giornata.
 
 <span class="help-strong-dark help-subtitle-pill">▸ STORICO APPUNTAMENTI</span>
-[[VIDEO|7]]
 Tabella con gli appuntamenti passati: anche qui cliccando sulla riga la vista Agenda si sposterà in quella giornata.
 
 Così hai tutto sotto controllo e puoi gestire i dati cliente in modo semplice e veloce!
@@ -2382,6 +2381,80 @@ Nel testo puoi usare:
 <span class="help-hint-text">Imposta l'orario di invio almeno 2-3 ore prima del primo appuntamento, così anche l'ultimo della coda riceve il memo con anticipo utile. Verifica sempre i numeri sulle anagrafiche: il memo legge da lì, non dalla nota dell'appuntamento.</span>
 </div>""",
     },
+
+    # ========== VERSIONE MOBILE (WEB APP) ==========
+    "mobile_uso_agenda": {
+        "title": "📱 Tosca Web App: usare l'Agenda da smartphone",
+        "content": """[[VIDEO|64]]
+
+Tosca è una <span class="help-strong-dark">Web App</span>: oltre che dal computer, puoi usarla dal browser del telefono e installarla come app (vedi <span class="help-strong-dark">[[INSTALLARE L'APP SU IPHONE E ANDROID|mobile_installa_app]]</span>).
+
+Tutte le pagine funzionano da mobile, ma l'<span class="help-strong-dark">Agenda</span> richiede un piccolo accorgimento, perché la griglia degli appuntamenti è più larga e più alta dello schermo del telefono.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME SPOSTARSI NELLA GRIGLIA AGENDA</span>
+Su computer ti muovi con le barre di scorrimento; sul telefono invece scorri con il dito. Ma attenzione:
+
+⚠️ Se appoggi e trascini il dito <span class="help-strong-dark">sopra un blocco appuntamento</span>, Tosca interpreta il gesto come un tocco e <span class="help-strong-dark">apre il blocco</span>: non scorre la griglia.
+
+Per spostarti senza aprire nulla usa le <span class="help-strong-dark">intestazioni</span> della tabella, che sono le "zone di scorrimento sicure":
+• 📅 trascina il dito sulla <span class="help-strong-dark">riga degli operatori in alto</span> (l'header delle colonne) per scorrere in orizzontale e vedere gli altri operatori
+• 🕐 trascina il dito sulla <span class="help-strong-dark">colonna degli orari a sinistra</span> (l'header delle righe) per scorrere in verticale tra le fasce orarie
+
+In pratica: per <span class="help-strong-dark">navigare</span> usa i bordi della tabella (header riga e header colonna), per <span class="help-strong-dark">agire</span> tocca direttamente la cella o il blocco.
+
+<span class="help-strong-dark help-subtitle-pill">▸ TOCCARE CELLE E BLOCCHI</span>
+• tocco su <span class="help-strong-dark">cella vuota</span> → apre la finestra di creazione appuntamento
+• tocco su <span class="help-strong-dark">blocco appuntamento</span> → apre il blocco con le sue funzioni
+
+Proprio perché ogni tocco su un blocco lo apre, quando lo schermo è pieno di appuntamenti ravvicinati conviene sempre scorrere partendo dagli header ed evitare di trascinare sulle aree piene.
+
+<span class="help-strong-dark help-subtitle-pill">▸ MODALITÀ TOUCH CONSIGLIATA</span>
+Sul telefono non esiste il passaggio del mouse, quindi i pulsanti che su computer compaiono "al passaggio" non si vedono. Conviene attivare la <span class="help-strong-dark">modalità touch</span>, che fa comparire i comandi del blocco dopo un tocco di selezione. Per il dettaglio vedi <span class="help-strong-dark">[[AGENDA MODALITÀ TOUCH|agenda_touch_mode]]</span>.
+
+<span class="help-strong-dark help-subtitle-pill">▸ LE ALTRE PAGINE</span>
+Cassa, Pacchetti, Report e Tools si scorrono normalmente con il dito: l'accorgimento degli header riguarda soprattutto la griglia fitta dell'Agenda.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Tieni il telefono in orizzontale quando lavori in Agenda: vedi più operatori e più ore insieme, e gli header da cui far partire lo scorrimento restano più comodi da raggiungere.</span>
+</div>""",
+    },
+
+    "mobile_installa_app": {
+        "title": "⬇️ Installare l'app Tosca su iPhone e Android",
+        "content": """[[VIDEO|65]]
+
+Tosca è una <span class="help-strong-dark">Web App</span>: non si scarica dagli store Apple o Google, ma si <span class="help-strong-dark">installa direttamente dal browser</span> in pochi secondi. Una volta installata, compare un'icona sulla home del telefono e si apre a schermo intero, esattamente come un'app normale.
+
+<span class="help-strong-dark help-subtitle-pill">▸ DOVE TROVARE IL PULSANTE DI INSTALLAZIONE</span>
+Apri Tosca dal browser e fermati sulla <span class="help-strong-dark">schermata di login</span>: sotto al pulsante "Accedi" compare il pulsante <span class="help-strong-dark">📱 Salva app su cellulare</span>.
+
+Il pulsante <span class="help-strong-dark">non compare</span> se l'app è già installata oppure se la stai già usando dall'icona installata: è del tutto normale.
+
+<span class="help-strong-dark help-subtitle-pill">▸ INSTALLARE SU ANDROID</span>
+1️⃣ apri Tosca con <span class="help-strong-dark">Google Chrome</span>
+2️⃣ nella schermata di login tocca <span class="help-strong-dark">📱 Salva app su cellulare</span>
+3️⃣ conferma <span class="help-strong-dark">Installa</span> nella finestra che propone il browser
+4️⃣ l'icona di Tosca compare sulla home del telefono
+
+<span class="help-strong-dark help-subtitle-pill">▸ INSTALLARE SU IPHONE / IPAD</span>
+Su iPhone e iPad l'installazione va fatta con <span class="help-strong-dark">Safari</span> (non con Chrome o altri browser).
+1️⃣ apri Tosca con <span class="help-strong-dark">Safari</span>
+2️⃣ tocca il pulsante <span class="help-strong-dark">📱 Salva app su cellulare</span>: compare una finestra con le istruzioni
+3️⃣ tocca l'icona <span class="help-strong-dark">Condividi</span> (il quadrato con la freccia verso l'alto) nella barra di Safari — in basso su iPhone, in alto su iPad
+4️⃣ scorri l'elenco e tocca <span class="help-strong-dark">"Aggiungi a Home"</span>
+5️⃣ conferma con <span class="help-strong-dark">"Aggiungi"</span> in alto a destra
+
+<span class="help-strong-dark help-subtitle-pill">▸ DOPO L'INSTALLAZIONE</span>
+• apri Tosca dall'icona sulla home, come una normale app
+• si apre a schermo intero, senza la barra del browser
+• per usarla bene da telefono vedi <span class="help-strong-dark">[[USARE L'AGENDA DA SMARTPHONE|mobile_uso_agenda]]</span>
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Su iPhone l'opzione "Aggiungi a Home" esiste solo in Safari: se hai aperto Tosca con un altro browser, il pulsante non potrà completare l'installazione. Su Android usa Chrome per avere l'installazione guidata automatica.</span>
+</div>""",
+    },
 }
 
 def get_help(topic):
@@ -2482,5 +2555,9 @@ def get_topics_by_category():
         ],
         "Versione Touch": [
             "agenda_touch_mode"
+        ],
+        "Versione Mobile": [
+            "mobile_uso_agenda",
+            "mobile_installa_app"
         ],
     }

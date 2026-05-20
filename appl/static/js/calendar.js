@@ -8110,6 +8110,8 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
     link.setAttribute('data-client-cellulare', clientPhone);
     link.setAttribute('data-service-nome', serviceTag);
     link.setAttribute('data-service-full_name', serviceName);
+    const clientNote = (appointment.client_note || '').toString().trim();
+    if (clientNote) link.setAttribute('data-client-note', clientNote);
     link.textContent = displayClientName || '';
     pClient.appendChild(link);
   }
