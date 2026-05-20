@@ -629,24 +629,57 @@
     border-color: #dbeafe;
 }
 
-/* Video tutorial inline: dimensione 1:1 (gli attributi width/height vengono
-   impostati via JS post-metadata su videoWidth/videoHeight). Su schermi
-   stretti, max-width:100% li riduce proporzionalmente senza upscale. */
+/* Video tutorial inline. Per non perdere nitidezza il video NON viene
+   ridimensionato: resta a risoluzione nativa (1 px sorgente = 1 px fisico) e
+   .help-video-crop ne mostra solo una finestra larga il 50%, ritagliata con
+   overflow:hidden. Larghezza nativa, larghezza finestra e centratura sono
+   calcolate via JS (applyVideoCrop) dai metadati e dal devicePixelRatio. */
 .help-video-wrap {
     margin: 4px 0 14px;
     text-align: center;
 }
 
-.help-inline-video {
-    display: block;
-    margin: 0 auto;
+.help-video-crop {
+    display: inline-block;
+    vertical-align: top;
+    width: var(--crop-w, auto);
+    height: var(--crop-h, auto);
     max-width: 100%;
-    height: auto;
-    cursor: zoom-in;
+    overflow: hidden;
     border-radius: 10px;
     background: #000;
     box-shadow: 0 2px 10px rgba(0,0,0,0.10);
     border: 1px solid #f3d9e6;
+}
+
+.help-inline-video {
+    display: block;
+    width: var(--vid-w, auto);
+    height: auto;
+    margin-left: var(--crop-shift-x, 0);
+    margin-top: var(--crop-shift-y, 0);
+    cursor: zoom-in;
+    background: #000;
+}
+
+/* A schermo intero il video torna intero (niente ritaglio né spostamento):
+   lo zoom mostra l'intera registrazione. La lente diventa "−".
+   Regole separate: un browser che non capisce un selettore non scarta l'altro. */
+.help-inline-video:fullscreen {
+    width: 100%;
+    height: 100%;
+    margin-left: 0;
+    margin-top: 0;
+    object-fit: contain;
+    cursor: zoom-out;
+}
+.help-inline-video:-webkit-full-screen {
+    width: 100%;
+    height: 100%;
+    margin-left: 0;
+    margin-top: 0;
+    object-fit: contain;
+    cursor: zoom-out;
 }
 
 /* Formattazione testo */
@@ -1276,7 +1309,7 @@ function renderTopic() {
         // ancora stato caricato, così la pagina resta pulita fino all'upload.
         if (text && text.toUpperCase() === 'VIDEO') {
             const src = STATIC_VIDEO_BASE + imageKey + '.mp4';
-            return `</p><div class="help-video-wrap"><video class="help-inline-video" controls muted playsinline preload="metadata" controlsList="nodownload noremoteplayback" disablePictureInPicture oncontextmenu="return false" onclick="helpVideoFullscreen(event)" title="Clicca per schermo intero" onerror="this.parentNode.style.display='none'"><source src="${src}" type="video/mp4"></video></div><p>`;
+            return `</p><div class="help-video-wrap"><div class="help-video-crop"><video class="help-inline-video" data-video="${imageKey}" controls muted playsinline preload="metadata" controlsList="nodownload noremoteplayback" disablePictureInPicture oncontextmenu="return false" onclick="helpVideoFullscreen(event)" title="Clicca per schermo intero" onerror="this.closest('.help-video-wrap').style.display='none'"><source src="${src}" type="video/mp4"></video></div></div><p>`;
         }
         const images = HELP_IMAGES[imageKey];
         if (images && images.length > 0) {
@@ -1329,27 +1362,94 @@ function renderTopic() {
     document.querySelector('.help-topic-content').scrollTop = 0;
 }
 
-// Autoplay muto quando il video entra nel viewport. Dimensione lasciata al
-// browser: usa le dimensioni intrinseche del file (videoWidth × videoHeight)
-// senza forzature. CSS cappa solo se il video è più largo del contenitore.
+// ── Finestra di ritaglio dei video tutorial ──────────────────────────────
+// Ridurre il video (anche con un downscale "pulito") perde nitidezza, perché
+// butta via pixel: il testo delle registrazioni schermo ne risente. Soluzione:
+// NON ridimensionare. Il video resta a risoluzione nativa (1 px sorgente =
+// 1 px fisico, zero interpolazione) e se ne mostra solo una finestra larga e
+// alta il 50%, ritagliata con overflow:hidden e posizionata sul contenuto.
+
+// Frazione di larghezza e altezza del video mostrate dalla finestra.
+const HELP_VIDEO_CROP_WIDTH  = 0.5;
+const HELP_VIDEO_CROP_HEIGHT = 0.5;
+// Punto del video su cui centrare la finestra, come frazione (0.5 = centro;
+// 0 = bordo sinistro/alto; 1 = bordo destro/basso). La Y è tenuta in alto
+// (0.3) perché nelle registrazioni l'azione — modali, campi, pulsanti — sta
+// nella metà superiore del fotogramma.
+const HELP_VIDEO_CROP_CENTER_X = 0.5;
+const HELP_VIDEO_CROP_CENTER_Y = 0.3;
+// Override di centratura per singolo video (chiave = numero del file N.mp4),
+// per i tutorial in cui l'azione non è al centro. x: 0.75 = focus a destra,
+// x: 0.25 = focus a sinistra; idem y per alto/basso.
+const HELP_VIDEO_CROP_OVERRIDES = {
+    '1': { x: 0.75 },   // focus spostato verso destra
+    '2': { x: 0.75 },   // focus spostato verso destra
+};
+
+function applyVideoCrop(v) {
+    if (!v || !v.videoWidth) return;
+    const dpr = window.devicePixelRatio || 1;
+    // Dimensioni CSS che rendono il video pixel-perfect: niente ridimensionamento.
+    const nativeW = v.videoWidth / dpr;
+    const nativeH = v.videoHeight / dpr;
+    const cropW = nativeW * HELP_VIDEO_CROP_WIDTH;
+    const cropH = nativeH * HELP_VIDEO_CROP_HEIGHT;
+    // Centro della finestra: valori globali, salvo override per quel video.
+    const ov = HELP_VIDEO_CROP_OVERRIDES[v.dataset.video] || {};
+    const centerX = (ov.x != null) ? ov.x : HELP_VIDEO_CROP_CENTER_X;
+    const centerY = (ov.y != null) ? ov.y : HELP_VIDEO_CROP_CENTER_Y;
+    // Margini che portano il centro della finestra sui punti centerX / centerY.
+    const shiftX = -(centerX * nativeW - cropW / 2);
+    const shiftY = -(centerY * nativeH - cropH / 2);
+    v.style.setProperty('--vid-w', nativeW + 'px');
+    v.style.setProperty('--crop-shift-x', shiftX + 'px');
+    v.style.setProperty('--crop-shift-y', shiftY + 'px');
+    const crop = v.closest('.help-video-crop');
+    if (crop) {
+        crop.style.setProperty('--crop-w', cropW + 'px');
+        crop.style.setProperty('--crop-h', cropH + 'px');
+    }
+}
+
+// Avvia i video in autoplay muto all'ingresso nel viewport e applica la
+// finestra di ritaglio (applyVideoCrop), ricalcolando su resize/zoom.
 function setupInlineVideos() {
     const videos = document.querySelectorAll('#topicBody .help-inline-video');
     if (!videos.length) return;
 
-    videos.forEach(v => { v.muted = true; });
+    videos.forEach(v => {
+        v.muted = true;
+        if (v.readyState >= 1) applyVideoCrop(v);
+        else v.addEventListener('loadedmetadata', () => applyVideoCrop(v), { once: true });
+    });
+
+    // Ricalcola se cambia lo zoom del browser (modifica devicePixelRatio).
+    if (window._helpVideoResize) {
+        window.removeEventListener('resize', window._helpVideoResize);
+    }
+    window._helpVideoResize = () => videos.forEach(applyVideoCrop);
+    window.addEventListener('resize', window._helpVideoResize);
 
     if (!('IntersectionObserver' in window)) {
         videos.forEach(v => v.play().catch(() => {}));
         return;
     }
     if (window._helpVideoObserver) window._helpVideoObserver.disconnect();
+    // Il video è dentro .help-video-crop con overflow:hidden, quindi
+    // l'intersectionRatio massimo possibile è CROP_WIDTH × CROP_HEIGHT della
+    // sua superficie (es. 0.5 × 0.5 = 0.25). La soglia deve stare sotto quel
+    // valore, altrimenti isIntersecting non diventa mai true e l'autoplay al
+    // caricamento della pagina non parte.
+    const visThreshold = Math.max(0.01,
+        HELP_VIDEO_CROP_WIDTH * HELP_VIDEO_CROP_HEIGHT * 0.4);
     window._helpVideoObserver = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             const v = entry.target;
             if (entry.isIntersecting) v.play().catch(() => {});
-            else v.pause();
+            // Mai mettere in pausa il video mentre è a schermo intero.
+            else if (!document.fullscreenElement) v.pause();
         });
-    }, { threshold: 0.3 });
+    }, { threshold: visThreshold });
     videos.forEach(v => window._helpVideoObserver.observe(v));
 }
 
@@ -1360,13 +1460,23 @@ function helpVideoFullscreen(e) {
     const v = e.currentTarget;
     const rect = v.getBoundingClientRect();
     if (e.clientY > rect.bottom - 44) return; // zona barra controlli nativa
+    // Il click sul corpo di un <video controls> fa play/pausa di default:
+    // lo annulliamo, altrimenti il video si fermerebbe all'ingrandimento.
+    e.preventDefault();
     if (document.fullscreenElement || document.webkitFullscreenElement) {
         (document.exitFullscreen || document.webkitExitFullscreen).call(document);
         return;
     }
     const req = v.requestFullscreen || v.webkitRequestFullscreen
               || v.webkitEnterFullscreen; // iOS Safari
-    if (req) req.call(v);
+    if (!req) return;
+    const r = req.call(v);
+    // Dopo l'ingrandimento il video deve continuare a riprodursi, non fermarsi.
+    if (r && typeof r.then === 'function') {
+        r.then(() => v.play().catch(() => {})).catch(() => {});
+    } else {
+        v.play().catch(() => {});
+    }
 }
 
 function prevTopic() {

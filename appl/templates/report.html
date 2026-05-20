@@ -428,6 +428,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="tile-neumorphic tile-large" id="tile-palette-stagionale">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
 <div class="tile-title">PALETTE STAGIONALE</div>
+<div class="palette-subtitle" id="palette-subtitle"></div>
 <div class="palette-container" id="palette-container"></div>
 </div>
 
@@ -1433,6 +1434,18 @@ document.addEventListener('DOMContentLoaded', function() {
   white-space: normal !important;
   word-break: break-word !important;
   overflow-wrap: anywhere !important;
+}
+
+/* Titolo della palette (testo preso dal JSON), centrato sopra le unghie. */
+.palette-subtitle {
+  text-align: center;
+  font-weight: 700;
+  color: #34343c;
+  margin: 30px 0 0;  /* con il margin-bottom:auto del container centra il blocco titolo+unghie */
+  padding: 0 8px;
+}
+.palette-subtitle:empty {
+  display: none;
 }
 
 /* Mirata a #tabella-riassunto dentro modal: nessun min-width, layout fisso e contenuto adattivo */
@@ -3616,12 +3629,18 @@ root.appendChild(row);
 document.addEventListener('DOMContentLoaded', function() {
   fetch('/static/js/palette-stagionale.json')
     .then(r => r.json())
-    .then(palette => {
+    .then(data => {
       const container = document.getElementById('palette-container');
       container.innerHTML = '';
 
+      // Il JSON è un oggetto { titolo, colori } (con fallback se fosse un array).
+      const colori = Array.isArray(data) ? data : (data.colori || []);
+      const titolo = (data && !Array.isArray(data)) ? (data.titolo || '') : '';
+      const subEl = document.getElementById('palette-subtitle');
+      if (subEl) subEl.textContent = titolo;
+
       // Usa solo le prime 4
-palette.slice(0, 4).forEach((col, idx) => {
+colori.slice(0, 4).forEach((col, idx) => {
   let desc = col.descrizione || '';
   const el = document.createElement('div');
   el.className = 'palette-color';
@@ -3629,6 +3648,7 @@ palette.slice(0, 4).forEach((col, idx) => {
   el.style.flexDirection = 'column';
   el.style.alignItems = 'center';
   el.style.width = '120px';
+  el.style.marginTop = '15px';
   el.style.marginLeft = '3px';
   el.style.marginRight = '3px';
 el.textContent = '';
@@ -3637,7 +3657,7 @@ const nail = document.createElement('div');
 nail.className = 'nail-shape';
 nail.style.width = '38px';
 nail.style.height = '62px';
-nail.style.marginTop = '20px';
+nail.style.marginTop = '8px';
 nail.style.marginBottom = '20px';
 nail.style.borderRadius = '18px 18px 30px 30px / 30px 30px 62px 62px';
 if (typeof col.hex === 'string' && /^#?[0-9a-fA-F]{3,8}$/.test(col.hex)) {
@@ -3672,7 +3692,10 @@ el.appendChild(descBox);
       container.style.justifyContent = 'center';
       container.style.alignItems = 'center';
       container.style.gap = '10px';
-      container.style.flex = '1 1 auto';
+      // Niente flex-grow: il contenitore prende l'altezza naturale, così il
+      // blocco [titolo + unghie] resta compatto e centrato (margin auto).
+      container.style.flex = '0 0 auto';
+      container.style.marginBottom = 'auto';
       container.style.width = '100%';
       container.style.flexWrap = 'nowrap';
     });

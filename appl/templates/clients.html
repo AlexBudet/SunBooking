@@ -332,6 +332,16 @@ th {
         console.log("Modal shown for client note");
     }
 
+    // Aggiorna lo stile (vuota/piena) di tutti i pulsanti "Note" leggendo data-note.
+    // Globale: usata sia dopo il salvataggio di una nota sia dopo il popolamento tabella.
+    function updateNoteButtonStyles() {
+        document.querySelectorAll('.note').forEach(function(btn) {
+            var hasNote = (btn.getAttribute('data-note') || '').trim().length > 0;
+            btn.classList.toggle('btn-note-filled', hasNote);
+            btn.classList.toggle('btn-note-empty', !hasNote);
+        });
+    }
+
 document.getElementById('userForm').addEventListener('submit', function(event) {
     event.preventDefault();
     const form = event.target;
@@ -377,7 +387,16 @@ document.getElementById('userForm').addEventListener('submit', function(event) {
     })
     .then(data => {
         alert('Cliente aggiunto con successo!');
-        setTimeout(() => location.reload(), 800);
+        // Pulisce il form e mostra subito il nuovo cliente nella tabella,
+        // senza ricaricare la pagina (la tabella si popola via JS).
+        form.reset();
+        const searchInput = document.getElementById('clientSearchInput');
+        if (searchInput) searchInput.value = '';
+        if (typeof window.loadRecentClients === 'function') {
+            window.loadRecentClients();
+        } else {
+            setTimeout(() => location.reload(), 800);
+        }
     })
     .catch(error => {
         alert(error.message);
@@ -674,6 +693,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Errore nel caricamento.</td></tr>';
             });
     }
+    // Esposta globalmente: il form "Aggiungi Cliente" la richiama per mostrare
+    // il nuovo cliente nella tabella senza ricaricare la pagina.
+    window.loadRecentClients = loadRecentClients;
 
     // Funzione per caricare risultati ricerca
     function loadSearchResults(searchValue) {
