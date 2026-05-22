@@ -6,12 +6,12 @@
 <div class="page-wide-90">
 <h3>&nbsp;&nbsp;CASSA</h3>
 <div style="float:right; display:flex; flex-direction:column; gap:8px; margin-top: -20px;">
-  <a href="{{ url_for('cassa.registro_scontrini') }}" class="btn neumorphic-btn">Registro Scontrini</a>
-  <a href="#" id="btnRegistroDGFE" class="btn neumorphic-btn">Registro DGFE</a>
-  <a href="#" id="btnChiusuraGiornaliera" class="btn neumorphic-btn">Chiusura Giornaliera</a>
-  <a href="#" id="btnAnnullaScontrino" class="btn neumorphic-btn">Annulla Scontrino</a>
+  <a href="{{ url_for('cassa.registro_scontrini') }}" class="btn neumorphic-btn" data-bs-toggle="tooltip" data-bs-placement="left" title="Corrispettivi giornalieri">Registro Scontrini</a>
+  <a href="#" id="btnRegistroDGFE" class="btn neumorphic-btn" data-bs-toggle="tooltip" data-bs-placement="left" title="Legge il registro giornaliero dalla stampante fiscale">Registro DGFE</a>
+  <a href="#" id="btnChiusuraGiornaliera" class="btn neumorphic-btn" data-bs-toggle="tooltip" data-bs-placement="left" title="Clicca per stampare la chiusura fiscale giornaliera">Chiusura Giornaliera</a>
+  <a href="#" id="btnAnnullaScontrino" class="btn neumorphic-btn" data-bs-toggle="tooltip" data-bs-placement="left" title="Annulla l'ultimo scontrino emesso">Annulla Scontrino</a>
   {% if user_role in ['admin', 'owner'] %}
-  <a href="#" id="btnConsoleRCH" class="btn neumorphic-btn" style="background: #ff5722; color: white;">🔧 Console RCH</a>
+  <a href="#" id="btnConsoleRCH" class="btn neumorphic-btn" style="background: #ff5722; color: white;" data-bs-toggle="tooltip" data-bs-placement="left" title="Accesso alla console di gestione RCH">🔧 Console RCH</a>
   {% endif %}
 </div>
 <div class="service-bar" style="display: flex; align-items: center; gap: 0.7em; padding-left: 25px !important; padding-right: 25px !important; flex-wrap: wrap; max-width: 96%;">
@@ -19,11 +19,11 @@
     placeholder="Cerca servizio..." autocomplete="off"
     style="min-width: 180px; flex: 1 1 220px; max-width: 350px;">
 <div id="serviceDropdown" class="dropdown-menu w-100"></div>
-    <button class="service-bar-btn" id="btnFrequenti">Frequenti</button>
-    <button class="service-bar-btn" id="btnUltimi">Ultimi</button>
-    <button class="service-bar-btn" id="btnSolarium">Solarium</button>
-    <button class="service-bar-btn" id="btnEstetica">Estetica</button>
-    <button class="service-bar-btn" id="btnProdotti">Prodotti</button>
+    <button class="service-bar-btn" id="btnFrequenti" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Servizi e Prodotti più utilizzati in cassa">Frequenti</button>
+    <button class="service-bar-btn" id="btnUltimi" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Ultimi Servizi e Prodotti utilizzati">Ultimi</button>
+    <button class="service-bar-btn" id="btnSolarium" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Solo Servizi e Prodotti Solarium">Solarium</button>
+    <button class="service-bar-btn" id="btnEstetica" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Solo Servizi e Prodotti di Estetica">Estetica</button>
+    <button class="service-bar-btn" id="btnProdotti" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Prodotti in vendita">Prodotti</button>
   </div>
 <br>
   <!-- Sezione pulsanti servizi -->
@@ -1774,4 +1774,24 @@ body.show-op-per-riga .scontrino-row .op-col:hover {
   color: #fff;
 }
 </style>
+
+<script>
+/* Init globale e ROBUSTO dei tooltip Bootstrap della pagina Cassa.
+   In uno <script> isolato e in coda alla pagina: gira di sicuro (anche se lo
+   <script> principale della cassa avesse problemi) e per ultimo.
+   getOrCreateInstance e' idempotente: non duplica ne' rompe i tooltip gia'
+   creati altrove (es. i bottoni Cassa/Calendar con customClass tooltip-dark,
+   che hanno data-bs-custom-class sull'elemento e quindi restano scuri).
+   Cosi' campi Salone/Cliente, label Bozza Scontrino, bottoni service-bar e
+   bottoni laterali ottengono tutti il tooltip in stile Bootstrap. */
+document.addEventListener('DOMContentLoaded', function() {
+  if (!window.bootstrap || !bootstrap.Tooltip) return;
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+    var opts = (el.id === 'bozzaScontrinoLabel')
+      ? { container: 'body', boundary: 'window' }
+      : {};
+    try { bootstrap.Tooltip.getOrCreateInstance(el, opts); } catch (_) {}
+  });
+});
+</script>
 {% endblock %}
