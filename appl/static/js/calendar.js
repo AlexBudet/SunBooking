@@ -1,3 +1,28 @@
+// Helper: trasforma un elemento creato via JS in tooltip Bootstrap, cosi'
+// eredita lo stile scuro globale (.tooltip-inner) invece del tooltip nativo
+// del browser. Niente container:'body' → il tooltip resta nel contesto di
+// stacking locale (evita le trappole di z-index con navigator/modal).
+// Salta in modalità touch, coerente col resto del calendario. Idempotente.
+// IMPORTANTE: definito a livello globale dello script, FUORI dalla IIFE del
+// calendario (che si chiude a riga ~4454), cosi' e' accessibile da tutte le
+// funzioni del file — anche quelle dichiarate dopo la chiusura della IIFE.
+function applyBsTooltip(el, text, opts) {
+  if (!el) return;
+  if (typeof text === 'string') el.setAttribute('title', text);
+  el.setAttribute('data-bs-toggle', 'tooltip');
+  let isTouch = false;
+  try {
+    isTouch = localStorage.getItem('sun_touch_ui') === '1'
+      || document.body.classList.contains('touch-ui');
+  } catch (_) {}
+  if (isTouch || !window.bootstrap || !bootstrap.Tooltip) return;
+  try {
+    const existing = bootstrap.Tooltip.getInstance(el);
+    if (existing) existing.dispose();
+    new bootstrap.Tooltip(el, opts || {});
+  } catch (_) {}
+}
+
 (function(){
     const MOBILE_BP = 1200;
     const S_KEY = 'sun_touch_ui';
@@ -651,7 +676,7 @@ function buildServiceDropdownLabel(item, options) {
     const icon = document.createElement('i');
     icon.className = 'bi bi-box-seam';
     icon.style.cssText = 'font-size:0.85em;opacity:0.75;cursor:help;';
-    icon.title = 'Servizio disponibile in un pacchetto attivo';
+    applyBsTooltip(icon, 'Servizio disponibile in un pacchetto attivo');
     left.appendChild(icon);
   }
 
@@ -1175,6 +1200,40 @@ document.addEventListener('DOMContentLoaded', function() {
     if (addClientForm) {
 addClientForm.addEventListener('submit', function(event) {
     event.preventDefault();
+
+    // Validazione campi obbligatori: invece del messaggio nativo del browser
+    // ("Compila questo campo.", non stilizzabile) mostriamo un tooltip
+    // Bootstrap (stile scuro). Funziona perche' il form ha l'attributo
+    // `novalidate`: senza, il browser bloccherebbe il submit da solo.
+    if (window.bootstrap && bootstrap.Tooltip) {
+      const reqFields = addClientForm.querySelectorAll(
+        'input[required], select[required], textarea[required]'
+      );
+      let firstEmpty = null;
+      reqFields.forEach(function(f) {
+        const tip = bootstrap.Tooltip.getOrCreateInstance(f, {
+          title: 'Compila questo campo.',
+          trigger: 'manual',
+          placement: 'top',
+          container: addClientForm.closest('.modal') || 'body'
+        });
+        if (!(f.value || '').trim()) {
+          if (!firstEmpty) firstEmpty = { field: f, tip: tip };
+        } else {
+          tip.hide();
+        }
+      });
+      if (firstEmpty) {
+        firstEmpty.tip.show();
+        firstEmpty.field.focus();
+        firstEmpty.field.addEventListener('input', function _hideTip() {
+          firstEmpty.tip.hide();
+          firstEmpty.field.removeEventListener('input', _hideTip);
+        });
+        return; // blocca l'invio finche' i campi obbligatori non sono compilati
+      }
+    }
+
     const originalData = new FormData(addClientForm);
     const formData = new FormData();
     formData.append('cliente_nome', originalData.get('client_name') || originalData.get('cliente_nome') || "");
@@ -2331,7 +2390,7 @@ function handleClientSearch(query) {
           const infoBtn = document.createElement('button');
           infoBtn.type = 'button';
           infoBtn.className = 'client-info-btn';
-          infoBtn.title = 'Info cliente';
+          applyBsTooltip(infoBtn, 'Info cliente');
           infoBtn.setAttribute('aria-label', 'Info cliente');
           infoBtn.innerText = 'i';
 
@@ -2442,7 +2501,7 @@ function selectClient(clientId, fullName) {
       const infoBtn = document.createElement('button');
       infoBtn.type = 'button';
       infoBtn.className = 'client-info-btn';
-      infoBtn.title = 'Info cliente';
+      applyBsTooltip(infoBtn, 'Info cliente');
       infoBtn.setAttribute('aria-label', 'Info cliente');
       infoBtn.innerText = 'i';
       infoBtn.style.position = 'absolute';
@@ -2506,7 +2565,7 @@ function selectService(serviceId, serviceName, serviceDuration) {
     const badge = document.createElement('i');
     badge.className = 'bi bi-box-seam pseudo-pacchetto-badge';
     badge.style.cssText = 'margin-left:8px;font-size:0.9em;opacity:0.75;cursor:help;';
-    badge.title = `📦 ${pacchettoNome} - seduta collegata`;
+    applyBsTooltip(badge, `📦 ${pacchettoNome} - seduta collegata`);
     blockEl.appendChild(badge);
   }
 
@@ -3915,7 +3974,7 @@ function openModifyPopup(appointmentId) {
   infoBtn.type = 'button';
   infoBtn.className = 'client-info-btn';
   infoBtn.setAttribute('aria-label', 'Info cliente');
-  infoBtn.title = 'Info cliente';
+  applyBsTooltip(infoBtn, 'Info cliente', { container: '#EditAppointmentModal' });
   infoBtn.id = 'infoClientBtn';
   infoBtn.textContent = 'i';
   flexContainer.appendChild(infoBtn);
@@ -3953,7 +4012,7 @@ function openModifyPopup(appointmentId) {
   addBtn.type = 'button';
   addBtn.className = 'btn btn-outline-success btn-add-client-square btn-add-client-nav';
   addBtn.setAttribute('aria-label', 'Aggiungi cliente');
-  addBtn.title = 'Aggiungi cliente';
+  applyBsTooltip(addBtn, 'Aggiungi cliente', { container: '#EditAppointmentModal' });
   addBtn.textContent = '+';
   addBtn.style.position = 'absolute';
   addBtn.style.right = '0';
@@ -6155,7 +6214,7 @@ function selectClientNav(clientId, fullName) {
   const infoBtn = document.createElement('button');
   infoBtn.type = 'button';
   infoBtn.className = 'client-info-btn client-info-btn-nav';
-  infoBtn.title = 'Info cliente';
+  applyBsTooltip(infoBtn, 'Info cliente');
   infoBtn.setAttribute('aria-label', 'Info cliente');
   infoBtn.innerText = 'i';
   infoBtn.style.position = 'absolute';
@@ -6430,7 +6489,7 @@ function handleClientSearchNav(query) {
           infoBtn.type = 'button';
           infoBtn.className = 'client-info-btn';
           infoBtn.setAttribute('aria-label', 'Info cliente');
-          infoBtn.title = 'Info cliente';
+          applyBsTooltip(infoBtn, 'Info cliente');
           infoBtn.textContent = 'i';
           infoBtn.addEventListener('click', function (ev) {
             ev.stopPropagation();
@@ -6941,7 +7000,7 @@ function renderPseudoBlocksList() {
         const pacchettoIcon = document.createElement('i');
         pacchettoIcon.className = 'bi bi-box-seam';
         pacchettoIcon.style.cssText = 'margin-right:4px;font-size:0.85em;opacity:0.7;';
-        pacchettoIcon.title = `📦 Collegato a: ${block.pacchettoNome || 'Pacchetto'}`;
+        applyBsTooltip(pacchettoIcon, `📦 Collegato a: ${block.pacchettoNome || 'Pacchetto'}`);
         left.appendChild(pacchettoIcon);
       }
       
@@ -10693,7 +10752,7 @@ function restoreNavigatorState() {
           const infoBtn = document.createElement('button');
           infoBtn.type = 'button';
           infoBtn.className = 'client-info-btn client-info-btn-nav';
-          infoBtn.title = 'Info cliente';
+          applyBsTooltip(infoBtn, 'Info cliente');
           infoBtn.setAttribute('aria-label', 'Info cliente');
           infoBtn.innerText = 'i';
           infoBtn.style.position = 'absolute';
@@ -11753,7 +11812,7 @@ function loadWebAppointments(date, search) {
             const phoneIcon = document.createElement('span');
             phoneIcon.textContent = '📱';
             phoneIcon.style.fontSize = '1.4em';
-            phoneIcon.title = 'Match solo cellulare';
+            applyBsTooltip(phoneIcon, 'Match solo cellulare');
             tdMatch.appendChild(phoneIcon);
           } else {
             tdMatch.textContent = 'No';
@@ -11783,7 +11842,7 @@ function loadWebAppointments(date, search) {
           if (isPlaceholder) {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.title = 'Associa';
+            applyBsTooltip(btn, 'Associa');
             
             // Determina classe e tipo in base al match
             if (matchType === 'phone_only') {
@@ -11869,7 +11928,7 @@ tr.appendChild(tdAppt);
 if (tdAppt.textContent.trim()) {
   // Rende cliccabile e aggiunge tooltip
   tdAppt.style.cursor = 'pointer';
-  tdAppt.title = "Vai all'appuntamento";
+  applyBsTooltip(tdAppt, "Vai all'appuntamento");
   tdAppt.addEventListener('click', function () {
     // Usa gli attributi data-* invece di parsare il testo
     const dateStr = tdAppt.dataset.date;
@@ -13333,9 +13392,13 @@ document.addEventListener('click', function(e) {
     const monthSpan = document.createElement('span');
     monthSpan.className = 'shifts-month-title-month';
     monthSpan.textContent = MESI_IT[month];
-    monthSpan.title = 'Cambia mese';
+    applyBsTooltip(monthSpan, 'Clicca per cambiare mese', {
+      placement: 'bottom',
+      container: '#OperatorShiftsModalCalendar'
+    });
     monthSpan.style.cursor = 'pointer';
     monthSpan.style.textDecoration = 'underline dotted';
+    monthSpan.style.marginRight = '6px'; // spazio tra mese e anno
     monthSpan.addEventListener('click', function(e) {
       e.stopPropagation();
       _openMonthPicker(operatorId, year, month);
@@ -13344,7 +13407,10 @@ document.addEventListener('click', function(e) {
     const yearSpan = document.createElement('span');
     yearSpan.className = 'shifts-month-title-year';
     yearSpan.textContent = year;
-    yearSpan.title = 'Cambia anno';
+    applyBsTooltip(yearSpan, 'Clicca per cambiare anno', {
+      placement: 'bottom',
+      container: '#OperatorShiftsModalCalendar'
+    });
     yearSpan.style.cursor = 'pointer';
     yearSpan.style.textDecoration = 'underline dotted';
     yearSpan.addEventListener('click', function(e) {
@@ -13354,6 +13420,16 @@ document.addEventListener('click', function(e) {
     titleEl.appendChild(monthSpan);
     titleEl.appendChild(sep);
     titleEl.appendChild(yearSpan);
+
+    // Tooltip Bootstrap sulle frecce di navigazione mese precedente/successivo
+    applyBsTooltip(document.getElementById('shiftsMonthPrev'), 'Mese precedente', {
+      placement: 'bottom',
+      container: '#OperatorShiftsModalCalendar'
+    });
+    applyBsTooltip(document.getElementById('shiftsMonthNext'), 'Mese successivo', {
+      placement: 'bottom',
+      container: '#OperatorShiftsModalCalendar'
+    });
 
     // Skeleton loader
     grid.innerHTML = '<div class="shifts-month-loading">Caricamento…</div>';
@@ -13462,7 +13538,7 @@ document.addEventListener('click', function(e) {
       }
 
       // Click sul giorno → vai al calendario giornaliero
-      cell.title = 'Vai al ' + dateStr;
+      applyBsTooltip(cell, 'Vai al ' + dateStr);
       cell.addEventListener('click', function() {
         const base = (typeof calendarHomeUrl !== 'undefined') ? calendarHomeUrl : '/calendar/';
         window.location.href = base + '?date=' + dateStr;
@@ -16709,6 +16785,7 @@ document.head.appendChild(aiStyleOverride);
         'transition:opacity 0.15s ease'
       ].join(';');
       resetBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+      applyBsTooltip(resetBtn);
 
       resetBtn.addEventListener('mouseenter', function() { resetBtn.style.opacity = '1'; });
       resetBtn.addEventListener('mouseleave', function() { resetBtn.style.opacity = '0.85'; });

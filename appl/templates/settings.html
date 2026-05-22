@@ -134,4 +134,16 @@
 <div class="settings-glam">
   {% block settings_content %}{% endblock %}
 </div>
+
+<script>
+  // Init globale dei tooltip Bootstrap per TUTTE le sotto-pagine Settings.
+  // getOrCreateInstance e' idempotente: non duplica i tooltip gia' inizializzati
+  // dalle singole pagine (clients, marketing, ecc.). Gira dopo gli script figli.
+  document.addEventListener('DOMContentLoaded', function() {
+    if (!window.bootstrap || !bootstrap.Tooltip) return;
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+      try { bootstrap.Tooltip.getOrCreateInstance(el); } catch (_) {}
+    });
+  });
+</script>
 {% endblock %}

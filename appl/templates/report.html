@@ -42,6 +42,7 @@
                id="mobileCalDate"
                value="{{ selected_date_str }}"
                aria-label="Seleziona data"
+               data-bs-toggle="tooltip"
                title="Seleziona data">
       </td>
       <td class="cell-arrow">
@@ -226,6 +227,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   <button class="btn-neumorphic btn-settings"
           id="btnSettings"
+          data-bs-toggle="tooltip"
           title="Settaggi"
           style="position: absolute; top: 0px; right: 20px; z-index: 0;">
     <i class="bi bi-gear" style="font-size: 1.5em;"></i>
@@ -290,7 +292,8 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="report-tiles-grid" id="report-tiles-grid">
 <div class="tile-neumorphic tile-large" id="tile-stats-oggi">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; left:10px; z-index:2;"></button>
-  <div class="tile-title">
+  <div class="tile-title" data-bs-toggle="tooltip" data-bs-placement="bottom"
+       title="Quanto hai incassato nel giorno scelto e come è composto">
     INCASSO TOTALE del
     <span id="stat-incasso-data" style="margin-left:2px;"></span>
   </div>
@@ -322,7 +325,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div class="tile-neumorphic tile-large" id="tile-appuntamenti">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
-  <div class="tile-title">
+  <div class="tile-title" data-bs-toggle="tooltip" data-bs-placement="bottom"
+       title="Appuntamenti completati, no-show e quanti ne hai presi">
     APPUNTAMENTI CONCLUSI
   </div>
   <div class="fs-3">
@@ -360,7 +364,8 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
   <div class="tile-neumorphic tile-large" id="tile-incasso-stimato">
     <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
-  <div class="tile-title">
+  <div class="tile-title" data-bs-toggle="tooltip" data-bs-placement="bottom"
+       title="Incasso atteso dagli appuntamenti ancora in agenda">
     INCASSO STIMATO
   </div>
   <div class="fs-3">
@@ -378,7 +383,8 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="tile-neumorphic tile-large" id="tile-top-clienti">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
-    <span id="top-clienti-title">TOP 10 CLIENTI</span>
+    <span id="top-clienti-title" data-bs-toggle="tooltip" data-bs-placement="bottom"
+          title="Chi spende di più: utile per premiarli e fidelizzarli">TOP 10 CLIENTI</span>
     <div class="btn-group btn-group-sm" role="group">
       <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo active" data-periodo="mese">Ultimo mese</button>
       <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo" data-periodo="anno">Ultimo anno</button>
@@ -393,7 +399,8 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="tile-neumorphic tile-large" id="tile-heatmap-appuntamenti">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
-    <span>HEATMAP APPUNTAMENTI</span>
+    <span data-bs-toggle="tooltip" data-bs-placement="bottom"
+          title="Colpo d'occhio sui giorni più pieni di appuntamenti">HEATMAP APPUNTAMENTI</span>
     <div class="btn-group btn-group-sm" role="group">
       <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-app-periodo active" data-giorni="10">10 gg</button>
       <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-app-periodo" data-giorni="30">30 gg</button>
@@ -405,7 +412,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div class="tile-neumorphic tile-large" id="next-appointments-tile">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
-   <div class="tile-title">PROSSIMI APPUNTAMENTI</div>
+   <div class="tile-title" data-bs-toggle="tooltip" data-bs-placement="bottom"
+        title="I prossimi appuntamenti in agenda a partire da oggi">PROSSIMI APPUNTAMENTI</div>
   <ul id="next-appointments-list" style="list-style: none; padding-left: 0; text-align: left;"></ul>
  <div id="agenda-title" style="font-weight:600; font-size:1.15em; margin-top:5px;"></div>
  <button class="btn btn-flat" id="btnViewAgenda" style="margin-top: 5px; background-color: #eef0f4;">Scarica</button>
@@ -415,7 +423,8 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="tile-neumorphic tile-large" id="tile-heatmap-incassi">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
-    <span>HEATMAP INCASSI</span>
+    <span data-bs-toggle="tooltip" data-bs-placement="bottom"
+          title="Colpo d'occhio sui giorni che incassano di più">HEATMAP INCASSI</span>
     <div class="btn-group btn-group-sm" role="group">
       <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-inc-periodo active" data-giorni="10">10 gg</button>
       <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-inc-periodo" data-giorni="30">30 gg</button>
@@ -427,19 +436,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div class="tile-neumorphic tile-large" id="tile-palette-stagionale">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
-<div class="tile-title">PALETTE STAGIONALE</div>
+<div class="tile-title" data-bs-toggle="tooltip" data-bs-placement="bottom"
+     title="Colori di tendenza del periodo, spunti per il marketing">PALETTE STAGIONALE</div>
 <div class="palette-subtitle" id="palette-subtitle"></div>
 <div class="palette-container" id="palette-container"></div>
 </div>
 
 <div class="tile-neumorphic tile-large" id="tile-riassunto-giornaliero">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:16px; z-index:2;"></button>
-    <div class="tile-title">
+    <div class="tile-title" data-bs-toggle="tooltip" data-bs-placement="bottom"
+         title="Riepilogo del giorno, pronto da copiare e inviare">
       RIASSUNTO GIORNALIERO <span id="riassunto-data"></span>
     </div>
   <div class="table-responsive mt-2">
     <span>copia i dati principali per inviarli:&nbsp;</span>
-    <button id="btnCopiaRiassunto" class="btn btn-light btn-sm" title="Copia riassunto" style="border-radius:8px; align-content: right;">
+    <button id="btnCopiaRiassunto" class="btn btn-light btn-sm" data-bs-toggle="tooltip" title="Copia riassunto" style="border-radius:8px; align-content: right;">
       <i class="bi bi-clipboard"></i>
     </button>
     <table class="table table-bordered table-sm mb-0" id="tabella-riassunto">
@@ -495,7 +506,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div class="tile-neumorphic tile-large" id="tile-booking-online">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
-  <div class="tile-title">
+  <div class="tile-title" data-bs-toggle="tooltip" data-bs-placement="bottom"
+       title="Le prenotazioni arrivate dal sito di booking online">
     PRENOTAZIONI ONLINE del <span id="tile-booking-online-data"></span>
   </div>
   <div id="booking-online-list" class="booking-online-list-custom">
@@ -509,14 +521,15 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="modal-content">
       <div class="modal-header d-flex align-items-center gap-2">
         <h4 class="modal-title" id="modalCorrispettiviLabel">Registro Corrispettivi</h4>
-        <button id="btnExportExcelCorrispettivi" class="btn btn-success btn-sm ms-2" title="Esporta in Excel">
+        <button id="btnExportExcelCorrispettivi" class="btn btn-success btn-sm ms-2" data-bs-toggle="tooltip" title="Esporta in Excel">
           <i class="bi bi-file-earmark-excel"></i>
         </button>
-        <button id="btnExportPdfCorrispettivi" class="btn btn-danger btn-sm ms-2" title="Esporta in PDF">
+        <button id="btnExportPdfCorrispettivi" class="btn btn-danger btn-sm ms-2" data-bs-toggle="tooltip" title="Esporta in PDF">
   <i class="bi bi-file-earmark-pdf"></i>
 </button>
         {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
         <button id="btnLoadDgfeCorrispettivi" class="btn btn-outline-primary btn-sm ms-2"
+                data-bs-toggle="tooltip"
                 title="Legge il totale DGFE da RCH per ogni giorno del range">
           <i class="bi bi-cloud-download"></i> Carica DGFE
         </button>
@@ -535,7 +548,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <th>Giorno</th>
                 <th>Incasso totale</th>
                 {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
-                <th title="Totale fiscale letto dalla DGFE della stampante RCH">DGFE (RCH)</th>
+                <th data-bs-toggle="tooltip" title="Totale fiscale letto dalla DGFE della stampante RCH">DGFE (RCH)</th>
                 {% endif %}
                 <th>Incasso servizi</th>
                 <th>Incasso prodotti</th>
@@ -561,10 +574,10 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="modal-content">
       <div class="modal-header d-flex align-items-center gap-2">
         <h4 class="modal-title" id="modalIncassoCategoriaLabel">Incasso per Categoria</h4>
-<button id="btnEspandiIncassoCategoria" class="btn btn-light btn-sm ms-2" title="Espandi tutto" style="border-radius:8px;">
+<button id="btnEspandiIncassoCategoria" class="btn btn-light btn-sm ms-2" data-bs-toggle="tooltip" title="Espandi tutto" style="border-radius:8px;">
   <i class="bi bi-arrows-angle-expand"></i>
 </button>
-<button id="btnCopiaIncassoCategoria" class="btn btn-light btn-sm ms-2" title="Copia tutto" style="border-radius:8px; display:none;">
+<button id="btnCopiaIncassoCategoria" class="btn btn-light btn-sm ms-2" data-bs-toggle="tooltip" title="Copia tutto" style="border-radius:8px; display:none;">
   <i class="bi bi-clipboard"></i>
 </button>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
@@ -616,10 +629,10 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="modal-content">
       <div class="modal-header d-flex align-items-center gap-2">
         <h4 class="modal-title" id="modalPassaggiCassaLabel">Passaggi di Cassa</h4>
-        <button id="btnExportExcelPassaggiCassa" class="btn btn-success btn-sm ms-2" title="Esporta in Excel">
+        <button id="btnExportExcelPassaggiCassa" class="btn btn-success btn-sm ms-2" data-bs-toggle="tooltip" title="Esporta in Excel">
           <i class="bi bi-file-earmark-excel"></i>
         </button>
-        <button id="btnExportPdfPassaggiCassa" class="btn btn-danger btn-sm ms-2" title="Esporta in PDF">
+        <button id="btnExportPdfPassaggiCassa" class="btn btn-danger btn-sm ms-2" data-bs-toggle="tooltip" title="Esporta in PDF">
           <i class="bi bi-file-earmark-pdf"></i>
         </button>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
@@ -651,10 +664,10 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="modal-content" style="height:100%; max-height:90vh; display:flex; flex-direction:column;">
       <div class="modal-header d-flex align-items-center gap-2" style="flex-shrink:0;">
         <h4 class="modal-title" id="modalClientiLabel">Clienti</h4>
-        <button id="btnExportExcelClienti" class="btn btn-success btn-sm ms-2" title="Esporta in Excel">
+        <button id="btnExportExcelClienti" class="btn btn-success btn-sm ms-2" data-bs-toggle="tooltip" title="Esporta in Excel">
           <i class="bi bi-file-earmark-excel"></i>
         </button>
-        <button id="btnExportPdfClienti" class="btn btn-danger btn-sm ms-2" title="Esporta in PDF">
+        <button id="btnExportPdfClienti" class="btn btn-danger btn-sm ms-2" data-bs-toggle="tooltip" title="Esporta in PDF">
           <i class="bi bi-file-earmark-pdf"></i>
         </button>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
@@ -1115,29 +1128,8 @@ document.addEventListener('DOMContentLoaded', function() {
   color: #6c757d;
 }
 
-/* Tooltip per la barra */
-.progress-fill-completati::after,
-.progress-fill-noshow::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  top: -30px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0,0,0,0.8);
-  color: white;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.75em;
-  opacity: 0;
-  transition: opacity 0.2s;
-  white-space: nowrap;
-  z-index: 10;
-}
-
-.progress-fill-completati:hover::after,
-.progress-fill-noshow:hover::after {
-  opacity: 1;
-}
+/* Tooltip della barra: ora gestiti come tooltip Bootstrap (stile scuro
+   globale) via bsTip() in JS, non piu' con lo pseudo-elemento ::after. */
 
 .kpi-trend-azzurro {
   background: #d4eeff 100%;
@@ -1535,6 +1527,21 @@ document.addEventListener('DOMContentLoaded', function() {
     new bootstrap.Tooltip(el);
   });
 });
+
+// Helper per i tooltip generati via JS dopo il load (tabella DGFE, barra
+// progresso, ecc.): assegna il testo e (ri)crea il tooltip Bootstrap, cosi'
+// eredita lo stile scuro globale invece del tooltip nativo del browser.
+window.bsTip = function(el, text) {
+  if (!el) return;
+  if (typeof text === 'string') el.setAttribute('title', text);
+  el.setAttribute('data-bs-toggle', 'tooltip');
+  if (!window.bootstrap || !bootstrap.Tooltip) return;
+  try {
+    var existing = bootstrap.Tooltip.getInstance(el);
+    if (existing) existing.dispose();
+    new bootstrap.Tooltip(el);
+  } catch (_) {}
+};
 </script>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
@@ -1738,8 +1745,8 @@ function triggerReportReload() {
         setTimeout(() => {
           progressCompletati.style.width = `${percCompletati}%`;
           progressNoshow.style.width = `${percNoshow}%`;
-          progressCompletati.setAttribute('data-tooltip', `${data.completati} completati (${percCompletati}%)`);
-          progressNoshow.setAttribute('data-tooltip', `${data.noshow} no-show (${percNoshow}%)`);
+          bsTip(progressCompletati, `${data.completati} completati (${percCompletati}%)`);
+          bsTip(progressNoshow, `${data.noshow} no-show (${percNoshow}%)`);
         }, 100);
         document.querySelector('.label-completati').textContent = `✅ Completati (${percCompletati}%)`;
         document.querySelector('.label-noshow').textContent = `❌ No-show (${percNoshow}%)`;
@@ -2218,7 +2225,7 @@ document.addEventListener('DOMContentLoaded', function() {
               const runAt = row.reconciliation_run_at
                 ? row.reconciliation_run_at.replace('T', ' ').slice(0, 16)
                 : '-';
-              dgfeCell.title = `${row.reconciliation_dgfe_count || 0} scontrini in DGFE (verifica post-Z del ${runAt})`;
+              bsTip(dgfeCell, `${row.reconciliation_dgfe_count || 0} scontrini in DGFE (verifica post-Z del ${runAt})`);
               tr.dataset.dgfeTotal = String(row.reconciliation_dgfe_total);
             } else {
               dgfeCell.textContent = '—';
@@ -2245,7 +2252,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const btnCorreggi = document.createElement('button');
                 btnCorreggi.className = 'btn btn-sm btn-warning';
                 btnCorreggi.textContent = 'Correggi';
-                btnCorreggi.title = `DB: ${(row.totale||0).toFixed(2)} | DGFE: ${row.reconciliation_dgfe_total.toFixed(2)}`;
+                bsTip(btnCorreggi, `DB: ${(row.totale||0).toFixed(2)} | DGFE: ${row.reconciliation_dgfe_total.toFixed(2)}`);
                 btnCorreggi.addEventListener('click',
                   () => _correggiGiorno(isoDay, btnCorreggi, tr.querySelector('.dgfe-cell'), tr));
                 azioniCell.appendChild(btnCorreggi);
@@ -2341,7 +2348,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (Math.abs((dgfeTotal || 0) - (dbTotal || 0)) <= 0.01) {
       const check = document.createElement('i');
       check.className = 'bi bi-check-circle-fill text-success ms-1';
-      check.title = 'DGFE coincide con il totale registrato';
+      bsTip(check, 'DGFE coincide con il totale registrato');
       cell.appendChild(check);
     }
   }
@@ -2661,7 +2668,7 @@ document.addEventListener('DOMContentLoaded', function() {
           if (dgfeCell) {
             dgfeCell.textContent = 'errore';
             dgfeCell.style.color = '#c00';
-            dgfeCell.title = 'Stato: ' + (d.status || '?') + (d.error ? ' | ' + d.error : '');
+            bsTip(dgfeCell, 'Stato: ' + (d.status || '?') + (d.error ? ' | ' + d.error : ''));
           }
           allReadable = false;
         } else if (d.status === 'ok') {
@@ -2669,7 +2676,7 @@ document.addEventListener('DOMContentLoaded', function() {
           dgfeTotalSum += tot;
           if (dgfeCell) {
             _renderDgfeCell(dgfeCell, tot, totaleDb);
-            dgfeCell.title = `${d.dgfe_count} scontrini in DGFE`;
+            bsTip(dgfeCell, `${d.dgfe_count} scontrini in DGFE`);
           }
           // Confronto: se differenza > 0.01 mostra "Correggi"
           if (Math.abs(tot - totaleDb) > 0.01 && azioniCell) {
@@ -2680,7 +2687,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const btnCorreggi = document.createElement('button');
             btnCorreggi.className = 'btn btn-sm btn-warning';
             btnCorreggi.textContent = 'Correggi';
-            btnCorreggi.title = `DB: ${totaleDb.toFixed(2)} | DGFE: ${tot.toFixed(2)}`;
+            bsTip(btnCorreggi, `DB: ${totaleDb.toFixed(2)} | DGFE: ${tot.toFixed(2)}`);
             btnCorreggi.addEventListener('click', () => _correggiGiorno(isoDay, btnCorreggi, dgfeCell, tr));
             azioniCell.appendChild(btnCorreggi);
           } else {
@@ -2696,11 +2703,11 @@ document.addEventListener('DOMContentLoaded', function() {
           if (dgfeCell) {
             if (noScontriniLegittimo) {
               _renderDgfeCell(dgfeCell, 0, totaleDb);
-              dgfeCell.title = `0 scontrini in DGFE (status: ${d.status})`;
+              bsTip(dgfeCell, `0 scontrini in DGFE (status: ${d.status})`);
             } else {
               dgfeCell.textContent = d.status || '?';
               dgfeCell.style.color = '#c00';
-              dgfeCell.title = `status=${d.status} | http=${d.http_status||'-'} | body_len=${d.body_len||0}` + (d.error ? ' | ' + d.error : '');
+              bsTip(dgfeCell, `status=${d.status} | http=${d.http_status||'-'} | body_len=${d.body_len||0}` + (d.error ? ' | ' + d.error : ''));
             }
           }
           if (noScontriniLegittimo && Math.abs(0 - totaleDb) > 0.01 && azioniCell) {
@@ -2716,7 +2723,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (dgfeCell) {
           dgfeCell.textContent = 'errore rete';
           dgfeCell.style.color = '#c00';
-          dgfeCell.title = err.message;
+          bsTip(dgfeCell, err.message);
         }
         allReadable = false;
       }
@@ -2731,7 +2738,7 @@ document.addEventListener('DOMContentLoaded', function() {
       } else {
         totDgfeCell.textContent = dgfeTotalSum.toFixed(2) + ' (parz.)';
         totDgfeCell.style.color = '#c00';
-        totDgfeCell.title = 'Alcuni giorni non leggibili dalla stampante';
+        bsTip(totDgfeCell, 'Alcuni giorni non leggibili dalla stampante');
       }
     }
 

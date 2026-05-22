@@ -633,7 +633,7 @@ display: none;
             <strong>Solo {{ pacchetto.vincoli_utilizzo.servizi_ids|length }} servizi specifici</strong>
           {% endif %}
           {% if current_user and current_user.ruolo.value in ['admin', 'owner'] %}
-          <button type="button" class="btn btn-sm btn-outline-light ms-2" onclick="apriModalVincoli()" title="Modifica vincoli">
+          <button type="button" class="btn btn-sm btn-outline-light ms-2" onclick="apriModalVincoli()" data-bs-toggle="tooltip" title="Modifica vincoli">
             <i class="bi bi-pencil"></i>
           </button>
           {% endif %}
@@ -736,7 +736,7 @@ display: none;
     <td class="data-cell" data-date="{{ s.data_trattamento or '' }}"
         {% if not s.data_trattamento and not s.appointment_id %}data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca per scegliere data e fissare in agenda"{% endif %}>
       {% if s.appointment_id %}
-        <span title="Appuntamento fissato in agenda">📅 {{ s.appointment_start }}</span>
+        <span data-bs-toggle="tooltip" title="Appuntamento fissato in agenda">📅 {{ s.appointment_start }}</span>
       {% else %}
         {{ s.data_trattamento|default('—') }}
       {% endif %}
@@ -975,7 +975,7 @@ display: none;
             <span class="input-group-text">€</span>
             <input type="number" class="form-control form-control-lg text-center fw-bold" id="creditoRicaricaCalcolato" 
                    step="0.01" readonly style="background-color: #d4edda;">
-            <button type="button" class="btn btn-outline-secondary" onclick="sbloccaCreditoRicaricaManuale()" title="Modifica manualmente">
+            <button type="button" class="btn btn-outline-secondary" onclick="sbloccaCreditoRicaricaManuale()" data-bs-toggle="tooltip" title="Modifica manualmente">
               <i class="bi bi-pencil"></i>
             </button>
           </div>
@@ -2673,7 +2673,7 @@ document.addEventListener('click', function (e) {
           <select id="rataDaySelect" class="form-select form-select-sm" style="width:80px;"></select>
           <select id="rataMonthSelect" class="form-select form-select-sm" style="width:110px;"></select>
           <select id="rataYearSelect" class="form-select form-select-sm" style="width:80px;"></select>
-          <span class="calendar-toggle-btn" id="toggleCalendarBtn" title="Apri calendario"><i class="bi bi-calendar3"></i></span>
+          <span class="calendar-toggle-btn" id="toggleCalendarBtn" data-bs-toggle="tooltip" title="Apri calendario"><i class="bi bi-calendar3"></i></span>
         </div>
       </div>
       <div id="calendarContainer" class="mb-3" style="display:none;">

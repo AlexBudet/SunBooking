@@ -95,7 +95,7 @@
       <td>
         <div class="copy-field-wrapper">
           <input type="text" id="website" name="website" value="{{ business_info.website if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-          <button type="button" class="copy-field-btn" data-copy-target="website" title="Copia"><i class="bi bi-clipboard"></i></button>
+          <button type="button" class="copy-field-btn" data-copy-target="website" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
         </div>
       </td>
     </tr>
@@ -104,7 +104,7 @@
       <td>
         <div class="copy-field-wrapper">
           <input type="text" id="web_app" name="web_app" value="{{ business_info.web_app if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-          <button type="button" class="copy-field-btn" data-copy-target="web_app" title="Copia"><i class="bi bi-clipboard"></i></button>
+          <button type="button" class="copy-field-btn" data-copy-target="web_app" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
         </div>
       </td>
     </tr>
@@ -113,7 +113,7 @@
       <td>
         <div class="copy-field-wrapper">
           <input type="text" id="web_booking_page" name="web_booking_page" value="{{ business_info.web_booking_page if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-          <button type="button" class="copy-field-btn" data-copy-target="web_booking_page" title="Copia"><i class="bi bi-clipboard"></i></button>
+          <button type="button" class="copy-field-btn" data-copy-target="web_booking_page" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
         </div>
       </td>
     </tr>
@@ -138,7 +138,7 @@
       <td>
         <div class="copy-field-wrapper">
           <input type="text" id="vat_code" name="vat_code" value="{{ business_info.vat_code if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-          <button type="button" class="copy-field-btn" data-copy-target="vat_code" title="Copia"><i class="bi bi-clipboard"></i></button>
+          <button type="button" class="copy-field-btn" data-copy-target="vat_code" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
         </div>
       </td>
     </tr>
@@ -147,7 +147,7 @@
       <td>
         <div class="copy-field-wrapper">
           <input type="text" id="pec_code" name="pec_code" value="{{ business_info.pec_code if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-          <button type="button" class="copy-field-btn" data-copy-target="pec_code" title="Copia"><i class="bi bi-clipboard"></i></button>
+          <button type="button" class="copy-field-btn" data-copy-target="pec_code" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
         </div>
       </td>
     </tr>

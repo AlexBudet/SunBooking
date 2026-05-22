@@ -1727,6 +1727,15 @@ body.quarter-55 .appointment-block:not(.note-off):not(.off)[data-note]:not([data
   z-index: 1;
 }
 
+/* Nome cliente in CORSIVO quando il cliente ha una nota salvata.
+   L'attributo data-client-note e' presente sia nei blocchi resi dal server
+   sia in quelli ricreati via JS (createAppointmentBlockElement): la regola
+   CSS garantisce il corsivo in entrambi i casi, senza dipendere dallo style
+   inline (che la ricostruzione JS del blocco non riportava). */
+.appointment-block .client-info-link[data-client-note] {
+  font-style: italic;
+}
+
 #currentTimeIndicator {
     pointer-events: none !important;
     z-index: 0 !important;

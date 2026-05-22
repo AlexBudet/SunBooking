@@ -479,7 +479,7 @@
                             <label for="creditoTotaleCalcolato" class="form-label">Credito Totale (€)</label>
                             <div class="input-group">
                                 <input type="number" class="form-control" id="creditoTotaleCalcolato" step="0.01" min="0" readonly style="background-color: #e9ecef; font-weight: bold;">
-                                <button type="button" class="btn btn-outline-secondary" onclick="sbloccaCreditoManuale()" title="Modifica manualmente">
+                                <button type="button" class="btn btn-outline-secondary" onclick="sbloccaCreditoManuale()" data-bs-toggle="tooltip" title="Modifica manualmente">
                                     <i class="bi bi-pencil"></i>
                                 </button>
                             </div>
@@ -633,6 +633,7 @@
                             <button type="button"
                                     class="btn btn-outline-secondary btn-sm"
                                     id="btnDeselezionaOperatori"
+                                    data-bs-toggle="tooltip"
                                     title="Deseleziona tutti gli operatori"
                                     onclick="deselezionaOperatori()">Deseleziona</button>
                         </div>

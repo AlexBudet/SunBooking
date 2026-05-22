@@ -1,3 +1,20 @@
+// Helper: trasforma un elemento in tooltip Bootstrap (eredita lo stile scuro
+// globale di .tooltip-inner). Usato per i tooltip generati via JS, cosi' da
+// non lasciare i tooltip nativi del browser. Idempotente: se il tooltip
+// esiste gia' lo ricrea col testo aggiornato. Definito a livello globale
+// del file per essere accessibile da tutte le funzioni.
+function applyBsTooltip(el, text, opts) {
+  if (!el) return;
+  if (typeof text === 'string') el.setAttribute('title', text);
+  el.setAttribute('data-bs-toggle', 'tooltip');
+  if (!window.bootstrap || !bootstrap.Tooltip) return;
+  try {
+    const existing = bootstrap.Tooltip.getInstance(el);
+    if (existing) existing.dispose();
+    new bootstrap.Tooltip(el, opts || {});
+  } catch (_) {}
+}
+
 document.addEventListener('DOMContentLoaded', function () {
 
 // Popup successo auto-chiudibile
@@ -1435,8 +1452,8 @@ row.className = 'd-flex align-items-center scontrino-row';
   const opCol = document.createElement('span');
   opCol.className = 'op-col';
   opCol.textContent = servizio.operator_nome ? capitalizeName(servizio.operator_nome) : '—';
-  opCol.title = 'Clicca per cambiare operatore';
   opCol.style.cursor = 'pointer';
+  applyBsTooltip(opCol, 'Clicca per cambiare operatore');
   opCol.addEventListener('click', function(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -1476,7 +1493,7 @@ row.className = 'd-flex align-items-center scontrino-row';
   if (servizio.prepagata_id) {
     prezzo.readOnly = true;
     prezzo.style.backgroundColor = '#e8f5e9';
-    prezzo.title = 'Importo fisso: il credito caricato sulla carta è definito alla creazione';
+    applyBsTooltip(prezzo, 'Importo fisso: il credito caricato sulla carta è definito alla creazione');
     row.dataset.prepagataId = servizio.prepagata_id;
     row.dataset.creditoDaCaricare = servizio.credito_da_caricare || servizio.prezzo || '0';
   }
@@ -1484,7 +1501,7 @@ row.className = 'd-flex align-items-center scontrino-row';
   if (servizio.ricarica_prepagata_id) {
     prezzo.readOnly = true;
     prezzo.style.backgroundColor = '#e8f5e9';
-    prezzo.title = 'Importo fisso per ricarica carta prepagata';
+    applyBsTooltip(prezzo, 'Importo fisso per ricarica carta prepagata');
     row.dataset.ricaricaPrepagataId = servizio.ricarica_prepagata_id;
     row.dataset.ricaricaImporto = servizio.ricarica_importo || servizio.prezzo || '0';
     row.dataset.ricaricaCredito = servizio.ricarica_credito || servizio.credito_da_caricare || servizio.prezzo || '0';
@@ -1791,11 +1808,12 @@ function popolaPulsantiServizi(servizi) {
 
     btn.textContent = servizio.tag;
 
-    // Tooltip custom
-    const tooltip = document.createElement('span');
-    tooltip.className = 'custom-tooltip';
-    tooltip.textContent = servizio.nome;
-    btn.appendChild(tooltip);
+    // Tooltip Bootstrap col nome completo del servizio (stile scuro globale).
+    // Sostituisce il vecchio .custom-tooltip per uniformita' con tutta l'app.
+    applyBsTooltip(btn, servizio.nome, {
+      placement: 'bottom',
+      delay: { show: 1000, hide: 100 }
+    });
 
     btn.onclick = () => {
       aggiungiRigaServizio(servizio);

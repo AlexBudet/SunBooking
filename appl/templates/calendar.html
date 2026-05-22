@@ -627,7 +627,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <form id="AddClientForm">
+        <form id="AddClientForm" novalidate>
           <div class="mb-3">
             <input type="text" class="form-control" id="cliente_nome" name="cliente_nome" required required placeholder="Nome">
           </div>
@@ -886,6 +886,7 @@
           <div id="clientResults" class="results-dropdown"></div>
         </div>
         <button type="button" class="btn btn-outline-success btn-add-client-square"
+                data-bs-toggle="tooltip" data-bs-placement="top"
                 title="Aggiungi cliente"
                 onclick="openAddClientModal('CreateAppointmentModal')">+</button>
       </div>
@@ -2915,6 +2916,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Badge flottante (angolo basso dx) -->
 <div id="aiBadgeBtn"
+     data-bs-toggle="tooltip"
      title="Assistente AI"
      aria-label="Apri assistente AI"
      style="display:none; position:fixed; bottom:28px; right:24px; z-index:99999;
@@ -2942,8 +2944,8 @@ document.addEventListener('DOMContentLoaded', function() {
             flex-direction:column; overflow:hidden;
             border:1px solid rgba(135,100,124,0.2);">
 
-  <div id="aiChatResizeHandle" aria-label="Ridimensiona chat (angolo)" title="Ridimensiona"></div>
-  <div id="aiChatResizeHandleRight" aria-label="Ridimensiona larghezza" title="Ridimensiona larghezza"></div>
+  <div id="aiChatResizeHandle" aria-label="Ridimensiona chat (angolo)" data-bs-toggle="tooltip" title="Ridimensiona"></div>
+  <div id="aiChatResizeHandleRight" aria-label="Ridimensiona larghezza" data-bs-toggle="tooltip" title="Ridimensiona larghezza"></div>
 
   <!-- Header -->
   <div style="background:linear-gradient(135deg,#723a57,#83506c);
@@ -2955,6 +2957,7 @@ document.addEventListener('DOMContentLoaded', function() {
       TOSCA AI
     </span>
     <span id="aiStatusDot"
+          data-bs-toggle="tooltip"
           title="Online"
           style="width:9px; height:9px; border-radius:50%;
                  background:#4cff91; border:1.5px solid #fff;
@@ -3008,6 +3011,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <button id="aiMicBtn"
             type="button"
             aria-label="Dettatura vocale"
+            data-bs-toggle="tooltip"
             title="Dettatura vocale"
             style="width:36px; height:36px; border-radius:50%; border:none;
                    background:#f0ebff; color:#6c47ff; cursor:pointer;
@@ -3322,6 +3326,26 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     } catch(_) {}
   }
+
+  // Tooltip nei modal del calendario: il contenuto dei modal (es. Crea
+  // Appuntamento) viene spesso ricostruito via innerHTML ad ogni apertura,
+  // quindi inizializziamo i tooltip ad OGNI apertura con shown.bs.modal.
+  // container = il modal: il tooltip resta nel suo stacking context (niente
+  // 'body', che finirebbe dietro dato che .tooltip ha z-index 23050 < modal)
+  // e non viene tagliato dall'overflow del .modal-body.
+  // La tabella calendario e' gestita a parte da initCalendarDesktopTooltips().
+  document.addEventListener('shown.bs.modal', function(ev) {
+    const modal = ev.target;
+    if (!modal || !modal.querySelectorAll) return;
+    modal.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+      try { bootstrap.Tooltip.getOrCreateInstance(el, { container: modal }); } catch(_) {}
+    });
+  });
+  ['aiBadgeBtn', 'aiStatusDot', 'aiMicBtn', 'aiChatResizeHandle', 'aiChatResizeHandleRight']
+    .forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) { try { bootstrap.Tooltip.getOrCreateInstance(el); } catch(_) {} }
+    });
 });
 </script>
 

@@ -108,7 +108,7 @@
         <div class="help-topic-content">
             <div class="help-topic-title-row">
                 <h2 class="help-topic-title" id="topicTitle">Titolo</h2>
-                <button type="button" class="help-topic-title-wa-btn" id="topicWaBtn" onclick="sendCurrentTopicWhatsapp()" title="Crea messaggio WhatsApp">
+                <button type="button" class="help-topic-title-wa-btn" id="topicWaBtn" onclick="sendCurrentTopicWhatsapp()" data-bs-toggle="tooltip" title="Crea messaggio WhatsApp">
                     <i class="bi bi-whatsapp"></i>
                 </button>
             </div>
@@ -629,57 +629,75 @@
     border-color: #dbeafe;
 }
 
-/* Video tutorial inline. Per non perdere nitidezza il video NON viene
-   ridimensionato: resta a risoluzione nativa (1 px sorgente = 1 px fisico) e
-   .help-video-crop ne mostra solo una finestra larga il 50%, ritagliata con
-   overflow:hidden. Larghezza nativa, larghezza finestra e centratura sono
-   calcolate via JS (applyVideoCrop) dai metadati e dal devicePixelRatio. */
+/* Video tutorial: nella pagina si mostra una copertina statica cliccabile
+   (.help-video-cover = immagine covers/N.jpg, sempre nitida); il <video> vero
+   viene creato al volo e aperto a schermo intero al click (vedi helpOpenVideo). */
 .help-video-wrap {
     margin: 4px 0 14px;
     text-align: center;
 }
 
-.help-video-crop {
+.help-video-cover-btn {
     display: inline-block;
-    vertical-align: top;
-    width: var(--crop-w, auto);
-    height: var(--crop-h, auto);
+    position: relative;
+    margin: 0 auto;
+    padding: 0;
     max-width: 100%;
+    line-height: 0;
     overflow: hidden;
+    border: 1px solid #f3d9e6;
     border-radius: 10px;
     background: #000;
     box-shadow: 0 2px 10px rgba(0,0,0,0.10);
-    border: 1px solid #f3d9e6;
-}
-
-.help-inline-video {
-    display: block;
-    width: var(--vid-w, auto);
-    height: auto;
-    margin-left: var(--crop-shift-x, 0);
-    margin-top: var(--crop-shift-y, 0);
     cursor: zoom-in;
-    background: #000;
 }
 
-/* A schermo intero il video torna intero (niente ritaglio né spostamento):
-   lo zoom mostra l'intera registrazione. La lente diventa "−".
-   Regole separate: un browser che non capisce un selettore non scarta l'altro. */
-.help-inline-video:fullscreen {
-    width: 100%;
-    height: 100%;
-    margin-left: 0;
-    margin-top: 0;
-    object-fit: contain;
-    cursor: zoom-out;
+.help-video-cover {
+    display: block;
+    max-width: 100%;
+    height: auto;
 }
-.help-inline-video:-webkit-full-screen {
-    width: 100%;
-    height: 100%;
-    margin-left: 0;
-    margin-top: 0;
-    object-fit: contain;
-    cursor: zoom-out;
+
+/* Pastiglia ▶ al centro della copertina. */
+.help-video-play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 24px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-left: 4px;            /* compensazione ottica del triangolo */
+    pointer-events: none;
+    transition: background 0.15s;
+}
+.help-video-cover-btn:hover .help-video-play {
+    background: rgba(190, 24, 93, 0.88);
+}
+
+/* <video> temporaneo per lo schermo intero: fuori vista finché non va fullscreen. */
+.help-fs-video {
+    position: fixed;
+    left: -99999px;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+}
+.help-fs-video:fullscreen {
+    left: 0; width: 100%; height: 100%;
+    opacity: 1; object-fit: contain; background: #000;
+}
+.help-fs-video:-webkit-full-screen {
+    left: 0; width: 100%; height: 100%;
+    opacity: 1; object-fit: contain; background: #000;
 }
 
 /* Formattazione testo */
@@ -1304,12 +1322,13 @@ function renderTopic() {
     // 3) link interno a un topic (se la chiave corrisponde a un topic key)
     let content = topic.content;
     content = content.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, function(match, text, imageKey) {
-        // Video tutorial inline: [[VIDEO|1]] -> player video posizionato sul punto
-        // L'evento onerror del <source> nasconde l'intero blocco se il file non è
-        // ancora stato caricato, così la pagina resta pulita fino all'upload.
+        // Video tutorial: [[VIDEO|N]] -> copertina cliccabile. Inline si mostra
+        // solo l'immagine statica covers/N.jpg (sempre nitida); al click il
+        // video vero N.mp4 si apre a schermo intero (helpOpenVideo).
+        // onerror sull'immagine nasconde il blocco se la copertina non esiste.
         if (text && text.toUpperCase() === 'VIDEO') {
-            const src = STATIC_VIDEO_BASE + imageKey + '.mp4';
-            return `</p><div class="help-video-wrap"><div class="help-video-crop"><video class="help-inline-video" data-video="${imageKey}" controls muted playsinline preload="metadata" controlsList="nodownload noremoteplayback" disablePictureInPicture oncontextmenu="return false" onclick="helpVideoFullscreen(event)" title="Clicca per schermo intero" onerror="this.closest('.help-video-wrap').style.display='none'"><source src="${src}" type="video/mp4"></video></div></div><p>`;
+            const cover = STATIC_VIDEO_BASE + 'covers/' + imageKey + '.jpg';
+            return `</p><div class="help-video-wrap"><button type="button" class="help-video-cover-btn" data-video="${imageKey}" onclick="helpOpenVideo(this)" data-bs-toggle="tooltip" title="Clicca per guardare il video"><img class="help-video-cover" src="${cover}" alt="Anteprima video tutorial" onerror="this.closest('.help-video-wrap').style.display='none'"><span class="help-video-play" aria-hidden="true">▶</span></button></div><p>`;
         }
         const images = HELP_IMAGES[imageKey];
         if (images && images.length > 0) {
@@ -1354,6 +1373,15 @@ function renderTopic() {
     document.getElementById('topicBody').innerHTML = content;
     setupInlineVideos();
 
+    // Inizializza i tooltip Bootstrap sul contenuto appena iniettato
+    // (es. copertine video), che l'init globale di settings.html non vede
+    // perche' creato dopo il DOMContentLoaded.
+    if (window.bootstrap && bootstrap.Tooltip) {
+        document.querySelectorAll('#topicBody [data-bs-toggle="tooltip"]').forEach(function(el) {
+            bootstrap.Tooltip.getOrCreateInstance(el);
+        });
+    }
+
     // Aggiorna pulsanti
     document.getElementById('btnPrev').disabled = currentTopicIndex === 0;
     document.getElementById('btnNext').disabled = currentTopicIndex === total - 1;
@@ -1382,8 +1410,8 @@ const HELP_VIDEO_CROP_CENTER_Y = 0.3;
 // per i tutorial in cui l'azione non è al centro. x: 0.75 = focus a destra,
 // x: 0.25 = focus a sinistra; idem y per alto/basso.
 const HELP_VIDEO_CROP_OVERRIDES = {
-    '1': { x: 0.75 },   // focus spostato verso destra
-    '2': { x: 0.75 },   // focus spostato verso destra
+    '1': { x: 0.75, y: 0.25 },   // focus a destra e tutto in alto
+    '2': { x: 0.75, y: 0.25 },   // focus a destra e tutto in alto
 };
 
 function applyVideoCrop(v) {
@@ -1453,27 +1481,41 @@ function setupInlineVideos() {
     videos.forEach(v => window._helpVideoObserver.observe(v));
 }
 
-// Click sul video tutorial → apertura a tutto schermo (100%, 1:1 su un
-// monitor 1080p). I click sulla barra controlli in basso restano dedicati
-// a play/pausa e scrubber.
-function helpVideoFullscreen(e) {
-    const v = e.currentTarget;
-    const rect = v.getBoundingClientRect();
-    if (e.clientY > rect.bottom - 44) return; // zona barra controlli nativa
-    // Il click sul corpo di un <video controls> fa play/pausa di default:
-    // lo annulliamo, altrimenti il video si fermerebbe all'ingrandimento.
-    e.preventDefault();
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
-        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-        return;
-    }
+// Click sulla copertina di un tutorial → crea il <video> al volo, lo apre a
+// schermo intero e lo riproduce. La pagina mostra solo l'immagine di copertina;
+// il <video> esiste soltanto durante la visione e viene rimosso all'uscita.
+function helpOpenVideo(btn) {
+    const n = btn && btn.dataset ? btn.dataset.video : null;
+    if (!n) return;
+    const v = document.createElement('video');
+    v.src = STATIC_VIDEO_BASE + n + '.mp4';
+    v.className = 'help-fs-video';
+    v.controls = true;
+    v.muted = true;            // niente audio a sorpresa; sbloccabile dai controlli
+    v.playsInline = true;
+    v.setAttribute('controlsList', 'nodownload noremoteplayback');
+    v.disablePictureInPicture = true;
+    document.body.appendChild(v);
+
+    // Rimuove il <video> appena si esce dallo schermo intero.
+    const cleanup = () => {
+        if (document.fullscreenElement || document.webkitFullscreenElement) return;
+        v.pause();
+        v.remove();
+        document.removeEventListener('fullscreenchange', cleanup);
+        document.removeEventListener('webkitfullscreenchange', cleanup);
+    };
+    document.addEventListener('fullscreenchange', cleanup);
+    document.addEventListener('webkitfullscreenchange', cleanup);
+    v.addEventListener('webkitendfullscreen', () => { v.pause(); v.remove(); });
+
+    // requestFullscreen va chiamata sincrona, dentro al gesto del click.
     const req = v.requestFullscreen || v.webkitRequestFullscreen
               || v.webkitEnterFullscreen; // iOS Safari
-    if (!req) return;
+    if (!req) { v.play().catch(() => {}); return; }
     const r = req.call(v);
-    // Dopo l'ingrandimento il video deve continuare a riprodursi, non fermarsi.
     if (r && typeof r.then === 'function') {
-        r.then(() => v.play().catch(() => {})).catch(() => {});
+        r.then(() => v.play().catch(() => {})).catch(() => v.remove());
     } else {
         v.play().catch(() => {});
     }

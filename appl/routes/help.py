@@ -177,6 +177,7 @@ In Tosca puoi aggiungere due tipi di note, entrambe visibili nel tooltip informa
 Sono note permanenti legate al cliente, utili per informazioni che valgono sempre (es: allergie, preferenze, richieste particolari).
 • **Come aggiungerle:** vai in **Impostazioni → Clienti**, cerca il cliente e compila il campo "Note"
 • **Dove si vedono:** nel tooltip che appare passando il mouse sul nome cliente nel blocco appuntamento, nella parte **superiore**
+• **Indizio visivo:** quando un cliente ha una nota salvata, il suo nome appare scritto in <i>corsivo</i> direttamente nel blocco appuntamento, così lo riconosci a colpo d'occhio senza dover passare il mouse
 
 📅 **NOTE APPUNTAMENTO**
 Sono note specifiche per quel singolo appuntamento (es: "porta il prodotto X", "arriva 10 min prima").
