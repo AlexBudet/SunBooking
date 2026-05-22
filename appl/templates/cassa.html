@@ -75,10 +75,10 @@
         <div id="scontrino-container"></div>
         <!-- Icona dischetto per salvare modifiche (visibile solo se pseudoscontrino popolato da blocchi calendar) -->
 <div id="saveModificheContainer" style="display: none; margin-top: 10px; text-align: center;">
-  <button id="btnSaveModifiche" class="btn btn-outline-primary" title="Salva modifiche bozza scontrino">
+  <button id="btnSaveModifiche" class="btn btn-outline-primary" data-bs-toggle="tooltip" title="Salva modifiche bozza scontrino">
     <i class="bi bi-floppy"></i> Salva Modifiche
   </button>
-  <button id="btnResetModifiche" class="btn btn-outline-warning" title="Ripristina valori originali" style="display: none; margin-left: 10px;">
+  <button id="btnResetModifiche" class="btn btn-outline-warning" data-bs-toggle="tooltip" title="Ripristina valori originali" style="display: none; margin-left: 10px;">
     <i class="bi bi-arrow-counterclockwise"></i> Reset
   </button>
 </div>
@@ -325,6 +325,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (clientInput) new bootstrap.Tooltip(clientInput);
     const bozzaLabel = document.getElementById('bozzaScontrinoLabel');
     if (bozzaLabel) new bootstrap.Tooltip(bozzaLabel, { container: 'body', boundary: 'window', html: true });
+    const btnSaveModifiche = document.getElementById('btnSaveModifiche');
+    const btnResetModifiche = document.getElementById('btnResetModifiche');
+    if (btnSaveModifiche) bootstrap.Tooltip.getOrCreateInstance(btnSaveModifiche);
+    if (btnResetModifiche) bootstrap.Tooltip.getOrCreateInstance(btnResetModifiche);
   }
   
   // Verifica che gli elementi esistano (solo per admin/owner)
