@@ -46,23 +46,21 @@ header {
     text-align: center;
 }
 
-body.modal-open header {
-    z-index: 1 !important;
-    pointer-events: none !important;
-    opacity: 0.5 !important;
-    transition: opacity 0.2s;
-}
+/* A modal aperto NON si modifica l'header: niente opacity, niente z-index.
+   Il backdrop del modal (z-index 24500) copre e scurisce TUTTA la pagina in
+   modo uniforme; l'opacity 0.5 extra applicata solo all'header faceva
+   "sparire" il menu di navigazione (nav bg-light a meta' opacita'). */
 body.modal-open .modal-backdrop {
     z-index: 24500 !important;
 }
-body.modal-open .calendar-navigation {
-    z-index: 1 !important;
-}
 
-body.modal-open .calendar-fullwidth {
-    z-index: 0 !important;
-    position: relative;
-}
+/* NB: a modal aperto NON si tocca lo z-index di header, calendar-navigation,
+   calendar-fullwidth, appointmentNavigator, ecc. Il backdrop (z-index 24500)
+   e il modal (24510) stanno gia' sopra a TUTTI gli elementi di pagina
+   (max ~23050), quindi abbassarli era inutile e sballava l'ordine z-index
+   interno del calendario (tabella, header tabella, "striscia" navigazione).
+   Cosi' a modal aperto l'impaginazione resta identica a com'e' a modal chiuso,
+   solo coperta dal backdrop. */
 header h1, header nav {
     margin: 0;
     line-height: 70px;
@@ -1364,13 +1362,9 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     border-top: none;
 }
 
-/* Quando un modal è visibile, il navigator va sotto per non coprirlo */
-body.modal-open .appointmentNavigator {
-    z-index: 1 !important;
-}
-body.modal-open #quarterNavigator {
-    z-index: 1 !important;
-}
+/* NB: a modal aperto il navigator NON viene abbassato: il backdrop del modal
+   (z-index 24500) sta gia' sopra al navigator (z-index 23001), quindi non lo
+   copre. Abbassarlo sballava soltanto l'ordine z-index del resto della pagina. */
 
 .navigator-section-label {
     font-size: 0.7rem;

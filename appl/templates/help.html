@@ -992,6 +992,23 @@ const HELP_IMAGES = {
     {% endfor %}
 };
 
+// Tooltip descrittivo per ogni video tutorial (chiave = numero del file N.mp4).
+// Mostrato al passaggio del mouse sulla copertina del video, al posto del
+// generico "Clicca per guardare il video". Se un video non e' qui, usa il
+// fallback generico.
+const HELP_VIDEO_TITLES = {
+  "1":  "Creare un appuntamento dal Navigator",
+  "2":  "Posizionare i blocchi sul calendario",
+  "3":  "Aggiungere un nuovo cliente al volo",
+  "4":  "La finestra Info Cliente",
+  "5":  "Cellulare: formato corretto e ricerca",
+  "8":  "I pulsanti del blocco appuntamento",
+  "9":  "Modificare il turno operatore dall'Agenda",
+  "10": "Spostare un appuntamento trascinandolo",
+  "11": "Tooltip e note nel blocco appuntamento",
+  "12": "Creare e usare i Blocchi OFF"
+};
+
 const CATEGORY_DESCRIPTIONS = {
     "Agenda": "Il tuo calendario multi-funzione: da qui puoi creare, spostare e gestire gli appuntamenti e le anagrafiche dei clienti in modo rapido e intuitivo.",
     "Cassa": "Gestisci da qui pagamenti e scontrini in pochi passaggi, impostando metodo di pagamento, sconti e utilizzando altri strumenti fiscali integrati.",
@@ -1328,7 +1345,8 @@ function renderTopic() {
         // onerror sull'immagine nasconde il blocco se la copertina non esiste.
         if (text && text.toUpperCase() === 'VIDEO') {
             const cover = STATIC_VIDEO_BASE + 'covers/' + imageKey + '.jpg';
-            return `</p><div class="help-video-wrap"><button type="button" class="help-video-cover-btn" data-video="${imageKey}" onclick="helpOpenVideo(this)" data-bs-toggle="tooltip" title="Clicca per guardare il video"><img class="help-video-cover" src="${cover}" alt="Anteprima video tutorial" onerror="this.closest('.help-video-wrap').style.display='none'"><span class="help-video-play" aria-hidden="true">▶</span></button></div><p>`;
+            const vidTitle = HELP_VIDEO_TITLES[imageKey] || 'Clicca per guardare il video';
+            return `</p><div class="help-video-wrap"><button type="button" class="help-video-cover-btn" data-video="${imageKey}" onclick="helpOpenVideo(this)" data-bs-toggle="tooltip" title="${vidTitle}"><img class="help-video-cover" src="${cover}" alt="Anteprima video tutorial" onerror="this.closest('.help-video-wrap').style.display='none'"><span class="help-video-play" aria-hidden="true">▶</span></button></div><p>`;
         }
         const images = HELP_IMAGES[imageKey];
         if (images && images.length > 0) {
