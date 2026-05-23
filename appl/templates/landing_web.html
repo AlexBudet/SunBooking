@@ -76,8 +76,20 @@
       margin-top:16px; padding:10px 16px; width:100%;
       background:#d6336c; color:#fff; border:none; border-radius:6px;
       font-size:1em; font-weight:600; cursor:pointer;
+      display:inline-flex; align-items:center; justify-content:center; gap:8px;
     }
     button.primary:hover { background:#b02a5b; }
+    button.primary:disabled { background:#b87a93; cursor:wait; }
+    /* Spinner inline nel pulsante (mostrato durante il submit del login). */
+    .btn-spinner {
+      display:inline-block;
+      width:14px; height:14px;
+      border:2px solid currentColor;
+      border-right-color:transparent;
+      border-radius:50%;
+      animation: btn-spin 0.7s linear infinite;
+    }
+    @keyframes btn-spin { to { transform: rotate(360deg); } }
     .db-link {
       display: block;
       margin: 10px 0;
@@ -130,6 +142,15 @@
     }
     .install-btn:hover { background:#d6336c; color:#fff; }
     .install-btn.is-visible { display:block; }
+
+    /* Il pulsante "Salva app su cellulare" ha senso solo su schermi mobile.
+       Anche se il JS aggiunge .is-visible (es. su Chrome desktop quando parte
+       beforeinstallprompt), la regola sotto lo tiene comunque nascosto su
+       schermi >= 1101px. */
+    @media (min-width: 1101px) {
+      .install-btn,
+      .install-btn.is-visible { display: none !important; }
+    }
 
     .ios-modal {
       display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
@@ -205,7 +226,7 @@
       <h1 style="text-align:center;">TOSCA</h1>
       <h3 style="text-align:center;">La tua amica in salone!</h3>
 
-      <form method="POST" autocomplete="off">
+      <form method="POST" autocomplete="off" id="loginForm">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="username">Username / Email</label>
         <input id="username" name="username" type="text" required
@@ -214,8 +235,27 @@
         <label for="password">Password</label>
         <input id="password" name="password" type="password" required>
 
-        <button type="submit" class="primary">Accedi</button>
+        <button type="submit" class="primary" id="loginSubmitBtn">
+          <span id="loginBtnLabel">Accedi</span>
+        </button>
       </form>
+      <script>
+        (function() {
+          var form = document.getElementById('loginForm');
+          var btn  = document.getElementById('loginSubmitBtn');
+          var lbl  = document.getElementById('loginBtnLabel');
+          if (!form || !btn || !lbl) return;
+          form.addEventListener('submit', function() {
+            if (!form.checkValidity()) return; // i required bloccano gia` il submit
+            btn.disabled = true;
+            lbl.textContent = 'Verifica credenziali...';
+            // Aggiunge lo spinner PRIMA del testo, dentro al pulsante.
+            var sp = document.createElement('span');
+            sp.className = 'btn-spinner';
+            btn.insertBefore(sp, lbl);
+          });
+        })();
+      </script>
 
       {% if login_error %}
         <div class="error-msg">{{ login_error|e }}</div>

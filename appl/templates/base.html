@@ -172,6 +172,20 @@
   </div>
 </div>
 
+<!-- Indicatore SOFT di riconnessione (mostrato per i primi tentativi prima di
+     escalare al modal pieno; copre i micro-drop di rete 4G/5G/wifi). -->
+<div id="reconnectingIndicator" role="status" aria-live="polite"
+     style="display:none; position:fixed; top:16px; left:50%; transform:translateX(-50%);
+            background:rgba(33,37,41,0.92); color:#fff; padding:10px 18px;
+            border-radius:24px; font-size:14px; font-weight:500;
+            box-shadow:0 4px 16px rgba(0,0,0,0.25); z-index:25000;
+            display:flex; align-items:center; gap:10px; pointer-events:none;
+            visibility:hidden;">
+  <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"
+        style="width:16px; height:16px; border-width:2px;"></span>
+  <span id="reconnectingMessage">Connessione instabile, aspetta un momento...</span>
+</div>
+
 <!-- Modal OFFLINE globale -->
 <div class="modal fade" id="offlineModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="offlineModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -270,16 +284,56 @@ document.addEventListener('DOMContentLoaded', function () {
   // Logica modal offline
   const offlineModalEl = document.getElementById('offlineModal');
   const offlineModal = offlineModalEl ? new bootstrap.Modal(offlineModalEl) : null;
+  const reconnectingEl = document.getElementById('reconnectingIndicator');
   const NEXT_APPTS_URL = "/calendar/api/next_appointments";
+  // Cadenza normale (online): poll lento di salute. Cadenza retry (offline):
+  // poll veloce per riallinearsi appena la rete torna (tipico micro-drop 4G/5G).
   const CHECK_MS = 20000;
+  const SOFT_RETRY_MS = 10000;
+  // Numero di tentativi "soft" (rotellina + messaggio) prima di mostrare il
+  // modal pieno con i pulsanti di salvataggio. Su micro-drop di rete il
+  // modal pieno non compare e l'utente quasi non se ne accorge.
+  const MAX_SOFT_RETRIES = 3;
 
   window._offlineOrDbDown = false;
+  let offlineRetryCount = 0;
+  let softRetryTimer = null;
+
+  function showReconnecting() {
+    if (!reconnectingEl) return;
+    reconnectingEl.style.display = 'flex';
+    reconnectingEl.style.visibility = 'visible';
+  }
+  function hideReconnecting() {
+    if (!reconnectingEl) return;
+    reconnectingEl.style.display = 'none';
+    reconnectingEl.style.visibility = 'hidden';
+  }
 
   function applyOfflineState() {
     if (window._offlineOrDbDown) {
       window._wasOffline = true;
-      if (offlineModal) { offlineModal.show(); }
+      offlineRetryCount += 1;
+
+      if (offlineRetryCount <= MAX_SOFT_RETRIES) {
+        // Stato SOFT: spinner discreto, modal pieno NON mostrato.
+        try { if (offlineModal) { offlineModal.hide(); } } catch (_) {}
+        showReconnecting();
+      } else {
+        // Dopo MAX_SOFT_RETRIES tentativi falliti: escalation al modal pieno
+        // con i pulsanti per salvare l'agenda.
+        hideReconnecting();
+        if (offlineModal) { offlineModal.show(); }
+      }
+
+      // Riprova in fretta finche' siamo offline (10s).
+      if (softRetryTimer) clearTimeout(softRetryTimer);
+      softRetryTimer = setTimeout(probeConnectivity, SOFT_RETRY_MS);
     } else {
+      // Torna online: pulisci tutto.
+      if (softRetryTimer) { clearTimeout(softRetryTimer); softRetryTimer = null; }
+      offlineRetryCount = 0;
+      hideReconnecting();
       try { if (offlineModal) { offlineModal.hide(); } } catch (_) {}
       // Se eravamo offline e ora siamo tornati online, reload per riallineare lo stato
       if (window._wasOffline) {
@@ -303,9 +357,12 @@ document.addEventListener('DOMContentLoaded', function () {
       applyOfflineState();
       return;
     }
-    // Poi prova a raggiungere il server locale per confermare
+    // Poi prova a raggiungere il server locale per confermare. Timeout
+    // ridotto a 8s nella fase di retry: cosi' ogni tentativo "soft" dura
+    // davvero ~10s e i 3 tentativi finiscono in ~30s prima dell'escalation.
+    const timeoutMs = (offlineRetryCount > 0) ? 8000 : 60000;
     try {
-      const resp = await fetchWithTimeout(NEXT_APPTS_URL, 60000);
+      const resp = await fetchWithTimeout(NEXT_APPTS_URL, timeoutMs);
       window._offlineOrDbDown = !(resp && resp.ok);
     } catch (_) {
       window._offlineOrDbDown = true;
@@ -317,7 +374,8 @@ document.addEventListener('DOMContentLoaded', function () {
   window.addEventListener('online', probeConnectivity);
   window.addEventListener('offline', probeConnectivity);
 
-  // Controllo iniziale e periodico
+  // Controllo iniziale e periodico (heartbeat lento quando tutto va bene;
+  // se siamo offline, applyOfflineState() avvia il retry veloce a 10s).
   probeConnectivity();
   setInterval(probeConnectivity, CHECK_MS);
 
