@@ -1209,6 +1209,95 @@ def client_history():
 
     return jsonify(result)
 
+
+@settings_bp.route('/api/service_history/<int:service_id>', methods=['GET'])
+def service_history(service_id):
+    service = db.session.get(Service, service_id)
+    if not service or service.is_deleted:
+        return jsonify({"error": "Servizio non trovato"}), 404
+
+    now = datetime.now()
+
+    appointments = Appointment.query.filter(
+        Appointment.service_id == service_id,
+        Appointment.is_cancelled_by_client == False,
+        Appointment.stato != AppointmentStatus.DEFAULT,
+        Appointment.start_time <= now,
+    ).options(
+        joinedload(Appointment.operator),
+        joinedload(Appointment.client),
+    ).order_by(Appointment.start_time.desc()).all()
+
+    total = len(appointments)
+
+    # Statistiche aggregate su TUTTO lo storico
+    frequenza_mese = 0.0
+    picco_mese_label = None
+    picco_mese_count = 0
+    monthly_by_year = {}  # { anno: [12 valori] }
+    available_years = []
+
+    if total > 0:
+        first_dt = appointments[-1].start_time  # ordinato desc, ultimo = piu' vecchio
+        # Numero di mesi calendariali trascorsi dal primo appuntamento ad oggi (almeno 1)
+        months_span = (now.year - first_dt.year) * 12 + (now.month - first_dt.month) + 1
+        if months_span < 1:
+            months_span = 1
+        frequenza_mese = round(total / months_span, 1)
+
+        # Conteggi (anno, mese)
+        counts_by_month = {}
+        for a in appointments:
+            key = (a.start_time.year, a.start_time.month)
+            counts_by_month[key] = counts_by_month.get(key, 0) + 1
+
+        mesi_it = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno',
+                   'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre']
+        peak_key, peak_count = max(counts_by_month.items(), key=lambda kv: kv[1])
+        picco_mese_label = f"{mesi_it[peak_key[1] - 1]} {peak_key[0]}"
+        picco_mese_count = peak_count
+
+        # Tabella mensile per anno
+        for (anno, mese), c in counts_by_month.items():
+            if anno not in monthly_by_year:
+                monthly_by_year[anno] = [0] * 12
+            monthly_by_year[anno][mese - 1] = c
+        available_years = sorted(monthly_by_year.keys(), reverse=True)
+
+    # Lista dettagliata: limite alle ultime 200 piu' recenti
+    items = []
+    for appt in appointments[:200]:
+        operatore_nome = (appt.operator.user_nome or "").strip() if appt.operator else None
+        if not operatore_nome and appt.operator_id:
+            op = db.session.get(Operator, appt.operator_id)
+            operatore_nome = (op.user_nome or "").strip() if op else None
+
+        cliente = appt.client
+        cliente_nome = ""
+        if cliente:
+            cliente_nome = f"{cliente.cliente_nome or ''} {cliente.cliente_cognome or ''}".strip()
+
+        items.append({
+            "appointment_id": appt.id,
+            "ora_inizio": appt.start_time.strftime('%Y-%m-%d %H:%M'),
+            "cliente": cliente_nome,
+            "operatore": operatore_nome,
+        })
+
+    return jsonify({
+        "servizio_nome": service.servizio_nome,
+        "totale": total,
+        "frequenza_mese": frequenza_mese,
+        "picco_mese": picco_mese_label,
+        "picco_mese_count": picco_mese_count,
+        "monthly_by_year": monthly_by_year,
+        "available_years": available_years,
+        "items": items,
+        "items_limit": 200,
+        "items_truncated": total > 200,
+    })
+
+
 @settings_bp.route('/api/search-clients', methods=['GET'])
 def search_clients_settings():
     q = request.args.get('q', '').strip().lower()

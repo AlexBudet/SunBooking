@@ -114,6 +114,10 @@
             data-service-id="{{ service.id }}"
             data-service-name="{{ service.servizio_nome }}"
             onclick="openServiceInfoModalReadOnly(this)">Descrizione</button>
+    <button type="button"
+            class="btn btn-sm storico-btn"
+            data-service-id="{{ service.id }}"
+            data-service-name="{{ service.servizio_nome }}">Storico</button>
     <button type="button" class="btn btn-sm btn-primary" onclick="showNoRightsPopup()">Modifica</button>
     <button type="button" class="btn btn-sm btn-danger" onclick="showNoRightsPopup()">Elimina</button>
   {% else %}
@@ -123,9 +127,13 @@
             data-service-id="{{ service.id }}"
             data-service-name="{{ service.servizio_nome }}"
             onclick="openServiceInfoModal(this)">Descrizione</button>
+    <button type="button"
+            class="btn btn-sm storico-btn"
+            data-service-id="{{ service.id }}"
+            data-service-name="{{ service.servizio_nome }}">Storico</button>
     <a href="{{ url_for('settings.edit_service', service_id=service.id) }}" class="btn btn-sm btn-primary">Modifica</a>
     <form action="{{ url_for('settings.delete_service', service_id=service.id) }}" method="POST" style="display:inline;">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"> 
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-sm btn-danger">Elimina</button>
     </form>
   {% endif %}
@@ -401,6 +409,110 @@ th {
   background-color: #0b5ed7;
   color: #fff;
   border-color: #0b5ed7;
+}
+
+/* Stile pulsante Storico (uniforme a clients.html) */
+.storico-btn {
+  background-color: #f5ecdc;
+  color: #333333;
+  border: 0.5px solid #c0c2b9 !important;
+  border-radius: 8px;
+  transition: background-color 0.14s, box-shadow 0.14s;
+}
+.storico-btn:hover {
+  background-color: #d4cca9;
+  color: #333333;
+  box-shadow: 0 3px 8px rgba(120,96,48,0.13);
+}
+
+#ServiceHistoryModal .history-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+#ServiceHistoryModal .history-stat {
+  flex: 1 1 180px;
+  background: linear-gradient(180deg, #f5f7fb 0%, #ebeef5 100%);
+  border: 1px solid #dde2ed;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+#ServiceHistoryModal .history-stat .label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6c757d;
+}
+#ServiceHistoryModal .history-stat .value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #34475f;
+}
+#ServiceHistoryModal .history-date-link,
+#ServiceHistoryModal .history-date-link:visited,
+#ServiceHistoryModal .history-date-link:active {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+#ServiceHistoryModal .history-date-link:hover {
+  color: inherit;
+  text-decoration: underline;
+}
+
+/* Forza il modal-body a contenere i figli (lo stile globale .modal-body ha
+   overflow:visible !important, che fa "straboccare" la tabella mensile e
+   quella dettagliata oltre il container del modal). */
+#ServiceHistoryModal .modal-body {
+  overflow: hidden !important;
+}
+
+#ServiceHistoryModal .monthly-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+#ServiceHistoryModal .monthly-row .year-select {
+  width: auto;
+  min-width: 90px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+#ServiceHistoryModal .monthly-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0;
+  flex: 0 0 auto;
+}
+#ServiceHistoryModal .monthly-table th,
+#ServiceHistoryModal .monthly-table td {
+  text-align: center;
+  padding: 4px 8px;
+  border: 1px solid #dde2ed;
+  font-size: 13px;
+  min-width: 42px;
+}
+#ServiceHistoryModal .monthly-table th {
+  background: linear-gradient(180deg, #f5f7fb 0%, #ebeef5 100%);
+  color: #34475f;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 11px;
+}
+#ServiceHistoryModal .monthly-table td {
+  background: #fff;
+  font-variant-numeric: tabular-nums;
+}
+#ServiceHistoryModal .monthly-table td.zero {
+  color: #c0c4cc;
 }
 </style>
 <script>
@@ -810,5 +922,175 @@ function generatePriceListPDF(data, includeDescription) {
     const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
     doc.save(`listino_prezzi_${dateStr}.pdf`);
 }
+</script>
+
+<!-- Modal Storico Servizio -->
+<div class="modal fade" tabindex="-1" id="ServiceHistoryModal">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable" style="max-width:90vw; height:90vh;">
+    <div class="modal-content" style="height:100%; max-height:90vh; display:flex; flex-direction:column;">
+      <div class="modal-header">
+        <h3 class="modal-title">Storico Servizio: <span id="serviceHistoryTitle"></span></h3>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body" id="serviceHistoryBody" style="flex:1 1 auto; overflow:hidden; min-height:0;">
+        <div class="text-center text-muted">Caricamento...</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const mesiIT = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+  function formatDateIT(dateStr) {
+    const [anno, mese, giorno] = dateStr.split('-');
+    return `${giorno} ${mesiIT[parseInt(mese, 10) - 1]} ${anno}`;
+  }
+  function escapeHtml(s) {
+    return (s == null ? '' : String(s))
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  document.querySelectorAll('.storico-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const serviceId = btn.getAttribute('data-service-id');
+      const serviceName = btn.getAttribute('data-service-name') || '';
+      const modalEl = document.getElementById('ServiceHistoryModal');
+      const titleEl = document.getElementById('serviceHistoryTitle');
+      const body = document.getElementById('serviceHistoryBody');
+      titleEl.textContent = serviceName;
+      body.innerHTML = '<div class="text-center text-muted">Caricamento...</div>';
+      const modal = new bootstrap.Modal(modalEl);
+      modal.show();
+
+      fetch(`/settings/api/service_history/${serviceId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (!data || data.totale === 0) {
+            body.innerHTML = '<div class="alert alert-info">Nessun appuntamento trovato per questo servizio.</div>';
+            return;
+          }
+
+          const calendarBase = "{{ url_for('calendar.calendar_home') }}";
+          const statsHtml = `
+            <div class="history-stats">
+              <div class="history-stat">
+                <div class="label">Servizio in agenda</div>
+                <div class="value">${data.totale} volte</div>
+              </div>
+              <div class="history-stat">
+                <div class="label">Frequenza</div>
+                <div class="value">${data.frequenza_mese} volte/mese</div>
+              </div>
+              <div class="history-stat">
+                <div class="label">Mese con maggiore frequenza</div>
+                <div class="value">${data.picco_mese ? escapeHtml(data.picco_mese) + ' &mdash; ' + data.picco_mese_count + ' volte' : '-'}</div>
+              </div>
+            </div>
+          `;
+
+          const years = Array.isArray(data.available_years) ? data.available_years : [];
+          const monthlyByYear = data.monthly_by_year || {};
+          const monthHeaders = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+          let monthlyHtml = '';
+          if (years.length > 0) {
+            const yearOptions = years.map(y => `<option value="${y}">${y}</option>`).join('');
+            const headerCells = monthHeaders.map(m => `<th>${m}</th>`).join('');
+            const tooltipTitle = `seleziona un anno, e per ogni mese vedrai visualizzato il totale dei trattamenti per ${serviceName}`;
+            monthlyHtml = `
+              <div class="monthly-row">
+                <select class="form-select form-select-sm year-select"
+                        id="serviceHistoryYearSelect"
+                        data-bs-toggle="tooltip"
+                        data-bs-placement="top"
+                        title="${escapeHtml(tooltipTitle)}">
+                  ${yearOptions}
+                </select>
+                <table class="monthly-table">
+                  <thead><tr>${headerCells}</tr></thead>
+                  <tbody><tr id="serviceHistoryMonthlyRow"></tr></tbody>
+                </table>
+              </div>
+            `;
+          }
+
+          const truncatedNote = data.items_truncated
+            ? `<div class="text-muted small mb-2">Visualizzate le ${data.items_limit} righe pi&ugrave; recenti su ${data.totale} totali.</div>`
+            : '';
+
+          const rowsHtml = data.items.map(item => {
+            const [dataStr, oraStr] = (item.ora_inizio || '').split(' ');
+            const dataFormattata = dataStr ? formatDateIT(dataStr) : '-';
+            const oraShort = (oraStr || '').slice(0, 5);
+            const href = `${calendarBase}?date=${encodeURIComponent(dataStr || '')}&ora=${encodeURIComponent(oraShort)}`;
+            return `
+              <tr>
+                <td>
+                  <a class="history-date-link" href="${href}">${dataFormattata}</a>
+                </td>
+                <td>${escapeHtml(oraStr || '-')}</td>
+                <td>${escapeHtml(item.cliente || '-')}</td>
+                <td>${escapeHtml(item.operatore || '-')}</td>
+              </tr>
+            `;
+          }).join('');
+
+          body.innerHTML = `
+            ${statsHtml}
+            ${monthlyHtml}
+            ${truncatedNote}
+            <div style="max-height:100%; overflow-y:auto; overflow-x:auto; width:100%;">
+              <table class="table table-striped align-middle">
+                <thead>
+                  <tr>
+                    <th>DATA</th>
+                    <th>ORA</th>
+                    <th>CLIENTE</th>
+                    <th>OPERATORE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rowsHtml}
+                </tbody>
+              </table>
+            </div>
+          `;
+
+          if (years.length > 0) {
+            const yearSelect = document.getElementById('serviceHistoryYearSelect');
+            const monthlyRowEl = document.getElementById('serviceHistoryMonthlyRow');
+            function renderMonthly(year) {
+              const arr = monthlyByYear[year] || monthlyByYear[String(year)] || [0,0,0,0,0,0,0,0,0,0,0,0];
+              monthlyRowEl.innerHTML = arr.map(v => {
+                const n = Number(v) || 0;
+                return `<td class="${n === 0 ? 'zero' : ''}">${n}</td>`;
+              }).join('');
+            }
+            yearSelect.addEventListener('change', () => renderMonthly(yearSelect.value));
+            renderMonthly(yearSelect.value);
+
+            // Init tooltip Bootstrap sul select (container = modal per
+            // evitare problemi di z-index e clipping nel modal-body).
+            try {
+              const existing = bootstrap.Tooltip.getInstance(yearSelect);
+              if (existing) existing.dispose();
+              new bootstrap.Tooltip(yearSelect, { container: modalEl });
+            } catch (_) { /* no-op */ }
+          }
+        })
+        .catch(() => {
+          body.innerHTML = '<div class="alert alert-danger">Errore nel caricamento dello storico.</div>';
+        });
+    });
+  });
+});
 </script>
 {% endblock %}
