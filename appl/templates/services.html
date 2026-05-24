@@ -430,6 +430,10 @@ th {
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 14px;
+  flex: 0 0 auto;
+}
+#ServiceHistoryModal #serviceHistoryNote {
+  flex: 0 0 auto;
 }
 #ServiceHistoryModal .history-stat {
   flex: 1 1 180px;
@@ -463,9 +467,19 @@ th {
 
 /* Forza il modal-body a contenere i figli (lo stile globale .modal-body ha
    overflow:visible !important, che fa "straboccare" la tabella mensile e
-   quella dettagliata oltre il container del modal). */
+   quella dettagliata oltre il container del modal). Layout flex-column per
+   far espandere correttamente il wrapper scrollabile della tabella dettagli. */
 #ServiceHistoryModal .modal-body {
   overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+#ServiceHistoryModal .history-details-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  width: 100%;
 }
 
 #ServiceHistoryModal .monthly-row {
@@ -478,6 +492,7 @@ th {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+  flex: 0 0 auto;
 }
 #ServiceHistoryModal .monthly-row .year-select {
   width: auto;
@@ -513,6 +528,19 @@ th {
 }
 #ServiceHistoryModal .monthly-table td.zero {
   color: #c0c4cc;
+}
+#ServiceHistoryModal .monthly-table td.clickable {
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s;
+}
+#ServiceHistoryModal .monthly-table td.clickable:hover {
+  background: #eaf3ff;
+}
+#ServiceHistoryModal .monthly-table td.selected {
+  background: #cfe2ff !important;
+  color: #0a58ca;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px #0a58ca;
 }
 </style>
 <script>
@@ -1032,7 +1060,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const oraShort = (oraStr || '').slice(0, 5);
             const href = `${calendarBase}?date=${encodeURIComponent(dataStr || '')}&ora=${encodeURIComponent(oraShort)}`;
             return `
-              <tr>
+              <tr data-date="${escapeHtml(dataStr || '')}">
                 <td>
                   <a class="history-date-link" href="${href}">${dataFormattata}</a>
                 </td>
@@ -1046,8 +1074,8 @@ document.addEventListener('DOMContentLoaded', function() {
           body.innerHTML = `
             ${statsHtml}
             ${monthlyHtml}
-            ${truncatedNote}
-            <div style="max-height:100%; overflow-y:auto; overflow-x:auto; width:100%;">
+            <div id="serviceHistoryNote" class="text-muted small mb-2">${truncatedNote ? truncatedNote.replace(/^<div[^>]*>|<\/div>$/g, '') : ''}</div>
+            <div class="history-details-wrap">
               <table class="table table-striped align-middle">
                 <thead>
                   <tr>
@@ -1057,7 +1085,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <th>OPERATORE</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody id="serviceHistoryTbody">
                   ${rowsHtml}
                 </tbody>
               </table>
@@ -1067,14 +1095,145 @@ document.addEventListener('DOMContentLoaded', function() {
           if (years.length > 0) {
             const yearSelect = document.getElementById('serviceHistoryYearSelect');
             const monthlyRowEl = document.getElementById('serviceHistoryMonthlyRow');
-            function renderMonthly(year) {
-              const arr = monthlyByYear[year] || monthlyByYear[String(year)] || [0,0,0,0,0,0,0,0,0,0,0,0];
-              monthlyRowEl.innerHTML = arr.map(v => {
-                const n = Number(v) || 0;
-                return `<td class="${n === 0 ? 'zero' : ''}">${n}</td>`;
-              }).join('');
+            const tbodyEl = document.getElementById('serviceHistoryTbody');
+            const noteEl = document.getElementById('serviceHistoryNote');
+            const monthNamesFull = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+            let currentMonthFilter = null; // formato 'YYYY-MM' oppure null
+
+            // Salva HTML originale (ultimi 200) + nota per ripristinarli al reset filtro
+            const originalRowsHtml = rowsHtml;
+            const originalNoteHtml = truncatedNote ? truncatedNote.replace(/^<div[^>]*>|<\/div>$/g, '') : '';
+
+            function buildRowHtmlFromItem(item) {
+              const [dataStr, oraStr] = (item.ora_inizio || '').split(' ');
+              const dataFormattata = dataStr ? formatDateIT(dataStr) : '-';
+              const oraShort = (oraStr || '').slice(0, 5);
+              const href = `${calendarBase}?date=${encodeURIComponent(dataStr || '')}&ora=${encodeURIComponent(oraShort)}`;
+              return `
+                <tr data-date="${escapeHtml(dataStr || '')}">
+                  <td><a class="history-date-link" href="${href}">${dataFormattata}</a></td>
+                  <td>${escapeHtml(oraStr || '-')}</td>
+                  <td>${escapeHtml(item.cliente || '-')}</td>
+                  <td>${escapeHtml(item.operatore || '-')}</td>
+                </tr>
+              `;
             }
-            yearSelect.addEventListener('change', () => renderMonthly(yearSelect.value));
+
+            function resetToOriginalRows() {
+              if (tbodyEl) tbodyEl.innerHTML = originalRowsHtml;
+              if (noteEl) noteEl.innerHTML = originalNoteHtml;
+            }
+
+            async function loadMonthRows(year, month) {
+              if (!tbodyEl) return;
+              const mLabel = monthNamesFull[parseInt(month, 10) - 1];
+              tbodyEl.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Caricamento...</td></tr>';
+              if (noteEl) noteEl.innerHTML = `Caricamento dati di <strong>${mLabel} ${year}</strong>...`;
+              try {
+                const resp = await fetch(`/settings/api/service_history/${serviceId}/month/${year}/${month}`);
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const payload = await resp.json();
+                const items = Array.isArray(payload.items) ? payload.items : [];
+                if (items.length === 0) {
+                  tbodyEl.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Nessun appuntamento trovato per il mese selezionato.</td></tr>';
+                } else {
+                  tbodyEl.innerHTML = items.map(buildRowHtmlFromItem).join('');
+                }
+                if (noteEl) {
+                  const voci = `${items.length} ${items.length === 1 ? 'voce' : 'voci'}`;
+                  noteEl.innerHTML = `Visualizzate ${voci} di <strong>${mLabel} ${year}</strong> su ${data.totale} totali. <a href="#" id="serviceHistoryClearFilter">Rimuovi filtro</a>`;
+                  const clearLink = document.getElementById('serviceHistoryClearFilter');
+                  if (clearLink) {
+                    clearLink.addEventListener('click', (e) => {
+                      e.preventDefault();
+                      monthlyRowEl.querySelectorAll('td.selected').forEach(t => t.classList.remove('selected'));
+                      currentMonthFilter = null;
+                      resetToOriginalRows();
+                    });
+                  }
+                }
+              } catch (err) {
+                console.error('Errore caricamento mese:', err);
+                tbodyEl.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Errore nel caricamento dei dati del mese.</td></tr>';
+                if (noteEl) noteEl.innerHTML = '';
+              }
+            }
+
+            function disposeCellTooltips() {
+              monthlyRowEl.querySelectorAll('td').forEach(td => {
+                try {
+                  const tt = bootstrap.Tooltip.getInstance(td);
+                  if (tt) tt.dispose();
+                } catch (_) { /* no-op */ }
+              });
+            }
+
+            function renderMonthly(year) {
+              disposeCellTooltips();
+              const arr = monthlyByYear[year] || monthlyByYear[String(year)] || [0,0,0,0,0,0,0,0,0,0,0,0];
+              monthlyRowEl.innerHTML = arr.map((v, idx) => {
+                const n = Number(v) || 0;
+                const monthNum = String(idx + 1).padStart(2, '0');
+                const classes = [];
+                if (n === 0) classes.push('zero');
+                if (n > 0) classes.push('clickable');
+                const tooltipAttrs = n > 0
+                  ? ` data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca per filtrare i servizi di ${monthNamesFull[idx]} ${year}"`
+                  : '';
+                return `<td class="${classes.join(' ')}" data-month="${monthNum}" data-count="${n}"${tooltipAttrs}>${n}</td>`;
+              }).join('');
+
+              // Reset filtro quando si cambia anno: ripristina elenco originale
+              currentMonthFilter = null;
+              resetToOriginalRows();
+
+              // Click handler + tooltip Bootstrap sulle celle con dati
+              monthlyRowEl.querySelectorAll('td.clickable').forEach(td => {
+                try {
+                  new bootstrap.Tooltip(td, { container: modalEl });
+                } catch (_) { /* no-op */ }
+                td.addEventListener('click', () => {
+                  const month = td.getAttribute('data-month');
+                  const key = `${year}-${month}`;
+                  // Nascondi il tooltip della cella dopo il click
+                  try {
+                    const tt = bootstrap.Tooltip.getInstance(td);
+                    if (tt) tt.hide();
+                  } catch (_) { /* no-op */ }
+                  if (currentMonthFilter === key) {
+                    // Toggle off: ripristina elenco originale
+                    currentMonthFilter = null;
+                    td.classList.remove('selected');
+                    resetToOriginalRows();
+                  } else {
+                    // Nuovo filtro: ricarica dal server per il mese selezionato
+                    monthlyRowEl.querySelectorAll('td.selected').forEach(t => t.classList.remove('selected'));
+                    currentMonthFilter = key;
+                    td.classList.add('selected');
+                    loadMonthRows(year, month);
+                  }
+                });
+              });
+            }
+
+            yearSelect.addEventListener('change', () => {
+              // Nasconde il tooltip dell'anno quando si cambia selezione
+              try {
+                const tt = bootstrap.Tooltip.getInstance(yearSelect);
+                if (tt) tt.hide();
+              } catch (_) { /* no-op */ }
+              renderMonthly(yearSelect.value);
+            });
+            // Nasconde anche su mousedown/blur (il change a volte non basta sui select)
+            ['mousedown', 'blur'].forEach(ev => {
+              yearSelect.addEventListener(ev, () => {
+                try {
+                  const tt = bootstrap.Tooltip.getInstance(yearSelect);
+                  if (tt) tt.hide();
+                } catch (_) { /* no-op */ }
+              });
+            });
+
             renderMonthly(yearSelect.value);
 
             // Init tooltip Bootstrap sul select (container = modal per
@@ -1082,8 +1241,18 @@ document.addEventListener('DOMContentLoaded', function() {
             try {
               const existing = bootstrap.Tooltip.getInstance(yearSelect);
               if (existing) existing.dispose();
-              new bootstrap.Tooltip(yearSelect, { container: modalEl });
+              new bootstrap.Tooltip(yearSelect, { container: modalEl, trigger: 'hover focus' });
             } catch (_) { /* no-op */ }
+
+            // Pulizia tooltip alla chiusura del modal
+            modalEl.addEventListener('hidden.bs.modal', function onHide() {
+              try {
+                const tt = bootstrap.Tooltip.getInstance(yearSelect);
+                if (tt) tt.dispose();
+              } catch (_) { /* no-op */ }
+              disposeCellTooltips();
+              modalEl.removeEventListener('hidden.bs.modal', onHide);
+            });
           }
         })
         .catch(() => {
