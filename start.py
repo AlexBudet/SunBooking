@@ -78,10 +78,28 @@ class SplashWindow:
             bg='white', fg='#666',
         ).pack(pady=(2, 12))
 
+        # Stile custom: barra fucsia (brand Tosca). Il tema 'vista' di
+        # default su Windows ignora le configure su background, quindi
+        # passiamo a 'clam' che permette la personalizzazione colori.
+        style = ttk.Style(root)
+        try:
+            style.theme_use('clam')
+        except Exception:
+            pass
+        style.configure(
+            'Tosca.Horizontal.TProgressbar',
+            troughcolor='#f5e6ed',
+            bordercolor='#f5e6ed',
+            background='#d6336c',
+            lightcolor='#d6336c',
+            darkcolor='#d6336c',
+        )
+
         # Barra indeterminata: start() registra un after-callback che la
         # anima 'da sola' purche' il mainloop sia attivo.
         self._progress = ttk.Progressbar(
             root, mode='indeterminate', length=240,
+            style='Tosca.Horizontal.TProgressbar',
         )
         self._progress.pack()
         self._progress.start(12)  # ms per frame

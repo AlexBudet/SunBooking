@@ -1298,6 +1298,60 @@ def service_history(service_id):
     })
 
 
+@settings_bp.route('/api/service_history/<int:service_id>/month/<int:year>/<int:month>', methods=['GET'])
+def service_history_month(service_id, year, month):
+    """Restituisce tutti gli appuntamenti per il servizio in un singolo mese.
+    Usato per il filtro mensile interattivo nello storico servizio."""
+    service = db.session.get(Service, service_id)
+    if not service or service.is_deleted:
+        return jsonify({"error": "Servizio non trovato"}), 404
+    if month < 1 or month > 12:
+        return jsonify({"error": "Mese non valido"}), 400
+
+    now = datetime.now()
+    start_dt = datetime(year, month, 1)
+    if month == 12:
+        end_dt = datetime(year + 1, 1, 1)
+    else:
+        end_dt = datetime(year, month + 1, 1)
+
+    appointments = Appointment.query.filter(
+        Appointment.service_id == service_id,
+        Appointment.is_cancelled_by_client == False,
+        Appointment.stato != AppointmentStatus.DEFAULT,
+        Appointment.start_time >= start_dt,
+        Appointment.start_time < end_dt,
+        Appointment.start_time <= now,
+    ).options(
+        joinedload(Appointment.operator),
+        joinedload(Appointment.client),
+    ).order_by(Appointment.start_time.desc()).all()
+
+    items = []
+    for appt in appointments:
+        operatore_nome = (appt.operator.user_nome or "").strip() if appt.operator else None
+        if not operatore_nome and appt.operator_id:
+            op = db.session.get(Operator, appt.operator_id)
+            operatore_nome = (op.user_nome or "").strip() if op else None
+
+        cliente = appt.client
+        cliente_nome = ""
+        if cliente:
+            cliente_nome = f"{cliente.cliente_nome or ''} {cliente.cliente_cognome or ''}".strip()
+
+        items.append({
+            "appointment_id": appt.id,
+            "ora_inizio": appt.start_time.strftime('%Y-%m-%d %H:%M'),
+            "cliente": cliente_nome,
+            "operatore": operatore_nome,
+        })
+
+    return jsonify({
+        "items": items,
+        "count": len(items),
+    })
+
+
 @settings_bp.route('/api/search-clients', methods=['GET'])
 def search_clients_settings():
     q = request.args.get('q', '').strip().lower()
