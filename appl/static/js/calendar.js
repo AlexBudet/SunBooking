@@ -16708,6 +16708,8 @@ if (a.date) {
     AI.pendingDisambiguation = null;
     _removeInfoResultsBubble();
     _clearMessages();
+    // Ripristina titolo "TOSCA AI" tornando al modo AI
+    _setChatTitle('TOSCA AI');
     appendMessage('assistant',
       '👋 Ciao! Sono TOSCA AI, la tua assistente di prenotazione. Clicca su ciò di cui hai bisogno per iniziare:'
     );
@@ -16716,9 +16718,23 @@ if (a.date) {
     elInput.value = '';
   }
 
+  // ── INFO VIEWS: 5 categorie navigabili. Il view corrente NON appare nei
+  // bottoni; gli altri 4 sì. Cliccare un bottone "scambia" la view.
+  var CD_INFO_VIEWS = [
+    { id: 'clienti',     icon: '👤', label: 'Clienti'     },
+    { id: 'servizi',     icon: '💅', label: 'Servizi'     },
+    { id: 'operatore',   icon: '👩', label: 'Operatore'   },
+    { id: 'negozio',     icon: '🏪', label: 'Negozio'     },
+    { id: 'booking_web', icon: '🌐', label: 'Booking Web' },
+  ];
+
+  function _setChatTitle(text) {
+    var t = document.getElementById('aiChatTitle');
+    if (t) t.textContent = text;
+  }
+
   function openInfoChat() {
     AI.mode = 'info';
-    AI.infoSubMode = null;
     AI.chatHistory = [];
     AI.selectedIntent = null;
     AI.intentSelected = true;
@@ -16730,29 +16746,78 @@ if (a.date) {
     AI.isOpen = true;
     elModal.style.display = 'flex';
 
+    // Titolo della chat in modo info
+    _setChatTitle('INFO BOX');
+
+    // View di partenza: 'clienti'
+    _switchInfoView('clienti');
+  }
+
+  // Switcher unico per le 5 view. Cambia titolo, contenuto e ricostruisce
+  // la barra dei bottoni escludendo la view corrente.
+  function _switchInfoView(viewId) {
+    var view = CD_INFO_VIEWS.find(function(v) { return v.id === viewId; });
+    if (!view) view = CD_INFO_VIEWS[0]; // safety: 'clienti'
+
+    AI.chatHistory = [];
+    _removeInfoResultsBubble();
     _clearMessages();
+    AI._infoCurrentView = view.id;
+
+    // Titolo sempre in alto: "📋 Info <Label>"
     appendMessage('assistant',
-      'Digita nome cliente o numero di cellulare per info cliente.'
+      '<strong style="color:#5a87aa; font-size:0.95rem;">📋 Info ' + esc(view.label) + '</strong>'
     );
-    buildInfoActionButtons();
+
+    // Barra bottoni: tutte le view tranne quella corrente
+    _buildInfoActionButtonsExcept(view.id);
+
+    // Contenuto specifico della view
+    if (view.id === 'clienti') {
+      AI.infoSubMode = null;
+      appendMessage('assistant',
+        '<span style="font-size:0.84rem;">Digita nome cliente o numero di cellulare per info cliente.</span>'
+      );
+      elInput.setAttribute('placeholder', 'Nome cliente o cellulare…');
+    } else if (view.id === 'servizi') {
+      AI.infoSubMode = 'service-search';
+      appendMessage('assistant',
+        '<span style="font-size:0.84rem;">Digita il nome di un servizio per vedere statistiche e frequenza.</span>'
+      );
+      elInput.setAttribute('placeholder', 'Nome servizio…');
+    } else if (view.id === 'operatore') {
+      AI.infoSubMode = 'operator-search';
+      appendMessage('assistant',
+        '<span style="font-size:0.84rem;">Digita il nome di un operatore per vedere statistiche e frequenza.</span>'
+      );
+      elInput.setAttribute('placeholder', 'Nome operatore…');
+    } else if (view.id === 'negozio' || view.id === 'booking_web') {
+      AI.infoSubMode = null;
+      elInput.setAttribute('placeholder', '');
+      elTyping.style.display = 'block';
+      _fetchInfoStatic()
+        .then(function(data) {
+          elTyping.style.display = 'none';
+          if (view.id === 'negozio') renderInfoBusiness(data.business || {});
+          else                       renderInfoBookingWeb(data.business || {});
+        })
+        .catch(function() {
+          elTyping.style.display = 'none';
+          appendMessage('error', 'Errore nel caricamento delle informazioni.');
+        });
+    }
 
     setInputEnabled(true);
-    elInput.setAttribute('placeholder', 'Nome cliente o cellulare…');
     elInput.value = '';
     setTimeout(function() { try { elInput.focus(); } catch(_) {} }, 80);
   }
 
-  function buildInfoActionButtons() {
-    var actions = [
-      { id: 'servizi',     icon: '💅', label: 'Servizi' },
-      { id: 'operatore',   icon: '👩',  label: 'Operatore' },
-      { id: 'negozio',     icon: '🏪', label: 'Negozio' },
-      { id: 'booking_web', icon: '🌐', label: 'Booking Web' },
-    ];
+  function _buildInfoActionButtonsExcept(currentViewId) {
+    var actions = CD_INFO_VIEWS.filter(function(v) { return v.id !== currentViewId; });
 
     var wrap = document.createElement('div');
     wrap.id = 'aiInfoActionButtons';
-    wrap.style.cssText = 'margin-top:10px; display:flex; flex-wrap:wrap; gap:6px;';
+    wrap.style.cssText = 'margin-top:8px; display:flex; flex-wrap:wrap; gap:6px;';
 
     actions.forEach(function(action) {
       var btn = document.createElement('button');
@@ -16784,12 +16849,12 @@ if (a.date) {
         btn.style.background = 'linear-gradient(135deg,#eaf2f9 0%,#d9e6f1 100%)';
         btn.style.borderColor = 'rgba(122,166,200,0.40)';
       });
-      // stopPropagation: questo handler rimuove gli stessi bottoni dal DOM,
-      // quindi al bubble il listener globale "click fuori chat" vedrebbe
-      // e.target come detached → chiuderebbe la chat. Vedi nota Step 2.
+      // stopPropagation: il click rimuove questi stessi bottoni dal DOM,
+      // quindi al bubble il listener "click fuori chat" vedrebbe e.target
+      // detached → chiuderebbe la chat.
       btn.addEventListener('click', function(e) {
         e.stopPropagation();
-        handleInfoActionClick(action);
+        _switchInfoView(action.id);
       });
       wrap.appendChild(btn);
     });
@@ -16803,80 +16868,6 @@ if (a.date) {
     return fetch(getBaseUrl() + '/api/info/static', { credentials: 'same-origin' })
       .then(function(r) { return r.ok ? r.json() : {}; })
       .then(function(data) { AI._infoCachedStatic = data; return data; });
-  }
-
-  function handleInfoActionClick(action) {
-    AI.chatHistory = [];
-    _removeInfoResultsBubble();
-    _clearMessages();
-
-    // SERVIZI: entra in modo ricerca servizi (autocomplete + card stats)
-    if (action.id === 'servizi') {
-      AI.infoSubMode = 'service-search';
-      appendMessage('assistant',
-        '<strong style="color:#5a87aa;">📋 Info servizi</strong><br>' +
-        '<span style="font-size:0.84rem;">Digita il nome di un servizio per vedere statistiche e frequenza.</span>'
-      );
-      appendInfoBackButton();
-      elInput.value = '';
-      elInput.setAttribute('placeholder', 'Nome servizio…');
-      setTimeout(function() { try { elInput.focus(); } catch(_) {} }, 80);
-      return;
-    }
-
-    // OPERATORE: entra in modo ricerca operatore (autocomplete + card stats)
-    if (action.id === 'operatore') {
-      AI.infoSubMode = 'operator-search';
-      appendMessage('assistant',
-        '<strong style="color:#5a87aa;">📋 Info operatore</strong><br>' +
-        '<span style="font-size:0.84rem;">Digita il nome di un operatore per vedere statistiche e frequenza.</span>'
-      );
-      appendInfoBackButton();
-      elInput.value = '';
-      elInput.setAttribute('placeholder', 'Nome operatore…');
-      setTimeout(function() { try { elInput.focus(); } catch(_) {} }, 80);
-      return;
-    }
-
-    // Per negozio e booking_web: dump statico (un solo record, niente ricerca)
-    AI.infoSubMode = null;
-    appendMessage('assistant',
-      '<strong style="color:#5a87aa;">📋 Info ' + esc(action.label.toLowerCase()) + '</strong>'
-    );
-    elTyping.style.display = 'block';
-
-    _fetchInfoStatic()
-      .then(function(data) {
-        elTyping.style.display = 'none';
-        if (action.id === 'negozio')           renderInfoBusiness(data.business || {});
-        else if (action.id === 'booking_web')  renderInfoBookingWeb(data.business || {});
-        appendInfoBackButton();
-      })
-      .catch(function() {
-        elTyping.style.display = 'none';
-        appendMessage('error', 'Errore nel caricamento delle informazioni.');
-        appendInfoBackButton();
-      });
-  }
-
-  function appendInfoBackButton() {
-    var wrap = document.createElement('div');
-    wrap.style.cssText = 'margin-top:8px;';
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.style.cssText = [
-      'display:inline-flex','align-items:center','gap:6px',
-      'padding:6px 11px','border:1px solid #bbb','border-radius:14px',
-      'background:#f7f5ff','color:#666','font-size:0.78rem','cursor:pointer'
-    ].join(';');
-    btn.innerHTML = '↩ Indietro';
-    btn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      openInfoChat();
-    });
-    wrap.appendChild(btn);
-    elMessages.appendChild(wrap);
-    scrollToBottom();
   }
 
   function renderInfoServices(byCategory) {
@@ -16929,25 +16920,116 @@ if (a.date) {
       appendMessage('assistant', '<em>Info azienda non configurate.</em>');
       return;
     }
+    // Ogni riga: [label, rawValue] — rawValue è quello che si copia.
     var rows = [];
-    if (biz.nome)         rows.push(['Nome',         esc(biz.nome)]);
-    if (biz.indirizzo)    rows.push(['Indirizzo',    esc(biz.indirizzo)]);
-    if (biz.phone)        rows.push(['Telefono',     esc(biz.phone)]);
-    if (biz.mobile)       rows.push(['Cellulare',    esc(biz.mobile)]);
-    if (biz.email)        rows.push(['Email',        esc(biz.email)]);
+    if (biz.nome)         rows.push(['Nome',         biz.nome]);
+    if (biz.indirizzo)    rows.push(['Indirizzo',    biz.indirizzo]);
+    if (biz.phone)        rows.push(['Telefono',     biz.phone]);
+    if (biz.mobile)       rows.push(['Cellulare',    biz.mobile]);
+    if (biz.email)        rows.push(['Email',        biz.email]);
     if (biz.opening && biz.closing)
-                          rows.push(['Orari',        esc(biz.opening) + ' – ' + esc(biz.closing)]);
+                          rows.push(['Orari',        biz.opening + ' – ' + biz.closing]);
     if (biz.closing_days && biz.closing_days.length)
-                          rows.push(['Chiusura',     biz.closing_days.map(esc).join(', ')]);
-    if (biz.website)      rows.push(['Sito',         esc(biz.website)]);
-    if (biz.vat_code)     rows.push(['P.IVA',        esc(biz.vat_code)]);
+                          rows.push(['Chiusura',     biz.closing_days.join(', ')]);
+    if (biz.website)      rows.push(['Sito',         biz.website]);
+    if (biz.vat_code)     rows.push(['P.IVA',        biz.vat_code]);
 
-    var html = '<div style="font-size:0.86rem;">';
+    // Render con bottone "copia" per ogni riga.
+    var html = '<div class="cd-info-rows" style="font-size:0.88rem;">';
     rows.forEach(function(r) {
-      html += '<div><strong>' + r[0] + ':</strong> ' + r[1] + '</div>';
+      var label    = r[0];
+      var rawValue = String(r[1] || '');
+      html +=
+        '<div class="cd-info-row" style="display:flex; align-items:center; gap:8px;' +
+        ' padding:6px 8px; border-bottom:1px solid #eee0e8;">' +
+          '<div style="flex:1; min-width:0;">' +
+            '<strong style="color:#5a87aa;">' + esc(label) + ':</strong> ' +
+            '<span style="word-break:break-word;">' + esc(rawValue) + '</span>' +
+          '</div>' +
+          '<button type="button" class="cd-info-row-copy" ' +
+                  'data-copy-value="' + esc(rawValue) + '" ' +
+                  'title="Copia" aria-label="Copia ' + esc(label) + '" ' +
+                  'style="flex-shrink:0; background:none; border:1px solid #d0d7e0; ' +
+                  'border-radius:6px; padding:3px 7px; cursor:pointer; color:#7aa6c8; ' +
+                  'font-size:0.95rem; line-height:1; transition:background .12s, border-color .12s;">' +
+            '<i class="bi bi-clipboard"></i>' +
+          '</button>' +
+        '</div>';
     });
     html += '</div>';
     appendMessage('assistant', html);
+
+    // Wire-up dei pulsanti "copia" appena renderizzati.
+    elMessages.querySelectorAll('.cd-info-row-copy:not([data-bound])').forEach(function(btn) {
+      btn.setAttribute('data-bound', '1');
+      btn.addEventListener('mouseenter', function() {
+        btn.style.background = '#eaf2f9';
+        btn.style.borderColor = '#7aa6c8';
+      });
+      btn.addEventListener('mouseleave', function() {
+        if (btn.getAttribute('data-copied') === '1') return;
+        btn.style.background = 'none';
+        btn.style.borderColor = '#d0d7e0';
+      });
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var val = btn.getAttribute('data-copy-value') || '';
+        _cdCopyToClipboard(val, btn);
+      });
+    });
+  }
+
+  // Copia testo nella clipboard con feedback visivo sul bottone.
+  // L'icona originale è sempre "bi bi-clipboard" (hardcoded) per evitare
+  // il bug: se l'utente riclicca durante il feedback, NON catturare lo stato
+  // corrente "bi-check-lg" come "originale" — altrimenti il tick si incolla.
+  // In più tracciamo il timer per-bottone, così click ripetuti rapidi
+  // riavviano il timer invece di sovrapporsi.
+  function _cdCopyToClipboard(text, button) {
+    function feedbackOk() {
+      if (!button) return;
+      var icon = button.querySelector('i');
+
+      // Annulla timer pendente sullo stesso bottone (click ripetuto)
+      var pending = button.__cdResetTimer;
+      if (pending) { clearTimeout(pending); button.__cdResetTimer = null; }
+
+      button.setAttribute('data-copied', '1');
+      if (icon) icon.className = 'bi bi-check-lg';
+      button.style.background   = '#d4f7d4';
+      button.style.borderColor  = '#2a7a2a';
+      button.style.color        = '#2a7a2a';
+
+      button.__cdResetTimer = setTimeout(function() {
+        button.__cdResetTimer = null;
+        button.removeAttribute('data-copied');
+        // Ripristino HARDCODED all'icona iniziale clipboard
+        if (icon) icon.className = 'bi bi-clipboard';
+        button.style.background  = 'none';
+        button.style.borderColor = '#d0d7e0';
+        button.style.color       = '#7aa6c8';
+      }, 1300);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(feedbackOk).catch(function() {
+        _cdCopyFallback(text, feedbackOk);
+      });
+    } else {
+      _cdCopyFallback(text, feedbackOk);
+    }
+  }
+  function _cdCopyFallback(text, onSuccess) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      onSuccess();
+    } catch (_) {}
+    document.body.removeChild(ta);
   }
 
   function renderInfoBookingWeb(biz) {
