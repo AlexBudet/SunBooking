@@ -2945,7 +2945,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <!-- Badge 2: Info clienti / servizi / operatori (statico, no AI) -->
   <div id="aiInfoBadgeBtn"
        data-bs-toggle="tooltip"
-       title="ottieni informazioni dettagliate su un cliente digitando il suo nome, oppure su servizi, operatori ecc"
+       title="INFO BOX - Ottieni informazioni dettagliate su un cliente digitando il suo nome, oppure su servizi, operatori ecc"
        aria-label="Apri pannello informazioni"
        style="display:flex; width:44px; height:44px; border-radius:50%;
               background:linear-gradient(135deg,#7aa6c8,#5a87aa);
@@ -2959,7 +2959,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <!-- Badge 3: Cerca disponibilità (apre modal dedicato) -->
   <div id="aiSearchAvailBadgeBtn"
        data-bs-toggle="tooltip"
-       title="cerca disponibilità in calendario per cliente, operatore, servizio, data e orario"
+       title="&quot;CERCA UN BUCO&quot; - Cerca disponibilità in calendario per cliente, operatore, servizio, data e orario"
        aria-label="Apri ricerca disponibilità"
        style="display:flex; width:44px; height:44px; border-radius:50%;
               background:linear-gradient(135deg,#8fb88a,#6f9a6b);
@@ -3993,100 +3993,108 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 .cd-orario-table td.cd-col-disabled .cd-orario-tick { color: transparent !important; }
 
-/* Risultati ricerca disponibilità: stili senza prefisso modal-specifico
-   (vivono nel modal "cercaDispResultsModal"). Classi .cd-* esclusive a
-   questa feature, quindi nessun rischio di collisione. */
-.cd-day-block { margin-bottom: 14px; }
-.cd-day-header {
-  font-weight: 700;
-  font-size: 0.95rem;
-  color: #5a3e51;
-  background: #fbeef3;
-  border-left: 3px solid #87647c;
-  padding: 6px 10px;
-  margin-bottom: 6px;
-  border-radius: 4px;
+/* Risultati ricerca disponibilità: vivono nel modal "cercaDispResultsModal".
+   Uso prefisso esplicito + !important sui visual per BATTERE le regole
+   globali di .modal-body (font-size, color, padding, label, ecc.). */
+#cercaDispResultsModal .cd-day-block { margin-bottom: 14px !important; }
+#cercaDispResultsModal .cd-day-header {
+  font-weight: 700 !important;
+  font-size: 0.95rem !important;
+  color: #5a3e51 !important;
+  background: #fbeef3 !important;
+  border-left: 3px solid #87647c !important;
+  padding: 6px 10px !important;
+  margin-bottom: 6px !important;
+  border-radius: 4px !important;
+  display: block !important;
 }
-.cd-day-header .cd-day-count {
-  font-weight: 500;
-  color: #87647c;
-  font-size: 0.85rem;
+#cercaDispResultsModal .cd-day-header .cd-day-count {
+  font-weight: 500 !important;
+  color: #87647c !important;
+  font-size: 0.85rem !important;
 }
-.cd-results-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
+#cercaDispResultsModal .cd-results-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
+  gap: 10px !important;
 }
-.cd-result-card {
-  background: linear-gradient(135deg,#fff5fa,#fce4ec);
-  border: 1.5px solid #b8809d;
-  border-radius: 10px;
-  padding: 8px 11px;
-  cursor: pointer;
+#cercaDispResultsModal .cd-result-card {
+  background: #fff !important;
+  border: 2px solid #87647c !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  cursor: pointer !important;
   transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
-  font-size: 0.88rem;
-  line-height: 1.35;
+  font-size: 0.88rem !important;
+  line-height: 1.4 !important;
+  display: block !important;
+  color: #5a3e51 !important;
 }
-.cd-result-card:hover {
-  background: linear-gradient(135deg,#fce4ec,#f5c7d8);
+#cercaDispResultsModal .cd-result-card:hover {
+  background: #fce4ec !important;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(184,128,157,0.25);
+  box-shadow: 0 4px 12px rgba(135,100,124,0.30);
 }
-.cd-slot-header {
-  display: flex;
+#cercaDispResultsModal .cd-slot-header {
+  display: flex !important;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  border-bottom: 1px solid rgba(184,128,157,0.3);
-  padding-bottom: 4px;
-  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(135,100,124,0.3) !important;
+  padding-bottom: 5px;
+  margin-bottom: 6px;
 }
-.cd-slot-range {
-  font-weight: 700;
-  color: #5a3e51;
-  font-size: 1rem;
+#cercaDispResultsModal .cd-slot-range {
+  font-weight: 800 !important;
+  color: #5a3e51 !important;
+  font-size: 1.02rem !important;
 }
-.cd-slot-dur {
-  color: #87647c;
-  font-size: 0.78rem;
-  font-weight: 500;
+#cercaDispResultsModal .cd-slot-dur {
+  color: #87647c !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
 }
-.cd-slot-svc-list { margin: 0; }
-.cd-slot-svc {
-  display: flex;
+#cercaDispResultsModal .cd-slot-svc-list { margin: 0 !important; }
+#cercaDispResultsModal .cd-slot-svc {
+  display: flex !important;
   align-items: baseline;
   gap: 6px;
   padding: 2px 0;
-  color: #5a3e51;
-  font-size: 0.85rem;
+  color: #5a3e51 !important;
+  font-size: 0.88rem !important;
 }
-.cd-slot-svc-time {
-  color: #87647c;
-  font-weight: 600;
-  font-size: 0.78rem;
-  min-width: 38px;
+#cercaDispResultsModal .cd-slot-svc-time {
+  color: #87647c !important;
+  font-weight: 700 !important;
+  font-size: 0.80rem !important;
+  min-width: 42px;
 }
-.cd-slot-svc-name {
-  font-weight: 600;
+#cercaDispResultsModal .cd-slot-svc-name {
+  font-weight: 700 !important;
+  color: #5a3e51 !important;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cd-svc-op {
-  color: #6e4d61;
+#cercaDispResultsModal .cd-svc-op {
+  color: #6e4d61 !important;
   font-style: italic;
-  font-size: 0.75rem;
+  font-size: 0.78rem !important;
+  font-weight: 500 !important;
 }
-.cd-slot-shared-op {
-  margin-top: 5px;
-  padding-top: 4px;
-  border-top: 1px dashed rgba(184,128,157,0.3);
-  color: #5a3e51;
-  font-size: 0.85rem;
-  font-weight: 600;
+#cercaDispResultsModal .cd-slot-shared-op {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px dashed rgba(135,100,124,0.3);
+  color: #5a3e51 !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
 }
-.cd-slot-shared-op .bi { margin-right: 3px; color: #87647c; }
+#cercaDispResultsModal .cd-slot-shared-op .bi {
+  margin-right: 4px;
+  color: #87647c !important;
+}
 
 /* Slot espanso: conferma prenotazione inline */
 .cd-result-card.cd-slot-expanded {
@@ -5464,8 +5472,19 @@ document.addEventListener('DOMContentLoaded', function() {
         if (statusEl) statusEl.innerHTML =
           '<span style="color:#2a7a2a;"><i class="bi bi-check-circle-fill"></i> ' +
           services.length + ' appuntament' + (services.length === 1 ? 'o creato' : 'i creati') +
-          ' con successo</span>';
+          ' — apro l\'agenda…</span>';
         card.classList.add('cd-slot-booked');
+        // Redirect alla pagina agenda con la data dell'appuntamento appena creato.
+        // Usa window.calendarHomeUrl se disponibile (settato in calendar.html da
+        // url_for('calendar.calendar_home')); altrimenti fallback su _baseUrl().
+        var baseHref = (typeof window.calendarHomeUrl === 'string' && window.calendarHomeUrl)
+          ? window.calendarHomeUrl
+          : (_baseUrl() + '/');
+        // Rimuovi eventuale trailing slash duplicato
+        baseHref = baseHref.replace(/\/+$/, '/');
+        setTimeout(function() {
+          window.location.href = baseHref + '?date=' + encodeURIComponent(slot.date);
+        }, 700);
         return;
       }
       var sv = services[idx];
@@ -5510,20 +5529,29 @@ document.addEventListener('DOMContentLoaded', function() {
     postNext();
   }
 
-  // Formato "lunedì 2026-06-15" (giorno settimana in italiano + ISO date).
+  // Formato "lunedì 27 mag 2026". Logica auto-contenuta (non dipende da
+  // fmtDateIT globale, che è dentro IIFE e non esposta su window).
   var _CD_WEEKDAY_NAMES_IT = [
     'domenica', 'lunedì', 'martedì', 'mercoledì',
     'giovedì', 'venerdì', 'sabato'
+  ];
+  var _CD_MONTH_ABBR_IT = [
+    'gen', 'feb', 'mar', 'apr', 'mag', 'giu',
+    'lug', 'ago', 'set', 'ott', 'nov', 'dic'
   ];
   function _cdFmtDateWithWeekday(iso) {
     if (!iso) return '';
     var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (!m) return iso;
-    var d = new Date(parseInt(m[1],10), parseInt(m[2],10) - 1, parseInt(m[3],10));
+    var yyyy = m[1];
+    var mm   = parseInt(m[2], 10);
+    var dd   = m[3];
+    var d = new Date(parseInt(yyyy, 10), mm - 1, parseInt(dd, 10));
     if (isNaN(d.getTime())) return iso;
-    var wd = _CD_WEEKDAY_NAMES_IT[d.getDay()] || '';
-    var isoTrimmed = iso.substring(0, 10);
-    return wd ? (wd + ' ' + isoTrimmed) : isoTrimmed;
+    var wd    = _CD_WEEKDAY_NAMES_IT[d.getDay()] || '';
+    var month = _CD_MONTH_ABBR_IT[mm - 1] || m[2];
+    var ddmmm = dd + ' ' + month + ' ' + yyyy;   // es. "02 giu 2026"
+    return wd ? (wd + ' ' + ddmmm) : ddmmm;
   }
 
   function _cdBuildSlotBlock(s) {
