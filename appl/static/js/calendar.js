@@ -15518,6 +15518,8 @@ function buildSlotCard(slot, isMultiSlot) {
   // ──────────────────────────────────────────────────────────────
 
   async function sendQuery(message, overrideClientId) {
+    // Info mode: niente chiamate AI, l'input gestisce autocomplete cliente
+    if (AI.mode === 'info') return;
     if (AI.isLoading || !message.trim()) return;
 
     AI.isLoading       = true;
@@ -16668,6 +16670,542 @@ if (a.date) {
   }
 
   // ──────────────────────────────────────────────────────────────
+  // INFO MODE — badge 2 (info clienti/servizi/operatori/negozio)
+  // Apre la stessa modale chat, ma:
+  //  - welcome diverso
+  //  - 4 action buttons statici (no AI)
+  //  - input usato come autocomplete cliente
+  // ──────────────────────────────────────────────────────────────
+
+  AI.mode = 'ai';
+  // infoSubMode definisce cosa cerca l'input dell'utente in modo info:
+  //   null              → cerca clienti (welcome iniziale)
+  //   'service-search'  → cerca servizi (dopo click su bottone "Servizi")
+  //   'operator-search' → cerca operatori (dopo click su bottone "Operatore")
+  AI.infoSubMode = null;
+  AI._infoSearchTimer = null;
+  AI._infoResultsBubble = null;
+  AI._infoCachedStatic = null;
+
+  function _removeInfoResultsBubble() {
+    if (AI._infoResultsBubble && AI._infoResultsBubble.parentNode) {
+      AI._infoResultsBubble.parentNode.removeChild(AI._infoResultsBubble);
+    }
+    AI._infoResultsBubble = null;
+  }
+
+  function _clearMessages() {
+    while (elMessages.firstChild) elMessages.removeChild(elMessages.firstChild);
+  }
+
+  function _resetToAiWelcome() {
+    AI.mode = 'ai';
+    AI.chatHistory = [];
+    AI.intentSelected = false;
+    AI.selectedIntent = null;
+    AI.pendingSlot = null;
+    AI.pendingContext = {};
+    AI.pendingDisambiguation = null;
+    _removeInfoResultsBubble();
+    _clearMessages();
+    appendMessage('assistant',
+      '👋 Ciao! Sono TOSCA AI, la tua assistente di prenotazione. Clicca su ciò di cui hai bisogno per iniziare:'
+    );
+    buildIntentButtons();
+    setInputEnabled(false);
+    elInput.value = '';
+  }
+
+  function openInfoChat() {
+    AI.mode = 'info';
+    AI.infoSubMode = null;
+    AI.chatHistory = [];
+    AI.selectedIntent = null;
+    AI.intentSelected = true;
+    AI.pendingSlot = null;
+    AI.pendingContext = {};
+    AI.pendingDisambiguation = null;
+    _removeInfoResultsBubble();
+
+    AI.isOpen = true;
+    elModal.style.display = 'flex';
+
+    _clearMessages();
+    appendMessage('assistant',
+      'Digita nome cliente o numero di cellulare per info cliente.'
+    );
+    buildInfoActionButtons();
+
+    setInputEnabled(true);
+    elInput.setAttribute('placeholder', 'Nome cliente o cellulare…');
+    elInput.value = '';
+    setTimeout(function() { try { elInput.focus(); } catch(_) {} }, 80);
+  }
+
+  function buildInfoActionButtons() {
+    var actions = [
+      { id: 'servizi',     icon: '💅', label: 'Servizi' },
+      { id: 'operatore',   icon: '👩',  label: 'Operatore' },
+      { id: 'negozio',     icon: '🏪', label: 'Negozio' },
+      { id: 'booking_web', icon: '🌐', label: 'Booking Web' },
+    ];
+
+    var wrap = document.createElement('div');
+    wrap.id = 'aiInfoActionButtons';
+    wrap.style.cssText = 'margin-top:10px; display:flex; flex-wrap:wrap; gap:6px;';
+
+    actions.forEach(function(action) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ai-info-btn';
+      btn.setAttribute('data-info-action', action.id);
+      btn.style.cssText = [
+        'display:inline-flex',
+        'align-items:center',
+        'gap:6px',
+        'padding:7px 14px',
+        'border:1px solid rgba(122,166,200,0.40)',
+        'border-radius:20px',
+        'background:linear-gradient(135deg,#eaf2f9 0%,#d9e6f1 100%)',
+        'color:#456a85',
+        'font-size:0.82rem',
+        'font-weight:600',
+        'cursor:pointer',
+        'transition:all 0.15s ease',
+        'white-space:nowrap',
+        'box-shadow:0 1px 3px rgba(90,135,170,0.08)'
+      ].join(';');
+      btn.textContent = action.icon + '  ' + action.label;
+      btn.addEventListener('mouseenter', function() {
+        btn.style.background = 'linear-gradient(135deg,#d6e7f1 0%,#c4dae8 100%)';
+        btn.style.borderColor = '#7aa6c8';
+      });
+      btn.addEventListener('mouseleave', function() {
+        btn.style.background = 'linear-gradient(135deg,#eaf2f9 0%,#d9e6f1 100%)';
+        btn.style.borderColor = 'rgba(122,166,200,0.40)';
+      });
+      // stopPropagation: questo handler rimuove gli stessi bottoni dal DOM,
+      // quindi al bubble il listener globale "click fuori chat" vedrebbe
+      // e.target come detached → chiuderebbe la chat. Vedi nota Step 2.
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        handleInfoActionClick(action);
+      });
+      wrap.appendChild(btn);
+    });
+
+    elMessages.appendChild(wrap);
+    scrollToBottom();
+  }
+
+  function _fetchInfoStatic() {
+    if (AI._infoCachedStatic) return Promise.resolve(AI._infoCachedStatic);
+    return fetch(getBaseUrl() + '/api/info/static', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : {}; })
+      .then(function(data) { AI._infoCachedStatic = data; return data; });
+  }
+
+  function handleInfoActionClick(action) {
+    AI.chatHistory = [];
+    _removeInfoResultsBubble();
+    _clearMessages();
+
+    // SERVIZI: entra in modo ricerca servizi (autocomplete + card stats)
+    if (action.id === 'servizi') {
+      AI.infoSubMode = 'service-search';
+      appendMessage('assistant',
+        '<strong style="color:#5a87aa;">📋 Info servizi</strong><br>' +
+        '<span style="font-size:0.84rem;">Digita il nome di un servizio per vedere statistiche e frequenza.</span>'
+      );
+      appendInfoBackButton();
+      elInput.value = '';
+      elInput.setAttribute('placeholder', 'Nome servizio…');
+      setTimeout(function() { try { elInput.focus(); } catch(_) {} }, 80);
+      return;
+    }
+
+    // OPERATORE: entra in modo ricerca operatore (autocomplete + card stats)
+    if (action.id === 'operatore') {
+      AI.infoSubMode = 'operator-search';
+      appendMessage('assistant',
+        '<strong style="color:#5a87aa;">📋 Info operatore</strong><br>' +
+        '<span style="font-size:0.84rem;">Digita il nome di un operatore per vedere statistiche e frequenza.</span>'
+      );
+      appendInfoBackButton();
+      elInput.value = '';
+      elInput.setAttribute('placeholder', 'Nome operatore…');
+      setTimeout(function() { try { elInput.focus(); } catch(_) {} }, 80);
+      return;
+    }
+
+    // Per negozio e booking_web: dump statico (un solo record, niente ricerca)
+    AI.infoSubMode = null;
+    appendMessage('assistant',
+      '<strong style="color:#5a87aa;">📋 Info ' + esc(action.label.toLowerCase()) + '</strong>'
+    );
+    elTyping.style.display = 'block';
+
+    _fetchInfoStatic()
+      .then(function(data) {
+        elTyping.style.display = 'none';
+        if (action.id === 'negozio')           renderInfoBusiness(data.business || {});
+        else if (action.id === 'booking_web')  renderInfoBookingWeb(data.business || {});
+        appendInfoBackButton();
+      })
+      .catch(function() {
+        elTyping.style.display = 'none';
+        appendMessage('error', 'Errore nel caricamento delle informazioni.');
+        appendInfoBackButton();
+      });
+  }
+
+  function appendInfoBackButton() {
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:8px;';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.style.cssText = [
+      'display:inline-flex','align-items:center','gap:6px',
+      'padding:6px 11px','border:1px solid #bbb','border-radius:14px',
+      'background:#f7f5ff','color:#666','font-size:0.78rem','cursor:pointer'
+    ].join(';');
+    btn.innerHTML = '↩ Indietro';
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openInfoChat();
+    });
+    wrap.appendChild(btn);
+    elMessages.appendChild(wrap);
+    scrollToBottom();
+  }
+
+  function renderInfoServices(byCategory) {
+    var cats = Object.keys(byCategory).sort();
+    if (!cats.length) {
+      appendMessage('assistant', '<em>Nessun servizio configurato.</em>');
+      return;
+    }
+    var html = '<div style="font-size:0.86rem;">';
+    cats.forEach(function(cat) {
+      html += '<div style="margin-top:8px;">' +
+              '<div style="color:#5a87aa; font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em;">' + esc(cat) + '</div>' +
+              '<ul style="margin:4px 0 0; padding-left:18px;">';
+      byCategory[cat].forEach(function(s) {
+        var sub = s.sottocategoria ? ' <span style="color:#aaa;">[' + esc(s.sottocategoria) + ']</span>' : '';
+        html += '<li style="margin:2px 0;">' + esc(s.nome) +
+                ' <span style="color:#888;">— ' + s.durata + ' min · €' + (s.prezzo || 0).toFixed(2) + '</span>' +
+                sub + '</li>';
+      });
+      html += '</ul></div>';
+    });
+    html += '</div>';
+    appendMessage('assistant', html);
+  }
+
+  function renderInfoOperators(ops) {
+    if (!ops || !ops.length) {
+      appendMessage('assistant', '<em>Nessun operatore configurato.</em>');
+      return;
+    }
+    var groups = {};
+    ops.forEach(function(o) {
+      var key = (o.tipo || '').toLowerCase() || 'estetista';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(o.nome);
+    });
+    var labels = { estetista: 'Estetiste', macchinario: 'Macchinari / lampade' };
+    var html = '<div style="font-size:0.86rem;">';
+    Object.keys(groups).forEach(function(k) {
+      html += '<div style="margin-top:6px;">' +
+              '<strong style="color:#5a87aa;">' + esc(labels[k] || k) + '</strong><br>' +
+              groups[k].map(esc).join(', ') + '</div>';
+    });
+    html += '</div>';
+    appendMessage('assistant', html);
+  }
+
+  function renderInfoBusiness(biz) {
+    if (!biz || !Object.keys(biz).length) {
+      appendMessage('assistant', '<em>Info azienda non configurate.</em>');
+      return;
+    }
+    var rows = [];
+    if (biz.nome)         rows.push(['Nome',         esc(biz.nome)]);
+    if (biz.indirizzo)    rows.push(['Indirizzo',    esc(biz.indirizzo)]);
+    if (biz.phone)        rows.push(['Telefono',     esc(biz.phone)]);
+    if (biz.mobile)       rows.push(['Cellulare',    esc(biz.mobile)]);
+    if (biz.email)        rows.push(['Email',        esc(biz.email)]);
+    if (biz.opening && biz.closing)
+                          rows.push(['Orari',        esc(biz.opening) + ' – ' + esc(biz.closing)]);
+    if (biz.closing_days && biz.closing_days.length)
+                          rows.push(['Chiusura',     biz.closing_days.map(esc).join(', ')]);
+    if (biz.website)      rows.push(['Sito',         esc(biz.website)]);
+    if (biz.vat_code)     rows.push(['P.IVA',        esc(biz.vat_code)]);
+
+    var html = '<div style="font-size:0.86rem;">';
+    rows.forEach(function(r) {
+      html += '<div><strong>' + r[0] + ':</strong> ' + r[1] + '</div>';
+    });
+    html += '</div>';
+    appendMessage('assistant', html);
+  }
+
+  function renderInfoBookingWeb(biz) {
+    var url = (biz && (biz.web_booking || biz.web_app || biz.website)) || '';
+    if (!url) {
+      appendMessage('assistant', '<em>Pagina booking online non configurata.</em>');
+      return;
+    }
+    var html = '<div style="font-size:0.86rem;">' +
+               '<div>Pagina prenotazioni online:</div>' +
+               '<div style="margin-top:4px;">' +
+               '<a href="' + esc(url) + '" target="_blank" rel="noopener" style="color:#5a87aa;">' + esc(url) + '</a>' +
+               '</div></div>';
+    appendMessage('assistant', html);
+  }
+
+  // ── AUTOCOMPLETE CLIENTE in modo info ─────────────────────────
+
+  function _infoSearchClient(query) {
+    return fetch(getBaseUrl() + '/api/info/client/search?q=' + encodeURIComponent(query), {
+      credentials: 'same-origin'
+    }).then(function(r) { return r.ok ? r.json() : []; });
+  }
+
+  function _renderInfoClientResults(results) {
+    _removeInfoResultsBubble();
+    if (!Array.isArray(results) || !results.length) return;
+
+    var bubble = document.createElement('div');
+    bubble.className = 'ai-msg-assistant';
+    bubble.style.padding = '8px 11px';
+    var html = '<div style="font-size:0.8rem; color:#666; margin-bottom:5px;">Seleziona un cliente:</div>';
+    html += '<div class="ai-client-results">';
+    results.forEach(function(c) {
+      var full = ((c.nome || '') + ' ' + (c.cognome || '')).trim();
+      var tel  = c.cellulare ? ' · ' + c.cellulare : '';
+      html += '<a class="dropdown-item" data-client-id="' + c.id + '" ' +
+              'style="display:block; padding:5px 7px; cursor:pointer; border-radius:4px; text-decoration:none;">' +
+              '<strong>' + esc(full) + '</strong>' +
+              '<small style="opacity:0.75;">' + esc(tel) + '</small>' +
+              '</a>';
+    });
+    html += '</div>';
+    bubble.innerHTML = html;
+
+    bubble.querySelectorAll('a.dropdown-item').forEach(function(a) {
+      // stopPropagation: il click rimuove questa stessa bolla dal DOM
+      // (_removeInfoResultsBubble), quindi al bubble il listener globale
+      // vedrebbe e.target detached → chiuderebbe la chat.
+      a.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var cid = parseInt(a.getAttribute('data-client-id'), 10);
+        if (cid) _showInfoClient(cid);
+      });
+    });
+
+    elMessages.appendChild(bubble);
+    AI._infoResultsBubble = bubble;
+    scrollToBottom();
+  }
+
+  function _showInfoClient(clientId) {
+    elInput.value = '';
+    _removeInfoResultsBubble();
+    elTyping.style.display = 'block';
+
+    fetch(getBaseUrl() + '/api/info/client/' + clientId, { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : {}; })
+      .then(function(c) {
+        elTyping.style.display = 'none';
+        if (!c || !c.id) { appendMessage('error', 'Cliente non trovato.'); return; }
+        _renderClientCard(c);
+      })
+      .catch(function() {
+        elTyping.style.display = 'none';
+        appendMessage('error', 'Errore caricamento cliente.');
+      });
+  }
+
+  function _renderClientCard(c) {
+    var full = ((c.nome || '') + ' ' + (c.cognome || '')).trim();
+    var html = '<div style="font-size:0.86rem;">';
+    html += '<div style="font-size:1rem; margin-bottom:4px;"><strong>👤 ' + esc(full) + '</strong></div>';
+    if (c.cellulare)               html += '<div><strong>Cellulare:</strong> ' + esc(c.cellulare) + '</div>';
+    if (c.email)                   html += '<div><strong>Email:</strong> ' + esc(c.email) + '</div>';
+    if (c.sesso)                   html += '<div><strong>Sesso:</strong> ' + esc(c.sesso) + '</div>';
+    if (c.data_nascita)            html += '<div><strong>Data di nascita:</strong> ' + esc(fmtDateIT(c.data_nascita)) + '</div>';
+    if (c.data_registrazione)      html += '<div><strong>Registrato il:</strong> ' + esc(fmtDateIT(c.data_registrazione)) + '</div>';
+    if (c.ultimo_appuntamento)     html += '<div><strong>Ultimo appuntamento:</strong> ' + esc(fmtDateIT(c.ultimo_appuntamento)) + '</div>';
+    if (c.prossimo_appuntamento)   html += '<div><strong>Prossimo appuntamento:</strong> ' + esc(fmtDateIT(c.prossimo_appuntamento)) + '</div>';
+    if (c.totale_appuntamenti !== undefined && c.totale_appuntamenti !== null)
+                                   html += '<div><strong>Totale appuntamenti:</strong> ' + c.totale_appuntamenti + '</div>';
+    if (c.note)                    html += '<div style="margin-top:5px;"><em>Note:</em> ' + esc(c.note) + '</div>';
+    html += '</div>';
+    appendMessage('assistant', html);
+  }
+
+  // ── RICERCA SERVIZIO in modo info → 'service-search' ──────────
+
+  function _infoSearchService(query) {
+    return fetch(getBaseUrl() + '/api/info/service/search?q=' + encodeURIComponent(query), {
+      credentials: 'same-origin'
+    }).then(function(r) { return r.ok ? r.json() : []; });
+  }
+
+  function _renderInfoServiceResults(results) {
+    _removeInfoResultsBubble();
+    if (!Array.isArray(results) || !results.length) return;
+
+    var bubble = document.createElement('div');
+    bubble.className = 'ai-msg-assistant';
+    bubble.style.padding = '8px 11px';
+    var html = '<div style="font-size:0.8rem; color:#666; margin-bottom:5px;">Seleziona un servizio:</div>';
+    html += '<div class="ai-client-results">';
+    results.forEach(function(s) {
+      var meta = (s.durata || 0) + ' min · €' + (s.prezzo || 0).toFixed(2);
+      html += '<a class="dropdown-item" data-service-id="' + s.id + '" ' +
+              'style="display:block; padding:5px 7px; cursor:pointer; border-radius:4px; text-decoration:none;">' +
+              '<strong>' + esc(s.nome) + '</strong>' +
+              ' <small style="opacity:0.75;">— ' + esc(meta) + '</small>' +
+              '</a>';
+    });
+    html += '</div>';
+    bubble.innerHTML = html;
+
+    bubble.querySelectorAll('a.dropdown-item').forEach(function(a) {
+      a.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var sid = parseInt(a.getAttribute('data-service-id'), 10);
+        if (sid) _showInfoService(sid);
+      });
+    });
+
+    elMessages.appendChild(bubble);
+    AI._infoResultsBubble = bubble;
+    scrollToBottom();
+  }
+
+  function _showInfoService(serviceId) {
+    elInput.value = '';
+    _removeInfoResultsBubble();
+    elTyping.style.display = 'block';
+
+    fetch(getBaseUrl() + '/api/info/service/' + serviceId, { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : {}; })
+      .then(function(s) {
+        elTyping.style.display = 'none';
+        if (!s || !s.id) { appendMessage('error', 'Servizio non trovato.'); return; }
+        _renderServiceCard(s);
+      })
+      .catch(function() {
+        elTyping.style.display = 'none';
+        appendMessage('error', 'Errore caricamento servizio.');
+      });
+  }
+
+  function _renderServiceCard(s) {
+    var sub = s.sottocategoria ? ' <span style="color:#aaa;">[' + esc(s.sottocategoria) + ']</span>' : '';
+    var cat = s.categoria ? esc(s.categoria) : '—';
+    var html = '<div style="font-size:0.86rem;">';
+    html += '<div style="font-size:1rem; margin-bottom:4px;"><strong>💅 ' + esc(s.nome) + '</strong>' + sub + '</div>';
+    html += '<div><strong>Categoria:</strong> ' + cat + '</div>';
+    html += '<div><strong>Durata:</strong> ' + (s.durata || 0) + ' min</div>';
+    html += '<div><strong>Prezzo:</strong> €' + (s.prezzo || 0).toFixed(2) + '</div>';
+    html += '<hr style="border:none; border-top:1px dashed #d0d0d0; margin:6px 0;">';
+    html += '<div><strong>Totale appuntamenti:</strong> ' + (s.totale_appuntamenti || 0) + '</div>';
+    html += '<div><strong>Ultimi 30 giorni:</strong> ' + (s.ultimi_30_giorni || 0) + '</div>';
+    html += '<div><strong>Media mensile (6 mesi):</strong> ' + (s.media_mensile || 0) + '</div>';
+    html += '<div><strong>Incasso medio mensile:</strong> €' + (s.incasso_medio_mensile || 0).toFixed(2) + '</div>';
+    if (s.ultimo_appuntamento)
+      html += '<div><strong>Ultimo appuntamento:</strong> ' + esc(fmtDateIT(s.ultimo_appuntamento)) + '</div>';
+    html += '</div>';
+    appendMessage('assistant', html);
+  }
+
+  // ── RICERCA OPERATORE in modo info → 'operator-search' ────────
+
+  function _infoSearchOperator(query) {
+    return fetch(getBaseUrl() + '/api/info/operator/search?q=' + encodeURIComponent(query), {
+      credentials: 'same-origin'
+    }).then(function(r) { return r.ok ? r.json() : []; });
+  }
+
+  function _renderInfoOperatorResults(results) {
+    _removeInfoResultsBubble();
+    if (!Array.isArray(results) || !results.length) return;
+
+    var bubble = document.createElement('div');
+    bubble.className = 'ai-msg-assistant';
+    bubble.style.padding = '8px 11px';
+    var html = '<div style="font-size:0.8rem; color:#666; margin-bottom:5px;">Seleziona un operatore:</div>';
+    html += '<div class="ai-client-results">';
+    results.forEach(function(o) {
+      var meta = (o.tipo === 'macchinario') ? 'lampada/macchinario' : 'estetista';
+      html += '<a class="dropdown-item" data-operator-id="' + o.id + '" ' +
+              'style="display:block; padding:5px 7px; cursor:pointer; border-radius:4px; text-decoration:none;">' +
+              '<strong>' + esc(o.nome) + '</strong>' +
+              ' <small style="opacity:0.75;">— ' + esc(meta) + '</small>' +
+              '</a>';
+    });
+    html += '</div>';
+    bubble.innerHTML = html;
+
+    bubble.querySelectorAll('a.dropdown-item').forEach(function(a) {
+      a.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var oid = parseInt(a.getAttribute('data-operator-id'), 10);
+        if (oid) _showInfoOperator(oid);
+      });
+    });
+
+    elMessages.appendChild(bubble);
+    AI._infoResultsBubble = bubble;
+    scrollToBottom();
+  }
+
+  function _showInfoOperator(operatorId) {
+    elInput.value = '';
+    _removeInfoResultsBubble();
+    elTyping.style.display = 'block';
+
+    fetch(getBaseUrl() + '/api/info/operator/' + operatorId, { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : {}; })
+      .then(function(o) {
+        elTyping.style.display = 'none';
+        if (!o || !o.id) { appendMessage('error', 'Operatore non trovato.'); return; }
+        _renderOperatorCard(o);
+      })
+      .catch(function() {
+        elTyping.style.display = 'none';
+        appendMessage('error', 'Errore caricamento operatore.');
+      });
+  }
+
+  function _renderOperatorCard(o) {
+    var icon = (o.tipo === 'macchinario') ? '🛠️' : '👩';
+    var tipoLabel = (o.tipo === 'macchinario') ? 'lampada/macchinario' : 'estetista';
+    var html = '<div style="font-size:0.86rem;">';
+    html += '<div style="font-size:1rem; margin-bottom:4px;"><strong>' + icon + ' ' + esc(o.nome) + '</strong>' +
+            ' <span style="color:#888; font-size:0.82rem;">(' + esc(tipoLabel) + ')</span></div>';
+    html += '<hr style="border:none; border-top:1px dashed #d0d0d0; margin:6px 0;">';
+    html += '<div><strong>Totale appuntamenti gestiti:</strong> ' + (o.totale_appuntamenti || 0) + '</div>';
+    html += '<div><strong>Ultimi 30 giorni:</strong> ' + (o.ultimi_30_giorni || 0) + '</div>';
+    html += '<div><strong>Media mensile (6 mesi):</strong> ' + (o.media_mensile || 0) + '</div>';
+    html += '<div><strong>Incasso medio mensile:</strong> €' + (o.incasso_medio_mensile || 0).toFixed(2) + '</div>';
+    if (o.servizio_piu_frequente)
+      html += '<div><strong>Servizio più frequente:</strong> ' + esc(o.servizio_piu_frequente) +
+              ' <span style="color:#888;">(' + (o.servizio_piu_frequente_count || 0) + ')</span></div>';
+    if (o.ultimo_appuntamento)
+      html += '<div><strong>Ultimo appuntamento:</strong> ' + esc(fmtDateIT(o.ultimo_appuntamento)) + '</div>';
+    html += '</div>';
+    appendMessage('assistant', html);
+  }
+
+  // Expose openInfoChat all'esterno per il badge "info" in calendar.html
+  window.openInfoChat = openInfoChat;
+
+  // ──────────────────────────────────────────────────────────────
   // INIT
   // ──────────────────────────────────────────────────────────────
 
@@ -16792,7 +17330,12 @@ document.head.appendChild(aiStyleOverride);
 
       resetBtn.addEventListener('click', function(e) {
         e.stopPropagation();
-        // Resetta lo stato della chat
+        // In info mode il reset riporta al welcome info, non a quello AI
+        if (AI.mode === 'info') {
+          openInfoChat();
+          return;
+        }
+        // Resetta lo stato della chat AI
         AI.chatHistory = [];
         AI.selectedIntent = null;
         AI.intentSelected = false; // Reset: nessun intent selezionato
@@ -16837,9 +17380,56 @@ document.head.appendChild(aiStyleOverride);
     initSpeech();
     initAiChatResize();
 
-    elBadge.addEventListener('click', toggleChat);
+    // AI badge: se siamo (o eravamo) in info mode → switch ad AI mode
+    elBadge.addEventListener('click', function() {
+      if (AI.mode === 'info') {
+        _resetToAiWelcome();
+        if (!AI.isOpen) {
+          AI.isOpen = true;
+          elModal.style.display = 'flex';
+        }
+        return;
+      }
+      toggleChat();
+    });
     elClose.addEventListener('click', toggleChat);
     elSendBtn.addEventListener('click', () => sendQuery(elInput.value));
+
+    // Info badge: apre chat in modo info.
+    // stopPropagation evita che il listener globale "click fuori dalla chat"
+    // (registrato più sotto) chiuda subito la modale appena aperta:
+    // quel listener esclude solo elBadge (badge AI), non i nuovi badge.
+    var __infoBadgeEl = document.getElementById('aiInfoBadgeBtn');
+    if (__infoBadgeEl) {
+      __infoBadgeEl.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openInfoChat();
+      });
+    }
+
+    // Input listener per autocomplete in info mode.
+    // Dispatch in base al sub-mode:
+    //   null              → ricerca cliente
+    //   'service-search'  → ricerca servizio
+    //   'operator-search' → ricerca operatore (Step 2c)
+    elInput.addEventListener('input', function() {
+      if (AI.mode !== 'info') return;
+      var q = elInput.value.trim();
+      if (AI._infoSearchTimer) clearTimeout(AI._infoSearchTimer);
+      if (q.length < 2) {
+        _removeInfoResultsBubble();
+        return;
+      }
+      AI._infoSearchTimer = setTimeout(function() {
+        if (AI.infoSubMode === 'service-search') {
+          _infoSearchService(q).then(_renderInfoServiceResults).catch(function(){});
+        } else if (AI.infoSubMode === 'operator-search') {
+          _infoSearchOperator(q).then(_renderInfoOperatorResults).catch(function(){});
+        } else {
+          _infoSearchClient(q).then(_renderInfoClientResults).catch(function(){});
+        }
+      }, 250);
+    });
 
     elInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {

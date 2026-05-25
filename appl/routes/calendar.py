@@ -3261,3 +3261,854 @@ def ai_sessions_log():
         .all()
     )
     return jsonify([s.to_dict() for s in sessions]), 200
+
+
+# ═══════════════════════════════════════════════════════════════
+# INFO ENDPOINTS — pannello "info" (badge 2 in calendar)
+# Risposte statiche, niente AI.
+# ═══════════════════════════════════════════════════════════════
+
+@calendar_bp.route('/api/info/static', methods=['GET'])
+def api_info_static():
+    """Dati statici per pannello info: servizi (per categoria/sottocategoria),
+    operatori (per tipo), business info, link booking web."""
+    services = (
+        Service.query
+        .filter(Service.is_deleted == False,
+                Service.is_visible_in_calendar == True,
+                func.lower(Service.servizio_nome) != "dummy")
+        .all()
+    )
+    services_by_category = {}
+    for sv in services:
+        raw_cat = getattr(sv, 'servizio_categoria', None)
+        if raw_cat is None:
+            cat = '—'
+        elif hasattr(raw_cat, 'value'):
+            cat = str(raw_cat.value)
+        elif hasattr(raw_cat, 'name'):
+            cat = str(raw_cat.name)
+        else:
+            cat = str(raw_cat)
+        sub = ''
+        try:
+            if sv.servizio_sottocategoria:
+                sub = sv.servizio_sottocategoria.nome or ''
+        except Exception:
+            sub = ''
+        services_by_category.setdefault(cat, []).append({
+            'nome':         sv.servizio_nome or '',
+            'durata':       int(sv.servizio_durata or 0),
+            'prezzo':       float(sv.servizio_prezzo) if sv.servizio_prezzo is not None else 0.0,
+            'sottocategoria': sub,
+        })
+
+    ops = (
+        Operator.query
+        .filter_by(is_deleted=False, is_visible=True)
+        .order_by(Operator.order.asc())
+        .all()
+    )
+    operators = [{
+        'id':   op.id,
+        'nome': op.user_nome or '',
+        'tipo': op.user_tipo or '',
+    } for op in ops]
+
+    biz = BusinessInfo.query.first()
+    business = {}
+    if biz:
+        addr_parts = [p for p in [
+            biz.address, biz.cap, biz.city, biz.province
+        ] if p]
+        open_t  = biz.active_opening_time or biz.opening_time
+        close_t = biz.active_closing_time or biz.closing_time
+        business = {
+            'nome':         biz.business_name or '',
+            'indirizzo':    ', '.join(addr_parts),
+            'phone':        biz.phone or '',
+            'mobile':       biz.mobile or '',
+            'email':        biz.email or '',
+            'opening':      open_t.strftime('%H:%M') if open_t else '',
+            'closing':      close_t.strftime('%H:%M') if close_t else '',
+            'closing_days': biz.closing_days_list or [],
+            'website':      biz.website or '',
+            'web_booking':  biz.web_booking_page or '',
+            'web_app':      biz.web_app or '',
+            'vat_code':     biz.vat_code or '',
+        }
+
+    return jsonify({
+        'services_by_category': services_by_category,
+        'operators':            operators,
+        'business':             business,
+    })
+
+
+@calendar_bp.route('/api/info/client/search', methods=['GET'])
+def api_info_client_search():
+    """Ricerca clienti per autocomplete badge info."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+    q = (request.args.get('q') or '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    from appl.services.ai_service import find_client_by_text
+    try:
+        results = find_client_by_text(q) or []
+    except Exception as e:
+        app.logger.error(f"api_info_client_search error: {e}")
+        results = []
+    return jsonify(results[:15])
+
+
+@calendar_bp.route('/api/info/client/<int:client_id>', methods=['GET'])
+def api_info_client_detail(client_id):
+    """Dettaglio cliente (anagrafica + ultimo/prossimo appuntamento)."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+    from appl.services.ai_service import build_client_info
+    try:
+        info = build_client_info(client_id) or {}
+    except Exception as e:
+        app.logger.error(f"api_info_client_detail error: {e}")
+        info = {}
+    return jsonify(info)
+
+
+@calendar_bp.route('/api/info/service/search', methods=['GET'])
+def api_info_service_search():
+    """Ricerca servizi (per autocomplete pannello info → Servizi)."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+    q = (request.args.get('q') or '').strip().lower()
+    if len(q) < 2:
+        return jsonify([])
+    pattern = f"%{q}%"
+    services = (
+        Service.query
+        .filter(
+            Service.is_deleted == False,
+            Service.is_visible_in_calendar == True,
+            func.lower(Service.servizio_nome) != 'dummy',
+            or_(
+                func.lower(Service.servizio_nome).like(pattern),
+                func.lower(Service.servizio_tag).like(pattern),
+            ),
+        )
+        .order_by(Service.servizio_nome.asc())
+        .limit(15)
+        .all()
+    )
+    return jsonify([{
+        'id':       s.id,
+        'nome':     s.servizio_nome or '',
+        'durata':   int(s.servizio_durata or 0),
+        'prezzo':   float(s.servizio_prezzo or 0),
+    } for s in services])
+
+
+@calendar_bp.route('/api/info/service/<int:service_id>', methods=['GET'])
+def api_info_service_detail(service_id):
+    """Statistiche servizio: totale, ultimi 30gg, media mensile (6 mesi),
+    incasso medio mensile (price × media), ultimo appuntamento."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+
+    s = db.session.get(Service, service_id)
+    if not s or s.is_deleted:
+        return jsonify({})
+
+    now = datetime.now()
+    thirty_days_ago = now - timedelta(days=30)
+    six_months_ago  = now - timedelta(days=180)
+
+    base_q = Appointment.query.filter(
+        Appointment.service_id == service_id,
+        Appointment.is_cancelled_by_client == False,
+    )
+
+    total       = base_q.count()
+    last_30     = base_q.filter(Appointment.start_time >= thirty_days_ago).count()
+    last_6mo    = base_q.filter(Appointment.start_time >= six_months_ago).count()
+
+    last_appt   = base_q.order_by(Appointment.start_time.desc()).first()
+    last_date   = ''
+    if last_appt and last_appt.start_time:
+        last_date = last_appt.start_time.strftime('%Y-%m-%d')
+
+    avg_monthly = round(last_6mo / 6.0, 1) if last_6mo > 0 else 0
+    price       = float(s.servizio_prezzo or 0)
+    avg_revenue = round(price * avg_monthly, 2)
+
+    raw_cat = getattr(s, 'servizio_categoria', None)
+    if raw_cat is None:
+        cat = ''
+    elif hasattr(raw_cat, 'value'):
+        cat = str(raw_cat.value)
+    elif hasattr(raw_cat, 'name'):
+        cat = str(raw_cat.name)
+    else:
+        cat = str(raw_cat)
+
+    sub = ''
+    try:
+        if s.servizio_sottocategoria:
+            sub = s.servizio_sottocategoria.nome or ''
+    except Exception:
+        sub = ''
+
+    return jsonify({
+        'id':                    s.id,
+        'nome':                  s.servizio_nome or '',
+        'categoria':             cat,
+        'sottocategoria':        sub,
+        'durata':                int(s.servizio_durata or 0),
+        'prezzo':                price,
+        'totale_appuntamenti':   total,
+        'ultimi_30_giorni':      last_30,
+        'ultimi_6_mesi':         last_6mo,
+        'media_mensile':         avg_monthly,
+        'incasso_medio_mensile': avg_revenue,
+        'ultimo_appuntamento':   last_date,
+    })
+
+
+@calendar_bp.route('/api/info/operator/search', methods=['GET'])
+def api_info_operator_search():
+    """Ricerca operatori per autocomplete pannello info → Operatore."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+    q = (request.args.get('q') or '').strip().lower()
+    if len(q) < 2:
+        return jsonify([])
+    pattern = f"%{q}%"
+    ops = (
+        Operator.query
+        .filter(
+            Operator.is_deleted == False,
+            Operator.is_visible == True,
+            or_(
+                func.lower(Operator.user_nome).like(pattern),
+                func.lower(Operator.user_cognome).like(pattern),
+            ),
+        )
+        .order_by(Operator.order.asc())
+        .limit(15)
+        .all()
+    )
+    return jsonify([{
+        'id':   op.id,
+        'nome': op.user_nome or '',
+        'tipo': op.user_tipo or '',
+    } for op in ops])
+
+
+# ═══════════════════════════════════════════════════════════════
+# CERCA DISPONIBILITÀ (modal badge "calendario-check")
+# Ricerca slot diretta senza AI: applica i criteri della UI e
+# restituisce gli slot liberi degli operatori.
+# ═══════════════════════════════════════════════════════════════
+
+def _cd_parse_date_str(s):
+    """Converte 'YYYY-MM-DD' in date. Ritorna None su input invalido."""
+    if not s:
+        return None
+    try:
+        return date.fromisoformat(str(s)[:10])
+    except (ValueError, TypeError):
+        return None
+
+
+def _cd_hhmm_to_min(s):
+    """Converte 'HH:MM' in minuti dall'inizio del giorno. 0 su input invalido."""
+    if not s:
+        return 0
+    try:
+        parts = str(s).split(':')
+        return int(parts[0]) * 60 + int(parts[1])
+    except (ValueError, IndexError):
+        return 0
+
+
+def _cd_min_to_hhmm(m):
+    h = max(0, min(23, m // 60))
+    mi = max(0, min(59, m % 60))
+    return f"{h:02d}:{mi:02d}"
+
+
+def _cd_expand_dates(date_state):
+    """Espande lo state Date in lista di oggetti date."""
+    if not date_state:
+        return []
+    mode = date_state.get('mode')
+    if mode == 'single':
+        d = _cd_parse_date_str(date_state.get('date'))
+        return [d] if d else []
+    if mode == 'month':
+        # 'YYYY-MM' → tutti i giorni del mese (filtrati da weekdays se specificati)
+        month_str = (date_state.get('month') or '').strip()
+        if len(month_str) < 7:
+            return []
+        try:
+            year  = int(month_str[:4])
+            month = int(month_str[5:7])
+        except ValueError:
+            return []
+        try:
+            from calendar import monthrange
+            last_day = monthrange(year, month)[1]
+            first_d  = date(year, month, 1)
+            last_d   = date(year, month, last_day)
+        except Exception:
+            return []
+        weekdays = set(int(w) for w in (date_state.get('weekdays') or []) if w)
+        result = []
+        cur = first_d
+        while cur <= last_d:
+            iso_wd = cur.isoweekday()
+            if not weekdays or iso_wd in weekdays:
+                result.append(cur)
+            cur = cur + timedelta(days=1)
+        return result
+    if mode == 'range':
+        from_d = _cd_parse_date_str(date_state.get('from'))
+        to_d   = _cd_parse_date_str(date_state.get('to'))
+        if not from_d or not to_d:
+            return []
+        if from_d > to_d:
+            from_d, to_d = to_d, from_d
+        weekdays = set(int(w) for w in (date_state.get('weekdays') or []) if w)
+        result = []
+        cur = from_d
+        while cur <= to_d:
+            iso_wd = cur.isoweekday()  # 1=Mon..7=Sun
+            if not weekdays or iso_wd in weekdays:
+                result.append(cur)
+            cur = cur + timedelta(days=1)
+        return result
+    return []
+
+
+def _cd_compute_allowed_ranges(
+    iso_weekday, orari_state, shift_start_min, shift_end_min, duration_min
+):
+    """Per il giorno della settimana dato, ritorna lista di (start_min, end_min)
+    in cui possiamo cercare slot, in base ai filtri orari della UI.
+    - Se orari_state è None/empty → tutto lo shift è ammesso.
+    - Se orari_state ha bande con .days che includono iso_weekday → uniamo
+      gli intervalli (intersezione poi con lo shift).
+    - Per bande con fixed=True (apertura/chiusura) usiamo shift_start/shift_end
+      come riferimento (non gli orari business).
+    """
+    if not orari_state:
+        return [(shift_start_min, shift_end_min)]
+    raw_ranges = []
+    has_any_band_for_day = False
+    for band in orari_state:
+        days = band.get('days') or []
+        if iso_weekday not in days:
+            continue
+        has_any_band_for_day = True
+        is_fixed = bool(band.get('fixed'))
+        if is_fixed:
+            bid = (band.get('id') or '').strip().lower()
+            if bid == 'apertura':
+                raw_ranges.append((shift_start_min, shift_start_min + duration_min))
+            elif bid == 'chiusura':
+                raw_ranges.append((shift_end_min - duration_min, shift_end_min))
+            continue
+        s = _cd_hhmm_to_min(band.get('start'))
+        e = _cd_hhmm_to_min(band.get('end'))
+        if s < e:
+            raw_ranges.append((s, e))
+    if not has_any_band_for_day:
+        return []  # Utente ha definito orari ma nessuno copre questo giorno
+    # Intersezione con shift
+    constrained = []
+    for s, e in raw_ranges:
+        s2 = max(s, shift_start_min)
+        e2 = min(e, shift_end_min)
+        if e2 - s2 >= duration_min:
+            constrained.append((s2, e2))
+    return constrained
+
+
+def _cd_compute_free_slots(
+    shift, appts, duration_min, d, orari_state, max_slots_per_combo=8
+):
+    """Restituisce lista di (start_dt, end_dt) per slot liberi nel turno,
+    non sovrapposti agli appuntamenti, filtrati dagli orari della UI."""
+    if not shift or duration_min <= 0:
+        return []
+    shift_start_min = shift.shift_start_time.hour * 60 + shift.shift_start_time.minute
+    shift_end_min   = shift.shift_end_time.hour   * 60 + shift.shift_end_time.minute
+
+    iso_wd = d.isoweekday()
+    allowed = _cd_compute_allowed_ranges(
+        iso_wd, orari_state, shift_start_min, shift_end_min, duration_min
+    )
+    if not allowed:
+        return []
+
+    busy = []
+    for a in appts:
+        if not a.start_time or not a.end_time:
+            continue
+        a_s = a.start_time.hour * 60 + a.start_time.minute
+        a_e = a.end_time.hour   * 60 + a.end_time.minute
+        busy.append((a_s, a_e))
+    busy.sort()
+
+    SLOT_STEP = 15  # minuti
+    slots = []
+    for c_start, c_end in allowed:
+        candidate = c_start
+        # Allinea il primo candidato a multiplo di SLOT_STEP a partire dallo shift
+        offset = (candidate - shift_start_min) % SLOT_STEP
+        if offset:
+            candidate += (SLOT_STEP - offset)
+        while candidate + duration_min <= c_end:
+            slot_s = candidate
+            slot_e = candidate + duration_min
+            # Check overlap con appointment
+            overlap = False
+            for b_s, b_e in busy:
+                if slot_s < b_e and slot_e > b_s:
+                    overlap = True
+                    break
+            if not overlap:
+                start_dt = datetime.combine(d, dtime(slot_s // 60, slot_s % 60))
+                end_dt   = datetime.combine(d, dtime(slot_e // 60, slot_e % 60))
+                slots.append((start_dt, end_dt))
+                if len(slots) >= max_slots_per_combo:
+                    return slots
+            candidate += SLOT_STEP
+    return slots
+
+
+@calendar_bp.route('/api/find-availability', methods=['POST'])
+def api_find_availability():
+    """Cerca slot disponibili in base ai criteri del modal Cerca disponibilità.
+
+    Body JSON:
+      {
+        "cliente":    {id, nome, cognome, cellulare} | null,
+        "operatori":  [int, ...],            // empty/None = tutti
+        "servizi":    [{id, nome, durata, prezzo}, ...],
+        "date":       {mode, date|from, to, weekdays},
+        "orari":      [{id, start, end, fixed, days}, ...] | null
+      }
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+
+    data = request.get_json(silent=True) or {}
+    operatori_ids = [int(x) for x in (data.get('operatori') or []) if x]
+    servizi_req   = data.get('servizi') or []
+    date_state    = data.get('date') or {}
+    orari_state   = data.get('orari')
+
+    if not servizi_req:
+        return jsonify({'error': 'no_services', 'message': 'Seleziona almeno un servizio.'}), 400
+
+    dates_to_search = _cd_expand_dates(date_state)
+    # Filtra le date già passate: la ricerca disponibilità ha senso solo da
+    # oggi in avanti.
+    _today = date.today()
+    dates_to_search = [d for d in dates_to_search if d >= _today]
+    if not dates_to_search:
+        return jsonify({'error': 'no_dates',
+                        'message': 'Nessuna data valida (le date passate sono escluse).'}), 400
+
+    # Operatori candidati: se nessuno selezionato → tutti i visibili
+    op_query = Operator.query.filter(
+        Operator.is_deleted == False,
+        Operator.is_visible == True,
+    )
+    if operatori_ids:
+        op_query = op_query.filter(Operator.id.in_(operatori_ids))
+    candidate_operators = op_query.order_by(Operator.order.asc()).all()
+    if not candidate_operators:
+        return jsonify({'results': [], 'count': 0}), 200
+
+    MAX_TOTAL_SLOTS    = 60   # cap totale per non far esplodere il payload
+    MAX_PER_COMBO      = 6    # cap per (servizio, operatore, giorno)
+
+    # Logging diagnostico per capire perché eventualmente non si trovano slot
+    app.logger.info(
+        "[find-availability] dates=%d operatori_req=%s candidate_ops=%d servizi=%d orari=%s",
+        len(dates_to_search), operatori_ids, len(candidate_operators),
+        len(servizi_req), 'set' if orari_state else 'null'
+    )
+
+    # Fallback "shift virtuale" quando l'operatore non ha turno configurato:
+    # usa gli orari di apertura/chiusura del negozio (come fa la griglia del
+    # calendario, che mostra celle attive anche senza shift esplicito).
+    biz = BusinessInfo.query.first()
+    if biz:
+        biz_open  = biz.active_opening_time or biz.opening_time
+        biz_close = biz.active_closing_time or biz.closing_time
+        biz_closing_days = biz.closing_days_list or []
+    else:
+        biz_open  = dtime(9, 0)
+        biz_close = dtime(19, 0)
+        biz_closing_days = []
+
+    # Mappa "Lunedì"..."Domenica" → ISO weekday (1..7) per filtrare i giorni
+    # di chiusura del negozio.
+    _IT_WEEKDAY_TO_ISO = {
+        'lunedì': 1, 'lunedi': 1,
+        'martedì': 2, 'martedi': 2,
+        'mercoledì': 3, 'mercoledi': 3,
+        'giovedì': 4, 'giovedi': 4,
+        'venerdì': 5, 'venerdi': 5,
+        'sabato': 6,
+        'domenica': 7,
+    }
+    biz_closed_weekdays = set()
+    for day_name in biz_closing_days:
+        iso = _IT_WEEKDAY_TO_ISO.get(str(day_name).strip().lower())
+        if iso:
+            biz_closed_weekdays.add(iso)
+
+    from types import SimpleNamespace
+
+    # Carica tutti i servizi (preservando l'ordine dell'utente: serve
+    # per la "catena contigua")
+    services_list = []
+    for svc_req in servizi_req:
+        svc_id = svc_req.get('id')
+        if not svc_id:
+            continue
+        svc_obj = db.session.get(Service, svc_id)
+        if not svc_obj or svc_obj.is_deleted:
+            continue
+        dur = int(svc_obj.servizio_durata or 0)
+        if dur <= 0:
+            continue
+        services_list.append({
+            'id':        svc_obj.id,
+            'name':      svc_obj.servizio_nome or '',
+            'duration':  dur,
+            'price':     float(svc_obj.servizio_prezzo or 0),
+            # Mapping eligibility (può essere vuoto → niente restrizione)
+            'operators': set(o.id for o in svc_obj.operators),
+        })
+
+    if not services_list:
+        return jsonify({'error': 'no_valid_services',
+                        'message': 'Servizi non validi.'}), 400
+
+    total_duration = sum(s['duration'] for s in services_list)
+    candidate_op_ids  = [op.id for op in candidate_operators]
+    op_name_by_id     = {op.id: (op.user_nome or '') for op in candidate_operators}
+
+    all_results = []
+    debug = {
+        'dates_count':       len(dates_to_search),
+        'dates_first':       dates_to_search[0].isoformat() if dates_to_search else None,
+        'dates_last':        dates_to_search[-1].isoformat() if dates_to_search else None,
+        'operatori_req':     operatori_ids,
+        'candidate_op_ids':  candidate_op_ids,
+        'services_req':      [s['id'] for s in services_list],
+        'total_duration':    total_duration,
+        'orari_state':       orari_state,
+        'per_day':           [],
+        'shift_misses':      [],
+    }
+
+    def _to_naive(dt_value):
+        if dt_value is not None and getattr(dt_value, 'tzinfo', None) is not None:
+            return dt_value.replace(tzinfo=None)
+        return dt_value
+
+    def _op_available(op_id, start_dt, end_dt, shifts_by_op, appts_by_op):
+        """True se l'operatore ha un turno che copre [start, end] e non ha
+        appuntamenti sovrapposti."""
+        shifts = shifts_by_op.get(op_id, [])
+        in_shift = False
+        for s, e in shifts:
+            if s <= start_dt.time() and end_dt.time() <= e:
+                in_shift = True
+                break
+        if not in_shift:
+            return False
+        s_naive = _to_naive(start_dt)
+        e_naive = _to_naive(end_dt)
+        for a in appts_by_op.get(op_id, []):
+            a_start = _to_naive(a.start_time)
+            if a.end_time is not None:
+                a_end = _to_naive(a.end_time)
+            else:
+                a_end = a_start + timedelta(minutes=getattr(a, '_duration', 0) or 30)
+            if s_naive < a_end and e_naive > a_start:
+                return False
+        return True
+
+    def _find_chain(slot_start_dt, shifts_by_op, appts_by_op):
+        """Trova catena di operatori per i servizi contigui.
+        Priorità: 1) tutti stesso operatore. 2) cascade preferendo l'op precedente.
+        Ritorna lista di operator_id o None."""
+        n = len(services_list)
+
+        # Pass 1: stesso operatore per tutti
+        for op_id in candidate_op_ids:
+            cur = slot_start_dt
+            ok = True
+            for svc in services_list:
+                slot_end = cur + timedelta(minutes=svc['duration'])
+                if svc['operators'] and op_id not in svc['operators']:
+                    # Mapping eligibility (se popolato) — soft: se l'utente ha
+                    # selezionato esplicitamente questo op, accetto comunque.
+                    if operatori_ids and op_id in operatori_ids:
+                        pass  # rispetta scelta utente
+                    else:
+                        ok = False
+                        break
+                if not _op_available(op_id, cur, slot_end, shifts_by_op, appts_by_op):
+                    ok = False
+                    break
+                cur = slot_end
+            if ok:
+                return [op_id] * n
+
+        # Pass 2: cascade
+        chain = []
+        cur = slot_start_dt
+        for svc in services_list:
+            slot_end = cur + timedelta(minutes=svc['duration'])
+            order = list(candidate_op_ids)
+            if chain:
+                prev = chain[-1]
+                order = [prev] + [oid for oid in order if oid != prev]
+            found = None
+            for op_id in order:
+                if svc['operators'] and op_id not in svc['operators']:
+                    if not (operatori_ids and op_id in operatori_ids):
+                        continue
+                if _op_available(op_id, cur, slot_end, shifts_by_op, appts_by_op):
+                    found = op_id
+                    break
+            if not found:
+                return None
+            chain.append(found)
+            cur = slot_end
+        return chain
+
+    SLOT_STEP = 15  # minuti
+    now_dt = datetime.now()  # naive, per confronto con slot odierni
+
+    for d in dates_to_search:
+        if d.isoweekday() in biz_closed_weekdays:
+            continue
+        if len(all_results) >= MAX_TOTAL_SLOTS:
+            break
+
+        # Prepara shifts per ogni candidato (con fallback virtuale = orari negozio)
+        shifts_by_op = {}
+        for op in candidate_operators:
+            shift = OperatorShift.query.filter_by(
+                operator_id=op.id, shift_date=d
+            ).first()
+            if shift:
+                shifts_by_op[op.id] = [(shift.shift_start_time, shift.shift_end_time)]
+            elif biz_open and biz_close:
+                shifts_by_op[op.id] = [(biz_open, biz_close)]
+                if len(debug['shift_misses']) < 20:
+                    debug['shift_misses'].append((op.id, d.isoformat()))
+            else:
+                continue
+
+        # Carica tutti gli appointment del giorno (una sola query) e raggruppa per op
+        day_start = datetime.combine(d, dtime.min)
+        day_end   = datetime.combine(d, dtime.max)
+        candidate_ids_set = set(candidate_op_ids)
+        all_appts_today = Appointment.query.filter(
+            Appointment.is_cancelled_by_client == False,
+            Appointment.start_time >= day_start,
+            Appointment.start_time <= day_end,
+        ).all()
+        appts_by_op = {}
+        for a in all_appts_today:
+            if a.operator_id in candidate_ids_set:
+                appts_by_op.setdefault(a.operator_id, []).append(a)
+
+        # Union dei turni per orari "range generale" (apertura/chiusura combinata)
+        iso_wd = d.isoweekday()
+        all_starts = [s[0] for shifts in shifts_by_op.values() for s in shifts]
+        all_ends   = [s[1] for shifts in shifts_by_op.values() for s in shifts]
+        if not all_starts or not all_ends:
+            continue
+        union_min = min(t.hour * 60 + t.minute for t in all_starts)
+        union_max = max(t.hour * 60 + t.minute for t in all_ends)
+
+        allowed = _cd_compute_allowed_ranges(
+            iso_wd, orari_state, union_min, union_max, total_duration
+        )
+        day_debug = {
+            'date':       d.isoformat(),
+            'iso_wd':     iso_wd,
+            'union':      '%s-%s' % (_cd_min_to_hhmm(union_min), _cd_min_to_hhmm(union_max)),
+            'allowed':    [(_cd_min_to_hhmm(a), _cd_min_to_hhmm(b)) for a, b in allowed],
+            'chains_found': 0,
+        }
+
+        if not allowed:
+            if len(debug['per_day']) < 30:
+                debug['per_day'].append(day_debug)
+            continue
+
+        for r_start, r_end in allowed:
+            candidate = r_start
+            offset = candidate % SLOT_STEP
+            if offset:
+                candidate += (SLOT_STEP - offset)
+            while candidate + total_duration <= r_end:
+                slot_start_dt = datetime.combine(d, dtime(candidate // 60, candidate % 60))
+
+                # Skip slot già passato (oggi, ore precedenti a now)
+                if d == _today and slot_start_dt < now_dt:
+                    candidate += SLOT_STEP
+                    continue
+
+                chain = _find_chain(slot_start_dt, shifts_by_op, appts_by_op)
+                if chain:
+                    cur_dt = slot_start_dt
+                    services_breakdown = []
+                    for i, svc in enumerate(services_list):
+                        next_dt = cur_dt + timedelta(minutes=svc['duration'])
+                        services_breakdown.append({
+                            'id':            svc['id'],
+                            'name':          svc['name'],
+                            'duration':      svc['duration'],
+                            'price':         svc['price'],
+                            'start_time':    cur_dt.strftime('%H:%M'),
+                            'end_time':      next_dt.strftime('%H:%M'),
+                            'operator_id':   chain[i],
+                            'operator_name': op_name_by_id.get(chain[i], ''),
+                        })
+                        cur_dt = next_dt
+
+                    slot_end_dt = slot_start_dt + timedelta(minutes=total_duration)
+                    all_results.append({
+                        'date':           d.isoformat(),
+                        'iso_weekday':    iso_wd,
+                        'start_time':     slot_start_dt.strftime('%H:%M'),
+                        'end_time':       slot_end_dt.strftime('%H:%M'),
+                        'total_duration': total_duration,
+                        'total_price':    sum(s['price'] for s in services_breakdown),
+                        'services':       services_breakdown,
+                        'same_operator':  len(set(chain)) == 1,
+                    })
+                    day_debug['chains_found'] += 1
+                    if len(all_results) >= MAX_TOTAL_SLOTS:
+                        break
+                candidate += SLOT_STEP
+            if len(all_results) >= MAX_TOTAL_SLOTS:
+                break
+
+        if len(debug['per_day']) < 30:
+            debug['per_day'].append(day_debug)
+
+    # Ordina: data asc, orario asc
+    all_results.sort(key=lambda r: (r['date'], r['start_time']))
+
+    # Log diagnostico finale
+    app.logger.info(
+        "[find-availability] result_count=%d shift_misses=%d per_day_sample=%r",
+        len(all_results), len(debug['shift_misses']), debug['per_day'][:3]
+    )
+
+    return jsonify({
+        'results': all_results,
+        'count':   len(all_results),
+        'capped':  len(all_results) >= MAX_TOTAL_SLOTS,
+        'debug':   debug,   # info diagnostica: visibile nella console del browser
+    }), 200
+
+
+@calendar_bp.route('/api/info/operator/<int:operator_id>', methods=['GET'])
+def api_info_operator_detail(operator_id):
+    """Statistiche operatore: totale, ultimi 30gg, media mensile (6 mesi),
+    incasso medio mensile (somma prezzi × media), servizio più frequente,
+    ultimo appuntamento gestito."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+
+    op = db.session.get(Operator, operator_id)
+    if not op or op.is_deleted:
+        return jsonify({})
+
+    now = datetime.now()
+    thirty_days_ago = now - timedelta(days=30)
+    six_months_ago  = now - timedelta(days=180)
+
+    base_q = Appointment.query.filter(
+        Appointment.operator_id == operator_id,
+        Appointment.is_cancelled_by_client == False,
+    )
+
+    total    = base_q.count()
+    last_30  = base_q.filter(Appointment.start_time >= thirty_days_ago).count()
+
+    last_appt = base_q.order_by(Appointment.start_time.desc()).first()
+    last_date = ''
+    if last_appt and last_appt.start_time:
+        last_date = last_appt.start_time.strftime('%Y-%m-%d')
+
+    # Ultimi 6 mesi: aggregato per service_id per calcolare incasso e top servizio
+    rows_6mo = (
+        db.session.query(
+            Appointment.service_id,
+            func.count(Appointment.id).label('cnt')
+        )
+        .filter(
+            Appointment.operator_id == operator_id,
+            Appointment.is_cancelled_by_client == False,
+            Appointment.start_time >= six_months_ago,
+        )
+        .group_by(Appointment.service_id)
+        .all()
+    )
+
+    total_6mo    = sum(r.cnt for r in rows_6mo)
+    avg_monthly  = round(total_6mo / 6.0, 1) if total_6mo > 0 else 0
+
+    revenue_6mo  = 0.0
+    top_svc_id   = None
+    top_svc_cnt  = 0
+    for r in rows_6mo:
+        svc = db.session.get(Service, r.service_id) if r.service_id else None
+        price = float(svc.servizio_prezzo or 0) if svc else 0.0
+        revenue_6mo += price * r.cnt
+        # Ignora il servizio "dummy" nel calcolo del servizio più frequente:
+        # è un placeholder, non un servizio reale erogato dall'operatore.
+        is_dummy = bool(
+            svc and svc.servizio_nome and svc.servizio_nome.strip().lower() == 'dummy'
+        )
+        if not is_dummy and r.cnt > top_svc_cnt:
+            top_svc_cnt = r.cnt
+            top_svc_id  = r.service_id
+
+    avg_revenue = round(revenue_6mo / 6.0, 2) if total_6mo > 0 else 0.0
+
+    top_svc_name = ''
+    if top_svc_id:
+        svc = db.session.get(Service, top_svc_id)
+        if svc:
+            top_svc_name = svc.servizio_nome or ''
+
+    return jsonify({
+        'id':                          op.id,
+        'nome':                        op.user_nome or '',
+        'cognome':                     op.user_cognome or '',
+        'tipo':                        op.user_tipo or '',
+        'totale_appuntamenti':         total,
+        'ultimi_30_giorni':            last_30,
+        'media_mensile':               avg_monthly,
+        'incasso_medio_mensile':       avg_revenue,
+        'servizio_piu_frequente':      top_svc_name,
+        'servizio_piu_frequente_count': top_svc_cnt,
+        'ultimo_appuntamento':         last_date,
+    })
