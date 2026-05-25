@@ -2914,23 +2914,61 @@ document.addEventListener('DOMContentLoaded', function() {
      Il badge viene mostrato solo se /api/ai/status → enabled=true
      ══════════════════════════════════════════════════════════ -->
 
-<!-- Badge flottante (angolo basso dx) -->
-<div id="aiBadgeBtn"
-     data-bs-toggle="tooltip"
-     title="Assistente AI"
-     aria-label="Apri assistente AI"
-     style="display:none; position:fixed; bottom:28px; right:24px; z-index:99999;
-            width:54px; height:54px; border-radius:50%;
-            background:linear-gradient(135deg,#b8809d,#a06b88);
-            box-shadow:0 4px 18px rgba(184,128,157,0.45);
-            cursor:pointer; align-items:center; justify-content:center;
-            transition:transform .18s ease, box-shadow .18s ease;">
-  <i class="bi bi-stars" style="font-size:1.55rem; color:#fff; pointer-events:none;"></i>
-  <!-- Pallino rosso notifica (nascosto di default) -->
-  <span id="aiBadgeDot"
-        style="display:none; position:absolute; top:4px; right:4px;
-               width:11px; height:11px; border-radius:50%;
-               background:#ff3b3b; border:2px solid #fff;"></span>
+<!-- Colonna di badge flottanti (angolo basso dx)
+     z-index 99990: sta sopra qualsiasi elemento di pagina ma SOTTO le
+     finestre che aprono i badge (chat AI = 99998, futuri modal dedicati
+     useranno z-index >= 99997). -->
+<div id="aiBadgeColumn"
+     style="position:fixed; bottom:24px; right:12px; z-index:99990;
+            display:flex; flex-direction:column; gap:10px;
+            align-items:center;">
+
+  <!-- Badge 1: AI assistant (apre prompt AI) -->
+  <div id="aiBadgeBtn"
+       data-bs-toggle="tooltip"
+       title="chiedi info all'assistente ai"
+       aria-label="Apri assistente AI"
+       style="display:none; width:44px; height:44px; border-radius:50%;
+              background:linear-gradient(135deg,#b8809d,#a06b88);
+              box-shadow:0 4px 14px rgba(184,128,157,0.45);
+              cursor:pointer; align-items:center; justify-content:center;
+              position:relative;
+              transition:transform .18s ease, box-shadow .18s ease;">
+    <i class="bi bi-stars" style="font-size:1.25rem; color:#fff; pointer-events:none;"></i>
+    <!-- Pallino rosso notifica (nascosto di default) -->
+    <span id="aiBadgeDot"
+          style="display:none; position:absolute; top:2px; right:2px;
+                 width:10px; height:10px; border-radius:50%;
+                 background:#ff3b3b; border:2px solid #fff;"></span>
+  </div>
+
+  <!-- Badge 2: Info clienti / servizi / operatori (statico, no AI) -->
+  <div id="aiInfoBadgeBtn"
+       data-bs-toggle="tooltip"
+       title="ottieni informazioni dettagliate su un cliente digitando il suo nome, oppure su servizi, operatori ecc"
+       aria-label="Apri pannello informazioni"
+       style="display:flex; width:44px; height:44px; border-radius:50%;
+              background:linear-gradient(135deg,#7aa6c8,#5a87aa);
+              box-shadow:0 4px 14px rgba(122,166,200,0.45);
+              cursor:pointer; align-items:center; justify-content:center;
+              position:relative;
+              transition:transform .18s ease, box-shadow .18s ease;">
+    <i class="bi bi-info-lg" style="font-size:1.4rem; color:#fff; pointer-events:none;"></i>
+  </div>
+
+  <!-- Badge 3: Cerca disponibilità (apre modal dedicato) -->
+  <div id="aiSearchAvailBadgeBtn"
+       data-bs-toggle="tooltip"
+       title="cerca disponibilità in calendario per cliente, operatore, servizio, data e orario"
+       aria-label="Apri ricerca disponibilità"
+       style="display:flex; width:44px; height:44px; border-radius:50%;
+              background:linear-gradient(135deg,#8fb88a,#6f9a6b);
+              box-shadow:0 4px 14px rgba(143,184,138,0.45);
+              cursor:pointer; align-items:center; justify-content:center;
+              position:relative;
+              transition:transform .18s ease, box-shadow .18s ease;">
+    <i class="bi bi-calendar-check" style="font-size:1.15rem; color:#fff; pointer-events:none;"></i>
+  </div>
 </div>
 
 <!-- Modal Chat AI -->
@@ -3034,6 +3072,282 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════════
+     CERCA DISPONIBILITÀ — Modal (badge 3)
+     Scheletro: i campi vengono riempiti negli Step 4-8.
+     z-index 99997 → sopra la colonna badge (99990), sotto chat AI (99998).
+     ══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="cercaDispModal"
+     tabindex="-1"
+     aria-labelledby="cercaDispModalLabel"
+     aria-hidden="true"
+     style="z-index:99997;">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header"
+           style="background:linear-gradient(135deg,#4a7a47,#355c33); color:#fce4ec;">
+        <h5 class="modal-title d-flex align-items-center gap-2"
+            id="cercaDispModalLabel"
+            style="color:#fce4ec;">
+          <i class="bi bi-calendar-check"></i>
+          Cerca disponibilità
+        </h5>
+        <button type="button" class="btn-close btn-close-white"
+                data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+
+      <div class="modal-body">
+
+        <!-- ── Layout 2-colonne netto.
+             Sx: Cliente + Operatore + Servizio (con pseudo-blocchi sotto).
+             Dx: Date + Orario (con tabella fasce). -->
+        <div class="row g-3">
+          <div class="col-lg-6">
+
+        <!-- ── Sezione Cliente ── -->
+        <div class="cd-section">
+          <label class="cd-label" for="cdClienteInput">
+            <i class="bi bi-person"></i> Cliente
+            <span class="cd-label-hint">(si può selezionare anche in un secondo momento)</span>
+          </label>
+          <div class="cd-section-body" id="cdClienteBody">
+            <!-- Stesso layout di una card servizio per coerenza visiva. -->
+            <div id="cdClienteSelected" class="cd-svc-card cd-cli-card"
+                 style="display:none;">
+              <div class="cd-svc-num"><i class="bi bi-person-fill"></i></div>
+              <div class="cd-svc-info">
+                <strong id="cdClienteSelectedName"></strong>
+                <small id="cdClienteSelectedMeta"></small>
+              </div>
+              <button type="button" class="cd-svc-remove" id="cdClienteClear"
+                      aria-label="Rimuovi cliente">&times;</button>
+            </div>
+            <div id="cdClienteInputWrap" style="position:relative;">
+              <input type="text"
+                     class="form-control"
+                     id="cdClienteInput"
+                     autocomplete="off"
+                     placeholder="Cerca cliente per nome, cognome o cellulare (da 3 caratteri)…" />
+              <div id="cdClienteResults"
+                   style="display:none; position:absolute; top:100%; left:0; right:0;
+                          z-index:99998;
+                          background:#fff; border:1px solid #d0d7d0;
+                          border-top:none; border-radius:0 0 6px 6px;
+                          max-height:240px; overflow-y:auto;
+                          box-shadow:0 4px 12px rgba(0,0,0,0.08);"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Sezione Operatore preferito ── -->
+        <div class="cd-section">
+          <label class="cd-label">
+            <i class="bi bi-person-workspace"></i> Operatore preferito
+            <span class="cd-label-hint">(se non selezionati, cerca tra tutti)</span>
+          </label>
+          <div class="cd-section-body" id="cdOperatoreBody">
+            <div class="form-check form-switch mb-2"
+                 style="font-size:0.84rem;">
+              <input class="form-check-input" type="checkbox"
+                     id="cdShowMacchinari" />
+              <label class="form-check-label" for="cdShowMacchinari"
+                     style="color:#4a6f48;">
+                <i class="bi bi-lightbulb"></i> mostra anche lampade / macchinari
+              </label>
+            </div>
+            <div id="cdOperatoriList" class="cd-checkbox-grid">
+              <em class="cd-placeholder">Caricamento operatori…</em>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Sezione Servizio ── -->
+        <div class="cd-section">
+          <label class="cd-label" for="cdServizioInput">
+            <i class="bi bi-list-check"></i> Servizio
+            <span class="cd-label-hint">(seleziona fino a 15 servizi)</span>
+          </label>
+          <div class="cd-section-body" id="cdServizioBody">
+            <div id="cdServizioInputWrap" style="position:relative;">
+              <input type="text"
+                     class="form-control"
+                     id="cdServizioInput"
+                     autocomplete="off"
+                     placeholder="Cerca servizio per nome o tag (da 2 caratteri)…" />
+              <div id="cdServizioResults"
+                   style="display:none; position:absolute; top:100%; left:0; right:0;
+                          z-index:99998;
+                          background:#fff; border:1px solid #d0d7d0;
+                          border-top:none; border-radius:0 0 6px 6px;
+                          max-height:240px; overflow-y:auto;
+                          box-shadow:0 4px 12px rgba(0,0,0,0.08);"></div>
+            </div>
+            <div id="cdServiziSelected" class="cd-services-list" style="margin-top:8px;">
+              <!-- pseudo-blocchi servizio: popolati da JS -->
+            </div>
+            <div id="cdServiziCounter" class="cd-services-counter"
+                 style="display:none;"></div>
+          </div>
+        </div>
+
+          </div><!-- /col-lg-6 (sx: cliente + operatore + servizio) -->
+
+          <div class="col-lg-6">
+
+        <!-- ── Sezione Date ── -->
+        <div class="cd-section">
+          <label class="cd-label">
+            <i class="bi bi-calendar-range"></i> Date
+          </label>
+          <div class="cd-section-body" id="cdDateBody"
+               style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
+            <!-- Selettore modalità: 2 pillole radio. I chip "filtra giorni"
+                 sono stati spostati sopra la tabella Orario (allineati con le
+                 colonne giorno) per dare l'idea che filtrino la tabella sotto. -->
+            <div class="btn-group btn-group-sm cd-date-modes" role="group"
+                 aria-label="Modalità di selezione date">
+              <input type="radio" class="btn-check" name="cdDateMode"
+                     id="cdDateModeSingle" value="single">
+              <label class="btn btn-outline-success" for="cdDateModeSingle">
+                <i class="bi bi-calendar-day"></i> Giorno
+              </label>
+
+              <input type="radio" class="btn-check" name="cdDateMode"
+                     id="cdDateModeMonth" value="month">
+              <label class="btn btn-outline-success" for="cdDateModeMonth">
+                <i class="bi bi-calendar3"></i> Mese
+              </label>
+
+              <input type="radio" class="btn-check" name="cdDateMode"
+                     id="cdDateModeRange" value="range" checked>
+              <label class="btn btn-outline-success" for="cdDateModeRange">
+                <i class="bi bi-calendar-range"></i> Intervallo
+              </label>
+            </div>
+
+            <!-- Body modalità "single": un singolo date picker -->
+            <div id="cdDateBodySingle" class="cd-date-mode-body"
+                 style="display:none; align-items:center;">
+              <input type="date" class="form-control form-control-sm"
+                     id="cdDateSingle" style="max-width:160px;">
+            </div>
+
+            <!-- Body modalità "month": un month picker -->
+            <div id="cdDateBodyMonth" class="cd-date-mode-body"
+                 style="display:none; align-items:center;">
+              <input type="month" class="form-control form-control-sm"
+                     id="cdDateMonth" style="max-width:160px;">
+            </div>
+
+            <!-- Body modalità "range": Da/A inline. -->
+            <div id="cdDateBodyRange" class="cd-date-mode-body"
+                 style="display:inline-flex; align-items:center; gap:8px;">
+              <label class="cd-sublabel mb-0" for="cdDateFrom">Da</label>
+              <input type="date" class="form-control form-control-sm"
+                     id="cdDateFrom" style="max-width:160px;">
+              <label class="cd-sublabel mb-0" for="cdDateTo">A</label>
+              <input type="date" class="form-control form-control-sm"
+                     id="cdDateTo" style="max-width:160px;">
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Sezione Orario ── -->
+        <div class="cd-section">
+          <label class="cd-label">
+            <i class="bi bi-clock"></i> Orario
+            <span class="cd-label-hint">(tick sui giorni × fasce in cui cercare; orari modificabili)</span>
+          </label>
+          <div class="cd-section-body" id="cdOrarioBody">
+            <div class="cd-orario-table-wrap">
+              <table class="cd-orario-table" id="cdOrarioTable">
+                <thead>
+                  <!-- Riga filtro giorni-settimana: visibile solo se Date
+                       mode = "Intervallo". Popolata da _cdBuildWeekdayChips. -->
+                  <tr id="cdOrarioFilterRow" class="cd-orario-filter-row"
+                      style="display:none;">
+                    <th colspan="2" class="cd-orario-filter-hint">
+                      <i class="bi bi-funnel"></i> Filtra
+                    </th>
+                    <th data-wd="1"></th><th data-wd="2"></th>
+                    <th data-wd="3"></th><th data-wd="4"></th>
+                    <th data-wd="5"></th><th data-wd="6"></th>
+                    <th data-wd="7"></th>
+                  </tr>
+                  <tr>
+                    <th class="cd-orario-th-band">Fascia</th>
+                    <th class="cd-orario-th-time">Orario</th>
+                    <th>Lun</th><th>Mar</th><th>Mer</th>
+                    <th>Gio</th><th>Ven</th><th>Sab</th><th>Dom</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- righe popolate da JS -->
+                </tbody>
+              </table>
+            </div>
+            <div class="cd-sublabel" style="margin-top:6px;">
+              Se nessuna cella è selezionata, ricerca in tutti gli orari di apertura.
+            </div>
+          </div>
+        </div>
+
+          </div><!-- /col-lg-6 (dx: date + orario) -->
+        </div><!-- /row -->
+
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light"
+                data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-success" id="cdSearchBtn">
+          <i class="bi bi-search me-1"></i>Cerca
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     RISULTATI DISPONIBILITÀ — Modal separato (più stretto)
+     Si apre dopo Cerca, sostituendo il modal di ricerca.
+     Freccia ← in header per tornare al modal di ricerca con
+     lo stato preservato (cliente/operatori/servizi/date/orari).
+     ══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="cercaDispResultsModal"
+     tabindex="-1"
+     aria-labelledby="cercaDispResultsModalLabel"
+     aria-hidden="true"
+     style="z-index:99997;">
+  <div class="modal-dialog modal-md modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header"
+           style="background:linear-gradient(135deg,#4a7a47,#355c33); color:#fce4ec;
+                  padding:10px 14px;">
+        <button type="button" id="cdResultsBack"
+                class="btn btn-sm p-0 me-2"
+                style="background:transparent; border:none; color:#fce4ec;
+                       font-size:1.3rem; line-height:1;"
+                title="Torna alla ricerca">
+          <i class="bi bi-arrow-left-circle-fill"></i>
+        </button>
+        <h5 class="modal-title flex-grow-1 d-flex align-items-center gap-2"
+            id="cercaDispResultsModalLabel"
+            style="color:#fce4ec; font-size:1rem;">
+          <i class="bi bi-calendar-check"></i>
+          Disponibilità trovata
+        </h5>
+        <button type="button" class="btn-close btn-close-white"
+                data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body" id="cdResultsModalBody"
+           style="background:#fdf0f5; padding:14px;">
+        <!-- popolato da _cdRenderResults -->
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Stili animazione e slot-card -->
 <style>
 /* Pulsazione pallino typing */
@@ -3043,7 +3357,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 /* Badge hover */
 @media (max-width: 1199.98px) {
-  #aiBadgeBtn,
+  #aiBadgeColumn,
   #aiChatModal {
     display: none !important;
   }
@@ -3051,7 +3365,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
 #aiBadgeBtn:hover {
   transform: scale(1.08);
-  box-shadow: 0 6px 24px rgba(184,128,157,0.6);
+  box-shadow: 0 6px 22px rgba(184,128,157,0.6);
+}
+
+#aiInfoBadgeBtn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 22px rgba(122,166,200,0.6);
+}
+
+#aiSearchAvailBadgeBtn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 22px rgba(143,184,138,0.6);
 }
 
 #aiChatResizeHandle {
@@ -3256,7 +3580,1998 @@ document.addEventListener('DOMContentLoaded', function() {
   border-color: #ffcccc;
   color: #c0392b;
 }
+
+/* ═══ Cerca disponibilità modal ═══ */
+.cd-section { margin-bottom: 10px; }
+/* NB: usiamo #cercaDispModal come prefisso per battere la regola globale
+   .modal-body label (in styles.css) che altrimenti forza colore #5a4a54,
+   font-weight 500, font-size 0.875rem ecc. */
+#cercaDispModal .cd-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5a3e51;
+  background: #fce4ec;
+  padding: 4px 12px 4px 10px;
+  border-radius: 4px 4px 0 0;
+  border-left: 4px solid #87647c;
+  margin-bottom: 0;
+  position: relative;
+  top: 1px;
+  box-shadow: 0 -1px 2px rgba(184,128,157,0.18);
+}
+#cercaDispModal .cd-label .bi {
+  margin-right: 2px;
+  font-size: 0.95rem;
+  color: #6e4d61;
+}
+#cercaDispModal .cd-label-hint {
+  font-weight: 500;
+  font-size: 0.72rem;
+  color: #8c6f7d;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  margin-left: 6px;
+}
+.cd-section-body {
+  background: #fff5fa;
+  border: 1px solid #e8d3df;
+  border-radius: 4px 8px 8px 8px;
+  padding: 8px 10px;
+}
+.cd-placeholder {
+  color: #b89ca8;
+  font-size: 0.85rem;
+}
+/* Backdrop del modal Cerca disp: deve stare sopra la colonna badge (99990)
+   ma sotto il contenuto del modal (99997). */
+#cercaDispModal { z-index: 99997 !important; }
+.cd-backdrop { z-index: 99996 !important; }
+
+/* Modal Cerca disp: largo 84vw + più alto. Tema rosa chiarissimo per
+   tutto il body, header verde scuro a contrasto. */
+#cercaDispModal .modal-dialog {
+  max-width: 84vw !important;
+  width: 84vw !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Modal Risultati: nettamente più stretto del modal ricerca (single column).
+   Stesso z-index e tema. */
+#cercaDispResultsModal { z-index: 99997 !important; }
+#cercaDispResultsModal .modal-dialog {
+  max-width: 540px !important;
+  width: 540px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+#cercaDispResultsModal .modal-body {
+  max-height: calc(100vh - 180px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+#cdResultsBack { transition: transform .12s ease; }
+#cdResultsBack:hover { transform: translateX(-2px); }
+#cercaDispModal .modal-content {
+  background: #fdf0f5;
+}
+/* Modal body: più alto del 5% (-140px invece di -200px lasciati per
+   header+footer+margini), su sfondo rosa chiarissimo. */
+#cercaDispModal .modal-body {
+  max-height: calc(100vh - 140px) !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  background: #fdf0f5;
+  padding: 14px 16px;
+}
+
+/* Item dropdown autocomplete dentro il modal Cerca disp (cliente / servizio).
+   Tutto su UNA RIGA, ellipsis se troppo lungo. Prefisso #cercaDispModal +
+   !important per battere stili globali su .modal-body small/input/ecc. */
+#cercaDispModal .cd-result-item {
+  padding: 10px 14px !important;
+  cursor: pointer;
+  border-bottom: 1px solid #f5e7ee;
+  font-size: 1.05rem !important;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block !important;
+  text-decoration: none !important;
+}
+#cercaDispModal .cd-result-item:last-child { border-bottom: none; }
+#cercaDispModal .cd-result-item:hover { background: #fce4ec; }
+#cercaDispModal .cd-result-item strong {
+  color: #5a3e51 !important;
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  display: inline !important;
+}
+#cercaDispModal .cd-result-item .cd-result-meta,
+#cercaDispModal .cd-result-item small {
+  color: #87647c !important;
+  font-size: 0.95rem !important;
+  display: inline !important;
+  margin-left: 4px;
+}
+#cercaDispModal .cd-result-empty {
+  padding: 10px 12px;
+  font-size: 0.95rem !important;
+  color: #aa8c98;
+  font-style: italic;
+}
+
+/* Griglia chip per la selezione multi-operatore */
+.cd-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+/* Prefisso #cercaDispModal: necessario per battere .modal-body label
+   (styles.css globale) che altrimenti forza font-size 0.875rem e color #5a4a54. */
+#cercaDispModal .cd-op-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 9px 18px !important;
+  background: #fff;
+  border: 1.5px solid #e0c8d3;
+  border-radius: 18px;
+  cursor: pointer;
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  color: #5a3e51 !important;
+  user-select: none;
+  transition: background .12s, border-color .12s;
+  margin-bottom: 0 !important;
+}
+.cd-op-chip:hover { background: #fce4ec; }
+.cd-op-chip.cd-op-checked {
+  background: linear-gradient(135deg,#b8809d,#a06b88);
+  border-color: #87647c;
+  color: #fff;
+}
+.cd-op-chip-machinery {
+  background: #fff8e7;
+  border-color: #e3c98f;
+}
+.cd-op-chip-machinery:hover { background: #fff0c8; }
+.cd-op-chip-machinery.cd-op-checked {
+  background: linear-gradient(135deg,#e3c98f,#c69a3f);
+  border-color: #a87a2a;
+  color: #fff;
+}
+.cd-op-chip input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Lista pseudo-blocchi servizi selezionati: spazio già riservato sotto il
+   campo di ricerca per non far "saltare" il layout quando l'utente aggiunge
+   il primo servizio. */
+.cd-services-list {
+  min-height: 120px;
+  max-height: 230px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.cd-services-counter {
+  font-size: 0.78rem;
+  color: #888;
+  text-align: right;
+  margin-top: 4px;
+}
+.cd-services-counter.cd-counter-full { color: #c33; font-weight: 600; }
+
+.cd-svc-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  background: #fff;
+  border: 1.5px solid #b8c4b6;
+  border-radius: 8px;
+  margin-top: 5px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.cd-svc-num {
+  background: linear-gradient(135deg,#8fb88a,#6f9a6b);
+  color: #fff;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+/* Nome + meta TUTTO SU UNA RIGA (single-line card più compatta). */
+.cd-svc-info {
+  flex: 1;
+  font-size: 0.92rem;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cd-svc-info strong {
+  display: inline;
+  font-weight: 700;
+}
+.cd-svc-info small {
+  color: #888;
+  font-size: 0.84rem;
+  margin-left: 8px;
+  display: inline;
+}
+.cd-svc-remove {
+  background: none;
+  border: none;
+  color: #c33;
+  font-size: 1.15rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cd-svc-remove:hover { background: #fce8e8; }
+
+/* Card cliente: stesso layout della card servizio, stesso badge VERDE
+   (eredita .cd-svc-num default), con icona persona al posto del numero. */
+.cd-cli-card {
+  margin-top: 0;
+  background: #fff;
+  border-color: #d9bcc8;
+}
+.cd-cli-card .cd-svc-num .bi { font-size: 1rem; }
+
+/* Date section: pillole Singolo/Intervallo in tema viola (sfondo selezionato
+   uguale ai chip giorni-settimana). Il verde è confinato al solo header. */
+.cd-date-modes .btn-outline-success {
+  --bs-btn-color: #6e4d61;
+  --bs-btn-border-color: #d8c8d0;
+  --bs-btn-hover-bg: #fce4ec;
+  --bs-btn-hover-border-color: #87647c;
+  --bs-btn-hover-color: #5a3e51;
+  --bs-btn-active-bg: #87647c;
+  --bs-btn-active-border-color: #5a3e51;
+  --bs-btn-active-color: #fff;
+  font-size: 0.82rem;
+}
+.cd-sublabel {
+  font-size: 0.78rem;
+  color: #6f6;
+  color: #6f6f6f;
+  margin-bottom: 2px;
+}
+.cd-weekday-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.cd-wd-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 4px 8px;
+  background: #fff;
+  border: 1px solid #cfd8cf;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  user-select: none;
+  transition: background .12s, border-color .12s;
+}
+.cd-wd-chip:hover { background: #f0f6ef; }
+.cd-wd-chip.cd-wd-checked {
+  background: #4a7a47;
+  border-color: #355c33;
+  color: #fff;
+  font-weight: 600;
+}
+.cd-wd-chip input { display: none; }
+
+/* Tabella Orario */
+.cd-orario-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e8d3df;
+  border-radius: 6px;
+  background: #fff;
+  /* margine laterale: aspetto più "quadrato" */
+  margin: 0 auto;
+  max-width: max-content;
+}
+.cd-orario-table {
+  width: auto;
+  margin: 0 auto;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.cd-orario-table thead {
+  background: #f7e3ec;
+  color: #5a3e51;
+}
+
+/* Filter-row: prima riga del thead con i 7 chip "filtra giorni" allineati
+   sopra le colonne giorno della tabella sotto. Visibile solo in mode 'range'. */
+.cd-orario-filter-row th {
+  padding: 4px 3px !important;
+  background: #fbeef3;
+  border-bottom: 2px solid #e9c4d6;
+}
+.cd-orario-filter-row .cd-orario-filter-hint {
+  text-align: right !important;
+  padding-right: 10px !important;
+  color: #87647c;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.cd-orario-filter-row .cd-orario-filter-hint .bi { margin-right: 4px; }
+
+/* Chip filtro giorni-settimana: variante compatta per stare dentro un <th>
+   di larghezza ~60px. Stessa logica click/toggle dei chip originali. */
+.cd-wd-chip-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 4px 0;
+  background: #fff;
+  border: 1px solid #d8c8d0;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6e4d61;
+  user-select: none;
+  transition: background .12s, border-color .12s;
+}
+.cd-wd-chip-mini:hover { background: #fce4ec; }
+.cd-wd-chip-mini.cd-wd-checked {
+  background: #87647c;
+  border-color: #5a3e51;
+  color: #fff;
+}
+.cd-wd-chip-mini input { display: none; }
+.cd-orario-table th,
+.cd-orario-table td {
+  padding: 4px 8px;
+  text-align: center;
+  border-bottom: 1px solid #f0e0e8;
+  border-right: 1px solid #f5e7ee;
+  vertical-align: middle;
+}
+.cd-orario-table th { font-weight: 700; }
+.cd-orario-table tr:last-child td { border-bottom: none; }
+.cd-orario-table td:last-child,
+.cd-orario-table th:last-child { border-right: none; }
+/* Colonna Fascia: abbastanza larga per "Pausa pranzo" senza andare a capo */
+.cd-orario-th-band {
+  width: 130px; min-width: 130px;
+  text-align: left !important; padding-left: 10px !important;
+  white-space: nowrap;
+}
+.cd-orario-th-time { width: 165px; min-width: 165px; }
+.cd-orario-band-name {
+  text-align: left !important;
+  padding-left: 10px !important;
+  font-weight: 700;
+  color: #5a3e51;
+  background: #fbeef3;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background .12s;
+}
+.cd-orario-band-name:hover { background: #f5dde9;
+}
+.cd-orario-band-name.cd-band-all-checked { background: #e9c4d6; color:#3d2733; }
+
+/* Colonne disabilitate dal filtro Date */
+.cd-orario-table th.cd-col-disabled,
+.cd-orario-table td.cd-col-disabled {
+  background: #f1f1f1 !important;
+  color: #b8b8b8 !important;
+  cursor: not-allowed !important;
+  opacity: 0.55;
+  pointer-events: none;
+}
+.cd-orario-table td.cd-col-disabled .cd-orario-tick { color: transparent !important; }
+
+/* Risultati ricerca disponibilità: stili senza prefisso modal-specifico
+   (vivono nel modal "cercaDispResultsModal"). Classi .cd-* esclusive a
+   questa feature, quindi nessun rischio di collisione. */
+.cd-day-block { margin-bottom: 14px; }
+.cd-day-header {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #5a3e51;
+  background: #fbeef3;
+  border-left: 3px solid #87647c;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+}
+.cd-day-header .cd-day-count {
+  font-weight: 500;
+  color: #87647c;
+  font-size: 0.85rem;
+}
+.cd-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.cd-result-card {
+  background: linear-gradient(135deg,#fff5fa,#fce4ec);
+  border: 1.5px solid #b8809d;
+  border-radius: 10px;
+  padding: 8px 11px;
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+.cd-result-card:hover {
+  background: linear-gradient(135deg,#fce4ec,#f5c7d8);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(184,128,157,0.25);
+}
+.cd-slot-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid rgba(184,128,157,0.3);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+.cd-slot-range {
+  font-weight: 700;
+  color: #5a3e51;
+  font-size: 1rem;
+}
+.cd-slot-dur {
+  color: #87647c;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+.cd-slot-svc-list { margin: 0; }
+.cd-slot-svc {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 0;
+  color: #5a3e51;
+  font-size: 0.85rem;
+}
+.cd-slot-svc-time {
+  color: #87647c;
+  font-weight: 600;
+  font-size: 0.78rem;
+  min-width: 38px;
+}
+.cd-slot-svc-name {
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-svc-op {
+  color: #6e4d61;
+  font-style: italic;
+  font-size: 0.75rem;
+}
+.cd-slot-shared-op {
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(184,128,157,0.3);
+  color: #5a3e51;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.cd-slot-shared-op .bi { margin-right: 3px; color: #87647c; }
+
+/* Slot espanso: conferma prenotazione inline */
+.cd-result-card.cd-slot-expanded {
+  grid-column: 1 / -1;            /* occupa tutta la riga della griglia */
+  background: linear-gradient(135deg,#fff,#fce4ec);
+  border-color: #87647c;
+  box-shadow: 0 4px 14px rgba(135,100,124,0.25);
+  cursor: default;
+}
+.cd-slot-actions {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(135,100,124,0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cd-slot-client-line {
+  font-size: 0.88rem;
+  color: #5a3e51;
+  font-weight: 600;
+}
+.cd-slot-client-line .bi { color: #2a7a2a; margin-right: 4px; }
+.cd-slot-client-line small { font-weight: 400; color: #87647c; }
+.cd-slot-client-search { position: relative; }
+.cd-slot-client-results {
+  position: absolute;
+  top: 100%; left: 0; right: 0;
+  background: #fff;
+  border: 1px solid #d8c8d0;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  z-index: 5;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.cd-slot-action-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.cd-slot-action-btns .btn { flex: 1; font-size: 0.85rem; padding: 4px 8px; }
+.cd-slot-status { font-size: 0.85rem; min-height: 1.2em; }
+.cd-result-card.cd-slot-booked {
+  background: linear-gradient(135deg,#e8f5e9,#c8e6c9);
+  border-color: #2a7a2a;
+}
+.cd-result-card.cd-slot-booked:hover {
+  background: linear-gradient(135deg,#e8f5e9,#c8e6c9);
+  cursor: default;
+  transform: none;
+}
+.cd-orario-time-cell {
+  white-space: nowrap;
+  background: #fafcf9;
+}
+.cd-orario-time-cell input[type="time"] {
+  width: 70px;
+  min-width: 70px;
+  padding: 2px 4px;
+  font-size: 0.80rem;
+  border: 1px solid #d8c8d0;
+  border-radius: 4px;
+  background: #fff;
+}
+.cd-orario-time-sep { color: #888; margin: 0 3px; }
+/* Cella giorno×fascia: tutta l'area è cliccabile, niente box interno.
+   Lo stato selezionato è reso con un cambio di colore della cella. */
+.cd-orario-cell {
+  cursor: pointer;
+  user-select: none;
+  min-width: 58px;
+  height: 40px;
+}
+.cd-orario-cell:hover { background: #fce4ec; }
+.cd-orario-cell.cd-orario-cell-checked {
+  background: linear-gradient(135deg,#a06b88,#87647c);
+}
+.cd-orario-cell .cd-orario-tick {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: transparent;
+  line-height: 1;
+}
+.cd-orario-cell.cd-orario-cell-checked .cd-orario-tick {
+  color: #fff;
+}
+
+/* Checkbox visivo a sinistra del nome fascia (Mattino/Pausa/...): segnala
+   che cliccando il nome si seleziona/deseleziona tutta la riga. */
+.cd-band-checkbox {
+  display: inline-block;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid #c8b4c0;
+  border-radius: 3px;
+  background: #fff;
+  position: relative;
+  flex-shrink: 0;
+  vertical-align: middle;
+  margin-right: 8px;
+  transition: background .12s, border-color .12s;
+}
+.cd-orario-band-name:hover .cd-band-checkbox { border-color: #87647c; }
+.cd-orario-band-name.cd-band-all-checked .cd-band-checkbox {
+  background: #87647c;
+  border-color: #5a3e51;
+}
+.cd-orario-band-name.cd-band-all-checked .cd-band-checkbox::after {
+  content: '\2713';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Cella orario "fissa" (Apertura / Chiusura): non modificabile, mostrata
+   come testo italico grigio. */
+.cd-orario-time-cell-fixed {
+  color: #6e4d61;
+  font-style: italic;
+  font-size: 0.82rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Uniforma l'altezza di TUTTE le righe della tabella Orario, indipendentemente
+   dal contenuto della cella Orario (inputs alti vs testo). 40px = come le
+   celle giorno. */
+.cd-orario-table tbody tr { height: 40px; }
+.cd-orario-table tbody td { height: 40px; vertical-align: middle; }
 </style>
+
+<!-- ══════════════════════════════════════════════════════════
+     CERCA DISPONIBILITÀ — modulo state + handlers
+     Self-contained: usa window.CD per stato e funzioni, niente
+     dipendenze dall'IIFE AI o da altre logiche del calendario.
+     ══════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  // ── Stato del form ──────────────────────────────────────────
+  // Esposto su window.CD per debug e per i prossimi step
+  // (Step 5-9 vi aggiungeranno operatori/servizi/date/orari).
+  window.CD = window.CD || {
+    cliente:    null,   // {id, nome, cognome, cellulare} | null
+    operatori:  [],     // array di id operatori (Step 5)
+    servizi:    [],     // array di servizi selezionati (Step 6)
+    date:       null,   // criteri data (Step 7)
+    orari:      null,   // criteri orario (Step 8)
+    _searchTimer: null,
+    _searchAbort: null,
+  };
+
+  // Base URL come nel modulo AI: estrae /dbX/calendar dal path corrente
+  function _baseUrl() {
+    var m = window.location.pathname.match(/^(\/[^/]+\/calendar)/);
+    return m ? m[1] : '/calendar';
+  }
+
+  function _esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── CLIENTE: autocomplete ───────────────────────────────────
+
+  function _cdClienteShowResults(html) {
+    var box = document.getElementById('cdClienteResults');
+    if (!box) return;
+    box.innerHTML = html;
+    box.style.display = 'block';
+  }
+
+  function _cdClienteHideResults() {
+    var box = document.getElementById('cdClienteResults');
+    if (!box) return;
+    box.innerHTML = '';
+    box.style.display = 'none';
+  }
+
+  function _cdRenderClienteResults(results) {
+    if (!Array.isArray(results) || !results.length) {
+      _cdClienteShowResults(
+        '<div class="cd-result-empty">Nessun cliente trovato.</div>'
+      );
+      return;
+    }
+    var html = '';
+    results.forEach(function(c) {
+      var full = ((c.nome || '') + ' ' + (c.cognome || '')).trim();
+      var tel  = c.cellulare ? c.cellulare : '';
+      html += '<div class="cd-result-item" data-client-id="' + c.id + '">' +
+              '<strong>' + _esc(full) + '</strong>' +
+              (tel ? ' <span class="cd-result-meta">· ' + _esc(tel) + '</span>' : '') +
+              '</div>';
+    });
+    _cdClienteShowResults(html);
+
+    document.querySelectorAll('#cdClienteResults .cd-result-item')
+      .forEach(function(item) {
+        item.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var id = parseInt(item.getAttribute('data-client-id'), 10);
+          var match = results.find(function(r) { return r.id === id; });
+          if (match) _cdSelectCliente(match);
+        });
+      });
+  }
+
+  function _cdSelectCliente(c) {
+    window.CD.cliente = {
+      id:        c.id,
+      nome:      c.nome || '',
+      cognome:   c.cognome || '',
+      cellulare: c.cellulare || '',
+    };
+    var full = ((c.nome || '') + ' ' + (c.cognome || '')).trim();
+    document.getElementById('cdClienteSelectedName').textContent = full;
+    document.getElementById('cdClienteSelectedMeta').textContent = c.cellulare || '';
+    document.getElementById('cdClienteSelected').style.display = 'flex';
+    document.getElementById('cdClienteInputWrap').style.display = 'none';
+    var input = document.getElementById('cdClienteInput');
+    if (input) input.value = '';
+    _cdClienteHideResults();
+  }
+
+  function _cdClearCliente() {
+    window.CD.cliente = null;
+    var sel = document.getElementById('cdClienteSelected');
+    var wrap = document.getElementById('cdClienteInputWrap');
+    if (sel)  sel.style.display = 'none';
+    if (wrap) wrap.style.display = 'block';
+    var input = document.getElementById('cdClienteInput');
+    if (input) { input.value = ''; input.focus(); }
+    _cdClienteHideResults();
+  }
+
+  function _cdSearchCliente(query) {
+    // Aborta richiesta precedente per non sovrascrivere risultati con
+    // l'ordine sbagliato (es. utente digita veloce).
+    if (window.CD._searchAbort) {
+      try { window.CD._searchAbort.abort(); } catch(_) {}
+    }
+    var ctrl = new AbortController();
+    window.CD._searchAbort = ctrl;
+    return fetch(_baseUrl() + '/api/info/client/search?q=' + encodeURIComponent(query), {
+      credentials: 'same-origin',
+      signal:      ctrl.signal,
+    }).then(function(r) { return r.ok ? r.json() : []; });
+  }
+
+  // ── OPERATORI: lista checkbox (estetiste + opzionale lampade) ──
+
+  function _cdFetchStatic() {
+    if (window.CD._staticCache) {
+      return Promise.resolve(window.CD._staticCache);
+    }
+    return fetch(_baseUrl() + '/api/info/static', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : {}; })
+      .then(function(data) {
+        window.CD._staticCache = data || {};
+        return window.CD._staticCache;
+      });
+  }
+
+  function _cdFetchOperators() {
+    return _cdFetchStatic().then(function(d) {
+      var ops = (d && d.operators) || [];
+      // Mantieni la cache compatibile col vecchio nome: _cdRenderOperators
+      // (e il toggle "mostra lampade") legge da _operatorsCache.
+      window.CD._operatorsCache = ops;
+      return ops;
+    });
+  }
+
+  function _cdFetchBusiness() {
+    return _cdFetchStatic().then(function(d) { return (d && d.business) || {}; });
+  }
+
+  function _cdRenderOperators() {
+    var listEl = document.getElementById('cdOperatoriList');
+    if (!listEl) return;
+    var ops = window.CD._operatorsCache || [];
+    var showMacchinari = !!document.getElementById('cdShowMacchinari').checked;
+    var filtered = ops.filter(function(o) {
+      if (showMacchinari) return true;
+      return (o.tipo || '').toLowerCase() === 'estetista';
+    });
+    if (!filtered.length) {
+      listEl.innerHTML = '<em class="cd-placeholder">Nessun operatore disponibile.</em>';
+      return;
+    }
+    // Mantiene la selezione corrente quando si rifà render (es. al toggle del tick)
+    var selected = new Set(window.CD.operatori || []);
+    var html = '';
+    filtered.forEach(function(o) {
+      var isMach   = (o.tipo || '').toLowerCase() === 'macchinario';
+      var checked  = selected.has(o.id);
+      var classes  = 'cd-op-chip' +
+                     (isMach ? ' cd-op-chip-machinery' : '') +
+                     (checked ? ' cd-op-checked' : '');
+      html += '<label class="' + classes + '" data-op-id="' + o.id + '">' +
+              '<input type="checkbox" data-op-id="' + o.id + '"' +
+              (checked ? ' checked' : '') + ' />' +
+              '<span>' + _esc(o.nome) +
+              (isMach ? ' <i class="bi bi-lightbulb" style="font-size:0.78rem;"></i>' : '') +
+              '</span></label>';
+    });
+    listEl.innerHTML = html;
+
+    // Wire-up: toggle dello stato + sync con CD.operatori
+    listEl.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+      cb.addEventListener('change', function(e) {
+        e.stopPropagation();
+        var id = parseInt(cb.getAttribute('data-op-id'), 10);
+        if (!id) return;
+        var set = new Set(window.CD.operatori || []);
+        if (cb.checked) set.add(id);
+        else            set.delete(id);
+        window.CD.operatori = Array.from(set);
+        // Aggiorna look del chip parent
+        var chip = cb.closest('.cd-op-chip');
+        if (chip) chip.classList.toggle('cd-op-checked', cb.checked);
+      });
+    });
+  }
+
+  function _cdClearOperators() {
+    window.CD.operatori = [];
+    var sw = document.getElementById('cdShowMacchinari');
+    if (sw) sw.checked = false;
+    _cdRenderOperators();
+  }
+
+  // ── SERVIZI: autocomplete + lista pseudo-blocchi (max 15) ─────
+
+  var CD_MAX_SERVIZI = 15;
+
+  function _cdServizioShowResults(html) {
+    var box = document.getElementById('cdServizioResults');
+    if (!box) return;
+    box.innerHTML = html;
+    box.style.display = 'block';
+  }
+
+  function _cdServizioHideResults() {
+    var box = document.getElementById('cdServizioResults');
+    if (!box) return;
+    box.innerHTML = '';
+    box.style.display = 'none';
+  }
+
+  function _cdSearchServizio(query) {
+    if (window.CD._svcSearchAbort) {
+      try { window.CD._svcSearchAbort.abort(); } catch(_) {}
+    }
+    var ctrl = new AbortController();
+    window.CD._svcSearchAbort = ctrl;
+    return fetch(_baseUrl() + '/api/info/service/search?q=' + encodeURIComponent(query), {
+      credentials: 'same-origin',
+      signal:      ctrl.signal,
+    }).then(function(r) { return r.ok ? r.json() : []; });
+  }
+
+  function _cdRenderServizioResults(results) {
+    if (!Array.isArray(results) || !results.length) {
+      _cdServizioShowResults(
+        '<div class="cd-result-empty">Nessun servizio trovato.</div>'
+      );
+      return;
+    }
+    var html = '';
+    results.forEach(function(s) {
+      var meta = (s.durata || 0) + ' min · €' + (s.prezzo || 0).toFixed(2);
+      html += '<div class="cd-result-item" data-svc-id="' + s.id + '">' +
+              '<strong>' + _esc(s.nome) + '</strong>' +
+              ' <span class="cd-result-meta">— ' + _esc(meta) + '</span>' +
+              '</div>';
+    });
+    _cdServizioShowResults(html);
+
+    document.querySelectorAll('#cdServizioResults .cd-result-item')
+      .forEach(function(item) {
+        item.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var id = parseInt(item.getAttribute('data-svc-id'), 10);
+          var match = results.find(function(r) { return r.id === id; });
+          if (match) _cdAddServizio(match);
+        });
+      });
+  }
+
+  function _cdAddServizio(s) {
+    var list = window.CD.servizi || [];
+    if (list.length >= CD_MAX_SERVIZI) {
+      // Limite raggiunto: feedback senza chiudere il modal
+      var counter = document.getElementById('cdServiziCounter');
+      if (counter) {
+        counter.style.display = 'block';
+        counter.classList.add('cd-counter-full');
+        counter.textContent = 'Limite di ' + CD_MAX_SERVIZI + ' servizi raggiunto';
+      }
+      return;
+    }
+    // Duplicati ammessi (cliente può chiedere 2 manicure in giorni diversi).
+    list.push({
+      id:     s.id,
+      nome:   s.nome   || '',
+      durata: s.durata || 0,
+      prezzo: s.prezzo || 0,
+    });
+    window.CD.servizi = list;
+    _cdRenderServiziSelezionati();
+    // Pulisci input e dropdown per facilitare nuove ricerche
+    var input = document.getElementById('cdServizioInput');
+    if (input) { input.value = ''; input.focus(); }
+    _cdServizioHideResults();
+  }
+
+  function _cdRemoveServizio(index) {
+    var list = window.CD.servizi || [];
+    if (index < 0 || index >= list.length) return;
+    list.splice(index, 1);
+    window.CD.servizi = list;
+    _cdRenderServiziSelezionati();
+  }
+
+  function _cdRenderServiziSelezionati() {
+    var listEl    = document.getElementById('cdServiziSelected');
+    var counterEl = document.getElementById('cdServiziCounter');
+    if (!listEl || !counterEl) return;
+    var arr = window.CD.servizi || [];
+
+    if (!arr.length) {
+      listEl.innerHTML = '';
+      counterEl.style.display = 'none';
+      counterEl.classList.remove('cd-counter-full');
+      return;
+    }
+
+    var html = '';
+    arr.forEach(function(s, i) {
+      var meta = (s.durata || 0) + ' min · €' + (s.prezzo || 0).toFixed(2);
+      html += '<div class="cd-svc-card">' +
+              '<div class="cd-svc-num">' + (i + 1) + '</div>' +
+              '<div class="cd-svc-info">' +
+              '<strong>' + _esc(s.nome) + '</strong>' +
+              '<small>' + _esc(meta) + '</small>' +
+              '</div>' +
+              '<button type="button" class="cd-svc-remove" data-idx="' + i + '" ' +
+              'aria-label="Rimuovi servizio">&times;</button>' +
+              '</div>';
+    });
+    listEl.innerHTML = html;
+
+    listEl.querySelectorAll('.cd-svc-remove').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var idx = parseInt(btn.getAttribute('data-idx'), 10);
+        if (!isNaN(idx)) _cdRemoveServizio(idx);
+      });
+    });
+
+    counterEl.style.display = 'block';
+    counterEl.textContent = arr.length + ' / ' + CD_MAX_SERVIZI + ' servizi';
+    counterEl.classList.toggle('cd-counter-full', arr.length >= CD_MAX_SERVIZI);
+  }
+
+  function _cdClearServizi() {
+    window.CD.servizi = [];
+    _cdRenderServiziSelezionati();
+    _cdServizioHideResults();
+    var input = document.getElementById('cdServizioInput');
+    if (input) input.value = '';
+  }
+
+  // ── DATE: modalità singolo / intervallo / giorni settimana ────
+
+  // ISO weekday: 1=Lun..7=Dom (come date.weekday()+1 in Python, ma usiamo
+  // il formato isoweekday standard per coerenza con backend Python).
+  var CD_WEEKDAYS = [
+    { n: 1, label: 'Lun' },
+    { n: 2, label: 'Mar' },
+    { n: 3, label: 'Mer' },
+    { n: 4, label: 'Gio' },
+    { n: 5, label: 'Ven' },
+    { n: 6, label: 'Sab' },
+    { n: 7, label: 'Dom' },
+  ];
+
+  function _cdTodayIso() {
+    var d = new Date();
+    return d.getFullYear() + '-' +
+           String(d.getMonth() + 1).padStart(2, '0') + '-' +
+           String(d.getDate()).padStart(2, '0');
+  }
+
+  function _cdDaysFromTodayIso(days) {
+    var d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.getFullYear() + '-' +
+           String(d.getMonth() + 1).padStart(2, '0') + '-' +
+           String(d.getDate()).padStart(2, '0');
+  }
+
+  function _cdSetDateMode(mode) {
+    var single = document.getElementById('cdDateBodySingle');
+    var month  = document.getElementById('cdDateBodyMonth');
+    var range  = document.getElementById('cdDateBodyRange');
+    if (single) single.style.display = (mode === 'single') ? 'inline-flex' : 'none';
+    if (month)  month.style.display  = (mode === 'month')  ? 'inline-flex' : 'none';
+    if (range)  range.style.display  = (mode === 'range')  ? 'inline-flex' : 'none';
+    // Filter-row nei thead Orario: visibile in 'range' e 'month'
+    // (in 'single' il filtro giorni-settimana non ha senso, è implicito).
+    var filterRow = document.getElementById('cdOrarioFilterRow');
+    if (filterRow) {
+      filterRow.style.display = (mode === 'range' || mode === 'month') ? '' : 'none';
+    }
+    _cdSyncDateState();
+  }
+
+  function _cdSyncDateState() {
+    // Determina modalità corrente dal radio
+    var checked = document.querySelector('input[name="cdDateMode"]:checked');
+    var mode = checked ? checked.value : 'single';
+    var state = { mode: mode };
+
+    // Weekday filter chips (usato in range e month)
+    function _readWeekdayChips() {
+      var nodes = document.querySelectorAll(
+        '#cdOrarioFilterRow .cd-wd-chip-mini.cd-wd-checked'
+      );
+      return Array.prototype.map.call(nodes, function(c) {
+        return parseInt(c.getAttribute('data-wd'), 10);
+      }).sort(function(a, b) { return a - b; });
+    }
+
+    if (mode === 'single') {
+      state.date = document.getElementById('cdDateSingle').value || '';
+    } else if (mode === 'month') {
+      state.month    = document.getElementById('cdDateMonth').value || '';
+      state.weekdays = _readWeekdayChips();
+    } else if (mode === 'range') {
+      state.from     = document.getElementById('cdDateFrom').value || '';
+      state.to       = document.getElementById('cdDateTo').value   || '';
+      state.weekdays = _readWeekdayChips();
+    }
+    window.CD.date = state;
+    _cdUpdateOrarioColumnStates();
+  }
+
+  // ISO weekday (1=Lun..7=Dom) di un YYYY-MM-DD; null se invalido
+  function _cdIsoWeekdayOf(iso) {
+    if (!iso || typeof iso !== 'string') return null;
+    var m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    var d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+    if (isNaN(d.getTime())) return null;
+    var wd = d.getDay(); // 0=Dom..6=Sab
+    return wd === 0 ? 7 : wd;
+  }
+
+  // Calcola i giorni della settimana attualmente "disponibili" in base allo
+  // stato Date corrente: ritorna un Set<int> con valori 1..7.
+  function _cdComputeAvailableWeekdays() {
+    var st = window.CD.date || {};
+    var out = new Set();
+    if (st.mode === 'single') {
+      var wd = _cdIsoWeekdayOf(st.date);
+      if (wd) out.add(wd);
+      return out;
+    }
+    if (st.mode === 'range' || st.mode === 'month') {
+      // Se l'utente ha selezionato weekdays specifici → solo quelli.
+      if (Array.isArray(st.weekdays) && st.weekdays.length > 0) {
+        st.weekdays.forEach(function(w) { out.add(w); });
+        return out;
+      }
+      // Altrimenti: tutti i 7 giorni sono potenzialmente coperti
+      // (mese = sempre tutti i 7; range ≥7gg = tutti; range <7gg = quelli effettivi)
+      if (st.mode === 'month') {
+        for (var im = 1; im <= 7; im++) out.add(im);
+        return out;
+      }
+      var from = st.from, to = st.to;
+      if (!from || !to) return out;
+      var d1 = new Date(from), d2 = new Date(to);
+      if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return out;
+      if (d2 < d1) { var t = d1; d1 = d2; d2 = t; }
+      var diffDays = Math.round((d2 - d1) / 86400000) + 1;
+      if (diffDays >= 7) {
+        for (var i = 1; i <= 7; i++) out.add(i);
+        return out;
+      }
+      var cur = new Date(d1);
+      while (cur <= d2) {
+        var w = cur.getDay();
+        out.add(w === 0 ? 7 : w);
+        cur.setDate(cur.getDate() + 1);
+      }
+      return out;
+    }
+    // Modo sconosciuto: nessun filtro = tutti disponibili
+    for (var k = 1; k <= 7; k++) out.add(k);
+    return out;
+  }
+
+  function _cdUpdateOrarioColumnStates() {
+    var table = document.getElementById('cdOrarioTable');
+    if (!table) return;
+    var available = _cdComputeAvailableWeekdays();
+    // Bug-fix: NON applicare cd-col-disabled alle <th> della filter-row
+    // (i chip giorni-settimana). Altrimenti, quando l'utente unticka un chip
+    // che vive in <th data-wd="X">, quella TH riceve pointer-events:none e il
+    // chip non è più cliccabile per riselezionarlo. Targeto solo la riga
+    // band-header (la seconda <tr> del thead).
+    var bandHeaderRow = table.querySelector('thead tr:not(.cd-orario-filter-row)');
+    var ths = bandHeaderRow ? bandHeaderRow.querySelectorAll('th') : [];
+    for (var i = 2; i < ths.length && i < 9; i++) {
+      var wd = i - 1; // i=2 → Lun=1
+      ths[i].classList.toggle('cd-col-disabled', !available.has(wd));
+    }
+    // Aggiorna <td> celle e ri-tick stato sulla riga 'cd-band-all-checked'
+    var rows = table.querySelectorAll('tbody tr');
+    rows.forEach(function(row) {
+      row.querySelectorAll('.cd-orario-cell').forEach(function(cell) {
+        var wd = parseInt(cell.getAttribute('data-wd'), 10);
+        var disabled = !available.has(wd);
+        cell.classList.toggle('cd-col-disabled', disabled);
+        // Auto-deseleziona celle che entrano in una colonna disabilitata
+        if (disabled) cell.classList.remove('cd-orario-cell-checked');
+      });
+      _cdUpdateBandAllCheckedClass(row);
+    });
+    _cdSyncOrarioState();
+  }
+
+  function _cdUpdateBandAllCheckedClass(row) {
+    // La cella "Fascia" si colora di verde più scuro quando TUTTE le celle
+    // attive (non disabilitate) della riga sono selezionate. Aiuta a vedere
+    // a colpo d'occhio quali fasce sono fully-on.
+    var nameCell = row.querySelector('.cd-orario-band-name');
+    if (!nameCell) return;
+    var cells = row.querySelectorAll('.cd-orario-cell:not(.cd-col-disabled)');
+    if (!cells.length) { nameCell.classList.remove('cd-band-all-checked'); return; }
+    var allChecked = Array.prototype.every.call(cells, function(c) {
+      return c.classList.contains('cd-orario-cell-checked');
+    });
+    nameCell.classList.toggle('cd-band-all-checked', allChecked);
+  }
+
+  function _cdBuildWeekdayChips() {
+    // I chip vivono nella filter-row della tabella Orario (thead) — una <th>
+    // per ogni giorno. Niente <input> interno: lo stato è la classe
+    // .cd-wd-checked sul chip stesso (più robusto, evita il bug "click sullo
+    // span figlio non sempre triggera change sull'input nascosto").
+    var row = document.getElementById('cdOrarioFilterRow');
+    if (!row) return;
+    CD_WEEKDAYS.forEach(function(w) {
+      var th = row.querySelector('th[data-wd="' + w.n + '"]');
+      if (!th) return;
+      th.innerHTML =
+        '<div class="cd-wd-chip-mini" data-wd="' + w.n + '"' +
+        ' role="checkbox" aria-checked="false" tabindex="0">' +
+          '<span>' + w.label + '</span>' +
+        '</div>';
+    });
+    row.querySelectorAll('.cd-wd-chip-mini').forEach(function(chip) {
+      chip.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var isChecked = chip.classList.toggle('cd-wd-checked');
+        chip.setAttribute('aria-checked', isChecked ? 'true' : 'false');
+        _cdSyncDateState();
+      });
+      // Keyboard accessibility: Spazio/Enter toggle (per chi naviga a tastiera)
+      chip.addEventListener('keydown', function(e) {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          chip.click();
+        }
+      });
+    });
+  }
+
+  function _cdResetDateSection() {
+    // Default: modalità "Intervallo" attiva all'apertura del modal, con
+    // range oggi → +14 giorni e TUTTI i 7 giorni della settimana già spuntati
+    // (impostazione di partenza utile: poi l'utente toglie quelli che non vuole).
+    var today  = _cdTodayIso();
+    var plus14 = _cdDaysFromTodayIso(14);
+
+    document.getElementById('cdDateSingle').value = today;
+    document.getElementById('cdDateFrom').value   = today;
+    document.getElementById('cdDateTo').value     = plus14;
+    // Month picker → mese corrente (YYYY-MM)
+    var monthEl = document.getElementById('cdDateMonth');
+    if (monthEl) monthEl.value = today.substring(0, 7);
+
+    // Impedisci la selezione di date precedenti a oggi (min attribute).
+    // Il browser oscura/rende non cliccabili i giorni/mesi passati nel picker.
+    var currentMonth = today.substring(0, 7);
+    ['cdDateSingle', 'cdDateFrom', 'cdDateTo'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.min = today;
+    });
+    if (monthEl) monthEl.min = currentMonth;
+
+    // Reset radio: intervallo
+    var rangeRadio = document.getElementById('cdDateModeRange');
+    if (rangeRadio) rangeRadio.checked = true;
+
+    // Tutti i chip giorno-settimana checkati (nella filter-row del thead Orario).
+    // Stato = classe .cd-wd-checked, niente più <input> nascosti.
+    document.querySelectorAll('#cdOrarioFilterRow .cd-wd-chip-mini')
+      .forEach(function(chip) {
+        chip.classList.add('cd-wd-checked');
+        chip.setAttribute('aria-checked', 'true');
+      });
+
+    // Mostra il body "range" e la filter-row sopra la tabella
+    _cdSetDateMode('range');
+  }
+
+  // ── ORARIO: tabella 4 fasce × 7 giorni ────────────────────────
+
+  // Bande orarie nella tabella. "fixed: true" → orario non modificabile
+  // dall'utente, mostrato come testo statico. Apertura = primo slot della
+  // giornata (= active_opening_time); Chiusura = ultimo slot (= active_closing_time).
+  var CD_BANDS_DEF = [
+    { id: 'apertura',   label: 'Apertura',     fixed: true },
+    { id: 'mattino',    label: 'Mattino' },
+    { id: 'pausa',      label: 'Pausa pranzo' },
+    { id: 'pomeriggio', label: 'Pomeriggio' },
+    { id: 'sera',       label: 'Sera' },
+    { id: 'chiusura',   label: 'Chiusura',     fixed: true },
+  ];
+
+  function _cdParseHHMM(s) {
+    // "HH:MM" → minuti dall'inizio del giorno; fallback 0 su input invalido
+    if (!s || typeof s !== 'string') return 0;
+    var m = s.match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return 0;
+    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  }
+
+  function _cdFormatMin(min) {
+    var h = Math.max(0, Math.min(23, Math.floor(min / 60)));
+    var m = Math.max(0, Math.min(59, min % 60));
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+
+  function _cdComputeDefaultBands(opening, closing) {
+    // Calcola gli orari di default per le fasce in base agli orari attivi
+    // del negozio (BusinessInfo.active_opening_time / active_closing_time):
+    //   apertura   = primo slot della giornata = opening (fisso)
+    //   mattino    = apertura → apertura + 3h
+    //   pausa      = 12:00 → 14:00 (fissa)
+    //   pomeriggio = max(fine mattino, 14:00) → inizio sera
+    //   sera       = chiusura - 3h → chiusura
+    //   chiusura   = ultimo slot della giornata = closing (fisso)
+    var openMin  = _cdParseHHMM(opening  || '09:00');
+    var closeMin = _cdParseHHMM(closing  || '19:00');
+    if (closeMin <= openMin) closeMin = openMin + 600; // safety net
+
+    var morningEnd = Math.min(openMin + 180, closeMin);
+    var eveningStart = Math.max(closeMin - 180, openMin);
+
+    var lunchStart = 12 * 60;
+    var lunchEnd   = 14 * 60;
+
+    var afternoonStart = Math.max(morningEnd, lunchEnd);
+    var afternoonEnd   = Math.max(afternoonStart, eveningStart);
+    if (afternoonEnd < afternoonStart) afternoonEnd = afternoonStart;
+
+    var open  = _cdFormatMin(openMin);
+    var close = _cdFormatMin(closeMin);
+    return {
+      apertura:   { start: open,                       end: open,                       fixed: true },
+      mattino:    { start: open,                       end: _cdFormatMin(morningEnd) },
+      pausa:      { start: _cdFormatMin(lunchStart),   end: _cdFormatMin(lunchEnd) },
+      pomeriggio: { start: _cdFormatMin(afternoonStart),end: _cdFormatMin(afternoonEnd) },
+      sera:       { start: _cdFormatMin(eveningStart), end: close },
+      chiusura:   { start: close,                      end: close,                      fixed: true },
+    };
+  }
+
+  function _cdBuildOrarioTable(business) {
+    var tbody = document.querySelector('#cdOrarioTable tbody');
+    if (!tbody) return;
+    var defaults = _cdComputeDefaultBands(business.opening, business.closing);
+
+    var html = '';
+    CD_BANDS_DEF.forEach(function(band) {
+      var def = defaults[band.id] || { start: '09:00', end: '12:00' };
+      var isFixed = !!band.fixed;
+      html += '<tr data-band="' + band.id + '"' +
+              (isFixed ? ' data-fixed="1"' : '') + '>' +
+              '<td class="cd-orario-band-name">' +
+                '<span class="cd-band-checkbox"></span>' +
+                _esc(band.label) +
+              '</td>';
+      if (isFixed) {
+        // Orario non modificabile: testo descrittivo. L'orario reale resta
+        // negli attributi data-* per il sync state e il backend di Step 9.
+        var fixedText = '';
+        if (band.id === 'apertura')      fixedText = 'cerca prima disponibilità';
+        else if (band.id === 'chiusura') fixedText = 'cerca ultima disponibilità';
+        else                             fixedText = def.start;
+        html += '<td class="cd-orario-time-cell-fixed"' +
+                ' data-start="' + def.start + '" data-end="' + def.end + '">' +
+                _esc(fixedText) +
+                '</td>';
+      } else {
+        html += '<td class="cd-orario-time-cell">' +
+                  '<input type="time" data-edge="start" value="' + def.start + '">' +
+                  '<span class="cd-orario-time-sep">–</span>' +
+                  '<input type="time" data-edge="end" value="' + def.end + '">' +
+                '</td>';
+      }
+      // 7 celle giorni (ISO: 1=Lun..7=Dom)
+      for (var d = 1; d <= 7; d++) {
+        html += '<td class="cd-orario-cell" data-wd="' + d + '">' +
+                '<span class="cd-orario-tick">✓</span></td>';
+      }
+      html += '</tr>';
+    });
+    tbody.innerHTML = html;
+
+    // Wire-up: toggle celle giorno×fascia
+    tbody.querySelectorAll('.cd-orario-cell').forEach(function(cell) {
+      cell.addEventListener('click', function(e) {
+        e.stopPropagation();
+        cell.classList.toggle('cd-orario-cell-checked');
+        var row = cell.closest('tr');
+        if (row) _cdUpdateBandAllCheckedClass(row);
+        _cdSyncOrarioState();
+      });
+    });
+
+    // Wire-up: cambio orari → sync stato. Uso del nativo <input type="time">:
+    // il browser mostra ore e minuti separati con frecce di incremento, ed è
+    // anche digitabile direttamente. Niente flatpickr — l'utente preferisce
+    // l'input testuale standard.
+    tbody.querySelectorAll('input[type="time"]').forEach(function(inp) {
+      inp.addEventListener('change', function(e) {
+        e.stopPropagation();
+        _cdSyncOrarioState();
+      });
+      inp.addEventListener('input', function(e) {
+        e.stopPropagation();
+        _cdSyncOrarioState();
+      });
+    });
+
+    // Wire-up: click sulla cella "Fascia" → toggle TUTTE le celle giorno
+    // disponibili (non disabilitate) della riga. Se tutte sono già checked,
+    // le deseleziona; altrimenti le seleziona tutte.
+    tbody.querySelectorAll('.cd-orario-band-name').forEach(function(nameCell) {
+      nameCell.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var row = nameCell.closest('tr');
+        if (!row) return;
+        var cells = row.querySelectorAll('.cd-orario-cell:not(.cd-col-disabled)');
+        if (!cells.length) return;
+        var allChecked = Array.prototype.every.call(cells, function(c) {
+          return c.classList.contains('cd-orario-cell-checked');
+        });
+        cells.forEach(function(c) {
+          c.classList.toggle('cd-orario-cell-checked', !allChecked);
+        });
+        _cdUpdateBandAllCheckedClass(row);
+        _cdSyncOrarioState();
+      });
+    });
+
+    // Applica filtro colonne (in base alla Date corrente) appena costruita
+    _cdUpdateOrarioColumnStates();
+  }
+
+  function _cdSyncOrarioState() {
+    var tbody = document.querySelector('#cdOrarioTable tbody');
+    if (!tbody) return;
+    var bands = [];
+    tbody.querySelectorAll('tr').forEach(function(row) {
+      var bandId  = row.getAttribute('data-band');
+      var isFixed = row.getAttribute('data-fixed') === '1';
+      var start = '', end = '';
+      if (isFixed) {
+        var fixedCell = row.querySelector('.cd-orario-time-cell-fixed');
+        if (fixedCell) {
+          start = fixedCell.getAttribute('data-start') || '';
+          end   = fixedCell.getAttribute('data-end')   || '';
+        }
+      } else {
+        var startEl = row.querySelector('input[data-edge="start"]');
+        var endEl   = row.querySelector('input[data-edge="end"]');
+        start = startEl ? startEl.value : '';
+        end   = endEl   ? endEl.value   : '';
+      }
+      var days = [];
+      row.querySelectorAll('.cd-orario-cell.cd-orario-cell-checked').forEach(function(c) {
+        var wd = parseInt(c.getAttribute('data-wd'), 10);
+        if (wd) days.push(wd);
+      });
+      bands.push({
+        id:    bandId,
+        start: start,
+        end:   end,
+        fixed: isFixed,
+        days:  days.sort(function(a, b) { return a - b; }),
+      });
+    });
+    // Una fascia "attiva" solo se almeno un giorno è selezionato per quella riga.
+    // Se nessuna fascia ha giorni selezionati → null = nessun filtro orario.
+    var hasAny = bands.some(function(b) { return b.days.length > 0; });
+    window.CD.orari = hasAny ? bands : null;
+  }
+
+  function _cdResetOrarioSection() {
+    var tbody = document.querySelector('#cdOrarioTable tbody');
+    if (tbody) tbody.innerHTML = '';
+    window.CD.orari = null;
+    // Ricostruisce la tabella con i default da BusinessInfo (lazy + cache).
+    _cdFetchBusiness().then(_cdBuildOrarioTable).catch(function() {
+      _cdBuildOrarioTable({ opening: '09:00', closing: '19:00' });
+    });
+  }
+
+  // ── Init quando il DOM è pronto ─────────────────────────────
+
+  function initCD() {
+    var input        = document.getElementById('cdClienteInput');
+    var clearBtn     = document.getElementById('cdClienteClear');
+    var modalEl      = document.getElementById('cercaDispModal');
+    var showMachSw   = document.getElementById('cdShowMacchinari');
+    var svcInput     = document.getElementById('cdServizioInput');
+    if (!input || !clearBtn || !modalEl) return;
+
+    // Autocomplete cliente: 3 caratteri minimi, debounce 250ms.
+    input.addEventListener('input', function() {
+      var q = input.value.trim();
+      if (window.CD._searchTimer) clearTimeout(window.CD._searchTimer);
+      if (q.length < 3) {
+        _cdClienteHideResults();
+        return;
+      }
+      window.CD._searchTimer = setTimeout(function() {
+        _cdSearchCliente(q)
+          .then(_cdRenderClienteResults)
+          .catch(function(err) {
+            // ignora AbortError (richiesta annullata da nuova digitazione)
+            if (err && err.name === 'AbortError') return;
+            _cdClienteShowResults(
+              '<div class="cd-result-empty">Errore di ricerca.</div>'
+            );
+          });
+      }, 250);
+    });
+
+    // Chiude le dropdown se l'utente clicca fuori dai rispettivi wrap
+    document.addEventListener('click', function(e) {
+      var cliWrap = document.getElementById('cdClienteInputWrap');
+      if (cliWrap && !cliWrap.contains(e.target)) _cdClienteHideResults();
+      var svcWrap = document.getElementById('cdServizioInputWrap');
+      if (svcWrap && !svcWrap.contains(e.target)) _cdServizioHideResults();
+    });
+
+    // Bottone "rimuovi cliente"
+    clearBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      _cdClearCliente();
+    });
+
+    // Toggle "mostra anche lampade/macchinari" → ri-renderizza la lista
+    if (showMachSw) {
+      showMachSw.addEventListener('change', function() {
+        _cdRenderOperators();
+      });
+    }
+
+    // Autocomplete servizio: 2 caratteri minimi, debounce 250ms.
+    if (svcInput) {
+      svcInput.addEventListener('input', function() {
+        var q = svcInput.value.trim();
+        if (window.CD._svcSearchTimer) clearTimeout(window.CD._svcSearchTimer);
+        if (q.length < 2) {
+          _cdServizioHideResults();
+          return;
+        }
+        window.CD._svcSearchTimer = setTimeout(function() {
+          _cdSearchServizio(q)
+            .then(_cdRenderServizioResults)
+            .catch(function(err) {
+              if (err && err.name === 'AbortError') return;
+              _cdServizioShowResults(
+                '<div class="cd-result-empty">Errore di ricerca.</div>'
+              );
+            });
+        }, 250);
+      });
+    }
+
+    // Date: costruisci chip giorni settimana una volta sola
+    _cdBuildWeekdayChips();
+
+    // Radio modalità date → toggle del body corretto
+    document.querySelectorAll('input[name="cdDateMode"]').forEach(function(r) {
+      r.addEventListener('change', function() {
+        _cdSetDateMode(r.value);
+      });
+    });
+
+    // Sync stato sulla modifica di qualunque input data
+    [
+      'cdDateSingle', 'cdDateMonth', 'cdDateFrom', 'cdDateTo'
+    ].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('change', _cdSyncDateState);
+    });
+
+    // All'apertura del modal di ricerca:
+    //  - se è apertura "fresh" (dal badge): reset tutto ai default
+    //  - se viene da "back" dai risultati: NON resettare, lo state è preservato
+    modalEl.addEventListener('shown.bs.modal', function() {
+      if (window.CD._comingBackFromResults) {
+        window.CD._comingBackFromResults = false;
+        // ricarica operatori solo se cache vuota
+        if (!window.CD._staticCache) {
+          _cdFetchOperators().then(_cdRenderOperators).catch(function(){});
+        }
+        return;
+      }
+      _cdFetchOperators().then(_cdRenderOperators).catch(function() {
+        var el = document.getElementById('cdOperatoriList');
+        if (el) el.innerHTML =
+          '<em class="cd-placeholder">Errore caricamento operatori.</em>';
+      });
+      _cdResetDateSection();
+      _cdResetOrarioSection();
+    });
+
+    // Quando il modal di ricerca si chiude:
+    //  - se sto andando ai risultati (_goingToResults=true): NON resettare lo state
+    //  - altrimenti (chiusura normale): reset
+    modalEl.addEventListener('hidden.bs.modal', function() {
+      if (window.CD._goingToResults) {
+        window.CD._goingToResults = false;
+        return;
+      }
+      _cdClearCliente();
+      _cdClearOperators();
+      _cdClearServizi();
+      _cdResetDateSection();
+      _cdResetOrarioSection();
+      _cdClearResults();
+    });
+
+    // Back arrow nel modal risultati: torna al modal di ricerca con state intatto
+    var resultsModalEl = document.getElementById('cercaDispResultsModal');
+    var resultsBackBtn = document.getElementById('cdResultsBack');
+    if (resultsBackBtn && resultsModalEl) {
+      resultsBackBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        window.CD._comingBackFromResults = true;
+        var resInst = bootstrap.Modal.getInstance(resultsModalEl);
+        if (resInst) resInst.hide();
+        setTimeout(function() {
+          var searchInst = bootstrap.Modal.getOrCreateInstance(modalEl);
+          searchInst.show();
+        }, 220);
+      });
+    }
+
+    // Bottone "Cerca" → invia stato CD al backend find-availability
+    var searchBtn = document.getElementById('cdSearchBtn');
+    if (searchBtn) {
+      searchBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        _cdRunSearch();
+      });
+    }
+  }
+
+  // ── RICERCA DISPONIBILITÀ: invio criteri al backend ─────────
+
+  // Apre il modal risultati (separato, più stretto). Chiude prima il modal di
+  // ricerca preservando lo state (flag _comingBackFromResults).
+  function _cdOpenResultsModal() {
+    var searchModalEl  = document.getElementById('cercaDispModal');
+    var resultsModalEl = document.getElementById('cercaDispResultsModal');
+    if (!resultsModalEl || !window.bootstrap || !window.bootstrap.Modal) return;
+    window.CD._goingToResults = true;
+    if (searchModalEl) {
+      var inst = bootstrap.Modal.getInstance(searchModalEl);
+      if (inst) inst.hide();
+    }
+    // Apri risultati dopo brevissimo delay (per non sovrapporre le transizioni)
+    setTimeout(function() {
+      var resInst = bootstrap.Modal.getOrCreateInstance(resultsModalEl);
+      resInst.show();
+    }, 220);
+  }
+
+  function _cdClearResults() {
+    var el = document.getElementById('cdResultsModalBody');
+    if (el) el.innerHTML = '';
+  }
+
+  function _cdShowResultsLoading() {
+    var el = document.getElementById('cdResultsModalBody');
+    if (!el) return;
+    el.innerHTML =
+      '<div style="padding:14px; text-align:center; color:#87647c;">' +
+      '<i class="bi bi-hourglass-split"></i> Ricerca in corso…</div>';
+  }
+
+  function _cdShowResultsError(msg) {
+    var el = document.getElementById('cdResultsModalBody');
+    if (!el) return;
+    el.innerHTML =
+      '<div style="padding:14px; color:#c0392b; font-weight:600;">' +
+      '<i class="bi bi-exclamation-triangle-fill"></i> ' + _esc(msg || 'Errore') +
+      '</div>';
+  }
+
+  function _cdRunSearch() {
+    // Valida criteri minimi lato client
+    if (!window.CD.servizi || !window.CD.servizi.length) {
+      alert('Seleziona almeno un servizio prima di cercare.');
+      return;
+    }
+    // Forza un sync date+orari per essere sicuri
+    if (typeof _cdSyncDateState  === 'function') _cdSyncDateState();
+    if (typeof _cdSyncOrarioState === 'function') _cdSyncOrarioState();
+
+    // Apri il modal risultati subito (con loading state) e nascondi quello di ricerca
+    _cdOpenResultsModal();
+    _cdShowResultsLoading();
+
+    var payload = {
+      cliente:   window.CD.cliente || null,
+      operatori: window.CD.operatori || [],
+      servizi:   window.CD.servizi || [],
+      date:      window.CD.date    || {},
+      orari:     window.CD.orari   || null,
+    };
+    var csrfToken = document.querySelector('meta[name="csrf-token"]');
+    var headers = { 'Content-Type': 'application/json' };
+    if (csrfToken && csrfToken.content) headers['X-CSRFToken'] = csrfToken.content;
+
+    fetch(_baseUrl() + '/api/find-availability', {
+      method:      'POST',
+      credentials: 'same-origin',
+      headers:     headers,
+      body:        JSON.stringify(payload),
+    })
+    .then(function(r) {
+      if (!r.ok) {
+        return r.json().then(function(j) {
+          throw new Error((j && j.message) || ('HTTP ' + r.status));
+        }).catch(function(err) {
+          // Se il body non è JSON, lancia un errore generico
+          if (err && err.message) throw err;
+          throw new Error('HTTP ' + r.status);
+        });
+      }
+      return r.json();
+    })
+    .then(function(data) {
+      // Debug info utile in console quando "nessuno slot trovato"
+      if (data && data.debug) {
+        console.groupCollapsed('[find-availability] debug');
+        console.log('dates:',          data.debug.dates_first, '→', data.debug.dates_last,
+                                       '(', data.debug.dates_count, 'giorni)');
+        console.log('operatori_req:',  data.debug.operatori_req);
+        console.log('candidate_ops:',  data.debug.candidate_op_ids);
+        console.log('services_req:',   data.debug.services_req);
+        console.log('orari_state:',    data.debug.orari_state);
+        console.log('per_combo:',      data.debug.per_combo);
+        console.log('shift_misses:',   data.debug.shift_misses);
+        console.groupEnd();
+      }
+      _cdRenderResults(data || {});
+    })
+    .catch(function(err) {
+      _cdShowResultsError(err.message || 'Errore durante la ricerca.');
+    });
+  }
+
+  function _cdRenderResults(data) {
+    // I risultati ora vivono in un modal separato (#cercaDispResultsModal).
+    var el = document.getElementById('cdResultsModalBody');
+    if (!el) return;
+
+    var results = (data && data.results) || [];
+    if (!results.length) {
+      el.innerHTML =
+        '<div style="padding:14px; text-align:center; color:#87647c;">' +
+        '<i class="bi bi-info-circle"></i> Nessuno slot disponibile con i criteri scelti.</div>';
+      return;
+    }
+
+    var grouped = {};
+    var orderedDates = [];
+    results.forEach(function(r) {
+      if (!grouped[r.date]) { grouped[r.date] = []; orderedDates.push(r.date); }
+      grouped[r.date].push(r);
+    });
+
+    var capped = data.capped
+      ? ' <small style="font-weight:400; color:#888;">(limitati ai primi ' + results.length + ')</small>'
+      : '';
+    var html =
+      '<div style="font-weight:700; color:#5a3e51; margin-bottom:10px; font-size:0.95rem;">' +
+      results.length + ' slot disponibili in ' + orderedDates.length + ' giorni' + capped + '</div>';
+
+    orderedDates.forEach(function(dateStr) {
+      var slots = grouped[dateStr];
+      html += '<div class="cd-day-block">' +
+              '<div class="cd-day-header">' +
+                '<i class="bi bi-calendar3"></i> ' + _esc(_cdFmtDateWithWeekday(dateStr)) +
+                ' <span class="cd-day-count">(' + slots.length + ' slot)</span>' +
+              '</div>' +
+              '<div class="cd-results-grid">';
+      slots.forEach(function(s) { html += _cdBuildSlotBlock(s); });
+      html += '</div></div>';
+    });
+
+    el.innerHTML = html;
+
+    // Wire-up: click sulle card per espandere conferma prenotazione.
+    var flatSlots = [];
+    orderedDates.forEach(function(d) { flatSlots = flatSlots.concat(grouped[d]); });
+    el.querySelectorAll('.cd-result-card').forEach(function(card, idx) {
+      card._cdSlot = flatSlots[idx];
+      card.addEventListener('click', function(e) {
+        if (e.target.closest('.cd-slot-actions')) return;
+        e.stopPropagation();
+        _cdSlotToggleExpand(card, card._cdSlot);
+      });
+    });
+  }
+
+  // ── CLICK-TO-BOOK su slot ───────────────────────────────────
+
+  function _cdSlotCollapse(card) {
+    card.classList.remove('cd-slot-expanded');
+    var a = card.querySelector('.cd-slot-actions');
+    if (a) a.remove();
+  }
+
+  function _cdSlotToggleExpand(card, slot) {
+    if (card.classList.contains('cd-slot-expanded')) {
+      _cdSlotCollapse(card);
+      return;
+    }
+    document.querySelectorAll('.cd-result-card.cd-slot-expanded').forEach(_cdSlotCollapse);
+    card.classList.add('cd-slot-expanded');
+
+    var hasClient = !!(window.CD.cliente && window.CD.cliente.id);
+    var pickedClientId = hasClient ? window.CD.cliente.id : null;
+
+    var html = '<div class="cd-slot-actions" onclick="event.stopPropagation()">';
+    if (hasClient) {
+      var c = window.CD.cliente;
+      var full = ((c.nome || '') + ' ' + (c.cognome || '')).trim();
+      html += '<div class="cd-slot-client-line">' +
+              '<i class="bi bi-person-check-fill"></i> ' + _esc(full) +
+              (c.cellulare ? ' <small>· ' + _esc(c.cellulare) + '</small>' : '') +
+              '</div>';
+    } else {
+      html += '<div class="cd-slot-client-search">' +
+              '<input type="text" class="form-control form-control-sm cd-slot-client-input" ' +
+              'placeholder="Cerca cliente (3+ caratteri)…" autocomplete="off">' +
+              '<div class="cd-slot-client-results" style="display:none;"></div>' +
+              '</div>';
+    }
+    html += '<div class="cd-slot-action-btns">' +
+              '<button type="button" class="btn btn-sm btn-success cd-slot-confirm"' +
+              (hasClient ? '' : ' disabled') + '>' +
+                '<i class="bi bi-check-lg"></i> Conferma' +
+              '</button>' +
+              '<button type="button" class="btn btn-sm btn-light cd-slot-cancel">Annulla</button>' +
+            '</div>' +
+            '<div class="cd-slot-status"></div>' +
+            '</div>';
+
+    var tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    card.appendChild(tmp.firstElementChild);
+
+    var cancelBtn  = card.querySelector('.cd-slot-cancel');
+    var confirmBtn = card.querySelector('.cd-slot-confirm');
+    cancelBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      _cdSlotCollapse(card);
+    });
+
+    if (!hasClient) {
+      var input      = card.querySelector('.cd-slot-client-input');
+      var resultsDiv = card.querySelector('.cd-slot-client-results');
+      var tmr = null;
+      input.addEventListener('input', function() {
+        var q = input.value.trim();
+        if (tmr) clearTimeout(tmr);
+        if (q.length < 3) { resultsDiv.style.display = 'none'; return; }
+        tmr = setTimeout(function() {
+          fetch(_baseUrl() + '/api/info/client/search?q=' + encodeURIComponent(q),
+                { credentials: 'same-origin' })
+          .then(function(r) { return r.ok ? r.json() : []; })
+          .then(function(rows) {
+            resultsDiv.innerHTML = '';
+            resultsDiv.style.display = 'block';
+            if (!rows.length) {
+              resultsDiv.innerHTML = '<div class="cd-result-empty">Nessun risultato</div>';
+              return;
+            }
+            rows.forEach(function(rc) {
+              var item = document.createElement('div');
+              item.className = 'cd-result-item';
+              var rfull = ((rc.nome || '') + ' ' + (rc.cognome || '')).trim();
+              item.innerHTML = '<strong>' + _esc(rfull) + '</strong>' +
+                               (rc.cellulare ? ' <small>· ' + _esc(rc.cellulare) + '</small>' : '');
+              item.addEventListener('click', function(e) {
+                e.stopPropagation();
+                pickedClientId = rc.id;
+                input.value = rfull;
+                resultsDiv.style.display = 'none';
+                confirmBtn.disabled = false;
+              });
+              resultsDiv.appendChild(item);
+            });
+          })
+          .catch(function() {});
+        }, 250);
+      });
+    }
+
+    confirmBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (!pickedClientId) {
+        alert('Seleziona prima un cliente.');
+        return;
+      }
+      _cdBookSlot(card, slot, pickedClientId);
+    });
+  }
+
+  function _cdBookSlot(card, slot, clientId) {
+    var statusEl   = card.querySelector('.cd-slot-status');
+    var confirmBtn = card.querySelector('.cd-slot-confirm');
+    var cancelBtn  = card.querySelector('.cd-slot-cancel');
+    if (confirmBtn) confirmBtn.disabled = true;
+    if (cancelBtn)  cancelBtn.disabled  = true;
+    if (statusEl) statusEl.innerHTML =
+      '<i class="bi bi-hourglass-split"></i> Creazione in corso…';
+
+    var csrfToken = document.querySelector('meta[name="csrf-token"]');
+    var headers = { 'Content-Type': 'application/json' };
+    if (csrfToken && csrfToken.content) headers['X-CSRFToken'] = csrfToken.content;
+
+    var services = slot.services || [];
+    var idx = 0;
+    function postNext() {
+      if (idx >= services.length) {
+        if (statusEl) statusEl.innerHTML =
+          '<span style="color:#2a7a2a;"><i class="bi bi-check-circle-fill"></i> ' +
+          services.length + ' appuntament' + (services.length === 1 ? 'o creato' : 'i creati') +
+          ' con successo</span>';
+        card.classList.add('cd-slot-booked');
+        return;
+      }
+      var sv = services[idx];
+      fetch(_baseUrl() + '/create', {
+        method:      'POST',
+        credentials: 'same-origin',
+        headers:     headers,
+        body: JSON.stringify({
+          client_id:        clientId,
+          service_id:       sv.id,
+          operator_id:      sv.operator_id,
+          start_time:       sv.start_time,
+          appointment_date: slot.date,
+          duration:         sv.duration,
+          note:             '',
+        }),
+      })
+      .then(function(r) {
+        return r.json().then(function(j) { return { ok: r.ok, body: j }; })
+                       .catch(function() { return { ok: r.ok, body: {} }; });
+      })
+      .then(function(res) {
+        if (!res.ok || (res.body && res.body.error)) {
+          var msg = (res.body && (res.body.error || res.body.message)) || ('HTTP ' + (res.ok ? '?' : 'err'));
+          if (statusEl) statusEl.innerHTML =
+            '<span style="color:#c33;"><i class="bi bi-exclamation-circle-fill"></i> ' +
+            _esc(msg) + '</span>';
+          if (confirmBtn) confirmBtn.disabled = false;
+          if (cancelBtn)  cancelBtn.disabled  = false;
+          return;
+        }
+        idx++;
+        postNext();
+      })
+      .catch(function() {
+        if (statusEl) statusEl.innerHTML =
+          '<span style="color:#c33;"><i class="bi bi-wifi-off"></i> Errore di rete</span>';
+        if (confirmBtn) confirmBtn.disabled = false;
+        if (cancelBtn)  cancelBtn.disabled  = false;
+      });
+    }
+    postNext();
+  }
+
+  // Formato "lunedì 2026-06-15" (giorno settimana in italiano + ISO date).
+  var _CD_WEEKDAY_NAMES_IT = [
+    'domenica', 'lunedì', 'martedì', 'mercoledì',
+    'giovedì', 'venerdì', 'sabato'
+  ];
+  function _cdFmtDateWithWeekday(iso) {
+    if (!iso) return '';
+    var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return iso;
+    var d = new Date(parseInt(m[1],10), parseInt(m[2],10) - 1, parseInt(m[3],10));
+    if (isNaN(d.getTime())) return iso;
+    var wd = _CD_WEEKDAY_NAMES_IT[d.getDay()] || '';
+    var isoTrimmed = iso.substring(0, 10);
+    return wd ? (wd + ' ' + isoTrimmed) : isoTrimmed;
+  }
+
+  function _cdBuildSlotBlock(s) {
+    // Card singolo slot che include TUTTI i servizi contigui.
+    // Se same_operator → mostra l'operatore una volta in fondo.
+    // Se cascade → operatore accanto a ogni servizio.
+    var sameOp = !!s.same_operator;
+    var servicesHTML = '';
+    (s.services || []).forEach(function(sv) {
+      var opTag = sameOp ? '' :
+        ' <small class="cd-svc-op">' + _esc(sv.operator_name) + '</small>';
+      servicesHTML += '<div class="cd-slot-svc">' +
+                      '<span class="cd-slot-svc-time">' + _esc(sv.start_time) + '</span>' +
+                      ' <span class="cd-slot-svc-name">' + _esc(sv.name) + '</span>' +
+                      opTag +
+                      '</div>';
+    });
+
+    var sharedOpHTML = '';
+    if (sameOp && s.services && s.services.length) {
+      sharedOpHTML = '<div class="cd-slot-shared-op">' +
+                     '<i class="bi bi-person-fill"></i> ' +
+                     _esc(s.services[0].operator_name) + '</div>';
+    }
+
+    return (
+      '<div class="cd-result-card" ' +
+      'data-date="' + _esc(s.date) + '" ' +
+      'data-start="' + _esc(s.start_time) + '" ' +
+      'data-end="' + _esc(s.end_time) + '">' +
+        '<div class="cd-slot-header">' +
+          '<span class="cd-slot-range">' + _esc(s.start_time) + ' – ' + _esc(s.end_time) + '</span>' +
+          '<span class="cd-slot-dur">' + (s.total_duration || 0) + ' min</span>' +
+        '</div>' +
+        '<div class="cd-slot-svc-list">' + servicesHTML + '</div>' +
+        sharedOpHTML +
+      '</div>'
+    );
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCD);
+  } else {
+    initCD();
+  }
+})();
+</script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const isTouch = (function() {
@@ -3341,11 +5656,59 @@ document.addEventListener('DOMContentLoaded', function() {
       try { bootstrap.Tooltip.getOrCreateInstance(el, { container: modal }); } catch(_) {}
     });
   });
-  ['aiBadgeBtn', 'aiStatusDot', 'aiMicBtn', 'aiChatResizeHandle', 'aiChatResizeHandleRight']
+  ['aiBadgeBtn', 'aiInfoBadgeBtn', 'aiSearchAvailBadgeBtn',
+   'aiStatusDot', 'aiMicBtn', 'aiChatResizeHandle', 'aiChatResizeHandleRight']
     .forEach(function(id) {
       const el = document.getElementById(id);
       if (el) { try { bootstrap.Tooltip.getOrCreateInstance(el); } catch(_) {} }
     });
+
+  // Badge "info": il click handler vero è registrato in calendar.js (IIFE AI).
+  // Qui resta solo il fallback se l'AI module non è inizializzato (es. nessuna
+  // chiave AI configurata e l'IIFE esce prima). NON aggiungere logica qui:
+  // tutta la logica info-mode vive nell'IIFE per condividere stato e funzioni.
+  var __infoBadge = document.getElementById('aiInfoBadgeBtn');
+  if (__infoBadge) {
+    __infoBadge.addEventListener('click', function(e) {
+      if (typeof window.openInfoChat === 'function') return; // gestito dall'IIFE
+      e.stopPropagation();
+      alert('Pannello informazioni non disponibile.');
+    });
+  }
+  // Badge "cerca disponibilità": apre il modal dedicato.
+  // stopPropagation evita che il click chiuda la chat AI se aperta.
+  var __searchAvailBadge = document.getElementById('aiSearchAvailBadgeBtn');
+  var __cdModalEl = document.getElementById('cercaDispModal');
+  if (__searchAvailBadge && __cdModalEl) {
+    __searchAvailBadge.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (!window.bootstrap || !window.bootstrap.Modal) {
+        alert('Modal non disponibile: Bootstrap non caricato.');
+        return;
+      }
+      // backdrop con z-index dedicato (vedi CSS .cd-backdrop):
+      // backdrop:false → niente backdrop automatico, evita conflitti.
+      // Lasciamo invece backdrop Bootstrap (più semplice) e marchiamo
+      // l'ultimo backdrop con la classe .cd-backdrop dopo lo show.
+      var inst = bootstrap.Modal.getOrCreateInstance(__cdModalEl);
+      inst.show();
+    });
+
+    // Nasconde la colonna badge mentre il modal Cerca è aperto,
+    // così non sbuca dal lato del modal. La ripristina alla chiusura.
+    var __badgeColumn = document.getElementById('aiBadgeColumn');
+    __cdModalEl.addEventListener('shown.bs.modal', function() {
+      if (__badgeColumn) __badgeColumn.style.display = 'none';
+      // Forza z-index del backdrop appena creato.
+      var bds = document.querySelectorAll('.modal-backdrop');
+      if (bds.length) {
+        bds[bds.length - 1].classList.add('cd-backdrop');
+      }
+    });
+    __cdModalEl.addEventListener('hidden.bs.modal', function() {
+      if (__badgeColumn) __badgeColumn.style.display = 'flex';
+    });
+  }
 });
 </script>
 
