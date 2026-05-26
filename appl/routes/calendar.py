@@ -3364,15 +3364,109 @@ def api_info_client_search():
 
 @calendar_bp.route('/api/info/client/<int:client_id>', methods=['GET'])
 def api_info_client_detail(client_id):
-    """Dettaglio cliente (anagrafica + ultimo/prossimo appuntamento)."""
+    """Dettaglio cliente: anagrafica + ultimo/prossimo appuntamento + liste
+    prossimi appuntamenti, storico (ultimi 6 mesi), pacchetti sottoscritti."""
     if 'user_id' not in session:
         return jsonify({'error': 'session_expired'}), 401
+
     from appl.services.ai_service import build_client_info
     try:
         info = build_client_info(client_id) or {}
     except Exception as e:
         app.logger.error(f"api_info_client_detail error: {e}")
         info = {}
+
+    if not info:
+        return jsonify({})
+
+    now = datetime.now()
+
+    # ── Prossimi appuntamenti (da ora in poi, max 20) ──────────
+    prossimi_q = (
+        Appointment.query
+        .filter(
+            Appointment.client_id == client_id,
+            Appointment.start_time >= now,
+            Appointment.is_cancelled_by_client == False,
+        )
+        .order_by(Appointment.start_time.asc())
+        .limit(20)
+        .all()
+    )
+    prossimi_list = []
+    for a in prossimi_q:
+        if not a.start_time:
+            continue
+        prossimi_list.append({
+            'id':           a.id,
+            'data':         a.start_time.strftime('%Y-%m-%d'),
+            'ora':          a.start_time.strftime('%H:%M'),
+            'servizio':     (a.service.servizio_nome if a.service else '') or '',
+            'servizio_tag': (a.service.servizio_tag  if a.service else '') or '',
+            'durata':       int(a._duration) if hasattr(a, '_duration') and a._duration else (
+                              int((a.end_time - a.start_time).total_seconds() / 60) if a.end_time else 0
+                            ),
+            'operatore':    (a.operator.user_nome if a.operator else '') or '',
+            'prezzo':       float(a.service.servizio_prezzo) if (a.service and a.service.servizio_prezzo) else 0,
+        })
+
+    # ── Storico appuntamenti (passati, ultimi 6 mesi, max 50) ──
+    six_months_ago = now - timedelta(days=180)
+    storico_q = (
+        Appointment.query
+        .filter(
+            Appointment.client_id == client_id,
+            Appointment.start_time < now,
+            Appointment.start_time >= six_months_ago,
+            Appointment.is_cancelled_by_client == False,
+        )
+        .order_by(Appointment.start_time.desc())
+        .limit(50)
+        .all()
+    )
+    storico_list = []
+    for a in storico_q:
+        if not a.start_time:
+            continue
+        storico_list.append({
+            'id':           a.id,
+            'data':         a.start_time.strftime('%Y-%m-%d'),
+            'ora':          a.start_time.strftime('%H:%M'),
+            'servizio':     (a.service.servizio_nome if a.service else '') or '',
+            'servizio_tag': (a.service.servizio_tag  if a.service else '') or '',
+            'durata':       int(a._duration) if hasattr(a, '_duration') and a._duration else (
+                              int((a.end_time - a.start_time).total_seconds() / 60) if a.end_time else 0
+                            ),
+            'operatore':    (a.operator.user_nome if a.operator else '') or '',
+            'prezzo':       float(a.service.servizio_prezzo) if (a.service and a.service.servizio_prezzo) else 0,
+        })
+
+    # ── Pacchetti sottoscritti (tutti, ordinati per data desc) ──
+    pacchetti_list = []
+    try:
+        pq = (
+            Pacchetto.query
+            .filter(Pacchetto.client_id == client_id)
+            .order_by(Pacchetto.data_sottoscrizione.desc())
+            .all()
+        )
+        for p in pq:
+            tipo_val = ''
+            if p.tipo is not None:
+                tipo_val = p.tipo.value if hasattr(p.tipo, 'value') else str(p.tipo)
+            pacchetti_list.append({
+                'id':                  p.id,
+                'nome':                p.nome or '',
+                'data_sottoscrizione': p.data_sottoscrizione.strftime('%Y-%m-%d') if p.data_sottoscrizione else '',
+                'tipo':                tipo_val,
+            })
+    except Exception as e:
+        app.logger.warning(f"api_info_client_detail pacchetti error: {e}")
+
+    info['prossimi_appuntamenti_list'] = prossimi_list
+    info['storico_appuntamenti_list']  = storico_list
+    info['pacchetti_list']             = pacchetti_list
+
     return jsonify(info)
 
 
@@ -3542,6 +3636,17 @@ def _cd_expand_dates(date_state):
     if not date_state:
         return []
     mode = date_state.get('mode')
+    if mode == 'asap':
+        # "Il prima possibile": da oggi a +60 giorni, nessun filtro weekday.
+        # Il chiamante limita i risultati al primo N slot trovati.
+        today = date.today()
+        end   = today + timedelta(days=60)
+        result = []
+        cur = today
+        while cur <= end:
+            result.append(cur)
+            cur = cur + timedelta(days=1)
+        return result
     if mode == 'single':
         d = _cd_parse_date_str(date_state.get('date'))
         return [d] if d else []
@@ -3732,8 +3837,16 @@ def api_find_availability():
     if not candidate_operators:
         return jsonify({'results': [], 'count': 0}), 200
 
-    MAX_TOTAL_SLOTS    = 60   # cap totale per non far esplodere il payload
-    MAX_PER_COMBO      = 6    # cap per (servizio, operatore, giorno)
+    # Cap totale: in ASAP basta mostrare i primi 8 slot trovati (utente
+    # vuole "il prima possibile", non un elenco enorme).
+    _is_asap = (date_state.get('mode') == 'asap')
+    MAX_TOTAL_SLOTS    = 8 if _is_asap else 60
+    MAX_PER_COMBO      = 2 if _is_asap else 6
+
+    # In ASAP, ignora il filtro orari (l'utente non sceglie fasce — vogliamo
+    # il primo slot libero qualsiasi ora dello shift)
+    if _is_asap:
+        orari_state = None
 
     # Logging diagnostico per capire perché eventualmente non si trovano slot
     app.logger.info(

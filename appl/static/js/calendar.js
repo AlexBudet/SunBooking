@@ -16708,8 +16708,9 @@ if (a.date) {
     AI.pendingDisambiguation = null;
     _removeInfoResultsBubble();
     _clearMessages();
-    // Ripristina titolo "TOSCA AI" tornando al modo AI
+    // Ripristina titolo + colore header originale tornando al modo AI
     _setChatTitle('TOSCA AI');
+    _setChatHeaderMode('ai');
     appendMessage('assistant',
       '👋 Ciao! Sono TOSCA AI, la tua assistente di prenotazione. Clicca su ciò di cui hai bisogno per iniziare:'
     );
@@ -16725,12 +16726,30 @@ if (a.date) {
     { id: 'servizi',     icon: '💅', label: 'Servizi'     },
     { id: 'operatore',   icon: '👩', label: 'Operatore'   },
     { id: 'negozio',     icon: '🏪', label: 'Negozio'     },
-    { id: 'booking_web', icon: '🌐', label: 'Booking Web' },
+    { id: 'booking_web', icon: '🌐', label: 'Web' },
   ];
 
   function _setChatTitle(text) {
     var t = document.getElementById('aiChatTitle');
     if (t) t.textContent = text;
+  }
+
+  // Cambia colore del header del chat modal in base al modo:
+  //  'info' → azzurro (stesso del badge info)
+  //  'ai'   → viola (originale)
+  function _setChatHeaderMode(mode) {
+    var hdr  = document.getElementById('aiChatHeader');
+    var icon = document.getElementById('aiChatHeaderIcon');
+    if (!hdr) return;
+    if (mode === 'info') {
+      hdr.style.background = 'linear-gradient(135deg,#7aa6c8,#5a87aa)';
+      hdr.style.borderBottomColor = 'rgba(90,135,170,0.25)';
+      if (icon) icon.className = 'bi bi-info-lg';
+    } else {
+      hdr.style.background = 'linear-gradient(135deg,#723a57,#83506c)';
+      hdr.style.borderBottomColor = 'rgba(135,100,124,0.15)';
+      if (icon) icon.className = 'bi bi-stars';
+    }
   }
 
   function openInfoChat() {
@@ -16746,8 +16765,9 @@ if (a.date) {
     AI.isOpen = true;
     elModal.style.display = 'flex';
 
-    // Titolo della chat in modo info
+    // Titolo + colore header in modo info (azzurro come badge info)
     _setChatTitle('INFO BOX');
+    _setChatHeaderMode('info');
 
     // View di partenza: 'clienti'
     _switchInfoView('clienti');
@@ -17033,16 +17053,37 @@ if (a.date) {
   }
 
   function renderInfoBookingWeb(biz) {
-    var url = (biz && (biz.web_booking || biz.web_app || biz.website)) || '';
-    if (!url) {
-      appendMessage('assistant', '<em>Pagina booking online non configurata.</em>');
+    biz = biz || {};
+    var bookingUrl = biz.web_booking || biz.web_app || '';
+    var siteUrl    = biz.website     || '';
+
+    if (!bookingUrl && !siteUrl) {
+      appendMessage('assistant',
+        '<em>Pagina prenotazioni online e sito del negozio non configurati.</em>'
+      );
       return;
     }
-    var html = '<div style="font-size:0.86rem;">' +
-               '<div>Pagina prenotazioni online:</div>' +
-               '<div style="margin-top:4px;">' +
-               '<a href="' + esc(url) + '" target="_blank" rel="noopener" style="color:#5a87aa;">' + esc(url) + '</a>' +
-               '</div></div>';
+
+    function _linkBlock(label, url) {
+      if (!url) return '';
+      // Normalizza: prepend http:// se mancante per evitare link relativi
+      var href = /^https?:\/\//i.test(url) ? url : ('http://' + url);
+      return '<div style="margin-top:8px;">' +
+               '<div style="font-weight:600; color:#5a3e51;">' + esc(label) + '</div>' +
+               '<div style="margin-top:3px;">' +
+                 '<a href="' + esc(href) + '" target="_blank" rel="noopener" ' +
+                 'style="color:#5a87aa; word-break:break-all;">' +
+                 '<i class="bi bi-box-arrow-up-right" style="font-size:0.78rem;"></i> ' +
+                 esc(url) +
+                 '</a>' +
+               '</div>' +
+             '</div>';
+    }
+
+    var html = '<div style="font-size:0.88rem;">' +
+                 _linkBlock('Pagina prenotazioni online', bookingUrl) +
+                 _linkBlock('Sito del negozio',           siteUrl) +
+               '</div>';
     appendMessage('assistant', html);
   }
 
@@ -17118,13 +17159,188 @@ if (a.date) {
     if (c.sesso)                   html += '<div><strong>Sesso:</strong> ' + esc(c.sesso) + '</div>';
     if (c.data_nascita)            html += '<div><strong>Data di nascita:</strong> ' + esc(fmtDateIT(c.data_nascita)) + '</div>';
     if (c.data_registrazione)      html += '<div><strong>Registrato il:</strong> ' + esc(fmtDateIT(c.data_registrazione)) + '</div>';
-    if (c.ultimo_appuntamento)     html += '<div><strong>Ultimo appuntamento:</strong> ' + esc(fmtDateIT(c.ultimo_appuntamento)) + '</div>';
-    if (c.prossimo_appuntamento)   html += '<div><strong>Prossimo appuntamento:</strong> ' + esc(fmtDateIT(c.prossimo_appuntamento)) + '</div>';
     if (c.totale_appuntamenti !== undefined && c.totale_appuntamenti !== null)
                                    html += '<div><strong>Totale appuntamenti:</strong> ' + c.totale_appuntamenti + '</div>';
     if (c.note)                    html += '<div style="margin-top:5px;"><em>Note:</em> ' + esc(c.note) + '</div>';
     html += '</div>';
     appendMessage('assistant', html);
+
+    // Sezione: PROSSIMI APPUNTAMENTI
+    _renderClientApptsBlock(
+      'prossimi',
+      'Prossimi appuntamenti',
+      c.prossimi_appuntamenti_list || [],
+      '#5a87aa'
+    );
+
+    // Sezione: STORICO + PACCHETTI (intercalati per data)
+    var storico   = c.storico_appuntamenti_list || [];
+    var pacchetti = (window.modulePacchettiEnabled && c.pacchetti_list) ? c.pacchetti_list : [];
+    _renderClientStoricoBlock(storico, pacchetti);
+  }
+
+  // Pagina del calendario per quel giorno + ora (riusa calendarHomeUrl)
+  function _calendarUrlFor(dateStr, oraStr) {
+    var base = (typeof window.calendarHomeUrl === 'string' && window.calendarHomeUrl)
+      ? window.calendarHomeUrl
+      : (getBaseUrl() + '/');
+    base = base.replace(/\/+$/, '/');
+    var params = '?date=' + encodeURIComponent(dateStr || '');
+    if (oraStr) params += '&ora=' + encodeURIComponent(oraStr);
+    return base + params;
+  }
+
+  // Render tabella appuntamenti (prossimi o storico semplice)
+  function _renderClientApptsBlock(kind, label, list, accentColor) {
+    if (!list || !list.length) {
+      var emptyHtml =
+        '<div style="margin-top:4px;">' +
+        '<div style="font-weight:700; color:' + accentColor + '; font-size:0.85rem; margin-bottom:3px;">' +
+          '📅 ' + esc(label) + '</div>' +
+        '<em style="color:#999; font-size:0.82rem;">Nessuna seduta</em>' +
+        '</div>';
+      appendMessage('assistant', emptyHtml);
+      return;
+    }
+    var html =
+      '<div style="font-size:0.85rem;">' +
+      '<div style="font-weight:700; color:' + accentColor + '; font-size:0.85rem; margin-bottom:4px;">' +
+        '📅 ' + esc(label) + ' (' + list.length + ')</div>' +
+      '<table class="cd-client-table" style="width:100%; border-collapse:collapse; font-size:0.80rem;">' +
+      '<thead><tr style="background:#f5e7ee; color:#5a3e51;">' +
+        '<th style="padding:4px 6px; text-align:left;">Data</th>' +
+        '<th style="padding:4px 6px; text-align:left;">Ora</th>' +
+        '<th style="padding:4px 6px; text-align:left;">Servizio</th>' +
+        '<th style="padding:4px 6px; text-align:left;">Op.</th>' +
+        '<th style="padding:4px 6px; text-align:right;">€</th>' +
+      '</tr></thead><tbody>';
+    list.forEach(function(r) {
+      var label1 = r.servizio_tag || r.servizio || '';
+      var price = r.prezzo ? ('€' + Number(r.prezzo).toFixed(2)) : '';
+      var url = _calendarUrlFor(r.data, r.ora);
+      html += '<tr class="cd-appt-row" data-href="' + esc(url) + '" ' +
+              'style="cursor:pointer; border-bottom:1px solid #eee0e8;">' +
+                '<td style="padding:4px 6px;">' + esc(fmtDateIT(r.data) || r.data || '') + '</td>' +
+                '<td style="padding:4px 6px; white-space:nowrap;">' + esc(r.ora || '') + '</td>' +
+                '<td style="padding:4px 6px;">' + esc(label1) + '</td>' +
+                '<td style="padding:4px 6px;">' + esc(r.operatore || '') + '</td>' +
+                '<td style="padding:4px 6px; text-align:right;">' + esc(price) + '</td>' +
+              '</tr>';
+    });
+    html += '</tbody></table></div>';
+    appendMessage('assistant', html);
+    _wireApptRowClicks();
+  }
+
+  // Render storico cronologicamente unito con sottoscrizioni pacchetto
+  function _renderClientStoricoBlock(storico, pacchetti) {
+    var hasItems = (storico && storico.length) || (pacchetti && pacchetti.length);
+    if (!hasItems) {
+      appendMessage('assistant',
+        '<div style="margin-top:4px;">' +
+        '<div style="font-weight:700; color:#87647c; font-size:0.85rem; margin-bottom:3px;">' +
+          '📋 Storico</div>' +
+        '<em style="color:#999; font-size:0.82rem;">Nessun dato</em>' +
+        '</div>'
+      );
+      return;
+    }
+
+    // Unisci e ordina per data DESC: appuntamenti + sottoscrizioni pacchetti
+    var unified = [];
+    (storico || []).forEach(function(r) {
+      unified.push({ _kind: 'appt', _date: r.data || '', _ora: r.ora || '', row: r });
+    });
+    (pacchetti || []).forEach(function(p) {
+      unified.push({ _kind: 'pacc', _date: p.data_sottoscrizione || '', _ora: '', row: p });
+    });
+    unified.sort(function(a, b) {
+      // DESC: più recenti prima
+      var ka = (a._date || '') + ' ' + (a._ora || '');
+      var kb = (b._date || '') + ' ' + (b._ora || '');
+      if (ka === kb) return 0;
+      return ka < kb ? 1 : -1;
+    });
+
+    var calendarBase = (typeof window.calendarHomeUrl === 'string' && window.calendarHomeUrl)
+      ? window.calendarHomeUrl.replace(/\/+$/, '/') : '';
+    // /pacchetti/detail/<id>
+    var pacchettoBase = '/pacchetti/detail/';
+
+    var apptCount = (storico || []).length;
+    var pacCount  = (pacchetti || []).length;
+    var hdr = '📋 Storico (' + apptCount + ' sedut' + (apptCount === 1 ? 'a' : 'e');
+    if (pacCount > 0) hdr += ' · ' + pacCount + ' pacchett' + (pacCount === 1 ? 'o' : 'i');
+    hdr += ')';
+
+    var html =
+      '<div style="font-size:0.85rem;">' +
+      '<div style="font-weight:700; color:#87647c; font-size:0.85rem; margin-bottom:4px;">' +
+        esc(hdr) + '</div>' +
+      '<table class="cd-client-table" style="width:100%; border-collapse:collapse; font-size:0.80rem;">' +
+      '<thead><tr style="background:#fce4ec; color:#5a3e51;">' +
+        '<th style="padding:4px 6px; text-align:left;">Data</th>' +
+        '<th style="padding:4px 6px; text-align:left;">Tipo</th>' +
+        '<th style="padding:4px 6px; text-align:left;">Dettagli</th>' +
+        '<th style="padding:4px 6px; text-align:left;">Op.</th>' +
+        '<th style="padding:4px 6px; text-align:right;">€</th>' +
+      '</tr></thead><tbody>';
+
+    unified.forEach(function(it) {
+      if (it._kind === 'appt') {
+        var r = it.row;
+        var label1 = r.servizio_tag || r.servizio || '';
+        var price = r.prezzo ? ('€' + Number(r.prezzo).toFixed(2)) : '';
+        var url = _calendarUrlFor(r.data, r.ora);
+        html += '<tr class="cd-appt-row" data-href="' + esc(url) + '" ' +
+                'style="cursor:pointer; border-bottom:1px solid #eee0e8;">' +
+                  '<td style="padding:4px 6px;">' + esc(fmtDateIT(r.data) || r.data || '') + '</td>' +
+                  '<td style="padding:4px 6px;"><i class="bi bi-calendar-event" style="color:#87647c;"></i> appt</td>' +
+                  '<td style="padding:4px 6px;">' + esc(label1) + ' <small style="color:#888;">' + esc(r.ora || '') + '</small></td>' +
+                  '<td style="padding:4px 6px;">' + esc(r.operatore || '') + '</td>' +
+                  '<td style="padding:4px 6px; text-align:right;">' + esc(price) + '</td>' +
+                '</tr>';
+      } else {
+        var p = it.row;
+        var url = pacchettoBase + (p.id || '');
+        var tipo = p.tipo ? esc(p.tipo) : 'pacchetto';
+        html += '<tr class="cd-appt-row" data-href="' + esc(url) + '" ' +
+                'style="cursor:pointer; border-bottom:1px solid #eee0e8; ' +
+                'background:#fff8e7;">' +
+                  '<td style="padding:4px 6px;">' + esc(fmtDateIT(p.data_sottoscrizione) || p.data_sottoscrizione || '') + '</td>' +
+                  '<td style="padding:4px 6px;"><i class="bi bi-gift-fill" style="color:#c69a3f;"></i> ' + tipo + '</td>' +
+                  '<td style="padding:4px 6px;"><strong>' + esc(p.nome || '') + '</strong></td>' +
+                  '<td style="padding:4px 6px;">—</td>' +
+                  '<td style="padding:4px 6px; text-align:right;">—</td>' +
+                '</tr>';
+      }
+    });
+    html += '</tbody></table></div>';
+    appendMessage('assistant', html);
+    _wireApptRowClicks();
+  }
+
+  // Click handler delegato su righe tabella: redirect a data-href
+  function _wireApptRowClicks() {
+    elMessages.querySelectorAll('.cd-appt-row:not([data-bound])').forEach(function(tr) {
+      tr.setAttribute('data-bound', '1');
+      tr.addEventListener('mouseenter', function() {
+        tr.style.background = '#fce4ec';
+      });
+      tr.addEventListener('mouseleave', function() {
+        // Riapplica eventuale bg per pacchetti (giallino)
+        if (tr.getAttribute('data-href') && tr.getAttribute('data-href').indexOf('/pacchetti/') !== -1) {
+          tr.style.background = '#fff8e7';
+        } else {
+          tr.style.background = '';
+        }
+      });
+      tr.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var href = tr.getAttribute('data-href');
+        if (href) window.location.href = href;
+      });
+    });
   }
 
   // ── RICERCA SERVIZIO in modo info → 'service-search' ──────────
