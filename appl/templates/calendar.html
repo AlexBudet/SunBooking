@@ -2986,10 +2986,11 @@ document.addEventListener('DOMContentLoaded', function() {
   <div id="aiChatResizeHandleRight" aria-label="Ridimensiona larghezza" data-bs-toggle="tooltip" title="Ridimensiona larghezza"></div>
 
   <!-- Header -->
-  <div style="background:linear-gradient(135deg,#723a57,#83506c);
+  <div id="aiChatHeader"
+       style="background:linear-gradient(135deg,#723a57,#83506c);
               padding:13px 16px; display:flex; align-items:center; gap:10px;
               flex-shrink:0; border-bottom:1px solid rgba(135,100,124,0.15);">
-    <i class="bi bi-stars" style="color:#fff; font-size:1.2rem;"></i>
+    <i id="aiChatHeaderIcon" class="bi bi-stars" style="color:#fff; font-size:1.2rem;"></i>
     <span id="aiChatTitle"
           style="color:#fff; font-weight:700; font-size:1rem; flex:1;">
       TOSCA AI
@@ -3194,16 +3195,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
           <div class="col-lg-6">
 
-        <!-- ── Sezione Date ── -->
+        <!-- ── Sezione Quando ── -->
         <div class="cd-section">
           <label class="cd-label">
-            <i class="bi bi-calendar-range"></i> Date
+            <i class="bi bi-calendar-range"></i> Quando
           </label>
           <div class="cd-section-body" id="cdDateBody"
                style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
-            <!-- Selettore modalità: 2 pillole radio. I chip "filtra giorni"
-                 sono stati spostati sopra la tabella Orario (allineati con le
-                 colonne giorno) per dare l'idea che filtrino la tabella sotto. -->
+            <!-- 4 pillole: Giorno / Mese / Intervallo / Il prima possibile. -->
             <div class="btn-group btn-group-sm cd-date-modes" role="group"
                  aria-label="Modalità di selezione date">
               <input type="radio" class="btn-check" name="cdDateMode"
@@ -3222,6 +3221,12 @@ document.addEventListener('DOMContentLoaded', function() {
                      id="cdDateModeRange" value="range" checked>
               <label class="btn btn-outline-success" for="cdDateModeRange">
                 <i class="bi bi-calendar-range"></i> Intervallo
+              </label>
+
+              <input type="radio" class="btn-check" name="cdDateMode"
+                     id="cdDateModeAsap" value="asap">
+              <label class="btn btn-outline-success" for="cdDateModeAsap">
+                <i class="bi bi-lightning-charge-fill"></i> Il prima possibile
               </label>
             </div>
 
@@ -3376,6 +3381,16 @@ document.addEventListener('DOMContentLoaded', function() {
 #aiSearchAvailBadgeBtn:hover {
   transform: scale(1.08);
   box-shadow: 0 6px 22px rgba(143,184,138,0.6);
+}
+
+/* Lampeggio quando navigator ha cliente+servizio: alone pulsante a contrasto. */
+@keyframes cdBadgePulse {
+  0%   { box-shadow: 0 0 0 0   rgba(143,184,138,0.7); transform: scale(1); }
+  50%  { box-shadow: 0 0 0 14px rgba(143,184,138,0);  transform: scale(1.05); }
+  100% { box-shadow: 0 0 0 0   rgba(143,184,138,0);  transform: scale(1); }
+}
+#aiSearchAvailBadgeBtn.cd-badge-blink {
+  animation: cdBadgePulse 1.1s ease-in-out infinite;
 }
 
 #aiChatResizeHandle {
@@ -3884,6 +3899,30 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 .cd-wd-chip input { display: none; }
 
+/* Orario "disabilitato" in modalità ASAP (prima disponibilità):
+   l'utente non sceglie fasce, il backend cerca il primo slot libero. */
+.cd-section-body.cd-orario-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+  position: relative;
+}
+.cd-section-body.cd-orario-disabled::after {
+  content: '⚡ Ricerca prima disponibilità — fasce orarie non applicabili';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255,255,255,0.95);
+  color: #87647c;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1.5px dashed #b8809d;
+  font-weight: 700;
+  font-size: 0.92rem;
+  pointer-events: none;
+  z-index: 5;
+  white-space: nowrap;
+}
+
 /* Tabella Orario */
 .cd-orario-table-wrap {
   overflow-x: auto;
@@ -3996,22 +4035,36 @@ document.addEventListener('DOMContentLoaded', function() {
 /* Risultati ricerca disponibilità: vivono nel modal "cercaDispResultsModal".
    Uso prefisso esplicito + !important sui visual per BATTERE le regole
    globali di .modal-body (font-size, color, padding, label, ecc.). */
-#cercaDispResultsModal .cd-day-block { margin-bottom: 14px !important; }
+#cercaDispResultsModal .cd-day-block {
+  margin-bottom: 18px !important;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed rgba(135,100,124,0.25);
+}
+#cercaDispResultsModal .cd-day-block:last-child {
+  border-bottom: none;
+}
 #cercaDispResultsModal .cd-day-header {
-  font-weight: 700 !important;
-  font-size: 0.95rem !important;
+  font-weight: 800 !important;
+  font-size: 1.15rem !important;
   color: #5a3e51 !important;
-  background: #fbeef3 !important;
-  border-left: 3px solid #87647c !important;
-  padding: 6px 10px !important;
-  margin-bottom: 6px !important;
-  border-radius: 4px !important;
+  background: #ffffff !important;
+  border-left: 4px solid #87647c !important;
+  padding: 10px 14px !important;
+  margin-bottom: 10px !important;
+  border-radius: 6px !important;
   display: block !important;
+  box-shadow: 0 2px 6px rgba(135,100,124,0.10);
+  letter-spacing: 0.01em;
+}
+#cercaDispResultsModal .cd-day-header .bi {
+  color: #87647c !important;
+  margin-right: 4px;
 }
 #cercaDispResultsModal .cd-day-header .cd-day-count {
   font-weight: 500 !important;
   color: #87647c !important;
-  font-size: 0.85rem !important;
+  font-size: 0.88rem !important;
+  margin-left: 6px;
 }
 #cercaDispResultsModal .cd-results-grid {
   display: grid !important;
@@ -4616,11 +4669,17 @@ document.addEventListener('DOMContentLoaded', function() {
     if (single) single.style.display = (mode === 'single') ? 'inline-flex' : 'none';
     if (month)  month.style.display  = (mode === 'month')  ? 'inline-flex' : 'none';
     if (range)  range.style.display  = (mode === 'range')  ? 'inline-flex' : 'none';
-    // Filter-row nei thead Orario: visibile in 'range' e 'month'
-    // (in 'single' il filtro giorni-settimana non ha senso, è implicito).
+    // Filter-row nei thead Orario: visibile in 'range' e 'month'.
     var filterRow = document.getElementById('cdOrarioFilterRow');
     if (filterRow) {
       filterRow.style.display = (mode === 'range' || mode === 'month') ? '' : 'none';
+    }
+    // ASAP: grigia/disabilita TUTTA la sezione Orario (l'utente non sceglie
+    // fasce, parte la ricerca del primo slot libero rispettando solo lo
+    // shift e l'operatore).
+    var orarioBody = document.getElementById('cdOrarioBody');
+    if (orarioBody) {
+      orarioBody.classList.toggle('cd-orario-disabled', mode === 'asap');
     }
     _cdSyncDateState();
   }
@@ -4650,6 +4709,8 @@ document.addEventListener('DOMContentLoaded', function() {
       state.from     = document.getElementById('cdDateFrom').value || '';
       state.to       = document.getElementById('cdDateTo').value   || '';
       state.weekdays = _readWeekdayChips();
+    } else if (mode === 'asap') {
+      // Nessun input data; backend prende oggi → +60gg e ritorna i primi N.
     }
     window.CD.date = state;
     _cdUpdateOrarioColumnStates();
@@ -5592,10 +5653,176 @@ document.addEventListener('DOMContentLoaded', function() {
     );
   }
 
+  // ── NAVIGATOR WATCHER ───────────────────────────────────────
+  // Sorveglia "Navigator Appuntamenti" (lato sx del calendario):
+  // quando l'utente seleziona CLIENTE + almeno 1 SERVIZIO, fa lampeggiare
+  // il badge "Cerca disponibilità" e mostra un tooltip "cerca prima disponibilità" per 5s.
+  // Quando si svuota il navigator, il lampeggio si interrompe.
+  window.CD._navBlinkState = false;
+  window.CD._navTooltipTimer = null;
+  window.CD._navTooltipInstance = null;
+
+  function _cdReadNavigatorState() {
+    var cliId = window.selectedClientIdNav || null;
+    // Servizi: vivono in window.pseudoBlocks (array JS popolato quando
+    // l'utente sceglie un servizio nel Navigator). Filtra solo blocchi
+    // con serviceId valido (esclude i BLOCCO OFF).
+    var serviceIds = [];
+    var pb = window.pseudoBlocks;
+    if (Array.isArray(pb)) {
+      pb.forEach(function(b) {
+        if (!b) return;
+        var sid = b.serviceId;
+        var n = parseInt(sid, 10);
+        if (sid && !isNaN(n) && n > 0) serviceIds.push(n);
+      });
+    }
+    return {
+      cliente_id:   cliId,
+      cliente_nome: window.selectedClientNameNav || '',
+      service_ids:  serviceIds,
+    };
+  }
+
+  function _cdSetBadgeBlink(on) {
+    var badge = document.getElementById('aiSearchAvailBadgeBtn');
+    if (!badge) return;
+    if (on) {
+      badge.classList.add('cd-badge-blink');
+    } else {
+      badge.classList.remove('cd-badge-blink');
+      // Nasconde anche eventuale tooltip ancora attivo
+      _cdHideBadgeTooltip();
+    }
+  }
+
+  function _cdShowBadgeTooltip() {
+    var badge = document.getElementById('aiSearchAvailBadgeBtn');
+    if (!badge) return;
+    // Uso unicode escape à per evitare problemi di encoding del file
+    var TXT = 'cerca prima disponibilità';
+    // Wrap in try/catch: anche se Bootstrap Tooltip fallisce (versione vecchia
+    // o setContent non disponibile), il LAMPEGGIO del badge non deve esserne
+    // compromesso (si applica già prima di chiamare questa funzione).
+    try {
+      if (window.bootstrap && window.bootstrap.Tooltip) {
+        badge.setAttribute('data-bs-original-title', TXT);
+        badge.setAttribute('title', TXT);
+        var tt = bootstrap.Tooltip.getOrCreateInstance(badge, {
+          trigger: 'manual', container: 'body'
+        });
+        if (typeof tt.setContent === 'function') {
+          tt.setContent({ '.tooltip-inner': TXT });
+        }
+        tt.show();
+        window.CD._navTooltipInstance = tt;
+      }
+    } catch (err) {
+      console.warn('[CD] tooltip show failed:', err);
+    }
+    // Auto-hide dopo 5s (anche se tooltip non si è creato, niente di male)
+    if (window.CD._navTooltipTimer) clearTimeout(window.CD._navTooltipTimer);
+    window.CD._navTooltipTimer = setTimeout(_cdHideBadgeTooltip, 5000);
+  }
+
+  function _cdHideBadgeTooltip() {
+    if (window.CD._navTooltipTimer) {
+      clearTimeout(window.CD._navTooltipTimer);
+      window.CD._navTooltipTimer = null;
+    }
+    if (window.CD._navTooltipInstance) {
+      try { window.CD._navTooltipInstance.hide(); } catch(_) {}
+      window.CD._navTooltipInstance = null;
+    }
+  }
+
+  function _cdCheckNavigatorState() {
+    var st = _cdReadNavigatorState();
+    var shouldBlink = !!(st.cliente_id && st.service_ids.length > 0);
+    // Debug log: visibile in console (F12) per capire stato attuale
+    if (window.CD._navDebugLast !== shouldBlink) {
+      window.CD._navDebugLast = shouldBlink;
+      console.log('[CD navigator-watcher]',
+        'cliente_id=', st.cliente_id,
+        'service_ids=', st.service_ids,
+        '→ shouldBlink=', shouldBlink,
+        '| _navBlinkState=', window.CD._navBlinkState
+      );
+    }
+    if (shouldBlink && !window.CD._navBlinkState) {
+      window.CD._navBlinkState = true;
+      _cdSetBadgeBlink(true);
+      _cdShowBadgeTooltip();
+    } else if (!shouldBlink && window.CD._navBlinkState) {
+      window.CD._navBlinkState = false;
+      _cdSetBadgeBlink(false);
+    }
+  }
+
+  function _cdInitNavigatorWatcher() {
+    console.log('[CD] navigator-watcher init');
+    var listEl = document.getElementById('selectedServicesList');
+    if (listEl && typeof MutationObserver !== 'undefined') {
+      var mo = new MutationObserver(function() {
+        _cdCheckNavigatorState();
+      });
+      mo.observe(listEl, { childList: true, subtree: false });
+    }
+    var clientInput = document.getElementById('clientSearchInputNav');
+    if (clientInput) {
+      clientInput.addEventListener('input', function() {
+        setTimeout(_cdCheckNavigatorState, 100);
+      });
+    }
+    setInterval(_cdCheckNavigatorState, 1000);
+    // Fai partire subito una check così appare immediatamente in log
+    _cdCheckNavigatorState();
+  }
+
+  // Pre-fill del modal cerca-disp con stato del navigator.
+  // Chiamato dal click sul badge se navigator ha cliente + almeno 1 servizio.
+  function _cdPrefillFromNavigator() {
+    var st = _cdReadNavigatorState();
+    if (!st.cliente_id || !st.service_ids.length) return false;
+
+    // Setta cliente
+    _cdSelectCliente({
+      id:        st.cliente_id,
+      nome:      st.cliente_nome,
+      cognome:   '',
+      cellulare: '',
+    });
+
+    // Fetch dei dettagli servizi (per name/durata/prezzo)
+    fetch(_baseUrl() + '/api/services', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : []; })
+      .then(function(rows) {
+        var byId = {};
+        (rows || []).forEach(function(s) { byId[s.id] = s; });
+        st.service_ids.forEach(function(sid) {
+          var s = byId[sid];
+          if (!s) return;
+          _cdAddServizio({
+            id:     s.id,
+            nome:   s.servizio_nome,
+            durata: s.durata,
+            prezzo: parseFloat(s.price) || 0,
+          });
+        });
+      })
+      .catch(function(){});
+    return true;
+  }
+  window.CD.prefillFromNavigator = _cdPrefillFromNavigator;
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initCD);
+    document.addEventListener('DOMContentLoaded', function() {
+      initCD();
+      _cdInitNavigatorWatcher();
+    });
   } else {
     initCD();
+    _cdInitNavigatorWatcher();
   }
 })();
 </script>
@@ -5714,11 +5941,33 @@ document.addEventListener('DOMContentLoaded', function() {
         alert('Modal non disponibile: Bootstrap non caricato.');
         return;
       }
-      // backdrop con z-index dedicato (vedi CSS .cd-backdrop):
-      // backdrop:false → niente backdrop automatico, evita conflitti.
-      // Lasciamo invece backdrop Bootstrap (più semplice) e marchiamo
-      // l'ultimo backdrop con la classe .cd-backdrop dopo lo show.
+      // Se il Navigator Appuntamenti ha cliente + 1+ servizi, pre-compila
+      // il modal con quei dati. Lo shown.bs.modal default resetta lo state;
+      // applico il pre-fill DOPO il reset per non venire sovrascritto.
+      // I servizi del Navigator vivono in window.pseudoBlocks (array JS),
+      // NON come data-service-id sui DOM nodes di selectedServicesList.
+      var doPrefill = window.CD &&
+                      typeof window.CD.prefillFromNavigator === 'function' &&
+                      (function() {
+                        var c = window.selectedClientIdNav;
+                        var pb = window.pseudoBlocks;
+                        var hasSvc = Array.isArray(pb) && pb.some(function(b) {
+                          var n = parseInt(b && b.serviceId, 10);
+                          return !isNaN(n) && n > 0;
+                        });
+                        return !!(c && hasSvc);
+                      })();
       var inst = bootstrap.Modal.getOrCreateInstance(__cdModalEl);
+      if (doPrefill) {
+        var onShown = function() {
+          __cdModalEl.removeEventListener('shown.bs.modal', onShown);
+          // Aspetta 80ms così il reset di default ha tempo di finire
+          setTimeout(function() {
+            try { window.CD.prefillFromNavigator(); } catch(err) { console.warn(err); }
+          }, 80);
+        };
+        __cdModalEl.addEventListener('shown.bs.modal', onShown);
+      }
       inst.show();
     });
 
