@@ -4090,19 +4090,21 @@ document.addEventListener('DOMContentLoaded', function() {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
   gap: 10px !important;
 }
-/* Stile cd-result-card — mimo di .appointment-block: border-radius 12px,
-   colore random come sfondo, color font calcolato (inline style). I figli
-   ereditano il colore dal genitore. */
+/* Slot card a 2 zone:
+   - HEADER bianco (stile simile a .cd-day-header), orario inizio + durata
+   - BODY colorato (sfumatura della palette mauve), servizi + operatore
+   Niente padding sulla card → header e body filo-filo, look pulito. */
 #cercaDispResultsModal .cd-result-card {
-  /* background + color sono inline (random color + computed font color) */
-  border: 1px solid rgba(255,255,255,0.18) !important;
-  border-radius: 12px !important;
-  padding: 10px 14px !important;
+  background: #fff !important;
+  border: 1px solid rgba(135,100,124,0.20) !important;
+  border-radius: 10px !important;
+  padding: 0 !important;
   cursor: pointer !important;
   transition: transform .15s ease, box-shadow .15s ease;
   font-size: 0.88rem !important;
   line-height: 1.4 !important;
   display: block !important;
+  overflow: hidden;
   box-shadow: 0 3px 10px rgba(135,100,124,0.18), 0 1px 3px rgba(0,0,0,0.08);
 }
 #cercaDispResultsModal .cd-result-card:hover {
@@ -4117,20 +4119,25 @@ document.addEventListener('DOMContentLoaded', function() {
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.30) !important;
-  padding-bottom: 5px;
-  margin-bottom: 6px;
+  padding: 6px 12px !important;
+  background: #fff !important;
+  color: #5a3e51 !important;
+  border-bottom: 1px solid rgba(135,100,124,0.15);
 }
 #cercaDispResultsModal .cd-slot-range {
   font-weight: 800 !important;
-  color: inherit !important;
-  font-size: 1.02rem !important;
+  color: #5a3e51 !important;
+  font-size: 1.05rem !important;
 }
 #cercaDispResultsModal .cd-slot-dur {
-  color: inherit !important;
-  opacity: 0.85;
+  color: #87647c !important;
   font-size: 0.78rem !important;
   font-weight: 600 !important;
+  font-style: italic;
+}
+#cercaDispResultsModal .cd-slot-body {
+  /* background + color sono inline (sfumatura palette + font calcolato) */
+  padding: 8px 12px;
 }
 #cercaDispResultsModal .cd-slot-svc-list { margin: 0 !important; }
 #cercaDispResultsModal .cd-slot-svc {
@@ -4139,14 +4146,7 @@ document.addEventListener('DOMContentLoaded', function() {
   gap: 6px;
   padding: 2px 0;
   color: inherit !important;
-  font-size: 0.88rem !important;
-}
-#cercaDispResultsModal .cd-slot-svc-time {
-  color: inherit !important;
-  opacity: 0.85;
-  font-weight: 700 !important;
-  font-size: 0.80rem !important;
-  min-width: 42px;
+  font-size: 0.92rem !important;
 }
 #cercaDispResultsModal .cd-slot-svc-name {
   font-weight: 700 !important;
@@ -4158,15 +4158,15 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 #cercaDispResultsModal .cd-svc-op {
   color: inherit !important;
-  opacity: 0.80;
+  opacity: 0.85;
   font-style: italic;
-  font-size: 0.78rem !important;
+  font-size: 0.80rem !important;
   font-weight: 500 !important;
 }
 #cercaDispResultsModal .cd-slot-shared-op {
   margin-top: 6px;
   padding-top: 5px;
-  border-top: 1px dashed rgba(255,255,255,0.35);
+  border-top: 1px dashed rgba(255,255,255,0.40);
   color: inherit !important;
   font-size: 0.85rem !important;
   font-weight: 700 !important;
@@ -4174,7 +4174,7 @@ document.addEventListener('DOMContentLoaded', function() {
 #cercaDispResultsModal .cd-slot-shared-op .bi {
   margin-right: 4px;
   color: inherit !important;
-  opacity: 0.85;
+  opacity: 0.90;
 }
 
 /* Slot espanso: conferma prenotazione inline */
@@ -5637,24 +5637,77 @@ document.addEventListener('DOMContentLoaded', function() {
 
     var services = slot.services || [];
     var idx = 0;
+    var createdIds = [];   // ID di tutti gli appuntamenti creati
+
     function postNext() {
       if (idx >= services.length) {
+        // Tutto creato → mostra OK + flusso WhatsApp + redirect
         if (statusEl) statusEl.innerHTML =
           '<span style="color:#2a7a2a;"><i class="bi bi-check-circle-fill"></i> ' +
           services.length + ' appuntament' + (services.length === 1 ? 'o creato' : 'i creati') +
-          ' — apro l\'agenda…</span>';
+          '</span>';
         card.classList.add('cd-slot-booked');
-        // Redirect alla pagina agenda con la data dell'appuntamento appena creato.
-        // Usa window.calendarHomeUrl se disponibile (settato in calendar.html da
-        // url_for('calendar.calendar_home')); altrimenti fallback su _baseUrl().
-        var baseHref = (typeof window.calendarHomeUrl === 'string' && window.calendarHomeUrl)
-          ? window.calendarHomeUrl
-          : (_baseUrl() + '/');
-        // Rimuovi eventuale trailing slash duplicato
-        baseHref = baseHref.replace(/\/+$/, '/');
-        setTimeout(function() {
-          window.location.href = baseHref + '?date=' + encodeURIComponent(slot.date);
-        }, 700);
+
+        // Costruisci payload WhatsApp identico a quello usato da
+        // CreateAppointmentModal/Navigator.
+        var first = services[0] || {};
+        var cli = window.CD.cliente || {};
+        var fullName = ((cli.nome || '') + ' ' + (cli.cognome || '')).trim();
+        var whatsappData = {
+          client_id:        clientId,
+          client_name:      fullName,
+          data:             slot.date,
+          ora:              first.start_time || '',
+          appointment_id:   createdIds[0] || null,
+          appointment_ids:  createdIds.map(String),
+        };
+        var csrfTok = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+        // Redirect alla pagina agenda con la data dell'appuntamento creato.
+        function _goToAgenda() {
+          // Svuota il Navigator (cliente + servizi) prima del redirect: gli
+          // appuntamenti sono ormai stati creati, quindi cliente/servizi caricati
+          // dal Navigator hanno esaurito il loro scopo. confirmRestore=false →
+          // niente prompt su eventuali cutBlocks (siamo in flusso programmatico).
+          try {
+            if (typeof window.clearNavigator === 'function') {
+              window.clearNavigator(false);
+            }
+          } catch (_) { /* ignore */ }
+
+          var baseHref = (typeof window.calendarHomeUrl === 'string' && window.calendarHomeUrl)
+            ? window.calendarHomeUrl
+            : (_baseUrl() + '/');
+          baseHref = baseHref.replace(/\/+$/, '/');
+          setTimeout(function() {
+            window.location.href = baseHref + '?date=' + encodeURIComponent(slot.date);
+          }, 200);
+        }
+
+        // Chiedi conferma invio WhatsApp (riusa il pannello globale già
+        // definito in calendar.js, lo stesso del Navigator). Se l'utente
+        // dice "Sì" invia, poi redirect comunque.
+        try {
+          if (typeof chiediInvioWhatsappNavigator === 'function' &&
+              typeof inviaWhatsappAutoSeRichiesto  === 'function') {
+            Promise.resolve(chiediInvioWhatsappNavigator())
+              .then(function(want) {
+                if (want === true) {
+                  return Promise.resolve(
+                    inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfTok)
+                  ).then(function() {
+                    try { alert('Messaggio WhatsApp inviato!'); } catch(_) {}
+                  }).catch(function(){});
+                }
+              })
+              .catch(function(){})
+              .then(_goToAgenda);
+          } else {
+            _goToAgenda();
+          }
+        } catch (_) {
+          _goToAgenda();
+        }
         return;
       }
       var sv = services[idx];
@@ -5670,6 +5723,9 @@ document.addEventListener('DOMContentLoaded', function() {
           appointment_date: slot.date,
           duration:         sv.duration,
           note:             '',
+          // Stesso colore della card cliccata, per coerenza visiva tra
+          // slot proposto e blocco appuntamento creato.
+          colore:           (slot && slot._color) || '',
         }),
       })
       .then(function(r) {
@@ -5686,6 +5742,8 @@ document.addEventListener('DOMContentLoaded', function() {
           if (cancelBtn)  cancelBtn.disabled  = false;
           return;
         }
+        // Salva l'ID dell'appuntamento creato (serve per WhatsApp).
+        if (res.body && res.body.id) createdIds.push(res.body.id);
         idx++;
         postNext();
       })
@@ -5724,27 +5782,41 @@ document.addEventListener('DOMContentLoaded', function() {
     return wd ? (wd + ' ' + ddmmm) : ddmmm;
   }
 
+  // Palette: sfumature dello stesso colore (rosa-mauve), così tutti gli
+  // slot della stessa ricerca appaiono come "una famiglia" — non come
+  // appuntamenti multi-cliente. Light shades hanno font scuro.
+  var CD_SLOT_PALETTE = [
+    { bg: '#87647c', fg: '#fff'    },  // viola mauve scuro
+    { bg: '#a06b88', fg: '#fff'    },  // mauve medio scuro
+    { bg: '#b8809d', fg: '#fff'    },  // mauve medio
+    { bg: '#c994a8', fg: '#fff'    },  // rosa-mauve
+    { bg: '#d6a8b8', fg: '#5a3e51' },  // rosa medio
+    { bg: '#e6c0cd', fg: '#5a3e51' },  // rosa chiaro
+  ];
+
+  function _cdPickShade() {
+    return CD_SLOT_PALETTE[Math.floor(Math.random() * CD_SLOT_PALETTE.length)];
+  }
+
   function _cdBuildSlotBlock(s) {
-    // Genera colore random per questa card (memorizzato su _color del slot,
-    // così viene riusato al click "Conferma" per dare lo stesso colore
-    // all'appuntamento reale creato).
+    // Sfumatura della stessa famiglia (no rainbow). Memorizzata su s.
     if (!s._color) {
-      s._color = (typeof getRandomColor === 'function')
-                  ? getRandomColor() : '#4285f4';
-      s._fontColor = (typeof computeFontColor === 'function')
-                     ? computeFontColor(s._color) : '#ffffff';
+      var shade = _cdPickShade();
+      s._color     = shade.bg;
+      s._fontColor = shade.fg;
     }
     var bg = s._color;
     var fg = s._fontColor;
 
     var sameOp = !!s.same_operator;
+    // Lista servizi: SOLO nomi (l'orario di inizio è già nell'header,
+    // non lo ripetiamo). Operatore accanto se cascade.
     var servicesHTML = '';
     (s.services || []).forEach(function(sv) {
       var opTag = sameOp ? '' :
         ' <small class="cd-svc-op">' + _esc(sv.operator_name) + '</small>';
       servicesHTML += '<div class="cd-slot-svc">' +
-                      '<span class="cd-slot-svc-time">' + _esc(sv.start_time) + '</span>' +
-                      ' <span class="cd-slot-svc-name">' + _esc(sv.name) + '</span>' +
+                      '<span class="cd-slot-svc-name">' + _esc(sv.name) + '</span>' +
                       opTag +
                       '</div>';
     });
@@ -5756,20 +5828,24 @@ document.addEventListener('DOMContentLoaded', function() {
                      _esc(s.services[0].operator_name) + '</div>';
     }
 
+    // Card a 2 zone:
+    //  - HEADER bianco con orario di inizio + durata (no end time)
+    //  - BODY colorato con servizi + operatore
     return (
       '<div class="cd-result-card" ' +
       'data-date="' + _esc(s.date) + '" ' +
       'data-start="' + _esc(s.start_time) + '" ' +
       'data-end="' + _esc(s.end_time) + '" ' +
       'data-color="' + _esc(bg) + '" ' +
-      'data-font-color="' + _esc(fg) + '" ' +
-      'style="background:' + bg + '; color:' + fg + ';">' +
+      'data-font-color="' + _esc(fg) + '">' +
         '<div class="cd-slot-header">' +
-          '<span class="cd-slot-range">' + _esc(s.start_time) + ' – ' + _esc(s.end_time) + '</span>' +
+          '<span class="cd-slot-range">' + _esc(s.start_time) + '</span>' +
           '<span class="cd-slot-dur">' + (s.total_duration || 0) + ' min</span>' +
         '</div>' +
-        '<div class="cd-slot-svc-list">' + servicesHTML + '</div>' +
-        sharedOpHTML +
+        '<div class="cd-slot-body" style="background:' + bg + '; color:' + fg + ';">' +
+          '<div class="cd-slot-svc-list">' + servicesHTML + '</div>' +
+          sharedOpHTML +
+        '</div>' +
       '</div>'
     );
   }
