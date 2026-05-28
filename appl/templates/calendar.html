@@ -3195,10 +3195,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
           <div class="col-lg-6">
 
-        <!-- ── Sezione Quando ── -->
+        <!-- ── Sezione Cerca prima disponibilità ── -->
         <div class="cd-section">
           <label class="cd-label">
-            <i class="bi bi-calendar-range"></i> Quando
+            <i class="bi bi-calendar-range"></i> Cerca prima disponibilità
           </label>
           <div class="cd-section-body" id="cdDateBody"
                style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
@@ -3244,15 +3244,27 @@ document.addEventListener('DOMContentLoaded', function() {
                      id="cdDateMonth" style="max-width:160px;">
             </div>
 
-            <!-- Body modalità "range": Da/A inline. -->
+            <!-- Body modalità "range": Da/A inline + checkbox "fino a".
+                 "fino a" + data "A" sono raggruppati in un wrapper inline-flex
+                 che NON si spezza: restano sempre sulla stessa riga. -->
             <div id="cdDateBodyRange" class="cd-date-mode-body"
-                 style="display:inline-flex; align-items:center; gap:8px;">
+                 style="display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <label class="cd-sublabel mb-0" for="cdDateFrom">Da</label>
               <input type="date" class="form-control form-control-sm"
                      id="cdDateFrom" style="max-width:160px;">
-              <label class="cd-sublabel mb-0" for="cdDateTo">A</label>
-              <input type="date" class="form-control form-control-sm"
-                     id="cdDateTo" style="max-width:160px;">
+              <!-- Gruppo "fino a + A": resta unito su una riga -->
+              <div style="display:inline-flex; align-items:center; gap:6px;
+                          flex-wrap:nowrap; white-space:nowrap;">
+                <div class="form-check form-check-inline mb-0"
+                     style="margin:0; padding-left:1.5em;">
+                  <input type="checkbox" class="form-check-input"
+                         id="cdDateToEnabled">
+                  <label class="form-check-label cd-sublabel mb-0"
+                         for="cdDateToEnabled" style="cursor:pointer;">fino a</label>
+                </div>
+                <input type="date" class="form-control form-control-sm"
+                       id="cdDateTo" style="max-width:160px; flex-shrink:0;" disabled>
+              </div>
             </div>
           </div>
         </div>
@@ -3262,6 +3274,13 @@ document.addEventListener('DOMContentLoaded', function() {
           <label class="cd-label">
             <i class="bi bi-clock"></i> Orario
             <span class="cd-label-hint">(tick sui giorni × fasce in cui cercare; orari modificabili)</span>
+            <button type="button" id="cdOrarioToggleAllBtn"
+                    class="btn btn-sm btn-outline-light"
+                    style="margin-left:8px; padding:2px 10px; font-size:0.72rem;
+                           background:rgba(255,255,255,0.85); color:#5a3e51;
+                           border:1px solid #b8809d; font-weight:600;">
+              Seleziona tutti
+            </button>
           </label>
           <div class="cd-section-body" id="cdOrarioBody">
             <div class="cd-orario-table-wrap">
@@ -4071,39 +4090,45 @@ document.addEventListener('DOMContentLoaded', function() {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important;
   gap: 10px !important;
 }
+/* Stile cd-result-card — mimo di .appointment-block: border-radius 12px,
+   colore random come sfondo, color font calcolato (inline style). I figli
+   ereditano il colore dal genitore. */
 #cercaDispResultsModal .cd-result-card {
-  background: #fff !important;
-  border: 2px solid #87647c !important;
-  border-radius: 10px !important;
-  padding: 10px 12px !important;
+  /* background + color sono inline (random color + computed font color) */
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  border-radius: 12px !important;
+  padding: 10px 14px !important;
   cursor: pointer !important;
-  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+  transition: transform .15s ease, box-shadow .15s ease;
   font-size: 0.88rem !important;
   line-height: 1.4 !important;
   display: block !important;
-  color: #5a3e51 !important;
+  box-shadow: 0 3px 10px rgba(135,100,124,0.18), 0 1px 3px rgba(0,0,0,0.08);
 }
 #cercaDispResultsModal .cd-result-card:hover {
-  background: #fce4ec !important;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(135,100,124,0.30);
+  transform: scale(1.015);
+  box-shadow: 0 6px 20px rgba(135,100,124,0.30), 0 2px 6px rgba(0,0,0,0.12);
+}
+#cercaDispResultsModal .cd-result-card:active {
+  transform: scale(0.99);
 }
 #cercaDispResultsModal .cd-slot-header {
   display: flex !important;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  border-bottom: 1px solid rgba(135,100,124,0.3) !important;
+  border-bottom: 1px solid rgba(255,255,255,0.30) !important;
   padding-bottom: 5px;
   margin-bottom: 6px;
 }
 #cercaDispResultsModal .cd-slot-range {
   font-weight: 800 !important;
-  color: #5a3e51 !important;
+  color: inherit !important;
   font-size: 1.02rem !important;
 }
 #cercaDispResultsModal .cd-slot-dur {
-  color: #87647c !important;
+  color: inherit !important;
+  opacity: 0.85;
   font-size: 0.78rem !important;
   font-weight: 600 !important;
 }
@@ -4113,25 +4138,27 @@ document.addEventListener('DOMContentLoaded', function() {
   align-items: baseline;
   gap: 6px;
   padding: 2px 0;
-  color: #5a3e51 !important;
+  color: inherit !important;
   font-size: 0.88rem !important;
 }
 #cercaDispResultsModal .cd-slot-svc-time {
-  color: #87647c !important;
+  color: inherit !important;
+  opacity: 0.85;
   font-weight: 700 !important;
   font-size: 0.80rem !important;
   min-width: 42px;
 }
 #cercaDispResultsModal .cd-slot-svc-name {
   font-weight: 700 !important;
-  color: #5a3e51 !important;
+  color: inherit !important;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 #cercaDispResultsModal .cd-svc-op {
-  color: #6e4d61 !important;
+  color: inherit !important;
+  opacity: 0.80;
   font-style: italic;
   font-size: 0.78rem !important;
   font-weight: 500 !important;
@@ -4139,14 +4166,15 @@ document.addEventListener('DOMContentLoaded', function() {
 #cercaDispResultsModal .cd-slot-shared-op {
   margin-top: 6px;
   padding-top: 5px;
-  border-top: 1px dashed rgba(135,100,124,0.3);
-  color: #5a3e51 !important;
+  border-top: 1px dashed rgba(255,255,255,0.35);
+  color: inherit !important;
   font-size: 0.85rem !important;
   font-weight: 700 !important;
 }
 #cercaDispResultsModal .cd-slot-shared-op .bi {
   margin-right: 4px;
-  color: #87647c !important;
+  color: inherit !important;
+  opacity: 0.85;
 }
 
 /* Slot espanso: conferma prenotazione inline */
@@ -4707,7 +4735,11 @@ document.addEventListener('DOMContentLoaded', function() {
       state.weekdays = _readWeekdayChips();
     } else if (mode === 'range') {
       state.from     = document.getElementById('cdDateFrom').value || '';
-      state.to       = document.getElementById('cdDateTo').value   || '';
+      // Checkbox "fino a": se non tickato, NON includiamo "to" → backend
+      // tratta come "da Da in avanti" (60 giorni dal from).
+      var toEnabled  = !!document.getElementById('cdDateToEnabled').checked;
+      state.to       = toEnabled ? (document.getElementById('cdDateTo').value || '') : '';
+      state.to_open  = !toEnabled;
       state.weekdays = _readWeekdayChips();
     } else if (mode === 'asap') {
       // Nessun input data; backend prende oggi → +60gg e ritorna i primi N.
@@ -4859,6 +4891,14 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('cdDateSingle').value = today;
     document.getElementById('cdDateFrom').value   = today;
     document.getElementById('cdDateTo').value     = plus14;
+    // Default: "fino a" NON tickato → ricerca da Da in avanti (open-ended)
+    var toEnabledRst = document.getElementById('cdDateToEnabled');
+    var toInputRst   = document.getElementById('cdDateTo');
+    if (toEnabledRst) toEnabledRst.checked = false;
+    if (toInputRst) {
+      toInputRst.disabled = true;
+      toInputRst.style.opacity = '0.5';
+    }
     // Month picker → mese corrente (YYYY-MM)
     var monthEl = document.getElementById('cdDateMonth');
     if (monthEl) monthEl.value = today.substring(0, 7);
@@ -5081,12 +5121,37 @@ document.addEventListener('DOMContentLoaded', function() {
     // Se nessuna fascia ha giorni selezionati → null = nessun filtro orario.
     var hasAny = bands.some(function(b) { return b.days.length > 0; });
     window.CD.orari = hasAny ? bands : null;
+    // Sync label del bottone "Seleziona tutti / Deseleziona tutti"
+    _cdSyncToggleAllLabel();
+  }
+
+  // Aggiorna la label del bottone toggle in base allo stato ATTUALE:
+  // - se tutte le celle attive sono checked → "Deseleziona tutti"
+  // - altrimenti (nessuna, alcune) → "Seleziona tutti"
+  function _cdSyncToggleAllLabel() {
+    var btn = document.getElementById('cdOrarioToggleAllBtn');
+    var table = document.getElementById('cdOrarioTable');
+    if (!btn || !table) return;
+    var cells = table.querySelectorAll(
+      'tbody td.cd-orario-cell:not(.cd-col-disabled)'
+    );
+    if (!cells.length) {
+      btn.textContent = 'Seleziona tutti';
+      return;
+    }
+    var allChecked = Array.prototype.every.call(cells, function(c) {
+      return c.classList.contains('cd-orario-cell-checked');
+    });
+    btn.textContent = allChecked ? 'Deseleziona tutti' : 'Seleziona tutti';
   }
 
   function _cdResetOrarioSection() {
     var tbody = document.querySelector('#cdOrarioTable tbody');
     if (tbody) tbody.innerHTML = '';
     window.CD.orari = null;
+    // Reset etichetta del toggle "Seleziona tutti" (nessuna cella selezionata)
+    var tgBtn = document.getElementById('cdOrarioToggleAllBtn');
+    if (tgBtn) tgBtn.textContent = 'Seleziona tutti';
     // Ricostruisce la tabella con i default da BusinessInfo (lazy + cache).
     _cdFetchBusiness().then(_cdBuildOrarioTable).catch(function() {
       _cdBuildOrarioTable({ opening: '09:00', closing: '19:00' });
@@ -5184,6 +5249,50 @@ document.addEventListener('DOMContentLoaded', function() {
       var el = document.getElementById(id);
       if (el) el.addEventListener('change', _cdSyncDateState);
     });
+
+    // Checkbox "fino a": abilita/disabilita visivamente l'input "A"
+    var toEnabledEl = document.getElementById('cdDateToEnabled');
+    var toInputEl   = document.getElementById('cdDateTo');
+    if (toEnabledEl && toInputEl) {
+      toEnabledEl.addEventListener('change', function() {
+        toInputEl.disabled = !toEnabledEl.checked;
+        toInputEl.style.opacity = toEnabledEl.checked ? '' : '0.5';
+        _cdSyncDateState();
+      });
+    }
+
+    // Bottone "Seleziona tutti / Deseleziona tutti" — categorico:
+    //   - se TUTTE le celle attive sono già checked → DESELEZIONA TUTTE
+    //   - in qualunque altro stato (nessuna, alcune, miste) → SELEZIONA TUTTE
+    // La label viene mantenuta in sync con lo stato attuale (vedi
+    // _cdSyncToggleAllLabel che gira dopo ogni cambio cella o filtro).
+    var toggleAllBtn = document.getElementById('cdOrarioToggleAllBtn');
+    if (toggleAllBtn) {
+      toggleAllBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var table = document.getElementById('cdOrarioTable');
+        if (!table) return;
+        var cells = table.querySelectorAll(
+          'tbody td.cd-orario-cell:not(.cd-col-disabled)'
+        );
+        if (!cells.length) return;
+        var allChecked = Array.prototype.every.call(cells, function(c) {
+          return c.classList.contains('cd-orario-cell-checked');
+        });
+        var newState = !allChecked;
+        cells.forEach(function(c) {
+          c.classList.toggle('cd-orario-cell-checked', newState);
+        });
+        // Aggiorna badge "Fascia all-checked" per ogni riga
+        table.querySelectorAll('tbody tr').forEach(function(row) {
+          if (typeof _cdUpdateBandAllCheckedClass === 'function') {
+            _cdUpdateBandAllCheckedClass(row);
+          }
+        });
+        _cdSyncToggleAllLabel();
+        _cdSyncOrarioState();
+      });
+    }
 
     // All'apertura del modal di ricerca:
     //  - se è apertura "fresh" (dal badge): reset tutto ai default
@@ -5616,9 +5725,18 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function _cdBuildSlotBlock(s) {
-    // Card singolo slot che include TUTTI i servizi contigui.
-    // Se same_operator → mostra l'operatore una volta in fondo.
-    // Se cascade → operatore accanto a ogni servizio.
+    // Genera colore random per questa card (memorizzato su _color del slot,
+    // così viene riusato al click "Conferma" per dare lo stesso colore
+    // all'appuntamento reale creato).
+    if (!s._color) {
+      s._color = (typeof getRandomColor === 'function')
+                  ? getRandomColor() : '#4285f4';
+      s._fontColor = (typeof computeFontColor === 'function')
+                     ? computeFontColor(s._color) : '#ffffff';
+    }
+    var bg = s._color;
+    var fg = s._fontColor;
+
     var sameOp = !!s.same_operator;
     var servicesHTML = '';
     (s.services || []).forEach(function(sv) {
@@ -5642,7 +5760,10 @@ document.addEventListener('DOMContentLoaded', function() {
       '<div class="cd-result-card" ' +
       'data-date="' + _esc(s.date) + '" ' +
       'data-start="' + _esc(s.start_time) + '" ' +
-      'data-end="' + _esc(s.end_time) + '">' +
+      'data-end="' + _esc(s.end_time) + '" ' +
+      'data-color="' + _esc(bg) + '" ' +
+      'data-font-color="' + _esc(fg) + '" ' +
+      'style="background:' + bg + '; color:' + fg + ';">' +
         '<div class="cd-slot-header">' +
           '<span class="cd-slot-range">' + _esc(s.start_time) + ' – ' + _esc(s.end_time) + '</span>' +
           '<span class="cd-slot-dur">' + (s.total_duration || 0) + ' min</span>' +
@@ -5785,6 +5906,14 @@ document.addEventListener('DOMContentLoaded', function() {
     var st = _cdReadNavigatorState();
     if (!st.cliente_id || !st.service_ids.length) return false;
 
+    // CRITICO: pulisci PRIMA cliente + servizi.
+    // Motivo: se l'utente ha già fatto una ricerca precedente, lo state
+    // della modal è "preserved" (per il back-arrow dei risultati).
+    // Riaprendo da badge con un nuovo navigator, il pre-fill aggiungerebbe
+    // i nuovi servizi A QUELLI VECCHI → ricerca su entrambi. Reset esplicito.
+    _cdClearCliente();
+    _cdClearServizi();
+
     // Setta cliente
     _cdSelectCliente({
       id:        st.cliente_id,
@@ -5811,9 +5940,25 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       })
       .catch(function(){});
+
+    // Quando il pre-fill arriva dal Navigator, l'intento è "trova subito il
+    // prima slot libero" → seleziono automaticamente il tab ASAP.
+    var asapRadio = document.getElementById('cdDateModeAsap');
+    if (asapRadio) {
+      asapRadio.checked = true;
+      _cdSetDateMode('asap');
+    }
     return true;
   }
   window.CD.prefillFromNavigator = _cdPrefillFromNavigator;
+  // Helper esposta: clear forte di cliente + servizi + operatori (no date/orari).
+  // Usato dal click handler del badge PRIMA dello show del modal, per evitare
+  // qualsiasi residuo se il setTimeout del prefill fosse ritardato.
+  window.CD.clearForFreshOpen = function() {
+    try { _cdClearCliente();   } catch(_) {}
+    try { _cdClearServizi();   } catch(_) {}
+    try { _cdClearOperators(); } catch(_) {}
+  };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function() {
@@ -5959,6 +6104,12 @@ document.addEventListener('DOMContentLoaded', function() {
                       })();
       var inst = bootstrap.Modal.getOrCreateInstance(__cdModalEl);
       if (doPrefill) {
+        // Doppia sicurezza: clear FORZATO PRIMA dello show, così anche se il
+        // setTimeout del prefill viene ritardato o non gira, lo stato della
+        // modal NON contiene residui da sessioni precedenti.
+        if (window.CD && typeof window.CD.clearForFreshOpen === 'function') {
+          window.CD.clearForFreshOpen();
+        }
         var onShown = function() {
           __cdModalEl.removeEventListener('shown.bs.modal', onShown);
           // Aspetta 80ms così il reset di default ha tempo di finire
