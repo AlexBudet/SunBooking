@@ -17486,11 +17486,28 @@ if (a.date) {
     var html = '<div style="font-size:0.86rem;">';
     html += '<div style="font-size:1rem; margin-bottom:4px;"><strong>' + icon + ' ' + esc(o.nome) + '</strong>' +
             ' <span style="color:#888; font-size:0.82rem;">(' + esc(tipoLabel) + ')</span></div>';
+
+    // Campi privilegiati (admin/owner only): cellulare + flag notifiche WA.
+    // Se backend ha mascherato (null) per utente non autorizzato, salta.
+    if (o.cellulare !== null && o.cellulare !== undefined && o.cellulare !== '') {
+      html += '<div><strong>Cellulare:</strong> ' + esc(o.cellulare) + '</div>';
+    }
+    if (o.notify_turni_via_whatsapp !== null && o.notify_turni_via_whatsapp !== undefined) {
+      var notifLabel = o.notify_turni_via_whatsapp
+        ? '<span style="color:#2a7a2a;">✓ attive</span>'
+        : '<span style="color:#999;">— non attive</span>';
+      html += '<div><strong>Notifiche turni WhatsApp:</strong> ' + notifLabel + '</div>';
+    }
+
     html += '<hr style="border:none; border-top:1px dashed #d0d0d0; margin:6px 0;">';
     html += '<div><strong>Totale appuntamenti gestiti:</strong> ' + (o.totale_appuntamenti || 0) + '</div>';
     html += '<div><strong>Ultimi 30 giorni:</strong> ' + (o.ultimi_30_giorni || 0) + '</div>';
     html += '<div><strong>Media mensile (6 mesi):</strong> ' + (o.media_mensile || 0) + '</div>';
-    html += '<div><strong>Incasso medio mensile:</strong> €' + (o.incasso_medio_mensile || 0).toFixed(2) + '</div>';
+    // Incasso visibile solo per admin/owner (backend ritorna null per altri ruoli)
+    if (o.incasso_medio_mensile !== null && o.incasso_medio_mensile !== undefined) {
+      html += '<div><strong>Incasso medio mensile:</strong> €' +
+              Number(o.incasso_medio_mensile).toFixed(2) + '</div>';
+    }
     if (o.servizio_piu_frequente)
       html += '<div><strong>Servizio più frequente:</strong> ' + esc(o.servizio_piu_frequente) +
               ' <span style="color:#888;">(' + (o.servizio_piu_frequente_count || 0) + ')</span></div>';

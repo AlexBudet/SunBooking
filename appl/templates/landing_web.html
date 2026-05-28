@@ -214,8 +214,45 @@
 
       {% if db_links and db_links|length > 0 %}
         {% for link in db_links %}
-          <a href="{{ link.url }}" class="db-link">{{ link.label }}</a>
+          <a href="{{ link.url }}" class="db-link">
+            <span class="db-link-label">{{ link.label }}</span>
+          </a>
         {% endfor %}
+        <script>
+          (function() {
+            // Mostra rotella sul tasto cliccato + disabilita gli altri
+            // mentre la pagina del negozio sta caricando.
+            var links = document.querySelectorAll('.db-link');
+            if (!links.length) return;
+            links.forEach(function(link) {
+              link.addEventListener('click', function(e) {
+                // Doppio click: blocca i successivi
+                if (link._cdNavigating) {
+                  e.preventDefault();
+                  return;
+                }
+                link._cdNavigating = true;
+                // Disabilita visivamente gli altri link
+                links.forEach(function(other) {
+                  if (other !== link) {
+                    other.style.opacity = '0.5';
+                    other.style.pointerEvents = 'none';
+                  }
+                });
+                // Inserisci spinner prima del label
+                var sp = document.createElement('span');
+                sp.className = 'btn-spinner';
+                sp.style.marginRight = '8px';
+                sp.style.verticalAlign = '-2px';
+                link.insertBefore(sp, link.firstChild);
+                // Aggiorna label
+                var lbl = link.querySelector('.db-link-label');
+                if (lbl) lbl.textContent = 'Apertura…';
+                // NON preventDefault → la navigazione parte normalmente
+              });
+            });
+          })();
+        </script>
       {% else %}
         <p class="empty">Nessun negozio disponibile per questo utente.</p>
       {% endif %}

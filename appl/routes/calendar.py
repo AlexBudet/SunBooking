@@ -3679,8 +3679,11 @@ def _cd_expand_dates(date_state):
     if mode == 'range':
         from_d = _cd_parse_date_str(date_state.get('from'))
         to_d   = _cd_parse_date_str(date_state.get('to'))
-        if not from_d or not to_d:
+        if not from_d:
             return []
+        # "Fino a" non tickato → to vuoto: range open-ended da Da a Da+60gg
+        if not to_d:
+            to_d = from_d + timedelta(days=60)
         if from_d > to_d:
             from_d, to_d = to_d, from_d
         weekdays = set(int(w) for w in (date_state.get('weekdays') or []) if w)
@@ -4212,6 +4215,13 @@ def api_info_operator_detail(operator_id):
         if svc:
             top_svc_name = svc.servizio_nome or ''
 
+    # Dati sensibili (incasso, cellulare, notifiche serali) visibili SOLO
+    # per admin/owner. Per altri ruoli (estetista, ecc.) i campi sono null
+    # e il frontend non li mostra.
+    from appl.models import User, RuoloUtente
+    _u = db.session.get(User, session.get('user_id')) if session.get('user_id') else None
+    _is_privileged = bool(_u and _u.ruolo in (RuoloUtente.owner, RuoloUtente.admin))
+
     return jsonify({
         'id':                          op.id,
         'nome':                        op.user_nome or '',
@@ -4220,8 +4230,12 @@ def api_info_operator_detail(operator_id):
         'totale_appuntamenti':         total,
         'ultimi_30_giorni':            last_30,
         'media_mensile':               avg_monthly,
-        'incasso_medio_mensile':       avg_revenue,
+        'incasso_medio_mensile':       (avg_revenue if _is_privileged else None),
         'servizio_piu_frequente':      top_svc_name,
         'servizio_piu_frequente_count': top_svc_cnt,
         'ultimo_appuntamento':         last_date,
+        # Campi privilegiati: solo admin/owner. Per estetisti, null/None
+        # → il frontend salta la riga.
+        'cellulare':                   ((op.user_cellulare or '') if _is_privileged else None),
+        'notify_turni_via_whatsapp':   (bool(op.notify_turni_via_whatsapp) if _is_privileged else None),
     })
