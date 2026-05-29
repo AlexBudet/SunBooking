@@ -236,6 +236,40 @@ children = {}
 for idx, uri in pool.items():
     child = create_app(uri)
     child.secret_key = secret
+    # Marchiamo i child come "cloud": serve al context processor per decidere
+    # se nascondere la sezione Cassa quando l'owner del tenant non l'ha
+    # esplicitamente abilitata da Tools/Info Azienda.
+    child.config["IS_CLOUD"] = True
+
+    @child.context_processor
+    def inject_cloud_cassa_flags():
+        """Per ogni request del child cloud, calcola hide_cassa leggendo il
+        flag OWNER.cassa_enabled_on_web dal DB del tenant corrente.
+        Logica:
+          - IS_CLOUD False  -> hide_cassa = False (start.py: sempre visibile)
+          - IS_CLOUD True   -> hide_cassa = NOT cassa_enabled_on_web
+        Se la lettura DB fallisce (es. tabella non ancora migrata),
+        fallback prudente: hide_cassa = True. La query e' leggera (singola
+        riga, indice PK) ma viene fatta una volta per request; se diventa un
+        collo di bottiglia si puo' cachare in flask.g.
+        """
+        hide = True
+        cassa_enabled = False
+        try:
+            from appl.models import OWNER as _OWNER
+            cfg = _OWNER.query.first()
+            if cfg is not None:
+                cassa_enabled = bool(getattr(cfg, 'cassa_enabled_on_web', False))
+                hide = not cassa_enabled
+        except Exception:
+            # Tabella/colonna mancante o errore DB: tieni Cassa nascosta.
+            hide = True
+            cassa_enabled = False
+        return {
+            'hide_cassa': hide,
+            'cassa_enabled_on_web': cassa_enabled,
+            'is_cloud': True,
+        }
 
     creds = unipile_creds_for(idx)
 
@@ -765,6 +799,26 @@ def owner_setup_add_tenant():
     try:
         new_child = create_app(uri)
         new_child.secret_key = secret
+        new_child.config['IS_CLOUD'] = True
+
+        @new_child.context_processor
+        def _inject_cloud_cassa_flags():
+            hide = True
+            cassa_enabled = False
+            try:
+                from appl.models import OWNER as _OWNER
+                cfg = _OWNER.query.first()
+                if cfg is not None:
+                    cassa_enabled = bool(getattr(cfg, 'cassa_enabled_on_web', False))
+                    hide = not cassa_enabled
+            except Exception:
+                hide = True
+                cassa_enabled = False
+            return {
+                'hide_cassa': hide,
+                'cassa_enabled_on_web': cassa_enabled,
+                'is_cloud': True,
+            }
     except Exception as e:
         return jsonify({'error': f'Errore creazione app: {str(e)}'}), 500
 

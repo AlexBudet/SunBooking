@@ -108,7 +108,7 @@
             <span class="menu-label">Agenda</span>
         </a>
     </li>
-    {% if not config.get('HIDE_CASSA') %}
+    {% if not hide_cassa %}
     <li class="nav-item">
         <a class="nav-link menu-link" href="{{ url_for('cassa.cassa') }}">
             <i class="bi bi-cash-coin menu-icon"></i>

@@ -141,6 +141,66 @@ class SplashWindow:
         except Exception:
             pass
 
+    def close_with_error_threadsafe(self, title, message):
+        """Chiude lo splash e mostra un MessageBox di errore. Sicuro da
+        qualsiasi thread: tutto viene schedulato sul mainloop tkinter."""
+        if self._closed:
+            # Splash gia' chiuso: mostra solo il dialog usando un Tk volatile.
+            self._show_error_standalone(title, message)
+            return
+        self._closed = True
+        if self._root is None:
+            self._show_error_standalone(title, message)
+            return
+        try:
+            self._root.after(0, lambda: self._do_close_with_error(title, message))
+        except Exception:
+            self._show_error_standalone(title, message)
+
+    def _do_close_with_error(self, title, message):
+        try:
+            if self._progress is not None:
+                self._progress.stop()
+        except Exception:
+            pass
+        try:
+            # Nascondi la splash prima di mostrare il messagebox cosi'
+            # il dialog non appare "dietro" al logo di Tosca.
+            self._root.withdraw()
+        except Exception:
+            pass
+        try:
+            from tkinter import messagebox
+            messagebox.showerror(title, message)
+        except Exception:
+            pass
+        try:
+            self._root.quit()
+            self._root.destroy()
+        except Exception:
+            pass
+
+    @staticmethod
+    def _show_error_standalone(title, message):
+        """Fallback: crea una root Tk temporanea solo per mostrare il dialog.
+        Usato quando lo splash non era disponibile o e' gia' stato chiuso."""
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+            r = tk.Tk()
+            r.withdraw()
+            r.attributes('-topmost', True)
+            messagebox.showerror(title, message)
+            r.destroy()
+        except Exception:
+            # Ultimissimo fallback: MessageBox Win32 via ctypes.
+            try:
+                import ctypes
+                # MB_ICONERROR (0x10) | MB_OK (0) | MB_TOPMOST (0x40000)
+                ctypes.windll.user32.MessageBoxW(0, message, title, 0x10 | 0x40000)
+            except Exception:
+                pass
+
 
 # ============================================================================
 #   SETUP CWD / ENV / LOGGING
@@ -296,11 +356,25 @@ def _startup_background(splash):
 
         logger.info(f"Avvio server su http://127.0.0.1:{PORT} ...")
 
-        if not wait_for_server(PORT, 20):
+        # Timeout alto (120s) per coprire i casi di DB Azure lento: get_app()
+        # nel processo server fa db.create_all() e con un DB cloud rallentato
+        # puo' impiegare 30-90s prima che la porta 5050 venga aperta.
+        if not wait_for_server(PORT, 120):
             logger.error("Server non avviato (controlla .env/DB).")
             if server_proc.is_alive():
                 server_proc.terminate()
-            splash.close_threadsafe()
+            splash.close_with_error_threadsafe(
+                "Tosca - Impossibile avviare il programma",
+                "Tosca non riesce a connettersi al database entro il tempo previsto.\n\n"
+                "Possibili cause:\n"
+                "  - assenza o instabilita' della connessione internet\n"
+                "  - database temporaneamente non disponibile sul cloud\n"
+                "  - firewall o antivirus che bloccano la connessione\n\n"
+                "Verifica la connessione internet e riprova.\n"
+                "Se il problema persiste, contatta l'assistenza.\n\n"
+                "Dettagli tecnici nel file di log:\n"
+                "%LOCALAPPDATA%\\SunBooking\\logs\\sunbooking.log"
+            )
             os._exit(1)
 
         # 3. Lancia browser (o saltalo se siamo in post-update)
@@ -338,7 +412,18 @@ def _startup_background(splash):
     except Exception as e:
         logger.exception(f"Errore fatale in startup: {e}")
         try:
-            splash.close_threadsafe()
+            splash.close_with_error_threadsafe(
+                "Tosca - Errore fatale all'avvio",
+                "Si e' verificato un errore inaspettato durante l'avvio di Tosca:\n\n"
+                f"{type(e).__name__}: {e}\n\n"
+                "Possibili cause:\n"
+                "  - problema di connessione al database\n"
+                "  - file di configurazione (.env) mancante o errato\n"
+                "  - permessi insufficienti sulla cartella di installazione\n\n"
+                "Riprova; se il problema persiste, contatta l'assistenza.\n\n"
+                "Dettagli tecnici nel file di log:\n"
+                "%LOCALAPPDATA%\\SunBooking\\logs\\sunbooking.log"
+            )
         except Exception:
             pass
         os._exit(1)

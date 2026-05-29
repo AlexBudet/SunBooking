@@ -185,6 +185,26 @@ def create_app(db_uri: str | None = None):
             'module_pacchetti_enabled': True,
         }
 
+    # ---- CONTEXT PROCESSOR: default Cassa visibile (start.py / non-cloud) ----
+    # Questo viene SOVRASCRITTO da wsgi.py che registra un context processor
+    # successivo che legge OWNER.cassa_enabled_on_web (in Flask vince l'ultimo
+    # context processor registrato per la stessa chiave). Quindi:
+    #   - start.py (.exe locale): hide_cassa = False sempre (Cassa visibile)
+    #   - wsgi.py (cloud):        hide_cassa calcolato dal DB del tenant
+    @app.context_processor
+    def inject_cassa_defaults():
+        try:
+            from appl.models import OWNER
+            owner_cfg = OWNER.query.first()
+            cassa_enabled = bool(getattr(owner_cfg, 'cassa_enabled_on_web', False)) if owner_cfg else False
+        except Exception:
+            cassa_enabled = False
+        return {
+            'hide_cassa': False,
+            'cassa_enabled_on_web': cassa_enabled,
+            'is_cloud': False,
+        }
+
     # ---- BEFORE REQUEST: blocco route se modulo disabilitato ----
     @app.before_request
     def enforce_module_access():
