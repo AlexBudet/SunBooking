@@ -3215,6 +3215,13 @@ document.querySelectorAll('.selectable-cell').forEach(cell => {
     if (t.closest('.btn-popup') || t.closest('.popup-buttons') || t.closest('.appointment-block')) {
       return;
     }
+    // PASTE OFF MODE: se abbiamo un blocco OFF in clipboard, lascia che il
+    // listener globale (document-level, più sotto) gestisca il paste. Senza
+    // questo early-return il listener cella aprirebbe il modal "Crea
+    // appuntamento" prima che il listener document veda l'evento.
+    if (document.body.classList.contains('paste-off-block-mode')) {
+      return;
+    }
     // Se ci sono pseudo‑blocchi nel Navigator, il click viene gestito dal flusso Navigator:
     // non aprire il modal standard di creazione appuntamento.
     if (window.pseudoBlocks && Array.isArray(window.pseudoBlocks) && window.pseudoBlocks.length > 0) {
@@ -6534,6 +6541,13 @@ function handleClientSearchNav(query) {
   });
 }
 
+// Counter condiviso con showServicesDropdownNav: ogni nuova fetch (search o
+// frequent) prende un seq. Dopo l'await async, se seq < __navServiceFetchSeq
+// significa che e' arrivata una richiesta piu' recente e questo render va
+// scartato — previene il bug "voci duplicate nel dropdown" causato dalle
+// due funzioni async che si sovrappongono sullo stesso container.
+window.__navServiceFetchSeq = window.__navServiceFetchSeq || 0;
+
 function handleServiceSearchNav(query) {
   const resultsContainer = document.getElementById('serviceResultsNav');
 
@@ -6545,9 +6559,12 @@ function handleServiceSearchNav(query) {
     return;
   }
 
+  const mySeq = ++window.__navServiceFetchSeq;
+
   fetch(`/calendar/api/search-services/${encodeURIComponent(query)}`)
     .then(r => r.json())
     .then(async (services) => {
+      if (mySeq !== window.__navServiceFetchSeq) return; // stale
       // Svuota contenitore
       resultsContainer.innerHTML = '';
 
@@ -6565,6 +6582,11 @@ function handleServiceSearchNav(query) {
       const pacchettoServiceIds = clientIdNav
         ? await window.getPacchettoServiceIdsForClient(clientIdNav, serviceIds)
         : new Set();
+
+      if (mySeq !== window.__navServiceFetchSeq) return; // stale dopo await
+      // Doppio reset per sicurezza: se un'altra richiesta ha popolato
+      // durante l'await pacchetti, la nostra appendChild raddoppierebbe.
+      resultsContainer.innerHTML = '';
 
       services.forEach(service => {
         const item = document.createElement('div');
@@ -6785,6 +6807,15 @@ async function fetchClientLastDate(clientId) {
 async function showServicesDropdownNav(services) {
   const resultsContainer = document.getElementById('serviceResultsNav');
   if (!resultsContainer) return;
+
+  // Token di sequenza condiviso con handleServiceSearchNav: se un'altra
+  // chiamata piu' recente arriva mentre questa e' in attesa (await pacchetti),
+  // questa esce senza appendere. Su versione .exe locale (fetch a 127.0.0.1
+  // a ~5ms) le due fetch ritornano quasi insieme e senza questo guard si
+  // duplicavano le voci nel dropdown.
+  window.__navServiceFetchSeq = (window.__navServiceFetchSeq || 0) + 1;
+  const mySeq = window.__navServiceFetchSeq;
+
   resultsContainer.innerHTML = '';
 
   if (!Array.isArray(services) || services.length === 0) {
@@ -6812,6 +6843,11 @@ async function showServicesDropdownNav(services) {
   const pacchettoServiceIds = clientIdNav
     ? await window.getPacchettoServiceIdsForClient(clientIdNav, serviceIds)
     : new Set();
+
+  if (mySeq !== window.__navServiceFetchSeq) return; // stale dopo await
+  // Doppio reset per sicurezza: se un'altra richiesta ha popolato durante
+  // l'await pacchetti, la nostra forEach raddoppierebbe le voci.
+  resultsContainer.innerHTML = '';
 
   filteredServices.forEach(sv => {
     const item = document.createElement('div');
@@ -7275,6 +7311,12 @@ function chiediInvioWhatsappNavigator() {
       // Se il click proviene da popup/buttons o da un blocco, NON gestire il posizionamento da Navigator
       const t = e.target;
       if (t.closest('.btn-popup') || t.closest('.popup-buttons') || t.closest('.appointment-block')) {
+        return;
+      }
+
+      // PASTE OFF MODE: se siamo in incolla blocco OFF, lascia il controllo
+      // al listener globale (document-level) e non gestire dal Navigator.
+      if (document.body.classList.contains('paste-off-block-mode')) {
         return;
       }
 
