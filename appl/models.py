@@ -660,6 +660,15 @@ class OWNER(db.Model):
     module_web_enabled = db.Column(db.Boolean, nullable=False, default=True)
     module_pacchetti_enabled = db.Column(db.Boolean, nullable=False, default=True)
 
+    # Abilita la sezione Cassa quando l'app gira in cloud (wsgi.py). Default
+    # False perche' sul cloud la stampante fiscale RCH della LAN del salone
+    # non e' raggiungibile; l'owner puo' attivarlo a sua discrezione da
+    # Tools / Info Azienda (solo per uso non-fiscale o setup particolari).
+    # Sull'eseguibile locale (start.py) il flag e' ignorato e la Cassa e'
+    # sempre visibile.
+    cassa_enabled_on_web = db.Column(db.Boolean, nullable=False,
+                                     server_default='false', default=False)
+
     # Date attivazione moduli
     module_base_activated_on = db.Column(db.Date, nullable=True)
     module_web_activated_on = db.Column(db.Date, nullable=True)

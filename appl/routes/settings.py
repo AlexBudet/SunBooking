@@ -361,6 +361,42 @@ def business_info():
     current_user = db.session.get(User, user_id) if user_id else None
     return render_template('business_info.html', business_info=business_info, current_user=current_user)
 
+
+@settings_bp.route('/settings/api/cassa_on_web', methods=['POST'])
+def api_cassa_on_web():
+    """Toggle abilitazione Cassa quando Tosca gira da Web App (wsgi.py).
+    Visibile/usabile SOLO dall'owner del tenant. Il valore viene letto a
+    ogni request dal context processor di wsgi.py e influenza hide_cassa
+    in tutti i template del cloud. Sul .exe locale (start.py) il flag e'
+    ignorato (hide_cassa = False di default)."""
+    user_id = session.get('user_id')
+    user = db.session.get(User, user_id) if user_id else None
+    if not user:
+        return jsonify(success=False, error="Non autenticato"), 401
+    try:
+        role_val = user.ruolo.value if hasattr(user.ruolo, 'value') else str(user.ruolo)
+    except Exception:
+        role_val = ''
+    if role_val != 'owner':
+        return jsonify(success=False, error="Operazione consentita solo all'owner"), 403
+
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get('enabled', False))
+
+    from ..models import OWNER
+    try:
+        owner_cfg = OWNER.query.first()
+        if not owner_cfg:
+            owner_cfg = OWNER()
+            db.session.add(owner_cfg)
+        owner_cfg.cassa_enabled_on_web = enabled
+        db.session.commit()
+        return jsonify(success=True, cassa_enabled_on_web=enabled)
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.exception("api_cassa_on_web: errore salvataggio")
+        return jsonify(success=False, error=str(e)), 500
+
 @settings_bp.route('/settings/business_info', methods=['GET', 'POST'])
 def set_business_info():
     business_info = BusinessInfo.query.filter_by(is_deleted=False).first()

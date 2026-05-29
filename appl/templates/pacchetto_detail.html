@@ -1209,7 +1209,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const btnVaiInCassaPrepagata = document.getElementById('btnVaiInCassaPrepagata');
   if (btnVaiInCassaPrepagata) {
     btnVaiInCassaPrepagata.addEventListener('click', function() {
-      {% if hide_cassa or config.get('HIDE_CASSA') %}
+      {% if hide_cassa %}
       const backdrop = document.createElement('div');
       backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
       backdrop.innerHTML = `
@@ -1234,7 +1234,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const btnVaiInCassa = document.getElementById('btnVaiInCassa');
   if (btnVaiInCassa) {
     btnVaiInCassa.addEventListener('click', function() {
-      {% if hide_cassa or config.get('HIDE_CASSA') %}
+      {% if hide_cassa %}
       // Mostra popup elegante invece di procedere
       const backdrop = document.createElement('div');
       backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
@@ -1347,7 +1347,7 @@ function vaiInCassaRicarica() {
     return;
   }
   
-  {% if hide_cassa or config.get('HIDE_CASSA') %}
+  {% if hide_cassa %}
   // Chiudi prima il modal Bootstrap se aperto
   const modalRicarica = document.getElementById('modalRicarica');
   if (modalRicarica) {
@@ -1526,7 +1526,7 @@ function populateNStar() {
 }
 
 function segnaPagata(rataId) {
-  {% if hide_cassa or config.get('HIDE_CASSA') %}
+  {% if hide_cassa %}
   // Mostra popup elegante invece di alert
   const backdrop = document.createElement('div');
   backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';

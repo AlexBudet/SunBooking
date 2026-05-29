@@ -264,11 +264,12 @@ def registro_corrispettivi():
     }
 
     # Carica log riconciliazione SOLO per owner E SOLO sulla versione on-premise (start.py).
-    # Sul cloud/wsgi.py il config HIDE_CASSA=True (la stampante non e' raggiungibile),
-    # quindi la riconciliazione non ha senso ed i campi vengono omessi.
+    # Sul cloud/wsgi.py il flag IS_CLOUD=True viene settato sui child app: la
+    # stampante RCH della LAN del salone non e' raggiungibile da Azure, quindi
+    # la riconciliazione DGFE non ha senso ed i campi vengono omessi.
     user_id = session.get("user_id")
     user = db.session.get(User, user_id)
-    is_local = not bool(current_app.config.get('HIDE_CASSA'))
+    is_local = not bool(current_app.config.get('IS_CLOUD'))
     # Visibile a owner E admin sulla versione on-premise (start.py).
     # Il flag mantiene il nome storico is_owner per non rinominare ovunque, ma copre admin.
     is_owner = is_local and bool(user and getattr(user.ruolo, 'value', None) in ('owner', 'admin'))

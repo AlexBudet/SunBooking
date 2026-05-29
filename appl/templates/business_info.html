@@ -279,8 +279,100 @@
 <br><br><br>
 </div>
 
+<!-- Sezione "Cassa su Web App" — SOLO owner.
+     L'owner puo' abilitare/disabilitare la visibilita' della sezione Cassa
+     quando l'app gira in cloud (wsgi.py). Sul .exe locale la Cassa e' sempre
+     visibile e questo toggle non ha effetto. -->
+{% if current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
+<div style="margin-top: 30px; padding: 20px; border: 2px solid #b8809d;
+            border-radius: 8px; background: #faf5f8;">
+  <h5 style="margin-bottom: 6px; color: #723a57;">
+    <i class="bi bi-cash-coin"></i> Cassa su Web App
+    <small style="color:#999; font-weight:normal;">(visibile solo a owner)</small>
+  </h5>
+  <p style="font-size: 0.9em; color:#666; margin-bottom: 12px;">
+    Abilita la sezione <strong>Cassa</strong> quando Tosca gira da Web App (cloud).
+    Sull'eseguibile <strong>.exe locale</strong> la Cassa e' sempre visibile e
+    questo toggle non ha effetto.<br>
+    <span style="color:#a05050;">
+      <i class="bi bi-exclamation-triangle"></i>
+      Nota: la stampante fiscale RCH risponde solo a dispositivi della stessa LAN del salone,
+      quindi dal cloud la stampa non funzionera'. Usa questo toggle per consultazione
+      o setup particolari.
+    </span>
+  </p>
+  <div class="form-check form-switch" style="font-size: 1.05rem;">
+    <input class="form-check-input" type="checkbox" role="switch"
+           id="toggleCassaOnWeb"
+           {% if cassa_enabled_on_web %}checked{% endif %}>
+    <label class="form-check-label" for="toggleCassaOnWeb">
+      <span id="toggleCassaOnWebLabel">
+        {% if cassa_enabled_on_web %}Cassa <strong style="color:#2e7d32;">ABILITATA</strong> da Web App
+        {% else %}Cassa <strong style="color:#c62828;">DISABILITATA</strong> da Web App
+        {% endif %}
+      </span>
+    </label>
+  </div>
+  <div id="toggleCassaOnWebStatus" style="margin-top: 8px; font-size:0.85em; color:#666;"></div>
+  <small style="display:block; margin-top:6px; color:#999;">
+    Modifica effettiva dopo il prossimo caricamento di una pagina.
+  </small>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var sw = document.getElementById('toggleCassaOnWeb');
+  if (!sw) return;
+  var lbl = document.getElementById('toggleCassaOnWebLabel');
+  var status = document.getElementById('toggleCassaOnWebStatus');
+  function setLabel(enabled) {
+    if (!lbl) return;
+    if (enabled) {
+      lbl.innerHTML = 'Cassa <strong style="color:#2e7d32;">ABILITATA</strong> da Web App';
+    } else {
+      lbl.innerHTML = 'Cassa <strong style="color:#c62828;">DISABILITATA</strong> da Web App';
+    }
+  }
+  sw.addEventListener('change', function() {
+    var enabled = sw.checked;
+    sw.disabled = true;
+    status.textContent = 'Salvataggio in corso...';
+    status.style.color = '#666';
+    var csrfToken = document.querySelector('meta[name="csrf-token"]');
+    var headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRFToken'] = csrfToken.getAttribute('content');
+    fetch('/settings/api/cassa_on_web', {
+      method: 'POST',
+      headers: headers,
+      credentials: 'same-origin',
+      body: JSON.stringify({ enabled: enabled })
+    })
+    .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
+    .then(function(res) {
+      sw.disabled = false;
+      if (res.ok && res.body && res.body.success) {
+        setLabel(enabled);
+        status.textContent = "Impostazione salvata. Avra effetto dal prossimo caricamento pagina.";
+        status.style.color = '#2e7d32';
+      } else {
+        sw.checked = !enabled; // rollback visivo
+        status.textContent = 'Errore: ' + (res.body && res.body.error ? res.body.error : 'salvataggio non riuscito');
+        status.style.color = '#c62828';
+      }
+    })
+    .catch(function(err) {
+      sw.disabled = false;
+      sw.checked = !enabled;
+      status.textContent = 'Errore di rete: ' + err;
+      status.style.color = '#c62828';
+    });
+  });
+});
+</script>
+{% endif %}
+
 <!-- Sezione Aggiornamenti (solo istanza locale, non web app) -->
-{% if not config.get('HIDE_CASSA') %}
+{% if not hide_cassa %}
 <div class="desktop-only-setting" style="margin-top: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
   <h5 style="margin-bottom: 15px;">Aggiornamenti App</h5>
   <div id="updateStatus" style="margin-bottom: 15px;">
@@ -311,7 +403,7 @@
 {% endif %}
 
 <script>
-{% if not config.get('HIDE_CASSA') %}
+{% if not hide_cassa %}
 let updateData = null;
 
 function checkForUpdates() {
