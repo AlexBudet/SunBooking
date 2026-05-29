@@ -341,7 +341,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var csrfToken = document.querySelector('meta[name="csrf-token"]');
     var headers = { 'Content-Type': 'application/json' };
     if (csrfToken) headers['X-CSRFToken'] = csrfToken.getAttribute('content');
-    fetch('/settings/api/cassa_on_web', {
+    fetch("{{ url_for('settings.api_cassa_on_web') }}", {
       method: 'POST',
       headers: headers,
       credentials: 'same-origin',
@@ -352,8 +352,11 @@ document.addEventListener('DOMContentLoaded', function() {
       sw.disabled = false;
       if (res.ok && res.body && res.body.success) {
         setLabel(enabled);
-        status.textContent = "Impostazione salvata. Avra effetto dal prossimo caricamento pagina.";
+        status.textContent = "Impostazione salvata. Ricarico la pagina...";
         status.style.color = '#2e7d32';
+        // Refresh automatico: il menu Cassa e' renderizzato server-side dal
+        // context processor, va ricaricato l'HTML per vederlo apparire/sparire.
+        setTimeout(function() { window.location.reload(); }, 700);
       } else {
         sw.checked = !enabled; // rollback visivo
         status.textContent = 'Errore: ' + (res.body && res.body.error ? res.body.error : 'salvataggio non riuscito');
