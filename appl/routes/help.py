@@ -1354,6 +1354,77 @@ Nella stessa finestra trovi la sezione <span class=\"help-strong-dark\">Visualiz
 </div>""",
     },
 
+    "calendar_info_box": {
+        "title": "ℹ️ INFO BOX: info su cliente, servizio, operatore, negozio e booking web",
+        "content": """[[VIDEO|66]]
+
+L'<span class=\"help-strong-dark\">INFO BOX</span> è il badge azzurro con la \"i\" che trovi nella colonna badge in basso a destra dell'Agenda. Apre un pannello laterale dove ottieni in pochi click informazioni dettagliate su cinque aree del gestionale, senza uscire dalla pagina Agenda.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COME APRIRLO</span>
+1️⃣ click sul badge <span class=\"help-strong-dark\">\"i\"</span> azzurro in basso a destra
+2️⃣ si apre il pannello <span class=\"help-strong-dark\">INFO BOX</span>
+3️⃣ in alto trovi i pulsanti per cambiare vista: Clienti / Servizi / Operatore / Negozio / Booking Web
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ INFO CLIENTI</span>
+Digita nome, cognome o cellulare di un cliente: ottieni in un colpo d'occhio dati anagrafici, storico passaggi, frequenza, totale speso e ultime visite. Comodo quando ti serve una panoramica veloce prima di richiamare un cliente o di prenotare un appuntamento.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ INFO SERVIZI</span>
+Digita il nome di un servizio: il pannello mostra statistiche d'uso, frequenza e abbinamenti tipici. Utile per capire quali servizi tirano di più o quando proporre un trattamento alternativo.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ INFO OPERATORE</span>
+Digita il nome di un operatore: vedi statistiche, frequenza e dati sintetici sul suo storico, senza dover entrare nei Report.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ INFO NEGOZIO</span>
+Visualizza i dati aziendali principali del centro (nome, indirizzo, contatti, orari) così come configurati in <span class=\"help-strong-dark\">[[INFO AZIENDA|tools_tab_info_azienda]]</span>.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ INFO BOOKING WEB</span>
+Mostra le configurazioni essenziali del modulo <span class=\"help-strong-dark\">[[BOOKING WEB|tools_tab_booking_web]]</span> (se attivo): link pubblico, servizi visibili online, operatori associati.
+
+<div class=\"help-hint-box\">
+<span class=\"help-hint-label\">Consiglio:</span>
+<span class=\"help-hint-text\">Usa l'INFO BOX al telefono mentre parli con il cliente: in 2 secondi recuperi storico e abitudini senza saltare tra più schermate. Sopra 1200px di larghezza il badge è sempre visibile; su schermi più piccoli la colonna badge è nascosta per non coprire l'Agenda.</span>
+</div>""",
+    },
+
+    "calendar_cerca_un_buco": {
+        "title": "🔍 CERCA UN BUCO: trova subito una disponibilità",
+        "content": """[[VIDEO|67]]
+
+Il badge <span class=\"help-strong-dark\">\"Cerca un Buco\"</span> (verde, con icona calendario) si trova nella colonna badge in basso a destra dell'Agenda, sotto al pulsante INFO BOX. Apre il modal <span class=\"help-strong-dark\">Cerca disponibilità</span>: incroci cliente, operatore, servizi, date e fasce orarie e Tosca ti propone gli slot liberi compatibili.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COME APRIRLO</span>
+1️⃣ click sul badge verde <i class=\"bi bi-calendar-check\"></i> in basso a destra
+2️⃣ si apre il modal <span class=\"help-strong-dark\">Cerca disponibilità</span>
+3️⃣ compila i campi a sinistra (cliente, operatore, servizio) e a destra (date, orario)
+4️⃣ click su <span class=\"help-strong-dark\">Cerca</span>: appaiono i risultati ordinati per data
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ SEZIONE CLIENTE</span>
+La selezione cliente è <span class=\"help-strong-dark\">opzionale</span>: puoi lasciarla vuota e assegnare il cliente in un secondo momento (es. quando il cliente ti chiama e vuole solo sapere \"quando c'è posto\"). Cerca per nome, cognome o cellulare da 3 caratteri.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ SEZIONE OPERATORE PREFERITO</span>
+Puoi spuntare uno o più operatori per limitare la ricerca alle loro colonne. Se non spunti nessuno, Tosca cerca tra <span class=\"help-strong-dark\">tutti</span> gli operatori visibili. C'è anche un interruttore per includere o escludere <span class=\"help-strong-dark\">lampade/macchinari</span> (escluse di default).
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ SEZIONE SERVIZIO</span>
+Cerca per nome o tag da 2 caratteri e clicca sui risultati per aggiungerli alla lista. Puoi selezionare <span class=\"help-strong-dark\">fino a 15 servizi</span>: la ricerca propone slot in cui la <span class=\"help-strong-dark\">somma delle durate</span> entra in un buco libero, esattamente come fa il booking web (vedi <span class=\"help-strong-dark\">[[LOGICA SLOT|booking_logica_slot]]</span>).
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ SEZIONE DATE — 4 modalità</span>
+• <span class=\"help-strong-dark\"><i class=\"bi bi-calendar-day\"></i> Giorno</span>: cerca solo in un giorno specifico
+• <span class=\"help-strong-dark\"><i class=\"bi bi-calendar3\"></i> Mese</span>: scansiona un intero mese
+• <span class=\"help-strong-dark\"><i class=\"bi bi-calendar-range\"></i> Intervallo</span>: imposta \"Da\" e (opzionale) \"fino a\" — utile per finestre lunghe
+• <span class=\"help-strong-dark\"><i class=\"bi bi-lightning-charge-fill\"></i> Il prima possibile</span>: trova la prima disponibilità utile partendo da oggi
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ SEZIONE ORARIO</span>
+La tabella mostra le fasce orarie (righe) per ogni giorno della settimana (colonne). Spunta solo le caselle delle fasce in cui vuoi cercare. Se <span class=\"help-strong-dark\">non spunti nulla</span>, Tosca cerca in tutto l'orario di apertura del centro. In modalità \"Intervallo\" compare anche una riga di filtri per <span class=\"help-strong-dark\">giorni della settimana</span> (es. solo sabato). Il pulsante <span class=\"help-strong-dark\">Seleziona tutti</span> velocizza l'attivazione di tutte le celle.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ PRE-COMPILAZIONE DAL NAVIGATOR</span>
+Se nel <span class=\"help-strong-dark\">Navigator Appuntamenti</span> hai già caricato un cliente e uno o più servizi (mini-blocchi), all'apertura del modal vengono <span class=\"help-strong-dark\">pre-compilati</span> automaticamente. Così basta scegliere data e orario per partire.
+
+<div class=\"help-hint-box\">
+<span class=\"help-hint-label\">Consiglio:</span>
+<span class=\"help-hint-text\">Per un cliente al telefono che chiede \"il primo posto utile per la ceretta\", usa modalità <span class=\"help-strong-dark\">Il prima possibile</span> con il solo servizio selezionato: in pochi secondi hai la prima slot disponibile. Per appuntamenti ricorrenti (es. solo i sabato) usa <span class=\"help-strong-dark\">Intervallo</span> + filtro giorni della settimana.</span>
+</div>""",
+    },
+
     "agenda_touch_mode": {
         "title": "📱 Agenda in modalità TOUCH: differenze operative",
         "content": """[[VIDEO|51]]
@@ -2484,7 +2555,9 @@ def get_topics_by_category():
             "calendar_status",
             "calendar_note",
             "calendar_paid_block",
-            "calendar_off_block"
+            "calendar_off_block",
+            "calendar_info_box",
+            "calendar_cerca_un_buco"
         ],
         "Cassa": [
             "cassa_filtri_ricerca",

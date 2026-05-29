@@ -237,14 +237,8 @@ for idx, uri in pool.items():
     child = create_app(uri)
     child.secret_key = secret
     child.config["HIDE_PRINTER_IP"] = True
-    child.config["HIDE_CASSA"] = True
 
-    @child.context_processor
-    def inject_hide_cassa():
-        return {'hide_cassa': True}
-    
     creds = unipile_creds_for(idx)
-    creds["HIDE_CASSA"] = "1"
 
     # Aggiungi la route mancante per client_info ai child
     @child.route('/settings/api/client_info/<int:client_id>')
@@ -335,7 +329,6 @@ for idx, uri in pool.items():
 
     wrapped = with_request_env(child, creds)
     wrapped = with_db_cookie(wrapped, idx, secure=use_https)
-    wrapped = block_paths(wrapped, ("/cassa", "/cassa.html"))
     wrapped = fix_delete_method_middleware(wrapped)
     mounts[f"/s/{idx}"] = wrapped
     children[idx] = child
@@ -389,15 +382,13 @@ def landing_web():
         return render_template('landing_web.html',
                                db_links=links,
                                root_user=root_user,
-                               is_owner=is_owner,
-                               hide_cassa=True)
+                               is_owner=is_owner)
 
     # Altrimenti: form di login
     return render_template('landing_web.html',
                            db_links=None,
                            root_user=None,
-                           login_error=error,
-                           hide_cassa=True)
+                           login_error=error)
 
 
 @root_app.route('/landing-logout')
@@ -776,7 +767,6 @@ def owner_setup_add_tenant():
         new_child = create_app(uri)
         new_child.secret_key = secret
         new_child.config['HIDE_PRINTER_IP'] = True
-        new_child.config['HIDE_CASSA'] = True
     except Exception as e:
         return jsonify({'error': f'Errore creazione app: {str(e)}'}), 500
 
@@ -838,16 +828,10 @@ def owner_setup_add_tenant():
     except Exception as e:
         return jsonify({'error': f'Errore scrittura .env: {str(e)}'}), 500
 
-    # 3. Registra context processor e monta il child nel dispatcher (senza riavvio)
-    @new_child.context_processor
-    def _inject_hide_cassa():
-        return {'hide_cassa': True}
-
+    # 3. Monta il child nel dispatcher (senza riavvio)
     creds = unipile_creds_for(next_idx)
-    creds['HIDE_CASSA'] = '1'
     wrapped = with_request_env(new_child, creds)
     wrapped = with_db_cookie(wrapped, next_idx, secure=use_https)
-    wrapped = block_paths(wrapped, ('/cassa', '/cassa.html'))
     wrapped = fix_delete_method_middleware(wrapped)
 
     pool[next_idx] = uri
