@@ -236,7 +236,6 @@ children = {}
 for idx, uri in pool.items():
     child = create_app(uri)
     child.secret_key = secret
-    child.config["HIDE_PRINTER_IP"] = True
 
     creds = unipile_creds_for(idx)
 
@@ -766,7 +765,6 @@ def owner_setup_add_tenant():
     try:
         new_child = create_app(uri)
         new_child.secret_key = secret
-        new_child.config['HIDE_PRINTER_IP'] = True
     except Exception as e:
         return jsonify({'error': f'Errore creazione app: {str(e)}'}), 500
 
