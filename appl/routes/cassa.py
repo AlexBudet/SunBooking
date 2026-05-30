@@ -1650,6 +1650,126 @@ def correggi_day_apply():
         return jsonify({"error": f"Errore interno: {exc}"}), 500
 
 
+@cassa_bp.route('/cassa/dgfe-align-range', methods=['POST'])
+def dgfe_align_range():
+    """Allinea (e SALVA) il totale fiscale del DB al DGFE per ogni giorno del range.
+
+    E' l'azione dietro al pulsante "Carica DGFE": per ogni giorno legge il totale
+    dalla DGFE della stampante RCH e, se diverso dal totale registrato in DB, crea/
+    aggiorna la voce fiscale di allineamento ADJ-YYYYMMDD (additiva e reversibile)
+    cosi' che (scontrini reali + ADJ) == DGFE. La voce e' is_fiscale=True quindi
+    rientra nei corrispettivi del CRM: il dato corretto persiste fra le sessioni.
+
+    Sicurezza fiscale: NON azzera giorni con DGFE vuoto/illeggibile (dgfe_safe=False)
+    e salta i giorni futuri. Solo owner/admin, solo on-premise (stampante in LAN).
+    Body JSON: {dateFrom, dateTo}
+    """
+    try:
+        user_id = session.get("user_id")
+        user = db.session.get(User, user_id)
+        if not user or getattr(user.ruolo, 'value', None) not in ('owner', 'admin'):
+            return jsonify({"error": "Accesso riservato a owner/admin"}), 403
+
+        ip, _ = _get_printer_config()
+        if not ip:
+            return jsonify({"error": "IP stampante non configurato"}), 400
+
+        data = request.get_json(force=True, silent=True) or {}
+        date_from = (data.get("dateFrom") or "").strip()
+        date_to = (data.get("dateTo") or "").strip()
+        if not date_from or not date_to:
+            return jsonify({"error": "Date non valide"}), 400
+        try:
+            d_from = datetime.strptime(date_from, "%Y-%m-%d").date()
+            d_to = datetime.strptime(date_to, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": "Formato data non valido (YYYY-MM-DD)"}), 400
+        if d_to < d_from:
+            return jsonify({"error": "dateTo precede dateFrom"}), 400
+        if (d_to - d_from).days > 366:
+            return jsonify({"error": "Range troppo ampio (max 366 giorni)"}), 400
+
+        today = date.today()
+        results = []
+        corrected = 0
+        skipped_future = 0
+        skipped_unsafe = 0
+        cur = d_from
+        while cur <= d_to:
+            day_str = cur.strftime("%Y-%m-%d")
+            # Non leggere/correggere il futuro
+            if cur > today:
+                skipped_future += 1
+                results.append({"date": day_str, "status": "skipped_future"})
+                cur += timedelta(days=1)
+                continue
+
+            comp = _correggi_day_compute(cur)
+            if comp.get("error"):
+                # Lettura DGFE inaffidabile: NON tocchiamo il DB, segnaliamo.
+                results.append({
+                    "date": day_str,
+                    "status": "unreadable",
+                    "error": comp.get("error"),
+                })
+                cur += timedelta(days=1)
+                continue
+
+            if not comp.get("dgfe_safe"):
+                # DGFE vuoto (0 scontrini): non azzeriamo dati validi del DB.
+                skipped_unsafe += 1
+                results.append({
+                    "date": day_str,
+                    "status": "skipped_empty_dgfe",
+                    "dgfe_total": comp.get("dgfe_total", 0.0),
+                    "dgfe_count": comp.get("dgfe_count", 0),
+                    "db_total": comp.get("db_total", 0.0),
+                })
+                cur += timedelta(days=1)
+                continue
+
+            try:
+                action, applied = _set_day_alignment_adj(cur, comp["dgfe_total"])
+            except Exception as exc:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+                current_app.logger.error("dgfe-align-range: scrittura DB fallita su %s: %s", day_str, str(exc))
+                results.append({"date": day_str, "status": "error", "error": str(exc)})
+                cur += timedelta(days=1)
+                continue
+
+            if action in ("created", "updated", "deleted"):
+                corrected += 1
+            results.append({
+                "date": day_str,
+                "status": "aligned",
+                "action": action,
+                "delta": comp["delta"],
+                "dgfe_total": comp["dgfe_total"],
+                "dgfe_count": comp["dgfe_count"],
+                # Totale fiscale del giorno DOPO l'allineamento == DGFE.
+                "db_total": comp["dgfe_total"],
+            })
+            cur += timedelta(days=1)
+
+        return jsonify({
+            "ok": True,
+            "processed": len(results),
+            "corrected": corrected,
+            "skipped_future": skipped_future,
+            "skipped_empty_dgfe": skipped_unsafe,
+            "results": results,
+        })
+    except Exception as exc:
+        try:
+            current_app.logger.exception("dgfe-align-range: errore non gestito")
+        except Exception:
+            pass
+        return jsonify({"error": f"Errore interno: {exc}"}), 500
+
+
 @cassa_bp.route('/cassa/reconcile-range', methods=['POST'])
 def reconcile_range():
     """Riconciliazione retroattiva su un range di date (solo owner).
