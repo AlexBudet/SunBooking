@@ -2475,7 +2475,8 @@ document.addEventListener('DOMContentLoaded', function() {
     wrap.setAttribute('tabindex', '-1');
     wrap.style.display = 'block';
     wrap.style.background = 'rgba(0,0,0,0.55)';
-    wrap.style.zIndex = '13000';
+    // Sopra il modal Corrispettivi (.modal = z-index 24510 in styles.css) e il suo backdrop.
+    wrap.style.zIndex = '26000';
 
     const dialog = document.createElement('div');
     dialog.className = 'modal-dialog modal-xl modal-dialog-scrollable';
@@ -2638,13 +2639,70 @@ document.addEventListener('DOMContentLoaded', function() {
     document.body.appendChild(wrap);
   }
 
-  // "Allinea a DGFE": legge i corrispettivi giornalieri dalla DGFE della stampante RCH,
-  // mostra un modal di conferma con i dati scaricati e, alla conferma, SALVA in DB
-  // (voce fiscale ADJ additiva: scontrini reali + ADJ == DGFE) e ricarica la tabella
-  // dal database per dare prova che il dato e' persistito.
-  function _getCorrispettiviRange() {
+  // Cella DGFE dopo una lettura RIUSCITA: mostra il valore e SEMPRE la spunta verde
+  // (= giorno confrontato con la DGFE). Il tooltip distingue "coincide" da "da sovrascrivere".
+  function _renderDgfeCellRead(cell, dgfeTotal, dbTotal) {
+    if (!cell) return;
+    cell.innerHTML = '';
+    cell.style.color = '';
+    const val = document.createElement('span');
+    val.textContent = Number(dgfeTotal || 0).toFixed(2);
+    cell.appendChild(val);
+    const check = document.createElement('i');
+    check.className = 'bi bi-check-circle-fill text-success ms-1';
+    cell.appendChild(check);
+    const delta = (Number(dgfeTotal || 0) - Number(dbTotal || 0));
+    if (Math.abs(delta) <= 0.01) {
+      bsTip(cell, 'Confrontato con DGFE: coincide ✓');
+    } else {
+      bsTip(cell, `Confrontato con DGFE — da sovrascrivere (delta € ${delta.toFixed(2)})`);
+    }
+  }
+
+  // Lettura DGFE robusta di un singolo giorno, con retry su esiti non affidabili.
+  async function _readDgfeDayWithRetry(isoDay, maxAttempts) {
+    let last = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const r = await fetch(`/cassa/dgfe-total?day=${encodeURIComponent(isoDay)}`);
+        const d = await r.json();
+        last = d;
+        if (r.ok && !d.error) {
+          const st = d.status;
+          if (st === 'ok') {
+            return { ok: true, dgfeTotal: parseFloat(d.dgfe_total || 0), dgfeCount: d.dgfe_count || 0, empty: false, status: st };
+          }
+          // Giorno legittimamente senza scontrini commerciali
+          if ((st === 'ej_empty' || st === 'ej_no_blocks') && (d.dgfe_count || 0) === 0) {
+            return { ok: true, dgfeTotal: 0, dgfeCount: 0, empty: true, status: st };
+          }
+        }
+      } catch (e) {
+        last = { error: e.message };
+      }
+      if (attempt < maxAttempts) {
+        await new Promise(res => setTimeout(res, 700));  // breve attesa e riprova
+      }
+    }
+    return {
+      ok: false,
+      status: (last && last.status) || 'errore',
+      error: (last && last.error) || null,
+      http: last && last.http_status,
+      body_len: last && last.body_len,
+    };
+  }
+
+  // "Allinea a DGFE": CHECK giorno-per-giorno con rotellina visibile su ogni riga.
+  // Al termine tutti i giorni leggibili hanno la spunta verde; poi si apre il modal
+  // di conferma e, alla conferma, si SALVA su tutti i giorni del range.
+  async function _loadDgfeForAllRows() {
+    const btn = document.getElementById('btnLoadDgfeCorrispettivi');
     const tbody = document.getElementById('corpoTabellaCorrispettivi');
-    const rows = tbody ? Array.from(tbody.querySelectorAll('tr[data-day]')) : [];
+    if (!btn || !tbody) return;
+    const rows = Array.from(tbody.querySelectorAll('tr[data-day]'));
+    if (!rows.length) { alert('Nessun giorno da allineare nel range corrente.'); return; }
+
     let dayMin = null, dayMax = null;
     rows.forEach(tr => {
       const iso = tr.dataset.day;
@@ -2652,44 +2710,103 @@ document.addEventListener('DOMContentLoaded', function() {
       if (dayMin === null || iso < dayMin) dayMin = iso;
       if (dayMax === null || iso > dayMax) dayMax = iso;
     });
-    return { dayMin, dayMax, count: rows.length };
-  }
 
-  async function _loadDgfeForAllRows() {
-    const btn = document.getElementById('btnLoadDgfeCorrispettivi');
-    if (!btn) return;
-    const { dayMin, dayMax, count } = _getCorrispettiviRange();
-    if (!dayMin || !dayMax || !count) {
-      alert('Nessun giorno da allineare nel range corrente.');
-      return;
-    }
+    const t = new Date();
+    const todayIso = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+    const SPIN = '<span class="spinner-border spinner-border-sm" role="status"></span>';
 
     const originalLabel = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Lettura DGFE dalla stampante...';
 
-    // 1) ANTEPRIMA (dry_run): legge la DGFE senza scrivere nulla.
-    let preview;
-    try {
-      const r = await fetch('/cassa/dgfe-align-range', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ..._csrfHeaders() },
-        body: JSON.stringify({ dateFrom: dayMin, dateTo: dayMax, dry_run: true })
-      });
-      preview = await r.json();
-      if (!r.ok) {
-        alert((preview && preview.error) || 'Errore durante la lettura della DGFE.');
-        return;
+    const results = [];
+    let dgfeTotalSum = 0;
+    let okCount = 0, changeCount = 0, emptyCount = 0, errCount = 0, futureCount = 0;
+
+    for (let i = 0; i < rows.length; i++) {
+      const tr = rows[i];
+      const isoDay = tr.dataset.day;
+      const totaleDb = parseFloat(tr.dataset.totaleDb || '0');
+      const dgfeCell = tr.querySelector('.dgfe-cell');
+      const azioniCell = tr.querySelector('.azioni-cell');
+      if (azioniCell) azioniCell.innerHTML = '';
+      btn.innerHTML = `${SPIN} Check ${i+1}/${rows.length}`;
+
+      if (isoDay > todayIso) {
+        futureCount++;
+        if (dgfeCell) { dgfeCell.textContent = '—'; dgfeCell.style.color = '#888'; }
+        results.push({ date: isoDay, status: 'skipped_future' });
+        continue;
       }
-    } catch (err) {
-      alert('Errore di rete durante la lettura DGFE: ' + err.message);
-      return;
-    } finally {
-      btn.innerHTML = originalLabel;
-      btn.disabled = false;
+
+      // Rotellina visibile sul giorno in lavorazione
+      if (dgfeCell) { dgfeCell.innerHTML = SPIN; dgfeCell.style.color = ''; }
+
+      const res = await _readDgfeDayWithRetry(isoDay, 3);
+
+      if (res.ok) {
+        const tot = res.dgfeTotal;
+        dgfeTotalSum += tot;
+        tr.dataset.dgfeTotal = String(tot);
+        _renderDgfeCellRead(dgfeCell, tot, totaleDb);  // spunta VERDE sempre
+        const delta = +(tot - totaleDb).toFixed(2);
+        const willChange = Math.abs(delta) >= 0.01;
+
+        if (res.empty && Math.abs(totaleDb) > 0.01) {
+          // DGFE vuota ma il DB ha incassi: non si sovrascrive (anti-azzeramento)
+          emptyCount++;
+          tr.style.background = '#fff5f0';
+          results.push({ date: isoDay, status: 'skipped_empty_dgfe', db_total: totaleDb, dgfe_total: 0, dgfe_count: 0 });
+        } else {
+          okCount++;
+          if (willChange) { changeCount++; tr.style.background = '#fff5f0'; }
+          else { tr.style.background = ''; }
+          results.push({
+            date: isoDay, status: 'preview', will_change: willChange,
+            delta: delta, dgfe_total: tot, dgfe_count: res.dgfeCount, db_total_before: totaleDb
+          });
+        }
+      } else {
+        errCount++;
+        if (dgfeCell) {
+          dgfeCell.textContent = 'errore';
+          dgfeCell.style.color = '#c00';
+          bsTip(dgfeCell, `status=${res.status}` + (res.http ? ` | http=${res.http}` : '') + (res.error ? ` | ${res.error}` : ''));
+        }
+        results.push({ date: isoDay, status: 'unreadable', error: res.error || res.status });
+      }
     }
 
-    // 2) MODAL DI CONFERMA con i dati scaricati dalla stampante.
+    // Riga totali DGFE
+    const totDgfeCell = document.querySelector('#rigaTotaleCorrispettivi .dgfe-tot-cell');
+    if (totDgfeCell) {
+      if (errCount === 0) {
+        totDgfeCell.textContent = dgfeTotalSum.toFixed(2);
+        totDgfeCell.style.color = '';
+      } else {
+        totDgfeCell.textContent = dgfeTotalSum.toFixed(2) + ' (parz.)';
+        totDgfeCell.style.color = '#c00';
+        bsTip(totDgfeCell, `${errCount} giorni non leggibili dalla stampante`);
+      }
+    }
+
+    btn.innerHTML = originalLabel;
+    btn.disabled = false;
+
+    if (errCount > 0) {
+      const proceed = confirm(
+        `Check completato con ${errCount} giorni NON leggibili dalla stampante.\n`
+        + `Quei giorni NON verranno salvati. Vuoi comunque procedere al salvataggio degli altri ${changeCount} giorni da aggiornare?`
+      );
+      if (!proceed) return;
+    }
+
+    // Modal di conferma con il riepilogo (dati gia' verificati a schermo)
+    const preview = {
+      results,
+      corrected: changeCount,
+      skipped_future: futureCount,
+      skipped_empty_dgfe: emptyCount,
+    };
     _showDgfeConfirmModal(preview, dayMin, dayMax);
   }
 
@@ -2709,7 +2826,9 @@ document.addEventListener('DOMContentLoaded', function() {
     wrap.setAttribute('tabindex', '-1');
     wrap.style.display = 'block';
     wrap.style.background = 'rgba(0,0,0,0.55)';
-    wrap.style.zIndex = '13000';
+    // Deve stare SOPRA il modal Corrispettivi che lo apre (.modal = z-index 24510
+    // in styles.css) e sopra il suo backdrop (24500), altrimenti resta nascosto sotto.
+    wrap.style.zIndex = '26000';
 
     const dialog = document.createElement('div');
     dialog.className = 'modal-dialog modal-lg modal-dialog-scrollable';
