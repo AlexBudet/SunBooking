@@ -1491,6 +1491,59 @@ def _correggi_day_compute(day_date):
     }
 
 
+def _set_day_alignment_adj(day_date, dgfe_total):
+    """Allinea il totale fiscale del giorno in DB al totale DGFE in modo ADDITIVO
+    e reversibile: crea/aggiorna/elimina la dummy ADJ-YYYYMMDD col delta, senza
+    toccare gli scontrini reali (cliente/operatore/voci restano intatti).
+
+    Risultato garantito: somma scontrini reali del giorno + ADJ == dgfe_total.
+    Ritorna (action, delta) con action in {created, updated, deleted, noop}.
+    Esegue il commit. In caso di errore solleva (gestire dal chiamante).
+    """
+    db_receipts = _db_receipts_for_day_no_adj(day_date)
+    db_total = round(sum(float(r.total_amount or 0) for r in db_receipts), 2)
+    delta = round(float(dgfe_total or 0.0) - db_total, 2)
+
+    adj_prog = _adj_progressivo_for_day(day_date)
+    existing = Receipt.query.filter_by(numero_progressivo=adj_prog).first()
+    adj_dt = datetime.combine(day_date, datetime.min.time().replace(hour=23, minute=59))
+
+    if abs(delta) < 0.01:
+        # Gia' allineato: rimuovo eventuale ADJ residua di una correzione precedente.
+        if existing:
+            db.session.delete(existing)
+            db.session.commit()
+            return ("deleted", delta)
+        return ("noop", delta)
+
+    voci = [{
+        "_dummy_adjustment": True,
+        "reason": "Allineamento DGFE",
+        "applied_at": datetime.now().isoformat(timespec='seconds'),
+        "delta": delta
+    }]
+    if existing:
+        existing.total_amount = delta
+        existing.created_at = adj_dt
+        existing.voci = voci
+        flag_modified(existing, "voci")
+        db.session.commit()
+        return ("updated", delta)
+
+    new_adj = Receipt(
+        created_at=adj_dt,
+        total_amount=delta,
+        is_fiscale=True,
+        voci=voci,
+        cliente_id=None,
+        operatore_id=None,
+        numero_progressivo=adj_prog
+    )
+    db.session.add(new_adj)
+    db.session.commit()
+    return ("created", delta)
+
+
 @cassa_bp.route('/cassa/correggi-day/preview', methods=['GET'])
 def correggi_day_preview():
     """Anteprima per il bottone Correggi: confronto DGFE vs DB per un giorno.
@@ -1570,52 +1623,9 @@ def correggi_day_apply():
                     "preview": result
                 }), 409
 
-        adj_prog = _adj_progressivo_for_day(day)
-        existing = Receipt.query.filter_by(numero_progressivo=adj_prog).first()
-        action = None
-
         try:
-            if abs(delta) < 0.01:
-                # Allineato: se c'e' una dummy precedente, la elimino
-                if existing:
-                    db.session.delete(existing)
-                    db.session.commit()
-                    action = "deleted"
-                else:
-                    action = "noop"
-            else:
-                if existing:
-                    existing.total_amount = delta
-                    existing.created_at = datetime.combine(day, datetime.min.time().replace(hour=23, minute=59))
-                    if not isinstance(existing.voci, list):
-                        existing.voci = []
-                    existing.voci = [{
-                        "_dummy_adjustment": True,
-                        "reason": "Allineamento DGFE",
-                        "applied_at": datetime.now().isoformat(timespec='seconds'),
-                        "delta": delta
-                    }]
-                    flag_modified(existing, "voci")
-                    db.session.commit()
-                    action = "updated"
-                else:
-                    new_adj = Receipt(
-                        created_at=datetime.combine(day, datetime.min.time().replace(hour=23, minute=59)),
-                        total_amount=delta,
-                        is_fiscale=True,
-                        voci=[{
-                            "_dummy_adjustment": True,
-                            "reason": "Allineamento DGFE",
-                            "applied_at": datetime.now().isoformat(timespec='seconds'),
-                            "delta": delta
-                        }],
-                        cliente_id=None,
-                        operatore_id=None,
-                        numero_progressivo=adj_prog
-                    )
-                    db.session.add(new_adj)
-                    db.session.commit()
-                    action = "created"
+            # Allineamento additivo: l'helper porta (scontrini reali + ADJ) == DGFE.
+            action, _applied = _set_day_alignment_adj(day, result["dgfe_total"])
         except Exception as exc:
             try:
                 db.session.rollback()
@@ -2727,6 +2737,38 @@ def reconcile_day(day_date, business_info):
         summary["status"] = "fixed"
     else:
         summary["status"] = "discrepant"
+
+    # ALLINEAMENTO AUTOMATICO AL DGFE (chiusura fiscale serale).
+    # Dopo aver creato gli orfani mancanti, porta in modo ADDITIVO e reversibile
+    # il totale fiscale del giorno in DB a coincidere col totale DGFE, scrivendo
+    # la dummy ADJ-YYYYMMDD col residuo. Cosi' il dato del registro scontrini in
+    # DB resta permanentemente allineato al dato fiscale della DGFE.
+    # SICUREZZA: solo se la DGFE ha almeno 1 scontrino (dgfe_count > 0), per non
+    # azzerare un giorno su una lettura vuota/ambigua.
+    summary["alignment_action"] = "skipped"
+    summary["alignment_delta"] = 0.0
+    if summary["dgfe_count"] > 0:
+        try:
+            action, applied = _set_day_alignment_adj(day_date, summary["dgfe_total"])
+            summary["alignment_action"] = action
+            summary["alignment_delta"] = applied
+            # Totale fiscale effettivo del giorno (scontrini reali + ADJ) == DGFE.
+            summary["db_total"] = summary["dgfe_total"]
+            if action in ("created", "updated"):
+                summary["notes"] = (
+                    (summary.get("notes") or "")
+                    + f" Allineamento DGFE applicato (delta {applied:+.2f})."
+                ).strip()
+        except Exception as exc:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            current_app.logger.error("reconcile_day: allineamento DGFE fallito: %s", str(exc))
+            summary["alignment_action"] = "error"
+            summary["notes"] = (
+                (summary.get("notes") or "") + f" Allineamento DGFE fallito: {exc}."
+            ).strip()
 
     try:
         _set_reconciliation_entry(bid, summary["date"], summary)

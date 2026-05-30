@@ -2489,6 +2489,15 @@ body.touch-ui .appointment-block.active-popup .popup-buttons-bottom {
   pointer-events: auto;
 }
 
+/* HARDENING touch: le barre popup (sopra/sotto) devono SEMPRE essere fuori dal
+   flusso del blocco. Se entrassero nel flow (es. position:relative ereditata dal
+   selettore universale qui sotto), comparendo al click spingerebbero drag-handle,
+   nome cliente e nome servizio verso il basso. */
+body.touch-ui .appointment-block .popup-buttons,
+body.touch-ui .appointment-block .popup-buttons-bottom {
+  position: absolute !important;
+}
+
 body.touch-ui .appointment-block .popup-buttons,
 body.touch-ui .appointment-block .popup-buttons-bottom {
   pointer-events: auto !important;
@@ -2772,10 +2781,23 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup
   display: none !important;
 }
 
-/* TOUCH: OFF -> top bar solo su click, con opacity visibile */
-body.touch-ui .appointment-block.note-off .popup-buttons {
+/* TOUCH: OFF -> top bar nascosta finché non si clicca */
+body.touch-ui .appointment-block.note-off:not(.active-popup) .popup-buttons,
+body.touch-ui .appointment-block.off:not(.active-popup) .popup-buttons {
   display: none !important;
   opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+/* TOUCH: OFF attivo (click) -> mostra la top bar con DELETE e NOTA (TITOLO).
+   La regola generale che riattiva la visibility esclude .note-off/.off, quindi
+   senza questo override la barra resterebbe visibility:hidden e i pulsanti
+   invisibili (si vedrebbe solo la barra inferiore allunga/accorcia). */
+body.touch-ui .appointment-block.note-off.active-popup .popup-buttons,
+body.touch-ui .appointment-block.off.active-popup .popup-buttons {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 /* TOUCH: nascondi SEMPRE per default; mostra solo su .active-popup */
