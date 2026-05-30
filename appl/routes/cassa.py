@@ -1677,6 +1677,9 @@ def dgfe_align_range():
         data = request.get_json(force=True, silent=True) or {}
         date_from = (data.get("dateFrom") or "").strip()
         date_to = (data.get("dateTo") or "").strip()
+        # dry_run=True: legge la DGFE e calcola i delta SENZA scrivere nulla.
+        # Serve ad alimentare il modal di conferma prima del salvataggio.
+        dry_run = bool(data.get("dry_run", False))
         if not date_from or not date_to:
             return jsonify({"error": "Date non valide"}), 400
         try:
@@ -1688,6 +1691,11 @@ def dgfe_align_range():
             return jsonify({"error": "dateTo precede dateFrom"}), 400
         if (d_to - d_from).days > 366:
             return jsonify({"error": "Range troppo ampio (max 366 giorni)"}), 400
+
+        # Business per il log di riconciliazione (serve solo al salvataggio reale).
+        bi = None
+        if not dry_run:
+            bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
 
         today = date.today()
         results = []
@@ -1728,6 +1736,23 @@ def dgfe_align_range():
                 cur += timedelta(days=1)
                 continue
 
+            if dry_run:
+                # Anteprima: nessuna scrittura. Comunichiamo cosa cambierebbe.
+                will_change = abs(comp["delta"]) >= 0.01
+                if will_change:
+                    corrected += 1
+                results.append({
+                    "date": day_str,
+                    "status": "preview",
+                    "will_change": will_change,
+                    "delta": comp["delta"],
+                    "dgfe_total": comp["dgfe_total"],
+                    "dgfe_count": comp["dgfe_count"],
+                    "db_total_before": comp["db_total"],
+                })
+                cur += timedelta(days=1)
+                continue
+
             try:
                 action, applied = _set_day_alignment_adj(cur, comp["dgfe_total"])
             except Exception as exc:
@@ -1742,6 +1767,29 @@ def dgfe_align_range():
 
             if action in ("created", "updated", "deleted"):
                 corrected += 1
+            current_app.logger.info(
+                "dgfe-align-range: %s action=%s delta=%.2f dgfe=%.2f",
+                day_str, action, comp["delta"], comp["dgfe_total"]
+            )
+            # Persisti l'esito nel log di riconciliazione cosi' la colonna DGFE
+            # resta valorizzata (verde) anche dopo ricarica/logout.
+            if bi is not None:
+                try:
+                    _set_reconciliation_entry(bi.id, day_str, {
+                        "status": "fixed" if action in ("created", "updated", "deleted") else "ok",
+                        "date": day_str,
+                        "run_at": datetime.now().isoformat(timespec='seconds'),
+                        "dgfe_count": comp["dgfe_count"],
+                        "db_count": comp["db_count"],
+                        "dgfe_total": comp["dgfe_total"],
+                        # Dopo l'allineamento il totale fiscale del giorno == DGFE.
+                        "db_total": comp["dgfe_total"],
+                        "created_orphans": 0,
+                        "suspicious_extras": [],
+                        "notes": f"Allineato a DGFE da 'Allinea a DGFE' (delta {comp['delta']:.2f})",
+                    })
+                except Exception:
+                    current_app.logger.warning("dgfe-align-range: log recon non scritto per %s", day_str)
             results.append({
                 "date": day_str,
                 "status": "aligned",
@@ -1756,6 +1804,7 @@ def dgfe_align_range():
 
         return jsonify({
             "ok": True,
+            "dry_run": dry_run,
             "processed": len(results),
             "corrected": corrected,
             "skipped_future": skipped_future,

@@ -530,8 +530,8 @@ document.addEventListener('DOMContentLoaded', function() {
         {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
         <button id="btnLoadDgfeCorrispettivi" class="btn btn-outline-primary btn-sm ms-2"
                 data-bs-toggle="tooltip"
-                title="Legge il totale DGFE da RCH per ogni giorno del range">
-          <i class="bi bi-cloud-download"></i> Carica DGFE
+                title="Legge i corrispettivi giornalieri dalla DGFE della stampante RCH e li salva, sovrascrivendo i totali del CRM">
+          <i class="bi bi-cloud-download"></i> Allinea a DGFE
         </button>
         {% endif %}
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
@@ -2638,141 +2638,208 @@ document.addEventListener('DOMContentLoaded', function() {
     document.body.appendChild(wrap);
   }
 
-  // "Carica DGFE": legge il totale fiscale dalla stampante RCH per ogni giorno del
-  // range E SALVA l'allineamento in DB (voce fiscale ADJ additiva), in un colpo solo.
-  // Dopo il salvataggio il totale "Incasso totale" del giorno coincide col DGFE e
-  // persiste fra le sessioni (rientra nei corrispettivi del CRM).
-  async function _loadDgfeForAllRows() {
-    const btn = document.getElementById('btnLoadDgfeCorrispettivi');
+  // "Allinea a DGFE": legge i corrispettivi giornalieri dalla DGFE della stampante RCH,
+  // mostra un modal di conferma con i dati scaricati e, alla conferma, SALVA in DB
+  // (voce fiscale ADJ additiva: scontrini reali + ADJ == DGFE) e ricarica la tabella
+  // dal database per dare prova che il dato e' persistito.
+  function _getCorrispettiviRange() {
     const tbody = document.getElementById('corpoTabellaCorrispettivi');
-    if (!tbody || !btn) return;
-    const rows = Array.from(tbody.querySelectorAll('tr[data-day]'));
-    if (!rows.length) return;
-
-    // Mappa isoDay -> tr e ricava il range dalle righe in tabella.
-    const rowByDay = {};
+    const rows = tbody ? Array.from(tbody.querySelectorAll('tr[data-day]')) : [];
     let dayMin = null, dayMax = null;
     rows.forEach(tr => {
       const iso = tr.dataset.day;
       if (!iso) return;
-      rowByDay[iso] = tr;
       if (dayMin === null || iso < dayMin) dayMin = iso;
       if (dayMax === null || iso > dayMax) dayMax = iso;
-      const dgfeCell = tr.querySelector('.dgfe-cell');
-      const azioniCell = tr.querySelector('.azioni-cell');
-      if (dgfeCell) {
-        dgfeCell.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
-        dgfeCell.style.color = '';
-      }
-      if (azioniCell) azioniCell.innerHTML = '';
     });
-    if (!dayMin || !dayMax) return;
+    return { dayMin, dayMax, count: rows.length };
+  }
+
+  async function _loadDgfeForAllRows() {
+    const btn = document.getElementById('btnLoadDgfeCorrispettivi');
+    if (!btn) return;
+    const { dayMin, dayMax, count } = _getCorrispettiviRange();
+    if (!dayMin || !dayMax || !count) {
+      alert('Nessun giorno da allineare nel range corrente.');
+      return;
+    }
 
     const originalLabel = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Lettura e salvataggio DGFE...';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Lettura DGFE dalla stampante...';
 
-    let data;
+    // 1) ANTEPRIMA (dry_run): legge la DGFE senza scrivere nulla.
+    let preview;
     try {
       const r = await fetch('/cassa/dgfe-align-range', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ..._csrfHeaders() },
-        body: JSON.stringify({ dateFrom: dayMin, dateTo: dayMax })
+        body: JSON.stringify({ dateFrom: dayMin, dateTo: dayMax, dry_run: true })
       });
-      data = await r.json();
+      preview = await r.json();
       if (!r.ok) {
-        alert((data && data.error) || 'Errore durante la lettura/salvataggio DGFE.');
-        // Ripristina celle in errore
-        rows.forEach(tr => {
-          const c = tr.querySelector('.dgfe-cell');
-          if (c) { c.textContent = '—'; c.style.color = '#888'; }
-        });
+        alert((preview && preview.error) || 'Errore durante la lettura della DGFE.');
         return;
       }
     } catch (err) {
-      alert('Errore di rete: ' + err.message);
-      rows.forEach(tr => {
-        const c = tr.querySelector('.dgfe-cell');
-        if (c) { c.textContent = '—'; c.style.color = '#888'; }
-      });
+      alert('Errore di rete durante la lettura DGFE: ' + err.message);
       return;
     } finally {
       btn.innerHTML = originalLabel;
       btn.disabled = false;
     }
 
-    let dgfeTotalSum = 0;
-    let allReadable = true;
+    // 2) MODAL DI CONFERMA con i dati scaricati dalla stampante.
+    _showDgfeConfirmModal(preview, dayMin, dayMax);
+  }
 
-    (data.results || []).forEach(res => {
-      const tr = rowByDay[res.date];
-      if (!tr) return;
-      const dgfeCell = tr.querySelector('.dgfe-cell');
-      const azioniCell = tr.querySelector('.azioni-cell');
-      if (azioniCell) azioniCell.innerHTML = '';
+  function _showDgfeConfirmModal(preview, dayMin, dayMax) {
+    const prev = document.getElementById('dgfeAlignModal');
+    if (prev) prev.remove();
 
-      if (res.status === 'aligned') {
-        const tot = parseFloat(res.dgfe_total || 0);
-        dgfeTotalSum += tot;
-        // Il DB e' stato allineato: aggiorna "Incasso totale" del giorno = DGFE.
-        tr.dataset.totaleDb = String(tot);
-        tr.dataset.dgfeTotal = String(tot);
-        if (tr.cells[2]) tr.cells[2].textContent = tot.toFixed(2);
-        tr.style.background = '';
-        if (dgfeCell) {
-          _renderDgfeCell(dgfeCell, tot, tot);  // ora DB == DGFE -> spunta verde
-          const note = (res.action && res.action !== 'noop')
-            ? `${res.dgfe_count} scontrini in DGFE — salvato (delta € ${Number(res.delta||0).toFixed(2)})`
-            : `${res.dgfe_count} scontrini in DGFE — gia' allineato`;
-          bsTip(dgfeCell, note);
-        }
-      } else if (res.status === 'skipped_empty_dgfe') {
-        const dbTot = parseFloat(res.db_total || 0);
-        dgfeTotalSum += 0;
-        if (dgfeCell) {
-          _renderDgfeCell(dgfeCell, 0, dbTot);
-          bsTip(dgfeCell, '0 scontrini in DGFE: giorno non allineato per sicurezza (DGFE vuoto)');
-        }
-        // DGFE vuoto ma DB ha registri: segnala in rosa, nessun salvataggio automatico.
-        if (Math.abs(dbTot) > 0.01) tr.style.background = '#fff5f0';
-      } else if (res.status === 'skipped_future') {
-        if (dgfeCell) { dgfeCell.textContent = '—'; dgfeCell.style.color = '#888'; }
-      } else {
-        // unreadable / error
-        allReadable = false;
-        if (dgfeCell) {
-          dgfeCell.textContent = 'errore';
-          dgfeCell.style.color = '#c00';
-          bsTip(dgfeCell, (res.error || res.status || 'lettura non riuscita'));
-        }
-      }
-    });
+    const results = preview.results || [];
+    const toChange = results.filter(r => r.status === 'preview' && r.will_change);
+    const empties = results.filter(r => r.status === 'skipped_empty_dgfe');
+    const errors = results.filter(r => r.status === 'unreadable' || r.status === 'error');
+    const futures = results.filter(r => r.status === 'skipped_future');
 
-    // Aggiorna riga totali (DGFE + ricalcolo Incasso totale DB dalle data-row)
-    const totDgfeCell = document.querySelector('#rigaTotaleCorrispettivi .dgfe-tot-cell');
-    if (totDgfeCell) {
-      if (allReadable) {
-        totDgfeCell.textContent = dgfeTotalSum.toFixed(2);
-        totDgfeCell.style.color = '';
-      } else {
-        totDgfeCell.textContent = dgfeTotalSum.toFixed(2) + ' (parz.)';
-        totDgfeCell.style.color = '#c00';
-        bsTip(totDgfeCell, 'Alcuni giorni non leggibili dalla stampante');
-      }
+    const wrap = document.createElement('div');
+    wrap.id = 'dgfeAlignModal';
+    wrap.className = 'modal fade show';
+    wrap.setAttribute('tabindex', '-1');
+    wrap.style.display = 'block';
+    wrap.style.background = 'rgba(0,0,0,0.55)';
+    wrap.style.zIndex = '13000';
+
+    const dialog = document.createElement('div');
+    dialog.className = 'modal-dialog modal-lg modal-dialog-scrollable';
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.style.background = '#eef6ff';
+    header.innerHTML = `<h5 class="modal-title">Allinea corrispettivi a DGFE — Conferma salvataggio</h5>`;
+    const btnX = document.createElement('button');
+    btnX.type = 'button';
+    btnX.className = 'btn-close';
+    btnX.addEventListener('click', () => wrap.remove());
+    header.appendChild(btnX);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'modal-body';
+
+    const intro = document.createElement('div');
+    intro.className = 'alert ' + (toChange.length ? 'alert-warning' : 'alert-success');
+    if (toChange.length) {
+      intro.innerHTML = `<strong>${toChange.length} giorni</strong> verranno <strong>sovrascritti</strong> coi corrispettivi letti dalla DGFE della stampante RCH. `
+        + `Il totale fiscale di ogni giorno verra' portato esattamente al valore DGFE e <strong>salvato</strong> in database.`;
+    } else {
+      intro.innerHTML = `✅ Tutti i giorni leggibili sono <strong>gia' allineati</strong> alla DGFE. Nessuna modifica necessaria.`;
     }
-    _updateRigaTotaleDb();
+    body.appendChild(intro);
 
-    // Riepilogo
-    const corrected = data.corrected || 0;
-    const future = data.skipped_future || 0;
-    const empty = data.skipped_empty_dgfe || 0;
-    const errors = (data.results || []).filter(r => r.status === 'unreadable' || r.status === 'error').length;
-    let msg = `DGFE caricato e salvato.\nGiorni corretti: ${corrected}`;
-    if (empty) msg += `\nSaltati (DGFE vuoto): ${empty}`;
-    if (future) msg += `\nSaltati (futuri): ${future}`;
-    if (errors) msg += `\nNon leggibili: ${errors}`;
-    msg += '\n\nI corrispettivi del CRM ora coincidono con la DGFE e restano salvati.';
-    alert(msg);
+    if (toChange.length) {
+      const tblWrap = document.createElement('div');
+      tblWrap.style.maxHeight = '45vh';
+      tblWrap.style.overflowY = 'auto';
+      const tbl = document.createElement('table');
+      tbl.className = 'table table-sm table-bordered mb-0';
+      tbl.innerHTML = '<thead class="table-dark"><tr>'
+        + '<th>Data</th><th class="text-end">CRM attuale €</th>'
+        + '<th class="text-end">DGFE (RCH) €</th><th class="text-end">Delta €</th>'
+        + '<th class="text-center">Scontrini DGFE</th></tr></thead>';
+      const tb = document.createElement('tbody');
+      let sumDb = 0, sumDgfe = 0;
+      toChange.forEach(r => {
+        sumDb += Number(r.db_total_before || 0);
+        sumDgfe += Number(r.dgfe_total || 0);
+        const tr = tb.insertRow();
+        const d = r.date.split('-');
+        tr.insertCell().textContent = `${d[2]}-${d[1]}-${d[0]}`;
+        const c1 = tr.insertCell(); c1.className = 'text-end'; c1.textContent = Number(r.db_total_before||0).toFixed(2);
+        const c2 = tr.insertCell(); c2.className = 'text-end fw-bold'; c2.textContent = Number(r.dgfe_total||0).toFixed(2);
+        const c3 = tr.insertCell(); c3.className = 'text-end';
+        c3.textContent = Number(r.delta||0).toFixed(2);
+        c3.style.color = Number(r.delta||0) >= 0 ? '#198754' : '#c00';
+        const c4 = tr.insertCell(); c4.className = 'text-center'; c4.textContent = r.dgfe_count || 0;
+      });
+      tbl.appendChild(tb);
+      const tf = document.createElement('tfoot');
+      tf.innerHTML = `<tr class="table-light fw-bold"><th>Totale</th>`
+        + `<th class="text-end">${sumDb.toFixed(2)}</th>`
+        + `<th class="text-end">${sumDgfe.toFixed(2)}</th>`
+        + `<th class="text-end">${(sumDgfe - sumDb).toFixed(2)}</th><th></th></tr>`;
+      tbl.appendChild(tf);
+      tblWrap.appendChild(tbl);
+      body.appendChild(tblWrap);
+    }
+
+    if (empties.length || errors.length || futures.length) {
+      const note = document.createElement('div');
+      note.className = 'small text-muted mt-2';
+      const parts = [];
+      if (empties.length) parts.push(`${empties.length} giorni con DGFE vuota (non toccati, per sicurezza)`);
+      if (errors.length) parts.push(`${errors.length} giorni non leggibili dalla stampante`);
+      if (futures.length) parts.push(`${futures.length} giorni futuri (saltati)`);
+      note.textContent = 'Esclusi: ' + parts.join(' · ');
+      body.appendChild(note);
+    }
+
+    // Footer
+    const footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    const btnCancel = document.createElement('button');
+    btnCancel.className = 'btn btn-secondary';
+    btnCancel.textContent = 'Annulla';
+    btnCancel.addEventListener('click', () => wrap.remove());
+    footer.appendChild(btnCancel);
+
+    if (toChange.length) {
+      const btnSave = document.createElement('button');
+      btnSave.className = 'btn btn-danger';
+      btnSave.innerHTML = '<i class="bi bi-save"></i> SALVA E SOVRASCRIVI';
+      btnSave.addEventListener('click', async () => {
+        btnSave.disabled = true;
+        btnCancel.disabled = true;
+        btnSave.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Salvataggio in corso...';
+        try {
+          const r = await fetch('/cassa/dgfe-align-range', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ..._csrfHeaders() },
+            body: JSON.stringify({ dateFrom: dayMin, dateTo: dayMax, dry_run: false })
+          });
+          const data = await r.json();
+          if (!r.ok) {
+            alert((data && data.error) || 'Errore durante il salvataggio.');
+            btnSave.disabled = false; btnCancel.disabled = false;
+            btnSave.innerHTML = '<i class="bi bi-save"></i> SALVA E SOVRASCRIVI';
+            return;
+          }
+          wrap.remove();
+          // RICARICA dal database: prova concreta che il dato e' persistito.
+          if (typeof window.loadCorrispettiviData === 'function') {
+            await window.loadCorrispettiviData(dayMin, dayMax, false);
+          }
+          alert(`✅ Salvato.\nGiorni sovrascritti coi dati DGFE: ${data.corrected || 0}\n\n`
+            + `I corrispettivi mostrati ora arrivano dal database aggiornato e restano salvati anche dopo logout.`);
+        } catch (err) {
+          alert('Errore di rete durante il salvataggio: ' + err.message);
+          btnSave.disabled = false; btnCancel.disabled = false;
+          btnSave.innerHTML = '<i class="bi bi-save"></i> SALVA E SOVRASCRIVI';
+        }
+      });
+      footer.appendChild(btnSave);
+    }
+
+    content.appendChild(header);
+    content.appendChild(body);
+    content.appendChild(footer);
+    dialog.appendChild(content);
+    wrap.appendChild(dialog);
+    document.body.appendChild(wrap);
   }
 
   const btnLoadDgfe = document.getElementById('btnLoadDgfeCorrispettivi');
