@@ -103,6 +103,25 @@ def _normalize_model(model_raw) -> str:
         return PrinterModel.RCH_PRINT_F.value
     return PrinterModel.RCH_PRINT_RT.value
 
+def _tender_code(metodo, model=None) -> str:
+    """Mappa il metodo di pagamento del CRM al comando di pagamento RCH (=T<n>).
+
+    La tabella delle forme di pagamento differisce per modello:
+    - RCH Print 3.0 RT (tabella standard di fabbrica, vedi manuale sez. 9):
+        T1 contanti, T2 non riscosso, T3 assegni, T4 elettronico, T5 ticket
+      => carta/POS e bonifico sono entrambi 'elettronico' (T4).
+    - RCH Print F: tabella storica programmata con T2=bonifico, T3=POS.
+
+    NB: 'bank'->T2 sulla RT 3.0 colpisce 'non riscosso' e genera errorCode 45;
+    'pos'->T3 colpisce 'assegni' (non da' errore ma e' fiscalmente errato).
+    """
+    model = _normalize_model(model)
+    metodo = (metodo or "cash").lower()
+    if model == PrinterModel.RCH_PRINT_F.value:
+        return {"cash": "T1", "contanti": "T1", "bank": "T2", "pos": "T3"}.get(metodo, "T1")
+    # RCH Print 3.0 RT: carta/POS e bonifico sono entrambi 'elettronico' (T4)
+    return {"cash": "T1", "contanti": "T1", "bank": "T4", "pos": "T4"}.get(metodo, "T1")
+
 def _get_printer_config():
     """Ritorna (ip, model) dalla BusinessInfo corrente.
     Usa expire_all + query fresca per garantire lettura dal DB reale,
@@ -692,11 +711,15 @@ def send_to_rch():
     # 1. SCONTRINO FISCALE
     # =========================
     if voci_fiscali:
+        ip, printer_model = _get_printer_config()
+        if not ip:
+            return jsonify({"error": "IP stampante RCH non configurato"}), 400
+
         xml_lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
             '<Service>'
         ]
-        totali = {"T1": 0, "T2": 0, "T3": 0}
+        totali = {}  # tender RCH (es. "T1", "T4") -> centesimi
 
         for v in voci_fiscali:
             srv = db.session.get(Service, v.get("servizio_id"))
@@ -716,12 +739,8 @@ def send_to_rch():
                 xml_lines.append(f'<cmd>="/(Scontato del {sconto:.2f}%)</cmd>')
 
             metodo = v.get("metodo_pagamento", "cash")
-            if metodo == "cash":
-                totali["T1"] += prezzo_cents
-            elif metodo == "bank":
-                totali["T2"] += prezzo_cents
-            elif metodo == "pos":
-                totali["T3"] += prezzo_cents
+            tcode = _tender_code(metodo, printer_model)
+            totali[tcode] = totali.get(tcode, 0) + prezzo_cents
 
         codice_lotteria = (data.get("lotteria") or "").strip().upper()
         pagamenti_digitali = any(
@@ -734,15 +753,12 @@ def send_to_rch():
         ):
             xml_lines.insert(2, f'<cmd>="/?L/$1/({codice_lotteria})</cmd>')
 
-        if totali["T1"] == 0 and totali["T2"] == 0 and totali["T3"] == 0:
+        if not totali or sum(totali.values()) == 0:
             xml_lines.append('<cmd>=T5/$0</cmd>')
         else:
-            if totali["T1"] > 0:
-                xml_lines.append(f'<cmd>=T1/${totali["T1"]}</cmd>')
-            if totali["T2"] > 0:
-                xml_lines.append(f'<cmd>=T2/${totali["T2"]}</cmd>')
-            if totali["T3"] > 0:
-                xml_lines.append(f'<cmd>=T3/${totali["T3"]}</cmd>')
+            for tcode in ("T1", "T2", "T3", "T4", "T5"):
+                if totali.get(tcode, 0) > 0:
+                    xml_lines.append(f'<cmd>={tcode}/${totali[tcode]}</cmd>')
 
         xml_lines.append('</Service>')
         payload_vendita = "\n".join(xml_lines)
@@ -750,9 +766,7 @@ def send_to_rch():
         # --- STAMPA IL PAYLOAD NEL TERMINALE ---
         current_app.logger.debug("PAYLOAD XML INVIATO:\n%s", payload_vendita)
 
-        ip, printer_model = _get_printer_config()
-        if not ip:
-            return jsonify({"error": "IP stampante RCH non configurato"}), 400
+        # ip/printer_model gia' letti all'inizio del blocco fiscale
         url = _rch_url(ip, printer_model)
         headers = _rch_headers(printer_model)
         rch_kwargs = _rch_request_kwargs(printer_model)
@@ -3232,17 +3246,12 @@ def rch_console_close_document():
     
     results = []
     
-    # Determina comando pagamento
+    # Determina comando pagamento (tender dipendente dal modello, vedi _tender_code)
     if importo <= 0:
         pay_cmd = "=T5/$0"
     else:
         cents = int(round(importo * 100))
-        if metodo == "pos":
-            pay_cmd = f"=T3/${cents}"
-        elif metodo == "bank":
-            pay_cmd = f"=T2/${cents}"
-        else:
-            pay_cmd = f"=T1/${cents}"
+        pay_cmd = f"={_tender_code(metodo, printer_model)}/${cents}"
     
     commands = [pay_cmd, "=C3", "=C1"]
     

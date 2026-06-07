@@ -3505,9 +3505,12 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 /* Mini-blocco slot proposto (simile pseudo-block calendario) */
+/* I colori derivano dalle variabili --slot-* impostate via JS (un colore
+   casuale per ogni ricerca, uguale per tutti i blocchi proposti). I valori
+   dopo la virgola sono solo fallback. */
 .ai-slot-card {
-  background: #f8e8f0;
-  border: 1.5px solid #b8809d;
+  background: var(--slot-bg, #f8e8f0);
+  border: 1.5px solid var(--slot-border, #b8809d);
   border-radius: 10px;
   padding: 8px 11px;
   margin-top: 7px;
@@ -3516,8 +3519,12 @@ document.addEventListener('DOMContentLoaded', function() {
   font-size: 0.83rem;
   line-height: 1.5;
 }
+/* Caratteri meno in grassetto negli slot dei risultati */
+.ai-slot-card strong {
+  font-weight: 600;
+}
 .ai-slot-card:hover {
-  background: linear-gradient(135deg,#b8809d,#a06b88);
+  background: linear-gradient(135deg, var(--slot-border,#b8809d), var(--slot-hover,#a06b88));
   color: #fff;
   transform: translateY(-1px);
 }
@@ -3526,7 +3533,7 @@ document.addEventListener('DOMContentLoaded', function() {
   cursor: default;
 }
 .ai-slot-card.ai-slot-disabled:hover {
-  background: #f8e8f0;
+  background: var(--slot-bg, #f8e8f0);
   color: inherit;
   transform: none;
 }
@@ -3581,7 +3588,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 /* Impedisci che l'hover della card collassata cambi colore del testo interno */
 .ai-slot-card.ai-slot-collapsed:hover {
-  background: #f0dce6;
+  background: var(--slot-bg2, #f0dce6);
   color: inherit;
   transform: none;
 }
@@ -3589,7 +3596,7 @@ document.addEventListener('DOMContentLoaded', function() {
   color: #888;
 }
 .ai-slot-card.ai-slot-expanded:hover {
-  background: #f8e8f0;
+  background: var(--slot-bg, #f8e8f0);
   color: inherit;
   transform: none;
 }
