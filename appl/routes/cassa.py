@@ -1141,25 +1141,19 @@ def registro_scontrini():
     giorno_start = datetime.combine(giorno, datetime.min.time())
     giorno_end = datetime.combine(giorno, datetime.max.time())
     
-    # Esclude le voci di adjustment (dummy ADJ-YYYYMMDD create dal "Correggi" nel modal Corrispettivi):
-    # sono fiscali (concorrono ai totali) ma non vanno mostrate qui come scontrini reali.
-    no_adj = or_(
-        Receipt.numero_progressivo.is_(None),
-        ~Receipt.numero_progressivo.like('ADJ-%')
-    )
-
+    # Include ANCHE le voci di allineamento DGFE (dummy ADJ-YYYYMMDD): sono fiscali,
+    # concorrono ai totali e ora vengono mostrate come riga dedicata
+    # ("ALLINEAMENTO DGFE") cosi' il totale del registro combacia col totale DGFE.
     if user_role == "user":
         scontrini = Receipt.query.filter(
             Receipt.is_fiscale == True,
             Receipt.created_at >= giorno_start,
             Receipt.created_at <= giorno_end,
-            no_adj
         ).order_by(Receipt.created_at.asc()).all()
     else:
         scontrini = Receipt.query.filter(
             Receipt.created_at >= giorno_start,
             Receipt.created_at <= giorno_end,
-            no_adj
         ).order_by(Receipt.created_at.asc()).all()
 
     # 4. Normalizza i dati di ogni scontrino
@@ -1172,12 +1166,19 @@ def registro_scontrini():
                 s.voci = []
         if s.voci is None:
             s.voci = []
-        s.display_numero_progressivo = s.numero_progressivo
+        # Voce di allineamento DGFE (dummy ADJ-YYYYMMDD): riga dedicata, NON e' uno
+        # scontrino reale ne' uno storno.
+        s.is_adjustment = bool(s.numero_progressivo and str(s.numero_progressivo).startswith('ADJ-'))
+        if s.is_adjustment:
+            s.display_numero_progressivo = 'ALLINEAMENTO DGFE'
+        else:
+            s.display_numero_progressivo = s.numero_progressivo
         s.annullato = False
 
-    # 5. Separa scontrini positivi (originali) e negativi (storni)
-    storni = [s for s in scontrini if s.is_fiscale and s.total_amount is not None and float(s.total_amount) < 0]
-    positivi = [s for s in scontrini if s.is_fiscale and s.total_amount is not None and float(s.total_amount) > 0]
+    # 5. Separa scontrini positivi (originali) e negativi (storni).
+    #    Le voci di allineamento DGFE (ADJ) sono escluse: non sono storni.
+    storni = [s for s in scontrini if not s.is_adjustment and s.is_fiscale and s.total_amount is not None and float(s.total_amount) < 0]
+    positivi = [s for s in scontrini if not s.is_adjustment and s.is_fiscale and s.total_amount is not None and float(s.total_amount) > 0]
 
     # 6. Per ogni storno, trova lo scontrino originale corrispondente
     progressivi_stornati = set()
@@ -1203,7 +1204,7 @@ def registro_scontrini():
 
     # 7. Marca come "annullato" SOLO gli scontrini il cui progressivo è stato stornato
     for s in scontrini:
-        if s.is_fiscale and s.total_amount is not None and float(s.total_amount) > 0:
+        if not s.is_adjustment and s.is_fiscale and s.total_amount is not None and float(s.total_amount) > 0:
             if s.numero_progressivo and str(s.numero_progressivo) in progressivi_stornati:
                 s.annullato = True
 
@@ -1356,15 +1357,63 @@ def update_metodo_pagamento(receipt_id):
     db.session.commit()
     return jsonify({'success': True})
 
-def _run_post_z_reconciliation():
-    """Esegue reconcile_day(today) usando la BusinessInfo corrente.
-    Best-effort: non solleva mai eccezioni al chiamante.
-    Ritorna il summary o None."""
+def _run_post_z_reconciliation(max_attempts=6, settle_s=1.5, retry_sleep_s=2.5):
+    """Esegue reconcile_day(today) usando la BusinessInfo corrente, DOPO la chiusura
+    fiscale (Z). Subito dopo la Z la stampante puo' essere ancora occupata (invio
+    corrispettivi all'AdE, finalizzazione DGFE): una singola lettura DGFE puo'
+    fallire o tornare vuota, e in quel caso l'allineamento (dummy ADJ-YYYYMMDD che
+    fa combaciare il totale del registro col totale DGFE) NON verrebbe applicato.
+
+    Per questo riproviamo con una breve attesa finche' l'allineamento risulta
+    effettivamente applicato (action created/updated/noop/deleted). Cosi' i
+    Corrispettivi combaciano col DGFE in automatico, senza correzioni manuali.
+
+    Best-effort: non solleva mai eccezioni al chiamante. Ritorna il summary o None.
+    """
     try:
         bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
         if not bi:
             return None
-        return reconcile_day(date.today(), bi)
+
+        # Piccola attesa iniziale: lascia che la Z si finalizzi prima di leggere il DGFE.
+        if settle_s and settle_s > 0:
+            pytime.sleep(settle_s)
+
+        summary = None
+        # action "buone" = allineamento applicato (o gia' allineato / niente da fare).
+        good_actions = ("created", "updated", "noop", "deleted")
+        # Statuti di lettura DGFE considerati affidabili.
+        reliable_statuses = ("ok", "ej_empty", "ej_no_blocks")
+        for attempt in range(1, max_attempts + 1):
+            summary = reconcile_day(date.today(), bi)
+            action = (summary or {}).get("alignment_action")
+            diag = (summary or {}).get("dgfe_diagnostic") or {}
+            dgfe_status = diag.get("status")
+            dgfe_count = (summary or {}).get("dgfe_count") or 0
+            current_app.logger.info(
+                "post-Z reconciliation tentativo %d/%d: alignment=%s dgfe_status=%s dgfe_count=%s delta=%s",
+                attempt, max_attempts, action, dgfe_status,
+                dgfe_count, (summary or {}).get("alignment_delta")
+            )
+            if action in good_actions:
+                break
+            # Lettura affidabile ma giorno legittimamente vuoto (0 scontrini):
+            # non c'e' nulla da allineare, inutile ritentare.
+            if dgfe_status in reliable_statuses and dgfe_count == 0:
+                break
+            # Lettura DGFE non affidabile o vuota (stampante ancora occupata):
+            # aspetta e riprova, tranne all'ultimo tentativo.
+            if attempt < max_attempts:
+                pytime.sleep(retry_sleep_s)
+
+        if summary and summary.get("alignment_action") not in good_actions:
+            current_app.logger.warning(
+                "post-Z reconciliation: allineamento DGFE NON applicato dopo %d tentativi "
+                "(alignment=%s). Il totale del registro potrebbe non combaciare col DGFE; "
+                "usare 'Carica DGFE'/'Correggi' nei Corrispettivi.",
+                max_attempts, summary.get("alignment_action")
+            )
+        return summary
     except Exception as exc:
         try:
             current_app.logger.error("Reconciliation post-Z fallita: %s", str(exc))
