@@ -14143,46 +14143,6 @@ function fmtDateIT(isoDate) {
   }
 
   // ──────────────────────────────────────────────────────────────
-  // COLORE SLOT — un colore casuale per ogni ricerca, uguale per tutti
-  // i blocchi proposti in quella ricerca, sempre diverso dai precedenti.
-  // ──────────────────────────────────────────────────────────────
-  window._aiSlotHueHistory = window._aiSlotHueHistory || [];
-
-  function makeSlotPalette() {
-    // Sceglie una tonalità (hue) lontana da quelle delle ricerche recenti,
-    // così non escono sempre sfumature di viola né lo stesso colore di fila.
-    var h, tries = 0;
-    do {
-      h = Math.floor(Math.random() * 360);
-      tries++;
-    } while (tries < 30 && window._aiSlotHueHistory.some(function (prev) {
-      var d = Math.abs(prev - h);
-      d = Math.min(d, 360 - d);   // distanza circolare sulla ruota colori
-      return d < 45;
-    }));
-    window._aiSlotHueHistory.push(h);
-    if (window._aiSlotHueHistory.length > 10) window._aiSlotHueHistory.shift();
-    return {
-      bg:     'hsl(' + h + ', 55%, 95%)',
-      bg2:    'hsl(' + h + ', 50%, 90%)',
-      border: 'hsl(' + h + ', 45%, 55%)',
-      hover:  'hsl(' + h + ', 45%, 45%)'
-    };
-  }
-
-  function applySlotPalette(card, pal) {
-    if (!card || !pal) return;
-    card.style.setProperty('--slot-bg', pal.bg);
-    card.style.setProperty('--slot-bg2', pal.bg2);
-    card.style.setProperty('--slot-border', pal.border);
-    card.style.setProperty('--slot-hover', pal.hover);
-    // Allinea anche l'eventuale bordo sinistro accentato (card multi-slot)
-    if (card.style.borderLeftWidth) {
-      card.style.borderLeftColor = pal.hover;
-    }
-  }
-
-  // ──────────────────────────────────────────────────────────────
   // RENDER MESSAGGI
   // ──────────────────────────────────────────────────────────────
 
@@ -14199,15 +14159,10 @@ function fmtDateIT(isoDate) {
     bubble.innerHTML = isUser ? esc(content) : content.replace(/\n/g, '<br>');
     elMessages.appendChild(bubble);
 
-    // Slot cards — un colore casuale per questa ricerca, uguale per tutti i blocchi
+    // Slot cards
     if (!isUser && extra?.slots?.length) {
       var isMulti = extra.slots.length > 1;
-      var slotPalette = makeSlotPalette();
-      extra.slots.forEach(slot => {
-        var slotCard = buildSlotCard(slot, isMulti);
-        applySlotPalette(slotCard, slotPalette);
-        elMessages.appendChild(slotCard);
-      });
+      extra.slots.forEach(slot => elMessages.appendChild(buildSlotCard(slot, isMulti)));
     }
 
     const ts = document.createElement('div');
@@ -16412,11 +16367,8 @@ if (a.date) {
       } else if (Array.isArray(data.multi_slot_groups) && data.multi_slot_groups.length > 0) {
         // ── MULTI-SERVIZIO: mostra card multi-slot ──
         appendMessage('assistant', answerText);
-        var multiPalette = makeSlotPalette();
         data.multi_slot_groups.forEach(function(group) {
-          var multiCard = buildMultiSlotCard(group);
-          applySlotPalette(multiCard, multiPalette);
-          elMessages.appendChild(multiCard);
+          elMessages.appendChild(buildMultiSlotCard(group));
         });
         scrollToBottom();
 
