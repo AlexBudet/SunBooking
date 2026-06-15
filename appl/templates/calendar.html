@@ -5656,7 +5656,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // CreateAppointmentModal/Navigator.
         var first = services[0] || {};
         var cli = window.CD.cliente || {};
-        var fullName = ((cli.nome || '') + ' ' + (cli.cognome || '')).trim();
+        // Il nome può arrivare dal pre-fill del Navigator come "Nome Cognome - 3331234567"
+        // (vedi selectClientNav, calendar.js): rimuovi l'eventuale suffisso " - telefono"
+        // cosi' nel messaggio WhatsApp il placeholder nome NON contiene il numero di cellulare.
+        var fullName = ((cli.nome || '') + ' ' + (cli.cognome || '')).trim().split(' - ')[0].trim();
         var whatsappData = {
           client_id:        clientId,
           client_name:      fullName,
