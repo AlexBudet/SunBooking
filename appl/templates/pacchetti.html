@@ -7,7 +7,7 @@
 .offcanvas-footer {
     position: sticky;
     bottom: 0;
-    z-index: 1020;
+    z-index: 1030; /* sempre sopra eventuali dropdown assoluti (Bootstrap usa ~1000) */
 }
 
 #seduteOmaggioContainer {
@@ -25,29 +25,20 @@
     float: right;
 }
 
+/* Dropdown di ricerca: nascosti di default, con scroll interno */
 #clientDropdown, #serviceDropdown, #searchClienteDropdown, #searchProgrammaDropdown {
   display: none;
   max-height: 200px;
   overflow-y: auto;
 }
 
-.offcanvas-footer {
-    position: sticky;
-    bottom: 0;
-    z-index: 1020;
-}
-
-#seduteOmaggioContainer {
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    padding: 8px;
-    margin-bottom: 10px;
-}
-
-#clientDropdown, #serviceDropdown, #searchClienteDropdown, #searchProgrammaDropdown {
-  display: none;
-  max-height: 200px;
-  overflow-y: auto;
+/* I dropdown DENTRO l'offcanvas (cliente e servizio del form) restano nel
+   FLUSSO del contenuto scrollabile invece di essere assoluti: così non si
+   sovrappongono MAI al footer sticky con Salva/Annulla, ma spingono in basso
+   il contenuto sottostante. Stesso approccio già usato per #vincoloServizioDropdown. */
+#clientDropdown, #serviceDropdown {
+  position: relative;
+  width: 100%;
 }
 
 #pacchettoModal .modal-dialog {
@@ -431,7 +422,11 @@
 
                     <!-- Cliente (ricerca come in calendar.js) -->
                     <div class="mb-3">
-                        <label for="clientSearch" class="form-label">Cliente</label>
+                        <label for="clientSearch" class="form-label">Cliente
+                            <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                               data-bs-toggle="tooltip" data-bs-placement="right"
+                               title="Cerca per nome, cognome o cellulare e seleziona il cliente dal menu. Se non esiste, usa il pulsante + per crearlo al volo. Dopo la scelta comparirà la sezione dei servizi."></i>
+                        </label>
                         <div class="d-flex align-items-center gap-2">
                             <input type="text" class="form-control" id="clientSearch" placeholder="Cerca cliente..." autocomplete="off" style="flex: 1;">
                             <button type="button" 
@@ -538,37 +533,69 @@
 
                     <!-- SEZIONE SERVIZI (visibile di default) -->
                     <div id="sezioneServiziCampi">
+                    <!-- Guida passo-passo: i pacchetti non si creano tutti i giorni,
+                         quindi teniamo le istruzioni sempre visibili nel form. -->
+                    <div class="alert alert-info py-2" id="pacchettoGuidaServizi">
+                        <small>
+                            <strong>Come creare il pacchetto:</strong><br>
+                            <span class="fw-bold">1)</span> seleziona il <strong>cliente</strong> &nbsp;·&nbsp;
+                            <span class="fw-bold">2)</span> aggiungi i <strong>servizi</strong> con la quantità &nbsp;·&nbsp;
+                            <span class="fw-bold">3)</span> scegli l'eventuale <strong>sconto</strong> e il prezzo &nbsp;·&nbsp;
+                            <span class="fw-bold">4)</span> salva. I campi compaiono mano a mano che completi i passi.
+                        </small>
+                    </div>
+
+                    <!-- STEP 2: Servizi (compare dopo aver scelto il cliente) -->
+                    <div id="stepServizi" style="display: none;">
                     <!-- Servizi (ricerca come in calendar.js) -->
                     <div class="mb-3">
-                        <label class="form-label">Servizi</label>
+                        <label class="form-label">Servizi
+                            <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                               data-bs-toggle="tooltip" data-bs-placement="right"
+                               title="Cerca un servizio, indica la quantità (es. 5) e premi Aggiungi. Ripeti per inserire più servizi nello stesso pacchetto: costo totale e nome si aggiornano da soli."></i>
+                        </label>
                         <div class="row mb-2">
                             <div class="col-md-6">
                                 <input type="text" class="form-control" id="serviceSearch" placeholder="Cerca servizio..." autocomplete="off">
                                 <div id="serviceDropdown" class="dropdown-menu"></div>
                             </div>
-                            <div class="col-md-3">
-                                <input type="number" class="form-control" id="serviceQuantita" placeholder="Quantità" min="1">
-                            </div>
-                            <div class="col-md-3">
-                                <button type="button" class="btn btn-sm btn-success" onclick="addService()">Aggiungi</button>
+                            <!-- Quantità + Aggiungi: compaiono solo dopo aver selezionato un servizio dal menu -->
+                            <div class="col-md-6" id="serviceQtyAddCol" style="display: none;">
+                                <div class="d-flex gap-2">
+                                    <input type="number" class="form-control" id="serviceQuantita" placeholder="Quantità" min="1" style="flex:1;">
+                                    <button type="button" class="btn btn-sm btn-success" onclick="addService()">Aggiungi</button>
+                                </div>
                             </div>
                         </div>
                         <ul id="serviziList" class="list-group"></ul>
                     </div>
-                    
+                    </div><!-- fine stepServizi -->
+
+                    <!-- STEP 3: Prezzi e sconto (compare dopo aver aggiunto almeno un servizio) -->
+                    <div id="stepPrezzi" style="display: none;">
                     <!-- Costo totale -->
                     <div class="mb-3">
-                        <label for="costoTotale" class="form-label">Costo Totale Lordo</label>
-                        <input type="number" class="form-control" id="costoTotale" step="0.01" readonly>
+                        <label for="costoTotale" class="form-label">Costo Totale Lordo
+                            <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                               data-bs-toggle="tooltip" data-bs-placement="right"
+                               title="Somma a listino di tutti i servizi inseriti. È calcolato in automatico e non modificabile: per cambiarlo aggiungi o rimuovi servizi sopra."></i>
+                        </label>
+                        <input type="number" class="form-control" id="costoTotale" step="0.01" readonly
+                               style="background-color:#e9ecef; color:#6c757d; cursor:not-allowed;">
                     </div>
                     
                     <!-- Sconto -->
                     <div class="mb-3">
-                    <label for="scontoTipo" class="form-label">Tipo Sconto</label>
+                    <label for="scontoTipo" class="form-label">Tipo Sconto
+                        <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                           data-bs-toggle="tooltip" data-bs-placement="right" data-bs-html="true"
+                           title="<b>Sconto Percentuale</b>: applica una % sul totale da listino.<br><b>Sedute Omaggio</b>: il prezzo resta pieno, ma aggiungi sedute gratis (scorporate dal conteggio pagato).<br><b>Totale scontato</b>: imposti tu a mano il prezzo finale del pacchetto, in modo del tutto indipendente da percentuale e sedute omaggio."></i>
+                    </label>
                     <select class="form-select" id="scontoTipo" onchange="toggleScontoFields()" disabled>
-                        <option value="">Nessuno sconto</option>
+                        <option value="">Seleziona tipo di sconto (o nessuno)</option>
                         <option value="Percentuale">Sconto Percentuale</option>
                         <option value="Ogni_N_Omaggio">Sedute Omaggio</option>
+                        <option value="Totale_Scontato">Totale scontato (manuale)</option>
                         <!-- Promo salvate caricate dinamicamente -->
                     </select>
                     <small class="text-muted" id="scontoHint">Aggiungi almeno un servizio per attivare gli sconti</small>
@@ -587,11 +614,18 @@
                             </div>
                         </div>
 
+                        <!-- Campo per Totale Scontato (manuale, indipendente da % e sedute) -->
+                        <div id="scontoTotaleManualeFields" class="mt-2" style="display: none;">
+                            <input type="number" class="form-control" id="scontoTotaleManuale" placeholder="Prezzo finale del pacchetto (€)" step="0.01" min="0">
+                            <small class="text-muted">Imposta direttamente la cifra finale: ignora percentuale e sedute omaggio.</small>
+                        </div>
+
                     <!-- Costo totale scontato (auto-calcolato) -->
                     <div class="mb-3">
                         <label for="costoTotaleScontato" class="form-label">Costo Totale Scontato</label>
                         <div class="d-flex align-items-center">
-                            <input type="number" class="form-control" id="costoTotaleScontato" step="0.01" readonly style="flex: 1;">
+                            <input type="number" class="form-control" id="costoTotaleScontato" step="0.01" readonly
+                                   style="flex: 1; background-color:#e9ecef; color:#6c757d; cursor:not-allowed;">
                             <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="prezzoRoundDownModal"
                                     data-bs-toggle="tooltip" data-bs-placement="top" title="Arrotonda il prezzo per difetto"
                                     style="display: none;">↓</button>
@@ -626,7 +660,11 @@
                     
                     <!-- Operatori preferiti -->
                     <div class="mb-3">
-                        <label class="form-label">Operatore Preferito</label>
+                        <label class="form-label">Operatore Preferito
+                            <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                               data-bs-toggle="tooltip" data-bs-placement="right"
+                               title="Opzionale. L'operatore/i scelto qui verrà proposto come predefinito in agenda quando prenoti le sedute di questo pacchetto. Puoi lasciare vuoto."></i>
+                        </label>
                         <div class="d-flex gap-2 align-items-center">
                             <select class="form-select" id="operatoriSelect" multiple style="flex:1">
                             </select>
@@ -638,6 +676,7 @@
                                     onclick="deselezionaOperatori()">Deseleziona</button>
                         </div>
                     </div>
+                    </div><!-- fine stepPrezzi -->
                     </div><!-- fine sezioneServiziCampi -->
                     
                     <!-- Status (solo per edit) -->
@@ -652,7 +691,7 @@
                     </div>
                     
         <!-- Footer sticky in fondo -->
-        <div class="offcanvas-footer sticky-bottom bg-white border-top p-3 mt-3">
+        <div class="offcanvas-footer sticky-bottom bg-white border-top p-3">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="offcanvas">Annulla</button>
             <button type="button" class="btn btn-primary" onclick="savePacchetto()">Salva</button>
         </div>
@@ -718,6 +757,7 @@
             sezioneServizi.style.display = 'block';
             sezionePrepagata.style.display = 'none';
             document.getElementById('offcanvasTitle').textContent = 'Crea Nuovo Pacchetto';
+            updateFormStepsVisibility();  // ricalcola la visibilità degli step servizi
         }
     }
 
@@ -900,9 +940,10 @@
     // Calcola il totale sedute selezionate (escluse omaggio)
     const totaleSedute = serviziSelezionati.reduce((sum, s) => sum + s.quantita, 0)
       
-      // Rimuovi le opzioni promo esistenti (mantieni le prime 3)
-      while (select.options.length > 3) {
-        select.remove(3);
+      // Rimuovi le opzioni promo esistenti (mantieni le prime 4 statiche:
+      // Nessuno, Percentuale, Sedute Omaggio, Totale scontato)
+      while (select.options.length > 4) {
+        select.remove(4);
       }
       
   // Aggiungi separatore se ci sono promo attive e sufficienti sedute
@@ -950,6 +991,21 @@
             scontoSelect.value = '';
             hint.style.display = '';
         }
+        updateFormStepsVisibility();
+    }
+
+    // Progressive disclosure (solo pacchetto Servizi): mostra ogni step solo
+    // quando i passi precedenti sono completi.
+    //  - stepServizi: visibile dopo aver scelto il cliente
+    //  - stepPrezzi:  visibile dopo aver aggiunto almeno un servizio
+    function updateFormStepsVisibility() {
+        const stepServizi = document.getElementById('stepServizi');
+        const stepPrezzi = document.getElementById('stepPrezzi');
+        if (!stepServizi || !stepPrezzi) return;
+        const hasClient = !!(document.getElementById('client_id').value || '').trim();
+        const hasServizi = serviziSelezionati.length > 0;
+        stepServizi.style.display = hasClient ? '' : 'none';
+        stepPrezzi.style.display = (hasClient && hasServizi) ? '' : 'none';
     }
 
  // Toggle campi sconto in base alla selezione
@@ -958,22 +1014,31 @@ function toggleScontoFields() {
     const tipo = select.value;
     const percFields = document.getElementById('scontoPercentualeFields');
     const omaggioFields = document.getElementById('scontoOmaggioFields');
+    const totaleManualeFields = document.getElementById('scontoTotaleManualeFields');
     const riepilogoDiv = document.getElementById('riepilogoSeduteDiv');
-    
+
     // Nascondi tutto
     percFields.style.display = 'none';
     omaggioFields.style.display = 'none';
+    totaleManualeFields.style.display = 'none';
     riepilogoDiv.style.display = 'none';
-    
+
     // Reset
     seduteOmaggio = [];
     document.getElementById('seduteOmaggioContainer').innerHTML = '';
-    
+
     if (tipo === 'Percentuale') {
         percFields.style.display = '';
     } else if (tipo === 'Ogni_N_Omaggio') {
         omaggioFields.style.display = '';
         generateSeduteOmaggioRows();
+    } else if (tipo === 'Totale_Scontato') {
+        // Totale scontato manuale: precompila col lordo come spunto, poi l'utente lo modifica
+        totaleManualeFields.style.display = '';
+        const manualeInput = document.getElementById('scontoTotaleManuale');
+        if (!manualeInput.value) {
+            manualeInput.value = (parseFloat(document.getElementById('costoTotale').value) || 0).toFixed(2);
+        }
     } else if (tipo.startsWith('promo_')) {
         // Promo salvata selezionata - leggi dai dataset individuali
         const selectedOption = select.options[select.selectedIndex];
@@ -1181,7 +1246,7 @@ function generateSeduteOmaggioRows() {
         const tipo = document.getElementById('scontoTipo').value;
         
         let scontato = totale;
-        
+
         if (tipo === 'Percentuale') {
             const perc = parseFloat(document.getElementById('scontoPercentuale').value) || 0;
             if (perc > 0) {
@@ -1191,6 +1256,15 @@ function generateSeduteOmaggioRows() {
         } else if (tipo === 'Ogni_N_Omaggio') {
             // Il prezzo resta INVARIATO - le sedute omaggio sono gratis
             scontato = totale;
+        } else if (tipo === 'Totale_Scontato') {
+            // Prezzo finale impostato a mano: del tutto indipendente da totale/percentuale.
+            // Niente arrotondamento automatico (l'utente scrive già la cifra esatta).
+            const manuale = parseFloat(document.getElementById('scontoTotaleManuale').value);
+            scontato = isNaN(manuale) ? totale : manuale;
+            document.getElementById('costoTotaleScontato').value = scontato.toFixed(2);
+            document.getElementById('prezzoRoundDownModal').style.display = 'none';
+            document.getElementById('prezzoRoundUpModal').style.display = 'none';
+            return;
         }
         
         // Applica arrotondamento manuale se presente
@@ -1605,6 +1679,7 @@ tooltips.forEach(el => new bootstrap.Tooltip(el));
         document.getElementById('clientSearch').value = name;
         document.getElementById('client_id').value = id;
         document.getElementById('clientDropdown').style.display = 'none';
+        updateFormStepsVisibility();  // scelto il cliente -> mostra la sezione servizi
     }
 
     // Ricerca beneficiario nel modal (per carte prepagate)
@@ -1804,6 +1879,8 @@ tooltips.forEach(el => new bootstrap.Tooltip(el));
         document.getElementById('serviceSearch').dataset.serviceId = id;
         document.getElementById('serviceSearch').dataset.prezzo = prezzo;
         document.getElementById('serviceDropdown').style.display = 'none';
+        // Servizio scelto -> mostra Quantità + Aggiungi
+        document.getElementById('serviceQtyAddCol').style.display = '';
     }
 
     // Aggiungi servizio alla lista
@@ -1840,6 +1917,8 @@ tooltips.forEach(el => new bootstrap.Tooltip(el));
         delete searchInput.dataset.serviceId;
         delete searchInput.dataset.prezzo;
         document.getElementById('serviceQuantita').value = '';
+        // Servizio aggiunto e ricerca svuotata -> nascondi di nuovo Quantità + Aggiungi
+        document.getElementById('serviceQtyAddCol').style.display = 'none';
     }
 
 // Aggiorna lista servizi
@@ -1907,6 +1986,11 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
     generateSeduteOmaggioRows();
     updateCostoScontato();
 });
+
+    // Event listener per il totale scontato manuale
+    document.getElementById('scontoTotaleManuale').addEventListener('input', function() {
+        updateCostoScontato();
+    });
 
     // Event listener per percentuale sconto
     document.getElementById('scontoPercentuale').addEventListener('input', function() {
@@ -2094,6 +2178,7 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         tipoPacchettoCorrente = 'servizi';
         document.getElementById('clientSearch').value = '';
         document.getElementById('serviceSearch').value = '';
+        document.getElementById('serviceQtyAddCol').style.display = 'none';
         document.getElementById('clientDropdown').style.display = 'none';
         document.getElementById('serviceDropdown').style.display = 'none';
         document.getElementById('scontoTipo').value = '';
@@ -2101,8 +2186,11 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         document.getElementById('scontoHint').style.display = '';
         document.getElementById('scontoPercentualeFields').style.display = 'none';
         document.getElementById('scontoOmaggioFields').style.display = 'none';
+        document.getElementById('scontoTotaleManualeFields').style.display = 'none';
+        document.getElementById('scontoTotaleManuale').value = '';
         document.getElementById('riepilogoSeduteDiv').style.display = 'none';
         document.getElementById('seduteOmaggioContainer').innerHTML = '';
+        updateFormStepsVisibility();  // reset: nascondi step servizi/prezzi finché non si ricompila
         
         // Reset campi prepagata
         document.getElementById('importoPagamento').value = '';

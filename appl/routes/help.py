@@ -477,14 +477,23 @@ Flusso standard:
 5️⃣ imposta <span class="help-strong-dark">quantità sedute</span>, automaticamente verrà calcolato il costo totale da listino del pacchetto
 
 
-<span class="help-strong-dark help-subtitle-pill">▸ SCONTO O SEDUTE OMAGGIO?</span>
-Subito dopo, potrai scegliere tra due modi principali per rendere il pacchetto più conveniente:
+<span class="help-strong-dark help-subtitle-pill">▸ SCONTO, SEDUTE OMAGGIO O TOTALE SCONTATO?</span>
+Subito dopo, potrai scegliere tra tre modi per rendere il pacchetto più conveniente:
 
-• applicare uno <span class="help-strong-dark">SCONTO</span> sul totale del prezzo del pacchetto
+• <span class="help-strong-dark">SCONTO PERCENTUALE</span>: applichi una percentuale (es. 10%) sul totale da listino e il prezzo finale viene ricalcolato in automatico
 
 oppure
 
-• lasciare il prezzo pieno ma aggiungere una o più <span class="help-strong-dark">SEDUTE OMAGGIO</span>
+• <span class="help-strong-dark">SEDUTE OMAGGIO</span>: lasci il prezzo pieno ma aggiungi una o più sedute gratis, scorporate dal conteggio di quelle pagate
+
+oppure
+
+• <span class="help-strong-dark">TOTALE SCONTATO</span>: imposti <span class="help-strong-dark">a mano la cifra finale</span> del pacchetto, in modo del tutto indipendente da percentuale e sedute omaggio. È utile quando vuoi fare un prezzo "su misura" (es. listino pieno €325, ma a una cliente storica lo fai a €270): scrivi semplicemente 270 e quello sarà il prezzo del pacchetto.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Differenza chiave:</span>
+<span class="help-hint-text">con lo <span class="help-strong-dark">Sconto Percentuale</span> il prezzo finale dipende dalla % che imposti; con il <span class="help-strong-dark">Totale scontato</span> sei tu a decidere direttamente l'importo, senza calcoli. Nel form trovi l'icona ⓘ accanto a "Tipo Sconto" che riepiloga le tre modalità.</span>
+</div>
 
 
 <span class="help-strong-dark help-subtitle-pill">▸ PACCHETTI GIÀ PREIMPOSTATI DA TOOLS</span>
