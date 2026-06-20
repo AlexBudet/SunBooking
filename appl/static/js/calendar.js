@@ -17655,7 +17655,10 @@ document.head.appendChild(aiStyleOverride);
     elDictation = document.getElementById('aiDictationPreview');
     elClose     = document.getElementById('aiChatClose');
 
-    if (!elBadge || !elModal) return;
+    // Il badge AI (elBadge) è stato RIMOSSO: l'IIFE deve comunque inizializzarsi
+    // perché il badge INFO riusa questa stessa modale e le sue funzioni.
+    // Quindi si richiede solo la presenza della modale, non del badge AI.
+    if (!elModal) return;
 
     // ── Crea pulsante Reset Chat dinamicamente nell'header ──
     (function createResetButton() {
@@ -17733,22 +17736,26 @@ document.head.appendChild(aiStyleOverride);
     AI.csrfToken = getCsrf();
     AI.baseUrl   = getBaseUrl();
 
-    checkAiStatus();
+    // checkAiStatus() RIMOSSO: serviva a mostrare il badge AI in base a
+    // /api/ai/status (endpoint eliminato). Il badge AI non esiste più.
     initSpeech();
     initAiChatResize();
 
-    // AI badge: se siamo (o eravamo) in info mode → switch ad AI mode
-    elBadge.addEventListener('click', function() {
-      if (AI.mode === 'info') {
-        _resetToAiWelcome();
-        if (!AI.isOpen) {
-          AI.isOpen = true;
-          elModal.style.display = 'flex';
+    // Badge AI rimosso: il listener si aggancia solo se l'elemento esiste
+    // (non esiste più). La modale resta in uso esclusivo del badge INFO.
+    if (elBadge) {
+      elBadge.addEventListener('click', function() {
+        if (AI.mode === 'info') {
+          _resetToAiWelcome();
+          if (!AI.isOpen) {
+            AI.isOpen = true;
+            elModal.style.display = 'flex';
+          }
+          return;
         }
-        return;
-      }
-      toggleChat();
-    });
+        toggleChat();
+      });
+    }
     elClose.addEventListener('click', toggleChat);
     elSendBtn.addEventListener('click', () => sendQuery(elInput.value));
 
@@ -17802,7 +17809,7 @@ document.head.appendChild(aiStyleOverride);
     document.addEventListener('click', function (e) {
       // Non chiudere se appena terminato un resize
       if (AI._justResized) return;
-      if (AI.isOpen && !elModal.contains(e.target) && !elBadge.contains(e.target)) {
+      if (AI.isOpen && !elModal.contains(e.target) && (!elBadge || !elBadge.contains(e.target))) {
         toggleChat();
       }
     });
