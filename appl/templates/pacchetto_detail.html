@@ -1945,7 +1945,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // Inizializza tutti i tooltip Bootstrap
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
-  new bootstrap.Tooltip(el);
+  const tip = new bootstrap.Tooltip(el);
+  // Al click l'elemento deve nascondere il proprio tooltip (es. icone disclaimer/whatsapp/pdf/stampa)
+  el.addEventListener('click', () => tip.hide());
 });
 
 document.addEventListener('click', function interceptClientInfo(e) {
@@ -3503,6 +3505,17 @@ Firma del cliente`;
 function renderFormattedLine(text, xPos, yPos, maxWidth) {
   console.log('=== renderFormattedLine chiamata ===');
   console.log('Input text:', text);
+
+  // Riga firma (solo underscore): disegna una linea vettoriale continua e regolare
+  // invece dei caratteri "_" che in Helvetica appaiono spezzati in più tratti
+  if (/^_{3,}\s*$/.test(text)) {
+    doc.setFont('helvetica', 'normal');
+    const lineWidth = Math.min(doc.getTextWidth(text.trim()), maxWidth);
+    doc.setLineWidth(0.5);
+    doc.line(xPos, yPos, xPos + lineWidth, yPos);
+    return yPos + fontSize * lineHeight;
+  }
+
   const segments = [];
   
   // Parsing manuale per gestire correttamente tutti i marker
