@@ -1430,6 +1430,18 @@ document.addEventListener('DOMContentLoaded', function() {
     })
     .then(r => r.json())
     .then(data => {
+      // Chiusura fiscale precedente mancante: blocca, mostra il modal dedicato.
+      if (data && data.needs_closure) {
+        lotteriaInvioLock = false;
+        btnLotteriaInvia.disabled = false;
+        btnLotteriaInvia.textContent = originalText;
+        if (typeof window.showChiusuraMancanteModal === 'function') {
+          window.showChiusuraMancanteModal(data);
+        } else {
+          alert(data.message || 'Esegui prima la chiusura fiscale.');
+        }
+        return;
+      }
       // Se c'è un pacchetto associato, redirect alla pagina dettaglio
       if (data.redirect_to_pacchetto) {
         const url = `/pacchetti/detail/${data.redirect_to_pacchetto}`;

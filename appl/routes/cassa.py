@@ -641,7 +641,106 @@ def api_clients():
     ])
 
 IDEMPOTENCY_STORE = {}
-RCH_PENDING = {} 
+RCH_PENDING = {}
+
+
+def _read_printer_lastz(ip, printer_model):
+    """Legge dalla stampante il numero dell'ultima chiusura fiscale (Z) via =C453.
+    Ritorna int (numero Z gia' eseguite) oppure None se non leggibile."""
+    try:
+        url = _rch_url(ip, printer_model)
+        headers = _rch_headers(printer_model)
+        rch_kwargs = _rch_request_kwargs(printer_model)
+        payload = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C453/$0</cmd></Service>'
+        resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=8,
+                             **rch_kwargs)
+        m_z = re.search(r'<lastZ>(\d+)</lastZ>', resp.text or "")
+        if m_z:
+            return int(m_z.group(1))
+    except Exception as exc:
+        try:
+            current_app.logger.warning("lettura lastZ (=C453) fallita: %s", str(exc))
+        except Exception:
+            pass
+    return None
+
+
+def _check_chiusura_precedente(ip, printer_model):
+    """Verifica, al PRIMO scontrino fiscale del giorno, se la chiusura fiscale (Z)
+    della sessione precedente e' stata eseguita.
+
+    Logica (fiscalmente robusta): ogni scontrino e' numerato 'ZZZZ-NNNN' dove ZZZZ
+    e' il periodo di chiusura APERTO al momento dell'emissione (= lastZ+1, vedi
+    send_to_rch). Se l'ultimo scontrino di un giorno PRECEDENTE appartiene ancora al
+    periodo aperto sulla stampante (lastZ+1), allora la Z non e' stata eseguita e i
+    nuovi scontrini finirebbero nello stesso periodo fiscale del giorno prima: in quel
+    caso bisogna eseguire la chiusura prima di emettere il primo scontrino di oggi.
+
+    Ritorna {needs_closure: bool, reason: str, ...}. In caso di incertezza (stampante
+    non leggibile, nessuno scontrino precedente, non e' il primo di oggi) NON blocca
+    (fail-open): si blocca SOLO quando si e' certi che manchi la Z, per non fermare
+    mai la normale operativita'.
+    """
+    try:
+        today = date.today()
+        day_start = datetime.combine(today, datetime.min.time())
+
+        # Gate attivo solo al PRIMO scontrino fiscale di oggi (esclusi gli ADJ di
+        # allineamento DGFE, che non sono scontrini reali).
+        today_count = Receipt.query.filter(
+            Receipt.created_at >= day_start,
+            Receipt.is_fiscale == True,
+            or_(Receipt.numero_progressivo.is_(None),
+                ~Receipt.numero_progressivo.like('ADJ-%'))
+        ).count()
+        if today_count > 0:
+            return {"needs_closure": False, "reason": "not_first_today"}
+
+        # Ultimo scontrino fiscale di un giorno PRECEDENTE con progressivo 'Z-N' valido.
+        prev_receipts = Receipt.query.filter(
+            Receipt.created_at < day_start,
+            Receipt.is_fiscale == True,
+        ).order_by(Receipt.created_at.desc()).limit(50).all()
+        last_period = None
+        for r in prev_receipts:
+            m = re.match(r'^(\d+)-(\d+)$', str(r.numero_progressivo or ""))
+            if m:
+                last_period = int(m.group(1))
+                break
+        if last_period is None:
+            return {"needs_closure": False, "reason": "no_prior_receipts"}
+
+        # Periodo di chiusura attualmente APERTO sulla stampante (= ultima Z + 1).
+        last_z = _read_printer_lastz(ip, printer_model)
+        if last_z is None:
+            # Non determinabile: non blocchiamo (la stampa stessa rileggera' lastZ).
+            return {"needs_closure": False, "reason": "printer_unreadable"}
+        open_period = last_z + 1
+
+        # Blocco SOLO quando il giorno precedente e' ancora nel periodo aperto:
+        # nessuna Z lo ha chiuso. open_period > last_period => Z eseguita (ok).
+        # open_period < last_period => anomalia (es. stampante sostituita/azzerata):
+        # non blocchiamo per non fermare l'attivita' su un caso ambiguo.
+        if open_period == last_period:
+            return {
+                "needs_closure": True,
+                "reason": "missing_z",
+                "last_receipt_period": last_period,
+                "open_period": open_period,
+            }
+        return {
+            "needs_closure": False,
+            "reason": "z_done" if open_period > last_period else "anomaly",
+            "last_receipt_period": last_period,
+            "open_period": open_period,
+        }
+    except Exception as exc:
+        try:
+            current_app.logger.warning("check chiusura precedente fallito: %s", str(exc))
+        except Exception:
+            pass
+        return {"needs_closure": False, "reason": "error"}
+
 
 @cassa_bp.route('/cassa/send-to-rch', methods=['POST'])
 def send_to_rch():
@@ -714,6 +813,25 @@ def send_to_rch():
         ip, printer_model = _get_printer_config()
         if not ip:
             return jsonify({"error": "IP stampante RCH non configurato"}), 400
+
+        # GATE CHIUSURA FISCALE: il PRIMO scontrino fiscale del giorno NON viene
+        # stampato se la chiusura (Z) della sessione precedente non e' stata eseguita,
+        # altrimenti i nuovi corrispettivi finirebbero nel periodo fiscale del giorno
+        # prima. In quel caso non stampiamo e chiediamo all'operatore di fare la Z.
+        gate = _check_chiusura_precedente(ip, printer_model)
+        if gate.get("needs_closure"):
+            current_app.logger.warning(
+                "Stampa primo scontrino bloccata: chiusura fiscale precedente mancante "
+                "(periodo aperto %s == ultimo scontrino %s).",
+                gate.get("open_period"), gate.get("last_receipt_period")
+            )
+            return jsonify({
+                "needs_closure": True,
+                "error": "Chiusura fiscale precedente mancante.",
+                "message": ("Prima di emettere il primo scontrino di oggi devi eseguire la "
+                            "chiusura fiscale (Z) della giornata precedente. Esegui la "
+                            "chiusura e riprova a stampare."),
+            }), 409
 
         xml_lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
@@ -1696,6 +1814,31 @@ def correggi_day_apply():
                 pass
             current_app.logger.error("correggi-day/apply: scrittura DB fallita: %s", str(exc))
             return jsonify({"error": f"Errore scrittura DB: {exc}"}), 500
+
+        # PERSISTENZA (come 'Allinea a DGFE'): scrivi l'esito nel log di
+        # riconciliazione cosi' la colonna DGFE del report resta valorizzata col
+        # totale fiscale corretto anche dopo ricarica/logout. Senza questo, la
+        # correzione modificava solo gli scontrini (dummy ADJ) ma la colonna
+        # continuava a mostrare il vecchio valore (es. 0 dopo una doppia Z
+        # mattutina), facendo sembrare che "Correggi" non avesse funzionato.
+        try:
+            bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+            if bi is not None:
+                _set_reconciliation_entry(bi.id, day_str, {
+                    "status": "fixed" if action in ("created", "updated", "deleted") else "ok",
+                    "date": day_str,
+                    "run_at": datetime.now().isoformat(timespec='seconds'),
+                    "dgfe_count": result["dgfe_count"],
+                    "db_count": result["db_count"],
+                    "dgfe_total": result["dgfe_total"],
+                    # Dopo l'allineamento il totale fiscale del giorno == DGFE.
+                    "db_total": result["dgfe_total"],
+                    "created_orphans": 0,
+                    "suspicious_extras": [],
+                    "notes": f"Corretto a DGFE da 'Correggi' (delta {delta:+.2f}).",
+                })
+        except Exception:
+            current_app.logger.warning("correggi-day/apply: log recon non scritto per %s", day_str)
 
         # Ricalcola lo stato post-correzione
         post = _correggi_day_compute(day)
@@ -2793,8 +2936,36 @@ def _save_reconciliation_log(business_info_id, data):
         raise
 
 def _set_reconciliation_entry(business_info_id, day_str, entry):
-    """Aggiorna/crea l'entry del giorno e persiste."""
+    """Aggiorna/crea l'entry del giorno e persiste.
+
+    ROBUSTEZZA FISCALE (anti-azzeramento): non degrada MAI un giorno gia'
+    verificato col DGFE (dgfe_count>0 e totale>0) verso una lettura vuota
+    (dgfe_count==0). Capita con la doppia chiusura Z mattutina a 0 (la 2a Z ha
+    gran totale 0) o quando la stampante e' occupata: la lettura torna vuota ma
+    il dato fiscale gia' acquisito NON deve essere sovrascritto/azzerato. Le
+    correzioni reali ('Correggi'/'Allinea a DGFE') leggono sempre scontrini
+    (dgfe_count>0) quindi non sono mai bloccate da questo guard.
+    """
     log = _load_reconciliation_log(business_info_id)
+    prev = log.get(day_str)
+    if prev:
+        try:
+            prev_cnt = int(prev.get("dgfe_count") or 0)
+            prev_tot = abs(float(prev.get("dgfe_total") or 0.0))
+            new_cnt = int(entry.get("dgfe_count") or 0)
+        except (TypeError, ValueError):
+            prev_cnt = prev_tot = new_cnt = 0
+        if prev_cnt > 0 and prev_tot > 0.01 and new_cnt == 0:
+            try:
+                current_app.logger.warning(
+                    "reconciliation %s: ignoro lettura DGFE vuota (new dgfe_count=0, "
+                    "status=%s) per non azzerare il dato gia' verificato "
+                    "(prev dgfe_count=%s tot=%.2f).",
+                    day_str, entry.get("status"), prev_cnt, prev_tot
+                )
+            except Exception:
+                pass
+            return
     log[day_str] = entry
     _save_reconciliation_log(business_info_id, log)
 
