@@ -444,16 +444,39 @@
 
                     <!-- SEZIONE CARTA PREPAGATA (nascosta di default) -->
                     <div id="sezionePrepagataCampi" style="display: none;">
+                    <!-- Guida passo-passo: come per i pacchetti, teniamo le istruzioni
+                         sempre visibili perché le carte non si emettono ogni giorno. -->
+                    <div class="alert alert-info py-2" id="prepagataGuida">
+                        <small>
+                            <strong>Come creare la carta prepagata:</strong><br>
+                            <span class="fw-bold">1)</span> seleziona il <strong>cliente</strong> &nbsp;·&nbsp;
+                            <span class="fw-bold">2)</span> inserisci l'<strong>importo pagato</strong> &nbsp;·&nbsp;
+                            <span class="fw-bold">3)</span> imposta l'eventuale <strong>bonus</strong> e il <strong>credito</strong> &nbsp;·&nbsp;
+                            <span class="fw-bold">4)</span> definisci <strong>beneficiario, scadenza e vincoli</strong> d'uso &nbsp;·&nbsp;
+                            <span class="fw-bold">5)</span> salva. I campi compaiono mano a mano che completi i passi.
+                        </small>
+                    </div>
+
+                    <!-- STEP CARTA: dati prepagata (compare dopo aver scelto il cliente) -->
+                    <div id="stepPrepagataDati" style="display: none;">
                         <!-- Importo che il cliente paga -->
                         <div class="mb-3">
-                            <label for="importoPagamento" class="form-label">Importo da Pagare (€)</label>
+                            <label for="importoPagamento" class="form-label">Importo da Pagare (€)
+                                <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                                   data-bs-toggle="tooltip" data-bs-placement="right"
+                                   title="L'importo che il cliente versa e che andrà in cassa. È la base su cui si calcola l'eventuale bonus e il credito totale disponibile."></i>
+                            </label>
                             <input type="number" class="form-control" id="importoPagamento" step="0.01" min="0" placeholder="es. 100.00" onchange="calcolaCreditoTotale()">
                             <small class="text-muted">L'importo che andrà in cassa</small>
                         </div>
-                        
+
                         <!-- Tipo bonus -->
                         <div class="mb-3">
-                            <label class="form-label">Bonus / Sconto</label>
+                            <label class="form-label">Bonus / Sconto
+                                <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                                   data-bs-toggle="tooltip" data-bs-placement="right" data-bs-html="true"
+                                   title="Credito extra regalato al cliente, in aggiunta all'importo pagato.<br><b>Bonus in €</b>: aggiunge una cifra fissa.<br><b>Bonus in %</b>: aggiunge una percentuale dell'importo (con arrotondamento opzionale).<br>Lascia <b>Nessun bonus</b> se il credito coincide con quanto pagato."></i>
+                            </label>
                             <div class="input-group">
                                 <select class="form-select" id="tipoBonusPrepagata" style="max-width: 140px;" onchange="calcolaCreditoTotale()">
                                     <option value="nessuno">Nessun bonus</option>
@@ -471,7 +494,11 @@
                         
                         <!-- Credito totale (calcolato) -->
                         <div class="mb-3">
-                            <label for="creditoTotaleCalcolato" class="form-label">Credito Totale (€)</label>
+                            <label for="creditoTotaleCalcolato" class="form-label">Credito Totale (€)
+                                <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                                   data-bs-toggle="tooltip" data-bs-placement="right"
+                                   title="Credito effettivamente spendibile dal cliente (importo pagato + bonus). È calcolato in automatico; con il pulsante matita puoi forzarlo a mano se serve."></i>
+                            </label>
                             <div class="input-group">
                                 <input type="number" class="form-control" id="creditoTotaleCalcolato" step="0.01" min="0" readonly style="background-color: #e9ecef; font-weight: bold;">
                                 <button type="button" class="btn btn-outline-secondary" onclick="sbloccaCreditoManuale()" data-bs-toggle="tooltip" title="Modifica manualmente">
@@ -482,18 +509,30 @@
                         </div>
                         
                         <div class="mb-3">
-                            <label for="beneficiarioNome" class="form-label">Beneficiario (opzionale)</label>
+                            <label for="beneficiarioNome" class="form-label">Beneficiario (opzionale)
+                                <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                                   data-bs-toggle="tooltip" data-bs-placement="right"
+                                   title="Da compilare solo se chi userà la carta è diverso da chi la paga (es. una gift card). Lascia vuoto se il beneficiario è il cliente stesso."></i>
+                            </label>
                             <input type="text" class="form-control" id="beneficiarioNome" placeholder="Se diverso dal cliente">
                             <small class="text-muted">Lascia vuoto se il beneficiario è il cliente stesso</small>
                         </div>
                         <div class="mb-3">
-                            <label for="dataScadenzaPrepagata" class="form-label">Data Scadenza (opzionale)</label>
+                            <label for="dataScadenzaPrepagata" class="form-label">Data Scadenza (opzionale)
+                                <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                                   data-bs-toggle="tooltip" data-bs-placement="right"
+                                   title="Data entro cui il credito va utilizzato. Lascia vuoto per una carta senza scadenza."></i>
+                            </label>
                             <input type="date" class="form-control" id="dataScadenzaPrepagata">
                         </div>
-                        
+
                         <!-- Vincoli utilizzo prepagata -->
                         <div class="mb-3">
-                            <label class="form-label">Utilizzo consentito</label>
+                            <label class="form-label">Utilizzo consentito
+                                <i class="bi bi-info-circle ms-1" style="cursor:help;"
+                                   data-bs-toggle="tooltip" data-bs-placement="right"
+                                   title="Limita su cosa è spendibile il credito: tutti i servizi, una singola categoria/sottocategoria, oppure solo servizi specifici che selezioni tu."></i>
+                            </label>
                             <select class="form-select" id="vincoloTipo" onchange="toggleVincoliFields()">
                                 <option value="tutti">Tutti i servizi</option>
                                 <option value="categoria">Solo una categoria</option>
@@ -529,6 +568,7 @@
                             <div id="vincoloServizioDropdown" class="dropdown-menu" style="position: relative; width: 100%;"></div>
                             <ul id="vincoloServiziList" class="list-group mt-2"></ul>
                         </div>
+                    </div><!-- fine stepPrepagataDati -->
                     </div>
 
                     <!-- SEZIONE SERVIZI (visibile di default) -->
@@ -757,8 +797,8 @@
             sezioneServizi.style.display = 'block';
             sezionePrepagata.style.display = 'none';
             document.getElementById('offcanvasTitle').textContent = 'Crea Nuovo Pacchetto';
-            updateFormStepsVisibility();  // ricalcola la visibilità degli step servizi
         }
+        updateFormStepsVisibility();  // ricalcola la visibilità degli step (servizi o prepagata)
     }
 
     // Event listener per i radio button tipo pacchetto
@@ -999,10 +1039,17 @@
     //  - stepServizi: visibile dopo aver scelto il cliente
     //  - stepPrezzi:  visibile dopo aver aggiunto almeno un servizio
     function updateFormStepsVisibility() {
+        const hasClient = !!(document.getElementById('client_id').value || '').trim();
+
+        // Step carta prepagata: i dati della carta compaiono dopo aver scelto il cliente
+        const stepPrepagataDati = document.getElementById('stepPrepagataDati');
+        if (stepPrepagataDati) {
+            stepPrepagataDati.style.display = (tipoPacchettoCorrente === 'prepagata' && hasClient) ? '' : 'none';
+        }
+
         const stepServizi = document.getElementById('stepServizi');
         const stepPrezzi = document.getElementById('stepPrezzi');
         if (!stepServizi || !stepPrezzi) return;
-        const hasClient = !!(document.getElementById('client_id').value || '').trim();
         const hasServizi = serviziSelezionati.length > 0;
         stepServizi.style.display = hasClient ? '' : 'none';
         stepPrezzi.style.display = (hasClient && hasServizi) ? '' : 'none';
@@ -2285,7 +2332,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Popola il campo di ricerca con il nuovo cliente
                     document.getElementById('clientSearch').value = `${nome} ${cognome}`;
                     document.getElementById('client_id').value = data.client_id;
-                    
+                    updateFormStepsVisibility();  // scelto il cliente -> mostra lo step servizi/prepagata
+
                     alert('Cliente aggiunto con successo!');
                 } else {
                     alert('Errore: ' + (data.message || 'Impossibile aggiungere il cliente'));
