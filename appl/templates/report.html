@@ -2450,6 +2450,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (tr.cells[2]) tr.cells[2].textContent = (newTotale || 0).toFixed(2);
         tr.style.background = '';
       }
+      // Aggiorna anche la colonna DGFE col valore fiscale corretto (letto live):
+      // senza questo la cella restava sul vecchio valore (es. 0 dopo doppia Z).
+      if (dgfeCell && post.dgfe_total != null) {
+        _renderDgfeCellRead(dgfeCell, post.dgfe_total, newTotale);
+        if (tr) tr.dataset.dgfeTotal = String(post.dgfe_total);
+      }
       if (azioniCell) azioniCell.innerHTML = '';
       _updateRigaTotaleDb();
       alert(`Correzione applicata.\nDelta: € ${(data.applied_delta || 0).toFixed(2)}\nAzione: ${data.action}`);

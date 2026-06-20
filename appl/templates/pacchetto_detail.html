@@ -49,6 +49,23 @@
     .programma-card.status-completato:hover h5,
     .programma-card.status-completato:hover b { color: #ffffff; }
 
+    /* FIX testo bianco-su-bianco su pacchetto completato (sfondo grigio).
+       Il menu a tendina del consenso (sfondo BIANCO) sta dentro la card: quando
+       la card va in :hover la regola sopra colora di bianco TUTTI gli <a>
+       discendenti, incluse le voci del menu -> bianco su bianco, illeggibili.
+       Qui ripristiniamo il testo scuro sulle voci del menu, in ogni stato. */
+    .programma-card.status-completato .dropdown-menu .dropdown-item,
+    .programma-card.status-completato:hover .dropdown-menu .dropdown-item,
+    .programma-card.status-completato:hover .dropdown-menu .dropdown-item:hover {
+      color: #212529 !important;
+    }
+    /* Le voci "pericolo" (es. Elimina) restano rosse sul menu bianco */
+    .programma-card.status-completato .dropdown-menu .dropdown-item.text-danger,
+    .programma-card.status-completato:hover .dropdown-menu .dropdown-item.text-danger,
+    .programma-card.status-completato:hover .dropdown-menu .dropdown-item.text-danger:hover {
+      color: #dc3545 !important;
+    }
+
 .status-row { transition: background-color .15s ease, color .15s ease; }
 
 .status-row.status-preventivo:hover > td,
