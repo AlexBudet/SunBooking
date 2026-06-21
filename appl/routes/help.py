@@ -291,7 +291,7 @@ Se il cliente ha una prepagata attiva, puoi scalare il costo direttamente da lì
 3️⃣ Oppure, se vuoi modificare il metodo per tutte le voci, usa i tasti in fondo: "cash", "pos", "bank"
 4️⃣ Procedi cliccando su "Avanti"!
 
-Puoi anche dividere il pagamento su più metodi! 💡""",
+Puoi anche dividere il pagamento su più metodi (split): usa la forbice ✂️ accanto alla voce per dividere il singolo importo, o il tasto "Dividi" in basso per l'intero scontrino. 💡""",
     },
     
     "cassa_blocchi_appuntamento": {
@@ -1525,10 +1525,24 @@ I documenti non fiscali/test sono trattati in modo distinto nel Registro.""",
 
 In basso a destra trovi il riquadro <span class=\"help-strong-dark help-subtitle-pill\">Clienti in istituto</span>
 
-Mostra gli appuntamenti per ogni cliente che in Agenda è indicato come <span class=\"help-strong-dark\">presente in istituto</span>. Puoi usarlo per:
+Mostra gli appuntamenti per ogni cliente che in Agenda è indicato come <span class=\"help-strong-dark\">presente in istituto</span>.
 
-• tornare in Agenda con il tasto &nbsp;<span class=\"help-strong-dark\"><i class="bi bi-calendar2-week"></i></span>
-• portare i servizi relativi nella bozza scontrino con il tasto <span class=\"help-strong-dark\"><i class="bi bi-currency-euro"></i></span>
+<span class=\"help-strong-dark\">Come si usa</span>
+• <span class=\"help-strong-dark\">Clicca direttamente sul blocco del cliente</span> per caricarne i servizi nella bozza scontrino (non c'è più il tasto €: basta il clic sul blocco)
+• Passando il mouse sul blocco compare solo il tasto <span class=\"help-strong-dark\"><i class="bi bi-calendar2-week"></i></span> per tornare in Agenda su quell'appuntamento
+• Un blocco già caricato è segnato con <span class=\"help-strong-dark\">✓ in bozza</span>: cliccandolo di nuovo lo <span class=\"help-strong-dark\">togli</span> dalla bozza
+
+<span class=\"help-strong-dark\">Scontrino per più clienti</span>
+Puoi pagare insieme due o più clienti diversi presenti in istituto (es. due amiche che pagano una per l'altra):
+• carica il primo cliente cliccando il suo blocco
+• clicca il blocco di un altro cliente: comparirà un <span class=\"help-strong-dark\">avviso di conferma</span> (così non aggiungi un cliente per sbaglio); confermando, i suoi appuntamenti entrano nella stessa bozza
+• le righe restano <span class=\"help-strong-dark\">raggruppate per cliente</span> e il campo cliente mostra "Più clienti"
+• alla stampa vengono emessi <span class=\"help-strong-dark\">scontrini separati, uno per ciascun cliente</span>, ma con un unico comando Stampa
+
+<div class="help-hint-box">
+<span class="help-hint-label">Nota:</span>
+<span class="help-hint-text">La modalità più clienti è disponibile solo dal riquadro "Clienti in istituto". Con più clienti nella stessa bozza, il pagamento con prepagata non è disponibile.</span>
+</div>
 
 Quando la bozza scontrino viene creata a partire da appuntamenti in Agenda, compaiono anche dei tasti aggiuntivi per gestire le modifiche:
 
@@ -1555,7 +1569,15 @@ Ogni riga della bozza può essere rifinita prima della conferma.
 • Bank = altro tipo di pagamento: bonifico, assegno, pagamento online, ecc. 📱
 • Prepagata (solo quando c'è una CARTA PREPAGATA associata al cliente) 💳
 
-In basso trovi anche i bottoni rapidi per applicare il metodo a tutte le righe e leggere i subtotali per metodo.""",
+In basso trovi anche i bottoni rapidi per applicare il metodo a tutte le righe e leggere i subtotali per metodo.
+
+<span class=\"help-strong-dark\">Dividere il pagamento su più metodi (split)</span>
+Quando un importo viene saldato con più forme di pagamento (es. 50€ = 30 contanti + 20 POS):
+• per una <span class=\"help-strong-dark\">singola voce</span>: clicca la forbice <i class="bi bi-scissors"></i> accanto al metodo e indica gli importi per Cash / POS / Bank
+• per <span class=\"help-strong-dark\">tutto lo scontrino</span>: usa il tasto <span class=\"help-strong-dark\"><i class="bi bi-scissors"></i> Dividi</span> in basso
+• <span class=\"help-strong-dark\">auto-compilazione</span>: appena scrivi l'importo in Cash, il campo POS si completa da solo con il resto (e viceversa). Bank resta manuale ed è escluso da questo automatismo; ogni valore resta comunque modificabile a mano.
+
+La voce divisa resta <span class=\"help-strong-dark\">una sola riga</span> sullo scontrino (e una sola riga stampata): il totale viene solo ripartito sui metodi indicati. Una voce con pagamento diviso mostra il badge <span class=\"help-strong-dark\">Misto</span>.""",
     },
 
     "cassa_registro_ruoli": {
