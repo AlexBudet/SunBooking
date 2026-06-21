@@ -632,6 +632,14 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       return;
     }
 
+    // MULTI-CLIENTE: se la bozza contiene appuntamenti di clienti diversi, emetti
+    // uno scontrino fiscale separato per ciascun cliente, da un solo click STAMPA.
+    const _distinctClienti = new Set([...rows].map(r => r.dataset.clientId).filter(Boolean));
+    if (_distinctClienti.size >= 2) {
+      await stampaMultiClienteFlow(() => { stampaLock = false; });
+      return;
+    }
+
     const voci_fiscali = [];
     let  voci_non_fiscali = [];
 
@@ -684,6 +692,15 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       if (appointment_id) voce.appointment_id = appointment_id;
       if (rata_id) voce.rata_id = parseInt(rata_id);
       if (pacchetto_id) voce.pacchetto_id = parseInt(pacchetto_id);
+
+      // Split pagamento della singola voce (es. 30 contanti + 20 POS)
+      if (!isPrepagata) {
+        const pagamentiRiga = getRowPagamenti(row);
+        if (pagamentiRiga && pagamentiRiga.length) voce.pagamenti = pagamentiRiga;
+      }
+      // Cliente associato alla riga (per lo storico; usato nel flusso multi-cliente)
+      const clientIdRiga = row.dataset.clientId || cliente_id || null;
+      if (clientIdRiga) voce.cliente_id = clientIdRiga;
       
       // IMPORTANTE: Copia prepagata_id e ricarica_prepagata_id dal dataset della riga
       const prepagataId = row.dataset.prepagataId;
@@ -1474,12 +1491,21 @@ function resetScontrino(keepData = false) {
   if (clienteInput) {
     clienteInput.value = '';
     delete clienteInput.dataset.selectedClient;
+    // Ripristina lo stato del campo dopo una bozza multi-cliente
+    clienteInput.readOnly = false;
+    clienteInput.classList.remove('multi-cliente-field');
   }
+  window.multiClienteAttivo = false;
   const operatoreInput = document.getElementById('operatorSelectInput');
   if (operatoreInput) {
     operatoreInput.value = '';
     delete operatoreInput.dataset.selectedOperator;
+    operatoreInput.disabled = false;
+    operatoreInput.placeholder = 'Salone';
   }
+  document.body.classList.remove('show-op-per-riga');
+  const toggleOpBtn = document.getElementById('toggleOperatoriRiga');
+  if (toggleOpBtn) toggleOpBtn.classList.remove('active');
 
   // Svuota localStorage (aggiungi qui tutte le chiavi che usi)
   localStorage.removeItem('scontrinoServizi');
@@ -1542,6 +1568,9 @@ row.className = 'd-flex align-items-center scontrino-row';
   row.dataset.sottocategoriaId = servizio.sottocategoria_id || '';
   row.dataset.operatorId = servizio.operator_id || '';
   row.dataset.operatorNome = servizio.operator_nome || '';
+  // Cliente associato alla riga (usato per gli scontrini multi-cliente da "Clienti in istituto")
+  row.dataset.clientId = servizio.cliente_id ? String(servizio.cliente_id) : '';
+  row.dataset.clientNome = servizio.cliente_nome || '';
 
   // Se la riga proviene da un appuntamento del calendar, memorizza l'id originale
   if (servizio.appointment_id) {
@@ -1675,6 +1704,38 @@ row.className = 'd-flex align-items-center scontrino-row';
   payIcon.className = 'bi bi-calculator ms-2';
   row.appendChild(payIcon);
 
+  // Badge "Misto" mostrato quando il pagamento della riga e' splittato su piu' metodi
+  const mistoBadge = document.createElement('span');
+  mistoBadge.className = 'scontrino-misto-badge';
+  mistoBadge.style.display = 'none';
+  applyBsTooltip(mistoBadge, 'Pagamento diviso su più metodi - clicca per modificare');
+  mistoBadge.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    apriSplitPagamentoRiga(row);
+  });
+  row.appendChild(mistoBadge);
+
+  // Pulsante "dividi pagamento di questa voce" (split su più metodi)
+  const splitBtn = document.createElement('button');
+  splitBtn.type = 'button';
+  splitBtn.className = 'btn btn-link p-0 ms-1 scontrino-split-btn';
+  splitBtn.tabIndex = -1;
+  const splitIcon = document.createElement('i');
+  splitIcon.className = 'bi bi-distribute-horizontal';
+  splitBtn.appendChild(splitIcon);
+  applyBsTooltip(splitBtn, 'Dividi il pagamento di questa voce su più metodi');
+  splitBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    apriSplitPagamentoRiga(row);
+  });
+  // Lo split non si applica alle righe a importo fisso (prepagata / ricarica)
+  if (servizio.prepagata_id || servizio.ricarica_prepagata_id) {
+    splitBtn.style.display = 'none';
+  }
+  row.appendChild(splitBtn);
+
   // Tasto cancella
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
@@ -1684,9 +1745,11 @@ row.className = 'd-flex align-items-center scontrino-row';
   delBtn.appendChild(xIcon);
   delBtn.onclick = function () {
     const apptId = row.dataset.appointmentId || '';
+    if (apptId && window.originalAppointmentIds) window.originalAppointmentIds.delete(String(apptId));
     row.remove();
     aggiornaTotale();
     aggiornaSubtotaliPagamenti();
+    if (typeof aggiornaStatoMultiCliente === 'function') aggiornaStatoMultiCliente();
 
     // Aggiorna storage servizi manuali
     let servizi = JSON.parse(localStorage.getItem('scontrinoServizi') || '[]');
@@ -1702,6 +1765,8 @@ row.className = 'd-flex align-items-center scontrino-row';
 
   // Sincronizzazione prezzo <-> sconto
   prezzo.addEventListener('input', function () {
+    // Cambiare il prezzo invalida un'eventuale ripartizione split della riga
+    if (getRowPagamenti(row)) setRowPagamenti(row, null);
     const nuovoPrezzo = parseFloat(prezzo.value) || 0;
     let scontoPerc = 0;
     if (prezzoOriginale > 0) {
@@ -1740,7 +1805,19 @@ row.className = 'd-flex align-items-center scontrino-row';
   selectPay.addEventListener('change', function () {
     const nuovoMetodo = selectPay.value;
     const vecchioMetodo = row.dataset.vecchioMetodo || 'pos';
-    
+
+    // Cambiare metodo manualmente annulla un eventuale split pagamento della riga
+    if (getRowPagamenti(row)) {
+      setRowPagamenti(row, null);
+    }
+
+    // La prepagata non e' ammessa quando la bozza contiene piu' clienti
+    if (nuovoMetodo === 'prepagata' && window.multiClienteAttivo) {
+      alert('Il pagamento con prepagata non è disponibile per uno scontrino con più clienti.');
+      selectPay.value = vecchioMetodo;
+      return;
+    }
+
     // Se si seleziona prepagata, verifica il saldo
     if (nuovoMetodo === 'prepagata') {
       const prezzoRiga = parseFloat(prezzo.value) || 0;
@@ -1872,6 +1949,8 @@ row.className = 'd-flex align-items-center scontrino-row';
 // Cambia metodo pagamento globale
 function aggiornaMetodoPagamentoGlobale(tipo) {
   document.querySelectorAll('#scontrinoRowsContainer .scontrino-row').forEach(row => {
+    // Applicare un metodo globale annulla eventuali split pagamento sulla riga
+    if (getRowPagamenti(row)) setRowPagamenti(row, null);
     const select = row.querySelector('select');
     const icon = row.querySelector('i');
     // Aggiorna il metodo di pagamento
@@ -2033,6 +2112,16 @@ function aggiornaSubtotaliPagamenti() {
   let subtotali = { pos: 0, cash: 0, bank: 0, prepagata: 0 };
   rows.forEach(row => {
     const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
+    const pagamenti = getRowPagamenti(row);
+    if (pagamenti && pagamenti.length) {
+      // Riga con pagamento splittato: ripartisci gli importi sui rispettivi metodi
+      pagamenti.forEach(p => {
+        if (subtotali.hasOwnProperty(p.metodo)) {
+          subtotali[p.metodo] += parseFloat(p.importo) || 0;
+        }
+      });
+      return;
+    }
     const metodo = row.querySelector('select')?.value || 'cash';
     if (subtotali.hasOwnProperty(metodo)) {
       subtotali[metodo] += prezzo;
@@ -2079,6 +2168,388 @@ function aggiornaSubtotaliPagamenti() {
     subtotaliDiv.style.display = 'none';
   }
 }
+
+// ============================================================
+// SPLIT PAGAMENTO (per riga e per scontrino) + MULTI-CLIENTE
+// ============================================================
+
+// Legge la ripartizione pagamento salvata sulla riga (o null se metodo singolo)
+function getRowPagamenti(row) {
+  if (!row || !row.dataset || !row.dataset.pagamenti) return null;
+  try {
+    const a = JSON.parse(row.dataset.pagamenti);
+    return (Array.isArray(a) && a.length) ? a : null;
+  } catch (_) { return null; }
+}
+
+// Imposta/azzera lo split pagamento di una riga e aggiorna la UI della riga
+function setRowPagamenti(row, arr) {
+  const select = row.querySelector('select');
+  const payIcon = select ? select.nextElementSibling : null;
+  const badge = row.querySelector('.scontrino-misto-badge');
+  if (arr && arr.length > 1) {
+    row.dataset.pagamenti = JSON.stringify(arr);
+    if (select) select.style.display = 'none';
+    if (payIcon && payIcon.tagName === 'I') payIcon.style.display = 'none';
+    if (badge) {
+      const riass = arr.map(p => `${String(p.metodo).toUpperCase()} €${(parseFloat(p.importo) || 0).toFixed(2)}`).join(' + ');
+      badge.textContent = 'Misto';
+      badge.setAttribute('title', riass);
+      try {
+        const t = bootstrap.Tooltip.getInstance(badge);
+        if (t) t.setContent({ '.tooltip-inner': riass });
+      } catch (_) {}
+      badge.style.display = 'inline-block';
+    }
+  } else {
+    delete row.dataset.pagamenti;
+    if (select) select.style.display = '';
+    if (payIcon && payIcon.tagName === 'I') payIcon.style.display = '';
+    if (badge) badge.style.display = 'none';
+  }
+  aggiornaTotale();
+  aggiornaSubtotaliPagamenti();
+}
+
+// Apre la modale per dividere il pagamento della singola voce
+function apriSplitPagamentoRiga(row) {
+  const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0') || 0;
+  if (prezzo <= 0) { alert('Imposta prima un prezzo per dividere il pagamento.'); return; }
+  const esistenti = getRowPagamenti(row);
+  const iniziali = { cash: 0, pos: 0, bank: 0 };
+  if (esistenti) {
+    esistenti.forEach(p => { if (iniziali.hasOwnProperty(p.metodo)) iniziali[p.metodo] += parseFloat(p.importo) || 0; });
+  } else {
+    const m = row.querySelector('select')?.value || 'cash';
+    if (iniziali.hasOwnProperty(m)) iniziali[m] = prezzo; else iniziali.cash = prezzo;
+  }
+  apriSplitModal(prezzo, iniziali, 'Dividi pagamento voce', function (arr) {
+    if (arr.length <= 1) {
+      setRowPagamenti(row, null);
+      if (arr.length === 1) {
+        const s = row.querySelector('select');
+        if (s) { s.value = arr[0].metodo; s.dispatchEvent(new Event('change')); }
+      }
+    } else {
+      setRowPagamenti(row, arr);
+    }
+  });
+}
+
+// Apre la modale per dividere il pagamento dell'intero scontrino (parte fiscale)
+function apriSplitPagamentoScontrino() {
+  let totale = 0;
+  document.querySelectorAll('.scontrino-row').forEach(row => {
+    const isGrigia = row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc';
+    const m = row.querySelector('select')?.value || 'cash';
+    if (!isGrigia && m !== 'prepagata') totale += parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0') || 0;
+  });
+  totale = Math.round(totale * 100) / 100;
+  if (totale <= 0) { alert('Nessun importo fiscale da dividere.'); return; }
+  apriSplitModal(totale, { cash: 0, pos: 0, bank: 0 }, 'Dividi pagamento scontrino', applicaSplitScontrino);
+}
+
+// Distribuisce la ripartizione richiesta sulle righe fiscali (split per riga al confine)
+function applicaSplitScontrino(arr) {
+  const want = { cash: 0, pos: 0, bank: 0 };
+  arr.forEach(p => { if (want.hasOwnProperty(p.metodo)) want[p.metodo] += Math.round((parseFloat(p.importo) || 0) * 100); });
+  const rows = [...document.querySelectorAll('.scontrino-row')].filter(row => {
+    const isGrigia = row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc';
+    const m = row.querySelector('select')?.value || 'cash';
+    return !isGrigia && m !== 'prepagata';
+  });
+  const methods = ['cash', 'pos', 'bank'].map(m => ({ metodo: m, rem: want[m] })).filter(x => x.rem > 0);
+  rows.forEach(row => {
+    let price = Math.round((parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0') || 0) * 100);
+    const parts = [];
+    for (const mo of methods) {
+      if (price <= 0) break;
+      if (mo.rem <= 0) continue;
+      const take = Math.min(price, mo.rem);
+      if (take > 0) { parts.push({ metodo: mo.metodo, importo: take / 100 }); mo.rem -= take; price -= take; }
+    }
+    if (price > 0) {
+      if (parts.length) parts[parts.length - 1].importo = Math.round((parts[parts.length - 1].importo + price / 100) * 100) / 100;
+      else parts.push({ metodo: (row.querySelector('select')?.value || 'cash'), importo: price / 100 });
+    }
+    if (parts.length <= 1) {
+      setRowPagamenti(row, null);
+      if (parts.length === 1) {
+        const s = row.querySelector('select');
+        if (s) { s.value = parts[0].metodo; s.dispatchEvent(new Event('change')); }
+      }
+    } else {
+      setRowPagamenti(row, parts);
+    }
+  });
+}
+
+// Controller generico della modale di split
+let _splitModalApply = null;
+let _splitModalWired = false;
+function apriSplitModal(totale, iniziali, titolo, onApply) {
+  const modalEl = document.getElementById('modalSplitPagamento');
+  if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+    alert('Funzione split non disponibile.');
+    return;
+  }
+  document.getElementById('splitModalTitle').textContent = titolo || 'Dividi pagamento';
+  document.getElementById('splitModalTotale').textContent = '€ ' + (Math.round(totale * 100) / 100).toFixed(2);
+  modalEl.dataset.totale = String(totale || 0);
+  const cash = document.getElementById('splitCash');
+  const pos = document.getElementById('splitPos');
+  const bank = document.getElementById('splitBank');
+  cash.value = (iniziali && iniziali.cash) ? (Math.round(iniziali.cash * 100) / 100).toFixed(2) : '';
+  pos.value = (iniziali && iniziali.pos) ? (Math.round(iniziali.pos * 100) / 100).toFixed(2) : '';
+  bank.value = (iniziali && iniziali.bank) ? (Math.round(iniziali.bank * 100) / 100).toFixed(2) : '';
+  _splitModalApply = onApply;
+  if (!_splitModalWired) {
+    [cash, pos, bank].forEach(inp => inp.addEventListener('input', aggiornaRestoSplitModal));
+    document.getElementById('splitModalApplica').addEventListener('click', function () {
+      const c = parseFloat(cash.value) || 0;
+      const p = parseFloat(pos.value) || 0;
+      const b = parseFloat(bank.value) || 0;
+      const out = [];
+      if (c > 0) out.push({ metodo: 'cash', importo: Math.round(c * 100) / 100 });
+      if (p > 0) out.push({ metodo: 'pos', importo: Math.round(p * 100) / 100 });
+      if (b > 0) out.push({ metodo: 'bank', importo: Math.round(b * 100) / 100 });
+      bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+      if (typeof _splitModalApply === 'function') _splitModalApply(out);
+    });
+    _splitModalWired = true;
+  }
+  aggiornaRestoSplitModal();
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+
+function aggiornaRestoSplitModal() {
+  const modalEl = document.getElementById('modalSplitPagamento');
+  const totale = parseFloat(modalEl.dataset.totale || '0') || 0;
+  const c = parseFloat(document.getElementById('splitCash').value) || 0;
+  const p = parseFloat(document.getElementById('splitPos').value) || 0;
+  const b = parseFloat(document.getElementById('splitBank').value) || 0;
+  const somma = c + p + b;
+  const resto = Math.round((totale - somma) * 100) / 100;
+  const restoEl = document.getElementById('splitModalResto');
+  restoEl.textContent = '€ ' + resto.toFixed(2);
+  const ok = Math.abs(resto) < 0.005 && somma > 0;
+  restoEl.style.color = ok ? '#198754' : '#dc3545';
+  document.getElementById('splitModalApplica').disabled = !ok;
+}
+
+// --- MULTI-CLIENTE: raggruppamento bozza, stato, stampa ---
+
+// Inserisce/aggiorna le intestazioni-cliente nella bozza quando ci sono piu' clienti
+function aggiornaRaggruppamentoClienti() {
+  const container = document.getElementById('scontrinoRowsContainer');
+  if (!container) return;
+  container.querySelectorAll('.cliente-group-header').forEach(h => h.remove());
+  const rows = [...container.querySelectorAll('.scontrino-row')];
+  const distinct = new Set(rows.map(r => r.dataset.clientId).filter(Boolean));
+  if (distinct.size < 2) return;
+  let last = null;
+  rows.forEach(r => {
+    const cid = r.dataset.clientId || '';
+    if (cid !== last) {
+      const h = document.createElement('div');
+      h.className = 'cliente-group-header';
+      h.textContent = (r.dataset.clientNome || 'Cliente').toUpperCase();
+      container.insertBefore(h, r);
+      last = cid;
+    }
+  });
+}
+
+// Aggiorna flag multi-cliente, campo cliente e raggruppamento dopo append/rimozione
+function aggiornaStatoMultiCliente() {
+  const rows = [...document.querySelectorAll('#scontrinoRowsContainer .scontrino-row')];
+  const distinct = [...new Set(rows.map(r => r.dataset.clientId).filter(Boolean))];
+  const clientInput = document.getElementById('clientSearchInputCassa');
+  if (distinct.length >= 2) {
+    window.multiClienteAttivo = true;
+    if (clientInput) {
+      window.settingClientProgrammatically = true;
+      clientInput.value = 'Più clienti (' + distinct.length + ')';
+      delete clientInput.dataset.selectedClient;
+      clientInput.readOnly = true;
+      clientInput.classList.add('multi-cliente-field');
+    }
+  } else {
+    window.multiClienteAttivo = false;
+    if (clientInput) {
+      clientInput.readOnly = false;
+      clientInput.classList.remove('multi-cliente-field');
+      if (distinct.length === 1 && (clientInput.value.startsWith('Più clienti') || !clientInput.dataset.selectedClient)) {
+        const r = rows.find(rr => rr.dataset.clientId === distinct[0]);
+        if (r && r.dataset.clientNome) {
+          window.settingClientProgrammatically = true;
+          clientInput.value = r.dataset.clientNome;
+          clientInput.dataset.selectedClient = distinct[0];
+        }
+      }
+    }
+  }
+  aggiornaRaggruppamentoClienti();
+}
+window.aggiornaStatoMultiCliente = aggiornaStatoMultiCliente;
+
+// Rimuove dalla bozza le righe degli appuntamenti indicati (toggle blocco myspia)
+window.rimuoviPseudoscontrinoMySpia = function (ids) {
+  const set = new Set((Array.isArray(ids) ? ids : String(ids).split(',')).map(String));
+  document.querySelectorAll('#scontrinoRowsContainer .scontrino-row').forEach(row => {
+    if (row.dataset.appointmentId && set.has(String(row.dataset.appointmentId))) {
+      if (window.originalAppointmentIds) window.originalAppointmentIds.delete(String(row.dataset.appointmentId));
+      row.remove();
+    }
+  });
+  aggiornaTotale();
+  aggiornaSubtotaliPagamenti();
+  aggiornaStatoMultiCliente();
+};
+
+// Genera una idempotency key (uuid v4 semplificato) per le stampe fiscali
+function generaIdempotencyKeyGlobale() {
+  return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+    (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+  );
+}
+
+// Raggruppa le righe correnti per cliente (preserva l'ordine di apparizione)
+function getClientGroupsFromRows() {
+  const rows = [...document.querySelectorAll('#scontrinoRowsContainer .scontrino-row')];
+  const map = new Map();
+  const order = [];
+  rows.forEach(r => {
+    const cid = r.dataset.clientId || '';
+    if (!map.has(cid)) { map.set(cid, { clientId: cid || null, clientNome: r.dataset.clientNome || '', rows: [] }); order.push(cid); }
+    map.get(cid).rows.push(r);
+  });
+  return order.map(c => map.get(c));
+}
+
+// Costruisce voci fiscali/non fiscali dalle righe date (usato dal flusso multi-cliente)
+function raccogliVociDaRighe(rows) {
+  const voci_fiscali = [];
+  const voci_non_fiscali = [];
+  let hasError = false;
+  const operatoreGlobale = document.getElementById('operatorSelectInput')?.dataset.selectedOperator || null;
+  rows.forEach(row => {
+    if (hasError) return;
+    const isGrigia = row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc';
+    const nome = row.querySelector('.flex-grow-1')?.textContent.trim() || '';
+    const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
+    const sconto_riga = parseInt(row.querySelector('.scontrino-row-sconto')?.value || '0');
+    const metodo = row.querySelector('select')?.value || 'cash';
+    if (!isFinite(prezzo) || isNaN(prezzo)) { alert('Prezzo non valido in una riga. Correggi prima di inviare.'); hasError = true; return; }
+    if (prezzo < 0) { alert('Prezzi negativi non sono consentiti.'); hasError = true; return; }
+    const pagamenti = getRowPagamenti(row);
+    const voce = {
+      servizio_id: row.dataset.servizioId || null,
+      nome,
+      prezzo,
+      prezzo_originale: prezzo,
+      sconto_riga,
+      tipo: 'service',
+      metodo_pagamento: (pagamenti && pagamenti.length) ? pagamenti[0].metodo : metodo,
+      is_fiscale: !isGrigia,
+      operator_id: row.dataset.operatorId || operatoreGlobale
+    };
+    if (pagamenti && pagamenti.length) voce.pagamenti = pagamenti;
+    if (row.dataset.appointmentId) voce.appointment_id = row.dataset.appointmentId;
+    if (row.dataset.clientId) voce.cliente_id = row.dataset.clientId;
+    if (isGrigia) voci_non_fiscali.push(voce); else voci_fiscali.push(voce);
+  });
+  return { voci_fiscali, voci_non_fiscali, hasError };
+}
+
+// Aggiorna a "pagato" (status 2) gli appuntamenti della bozza
+async function aggiornaStatiAppuntamentiPagati(csrfToken) {
+  const ids = new Set();
+  document.querySelectorAll('.scontrino-row').forEach(r => { if (r.dataset.appointmentId) ids.add(String(r.dataset.appointmentId)); });
+  if (window.originalAppointmentIds) window.originalAppointmentIds.forEach(id => ids.add(String(id)));
+  const proms = [];
+  ids.forEach(id => {
+    proms.push(fetch(`/calendar/update_status/${id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}) },
+      body: JSON.stringify({ status: 2 })
+    }).catch(() => {}));
+  });
+  await Promise.allSettled(proms);
+}
+
+// Stampa multi-cliente: emette uno scontrino separato per ciascun cliente, da un solo comando
+async function stampaMultiClienteFlow(releaseLock) {
+  const groups = getClientGroupsFromRows();
+  const nClienti = new Set(groups.map(g => g.clientId).filter(Boolean)).size;
+  if (!confirm(`Questa bozza contiene ${nClienti} clienti diversi.\n\nVerranno stampati ${groups.length} scontrini separati (uno per cliente). Procedere?`)) {
+    if (releaseLock) releaseLock();
+    return;
+  }
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+  const operatore_id = document.getElementById('operatorSelectInput')?.dataset.selectedOperator || null;
+  for (const g of groups) {
+    const { voci_fiscali, voci_non_fiscali, hasError } = raccogliVociDaRighe(g.rows);
+    if (hasError) { if (releaseLock) releaseLock(); return; }
+    const cliente_id = g.clientId || null;
+    if (voci_fiscali.length) {
+      const idem = generaIdempotencyKeyGlobale();
+      let res, data = null;
+      try {
+        res = await fetch('/cassa/send-to-rch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}) },
+          body: JSON.stringify({ voci: voci_fiscali, cliente_id, operatore_id, is_fiscale: true, idempotency_key: idem })
+        });
+      } catch (err) {
+        if (releaseLock) releaseLock();
+        alert('Errore di rete durante la stampa di ' + (g.clientNome || 'cliente') + '.');
+        return;
+      }
+      try { data = await res.json(); } catch { data = null; }
+      if (res.status === 409 && data && data.needs_closure) {
+        if (releaseLock) releaseLock();
+        if (typeof window.showChiusuraMancanteModal === 'function') window.showChiusuraMancanteModal(data);
+        else alert((data && data.message) || 'Esegui prima la chiusura fiscale.');
+        return;
+      }
+      if (res.status === 202 || (data && data.pending)) {
+        if (releaseLock) releaseLock();
+        const et = (data && typeof data.expected_total === 'number') ? data.expected_total : null;
+        if (typeof showPendingModal === 'function') showPendingModal(idem, et);
+        else alert('Stampante in attesa. Riprova.');
+        return;
+      }
+      if (!res.ok) {
+        if (releaseLock) releaseLock();
+        alert((data && data.error) || ('Errore durante la stampa per ' + (g.clientNome || 'cliente')));
+        return;
+      }
+    }
+    if (voci_non_fiscali.length) {
+      try {
+        await fetch('/cassa/send-to-rch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}) },
+          body: JSON.stringify({ voci: voci_non_fiscali, cliente_id, operatore_id, is_fiscale: false })
+        });
+      } catch (_) {}
+    }
+  }
+  await aggiornaStatiAppuntamentiPagati(csrfToken);
+  if (typeof resetScontrino === 'function') resetScontrino(true);
+  if (typeof showSuccessPopup === 'function') {
+    showSuccessPopup(groups.length + ' scontrini stampati con successo!', 3000, () => { window.location.href = '/cassa'; });
+  } else {
+    window.location.href = '/cassa';
+  }
+}
+
+// Wiring pulsante "Dividi pagamento" a livello scontrino
+document.addEventListener('DOMContentLoaded', function () {
+  const btnDividi = document.getElementById('btnDividiPagamento');
+  if (btnDividi) btnDividi.addEventListener('click', function (e) { e.preventDefault(); apriSplitPagamentoScontrino(); });
+});
 
 // Helper
 function parseJSONSafe(s) { try { return JSON.parse(s); } catch { return null; } }

@@ -856,14 +856,40 @@ def send_to_rch():
                 sconto = 100 - (prezzo_finale / prezzo_pieno * 100)
                 xml_lines.append(f'<cmd>="/(Scontato del {sconto:.2f}%)</cmd>')
 
-            metodo = v.get("metodo_pagamento", "cash")
-            tcode = _tender_code(metodo, printer_model)
-            totali[tcode] = totali.get(tcode, 0) + prezzo_cents
+            # Split pagamento: una singola voce puo' essere saldata con piu' metodi
+            # (es. 50€ = 30 contanti + 20 POS). In tal caso 'pagamenti' contiene la
+            # ripartizione; la riga merce resta stampata una sola volta, ma il totale
+            # finisce su tender distinti. Se assente, comportamento storico (un metodo).
+            pagamenti_split = v.get("pagamenti")
+            if isinstance(pagamenti_split, list) and pagamenti_split:
+                assegnati = 0
+                for p in pagamenti_split:
+                    cents_p = int(round(float(p.get("importo", 0)) * 100))
+                    if cents_p <= 0:
+                        continue
+                    tcode_p = _tender_code(p.get("metodo", "cash"), printer_model)
+                    totali[tcode_p] = totali.get(tcode_p, 0) + cents_p
+                    assegnati += cents_p
+                # eventuale arrotondamento: assegna il resto al primo tender valido
+                diff = prezzo_cents - assegnati
+                if diff != 0 and pagamenti_split:
+                    tcode_first = _tender_code(pagamenti_split[0].get("metodo", "cash"), printer_model)
+                    totali[tcode_first] = totali.get(tcode_first, 0) + diff
+            else:
+                metodo = v.get("metodo_pagamento", "cash")
+                tcode = _tender_code(metodo, printer_model)
+                totali[tcode] = totali.get(tcode, 0) + prezzo_cents
+
+        def _voce_ha_digitale(v):
+            if v.get("metodo_pagamento", "cash") in ("pos", "bank"):
+                return True
+            return any(
+                p.get("metodo", "cash") in ("pos", "bank")
+                for p in (v.get("pagamenti") or [])
+            )
 
         codice_lotteria = (data.get("lotteria") or "").strip().upper()
-        pagamenti_digitali = any(
-            v.get("metodo_pagamento", "cash") in ("pos", "bank") for v in voci_fiscali
-        )
+        pagamenti_digitali = any(_voce_ha_digitale(v) for v in voci_fiscali)
         if (
             len(codice_lotteria) == 8
             and codice_lotteria.isalnum()
