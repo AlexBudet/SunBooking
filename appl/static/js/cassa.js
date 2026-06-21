@@ -698,9 +698,10 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
         const pagamentiRiga = getRowPagamenti(row);
         if (pagamentiRiga && pagamentiRiga.length) voce.pagamenti = pagamentiRiga;
       }
-      // Cliente associato alla riga (per lo storico; usato nel flusso multi-cliente)
-      const clientIdRiga = row.dataset.clientId || cliente_id || null;
-      if (clientIdRiga) voce.cliente_id = clientIdRiga;
+      // Cliente associato alla riga (solo se la riga lo porta esplicitamente).
+      // NB: il cliente globale dello scontrino viene aggiunto al payload più sotto;
+      // qui NON va usato perché la const cliente_id è dichiarata dopo il ciclo (TDZ).
+      if (row.dataset.clientId) voce.cliente_id = row.dataset.clientId;
       
       // IMPORTANTE: Copia prepagata_id e ricarica_prepagata_id dal dataset della riga
       const prepagataId = row.dataset.prepagataId;
@@ -1722,7 +1723,7 @@ row.className = 'd-flex align-items-center scontrino-row';
   splitBtn.className = 'btn btn-link p-0 ms-1 scontrino-split-btn';
   splitBtn.tabIndex = -1;
   const splitIcon = document.createElement('i');
-  splitIcon.className = 'bi bi-distribute-horizontal';
+  splitIcon.className = 'bi bi-scissors';
   splitBtn.appendChild(splitIcon);
   applyBsTooltip(splitBtn, 'Dividi il pagamento di questa voce su più metodi');
   splitBtn.addEventListener('click', function (e) {
