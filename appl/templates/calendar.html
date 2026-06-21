@@ -1519,19 +1519,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  const noteModal = document.getElementById('EditApptNoteModal');
-  if (noteModal) {
-    noteModal.addEventListener('hidden.bs.modal', function () {
-      try {
-        const id = window._lastNoteApptId;
-        if (!id) return;
-        const blk = document.querySelector(`.appointment-block[data-appointment-id="${id}"]`);
-        if (blk && String(blk.getAttribute('data-status')) === '2') {
-          location.reload();
-        }
-      } catch (_) {}
-    });
-  }
+  // NB: l'aggiornamento live del blocco (titolo OFF, indicatore nota, tooltip)
+  // è gestito al salvataggio in calendar.js (saveNoteBtn -> initOffBlockTitle),
+  // quindi qui non serve più alcun location.reload() alla chiusura del modal.
 });
 </script>
    <script>
@@ -2813,8 +2803,12 @@ function configureMobileModalButtons(modal, block) {
     display: none !important;
   }
 </style>
+{% endif %}
 <script>
 // Inizializza contenuti della tabella mobile (calendar)
+// NB: questo script (popolamento campo DATA mobile) e quello dell'offset header
+// devono girare SEMPRE, anche con cassa abilitata: per questo sono FUORI dal
+// blocco condizionale hide_cassa (che riguarda solo lo style di nascondi-cassa).
 document.addEventListener('DOMContentLoaded', function() {
   try {
     const fmtSpan = document.getElementById('mobileDateFormattedCalendar');
@@ -2906,7 +2900,6 @@ document.addEventListener('DOMContentLoaded', function() {
   // il resto del codice zoom può restare com'è, oppure puoi ignorarlo come comportamento
 });
 </script>
-{% endif %}
 
 <!-- ══════════════════════════════════════════════════════════
      BADGE FLOTTANTI CALENDARIO — INFO + CERCA-UN-BUCO

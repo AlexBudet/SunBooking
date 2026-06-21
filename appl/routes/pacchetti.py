@@ -1249,7 +1249,13 @@ def api_update_rata(rata_id):
     aggiorna_status_pacchetto(pacchetto)
 
     db.session.commit()
-    return jsonify({'success': True, 'message': 'Rata aggiornata'})
+    # Restituisci gli importi aggiornati di tutte le rate (per refresh live degli input,
+    # la ridistribuzione puo' aver cambiato anche le altre rate non pagate)
+    rate_aggiornate = [
+        {'id': r.id, 'importo': float(r.importo), 'is_pagata': bool(r.is_pagata)}
+        for r in PacchettoRata.query.filter_by(pacchetto_id=rata.pacchetto_id).order_by(PacchettoRata.id).all()
+    ]
+    return jsonify({'success': True, 'message': 'Rata aggiornata', 'rate': rate_aggiornate})
 
 @pacchetti_bp.route('/api/pacchetti/<int:id>/check_rate_pagate', methods=['GET'])
 def api_check_rate_pagate(id):
@@ -1668,28 +1674,38 @@ def api_ricarica_prepagata(id):
     pacchetto.credito_residuo = nuovo_saldo
     pacchetto.credito_iniziale = (pacchetto.credito_iniziale or Decimal('0')) + importo
     
-    # Registra movimento
+    # Registra movimento (tipo 'ricarica': in precedenza era erroneamente 'utilizzo')
     operatore_id = data.get('operatore_id')
     movimento = MovimentoPrepagata(
         pacchetto_id=pacchetto.id,
-        tipo_movimento='utilizzo',
+        tipo_movimento='ricarica',
         importo=importo,
         saldo_dopo=nuovo_saldo,
-        descrizione=data.get('descrizione', 'Pagamento in cassa'),
+        descrizione=data.get('descrizione', 'Ricarica manuale'),
         operatore_id=int(operatore_id) if operatore_id else None
     )
     db.session.add(movimento)
-    
+
     # History
     aggiungi_history(pacchetto, f"Ricarica €{importo:.2f} - Nuovo saldo €{nuovo_saldo:.2f}")
-    
+
     db.session.commit()
-    
+
     return jsonify({
         'success': True,
         'message': f'Ricarica di €{importo:.2f} effettuata',
         'credito_residuo': float(nuovo_saldo),
-        'credito_iniziale': float(pacchetto.credito_iniziale)
+        'credito_iniziale': float(pacchetto.credito_iniziale),
+        # Movimento appena creato (stessa forma usata dal render della pagina) per
+        # aggiornare lo storico lato client senza reload
+        'movimento': {
+            'id': movimento.id,
+            'tipo': movimento.tipo_movimento,
+            'importo': float(movimento.importo),
+            'saldo_dopo': float(movimento.saldo_dopo),
+            'descrizione': movimento.descrizione,
+            'data': movimento.data_movimento.strftime('%d/%m/%Y %H:%M') if movimento.data_movimento else None
+        }
     })
 
 

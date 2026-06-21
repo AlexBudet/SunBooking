@@ -1085,7 +1085,7 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute
 const pacchettoId = {{ pacchetto.id }};
 const operatori = {{ pacchetto.all_operatori | tojson }};
 const tipoPacchetto = '{{ pacchetto.tipo or "servizi" }}';
-const vincoliAttuali = {{ pacchetto.vincoli_utilizzo | tojson | default('null', true) }};
+let vincoliAttuali = {{ pacchetto.vincoli_utilizzo | tojson | default('null', true) }};
 
 // ============ GESTIONE VINCOLI UTILIZZO ============
 let modalVincoloServiziSelezionati = [];
@@ -1157,6 +1157,26 @@ function aggiornaModalListaVincoloServizi() {
   });
 }
 
+// Aggiorna il testo "Utilizzo consentito: ..." senza reload, replicando il template
+function aggiornaVincoliDisplay(vincoli) {
+  const wrap = document.getElementById('vincoliUtilizzoDisplay');
+  if (!wrap) return;
+  let testo;
+  if (!vincoli || vincoli.tipo === 'tutti') {
+    testo = 'Tutti i servizi';
+  } else if (vincoli.tipo === 'categoria') {
+    testo = 'Solo ' + (vincoli.categoria || '');
+  } else if (vincoli.tipo === 'sottocategoria') {
+    testo = 'Solo sottocategoria ID ' + (vincoli.sottocategoria_id || '');
+  } else if (vincoli.tipo === 'servizi') {
+    testo = 'Solo ' + ((vincoli.servizi_ids || []).length) + ' servizi specifici';
+  } else {
+    testo = 'Tutti i servizi';
+  }
+  const strong = wrap.querySelector('strong');
+  if (strong) strong.textContent = testo;
+}
+
 async function salvaVincoli() {
   const tipo = document.getElementById('modalVincoloTipo').value;
   let vincoli = null;
@@ -1181,7 +1201,9 @@ async function salvaVincoli() {
     const data = await resp.json();
     if (resp.ok) {
       bootstrap.Modal.getInstance(document.getElementById('modalVincoli')).hide();
-      location.reload();
+      // Aggiorna stato e testo del display vincoli senza reload
+      vincoliAttuali = vincoli;
+      aggiornaVincoliDisplay(vincoli);
     } else {
       alert('Errore: ' + (data.error || 'Errore sconosciuto'));
     }
@@ -1401,6 +1423,38 @@ function vaiInCassaRicarica() {
   window.location.href = '/cassa?' + params.toString();
 }
 
+// Aggiunge una riga allo Storico Movimenti replicando il markup del template (no reload)
+function appendMovimentoRow(m) {
+  const table = document.getElementById('movimentiTable');
+  if (!table || !m) return;
+  const tbody = table.querySelector('tbody');
+  if (!tbody) return;
+
+  // Rimuovi la riga placeholder "Nessun movimento registrato" se presente
+  const placeholder = tbody.querySelector('td[colspan="6"]');
+  if (placeholder) placeholder.closest('tr').remove();
+
+  const isRicarica = m.tipo === 'ricarica';
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const importoNum = Number(m.importo) || 0;
+  const saldoNum = Number(m.saldo_dopo) || 0;
+
+  const tr = document.createElement('tr');
+  tr.className = isRicarica ? 'table-success' : 'table-warning';
+  tr.innerHTML = `
+    <td>${esc(m.data || '')}</td>
+    <td>${isRicarica
+      ? '<span class="badge bg-success">Ricarica</span>'
+      : '<span class="badge bg-warning text-dark">Utilizzo</span>'}</td>
+    <td class="text-end fw-bold ${isRicarica ? 'text-success' : 'text-warning'}">&euro;${importoNum.toFixed(2)}</td>
+    <td class="text-end">&euro;${saldoNum.toFixed(2)}</td>
+    <td>${esc(m.descrizione) || '&mdash;'}</td>
+    <td><span class="text-muted fst-italic">non selezionato</span></td>
+  `;
+  tbody.appendChild(tr);
+}
+
 async function eseguiRicarica() {
   const importo = parseFloat(document.getElementById('importoRicarica').value);
   const descrizione = document.getElementById('descrizioneRicarica').value.trim();
@@ -1428,13 +1482,14 @@ async function eseguiRicarica() {
     if (data.success) {
       // Chiudi modal
       bootstrap.Modal.getInstance(document.getElementById('modalRicarica')).hide();
-      
-      // Aggiorna UI
+
+      // Aggiorna UI: credito residuo + nuova riga nello storico movimenti (no reload)
       document.getElementById('creditoResiduo').textContent = `€${data.credito_residuo.toFixed(2)}`;
-      
-      // Ricarica pagina per aggiornare storico movimenti
+      if (data.movimento && typeof appendMovimentoRow === 'function') {
+        appendMovimentoRow(data.movimento);
+      }
+
       alert(`Ricarica di €${importo.toFixed(2)} effettuata con successo!`);
-      location.reload();
     } else {
       alert('Errore: ' + (data.error || 'Ricarica non riuscita'));
     }
@@ -2563,7 +2618,13 @@ document.addEventListener('click', function(e) {
     .then(data => {
       if (data.error) {
         alert(data.error);
-        location.reload(); // Ripristina valori originali
+        location.reload(); // Ripristina valori originali in caso di errore
+      } else if (Array.isArray(data.rate)) {
+        // Aggiorna gli importi di tutte le rate non pagate senza reload
+        data.rate.forEach(rt => {
+          const inp = document.querySelector(`input.rata-importo-input[data-rata-id="${rt.id}"]`);
+          if (inp && !rt.is_pagata) inp.value = Number(rt.importo).toFixed(2);
+        });
       } else {
         location.reload();
       }
