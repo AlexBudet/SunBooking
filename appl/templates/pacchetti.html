@@ -2210,9 +2210,9 @@ document.getElementById('numeroSeduteOmaggio').addEventListener('input', functio
         if (confirm('Confermi eliminazione?')) {
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
             await fetch(`/pacchetti/api/pacchetti/${id}`, { method: 'DELETE', headers: { 'X-CSRFToken': csrfToken } });
+            // loadPacchetti/loadPrepagate ricaricano gia' via AJAX le liste: niente reload pagina
             loadPacchetti();
             loadPrepagate();
-            location.reload();
         }
     }
 

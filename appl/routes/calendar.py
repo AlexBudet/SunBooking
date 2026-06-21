@@ -86,6 +86,38 @@ def random_color():
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+def existing_day_color(client_id, day_date, exclude_session_id=None, exclude_appt_id=None):
+    """Colore (colore, colore_font) gia' usato da un appuntamento dello stesso cliente
+    nello stesso giorno, per uniformare. None se non esiste.
+
+    Regola: tutti i blocchi appuntamento di un cliente in un dato giorno devono avere
+    lo stesso colore. Quando si associa/crea un appuntamento, se il cliente ha gia'
+    un blocco in quel giorno se ne riusa il colore invece di generarne uno casuale.
+    """
+    if not client_id or not day_date:
+        return None
+    start_day = datetime.combine(day_date, time.min)
+    end_day = start_day + timedelta(days=1)
+    q = Appointment.query.filter(
+        Appointment.client_id == client_id,
+        Appointment.is_cancelled_by_client == False,
+        Appointment.start_time >= start_day,
+        Appointment.start_time < end_day,
+        Appointment.colore.isnot(None),
+    )
+    if exclude_session_id:
+        q = q.filter(or_(
+            Appointment.booking_session_id != exclude_session_id,
+            Appointment.booking_session_id.is_(None),
+        ))
+    if exclude_appt_id:
+        q = q.filter(Appointment.id != exclude_appt_id)
+    other = q.order_by(Appointment.start_time.asc()).first()
+    if other and other.colore:
+        return (other.colore, other.colore_font or compute_font_color(other.colore))
+    return None
+
+
 def _build_pacchetto_tooltip_data(pacchetto_seduta):
     """Costruisce i dati minimi da mostrare nel tooltip del badge pacchetto."""
     if not pacchetto_seduta:
@@ -409,6 +441,7 @@ def search_clients(query):
             'id': client.id,
             'name': f"{client.cliente_nome} {client.cliente_cognome}",
             'phone': client.cliente_cellulare,
+            'note': client.note or '',
         }
         for client in clients
     ]
@@ -803,10 +836,21 @@ def edit_appointment(appt_id):
             if 'client_id' in data:
                 appt.client_id = new_client_id
                 
-                # Se è un blocco web con placeholder, assegna nuovo colore random
+                # Se è un blocco web con placeholder, assegna il colore.
+                # Uniforma: riusa il colore di un altro appuntamento dello stesso
+                # cliente in quel giorno, altrimenti generane uno nuovo.
                 if appt.source == AppointmentSource.web and new_client_id != original_client_id:
-                    new_color = random_color()
-                    new_font_color = compute_font_color(new_color)
+                    day_color = existing_day_color(
+                        new_client_id,
+                        appt.start_time.date() if appt.start_time else None,
+                        exclude_session_id=appt.booking_session_id,
+                        exclude_appt_id=appt.id,
+                    )
+                    if day_color:
+                        new_color, new_font_color = day_color
+                    else:
+                        new_color = random_color()
+                        new_font_color = compute_font_color(new_color)
                     appt.colore = new_color
                     appt.colore_font = new_font_color
                     
@@ -2083,8 +2127,19 @@ def associa_cliente_booking():
     else:
         blocks = [appt]
 
-    new_color = random_color()
-    new_font_color = compute_font_color(new_color)
+    # Uniforma il colore: se il cliente ha gia' un appuntamento in questo giorno
+    # riusa quel colore, altrimenti generane uno nuovo.
+    day_date = appt.start_time.date() if appt.start_time else None
+    day_color = existing_day_color(
+        client.id, day_date,
+        exclude_session_id=appt.booking_session_id,
+        exclude_appt_id=appt.id,
+    )
+    if day_color:
+        new_color, new_font_color = day_color
+    else:
+        new_color = random_color()
+        new_font_color = compute_font_color(new_color)
 
     try:
         import re

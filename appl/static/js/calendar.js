@@ -1908,7 +1908,13 @@ function showClientInfoModal(clientId) {
           body: JSON.stringify({ client_id: clientId, phone: phoneField.input.value.trim() })
         })
         .then(r => r.ok ? r.json() : Promise.reject('phone update failed'))
-        .then(j => { phoneField.saveBtn.textContent = j.success ? 'Salvato!' : 'Errore'; setTimeout(()=> phoneField.saveBtn.textContent='Salva',1200); })
+        .then(j => {
+          phoneField.saveBtn.textContent = j.success ? 'Salvato!' : 'Errore';
+          if (j.success && typeof window.applyClientPhoneToBlocks === 'function') {
+            window.applyClientPhoneToBlocks(clientId, phoneField.input.value.trim());
+          }
+          setTimeout(()=> phoneField.saveBtn.textContent='Salva',1200);
+        })
         .catch(err => { console.error(err); phoneField.saveBtn.textContent = 'Errore'; setTimeout(()=> phoneField.saveBtn.textContent='Salva',1200); });
       });
 
@@ -1967,7 +1973,13 @@ function showClientInfoModal(clientId) {
           body: JSON.stringify({ client_id: clientId, note: noteTextarea.value.trim() })
         })
         .then(r => r.ok ? r.json() : Promise.reject('note update failed'))
-        .then(j => { noteSaveBtn.textContent = j.success ? 'Salvato!' : 'Errore'; setTimeout(()=> noteSaveBtn.textContent='Salva',1200); })
+        .then(j => {
+          noteSaveBtn.textContent = j.success ? 'Salvato!' : 'Errore';
+          if (j.success && typeof window.applyClientNoteToBlocks === 'function') {
+            window.applyClientNoteToBlocks(clientId, noteTextarea.value.trim());
+          }
+          setTimeout(()=> noteSaveBtn.textContent='Salva',1200);
+        })
         .catch(err => { console.error(err); noteSaveBtn.textContent = 'Errore'; setTimeout(()=> noteSaveBtn.textContent='Salva',1200); });
       });
 
@@ -2386,6 +2398,8 @@ function handleClientSearch(query) {
 
           item.dataset.clientId = id;
           item.dataset.clientName = name;
+          item.dataset.clientNote = String(client.note ?? '');
+          item.dataset.clientPhone = phone;
 
           const infoBtn = document.createElement('button');
           infoBtn.type = 'button';
@@ -2408,7 +2422,7 @@ function handleClientSearch(query) {
 
           item.addEventListener('click', () => {
             if (typeof selectClient === 'function') {
-              selectClient(id, name);
+              selectClient(id, name, String(client.note ?? ''), phone);
             } else {
               const input = document.querySelector('#clientSearchInput') || document.querySelector('#clientSearchInputNav');
               const idInput = document.querySelector('#client_id');
@@ -2469,13 +2483,18 @@ resultsContainer.style.display = 'block';
     }
 }
 
-function selectClient(clientId, fullName) {
+function selectClient(clientId, fullName, clientNote, clientPhone) {
   const modal = document.querySelector('.modal.show');
   const input = modal ? modal.querySelector('#clientSearchInput') : document.getElementById('clientSearchInput');
   const hidden = modal ? modal.querySelector('#client_id') : document.getElementById('client_id');
   const results = modal ? modal.querySelector('#clientResults') : document.getElementById('clientResults');
   if (input) input.value = capitalizeName(fullName);
-  if (hidden) hidden.value = clientId;
+  if (hidden) {
+    hidden.value = clientId;
+    // Memorizza nota/cellulare per propagare i corsivi + i bottoni WhatsApp ai blocchi
+    if (clientNote !== undefined) hidden.dataset.clientNote = String(clientNote || '');
+    if (clientPhone !== undefined) hidden.dataset.clientPhone = String(clientPhone || '');
+  }
   if (results) results.style.display = 'none';
 
   // Nascondi "Crea blocco OFF" quando un cliente è selezionato
@@ -4094,9 +4113,12 @@ function openModifyPopup(appointmentId) {
     if (formElement) {
       formElement.addEventListener('submit', function(e) {
         e.preventDefault();
-        const selectedClientId = document.querySelector('#EditAppointmentModal #client_id')?.value;
+        const hiddenClient = document.querySelector('#EditAppointmentModal #client_id');
+        const selectedClientId = hiddenClient?.value;
         if (!selectedClientId) { alert("Seleziona un cliente dalla lista."); return; }
         const fullName = (document.querySelector('#EditAppointmentModal input#clientSearchInput')?.value || '').trim();
+        const selectedClientNote = hiddenClient?.dataset.clientNote;
+        const selectedClientPhone = hiddenClient?.dataset.clientPhone;
 
         fetch(formElement.action, {
           method: 'POST',
@@ -4137,6 +4159,14 @@ function openModifyPopup(appointmentId) {
               body: JSON.stringify({ client_id: parseInt(selectedClientId, 10) })
             }).catch(() => {}));
           });
+
+          // Propaga corsivo NOTA e cellulare del nuovo cliente ai blocchi aggiornati
+          if (typeof window.applyClientNoteToBlocks === 'function' && selectedClientNote !== undefined) {
+            window.applyClientNoteToBlocks(selectedClientId, selectedClientNote);
+          }
+          if (typeof window.applyClientPhoneToBlocks === 'function' && selectedClientPhone !== undefined) {
+            window.applyClientPhoneToBlocks(selectedClientId, selectedClientPhone);
+          }
 
           // NEW: ricarica solo per blocchi web/booking_session
           const shouldReload = !!(baseBlock && (
@@ -4180,8 +4210,20 @@ function propBookingBlocks(appointmentId, newClientId, newClientName) {
     ? Array.from(document.querySelectorAll(`.appointment-block[data-booking_session_id="${sessionId}"]`))
     : [modified];
 
-  const baseColor = getRandomColor();
-  const baseFont = computeFontColor(baseColor);
+  // Regola: tutti gli appuntamenti di un cliente nello stesso giorno hanno lo stesso
+  // colore. La pagina calendar mostra un solo giorno, quindi se esiste gia' un altro
+  // blocco di questo cliente (fuori da questa sessione booking) ne riusiamo il colore.
+  let baseColor, baseFont;
+  const existingBlock = Array.from(
+    document.querySelectorAll(`.appointment-block:not(.note-off)[data-client-id="${newClientId}"]`)
+  ).find(b => !blocks.includes(b) && b.getAttribute('data-colore'));
+  if (existingBlock) {
+    baseColor = existingBlock.getAttribute('data-colore');
+    baseFont = existingBlock.getAttribute('data-colore_font') || computeFontColor(baseColor);
+  } else {
+    baseColor = getRandomColor();
+    baseFont = computeFontColor(baseColor);
+  }
   const parts = newClientName.split(' ');
   const nome = parts.shift() || '';
   const cognome = parts.join(' ') || '';
@@ -12479,6 +12521,47 @@ window.onAppointmentNoteSaved = function (appointmentId, noteText) {
         if (el) el.textContent = noteText || '';
       }
     }
+  } catch (_) {}
+};
+
+// Aggiorna live tutti i blocchi di un cliente quando cambia la NOTA CLIENTE
+// (corsivo sul nome + data-client-note usato dal tooltip), senza refresh pagina.
+window.applyClientNoteToBlocks = function (clientId, note) {
+  try {
+    const id = String(clientId || '').trim();
+    if (!id) return;
+    const noteVal = String(note || '').trim();
+    document.querySelectorAll(`.appointment-block[data-client-id="${id}"]`).forEach(block => {
+      const link = block.querySelector('.appointment-content .client-name a.client-info-link');
+      if (!link) return; // blocchi con cliente eliminato/dummy non hanno il link
+      if (noteVal) {
+        link.setAttribute('data-client-note', noteVal);
+        link.style.fontStyle = 'italic';
+      } else {
+        link.removeAttribute('data-client-note');
+        link.style.fontStyle = '';
+      }
+    });
+    // Se il tooltip info è aperto, forzane la ricostruzione al prossimo hover
+    const popup = document.getElementById('clientInfoPopup');
+    if (popup && popup.style.display !== 'none') popup.style.display = 'none';
+  } catch (_) {}
+};
+
+// Aggiorna live tutti i blocchi (e i bottoni WhatsApp) di un cliente quando
+// cambia il CELLULARE, senza refresh pagina.
+window.applyClientPhoneToBlocks = function (clientId, phone) {
+  try {
+    const id = String(clientId || '').trim();
+    if (!id) return;
+    const phoneVal = String(phone || '').trim();
+    document.querySelectorAll(`.appointment-block[data-client-id="${id}"]`).forEach(block => {
+      block.setAttribute('data-client-cellulare', phoneVal);
+      const link = block.querySelector('.client-info-link');
+      if (link) link.setAttribute('data-client-cellulare', phoneVal);
+      const wa = block.querySelector('.whatsapp-btn');
+      if (wa) wa.setAttribute('data-client-cellulare', phoneVal);
+    });
   } catch (_) {}
 };
 
