@@ -88,7 +88,8 @@
             <br>
             <button class="btn btn-outline-success me-1" id="payCashBtn"><i class="bi bi-cash"></i> Cash</button>
             <button class="btn btn-outline-primary me-1" id="payPosBtn"><i class="bi bi-calculator"></i> POS</button>
-            <button class="btn btn-outline-info" id="payBankBtn"><i class="bi bi-bank"></i> Bank</button>
+            <button class="btn btn-outline-info me-1" id="payBankBtn"><i class="bi bi-bank"></i> Bank</button>
+            <button class="btn btn-outline-dark" id="btnDividiPagamento" data-bs-toggle="tooltip" data-bs-placement="top" title="Dividi il totale dello scontrino su più metodi di pagamento"><i class="bi bi-distribute-horizontal"></i> Dividi</button>
           </div>
           <br>
           <div>
@@ -811,6 +812,44 @@ document.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
+<!-- Modal Split Pagamento (divide una voce o l'intero scontrino su più metodi) -->
+<div class="modal fade" id="modalSplitPagamento" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width: 360px;">
+    <div class="modal-content" style="border-radius: 12px;">
+      <div class="modal-header py-2 px-3">
+        <span class="modal-title" id="splitModalTitle" style="font-weight:600; color:#5a4a54;">Dividi pagamento</span>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-3">
+        <div class="mb-2 d-flex justify-content-between">
+          <span>Totale da ripartire:</span>
+          <strong id="splitModalTotale">€ 0.00</strong>
+        </div>
+        <div class="mb-2 d-flex align-items-center gap-2">
+          <label style="width:70px;"><i class="bi bi-cash"></i> Cash</label>
+          <input type="number" step="0.01" min="0" id="splitCash" class="form-control form-control-sm" placeholder="0.00">
+        </div>
+        <div class="mb-2 d-flex align-items-center gap-2">
+          <label style="width:70px;"><i class="bi bi-calculator"></i> POS</label>
+          <input type="number" step="0.01" min="0" id="splitPos" class="form-control form-control-sm" placeholder="0.00">
+        </div>
+        <div class="mb-2 d-flex align-items-center gap-2">
+          <label style="width:70px;"><i class="bi bi-bank"></i> Bank</label>
+          <input type="number" step="0.01" min="0" id="splitBank" class="form-control form-control-sm" placeholder="0.00">
+        </div>
+        <div class="d-flex justify-content-between mt-3">
+          <span>Resto da assegnare:</span>
+          <strong id="splitModalResto">€ 0.00</strong>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-success btn-sm" id="splitModalApplica" disabled>Applica</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="{{ url_for('static', filename='js/cassa.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 <script>
@@ -1024,6 +1063,13 @@ function renderMySpiaList(gruppi) {
   const container = document.getElementById('mySpiaListContainer');
   list.innerHTML = '';
 
+  // ID appuntamenti già presenti nella bozza (per marcare i blocchi "caricati")
+  const draftApptIds = new Set(
+    Array.from(document.querySelectorAll('#scontrinoRowsContainer .scontrino-row'))
+      .map(r => r.dataset.appointmentId).filter(Boolean).map(String)
+  );
+  const isTouch = document.body.classList.contains('touch-ui');
+
   // Luce blink se ci sono appuntamenti
   blink.style.display = (Array.isArray(gruppi) && gruppi.length > 0) ? '' : 'none';
 
@@ -1051,6 +1097,23 @@ function renderMySpiaList(gruppi) {
     const firstServizio = (gruppo.appuntamenti || [])[0] || {};
     blocco.style.backgroundColor = firstServizio.bg_color || '#fff';
     blocco.style.color = firstServizio.font_color || '#000';
+
+    // ID appuntamenti del gruppo + stato "caricato" nella bozza
+    const gruppoIds = (Array.isArray(gruppo.ids) && gruppo.ids.length)
+      ? gruppo.ids.map(String)
+      : ((gruppo.appuntamenti || []).map(s => s.appointment_id || s.id).filter(Boolean).map(String));
+    const isLoaded = gruppoIds.length > 0 && gruppoIds.every(id => draftApptIds.has(id));
+    if (isLoaded) blocco.classList.add('myspia-blocco-loaded');
+
+    // Desktop: clic sul blocco = porta in cassa (append/toggle).
+    // Touch: il clic apre i pulsanti, quindi si usa il pulsante € (vedi sotto).
+    if (!isTouch) {
+      blocco.style.cursor = 'pointer';
+      blocco.addEventListener('click', function (e) {
+        if (e.target.closest('.myspia-actions')) return;
+        gestisciClickBloccoMySpia(gruppo, gruppoIds, isLoaded);
+      });
+    }
 
     const infoDiv = document.createElement('div');
     infoDiv.style.color = 'inherit';
@@ -1109,14 +1172,7 @@ function renderMySpiaList(gruppi) {
     btnCassa.addEventListener('click', function(e) {
       e.preventDefault();
       e.stopPropagation();
-      const ids = (Array.isArray(gruppo.ids) && gruppo.ids.length)
-        ? gruppo.ids
-        : ((gruppo.appuntamenti || []).map(s => s.appointment_id || s.id).filter(Boolean));
-      if (ids.length && typeof window.creaPseudoscontrinoMySpia === 'function') {
-        window.creaPseudoscontrinoMySpia(ids.join(','));
-      } else {
-        alert('Nessun appuntamento da inviare in cassa.');
-      }
+      gestisciClickBloccoMySpia(gruppo, gruppoIds, isLoaded);
     });
 
     const btnCal = document.createElement('button');
@@ -1144,13 +1200,15 @@ function renderMySpiaList(gruppi) {
       }
     });
 
-    actions.appendChild(btnCassa);
+    // Su desktop il "porta in cassa" è il clic sul blocco: mostriamo solo "vedi in calendario".
+    // Su touch (nessun hover) manteniamo il pulsante € per portare in cassa.
+    if (isTouch) actions.appendChild(btnCassa);
     actions.appendChild(btnCal);
 
     // Tooltips neri a destra
     setTimeout(() => {
       if (window.bootstrap && bootstrap.Tooltip) {
-        [btnCassa, btnCal].forEach(el => {
+        (isTouch ? [btnCassa, btnCal] : [btnCal]).forEach(el => {
           bootstrap.Tooltip.getOrCreateInstance(el, {
             placement: 'right',
             container: 'body',
@@ -1183,8 +1241,37 @@ function renderMySpiaList(gruppi) {
   document.getElementById('mySpiaListContainer').classList.remove('open');
   caricaAppuntamentiMySpia();
 
-  // Crea pseudoscontrino per i blocchi selezionati
-window.creaPseudoscontrinoMySpia = function(ids) {
+  // Gestisce il clic su un blocco "Clienti in istituto": carica/aggiunge in bozza
+  // con conferma se la bozza è già compilata, oppure toglie il blocco se già caricato.
+  function gestisciClickBloccoMySpia(gruppo, ids, isLoaded) {
+    if (!ids || !ids.length) { alert('Nessun appuntamento da inviare in cassa.'); return; }
+    // Blocco già caricato → toggle: rimuovilo dalla bozza
+    if (isLoaded) {
+      if (typeof window.rimuoviPseudoscontrinoMySpia === 'function') {
+        window.rimuoviPseudoscontrinoMySpia(ids);
+      }
+      caricaAppuntamentiMySpia();
+      return;
+    }
+    const draftHasRows = document.querySelectorAll('#scontrinoRowsContainer .scontrino-row').length > 0;
+    if (draftHasRows) {
+      const nome = `${gruppo.cliente_nome || ''} ${gruppo.cliente_cognome || ''}`.trim();
+      if (!confirm(
+        `La bozza scontrino è già compilata.\n\n` +
+        `Vuoi AGGIUNGERE allo stesso scontrino anche gli appuntamenti di ${nome}?\n\n` +
+        `Alla stampa verranno emessi scontrini separati per ciascun cliente.`
+      )) return;
+    }
+    if (typeof window.creaPseudoscontrinoMySpia === 'function') {
+      window.creaPseudoscontrinoMySpia(ids.join(','), { append: draftHasRows });
+    }
+  }
+
+  // Crea/aggiunge alla bozza gli appuntamenti dei blocchi selezionati.
+  // opts.append = true: NON azzera la bozza, accumula (scontrino multi-cliente).
+  window.creaPseudoscontrinoMySpia = function(ids, opts) {
+    opts = opts || {};
+    const append = !!opts.append;
   fetch('/cassa/api/myspia/dettagli', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content },
@@ -1193,8 +1280,13 @@ window.creaPseudoscontrinoMySpia = function(ids) {
   .then(res => res.json())
   .then(async data => {
     if (data.success && data.appuntamenti) {
-      window.originalAppointmentIds = new Set();
-      document.getElementById('scontrinoRowsContainer').innerHTML = '';
+      if (!append) {
+        window.originalAppointmentIds = new Set();
+        document.getElementById('scontrinoRowsContainer').innerHTML = '';
+        window.lastPseudoscontrinoAppointmentIds = [];
+      }
+      window.originalAppointmentIds = window.originalAppointmentIds || new Set();
+      const clienteNomeCompleto = ((data.cliente_nome || '') + ' ' + (data.cliente_cognome || '')).trim();
       const apptIds = [];
       data.appuntamenti.forEach(servizio => {
         const apptId =
@@ -1214,10 +1306,13 @@ window.creaPseudoscontrinoMySpia = function(ids) {
           sottocategoria: servizio.sottocategoria,
           appointment_id: apptId,
           operator_id: servizio.operator_id || null,
-          operator_nome: servizio.operator_nome || ''
+          operator_nome: servizio.operator_nome || '',
+          cliente_id: data.cliente_id || null,
+          cliente_nome: clienteNomeCompleto
         }, false);
       });
-      window.lastPseudoscontrinoAppointmentIds = apptIds.filter(Boolean);
+      const merged = (window.lastPseudoscontrinoAppointmentIds || []).concat(apptIds.filter(Boolean));
+      window.lastPseudoscontrinoAppointmentIds = Array.from(new Set(merged.map(String)));
 
       // PATCH: attiva toggle se ci sono almeno 2 operatori diversi e popola op-col
       setTimeout(function() {
@@ -1244,17 +1339,26 @@ window.creaPseudoscontrinoMySpia = function(ids) {
         }
       }, 100);
 
-      if (data.cliente_nome) {
+      // Campo cliente: in single-cliente mostra il nome, in multi viene gestito dopo
+      if (!append && data.cliente_nome) {
         const input = document.getElementById('clientSearchInputCassa');
         window.settingClientProgrammatically = true;
-        input.value = data.cliente_nome + ' ' + (data.cliente_cognome || '');
+        input.value = clienteNomeCompleto;
         input.dataset.selectedClient = data.cliente_id;
       }
       if (data.operatore_nome) {
         const op = document.getElementById('operatorSelectInput');
-        op.value = data.operatore_nome;
-        op.dataset.selectedOperator = data.operatore_id;
+        if (!op.disabled) {
+          op.value = data.operatore_nome;
+          op.dataset.selectedOperator = data.operatore_id;
+        }
       }
+      // Aggiorna stato multi-cliente: campo "Più clienti", raggruppamento, prepagata off
+      if (typeof window.aggiornaStatoMultiCliente === 'function') {
+        window.aggiornaStatoMultiCliente();
+      }
+      // Refresh elenco per evidenziare i blocchi caricati
+      if (typeof caricaAppuntamentiMySpia === 'function') caricaAppuntamentiMySpia();
       setTimeout(() => {
         if (typeof ripristinaModifichePseudoscontrino === 'function') {
           ripristinaModifichePseudoscontrino();
@@ -1384,15 +1488,17 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
       
+      const pagamentiRiga = (typeof getRowPagamenti === 'function') ? getRowPagamenti(row) : null;
       const voce = {
         servizio_id,
         nome,
         prezzo,
         sconto_riga,
         tipo: 'service',
-        metodo_pagamento: metodo,
+        metodo_pagamento: (pagamentiRiga && pagamentiRiga.length) ? pagamentiRiga[0].metodo : metodo,
         is_fiscale: true
       };
+      if (pagamentiRiga && pagamentiRiga.length) voce.pagamenti = pagamentiRiga;
       if (appointment_id) voce.appointment_id = appointment_id;
       voci.push(voce);
     });
@@ -1784,6 +1890,63 @@ body.show-op-per-riga .scontrino-row .op-col:hover {
   background: linear-gradient(180deg, #b8809d 0%, #a06b88 100%);
   border-color: #a06b88;
   color: #fff;
+}
+
+/* Split pagamento: badge "Misto" e pulsante divisione voce */
+.scontrino-misto-badge {
+  display: none;
+  cursor: pointer;
+  font-size: 0.72em;
+  font-weight: 600;
+  color: #fff;
+  background: #6f42c1;
+  border-radius: 6px;
+  padding: 2px 7px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.scontrino-split-btn {
+  color: #6f42c1;
+  font-size: 0.95em;
+  line-height: 1;
+}
+.scontrino-split-btn:hover { color: #4d2d8a; }
+
+/* Intestazione di gruppo cliente nella bozza multi-cliente */
+.cliente-group-header {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #a06b88;
+  background: #f8f0f5;
+  border-left: 3px solid #b8809d;
+  padding: 3px 8px;
+  margin: 8px 0 4px 0;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+/* Campo cliente in modalità "Più clienti" */
+.multi-cliente-field {
+  background: #f8f0f5 !important;
+  font-weight: 600;
+  color: #a06b88 !important;
+  cursor: not-allowed;
+}
+
+/* Blocco "Clienti in istituto" già caricato nella bozza */
+.myspia-blocco-loaded {
+  box-shadow: inset 0 0 0 2px #198754 !important;
+}
+.myspia-blocco-loaded::after {
+  content: '✓ in bozza';
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  color: #198754;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
 }
 </style>
 
