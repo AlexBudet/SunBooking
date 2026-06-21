@@ -2305,7 +2305,11 @@ function apriSplitModal(totale, iniziali, titolo, onApply) {
   bank.value = (iniziali && iniziali.bank) ? (Math.round(iniziali.bank * 100) / 100).toFixed(2) : '';
   _splitModalApply = onApply;
   if (!_splitModalWired) {
-    [cash, pos, bank].forEach(inp => inp.addEventListener('input', aggiornaRestoSplitModal));
+    // Auto-fill complementare Cash <-> POS (Bank resta manuale/escluso):
+    // digitando uno dei due, l'altro si completa con il resto (T - Bank).
+    cash.addEventListener('input', function () { autofillSplitModal('cash'); aggiornaRestoSplitModal(); });
+    pos.addEventListener('input', function () { autofillSplitModal('pos'); aggiornaRestoSplitModal(); });
+    bank.addEventListener('input', aggiornaRestoSplitModal);
     document.getElementById('splitModalApplica').addEventListener('click', function () {
       const c = parseFloat(cash.value) || 0;
       const p = parseFloat(pos.value) || 0;
@@ -2321,6 +2325,38 @@ function apriSplitModal(totale, iniziali, titolo, onApply) {
   }
   aggiornaRestoSplitModal();
   bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+
+// Auto-completa il campo complementare tra Cash e POS in base al resto (T - Bank).
+// Bank è escluso: viene solo sottratto dal totale per definire il pool Cash/POS.
+// Il valore resta sempre modificabile a mano dall'operatore.
+let _autofillingSplit = false;
+function autofillSplitModal(which) {
+  if (_autofillingSplit) return;
+  _autofillingSplit = true;
+  try {
+    const m = document.getElementById('modalSplitPagamento');
+    const cashEl = document.getElementById('splitCash');
+    const posEl = document.getElementById('splitPos');
+    const bankEl = document.getElementById('splitBank');
+    const totale = parseFloat(m.dataset.totale || '0') || 0;
+    const b = parseFloat(bankEl.value) || 0;
+    let pool = Math.round((totale - b) * 100) / 100;
+    if (pool < 0) pool = 0;
+    if (which === 'cash') {
+      const c = parseFloat(cashEl.value) || 0;
+      let p = Math.round((pool - c) * 100) / 100;
+      if (p < 0) p = 0;
+      posEl.value = p > 0 ? p.toFixed(2) : '';
+    } else if (which === 'pos') {
+      const p = parseFloat(posEl.value) || 0;
+      let c = Math.round((pool - p) * 100) / 100;
+      if (c < 0) c = 0;
+      cashEl.value = c > 0 ? c.toFixed(2) : '';
+    }
+  } finally {
+    _autofillingSplit = false;
+  }
 }
 
 function aggiornaRestoSplitModal() {
