@@ -291,7 +291,7 @@ Se il cliente ha una prepagata attiva, puoi scalare il costo direttamente da lì
 3️⃣ Oppure, se vuoi modificare il metodo per tutte le voci, usa i tasti in fondo: "cash", "pos", "bank"
 4️⃣ Procedi cliccando su "Avanti"!
 
-Puoi anche dividere il pagamento su più metodi (split): usa la forbice ✂️ accanto alla voce per dividere il singolo importo, o il tasto "Dividi" in basso per l'intero scontrino. 💡""",
+Puoi anche dividere il pagamento su più metodi (split): usa l'icona dividi accanto alla voce per dividere il singolo importo, o il tasto "Dividi" in basso per l'intero scontrino. 💡""",
     },
     
     "cassa_blocchi_appuntamento": {
@@ -1504,6 +1504,13 @@ Metodi supportati:
 • Bank = bonifico, assegno, pagamento online, ecc. 📱
 • Prepagata = disponibile solo se il cliente ha una carta prepagata 💳
 
+<span class=\"help-strong-dark\">Pagamento diviso su più metodi (multi-pagamento / split)</span>
+Una stessa voce, o l'intero scontrino, può essere saldata con più forme di pagamento (es. 50€ = 30 contanti + 20 POS):
+• per la <span class=\"help-strong-dark\">singola voce</span>: clicca l'icona dividi <i class=\"bi bi-grid-1x2\"></i> accanto al metodo e indica gli importi per Cash / POS / Bank
+• per <span class=\"help-strong-dark\">tutto lo scontrino</span>: usa il tasto <span class=\"help-strong-dark\"><i class=\"bi bi-grid-1x2\"></i> Dividi</span> in basso
+• <span class=\"help-strong-dark\">auto-compilazione</span>: scrivendo l'importo in Cash, il campo POS si completa da solo con il resto (e viceversa); Bank resta manuale ed escluso dall'automatismo. Ogni valore è comunque modificabile a mano.
+La voce divisa resta <span class=\"help-strong-dark\">una sola riga</span> sullo scontrino: il totale viene solo ripartito sui metodi indicati e mostra il badge <span class=\"help-strong-dark\">Misto</span>.
+
 Quando la bozza scontrino viene creata a partire da appuntamenti in Agenda, compaiono anche dei tasti aggiuntivi per gestire le modifiche:
 • <span class=\"help-strong-dark\">Salva Modifiche</span>
 • <span class=\"help-strong-dark\">Reset</span>
@@ -1573,8 +1580,8 @@ In basso trovi anche i bottoni rapidi per applicare il metodo a tutte le righe e
 
 <span class=\"help-strong-dark\">Dividere il pagamento su più metodi (split)</span>
 Quando un importo viene saldato con più forme di pagamento (es. 50€ = 30 contanti + 20 POS):
-• per una <span class=\"help-strong-dark\">singola voce</span>: clicca la forbice <i class="bi bi-scissors"></i> accanto al metodo e indica gli importi per Cash / POS / Bank
-• per <span class=\"help-strong-dark\">tutto lo scontrino</span>: usa il tasto <span class=\"help-strong-dark\"><i class="bi bi-scissors"></i> Dividi</span> in basso
+• per una <span class=\"help-strong-dark\">singola voce</span>: clicca l'icona dividi <i class="bi bi-grid-1x2"></i> accanto al metodo e indica gli importi per Cash / POS / Bank
+• per <span class=\"help-strong-dark\">tutto lo scontrino</span>: usa il tasto <span class=\"help-strong-dark\"><i class="bi bi-grid-1x2"></i> Dividi</span> in basso
 • <span class=\"help-strong-dark\">auto-compilazione</span>: appena scrivi l'importo in Cash, il campo POS si completa da solo con il resto (e viceversa). Bank resta manuale ed è escluso da questo automatismo; ogni valore resta comunque modificabile a mano.
 
 La voce divisa resta <span class=\"help-strong-dark\">una sola riga</span> sullo scontrino (e una sola riga stampata): il totale viene solo ripartito sui metodi indicati. Una voce con pagamento diviso mostra il badge <span class=\"help-strong-dark\">Misto</span>.""",

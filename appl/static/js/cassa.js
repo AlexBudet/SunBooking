@@ -1723,7 +1723,7 @@ row.className = 'd-flex align-items-center scontrino-row';
   splitBtn.className = 'btn btn-link p-0 ms-1 scontrino-split-btn';
   splitBtn.tabIndex = -1;
   const splitIcon = document.createElement('i');
-  splitIcon.className = 'bi bi-scissors';
+  splitIcon.className = 'bi bi-grid-1x2';
   splitBtn.appendChild(splitIcon);
   applyBsTooltip(splitBtn, 'Dividi il pagamento di questa voce su più metodi');
   splitBtn.addEventListener('click', function (e) {
