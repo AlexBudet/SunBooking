@@ -1010,6 +1010,26 @@ def send_to_rch():
                     "is_fiscale": True
                 })
             else:
+                # L'errore stampante potrebbe dipendere dalla CHIUSURA FISCALE (Z) mancante
+                # della sessione precedente: tipico DOPO un giorno di chiusura, quando sono
+                # passate >24h senza Z e la RCH blocca l'emissione del primo scontrino.
+                # Il gate pre-stampa puo' non aver bloccato (es. lastZ momentaneamente non
+                # leggibile -> fail-open): ora la stampante HA risposto, quindi ri-leggiamo
+                # lo stato e, se manca la Z, mostriamo l'avviso corretto invece di un generico
+                # "stampante in errore / riprovare".
+                gate_err = _check_chiusura_precedente(ip, printer_model)
+                if gate_err.get("needs_closure"):
+                    current_app.logger.warning(
+                        "RCH errore + chiusura Z mancante (periodo aperto %s == ultimo scontrino %s): "
+                        "richiesta chiusura fiscale.",
+                        gate_err.get("open_period"), gate_err.get("last_receipt_period")
+                    )
+                    return jsonify({
+                        "needs_closure": True,
+                        "error": "Chiusura fiscale precedente mancante.",
+                        "message": ("Attenzione! Esegui una chiusura fiscale (Z) — come prassi "
+                                    "dopo un giorno di chiusura — prima di emettere nuovi scontrini."),
+                    }), 409
                 if idempotency_key:
                     RCH_PENDING[idempotency_key] = _build_pending_entry()
                     return jsonify({
