@@ -622,11 +622,13 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
   if (stampaLock) return;
   stampaLock = true;
   setTimeout(() => { stampaLock = false; }, 5000);
-      if (!confermaAttiva) {
+      if (!window.bozzaConfermata) {
     alert('Devi prima confermare lo scontrino!');
     return;
   }
-    const rows = document.querySelectorAll('.scontrino-row');
+    const rows = (typeof window.getBozzaCorrenteRows === 'function')
+      ? window.getBozzaCorrenteRows()
+      : document.querySelectorAll('.scontrino-row');
     if (rows.length === 0) {
       alert('Aggiungi almeno un servizio prima di generare lo scontrino!');
       return;
@@ -729,10 +731,14 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
 
     if (hasValidationError) { stampaLock = false; return; }
     
-    const cliente_id = document.getElementById('clientSearchInputCassa').dataset.selectedClient || null;
-    const operatore_id = document.getElementById('operatorSelectInput').dataset.selectedOperator || null;
+    const cliente_id = (typeof window.getBozzaCorrenteClienteId === 'function')
+      ? window.getBozzaCorrenteClienteId()
+      : (document.getElementById('clientSearchInputCassa').dataset.selectedClient || null);
+    const operatore_id = (typeof window.getBozzaCorrenteOperatoreId === 'function')
+      ? window.getBozzaCorrenteOperatoreId()
+      : (document.getElementById('operatorSelectInput').dataset.selectedOperator || null);
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-    
+
     // ========== GESTIONE PAGAMENTO CON PREPAGATA ==========
     // Se ci sono voci pagate con prepagata, scala il credito dalla carta
     if (vociConPrepagata.length > 0 && window.clientePrepagate && window.clientePrepagate.length > 0) {
@@ -1161,7 +1167,12 @@ function showPendingModal(key, expectedTotal) {
         // 3. Aggiorna stati appuntamenti
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
         const updatePromises = [];
-        document.querySelectorAll('.scontrino-row').forEach(row => {
+        const _bozzaRows = (typeof window.getBozzaCorrenteRows === 'function')
+          ? window.getBozzaCorrenteRows()
+          : document.querySelectorAll('.scontrino-row');
+        const _isClonePrint = !!(window.bozzaConfermata && window.bozzaConfermata.classList
+          && window.bozzaConfermata.classList.contains('bozza-clone'));
+        _bozzaRows.forEach(row => {
           const appointmentId = row.dataset.appointmentId;
           if (appointmentId) {
             updatePromises.push(
@@ -1176,7 +1187,7 @@ function showPendingModal(key, expectedTotal) {
             );
           }
         });
-        if (window.originalAppointmentIds && window.originalAppointmentIds.size > 0) {
+        if (!_isClonePrint && window.originalAppointmentIds && window.originalAppointmentIds.size > 0) {
           window.originalAppointmentIds.forEach(appointmentId => {
             updatePromises.push(
               fetch(`/calendar/update_status/${appointmentId}`, {
@@ -1197,7 +1208,10 @@ function showPendingModal(key, expectedTotal) {
           window.originalAppointmentIds.clear();
         }
 
-        // 5. Svuota lo pseudoscontrino (DOM + localStorage) PRIMA del popup
+        // 5. Se ci sono piu' bozze scorporate, salva le ALTRE per ripristinarle
+        //    dopo il reload post-stampa (eccezione attiva solo con >1 bozza).
+        if (typeof window.persistAltreBozzePerStampa === 'function') window.persistAltreBozzePerStampa();
+        // Svuota lo pseudoscontrino (DOM + localStorage) PRIMA del popup
         resetScontrino(true);
         await Promise.allSettled(updatePromises);
 
@@ -1423,22 +1437,25 @@ function showPendingModal(key, expectedTotal) {
 
 // Funzione per aggiornare il totale
 function aggiornaTotale() {
-  let totaleScontrino = 0;
-  let totaleComplessivo = 0;
-  document.querySelectorAll('.scontrino-row').forEach(row => {
-    const input = row.querySelector('.scontrino-row-prezzo');
-    const prezzo = parseFloat(input.value) || 0;
-    const metodo = row.querySelector('select')?.value || 'cash';
-    const isGrigia = row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc';
-    // Servizi in chiaro (non grigi) e non prepagata
-    if (!isGrigia && metodo !== 'prepagata') {
-      totaleScontrino += prezzo;
-    }
-    // Tutti i servizi (anche grigi)
-    totaleComplessivo += prezzo;
+  // Per-card: ogni bozza (.bozza-editor, originale + cloni) somma solo le proprie righe.
+  const cards = document.querySelectorAll('.bozza-editor');
+  const targets = cards.length ? cards : [document];
+  targets.forEach(card => {
+    let totaleScontrino = 0;
+    let totaleComplessivo = 0;
+    card.querySelectorAll('.scontrino-row').forEach(row => {
+      const input = row.querySelector('.scontrino-row-prezzo');
+      const prezzo = parseFloat(input && input.value) || 0;
+      const metodo = row.querySelector('select')?.value || 'cash';
+      const isGrigia = row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc';
+      if (!isGrigia && metodo !== 'prepagata') totaleScontrino += prezzo;
+      totaleComplessivo += prezzo;
+    });
+    const t = card.querySelector ? card.querySelector('.bozza-total') : document.getElementById('totalAmount');
+    const ta = card.querySelector ? card.querySelector('.bozza-total-all') : document.getElementById('totalAmountAll');
+    if (t) t.textContent = `Scontrino: € ${totaleScontrino.toFixed(2)}`;
+    if (ta) ta.textContent = `Totale: € ${totaleComplessivo.toFixed(2)}`;
   });
-  document.getElementById('totalAmount').textContent = `Scontrino: € ${totaleScontrino.toFixed(2)}`;
-  document.getElementById('totalAmountAll').textContent = `Totale: € ${totaleComplessivo.toFixed(2)}`;
 }
 
 function getCurrentAppointmentIds() {
@@ -2025,149 +2042,69 @@ function popolaPulsantiServizi(servizi) {
 let globalResetListener = window.globalResetListener || null;
 let confermaAttiva = window.confermaAttiva || false;
 
+// CONFERMA della card originale: delega al gestore esclusivo (confermaBozza).
+// Confermare una bozza de-conferma le altre; solo la confermata va in STAMPA.
 document.getElementById('confermaBtn').addEventListener('click', (e) => {
   e.preventDefault();
-  const confermaBtn = document.getElementById('confermaBtn');
-  const btnStampa = document.getElementById('btnStampaScontrino');
-  const stampaLabel = document.getElementById('stampaLabel');
-  const btnLotteria = document.getElementById('btnLotteria');
-  const container = document.querySelector('.card.neumorphic-card');
-  const btnAnnulla = document.getElementById('reset-scontrino'); // NEW
-
-  // Se siamo già in stato confermato, torna all'editing (INDIETRO)
-  if (confermaAttiva) {
-    confermaAttiva = false;
-  if (btnAnnulla) btnAnnulla.classList.remove('d-none'); // SHOW ANNULLA
-    confermaBtn.textContent = 'CONFERMA';
-    if (btnStampa) {
-      btnStampa.style.display = 'none';
-      btnStampa.classList.remove('attivo');
-      btnStampa.disabled = true;
-    }
-    if (stampaLabel) stampaLabel.classList.add('d-none');
-    if (btnLotteria) btnLotteria.classList.add('d-none');
-    if (container) container.classList.remove('pseudoscontrino-bloccato');
-    if (btnAnnulla) btnAnnulla.classList.remove('d-none');
-    confermaBtn.textContent = 'CONFERMA';
-
-    if (globalResetListener) {
-      document.removeEventListener('click', globalResetListener, true);
-      globalResetListener = null;
-    }
-    return;
+  const orig = document.getElementById('scontrinoRowsContainer')
+    ? document.getElementById('scontrinoRowsContainer').closest('.bozza-editor')
+    : null;
+  if (typeof window.confermaBozza === 'function' && orig) {
+    window.confermaBozza(orig);
   }
-
-  // Primo click: entra in stato confermato
-  const rows = document.querySelectorAll('.scontrino-row');
-  if (rows.length === 0) {
-    alert('Aggiungi almeno un servizio prima di generare lo scontrino!');
-    return;
-  }
-  if (btnStampa) {
-    btnStampa.style.display = 'flex';
-    btnStampa.classList.add('attivo');
-    btnStampa.disabled = false;
-  }
-  if (stampaLabel) stampaLabel.classList.remove('d-none');
-  if (container) container.classList.add('pseudoscontrino-bloccato');
-  confermaAttiva = true;
-  confermaBtn.textContent = 'INDIETRO';
-    if (btnAnnulla) btnAnnulla.classList.add('d-none'); // HIDE ANNULLA qui
-
-  // Click esterno: torna in editing (senza resettare lo scontrino)
-  globalResetListener = function(e) {
-    const lotteriaBtn   = document.getElementById('btnLotteria');
-    const modalLotteria = document.getElementById('modalLotteria');
-    if (
-      !btnStampa.contains(e.target) &&
-      !confermaBtn.contains(e.target) &&
-      !(lotteriaBtn   && lotteriaBtn.contains(e.target)) &&
-      !(modalLotteria && modalLotteria.contains(e.target))
-    ) {
-      confermaAttiva = false;
-      if (btnStampa) {
-        btnStampa.style.display = 'none';
-        btnStampa.classList.remove('attivo');
-        btnStampa.disabled = true;
-      }
-      if (stampaLabel) stampaLabel.classList.add('d-none');
-      if (lotteriaBtn) lotteriaBtn.classList.add('d-none');
-      if (container) container.classList.remove('pseudoscontrino-bloccato');
-      if (btnAnnulla) btnAnnulla.classList.remove('d-none'); // SHOW ANNULLA
-      confermaBtn.textContent = 'CONFERMA';
-      document.removeEventListener('click', globalResetListener, true);
-      globalResetListener = null;
-    }
-  };
-  document.addEventListener('click', globalResetListener, true);
 });
 
 document.getElementById('reset-scontrino').addEventListener('click', () => {
-  // Reset pulsante stampa scontrino
-  resetScontrino(false);
+  // Con piu' bozze il tasto dell'originale e' 'ELIMINA' (rimuove la bozza);
+  // con una sola bozza torna 'SVUOTA' (azzera lo scontrino).
+  const orig = document.getElementById('scontrinoRowsContainer')
+    ? document.getElementById('scontrinoRowsContainer').closest('.bozza-editor')
+    : null;
+  const nBozze = document.querySelectorAll('.bozza-editor').length;
+  if (nBozze > 1 && typeof window.eliminaBozza === 'function' && orig) {
+    window.eliminaBozza(orig);
+  } else {
+    resetScontrino(false);
+  }
 });
 
 // Funzione per mostrare i subtotali pagamenti se ci sono più tipi
 function aggiornaSubtotaliPagamenti() {
-  const rows = document.querySelectorAll('.scontrino-row');
-  let subtotali = { pos: 0, cash: 0, bank: 0, prepagata: 0 };
-  rows.forEach(row => {
-    const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
-    const pagamenti = getRowPagamenti(row);
-    if (pagamenti && pagamenti.length) {
-      // Riga con pagamento splittato: ripartisci gli importi sui rispettivi metodi
-      pagamenti.forEach(p => {
-        if (subtotali.hasOwnProperty(p.metodo)) {
-          subtotali[p.metodo] += parseFloat(p.importo) || 0;
+  // Per-card: ogni bozza calcola i propri subtotali sulle proprie righe.
+  const cards = document.querySelectorAll('.bozza-editor');
+  const targets = cards.length ? cards : [document];
+  targets.forEach(card => {
+    let subtotali = { pos: 0, cash: 0, bank: 0, prepagata: 0 };
+    card.querySelectorAll('.scontrino-row').forEach(row => {
+      const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
+      const pagamenti = getRowPagamenti(row);
+      if (pagamenti && pagamenti.length) {
+        pagamenti.forEach(p => { if (subtotali.hasOwnProperty(p.metodo)) subtotali[p.metodo] += parseFloat(p.importo) || 0; });
+        return;
+      }
+      const metodo = row.querySelector('select')?.value || 'cash';
+      if (subtotali.hasOwnProperty(metodo)) subtotali[metodo] += prezzo;
+    });
+    const tipiPresenti = Object.entries(subtotali).filter(([k, v]) => v > 0);
+    const subtotaliDiv = card.querySelector ? card.querySelector('.bozza-subtot') : document.getElementById('subtotaliPagamenti');
+    if (!subtotaliDiv) return;
+    subtotaliDiv.innerHTML = '';
+    if (tipiPresenti.length > 1) {
+      [['pos', 'POS'], ['cash', 'CASH'], ['bank', 'BANK'], ['prepagata', 'PREPAGATA']].forEach(([k, label]) => {
+        if (subtotali[k] > 0) {
+          const div = document.createElement('div');
+          div.appendChild(document.createTextNode('- subtotale ' + label + ': '));
+          const b = document.createElement('b');
+          b.textContent = `€ ${subtotali[k].toFixed(2)}`;
+          div.appendChild(b);
+          subtotaliDiv.appendChild(div);
         }
       });
-      return;
-    }
-    const metodo = row.querySelector('select')?.value || 'cash';
-    if (subtotali.hasOwnProperty(metodo)) {
-      subtotali[metodo] += prezzo;
+      subtotaliDiv.style.display = '';
+    } else {
+      subtotaliDiv.style.display = 'none';
     }
   });
-  const tipiPresenti = Object.entries(subtotali).filter(([k, v]) => v > 0);
-  const subtotaliDiv = document.getElementById('subtotaliPagamenti');
-  subtotaliDiv.innerHTML = '';
-  if (tipiPresenti.length > 1) {
-    if (subtotali.pos > 0) {
-      const div = document.createElement('div');
-      div.appendChild(document.createTextNode('- subtotale POS: '));
-      const b = document.createElement('b');
-      b.textContent = `€ ${subtotali.pos.toFixed(2)}`;
-      div.appendChild(b);
-      subtotaliDiv.appendChild(div);
-    }
-    if (subtotali.cash > 0) {
-      const div = document.createElement('div');
-      div.appendChild(document.createTextNode('- subtotale CASH: '));
-      const b = document.createElement('b');
-      b.textContent = `€ ${subtotali.cash.toFixed(2)}`;
-      div.appendChild(b);
-      subtotaliDiv.appendChild(div);
-    }
-    if (subtotali.bank > 0) {
-      const div = document.createElement('div');
-      div.appendChild(document.createTextNode('- subtotale BANK: '));
-      const b = document.createElement('b');
-      b.textContent = `€ ${subtotali.bank.toFixed(2)}`;
-      div.appendChild(b);
-      subtotaliDiv.appendChild(div);
-    }
-    if (subtotali.prepagata > 0) {
-      const div = document.createElement('div');
-      div.appendChild(document.createTextNode('- subtotale PREPAGATA: '));
-      const b = document.createElement('b');
-      b.textContent = `€ ${subtotali.prepagata.toFixed(2)}`;
-      div.appendChild(b);
-      subtotaliDiv.appendChild(div);
-    }
-    subtotaliDiv.style.display = '';
-  } else {
-    subtotaliDiv.style.display = 'none';
-  }
 }
 
 // ============================================================
@@ -2238,23 +2175,32 @@ function apriSplitPagamentoRiga(row) {
 }
 
 // Apre la modale per dividere il pagamento dell'intero scontrino (parte fiscale)
-function apriSplitPagamentoScontrino() {
+function bozzaSplitScope(card) {
+  if (card && card.querySelectorAll) return card;
+  const eng = document.getElementById('scontrinoRowsContainer');
+  return (eng && eng.closest('.bozza-editor')) || document;
+}
+function apriSplitPagamentoScontrino(card) {
+  const scope = bozzaSplitScope(card);
   let totale = 0;
-  document.querySelectorAll('.scontrino-row').forEach(row => {
+  scope.querySelectorAll('.scontrino-row').forEach(row => {
     const isGrigia = row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc';
     const m = row.querySelector('select')?.value || 'cash';
     if (!isGrigia && m !== 'prepagata') totale += parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0') || 0;
   });
   totale = Math.round(totale * 100) / 100;
   if (totale <= 0) { alert('Nessun importo fiscale da dividere.'); return; }
-  apriSplitModal(totale, { cash: 0, pos: 0, bank: 0 }, 'Dividi pagamento scontrino', applicaSplitScontrino);
+  apriSplitModal(totale, { cash: 0, pos: 0, bank: 0 }, 'Dividi pagamento scontrino', (arr) => applicaSplitScontrino(arr, scope));
 }
+// Split pagamento per una bozza clone specifica
+window.apriSplitPagamentoCard = function (card) { apriSplitPagamentoScontrino(card); };
 
 // Distribuisce la ripartizione richiesta sulle righe fiscali (split per riga al confine)
-function applicaSplitScontrino(arr) {
+function applicaSplitScontrino(arr, card) {
+  const scope = bozzaSplitScope(card);
   const want = { cash: 0, pos: 0, bank: 0 };
   arr.forEach(p => { if (want.hasOwnProperty(p.metodo)) want[p.metodo] += Math.round((parseFloat(p.importo) || 0) * 100); });
-  const rows = [...document.querySelectorAll('.scontrino-row')].filter(row => {
+  const rows = [...scope.querySelectorAll('.scontrino-row')].filter(row => {
     const isGrigia = row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc';
     const m = row.querySelector('select')?.value || 'cash';
     return !isGrigia && m !== 'prepagata';
@@ -3048,3 +2994,602 @@ function apriModalOperatoreRiga(row) {
     });
 }
 window.apriModalOperatoreRiga = apriModalOperatoreRiga;
+
+// ============================================================
+// SCORPORO BOZZA — Fase 1: riordino voci + barre/tasto DIVIDI
+// Modulo additivo e auto-contenuto. NON tocca CONFERMA/STAMPA/RCH/fiscale.
+// Decora ogni .scontrino-row con maniglia di drag (desktop) e frecce su/giù
+// (touch), e inserisce barre divisore tra voci adiacenti con il tasto DIVIDI.
+// ============================================================
+(function () {
+  const CONTAINER_ID = 'scontrinoRowsContainer';
+  function getContainer() { return document.getElementById(CONTAINER_ID); }
+  function getRows(c) {
+    c = c || getContainer();
+    return c ? Array.from(c.querySelectorAll(':scope > .scontrino-row')) : [];
+  }
+  function isBloccato() {
+    const card = document.querySelector('.card.neumorphic-card');
+    return !!(card && card.classList.contains('pseudoscontrino-bloccato'));
+  }
+
+  let dragged = null;
+  let mutating = false;
+
+  // --- Decorazione riga: maniglia drag + frecce touch ---
+  function decoraRiga(row) {
+    if (row._riordinoDecorato) return;
+    row._riordinoDecorato = true;
+
+    // Frecce su/giù (visibili solo in touch-ui via CSS)
+    const arrows = document.createElement('span');
+    arrows.className = 'bozza-move-arrows';
+    const up = document.createElement('button');
+    up.type = 'button';
+    up.className = 'bozza-move-up';
+    up.innerHTML = '<i class="bi bi-chevron-up"></i>';
+    up.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); spostaRiga(row, -1); });
+    const dn = document.createElement('button');
+    dn.type = 'button';
+    dn.className = 'bozza-move-down';
+    dn.innerHTML = '<i class="bi bi-chevron-down"></i>';
+    dn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); spostaRiga(row, 1); });
+    arrows.appendChild(up);
+    arrows.appendChild(dn);
+
+    // Maniglia di trascinamento (visibile solo desktop via CSS)
+    const handle = document.createElement('span');
+    handle.className = 'bozza-drag-handle';
+    handle.setAttribute('title', 'Trascina per riordinare');
+    handle.innerHTML = '<i class="bi bi-grip-vertical"></i>';
+    // Abilita il drag nativo della riga solo mentre si preme sulla maniglia
+    handle.addEventListener('mousedown', function () { if (!isBloccato()) row.draggable = true; });
+    handle.addEventListener('mouseup', function () { row.draggable = false; });
+    row.addEventListener('dragstart', function (e) {
+      dragged = row;
+      row.classList.add('dragging');
+      if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', ''); } catch (_) {} }
+    });
+    row.addEventListener('dragend', function () {
+      row.classList.remove('dragging');
+      row.draggable = false;
+      dragged = null;
+      scheduleDivisori();
+    });
+
+    // Inserisci in testa alla riga (prima del selectBox 32px)
+    row.insertBefore(arrows, row.firstChild);
+    row.insertBefore(handle, row.firstChild);
+  }
+
+  // --- Riordino via frecce (touch) ---
+  function spostaRiga(row, dir) {
+    if (isBloccato()) return;
+    const c = getContainer();
+    const rows = getRows(c);
+    const i = rows.indexOf(row);
+    if (i < 0) return;
+    if (dir < 0 && i > 0) {
+      c.insertBefore(row, rows[i - 1]);
+    } else if (dir > 0 && i < rows.length - 1) {
+      c.insertBefore(rows[i + 1], row);
+    } else {
+      return;
+    }
+    scheduleDivisori();
+  }
+
+  // --- DnD desktop sul container ---
+  function initContainerDnD() {
+    const c = getContainer();
+    if (!c || c._riordinoDnd) return;
+    c._riordinoDnd = true;
+    c.addEventListener('dragover', function (e) {
+      if (!dragged) return;
+      e.preventDefault();
+      const after = rigaDopoCursore(c, e.clientY);
+      if (after == null) {
+        if (c.lastElementChild !== dragged) c.appendChild(dragged);
+      } else if (after !== dragged) {
+        c.insertBefore(dragged, after);
+      }
+    });
+  }
+  function rigaDopoCursore(c, y) {
+    const rows = getRows(c).filter(r => r !== dragged);
+    for (const r of rows) {
+      const box = r.getBoundingClientRect();
+      if (y < box.top + box.height / 2) return r;
+    }
+    return null;
+  }
+
+  // --- Barre divisore tra voci adiacenti ---
+  function creaDivisore(cutIndex) {
+    const wrap = document.createElement('div');
+    wrap.className = 'bozza-divider';
+    wrap.dataset.cutIndex = String(cutIndex);
+    const bar = document.createElement('div');
+    bar.className = 'bozza-divider-bar';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'bozza-divider-btn';
+    btn.innerHTML = '<i class="bi bi-scissors"></i>DIVIDI';
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof window.dividiBozzaScontrino === 'function') {
+        window.dividiBozzaScontrino(cutIndex);
+      }
+    });
+    wrap.appendChild(bar);
+    wrap.appendChild(btn);
+    return wrap;
+  }
+
+  function aggiornaDivisori() {
+    const c = getContainer();
+    if (!c) return;
+    // Rimuovi i divisori esistenti
+    c.querySelectorAll(':scope > .bozza-divider').forEach(d => d.remove());
+    const rows = getRows(c);
+    // Decora sempre (idempotente) e aggiorna lo stato delle frecce
+    rows.forEach((r, idx) => {
+      decoraRiga(r);
+      const up = r.querySelector('.bozza-move-up');
+      const dn = r.querySelector('.bozza-move-down');
+      if (up) up.disabled = (idx === 0);
+      if (dn) dn.disabled = (idx === rows.length - 1);
+    });
+    // Le barre/divisori richiedono almeno 2 voci e bozza non confermata
+    if (rows.length < 2 || isBloccato()) return;
+    for (let i = 0; i < rows.length - 1; i++) {
+      c.insertBefore(creaDivisore(i), rows[i + 1]);
+    }
+  }
+
+  function scheduleDivisori() {
+    if (mutating) return;
+    mutating = true;
+    requestAnimationFrame(function () {
+      try { aggiornaDivisori(); } finally { mutating = false; }
+    });
+  }
+  window.aggiornaDivisoriBozza = scheduleDivisori;
+
+  // --- Observer: ricostruisci quando vengono aggiunte/rimosse righe ---
+  function initObserver() {
+    const c = getContainer();
+    if (!c || c._riordinoObs) return;
+    c._riordinoObs = true;
+    new MutationObserver(function (muts) {
+      let relevant = false;
+      for (const m of muts) {
+        m.addedNodes.forEach(n => { if (n.nodeType === 1 && n.classList && n.classList.contains('scontrino-row')) relevant = true; });
+        m.removedNodes.forEach(n => { if (n.nodeType === 1 && n.classList && n.classList.contains('scontrino-row')) relevant = true; });
+      }
+      if (relevant) scheduleDivisori();
+    }).observe(c, { childList: true });
+  }
+
+  // Stub Fase 1 (sostituito dalla logica reale nella Fase 2)
+  if (typeof window.dividiBozzaScontrino !== 'function') {
+    window.dividiBozzaScontrino = function (cutIndex) {
+      alert('Punto di divisione selezionato dopo la voce n.' + (cutIndex + 1) +
+        '.\n\n(Lo scorporo effettivo nelle due bozze viene attivato nella Fase 2.)');
+    };
+  }
+
+  function init() {
+    if (!getContainer()) return;
+    initObserver();
+    initContainerDnD();
+    // Sicurezza: dopo un click/rilascio nessuna riga deve restare "draggable"
+    document.addEventListener('mouseup', function () {
+      if (!dragged) getRows().forEach(r => { if (r.draggable) r.draggable = false; });
+    });
+    aggiornaDivisori();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+
+// ============================================================
+// SCORPORO BOZZA — Fase 2/3: cloni IDENTICI + CONFERMA esclusivo
+// Ogni bozza e' un clone identico della card di default (righe, cliente,
+// pulsanti pagamento, CONFERMA, SVUOTA, totale). STAMPA resta UNICO.
+// CONFERMA e' mutuamente esclusivo: confermarne una de-conferma le altre;
+// la STAMPA stampa la bozza confermata (righe/cliente letti da li').
+// NON tocca l'invio fiscale/RCH/Registro: riusa il flusso esistente.
+// ============================================================
+(function () {
+  function getEngine() { return document.getElementById('scontrinoRowsContainer'); }
+  function getOriginalCard() { const e = getEngine(); return e ? e.closest('.bozza-editor') : null; }
+  function allCards() { return Array.from(document.querySelectorAll('.bozza-editor')); }
+  function rowsOf(card) { return card ? Array.from(card.querySelectorAll('.scontrino-row')) : []; }
+  function isConfermata(card) { return !!(card && card.classList.contains('pseudoscontrino-bloccato')); }
+  function dormContainer() { return document.getElementById('bozzeScorporateContainer'); }
+  function refreshDivisori() { if (typeof window.aggiornaDivisoriBozza === 'function') window.aggiornaDivisoriBozza(); }
+
+  function bozzaCorrente() {
+    const conf = window.bozzaConfermata;
+    return (conf && document.body.contains(conf)) ? conf : getOriginalCard();
+  }
+  // Righe / cliente / operatore della bozza confermata (usati dalla STAMPA unica)
+  window.getBozzaCorrenteRows = function () {
+    const card = bozzaCorrente();
+    return card ? card.querySelectorAll('.scontrino-row') : document.querySelectorAll('#scontrinoRowsContainer .scontrino-row');
+  };
+  window.getBozzaCorrenteClienteId = function () {
+    const card = bozzaCorrente(); if (!card) return null;
+    const ci = card.querySelector('.bozza-cliente');
+    return (ci && ci.dataset.selectedClient) || card.dataset.clienteId || null;
+  };
+  window.getBozzaCorrenteOperatoreId = function () {
+    const card = bozzaCorrente(); if (!card) return null;
+    const oi = card.querySelector('.bozza-operatore');
+    return (oi && oi.dataset.selectedOperator) || null;
+  };
+
+  // Grigia/disattiva tutte le bozze TRANNE quella confermata (se ce n'e' una).
+  // Il tasto CONFERMA di ciascuna resta cliccabile (vedi CSS .bozza-disattivata):
+  // confermarne un'altra de-conferma la corrente e ribalta lo stato.
+  function aggiornaStatoBozze() {
+    const conf = (window.bozzaConfermata && document.body.contains(window.bozzaConfermata))
+      ? window.bozzaConfermata : null;
+    allCards().forEach(c => c.classList.toggle('bozza-disattivata', !!conf && c !== conf));
+  }
+  window.aggiornaStatoBozze = aggiornaStatoBozze;
+
+  // Mostra/nasconde la STAMPA unica in base alla presenza di una bozza confermata
+  function aggiornaStampaVisibile() {
+    const btn = document.getElementById('btnStampaScontrino');
+    const label = document.getElementById('stampaLabel');
+    const on = !!(window.bozzaConfermata && document.body.contains(window.bozzaConfermata));
+    if (btn) { btn.style.display = on ? 'flex' : 'none'; btn.classList.toggle('attivo', on); btn.disabled = !on; }
+    if (label) label.classList.toggle('d-none', !on);
+    aggiornaStatoBozze();
+  }
+  window.aggiornaStampaVisibile = aggiornaStampaVisibile;
+
+  // CONFERMA esclusivo: confermare una bozza de-conferma le altre
+  function confermaBozza(card) {
+    if (!card) return;
+    if (isConfermata(card)) {
+      card.classList.remove('pseudoscontrino-bloccato');
+      const c = card.querySelector('.bozza-conferma'); if (c) c.textContent = 'CONFERMA';
+      if (window.bozzaConfermata === card) window.bozzaConfermata = null;
+      aggiornaStampaVisibile();
+      return;
+    }
+    if (rowsOf(card).length === 0) { alert('Aggiungi almeno un servizio prima di confermare!'); return; }
+    allCards().forEach(c => {
+      if (c !== card && isConfermata(c)) {
+        c.classList.remove('pseudoscontrino-bloccato');
+        const b = c.querySelector('.bozza-conferma'); if (b) b.textContent = 'CONFERMA';
+      }
+    });
+    card.classList.add('pseudoscontrino-bloccato');
+    const c = card.querySelector('.bozza-conferma'); if (c) c.textContent = 'INDIETRO';
+    window.bozzaConfermata = card;
+    aggiornaStampaVisibile();
+  }
+  window.confermaBozza = confermaBozza;
+
+  // Etichetta del tasto sulla card ORIGINALE: 'SVUOTA' quando è l'unica bozza,
+  // 'ELIMINA' quando ce ne sono piu' di una (i cloni sono sempre 'ELIMINA').
+  function aggiornaEtichetteSvuota() {
+    const multi = allCards().length > 1;
+    const orig = getOriginalCard();
+    const b = orig && orig.querySelector('.bozza-svuota');
+    if (b) b.textContent = multi ? 'ELIMINA' : 'SVUOTA';
+  }
+  window.aggiornaEtichetteSvuota = aggiornaEtichetteSvuota;
+
+  // Copia cliente/operatore da una card all'altra (l'originale "adotta" il
+  // contenuto di un clone quando viene eliminata).
+  function copiaClienteOperatore(src, dst) {
+    const sCli = src.querySelector('.bozza-cliente'), dCli = dst.querySelector('.bozza-cliente');
+    const sOp = src.querySelector('.bozza-operatore'), dOp = dst.querySelector('.bozza-operatore');
+    if (sCli && dCli) {
+      window.settingClientProgrammatically = true;
+      dCli.value = sCli.value || '';
+      if (sCli.dataset.selectedClient) dCli.dataset.selectedClient = sCli.dataset.selectedClient;
+      else delete dCli.dataset.selectedClient;
+    }
+    dst.dataset.clienteId = src.dataset.clienteId || '';
+    dst.dataset.clienteNome = src.dataset.clienteNome || '';
+    if (sOp && dOp) {
+      dOp.value = sOp.value || '';
+      if (sOp.dataset.selectedOperator) dOp.dataset.selectedOperator = sOp.dataset.selectedOperator;
+      else delete dOp.dataset.selectedOperator;
+    }
+  }
+
+  // Elimina una singola bozza. Sui cloni = rimozione dal DOM. Sull'originale
+  // (card strutturale, non rimovibile) = adotta il contenuto del primo clone e
+  // rimuove quel clone, cosi' la bozza eliminata sparisce e le altre restano.
+  function eliminaBozza(card) {
+    if (!card) return;
+    if (!confirm('Eliminare questa bozza scontrino? Le sue voci verranno scartate.')) return;
+    const isOrig = (card === getOriginalCard());
+    if (isOrig) {
+      const donor = allCards().find(c => c !== card && c.classList.contains('bozza-clone'));
+      if (!donor) { if (typeof resetScontrino === 'function') resetScontrino(false); aggiornaEtichetteSvuota(); return; }
+      const eng = getEngine();
+      if (eng) { eng.innerHTML = ''; rowsOf(donor).forEach(r => eng.appendChild(r)); }
+      copiaClienteOperatore(donor, card);
+      if (window.bozzaConfermata === donor || window.bozzaConfermata === card) window.bozzaConfermata = null;
+      donor.remove();
+    } else {
+      if (window.bozzaConfermata === card) window.bozzaConfermata = null;
+      card.remove();
+    }
+    if (typeof aggiornaTotale === 'function') aggiornaTotale();
+    if (typeof aggiornaSubtotaliPagamenti === 'function') aggiornaSubtotaliPagamenti();
+    aggiornaEtichetteSvuota();
+    aggiornaStampaVisibile();
+    refreshDivisori();
+  }
+  window.eliminaBozza = eliminaBozza;
+
+  // Cambia metodo pagamento per le righe di UNA card
+  function metodoPagamentoCard(card, tipo) {
+    rowsOf(card).forEach(row => {
+      if (typeof getRowPagamenti === 'function' && getRowPagamenti(row) && typeof setRowPagamenti === 'function') setRowPagamenti(row, null);
+      const select = row.querySelector('select');
+      const icon = row.querySelector('i');
+      if (select) {
+        select.value = tipo;
+        if (icon) icon.className = (tipo === 'pos') ? 'bi bi-calculator ms-2' : (tipo === 'cash') ? 'bi bi-cash ms-2' : (tipo === 'bank') ? 'bi bi-bank ms-2' : 'bi bi-credit-card ms-2';
+      }
+      if (tipo !== 'cash') row.style.background = '#fff';
+    });
+    if (typeof aggiornaTotale === 'function') aggiornaTotale();
+    if (typeof aggiornaSubtotaliPagamenti === 'function') aggiornaSubtotaliPagamenti();
+  }
+
+  // Clona la card originale come editor identico; ritorna {card, refs}
+  function cloneEditor() {
+    const orig = getOriginalCard();
+    if (!orig) return null;
+    const clone = orig.cloneNode(true);
+    clone.classList.remove('pseudoscontrino-bloccato', 'h-100');
+    clone.classList.add('bozza-clone');
+    const refs = {
+      rowsBox: clone.querySelector('.bozza-rows'),
+      cli: clone.querySelector('.bozza-cliente'),
+      op: clone.querySelector('.bozza-operatore'),
+      subtot: clone.querySelector('.bozza-subtot'),
+      conferma: clone.querySelector('.bozza-conferma'),
+      svuota: clone.querySelector('.bozza-svuota'),
+      payCash: clone.querySelector('#payCashBtn'),
+      payPos: clone.querySelector('#payPosBtn'),
+      payBank: clone.querySelector('#payBankBtn'),
+      dividiPag: clone.querySelector('#btnDividiPagamento'),
+      saveBox: clone.querySelector('#saveModificheContainer')
+    };
+    if (refs.rowsBox) refs.rowsBox.innerHTML = '';
+    if (refs.cli) { refs.cli.value = ''; delete refs.cli.dataset.selectedClient; refs.cli.readOnly = false; refs.cli.classList.remove('multi-cliente-field'); }
+    if (refs.op) { refs.op.value = ''; delete refs.op.dataset.selectedOperator; refs.op.disabled = false; refs.op.placeholder = 'Salone'; }
+    if (refs.subtot) { refs.subtot.innerHTML = ''; refs.subtot.style.display = 'none'; }
+    if (refs.saveBox) refs.saveBox.style.display = 'none';
+    clone.querySelectorAll('.dropdown-menu').forEach(d => { d.style.display = 'none'; d.innerHTML = ''; });
+    clone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+    if (clone.id) clone.removeAttribute('id');
+    return { card: clone, refs: refs };
+  }
+
+  function wireClone(card, refs) {
+    if (refs.payCash) refs.payCash.addEventListener('click', e => { e.preventDefault(); metodoPagamentoCard(card, 'cash'); });
+    if (refs.payPos) refs.payPos.addEventListener('click', e => { e.preventDefault(); metodoPagamentoCard(card, 'pos'); });
+    if (refs.payBank) refs.payBank.addEventListener('click', e => { e.preventDefault(); metodoPagamentoCard(card, 'bank'); });
+    if (refs.dividiPag) refs.dividiPag.addEventListener('click', e => {
+      e.preventDefault();
+      if (typeof window.apriSplitPagamentoCard === 'function') window.apriSplitPagamentoCard(card);
+    });
+    if (refs.conferma) refs.conferma.addEventListener('click', e => { e.preventDefault(); confermaBozza(card); });
+    if (refs.svuota) {
+      refs.svuota.textContent = 'ELIMINA';
+      refs.svuota.addEventListener('click', e => { e.preventDefault(); eliminaBozza(card); });
+    }
+    if (refs.cli) wireClienteClone(refs.cli, card);
+  }
+
+  // Autocomplete cliente per un clone (assegnabile come una normale bozza)
+  function wireClienteClone(input, card) {
+    let seq = 0;
+    const drop = document.createElement('div');
+    drop.className = 'dropdown-menu';
+    drop.style.cssText = 'position:absolute; top:100%; left:0; width:100%; margin-top:2px;';
+    if (input.parentNode) { input.parentNode.style.position = 'relative'; input.parentNode.appendChild(drop); }
+    input.addEventListener('input', function () {
+      if (window.settingClientProgrammatically) { window.settingClientProgrammatically = false; return; }
+      const q = input.value.trim();
+      const my = ++seq;
+      if (q.length < 3) { drop.style.display = 'none'; return; }
+      fetch('/cassa/api/clients?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(clients => {
+          if (my !== seq) return;
+          drop.innerHTML = '';
+          if (!Array.isArray(clients) || !clients.length) { drop.style.display = 'none'; return; }
+          clients.forEach(c => {
+            const item = document.createElement('button');
+            item.type = 'button'; item.className = 'dropdown-item';
+            const cap = window.capitalizeName || (s => s || '');
+            const nome = (cap(c.nome) + ' ' + cap(c.cognome)).trim();
+            item.textContent = nome;
+            item.addEventListener('click', function () {
+              window.settingClientProgrammatically = true;
+              input.value = nome;
+              input.dataset.selectedClient = c.id;
+              card.dataset.clienteId = c.id; card.dataset.clienteNome = nome;
+              drop.style.display = 'none';
+            });
+            drop.appendChild(item);
+          });
+          drop.style.display = 'block';
+        }).catch(() => { drop.style.display = 'none'; });
+    });
+    document.addEventListener('click', function (e) { if (!input.contains(e.target) && !drop.contains(e.target)) drop.style.display = 'none'; });
+  }
+
+  // DIVIDI: crea una seconda bozza IDENTICA con le voci sotto il taglio
+  window.dividiBozzaScontrino = function (cutIndex) {
+    const orig = getOriginalCard();
+    if (!orig) return;
+    if (isConfermata(orig)) { alert('Annulla la conferma prima di dividere la bozza.'); return; }
+    const eng = getEngine();
+    const rows = Array.from(eng.querySelectorAll(':scope > .scontrino-row'));
+    if (cutIndex < 0 || cutIndex >= rows.length - 1) return;
+    const lower = rows.slice(cutIndex + 1);
+    if (!lower.length) return;
+    lower.forEach(r => { const a = r.dataset.appointmentId; if (a && window.originalAppointmentIds) window.originalAppointmentIds.delete(String(a)); });
+    const built = cloneEditor();
+    if (!built) return;
+    const card = built.card, refs = built.refs;
+    lower.forEach(r => refs.rowsBox.appendChild(r));
+    card.dataset.clienteId = ''; card.dataset.clienteNome = '';
+    wireClone(card, refs);
+    const cont = dormContainer();
+    if (cont) cont.appendChild(card);
+    if (typeof aggiornaTotale === 'function') aggiornaTotale();
+    if (typeof aggiornaSubtotaliPagamenti === 'function') aggiornaSubtotaliPagamenti();
+    refreshDivisori();
+    aggiornaEtichetteSvuota();
+    if (card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  // ---------- PERSISTENZA: sopravvivenza delle ALTRE bozze al reload post-stampa ----------
+  const RESTORE_KEY = 'cassa_bozze_restore';
+
+  function serializeRow(row) {
+    const grigia = (row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc');
+    return {
+      servizioId: row.dataset.servizioId || '',
+      nome: row.querySelector('.flex-grow-1')?.textContent.trim() || '',
+      prezzo: parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0') || 0,
+      sconto: parseInt(row.querySelector('.scontrino-row-sconto')?.value || '0') || 0,
+      metodo: row.querySelector('select')?.value || 'pos',
+      pagamenti: (typeof getRowPagamenti === 'function') ? getRowPagamenti(row) : null,
+      appointmentId: row.dataset.appointmentId || '',
+      rataId: row.dataset.rataId || '',
+      pacchettoId: row.dataset.pacchettoId || '',
+      operatorId: row.dataset.operatorId || '',
+      operatorNome: row.dataset.operatorNome || '',
+      categoria: row.dataset.categoria || '',
+      sottocategoriaId: row.dataset.sottocategoriaId || '',
+      isGrigia: grigia,
+      prepagataId: row.dataset.prepagataId || '',
+      ricaricaPrepagataId: row.dataset.ricaricaPrepagataId || ''
+    };
+  }
+  function serializeBozza(card) {
+    const ci = card.querySelector('.bozza-cliente');
+    const oi = card.querySelector('.bozza-operatore');
+    return {
+      clienteId: (ci && ci.dataset.selectedClient) || card.dataset.clienteId || '',
+      clienteNome: (ci && ci.value) || card.dataset.clienteNome || '',
+      operatoreId: (oi && oi.dataset.selectedOperator) || '',
+      operatoreNome: (oi && oi.value) || '',
+      voci: rowsOf(card).map(serializeRow)
+    };
+  }
+  // Salva tutte le bozze TRANNE quella confermata (stampata). Solo se ce n'e' >1.
+  window.persistAltreBozzePerStampa = function () {
+    try {
+      const cards = allCards();
+      if (cards.length < 2) { sessionStorage.removeItem(RESTORE_KEY); return; }
+      const conf = window.bozzaConfermata;
+      const altre = cards.filter(c => c !== conf);
+      if (!altre.length) { sessionStorage.removeItem(RESTORE_KEY); return; }
+      sessionStorage.setItem(RESTORE_KEY, JSON.stringify(altre.map(serializeBozza)));
+    } catch (_) {}
+  };
+
+  function materializzaRiga(voce) {
+    if (typeof aggiungiRigaServizio !== 'function') return null;
+    const orig = (voce.sconto > 0 && voce.sconto < 100) ? (voce.prezzo / (1 - voce.sconto / 100)) : voce.prezzo;
+    aggiungiRigaServizio({
+      id: voce.servizioId || '', nome: voce.nome, prezzo: orig, tag: voce.nome,
+      categoria: voce.categoria || '', sottocategoria_id: voce.sottocategoriaId || '',
+      appointment_id: voce.appointmentId || null, rata_id: voce.rataId || null, pacchetto_id: voce.pacchettoId || null,
+      operator_id: voce.operatorId || null, operator_nome: voce.operatorNome || '',
+      cliente_id: voce.clienteId || null, cliente_nome: voce.clienteNome || '',
+      prepagata_id: voce.prepagataId || null, ricarica_prepagata_id: voce.ricaricaPrepagataId || null
+    }, false);
+    const eng = getEngine();
+    const rs = eng ? eng.querySelectorAll(':scope > .scontrino-row') : [];
+    const row = rs[rs.length - 1];
+    if (!row) return null;
+    const pInput = row.querySelector('.scontrino-row-prezzo');
+    const sInput = row.querySelector('.scontrino-row-sconto');
+    if (pInput && !pInput.readOnly) pInput.value = (Number(voce.prezzo) || 0).toFixed(2);
+    if (sInput) sInput.value = String(voce.sconto || 0);
+    const sel = row.querySelector('select');
+    if (sel && ['pos', 'cash', 'bank'].includes(voce.metodo)) { sel.value = voce.metodo; sel.dispatchEvent(new Event('change')); }
+    if (voce.isGrigia) row.style.background = '#dcdcdc';
+    if (voce.pagamenti && voce.pagamenti.length > 1 && typeof setRowPagamenti === 'function') setRowPagamenti(row, voce.pagamenti);
+    return row;
+  }
+  function loadVoci(rowsBox, voci, isOriginal) {
+    (voci || []).forEach(v => {
+      const row = materializzaRiga(v);
+      if (row && !isOriginal && rowsBox) {
+        rowsBox.appendChild(row);
+        if (row.dataset.appointmentId && window.originalAppointmentIds) window.originalAppointmentIds.delete(String(row.dataset.appointmentId));
+      }
+    });
+  }
+  function applyClienteOperatore(cliInput, opInput, card, bozza) {
+    if (cliInput) {
+      if (bozza.clienteId) { window.settingClientProgrammatically = true; cliInput.value = bozza.clienteNome || ''; cliInput.dataset.selectedClient = bozza.clienteId; }
+      else { cliInput.value = ''; delete cliInput.dataset.selectedClient; }
+    }
+    if (card) { card.dataset.clienteId = bozza.clienteId || ''; card.dataset.clienteNome = bozza.clienteNome || ''; }
+    if (opInput && bozza.operatoreId) { opInput.value = bozza.operatoreNome || ''; opInput.dataset.selectedOperator = bozza.operatoreId; }
+  }
+  function restoreBozzeIfNeeded() {
+    let data = null;
+    try { data = JSON.parse(sessionStorage.getItem(RESTORE_KEY) || 'null'); } catch (_) {}
+    try { sessionStorage.removeItem(RESTORE_KEY); } catch (_) {}
+    if (!Array.isArray(data) || !data.length) return;
+    // Non interferire con i precompilati dal calendar
+    if (Array.isArray(window.SERVIZI_PRECOMPILATI) && window.SERVIZI_PRECOMPILATI.length) return;
+    const orig = getOriginalCard();
+    const eng = getEngine();
+    if (!orig || !eng) return;
+    // 1a bozza -> card originale
+    eng.innerHTML = '';
+    loadVoci(eng, data[0].voci, true);
+    applyClienteOperatore(orig.querySelector('.bozza-cliente'), orig.querySelector('.bozza-operatore'), orig, data[0]);
+    // altre -> cloni identici
+    for (let i = 1; i < data.length; i++) {
+      const built = cloneEditor();
+      if (!built) continue;
+      const card = built.card, refs = built.refs;
+      loadVoci(refs.rowsBox, data[i].voci, false);
+      applyClienteOperatore(refs.cli, refs.op, card, data[i]);
+      wireClone(card, refs);
+      const cont = dormContainer();
+      if (cont) cont.appendChild(card);
+    }
+    if (typeof aggiornaTotale === 'function') aggiornaTotale();
+    if (typeof aggiornaSubtotaliPagamenti === 'function') aggiornaSubtotaliPagamenti();
+    refreshDivisori();
+    aggiornaEtichetteSvuota();
+  }
+
+  function initRestore() {
+    if (!getOriginalCard()) return;
+    // Dopo che precompilati/localStorage hanno popolato il motore
+    window.addEventListener('load', function () { setTimeout(restoreBozzeIfNeeded, 400); });
+    if (document.readyState === 'complete') setTimeout(restoreBozzeIfNeeded, 400);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initRestore);
+  else initRestore();
+})();

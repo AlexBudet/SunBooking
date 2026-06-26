@@ -41,13 +41,13 @@
          style="margin-bottom: 2px; text-align: center; user-select: none; position: relative; z-index: 10;">
       <h5 style="color: #888; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; margin: 0; padding: 2px 0;">BOZZA SCONTRINO</h5>
     </div>
-    <div class="card neumorphic-card h-100">
+    <div class="card neumorphic-card h-100 bozza-editor">
       <div class="card-body">
         <!-- Operatore -->
 <div class="mb-2 d-flex gap-2 align-items-center">
   <div class="dropdown-anchor" style="width:230px; max-width:230px; position:relative;">
     <input type="text" id="operatorSelectInput" name="operatorSelectInput"
-           class="form-control" placeholder="Salone" readonly
+           class="form-control bozza-operatore" placeholder="Salone" readonly
            style="cursor:pointer; width:100%;"
            data-bs-toggle="tooltip" data-bs-placement="top"
            title="Seleziona l'operatore a cui associare il pagamento">
@@ -62,7 +62,7 @@
 
   <div class="dropdown-anchor" style="width:230px; max-width:230px; position:relative;">
     <input type="text" id="clientSearchInputCassa" name="clientSearchInputCassa"
-           class="form-control" placeholder="Cliente generico" autocomplete="off"
+           class="form-control bozza-cliente" placeholder="Cliente generico" autocomplete="off"
            style="width:100%;"
            data-bs-toggle="tooltip" data-bs-placement="top"
            title="Seleziona il cliente a cui associare il pagamento">
@@ -71,7 +71,7 @@
 </div>
         <br>
         <!-- Container righe servizi selezionati -->
-        <div id="scontrinoRowsContainer"></div>
+        <div id="scontrinoRowsContainer" class="bozza-rows"></div>
         <div id="scontrino-container"></div>
         <!-- Icona dischetto per salvare modifiche (visibile solo se pseudoscontrino popolato da blocchi calendar) -->
 <div id="saveModificheContainer" style="display: none; margin-top: 10px; text-align: center;">
@@ -93,17 +93,19 @@
           </div>
           <br>
           <div>
-            <span id="totalAmount" class="fw-bold fs-5">Scontrino: € 0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;
-            <span id="totalAmountAll" style="color: #444; font-size: 1rem;">Totale: € 0.00</span>
+            <span id="totalAmount" class="fw-bold fs-5 bozza-total">Scontrino: € 0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;
+            <span id="totalAmountAll" class="bozza-total-all" style="color: #444; font-size: 1rem;">Totale: € 0.00</span>
             <br><br>
-            <button class="btn btn-success ms-2" id="confermaBtn">CONFERMA</button>
-            <button id="reset-scontrino" class="btn btn-outline-danger">SVUOTA</button>
+            <button class="btn btn-success ms-2 bozza-conferma" id="confermaBtn">CONFERMA</button>
+            <button id="reset-scontrino" class="btn btn-outline-danger bozza-svuota">SVUOTA</button>
             <!-- Subtotali pagamenti, nascosto di default -->
-            <div id="subtotaliPagamenti" class="mt-2" style="display:none;"></div>
+            <div id="subtotaliPagamenti" class="mt-2 bozza-subtot" style="display:none;"></div>
           </div>
         </div>
       </div>
     </div>
+    <!-- Bozze scorporate (card parcheggiate, una per ogni divisione) -->
+    <div id="bozzeScorporateContainer"></div>
   </div>
 
 <!-- Pulsante stampa scontrino allineato in alto -->
@@ -680,6 +682,33 @@ document.addEventListener('DOMContentLoaded', function() {
 .pseudoscontrino-bloccato .border {
   border: transparent !important;
   box-shadow: none !important;
+}
+
+/* Il tasto CONFERMA/INDIETRO della bozza confermata deve restare cliccabile,
+   nonostante la card abbia pointer-events:none. */
+.pseudoscontrino-bloccato .bozza-conferma {
+  pointer-events: auto;
+}
+
+/* Bozza non confermata mentre un'altra è confermata: grigia e non interagibile,
+   tranne il suo tasto CONFERMA che la riattiva. */
+.bozza-disattivata {
+  position: relative;
+  pointer-events: none;
+}
+.bozza-disattivata::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(205, 205, 205, 0.55);
+  z-index: 5;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.bozza-disattivata .bozza-conferma {
+  position: relative;
+  z-index: 6;
+  pointer-events: auto;
 }
 
 .dropdown-anchor { position: relative; }
@@ -1948,6 +1977,122 @@ body.show-op-per-riga .scontrino-row .op-col:hover {
   font-weight: 700;
   line-height: 1;
 }
+
+/* ===== Scorporo bozza: riordino voci + divisione in due scontrini ===== */
+/* Maniglia di trascinamento (solo desktop) */
+.bozza-drag-handle {
+  cursor: grab;
+  color: #b08aa0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 2px;
+  font-size: 1.05em;
+  user-select: none;
+}
+.bozza-drag-handle:active { cursor: grabbing; }
+body.touch-ui .bozza-drag-handle { display: none; }
+
+/* Frecce su/giù (solo touch-ui) */
+.bozza-move-arrows { display: none; flex-direction: column; line-height: 1; margin-right: 2px; }
+body.touch-ui .bozza-move-arrows { display: inline-flex; }
+.bozza-move-arrows button {
+  border: none; background: #f0e8ee; color: #7a5d70;
+  border-radius: 4px; width: 26px; height: 20px; padding: 0; margin: 1px 0;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 0.8em;
+}
+.bozza-move-arrows button:disabled { opacity: 0.35; }
+.bozza-move-arrows button:active:not(:disabled) { background: #e0cede; }
+
+.scontrino-row.dragging { opacity: 0.55; background: #f7f0f5 !important; }
+
+/* Barra divisore tra due voci */
+.bozza-divider {
+  position: relative;
+  height: 14px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bozza-divider-bar {
+  position: absolute;
+  left: 6px; right: 6px; top: 50%;
+  height: 2px; transform: translateY(-50%);
+  background: transparent;
+  border-radius: 2px;
+  transition: background 0.12s;
+}
+.bozza-divider-btn {
+  position: relative;
+  z-index: 2;
+  border: none;
+  background: #e6e6e6;
+  color: #dc3545;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border-radius: 10px;
+  padding: 1px 9px;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.12s, transform 0.12s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.bozza-divider-btn i { font-size: 0.9em; margin-right: 2px; }
+/* Desktop: barra + tasto compaiono al passaggio del mouse sul gap */
+.bozza-divider:hover { height: 24px; }
+.bozza-divider:hover .bozza-divider-bar { background: #cfcfcf; }
+.bozza-divider:hover .bozza-divider-btn { opacity: 1; transform: scale(1); pointer-events: auto; }
+/* Touch: barra e tasto sempre visibili e tappabili */
+body.touch-ui .bozza-divider { height: 26px; }
+body.touch-ui .bozza-divider-bar { background: #cfcfcf; }
+body.touch-ui .bozza-divider-btn { opacity: 1; transform: scale(1); pointer-events: auto; }
+
+/* In stato confermato (bloccato) nascondi handle/frecce/divisori */
+.pseudoscontrino-bloccato .bozza-drag-handle,
+.pseudoscontrino-bloccato .bozza-move-arrows,
+.pseudoscontrino-bloccato .bozza-divider { display: none !important; }
+
+/* ===== Bozze scorporate (card parcheggiate) ===== */
+#bozzeScorporateContainer { margin-top: 14px; display: flex; flex-direction: column; gap: 12px; }
+.bozza-scorporata {
+  border: 1px dashed #b8809d;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fffdfe 0%, #fbf6f9 100%);
+  padding: 10px 12px;
+  position: relative;
+}
+.bozza-scorporata.in-attesa { opacity: 0.92; }
+.bozza-scorporata-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;
+}
+.bozza-scorporata-title {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #a06b88;
+}
+.bozza-scorporata-voci { margin: 4px 0; }
+.bsv-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.92em; padding: 3px 0; border-bottom: 1px solid #f0e6ee;
+}
+.bsv-row:last-child { border-bottom: none; }
+.bsv-nome { flex: 1 1 auto; }
+.bsv-metodo {
+  font-size: 0.66em; color: #7a5d70; background: #f0e8ee; border-radius: 6px;
+  padding: 1px 6px; margin-left: 6px; text-transform: uppercase; white-space: nowrap;
+}
+.bsv-prezzo { font-variant-numeric: tabular-nums; min-width: 70px; text-align: right; }
+.bsv-grigia { color: #999; }
+.bozza-scorporata-tot { text-align: right; font-weight: 700; margin-top: 4px; }
+.bozza-scorporata-cliente { margin-top: 6px; position: relative; }
+.bozza-scorporata-cliente .dropdown-menu {
+  position: absolute; top: 100%; left: 0; width: 100%; margin-top: 2px;
+  border: 1px solid rgba(135, 100, 124, 0.2); border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8f5f7 100%);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+.bozza-scorporata-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.bozza-scorporata-nota { font-size: 0.75em; color: #a06b88; margin-top: 6px; }
 </style>
 
 <script>
