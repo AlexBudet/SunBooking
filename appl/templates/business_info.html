@@ -546,18 +546,19 @@ function applyUpdateAutomatic() {
         return;
       }
 
-      /* Il batch è stato lanciato e farà: kill processo + copia + riavvio */
-      progressLabel.textContent = 'Aggiornamento avviato! L\'app si chiuderà automaticamente...';
+      /* Il batch è stato lanciato e farà: kill processo + copia + avviso di
+         completamento. NESSUN riavvio automatico: l'utente riavvia Tosca a mano. */
+      progressLabel.textContent = 'Aggiornamento avviato! L\'app si chiuderà...';
       btnUpdate.textContent = 'Chiusura in corso...';
       btnUpdate.style.backgroundColor = '#28a745';
 
-      /* Non serve alert bloccante: il batch farà taskkill e chiuderà tutto.
-         Mostriamo solo un messaggio e aspettiamo che il batch faccia il suo lavoro. */
+      /* Non serve alert bloccante: il batch farà taskkill e chiuderà tutto, poi
+         mostrerà un avviso "Aggiornamento completato". */
       document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#f0f0f0;">' +
         '<div style="text-align:center;font-family:sans-serif;">' +
         '<h2>Aggiornamento in corso...</h2>' +
-        '<p>L\'applicazione si chiuderà automaticamente, aspettare 1 minuto e riavviare Tosca, la nuova versione sarà disponibile al riavvio.</p>' +
-        '<p style="color:#888;margin-top:20px;">Se la finestra non si chiude entro 30 secondi, chiuderla manualmente.</p>' +
+        '<p>L\'applicazione si chiuderà per completare l\'aggiornamento.<br>Apparirà un avviso quando è completato: allora potrai <strong>riavviare Tosca</strong>.</p>' +
+        '<p style="color:#888;margin-top:20px;">Se questa finestra del browser non si chiude da sola, puoi chiuderla manualmente.</p>' +
         '</div></div>';
     })
     .catch(err => {
