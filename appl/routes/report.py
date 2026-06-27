@@ -263,16 +263,16 @@ def registro_corrispettivi():
         'Thursday': 'Giovedì', 'Friday': 'Venerdì', 'Saturday': 'Sabato', 'Sunday': 'Domenica'
     }
 
-    # Carica log riconciliazione SOLO per owner E SOLO sulla versione on-premise (start.py).
-    # Sul cloud/wsgi.py il flag IS_CLOUD=True viene settato sui child app: la
-    # stampante RCH della LAN del salone non e' raggiungibile da Azure, quindi
-    # la riconciliazione DGFE non ha senso ed i campi vengono omessi.
+    # Carica i dati DGFE riconciliati per owner/admin. I dati sono persistiti in DB
+    # (tabella dgfe_readings) dall'istanza on-premise collegata alla stampante: la sola
+    # LETTURA dal DB per mostrarli NON richiede la stampante, quindi va fatta anche
+    # quando l'app gira via wsgi.py (IS_CLOUD=True). Prima erano gated su `is_local`,
+    # percio' con wsgi.py i dati c'erano in DB ma non venivano mai mostrati.
+    # (La lettura LIVE "Carica DGFE" resta utilizzabile solo dove la RCH e' in LAN.)
     user_id = session.get("user_id")
     user = db.session.get(User, user_id)
-    is_local = not bool(current_app.config.get('IS_CLOUD'))
-    # Visibile a owner E admin sulla versione on-premise (start.py).
     # Il flag mantiene il nome storico is_owner per non rinominare ovunque, ma copre admin.
-    is_owner = is_local and bool(user and getattr(user.ruolo, 'value', None) in ('owner', 'admin'))
+    is_owner = bool(user and getattr(user.ruolo, 'value', None) in ('owner', 'admin'))
 
     recon_log = {}
     if is_owner:
