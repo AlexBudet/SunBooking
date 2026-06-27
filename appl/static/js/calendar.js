@@ -8860,6 +8860,15 @@ const groupBlocks = Array.from(new Set([...blocksInCell, ...contiguousBlocks]))
   // Ciclo: se il blocco è in stato 1 o 3, il primo click lo resetta a 0; se già a 0, il click successivo lo porta a stato 3.
   // In questo caso, l'unica modifica grafica è che il blocco diventa completamente nero e puntinato.
   // ===============================
+// Riconosce i placeholder generici del booking online (cliente non ancora associato).
+// Il backend usa DUE forme intercambiabili: ("cliente","booking") e ("booking","online").
+// Vanno trattate entrambe allo stesso modo (cfr. calendar.py / cassa.py).
+function isGenericBookingPlaceholder(nome, cognome) {
+  const n = (nome || '').toString().trim().toLowerCase();
+  const c = (cognome || '').toString().trim().toLowerCase();
+  return (n === 'booking' && c === 'online') || (n === 'cliente' && c === 'booking');
+}
+
 function getRelevantBlocks(baseBlock) {
   const allBlocks = Array.from(document.querySelectorAll('.appointment-block'));
   const baseClientId = baseBlock.getAttribute('data-client-id') || '';
@@ -8869,8 +8878,8 @@ function getRelevantBlocks(baseBlock) {
   const baseNome = (baseBlock.getAttribute('data-client-nome') || '').toString().trim().toLowerCase();
   const baseCognome = (baseBlock.getAttribute('data-client-cognome') || '').toString().trim().toLowerCase();
 
-  // Se è chiaramente un placeholder booking-online generico, non propagare
-  if (baseSource === 'web' && baseNome === 'booking' && baseCognome === 'online') {
+  // Se è chiaramente un placeholder booking generico (non associato), non propagare
+  if (baseSource === 'web' && isGenericBookingPlaceholder(baseNome, baseCognome)) {
     return [baseBlock];
   }
 
@@ -8889,10 +8898,10 @@ function getRelevantBlocks(baseBlock) {
     const bStatus = parseInt(b.getAttribute('data-status') || '0', 10);
     if (bStatus === 2) return false;
 
-    // escludi placeholder booking genericamente vuoti
+    // escludi placeholder booking generici (entrambe le forme: cliente/booking e booking/online)
     const bNome = (b.getAttribute('data-client-nome') || '').toString().trim().toLowerCase();
     const bCognome = (b.getAttribute('data-client-cognome') || '').toString().trim().toLowerCase();
-    if (b.getAttribute('data-source') === 'web' && bNome === 'booking' && bCognome === 'online') return false;
+    if ((b.getAttribute('data-source') || '').toString().trim().toLowerCase() === 'web' && isGenericBookingPlaceholder(bNome, bCognome)) return false;
 
     const bClientId = b.getAttribute('data-client-id') || '';
     const bBookingSession = b.getAttribute('data-booking_session_id') || '';
@@ -8973,67 +8982,6 @@ function getRelevantBlocks(baseBlock) {
   }
 
   return unique.length ? unique : [baseBlock];
-}
-
-function getContiguousClientBlocks(block) {
-  console.log("🔍 DEBUG: getContiguousClientBlocks called for block:", block.getAttribute('data-appointment-id'));
-  const clientId = block.getAttribute('data-client-id');
-  const date = block.getAttribute('data-date') || selectedDate;
-  if (!clientId) {
-    console.log("⚠️ DEBUG: No clientId, returning [block]");
-    return [block];
-  }
-
-  // Prendi tutti i blocchi dello stesso cliente e data, escludendo "cliente booking" con source=web
-  const allBlocks = Array.from(document.querySelectorAll('.appointment-block'))
-    .filter(b =>
-      b.getAttribute('data-client-id') === clientId &&
-      (b.getAttribute('data-date') || selectedDate) === date &&
-      !(
-        b.getAttribute('data-client-nome') === 'cliente' &&
-        b.getAttribute('data-client-cognome') === 'booking' &&
-        b.getAttribute('data-source') === 'web'
-      )
-    );
-  console.log("📋 DEBUG: Filtered blocks:", allBlocks.map(b => b.getAttribute('data-appointment-id')));
-
-  // Ordina per orario di inizio
-  allBlocks.sort((a, b) => getBlockStartTime(a) - getBlockStartTime(b));
-
-  // Trova il gruppo contiguo che include il blocco di partenza
-  const idx = allBlocks.indexOf(block);
-  if (idx === -1) return [block];
-
-    // Gap massimo in minuti (globale, impostabile): default da window.CONTIGUOUS_BLOCK_MAX_GAP_MINUTES
-  const MAX_GAP = Number(window.CONTIGUOUS_BLOCK_MAX_GAP_MINUTES || 30);
-
-  let group = [block];
-  // Verso l'alto: includi prev se la distanza tra end(prev) e start(curr) <= MAX_GAP
-  for (let i = idx - 1; i >= 0; i--) {
-    const prev = allBlocks[i];
-    const curr = group[0];
-    const gap = getBlockStartTime(curr) - getBlockEndTime(prev);
-    if (gap <= MAX_GAP && gap >= -MAX_GAP) { // tolleranza anche per sovrapposizioni negative
-      group.unshift(prev);
-    } else {
-      break;
-    }
-  }
-
-  // Verso il basso: includi next se la distanza tra start(next) e end(curr) <= MAX_GAP
-  for (let i = idx + 1; i < allBlocks.length; i++) {
-    const next = allBlocks[i];
-    const curr = group[group.length - 1];
-    const gap = getBlockStartTime(next) - getBlockEndTime(curr);
-    if (gap <= MAX_GAP && gap >= -MAX_GAP) {
-      group.push(next);
-    } else {
-      break;
-    }
-  }
-
-    console.log("📋 DEBUG: Final group (MAX_GAP=" + MAX_GAP + "):", group.map(b => b.getAttribute('data-appointment-id')));
-  return group;
 }
 
   document.addEventListener('click', function(e) {

@@ -547,6 +547,24 @@ def create_appointment():
         # Verifica “nuovo cliente” PRIMA di creare (solo se client_id reale)
         is_new_client = is_first_appointment_for_client(client_id) if client_id else False
 
+        # Invariante colore: tutti i blocchi di uno stesso cliente in uno stesso giorno
+        # devono avere lo stesso colore. Se il cliente ha gia' un appuntamento quel giorno
+        # ne riusiamo il colore (anche se ne e' stato scelto un altro nel form), altrimenti
+        # usiamo il colore richiesto/casuale e lo riusiamo per gli altri blocchi creati in
+        # questo batch per lo stesso cliente/giorno.
+        _day_color_cache = {}
+        def resolve_day_color(cid, fallback_color, day):
+            fallback = (fallback_color or '').strip() or random_color()
+            if not cid or not day:
+                return fallback, compute_font_color(fallback)
+            key = (cid, day)
+            if key in _day_color_cache:
+                return _day_color_cache[key]
+            dc = existing_day_color(cid, day)
+            res = dc if dc else (fallback, compute_font_color(fallback))
+            _day_color_cache[key] = res
+            return res
+
         # --- PSEUDOBLOCCHI ---
         pseudoblocks = data.get('pseudoblocks')
         created_appts = []
@@ -555,7 +573,7 @@ def create_appointment():
             first_created = None
 
             for pb in pseudoblocks:
-                pb_color = (pb.get('colore') or pb.get('color') or colore) if isinstance(pb, dict) else colore
+                pb_color_base = (pb.get('colore') or pb.get('color') or colore) if isinstance(pb, dict) else colore
                 try:
                     pb_duration = int(pb.get('duration', duration))
                 except Exception:
@@ -590,6 +608,9 @@ def create_appointment():
                     pb.get('pacchettoSedutaId') if isinstance(pb, dict) else None
                 )
 
+                # Uniforma il colore al giorno del cliente (invariante stesso cliente/giorno)
+                pb_color, pb_font = resolve_day_color(pb_client_id, pb_color_base, current_start.date())
+
                 new_appt = Appointment(
                     client_id=pb_client_id,
                     operator_id=operator_id,
@@ -597,7 +618,7 @@ def create_appointment():
                     start_time=current_start,
                     _duration=int(pb_duration),
                     colore=pb_color,
-                    colore_font=compute_font_color(pb_color),
+                    colore_font=pb_font,
                     note=pb_note,
                     stato=inherited_status,
                     pacchetto_seduta_id=pb_pacchetto_seduta_id
@@ -701,6 +722,9 @@ def create_appointment():
 
         # Recupera pacchetto_seduta_id se presente (supporta entrambi i formati)
         single_pacchetto_seduta_id = _norm_id(data.get('pacchetto_seduta_id')) or _norm_id(data.get('pacchettoSedutaId'))
+
+        # Uniforma il colore al giorno del cliente (invariante stesso cliente/giorno)
+        colore, colore_font = resolve_day_color(client_id, colore, start_time.date())
 
         new_appt = Appointment(
             client_id=client_id,
