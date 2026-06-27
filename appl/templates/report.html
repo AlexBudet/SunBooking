@@ -2341,6 +2341,23 @@ document.addEventListener('DOMContentLoaded', function() {
   // (sequenziale per non sovraccaricare la stampante).
   // Mostra "Correggi" solo nei giorni con discrepanza tra DB e DGFE.
   // ----------------------------------------------------------------
+  // Vero se la data ISO (YYYY-MM-DD) e' oggi.
+  function _isTodayIso(isoDay) {
+    const t = new Date();
+    const todayIso = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+    return isoDay === todayIso;
+  }
+
+  // Avvertenza "dato parziale" per il giorno corrente: il totale DGFE non e'
+  // definitivo finche' non viene fatta la chiusura fiscale (Z). Tooltip Bootstrap.
+  function _appendPartialBadge(cell) {
+    if (!cell) return;
+    const warn = document.createElement('i');
+    warn.className = 'bi bi-exclamation-triangle-fill text-warning ms-1';
+    bsTip(warn, 'Giornata in corso: il totale DGFE è PARZIALE e diventa definitivo dopo la chiusura fiscale (Z). Allinea/Correggi solo a chiusura avvenuta.');
+    cell.appendChild(warn);
+  }
+
   function _renderDgfeCell(cell, dgfeTotal, dbTotal) {
     cell.innerHTML = '';
     cell.style.color = '';

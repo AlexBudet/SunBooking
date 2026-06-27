@@ -4108,7 +4108,7 @@ $timer.Add_Tick({
     if (Test-Path "$env:LOCALAPPDATA\SunBooking\_update_done.flag") {
         Remove-Item "$env:LOCALAPPDATA\SunBooking\_update_done.flag" -Force -ErrorAction SilentlyContinue
         $label.Text = "Aggiornamento completato!"
-        $sublabel.Text = "Riavvio in corso..."
+        $sublabel.Text = "Puoi riavviare Tosca."
         $progress.Style = "Continuous"
         $progress.Value = 100
         $form.Refresh()
@@ -4163,9 +4163,7 @@ if not errorlevel 1 (
 
 if %RETRIES% GEQ 20 (
     echo [%date% %time%] ERRORE: impossibile sbloccare dopo 20 tentativi >> "{log_file}"
-    echo done> "{done_flag}"
-    pause
-    exit /b 1
+    goto :FAIL
 )
 
 timeout /t 1 /nobreak >nul
@@ -4191,9 +4189,7 @@ if errorlevel 1 (
     if errorlevel 1 (
         echo [%date% %time%] ERRORE CRITICO: ripristino vecchio exe >> "{log_file}"
         move /Y "{old_exe_renamed}" "{current_exe}" >nul 2>&1
-        echo done> "{done_flag}"
-        pause
-        exit /b 1
+        goto :FAIL
     )
 )
 
@@ -4202,9 +4198,7 @@ echo [%date% %time%] Copia completata con successo >> "{log_file}"
 if not exist "{current_exe}" (
     echo [%date% %time%] ERRORE: file target non esiste dopo copia! >> "{log_file}"
     move /Y "{old_exe_renamed}" "{current_exe}" >nul 2>&1
-    echo done> "{done_flag}"
-    pause
-    exit /b 1
+    goto :FAIL
 )
 
 del "{old_exe_renamed}" >nul 2>&1
@@ -4217,39 +4211,29 @@ rem === FASE 6: Pulizia ===
 del "{update_info_path}" >nul 2>&1
 rmdir /s /q "{os.path.dirname(new_exe_temp)}" >nul 2>&1
 
-rem === FASE 6b: Segnala post-update per non aprire un secondo browser ===
-echo 1> "{os.path.join(appdata_dir, '_post_update')}"
+rem === FASE 7: Assicura che NESSUN processo {exe_name} resti attivo (nessun riavvio automatico) ===
+taskkill /F /T /IM "{exe_name}" >nul 2>&1
+echo [%date% %time%] Processi {exe_name} terminati, nessun riavvio automatico >> "{log_file}"
 
-rem === FASE 7: Riavvia app ===
-echo [%date% %time%] Riavvio applicazione: {current_exe} >> "{log_file}"
-cd /d "{exe_dir}"
-start "SunBooking" "{current_exe}"
-
-rem === FASE 8: Attendi che il server sia pronto (max 30 sec) ===
-echo [%date% %time%] Attendo server pronto su porta {PORT}... >> "{log_file}"
-set WAIT_SERVER=0
-:WAIT_SERVER_LOOP
-set /A WAIT_SERVER+=1
-powershell -NoProfile -Command "try {{ $c = New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1', {PORT}); $c.Close(); [System.Environment]::Exit(0) }} catch {{ [System.Environment]::Exit(1) }}" >nul 2>&1
-if "%ERRORLEVEL%"=="0" (
-    echo [%date% %time%] Server pronto dopo %WAIT_SERVER% tentativi >> "{log_file}"
-    goto SERVER_READY
-)
-if %WAIT_SERVER% GEQ 30 (
-    echo [%date% %time%] Timeout attesa server >> "{log_file}"
-    goto SERVER_READY
-)
-timeout /t 1 /nobreak >nul
-goto WAIT_SERVER_LOOP
-
-:SERVER_READY
-rem Segnala alla finestra progresso di chiudersi
+rem Chiudi la finestra di progresso
 echo done> "{done_flag}"
-
 echo [%date% %time%] UPDATER COMPLETATO >> "{log_file}"
 
-rem Auto-elimina questo script
+rem === FASE 8: Avvisa il cliente che l'update e' riuscito e puo' riavviare Tosca ===
+powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Aggiornamento completato con successo.' + [Environment]::NewLine + [Environment]::NewLine + 'Ora puoi riavviare Tosca.','SunBooking - Aggiornamento',[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information,[System.Windows.Forms.MessageBoxDefaultButton]::Button1,[System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly) | Out-Null"
+
+rem Auto-elimina questo script ed esci
 (goto) 2>nul & del "%~f0"
+exit /b 0
+
+:FAIL
+echo [%date% %time%] UPDATER FALLITO >> "{log_file}"
+echo done> "{done_flag}"
+rem Niente riavvio: assicura comunque che nessun {exe_name} resti appeso
+taskkill /F /T /IM "{exe_name}" >nul 2>&1
+powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Aggiornamento NON riuscito: e'' stata mantenuta la versione precedente.' + [Environment]::NewLine + [Environment]::NewLine + 'Puoi riavviare Tosca e riprovare piu'' tardi.','SunBooking - Aggiornamento',[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Warning,[System.Windows.Forms.MessageBoxDefaultButton]::Button1,[System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly) | Out-Null"
+(goto) 2>nul & del "%~f0"
+exit /b 1
 '''
         
         with open(batch_path, 'w', encoding='utf-8') as f:
