@@ -2186,7 +2186,9 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 <script>
   // Flag globale: solo per owner E solo sulla versione on-premise (start.py).
-  // Sul cloud (wsgi.py) hide_cassa=True -> riconciliazione disattivata.
+  // La colonna/azioni DGFE dipendono SOLO dall'avere la cassa abilitata (hide_cassa)
+  // + ruolo owner/admin: NON dal flag cloud. Cosi', se la cassa e' abilitata anche
+  // online e la stampante RCH e' raggiungibile, la lettura DGFE funziona come in locale.
   window.IS_OWNER = {% if not hide_cassa and current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}true{% else %}false{% endif %};
 
   // Converte 'DD-MM-YYYY' in 'YYYY-MM-DD' per la query DGFE
@@ -2219,13 +2221,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const dgfeCell = tr.insertCell();
             dgfeCell.className = 'dgfe-cell';
             const hasRecon = row.reconciliation_dgfe_total != null
-              && ['ok', 'fixed', 'discrepant'].includes(row.reconciliation_status);
+              && ['ok', 'fixed', 'discrepant', 'checked'].includes(row.reconciliation_status);
             if (hasRecon) {
               _renderDgfeCell(dgfeCell, row.reconciliation_dgfe_total, row.totale);
               const runAt = row.reconciliation_run_at
                 ? row.reconciliation_run_at.replace('T', ' ').slice(0, 16)
                 : '-';
-              bsTip(dgfeCell, `${row.reconciliation_dgfe_count || 0} scontrini in DGFE (verifica post-Z del ${runAt})`);
+              bsTip(dgfeCell, `${row.reconciliation_dgfe_count || 0} scontrini nella DGFE — letto dal registratore il ${runAt}`);
               tr.dataset.dgfeTotal = String(row.reconciliation_dgfe_total);
             } else {
               dgfeCell.textContent = '—';
@@ -2243,7 +2245,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const azioniCell = tr.insertCell();
             azioniCell.className = 'azioni-cell';
             const hasRecon = row.reconciliation_dgfe_total != null
-              && ['ok', 'fixed', 'discrepant'].includes(row.reconciliation_status);
+              && ['ok', 'fixed', 'discrepant', 'checked'].includes(row.reconciliation_status);
             if (hasRecon
                 && Math.abs((row.reconciliation_dgfe_total || 0) - (row.totale || 0)) > 0.01) {
               tr.style.background = '#fff5f0';
@@ -2277,7 +2279,7 @@ document.addEventListener('DOMContentLoaded', function() {
           // pre-calcola il totale DGFE; altrimenti lascia '—' (richiede "Carica DGFE").
           const allPrefilled = data.rows.length > 0 && data.rows.every(r =>
             r.reconciliation_dgfe_total != null
-            && ['ok', 'fixed', 'discrepant'].includes(r.reconciliation_status)
+            && ['ok', 'fixed', 'discrepant', 'checked'].includes(r.reconciliation_status)
           );
           if (allPrefilled) {
             const sumDgfe = data.rows.reduce((acc, r) => acc + (r.reconciliation_dgfe_total || 0), 0);

@@ -22,34 +22,34 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
     <div class="alert alert-secondary py-2 mb-0 d-flex align-items-center" style="gap:.6em;" role="alert">
       <i class="bi bi-question-circle"></i>
       <div>
-        <strong>DGFE non ancora letto per questo giorno.</strong>
-        La conciliazione col registratore avviene alla chiusura fiscale (Z) o con
-        <em>Allinea a DGFE</em>.
+        <strong>Dati DGFE non ancora letti per questo giorno.</strong>
+        Vengono letti dal registratore alla chiusura fiscale (Z) oppure premendo
+        <em>Carica DGFE</em> nei Corrispettivi.
       </div>
     </div>
   {% elif dgfe_recon.aligned %}
     <div class="alert alert-success py-2 mb-0 d-flex align-items-center" style="gap:.6em;" role="alert">
       <i class="bi bi-check-circle-fill"></i>
       <div>
-        <strong>Totale fiscale allineato al DGFE.</strong>
-        Registro €{{ "%.2f"|format(dgfe_recon.registro_total) }} = DGFE €{{ "%.2f"|format(dgfe_recon.dgfe_total) }}
-        ({{ dgfe_recon.dgfe_count }} scontrin{{ 'o' if dgfe_recon.dgfe_count == 1 else 'i' }} sul DGFE).
+        <strong>Chiusura Tosca e DGFE coincidono.</strong>
+        Tosca €{{ "%.2f"|format(dgfe_recon.registro_total) }} = DGFE €{{ "%.2f"|format(dgfe_recon.dgfe_total) }}
+        ({{ dgfe_recon.dgfe_count }} scontrin{{ 'o' if dgfe_recon.dgfe_count == 1 else 'i' }} nella DGFE).
         {% if dgfe_recon.has_adj %}
-          La quadratura include la voce <em>ALLINEAMENTO DGFE</em> qui sotto.
+          Il pareggio include la voce <em>ALLINEAMENTO DGFE</em> qui sotto.
         {% else %}
-          Nessuna correzione necessaria.
+          Nessuna differenza.
         {% endif %}
-        {% if dgfe_recon.run_at %}<span class="text-muted">— verificato il {{ dgfe_recon.run_at }}</span>{% endif %}
+        {% if dgfe_recon.run_at %}<span class="text-muted">— letto il {{ dgfe_recon.run_at }}</span>{% endif %}
       </div>
     </div>
   {% else %}
     <div class="alert alert-warning py-2 mb-0 d-flex align-items-center" style="gap:.6em;" role="alert">
       <i class="bi bi-exclamation-triangle-fill"></i>
       <div>
-        <strong>Totale fiscale NON allineato al DGFE.</strong>
-        Registro €{{ "%.2f"|format(dgfe_recon.registro_total) }} vs DGFE €{{ "%.2f"|format(dgfe_recon.dgfe_total) }}
+        <strong>Chiusura Tosca e DGFE NON coincidono.</strong>
+        Tosca €{{ "%.2f"|format(dgfe_recon.registro_total) }} vs DGFE €{{ "%.2f"|format(dgfe_recon.dgfe_total) }}
         (Δ {{ "%+.2f"|format(dgfe_recon.delta) }}).
-        Usa <em>Allinea a DGFE</em> dal modal Corrispettivi per quadrare.
+        Allinea dai Corrispettivi per pareggiare.
         {% if dgfe_recon.run_at %}<span class="text-muted">— ultima lettura {{ dgfe_recon.run_at }}</span>{% endif %}
       </div>
     </div>

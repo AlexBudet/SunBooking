@@ -1656,6 +1656,16 @@ def dgfe_total_for_day():
 
         entries, diag = _dgfe_entries_with_diag(ip, day)
         total = round(sum(float(e.get("totale_float", 0) or 0) for e in entries), 2)
+
+        # Persisti la lettura in DB (anche se e' solo un "Carica DGFE"/check), cosi'
+        # il badge del Registro Scontrini la riflette. Solo se la lettura e' affidabile.
+        if diag.get("status") in ("ok", "ej_empty", "ej_no_blocks"):
+            _persist_dgfe_reading(
+                day, total, len(entries),
+                status="checked",
+                notes="Lettura DGFE da 'Carica DGFE' (Corrispettivi).",
+            )
+
         return jsonify({
             "date": day_str,
             "dgfe_total": total,
@@ -1726,6 +1736,14 @@ def _correggi_day_compute(day_date):
 
     adj_prog = _adj_progressivo_for_day(day_date)
     existing_adj = Receipt.query.filter_by(numero_progressivo=adj_prog).first()
+
+    # Persisti la lettura DGFE del giorno in DB (questa funzione e' usata da 'Allinea a
+    # DGFE' anteprima/reale e da 'Correggi'): cosi' anche un semplice check dai
+    # Corrispettivi popola la riconciliazione vista nel Registro Scontrini.
+    _persist_dgfe_reading(
+        day_date, dgfe_total, dgfe_count, db_total=db_total,
+        status="checked", notes="Lettura DGFE da Corrispettivi.",
+    )
 
     return {
         "ok": True,
@@ -2185,7 +2203,6 @@ def reconcile_range():
 
         return jsonify({
             "ok": True,
-            "log_dir": recon_dir,
             "processed": len(results),
             "skipped_future": skipped_future,
             "skipped_already_done": skipped_already_done,
@@ -3075,7 +3092,38 @@ def _set_reconciliation_entry(business_info_id, day_str, entry):
         except Exception:
             pass
         try:
-            current_app.logger.warning("DgfeReading: upsert fallito per %s: %s", day_str, str(exc))
+            current_app.logger.error("DgfeReading: UPSERT FALLITO per %s: %s", day_str, str(exc))
+        except Exception:
+            pass
+
+def _persist_dgfe_reading(day_date, dgfe_total, dgfe_count, db_total=None,
+                          status="checked", notes=None):
+    """Persiste in DB la lettura DGFE di un giorno, da QUALSIASI sorgente: semplice
+    'Carica DGFE'/check, anteprima, allineamento, chiusura Z. Cosi' il badge del
+    Registro Scontrini riflette sempre l'ultima lettura. Best-effort, mai solleva.
+
+    Rispetta il guard anti-azzeramento di `_set_reconciliation_entry` (non sovrascrive
+    un giorno gia' verificato con una lettura vuota)."""
+    try:
+        bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+        if bi is None:
+            return
+        day_str = day_date.strftime("%Y-%m-%d")
+        entry = {
+            "status": status,
+            "date": day_str,
+            "run_at": datetime.now().isoformat(timespec='seconds'),
+            "dgfe_count": dgfe_count,
+            "dgfe_total": dgfe_total,
+        }
+        if db_total is not None:
+            entry["db_total"] = db_total
+        if notes:
+            entry["notes"] = notes
+        _set_reconciliation_entry(bi.id, day_str, entry)
+    except Exception:
+        try:
+            current_app.logger.warning("persistenza lettura DGFE fallita per %s", day_date)
         except Exception:
             pass
 
