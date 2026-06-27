@@ -349,6 +349,34 @@ class BusinessInfo(db.Model):
     def __repr__(self):
         return f"<BusinessInfo {self.business_name}>"
 
+class DgfeReading(db.Model):
+    """Lettura DGFE (registratore fiscale) riconciliata per un giorno.
+
+    Sostituisce il vecchio log JSON su file: la riconciliazione DGFE<->DB viene
+    persistita qui, in DB, una riga per (negozio, giorno). `payload` conserva il
+    dict completo dell'esito per retro-compatibilita' (badge registro + colonna
+    DGFE nei corrispettivi). Le colonne dedicate servono per query/ispezione.
+    """
+    __tablename__ = 'dgfe_readings'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    # Non usiamo una FK per robustezza (era una semplice chiave nel vecchio log);
+    # None viene normalizzato a 0 dal codice cosi' il vincolo UNIQUE funziona.
+    business_info_id = db.Column(db.Integer, nullable=False, default=0, index=True)
+    giorno = db.Column(db.Date, nullable=False, index=True)
+    dgfe_total = db.Column(db.Float, nullable=True)
+    dgfe_count = db.Column(db.Integer, nullable=True)
+    status = db.Column(db.String(32), nullable=True)
+    run_at = db.Column(db.DateTime, nullable=True)
+    payload = db.Column(db.Text, nullable=True)  # JSON completo dell'esito
+    updated_at = db.Column(db.DateTime, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('business_info_id', 'giorno', name='uq_dgfe_readings_bi_day'),
+    )
+
+    def __repr__(self):
+        return f"<DgfeReading {self.giorno} bi={self.business_info_id} tot={self.dgfe_total}>"
+
 class MarketingTemplate(db.Model):
     __tablename__ = 'marketing_templates'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)

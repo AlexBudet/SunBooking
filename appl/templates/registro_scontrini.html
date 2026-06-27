@@ -16,8 +16,52 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
 });
 </script>
 
+{% if dgfe_recon %}
+<div style="width: 94%; margin: 0 auto 1em auto;">
+  {% if not dgfe_recon.available %}
+    <div class="alert alert-secondary py-2 mb-0 d-flex align-items-center" style="gap:.6em;" role="alert">
+      <i class="bi bi-question-circle"></i>
+      <div>
+        <strong>DGFE non ancora letto per questo giorno.</strong>
+        La conciliazione col registratore avviene alla chiusura fiscale (Z) o con
+        <em>Allinea a DGFE</em>.
+      </div>
+    </div>
+  {% elif dgfe_recon.aligned %}
+    <div class="alert alert-success py-2 mb-0 d-flex align-items-center" style="gap:.6em;" role="alert">
+      <i class="bi bi-check-circle-fill"></i>
+      <div>
+        <strong>Totale fiscale allineato al DGFE.</strong>
+        Registro €{{ "%.2f"|format(dgfe_recon.registro_total) }} = DGFE €{{ "%.2f"|format(dgfe_recon.dgfe_total) }}
+        ({{ dgfe_recon.dgfe_count }} scontrin{{ 'o' if dgfe_recon.dgfe_count == 1 else 'i' }} sul DGFE).
+        {% if dgfe_recon.has_adj %}
+          La quadratura include la voce <em>ALLINEAMENTO DGFE</em> qui sotto.
+        {% else %}
+          Nessuna correzione necessaria.
+        {% endif %}
+        {% if dgfe_recon.run_at %}<span class="text-muted">— verificato il {{ dgfe_recon.run_at }}</span>{% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="alert alert-warning py-2 mb-0 d-flex align-items-center" style="gap:.6em;" role="alert">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <div>
+        <strong>Totale fiscale NON allineato al DGFE.</strong>
+        Registro €{{ "%.2f"|format(dgfe_recon.registro_total) }} vs DGFE €{{ "%.2f"|format(dgfe_recon.dgfe_total) }}
+        (Δ {{ "%+.2f"|format(dgfe_recon.delta) }}).
+        Usa <em>Allinea a DGFE</em> dal modal Corrispettivi per quadrare.
+        {% if dgfe_recon.run_at %}<span class="text-muted">— ultima lettura {{ dgfe_recon.run_at }}</span>{% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# Macro: una tabella completa del registro a partire da una lista di scontrini.
+   Tutto cio' che serve e' passato come argomento per garantire l'accesso nel macro. #}
+{% macro receipts_table(rows, user_role, giorno, date_today) %}
 <div style="max-height: 80vh; overflow-y: auto; width: 94%; margin: 0 auto;">
-  <table class="table table-bordered table-sm mb-0" style="width:100%;">
+  <table class="table table-bordered table-sm mb-0 registro-table" style="width:100%;">
     <thead class="sticky-thead">
     <tr>
       <th>Data</th>
@@ -32,7 +76,7 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
     </tr>
   </thead>
 <tbody>
-  {% for s in scontrini %}
+  {% for s in rows %}
   {% if s.is_adjustment is defined and s.is_adjustment %}
     {% set bg = "#eaf3ff" %}
   {% elif not s.is_fiscale %}
@@ -115,13 +159,38 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
   <tr style="background:#e9ecef; font-weight:bold;">
     <td colspan="6" style="text-align:right;">Totale</td>
     <td>
-      {{ "%.2f"|format(scontrini|map(attribute='total_amount')|sum) }}
+      {{ "%.2f"|format(rows|map(attribute='total_amount')|sum) }}
     </td>
     <td colspan="2"></td>
   </tr>
 </tbody>
 </table>
 </div>
+{% endmacro %}
+
+{% if user_role in ['admin', 'owner'] %}
+  {# Un solo interruttore: a sinistra "Solo fiscali" (default, == vista utente, quadra
+     col DGFE), a destra "Fiscali + test" (totale complessivo di cassa). Entrambe le
+     tabelle sono in pagina; lo switch mostra l'una o l'altra. #}
+  {% set scontrini_fiscali = scontrini | selectattr('is_fiscale') | list %}
+  <div class="d-flex align-items-center justify-content-center mb-3" style="gap:.7em;">
+    <span id="lblFiscali" class="fw-bold">Solo fiscali</span>
+    <div class="form-check form-switch m-0" style="font-size:1.4em;">
+      <input class="form-check-input" type="checkbox" role="switch" id="toggleTabella"
+             style="cursor:pointer;">
+    </div>
+    <span id="lblTutti" class="text-muted">Fiscali + test</span>
+  </div>
+
+  <div id="tabFiscali">
+    {{ receipts_table(scontrini_fiscali, user_role, giorno, date_today) }}
+  </div>
+  <div id="tabTutti" style="display:none;">
+    {{ receipts_table(scontrini, user_role, giorno, date_today) }}
+  </div>
+{% else %}
+  {{ receipts_table(scontrini, user_role, giorno, date_today) }}
+{% endif %}
 <style>
 .sticky-thead th {
   position: sticky;
@@ -154,7 +223,26 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
   document.addEventListener('DOMContentLoaded', function() {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
-    document.querySelector('table').addEventListener('click', function(e) {
+    // Interruttore "Solo fiscali" / "Fiscali + test" (admin/owner)
+    const tgl = document.getElementById('toggleTabella');
+    if (tgl) {
+      tgl.addEventListener('change', function() {
+        const tutti = this.checked;
+        const tF = document.getElementById('tabFiscali');
+        const tT = document.getElementById('tabTutti');
+        if (tF) tF.style.display = tutti ? 'none' : '';
+        if (tT) tT.style.display = tutti ? '' : 'none';
+        const lF = document.getElementById('lblFiscali');
+        const lT = document.getElementById('lblTutti');
+        if (lF) { lF.classList.toggle('fw-bold', !tutti); lF.classList.toggle('text-muted', tutti); }
+        if (lT) { lT.classList.toggle('fw-bold', tutti); lT.classList.toggle('text-muted', !tutti); }
+      });
+    }
+
+    // Più tabelle possibili (admin/owner: fiscale + fiscale&test): aggancia il
+    // gestore a ognuna, così i pulsanti della seconda tabella restano attivi.
+    document.querySelectorAll('table.registro-table').forEach(function(tbl) {
+      tbl.addEventListener('click', function(e) {
       const btn = e.target.closest('button');
       if (!btn) return;
 
@@ -414,6 +502,7 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
             });
         }
       }
+      });
     });
   });
 </script>

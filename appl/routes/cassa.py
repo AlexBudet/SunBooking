@@ -1372,13 +1372,57 @@ def registro_scontrini():
             if s.numero_progressivo and str(s.numero_progressivo) in progressivi_stornati:
                 s.annullato = True
 
-    # 8. Render template
+    # 8. Riepilogo conciliazione DGFE per il giorno (solo informativo, no I/O stampante).
+    #    Legge il log di riconciliazione gia' persistito (reconcile_day / Allinea a DGFE)
+    #    cosi' l'utente vede SEMPRE se il registro fiscale quadra col DGFE, anche quando
+    #    NON c'e' la riga "ALLINEAMENTO DGFE" perche' i totali gia' combaciano (delta 0).
+    dgfe_recon = None
+    if user_role in ('admin', 'owner'):
+        try:
+            registro_fiscale_total = round(
+                sum(float(s.total_amount or 0) for s in scontrini if s.is_fiscale), 2
+            )
+            has_adj = any(getattr(s, 'is_adjustment', False) for s in scontrini)
+            bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+            recon = _load_reconciliation_log(bi.id).get(giorno.strftime('%Y-%m-%d')) if bi else None
+
+            dgfe_total = recon.get('dgfe_total') if recon else None
+            dgfe_count = int(recon.get('dgfe_count') or 0) if recon else 0
+            dgfe_total_f = float(dgfe_total) if dgfe_total is not None else None
+            available = bool(recon) and dgfe_count > 0 and dgfe_total_f is not None
+            aligned = available and abs(dgfe_total_f - registro_fiscale_total) < 0.01
+            run_at = recon.get('run_at') if recon else None
+            run_at_fmt = None
+            if run_at:
+                try:
+                    run_at_fmt = datetime.fromisoformat(run_at).strftime('%d/%m/%Y %H:%M')
+                except Exception:
+                    run_at_fmt = run_at
+            # SEMPRE valorizzato per admin/owner: se per il giorno non c'e' una lettura
+            # DGFE nel log, mostriamo lo stato grigio "non ancora letto" (available=False).
+            # Cosi' il badge e' SEMPRE visibile, non sparisce mai.
+            dgfe_recon = {
+                'available': available,
+                'aligned': aligned,
+                'has_adj': has_adj,
+                'registro_total': registro_fiscale_total,
+                'dgfe_total': dgfe_total_f,
+                'dgfe_count': dgfe_count,
+                'delta': round((dgfe_total_f - registro_fiscale_total), 2) if dgfe_total_f is not None else None,
+                'run_at': run_at_fmt,
+            }
+        except Exception:
+            current_app.logger.exception("registro_scontrini: riepilogo DGFE non calcolabile")
+            dgfe_recon = None
+
+    # 9. Render template
     return render_template(
         'registro_scontrini.html',
         scontrini=scontrini,
         giorno=giorno,
         user_role=user_role,
-        date_today=date.today()
+        date_today=date.today(),
+        dgfe_recon=dgfe_recon,
     )
 
 @cassa_bp.route('/cassa/api/receipt/<int:receipt_id>')
@@ -2105,16 +2149,8 @@ def reconcile_range():
         if not bi:
             return jsonify({"error": "BusinessInfo non configurata"}), 400
 
-        # Verifica esplicita che la dir di log sia scrivibile (errore parlante se no)
-        try:
-            recon_dir = _reconciliation_dir()
-        except Exception as exc:
-            current_app.logger.error("reconcile-range: dir log non scrivibile: %s", str(exc))
-            return jsonify({
-                "error": f"Cartella log riconciliazione non scrivibile: {exc}. "
-                         f"Imposta SUNBOOKING_RECONCILIATION_DIR a un percorso scrivibile."
-            }), 500
-
+        # Le letture DGFE sono ora persistite in DB (tabella dgfe_readings), nessuna
+        # cartella file da verificare.
         log_pre = _load_reconciliation_log(bi.id)
 
         today = date.today()
@@ -2904,85 +2940,63 @@ def _try_lazy_recover(voci, cliente_id, operatore_id, expected_total,
         return None
 
 # ============================================================
-# RECONCILIATION DGFE <-> DB (Livello 2: log su file JSON per-tenant)
+# RECONCILIATION DGFE <-> DB (persistita IN DATABASE, tabella dgfe_readings)
 # ============================================================
+# La lettura DGFE riconciliata per ogni giorno e' salvata in DB (modello
+# DgfeReading), NON piu' su file JSON. Una riga per (negozio, giorno). Il campo
+# `payload` conserva il dict completo dell'esito per retro-compatibilita' con i
+# consumatori (badge registro scontrini + colonna DGFE nei Corrispettivi), che
+# continuano a ricevere la stessa forma {date_str: entry_dict}.
 
-def _reconciliation_dir():
-    """Directory dove salvare i log di riconciliazione.
-    Priorita':
-      1. SUNBOOKING_RECONCILIATION_DIR env
-      2. config RECONCILIATION_DIR
-      3. %LOCALAPPDATA%\\SunBooking\\reconciliation (Windows desktop, sempre scrivibile dall'utente)
-      4. ~/SunBooking/reconciliation (fallback Unix)
-      5. <cwd>/data/reconciliation (ultimissimo fallback)
-    NON usiamo Flask instance_path perche' su Windows risolve in C:\\Program Files\\... che e' read-only.
-    """
-    base = (
-        os.environ.get('SUNBOOKING_RECONCILIATION_DIR')
-        or current_app.config.get('RECONCILIATION_DIR')
-    )
-    if not base:
-        local_appdata = os.environ.get('LOCALAPPDATA')
-        if local_appdata:
-            base = os.path.join(local_appdata, 'SunBooking', 'reconciliation')
-        else:
-            home = os.path.expanduser('~')
-            if home and home != '~':
-                base = os.path.join(home, 'SunBooking', 'reconciliation')
-            else:
-                base = os.path.join(os.getcwd(), 'data', 'reconciliation')
-    os.makedirs(base, exist_ok=True)
-    return base
-
-def _reconciliation_file(business_info_id):
-    """Percorso file JSON per il negozio (per-tenant)."""
-    bid = int(business_info_id) if business_info_id is not None else 0
-    return os.path.join(_reconciliation_dir(), f"reconciliation_{bid}.json")
+def _recon_bid(business_info_id):
+    """Normalizza il business_info_id (None -> 0) come chiave del negozio."""
+    try:
+        return int(business_info_id) if business_info_id is not None else 0
+    except Exception:
+        return 0
 
 def _load_reconciliation_log(business_info_id):
-    """Legge il log JSON. Ritorna dict {date_str: entry} (vuoto se mancante/corrotto/dir
-    non creabile). Non solleva mai eccezioni al chiamante."""
+    """Legge da DB tutte le letture DGFE del negozio. Ritorna dict
+    {date_str: entry_dict} per compatibilita' col vecchio formato.
+    Non solleva mai eccezioni (es. se la tabella non esiste ancora -> {})."""
     try:
-        path = _reconciliation_file(business_info_id)
+        from appl.models import DgfeReading
+        bid = _recon_bid(business_info_id)
+        rows = DgfeReading.query.filter_by(business_info_id=bid).all()
+        out = {}
+        for r in rows:
+            key = r.giorno.strftime('%Y-%m-%d') if r.giorno else None
+            entry = None
+            if r.payload:
+                try:
+                    entry = json.loads(r.payload)
+                except Exception:
+                    entry = None
+            if not isinstance(entry, dict):
+                # Fallback dalle colonne dedicate se il payload manca/corrotto.
+                entry = {
+                    "date": key,
+                    "dgfe_total": r.dgfe_total,
+                    "dgfe_count": r.dgfe_count,
+                    "status": r.status,
+                    "run_at": r.run_at.isoformat(timespec='seconds') if r.run_at else None,
+                }
+            if key:
+                out[key] = entry
+        return out
     except Exception as exc:
         try:
-            current_app.logger.warning("Reconciliation dir non accessibile: %s", str(exc))
+            db.session.rollback()
         except Exception:
             pass
-        return {}
-    if not os.path.exists(path):
-        return {}
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            return data
-        return {}
-    except Exception as exc:
         try:
-            current_app.logger.warning("Reconciliation log corrotto %s: %s", path, str(exc))
+            current_app.logger.warning("DgfeReading: load fallita: %s", str(exc))
         except Exception:
             pass
         return {}
-
-def _save_reconciliation_log(business_info_id, data):
-    """Scrive il log JSON in modo atomico (tmp + replace)."""
-    path = _reconciliation_file(business_info_id)
-    dir_path = os.path.dirname(path)
-    fd, tmp_path = tempfile.mkstemp(prefix=".recon_", suffix=".json.tmp", dir=dir_path)
-    try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
-        raise
 
 def _set_reconciliation_entry(business_info_id, day_str, entry):
-    """Aggiorna/crea l'entry del giorno e persiste.
+    """UPSERT in DB della lettura DGFE riconciliata del giorno (tabella dgfe_readings).
 
     ROBUSTEZZA FISCALE (anti-azzeramento): non degrada MAI un giorno gia'
     verificato col DGFE (dgfe_count>0 e totale>0) verso una lettura vuota
@@ -2991,29 +3005,79 @@ def _set_reconciliation_entry(business_info_id, day_str, entry):
     il dato fiscale gia' acquisito NON deve essere sovrascritto/azzerato. Le
     correzioni reali ('Correggi'/'Allinea a DGFE') leggono sempre scontrini
     (dgfe_count>0) quindi non sono mai bloccate da questo guard.
+
+    Best-effort: non solleva mai eccezioni al chiamante (se la tabella non esiste
+    ancora, semplicemente non persiste; il flusso Z non si interrompe).
     """
-    log = _load_reconciliation_log(business_info_id)
-    prev = log.get(day_str)
-    if prev:
+    try:
+        from appl.models import DgfeReading
+        bid = _recon_bid(business_info_id)
         try:
-            prev_cnt = int(prev.get("dgfe_count") or 0)
-            prev_tot = abs(float(prev.get("dgfe_total") or 0.0))
-            new_cnt = int(entry.get("dgfe_count") or 0)
-        except (TypeError, ValueError):
-            prev_cnt = prev_tot = new_cnt = 0
-        if prev_cnt > 0 and prev_tot > 0.01 and new_cnt == 0:
-            try:
-                current_app.logger.warning(
-                    "reconciliation %s: ignoro lettura DGFE vuota (new dgfe_count=0, "
-                    "status=%s) per non azzerare il dato gia' verificato "
-                    "(prev dgfe_count=%s tot=%.2f).",
-                    day_str, entry.get("status"), prev_cnt, prev_tot
-                )
-            except Exception:
-                pass
+            giorno = datetime.strptime(day_str, '%Y-%m-%d').date()
+        except Exception:
             return
-    log[day_str] = entry
-    _save_reconciliation_log(business_info_id, log)
+
+        existing = DgfeReading.query.filter_by(business_info_id=bid, giorno=giorno).first()
+
+        # Guard anti-azzeramento.
+        if existing is not None:
+            try:
+                prev_cnt = int(existing.dgfe_count or 0)
+                prev_tot = abs(float(existing.dgfe_total or 0.0))
+                new_cnt = int(entry.get("dgfe_count") or 0)
+            except (TypeError, ValueError):
+                prev_cnt = prev_tot = new_cnt = 0
+            if prev_cnt > 0 and prev_tot > 0.01 and new_cnt == 0:
+                try:
+                    current_app.logger.warning(
+                        "DgfeReading %s: ignoro lettura DGFE vuota (new dgfe_count=0, "
+                        "status=%s) per non azzerare il dato gia' verificato "
+                        "(prev dgfe_count=%s tot=%.2f).",
+                        day_str, entry.get("status"), prev_cnt, prev_tot
+                    )
+                except Exception:
+                    pass
+                return
+
+        run_at_dt = None
+        ra = entry.get('run_at')
+        if ra:
+            try:
+                run_at_dt = datetime.fromisoformat(ra)
+            except Exception:
+                run_at_dt = None
+
+        try:
+            dgfe_total_v = float(entry.get('dgfe_total')) if entry.get('dgfe_total') is not None else None
+        except (TypeError, ValueError):
+            dgfe_total_v = None
+        try:
+            dgfe_count_v = int(entry.get('dgfe_count') or 0)
+        except (TypeError, ValueError):
+            dgfe_count_v = 0
+
+        payload = json.dumps(entry, ensure_ascii=False, default=str)
+        status_v = (entry.get('status') or '')[:32] or None
+
+        if existing is None:
+            existing = DgfeReading(business_info_id=bid, giorno=giorno)
+            db.session.add(existing)
+        existing.dgfe_total = dgfe_total_v
+        existing.dgfe_count = dgfe_count_v
+        existing.status = status_v
+        existing.run_at = run_at_dt
+        existing.payload = payload
+        existing.updated_at = datetime.now()
+        db.session.commit()
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
+            current_app.logger.warning("DgfeReading: upsert fallito per %s: %s", day_str, str(exc))
+        except Exception:
+            pass
 
 def reconcile_day(day_date, business_info):
     """Riconcilia il giorno con il DGFE della stampante e crea Receipt orfani per le

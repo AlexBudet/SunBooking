@@ -1229,15 +1229,17 @@ function renderMySpiaList(gruppi) {
       }
     });
 
-    // Su desktop il "porta in cassa" è il clic sul blocco: mostriamo solo "vedi in calendario".
-    // Su touch (nessun hover) manteniamo il pulsante € per portare in cassa.
-    if (isTouch) actions.appendChild(btnCassa);
+    // Il clic sul blocco fa già da "porta in cassa", ma mostriamo comunque il
+    // pulsante € (con tooltip) anche su desktop per chiarezza UX, oltre al
+    // "vedi in calendario". Su touch (nessun hover) il pulsante € è l'unico modo
+    // per portare in cassa.
+    actions.appendChild(btnCassa);
     actions.appendChild(btnCal);
 
     // Tooltips neri a destra
     setTimeout(() => {
       if (window.bootstrap && bootstrap.Tooltip) {
-        (isTouch ? [btnCassa, btnCal] : [btnCal]).forEach(el => {
+        [btnCassa, btnCal].forEach(el => {
           bootstrap.Tooltip.getOrCreateInstance(el, {
             placement: 'right',
             container: 'body',
