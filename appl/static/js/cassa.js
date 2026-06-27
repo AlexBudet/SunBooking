@@ -1762,8 +1762,12 @@ row.className = 'd-flex align-items-center scontrino-row';
   xIcon.className = 'bi bi-x-lg';
   delBtn.appendChild(xIcon);
   delBtn.onclick = function () {
-    const apptId = row.dataset.appointmentId || '';
-    if (apptId && window.originalAppointmentIds) window.originalAppointmentIds.delete(String(apptId));
+    // NON scollegare l'appuntamento da window.originalAppointmentIds: anche se si
+    // toglie o si sostituisce la voce, l'appuntamento PRENOTATO resta legato alla
+    // bozza e va comunque messo in GRIGIO (PAGATO) in Calendar al pagamento.
+    // In Registro Scontrini finiscono i servizi effettivamente pagati; in Calendar
+    // restano segnati quelli prenotati anche se cambiati in cassa. Per scollegare
+    // davvero un appuntamento dalla cassa si usa il toggle "cliente in istituto".
     row.remove();
     aggiornaTotale();
     aggiornaSubtotaliPagamenti();

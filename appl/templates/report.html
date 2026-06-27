@@ -2224,6 +2224,7 @@ document.addEventListener('DOMContentLoaded', function() {
               && ['ok', 'fixed', 'discrepant', 'checked'].includes(row.reconciliation_status);
             if (hasRecon) {
               _renderDgfeCell(dgfeCell, row.reconciliation_dgfe_total, row.totale);
+              if (_isTodayIso(isoDay)) _appendPartialBadge(dgfeCell);
               const runAt = row.reconciliation_run_at
                 ? row.reconciliation_run_at.replace('T', ' ').slice(0, 16)
                 : '-';
@@ -2773,6 +2774,7 @@ document.addEventListener('DOMContentLoaded', function() {
         dgfeTotalSum += tot;
         tr.dataset.dgfeTotal = String(tot);
         _renderDgfeCellRead(dgfeCell, tot, totaleDb);  // spunta VERDE sempre
+        if (_isTodayIso(isoDay)) _appendPartialBadge(dgfeCell);
         const delta = +(tot - totaleDb).toFixed(2);
         const willChange = Math.abs(delta) >= 0.01;
 
