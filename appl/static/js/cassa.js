@@ -17,6 +17,25 @@ function applyBsTooltip(el, text, opts) {
 
 document.addEventListener('DOMContentLoaded', function () {
 
+// === Avviso chiusura fiscale dovuta dopo un giorno di chiusura ===
+// Check SOLO su DB (niente stampante): all'apertura della cassa, se IERI era un giorno
+// di chiusura e non risulta una Z registrata da allora, invita a eseguire la chiusura
+// PRIMA di battere scontrini. Best-effort: non disturba se l'endpoint/tabella manca.
+(function checkChiusuraDovuta() {
+  fetch('/cassa/chiusura-dovuta')
+    .then(r => (r.ok ? r.json() : null))
+    .then(d => {
+      if (d && d.warning && typeof window.showChiusuraMancanteModal === 'function') {
+        window.showChiusuraMancanteModal({
+          message: d.message || 'Dopo un giorno di chiusura devi eseguire una chiusura fiscale (Z) prima di battere scontrini.',
+          hint: 'Esegui la chiusura qui sotto. Se l\'hai gia\' fatta puoi chiudere questo avviso e proseguire.',
+          successMessage: '✅ Chiusura fiscale eseguita. Ora puoi battere scontrini.'
+        });
+      }
+    })
+    .catch(() => {});
+})();
+
 // Popup successo auto-chiudibile
 function showSuccessPopup(message, timeout = 5000, onClose = null) {
   // Rimuovi eventuali popup esistenti
@@ -840,7 +859,8 @@ window.showChiusuraMancanteModal = function showChiusuraMancanteModal(data) {
   const hint = document.createElement('div');
   hint.style.fontSize = '13px';
   hint.style.color = '#666';
-  hint.textContent = 'Esegui la chiusura qui sotto, poi premi di nuovo "Stampa". Lo scontrino e\' ancora pronto.';
+  hint.textContent = (data && data.hint) ||
+    'Esegui la chiusura qui sotto, poi premi di nuovo "Stampa". Lo scontrino e\' ancora pronto.';
   body.appendChild(hint);
 
   const msg = document.createElement('div');
@@ -877,7 +897,8 @@ window.showChiusuraMancanteModal = function showChiusuraMancanteModal(data) {
       try { dd = await r.json(); } catch (_) {}
       if (r.ok && (dd.status === 'ok' || dd.code === 200)) {
         msg.style.color = '#198754';
-        msg.textContent = '✅ Chiusura eseguita. Ora premi di nuovo "Stampa" per emettere lo scontrino.';
+        msg.textContent = (data && data.successMessage) ||
+          '✅ Chiusura eseguita. Ora premi di nuovo "Stampa" per emettere lo scontrino.';
         btnChiusura.style.display = 'none';
         btnAnnulla.textContent = 'Chiudi';
         btnAnnulla.disabled = false;
