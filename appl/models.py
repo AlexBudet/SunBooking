@@ -377,6 +377,27 @@ class DgfeReading(db.Model):
     def __repr__(self):
         return f"<DgfeReading {self.giorno} bi={self.business_info_id} tot={self.dgfe_total}>"
 
+class FiscalClosure(db.Model):
+    """Registro delle chiusure fiscali (Z) eseguite. Una riga per ogni Z, cosi' il
+    gestionale ha uno storico in DB (oltre al dato volatile letto dalla stampante via
+    =C453). Usato anche per confermare che una Z e' stata fatta quando la stampante
+    non e' leggibile (es. documento aperto)."""
+    __tablename__ = 'fiscal_closures'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    business_info_id = db.Column(db.Integer, nullable=False, default=0, index=True)
+    z_number = db.Column(db.Integer, nullable=True, index=True)  # lastZ DOPO questa chiusura
+    closed_at = db.Column(db.DateTime, nullable=False)           # quando e' stata eseguita
+    giorno = db.Column(db.Date, nullable=True, index=True)       # giorno solare della Z
+    dgfe_total = db.Column(db.Float, nullable=True)              # totale del giorno (se noto)
+    note = db.Column(db.String(255), nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('business_info_id', 'z_number', name='uq_fiscal_closures_bi_z'),
+    )
+
+    def __repr__(self):
+        return f"<FiscalClosure Z={self.z_number} bi={self.business_info_id} {self.closed_at}>"
+
 class MarketingTemplate(db.Model):
     __tablename__ = 'marketing_templates'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
