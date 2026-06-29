@@ -665,6 +665,83 @@ def _read_printer_lastz(ip, printer_model):
     return None
 
 
+def _previous_day_was_closure(today):
+    """True se il giorno PRECEDENTE a `today` e' un giorno di chiusura configurato
+    (BusinessInfo.closing_days, nomi giorno in inglese es. 'Sunday'). Solo lettura DB,
+    nessuna stampante. Usa weekday() (locale-independent) per il nome del giorno."""
+    try:
+        bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+        if not bi:
+            return False
+        closing = bi.closing_days_list or []
+        if not closing:
+            return False
+        EN_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        yesterday_name = EN_DAYS[(today - timedelta(days=1)).weekday()]
+        return yesterday_name in closing
+    except Exception:
+        return False
+
+
+def _z_recorded_since(business_id, dt):
+    """True se nel registro DB (fiscal_closures) risulta una chiusura Z eseguita con
+    closed_at >= dt. Best-effort: se la tabella non esiste o errore -> False."""
+    if dt is None:
+        return False
+    try:
+        from appl.models import FiscalClosure
+        return db.session.query(FiscalClosure.id).filter(
+            FiscalClosure.business_info_id == business_id,
+            FiscalClosure.closed_at >= dt,
+        ).first() is not None
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _record_fiscal_closure(ip, printer_model, dgfe_total=None):
+    """Registra in DB (fiscal_closures) la chiusura fiscale (Z) appena eseguita.
+    Legge il nuovo lastZ dalla stampante (numero della Z appena fatta). Best-effort:
+    non solleva mai e non interrompe il flusso di chiusura."""
+    try:
+        from appl.models import FiscalClosure
+        bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+        bid = bi.id if bi else 0
+        z_num = _read_printer_lastz(ip, printer_model)  # lastZ DOPO la Z = numero di questa Z
+
+        # Evita righe duplicate per lo stesso numero di Z (es. doppio click).
+        if z_num is not None:
+            existing = FiscalClosure.query.filter_by(business_info_id=bid, z_number=z_num).first()
+            if existing:
+                return
+
+        row = FiscalClosure(
+            business_info_id=bid,
+            z_number=z_num,
+            closed_at=datetime.now(),
+            giorno=date.today(),
+            dgfe_total=(float(dgfe_total) if dgfe_total is not None else None),
+        )
+        db.session.add(row)
+        db.session.commit()
+        try:
+            current_app.logger.info("Chiusura Z registrata in DB: z_number=%s bid=%s", z_num, bid)
+        except Exception:
+            pass
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
+            current_app.logger.warning("registrazione chiusura Z fallita: %s", str(exc))
+        except Exception:
+            pass
+
+
 def _check_chiusura_precedente(ip, printer_model):
     """Verifica, al PRIMO scontrino fiscale del giorno, se la chiusura fiscale (Z)
     della sessione precedente e' stata eseguita.
@@ -702,10 +779,12 @@ def _check_chiusura_precedente(ip, printer_model):
             Receipt.is_fiscale == True,
         ).order_by(Receipt.created_at.desc()).limit(50).all()
         last_period = None
+        last_receipt_dt = None
         for r in prev_receipts:
             m = re.match(r'^(\d+)-(\d+)$', str(r.numero_progressivo or ""))
             if m:
                 last_period = int(m.group(1))
+                last_receipt_dt = r.created_at
                 break
         if last_period is None:
             return {"needs_closure": False, "reason": "no_prior_receipts"}
@@ -713,7 +792,25 @@ def _check_chiusura_precedente(ip, printer_model):
         # Periodo di chiusura attualmente APERTO sulla stampante (= ultima Z + 1).
         last_z = _read_printer_lastz(ip, printer_model)
         if last_z is None:
-            # Non determinabile: non blocchiamo (la stampa stessa rileggera' lastZ).
+            # Stampante non leggibile: tipicamente c'e' un DOCUMENTO APERTO della sessione
+            # precedente (Z non eseguita), situazione frequente DOPO un giorno di chiusura.
+            # Se la Z fosse stata fatta la stampante sarebbe "pulita" e leggibile (=> z_done,
+            # non arriveremmo qui). Percio': se IERI era un giorno di chiusura configurato e
+            # ci sono scontrini di un giorno precedente, avvisa di fare la Z.
+            if _previous_day_was_closure(today):
+                # MA: se nel registro DB risulta una Z eseguita DOPO l'ultimo scontrino,
+                # la chiusura e' gia' stata fatta -> NESSUN avviso (anche a stampante muta).
+                bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+                bid = bi.id if bi else 0
+                if _z_recorded_since(bid, last_receipt_dt):
+                    return {"needs_closure": False, "reason": "z_recorded_db"}
+                return {
+                    "needs_closure": True,
+                    "reason": "closure_day_missing_z",
+                    "last_receipt_period": last_period,
+                    "open_period": None,
+                }
+            # Altrimenti non blocchiamo (la stampa stessa rileggera' lastZ).
             return {"needs_closure": False, "reason": "printer_unreadable"}
         open_period = last_z + 1
 
@@ -740,6 +837,33 @@ def _check_chiusura_precedente(ip, printer_model):
         except Exception:
             pass
         return {"needs_closure": False, "reason": "error"}
+
+
+def _closure_required_response(ip, printer_model):
+    """Ri-controlla se manca la chiusura Z precedente e, in caso, ritorna la response
+    HTTP 409 needs_closure da restituire al posto del generico errore/'documento aperto'.
+    Altrimenti None. Fail-safe: converte in avviso-Z SOLO quando puo' confermarlo
+    leggendo la stampante (se non leggibile -> None -> resta il flusso generico)."""
+    try:
+        gate = _check_chiusura_precedente(ip, printer_model)
+    except Exception:
+        return None
+    if gate.get("needs_closure"):
+        try:
+            current_app.logger.warning(
+                "RCH errore/timeout + chiusura Z mancante (periodo aperto %s == ultimo scontrino %s): "
+                "richiesta chiusura fiscale.",
+                gate.get("open_period"), gate.get("last_receipt_period")
+            )
+        except Exception:
+            pass
+        return jsonify({
+            "needs_closure": True,
+            "error": "Chiusura fiscale precedente mancante.",
+            "message": ("Attenzione! Esegui una chiusura fiscale (Z) — come prassi dopo "
+                        "un giorno di chiusura — prima di emettere nuovi scontrini."),
+        }), 409
+    return None
 
 
 @cassa_bp.route('/cassa/send-to-rch', methods=['POST'])
@@ -958,6 +1082,12 @@ def send_to_rch():
                     "is_fiscale": True
                 })
             else:
+                # Il timeout puo' dipendere da un DOCUMENTO APERTO della sessione
+                # precedente (tipico dopo un giorno di chiusura senza Z): se la Z manca
+                # davvero, avvisa di farla invece del generico "documento aperto".
+                closure_resp = _closure_required_response(ip, printer_model)
+                if closure_resp:
+                    return closure_resp
                 if idempotency_key:
                     RCH_PENDING[idempotency_key] = _build_pending_entry()
                     return jsonify({
@@ -982,6 +1112,11 @@ def send_to_rch():
                     "is_fiscale": True
                 })
             else:
+                # Anche su errore di rete: se la stampante e' invece raggiungibile e
+                # manca la Z della sessione precedente, avvisa di eseguire la chiusura.
+                closure_resp = _closure_required_response(ip, printer_model)
+                if closure_resp:
+                    return closure_resp
                 if idempotency_key:
                     RCH_PENDING[idempotency_key] = _build_pending_entry()
                     return jsonify({
@@ -1017,19 +1152,9 @@ def send_to_rch():
                 # leggibile -> fail-open): ora la stampante HA risposto, quindi ri-leggiamo
                 # lo stato e, se manca la Z, mostriamo l'avviso corretto invece di un generico
                 # "stampante in errore / riprovare".
-                gate_err = _check_chiusura_precedente(ip, printer_model)
-                if gate_err.get("needs_closure"):
-                    current_app.logger.warning(
-                        "RCH errore + chiusura Z mancante (periodo aperto %s == ultimo scontrino %s): "
-                        "richiesta chiusura fiscale.",
-                        gate_err.get("open_period"), gate_err.get("last_receipt_period")
-                    )
-                    return jsonify({
-                        "needs_closure": True,
-                        "error": "Chiusura fiscale precedente mancante.",
-                        "message": ("Attenzione! Esegui una chiusura fiscale (Z) — come prassi "
-                                    "dopo un giorno di chiusura — prima di emettere nuovi scontrini."),
-                    }), 409
+                closure_resp = _closure_required_response(ip, printer_model)
+                if closure_resp:
+                    return closure_resp
                 if idempotency_key:
                     RCH_PENDING[idempotency_key] = _build_pending_entry()
                     return jsonify({
@@ -2249,6 +2374,8 @@ def chiusura_giornaliera():
         # Se non troviamo nulla ma la risposta è 200, assumiamo OK
         if not codes and resp.status_code == 200:
             recon = _run_post_z_reconciliation()
+            # Registra la Z nel registro chiusure in DB (storico persistente).
+            _record_fiscal_closure(ip, printer_model, (recon or {}).get("dgfe_total"))
             return jsonify({"status": "ok", "code": 200, "message": "Chiusura giornaliera completata",
                             "reconciliation": recon}), 200
 
@@ -2259,6 +2386,8 @@ def chiusura_giornaliera():
         if not fatali:
             # Anche se l'HTTP code non è 200, l'esito è ok: non propagare l'errore al client
             recon = _run_post_z_reconciliation()
+            # Registra la Z nel registro chiusure in DB (storico persistente).
+            _record_fiscal_closure(ip, printer_model, (recon or {}).get("dgfe_total"))
             return jsonify({"status": "ok", "code": 200, "message": "Chiusura giornaliera completata",
                             "reconciliation": recon}), 200
 
