@@ -2340,6 +2340,51 @@ def reconcile_range():
             pass
         return jsonify({"error": f"Errore interno: {exc}"}), 500
 
+@cassa_bp.route('/cassa/chiusura-dovuta', methods=['GET'])
+def chiusura_dovuta():
+    """Check rapido SOLO su DB (niente stampante) da chiamare all'APERTURA della cassa.
+
+    Regola: se IERI era un giorno di chiusura configurato (BusinessInfo.closing_days) e
+    NON risulta una chiusura fiscale (Z) registrata in `fiscal_closures` da allora in poi,
+    segnala che va eseguita la Z prima di battere scontrini ("dopo un giorno di chiusura,
+    fai la chiusura fiscale"). Se la Z risulta gia' fatta -> nessun avviso.
+
+    Fail-safe: in caso di errore (es. tabella non ancora creata) NON disturba.
+    """
+    try:
+        today = date.today()
+        if not _previous_day_was_closure(today):
+            return jsonify({"warning": False, "reason": "no_closure_day"})
+
+        yesterday = today - timedelta(days=1)
+        from appl.models import FiscalClosure
+        bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+        bid = bi.id if bi else 0
+        z = db.session.query(FiscalClosure.id).filter(
+            FiscalClosure.business_info_id == bid,
+            FiscalClosure.giorno >= yesterday,
+        ).first()
+        if z is not None:
+            return jsonify({"warning": False, "reason": "z_done"})
+
+        return jsonify({
+            "warning": True,
+            "reason": "missing_z_after_closure",
+            "message": ("Ieri il negozio era chiuso. Prima di battere scontrini esegui una "
+                        "chiusura fiscale (Z)."),
+        })
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        try:
+            current_app.logger.warning("chiusura-dovuta check fallito: %s", str(exc))
+        except Exception:
+            pass
+        return jsonify({"warning": False, "reason": "error"})
+
+
 @cassa_bp.route('/cassa/chiusura-giornaliera', methods=['POST'])
 def chiusura_giornaliera():
     ip, printer_model = _get_printer_config()
