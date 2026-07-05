@@ -336,6 +336,16 @@ class BusinessInfo(db.Model):
     # un riavvio del processo non fa perdere il controllo dell'ora in cui e' avvenuto.
     error_summary_last_check = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    # Riepilogo giornaliero errori CRM/gestionale (routes/booking.py:
+    # process_crm_error_summary_tick). A differenza del checkpoint orario sopra,
+    # qui la cadenza e' giornaliera: si invia una sola mail al giorno, all'ora
+    # configurata in crm_error_summary_time (default 21:00). Il checkpoint tiene
+    # solo la DATA dell'ultimo invio, non l'ora esatta - basta per l'idempotenza
+    # ("ho gia' inviato oggi?") e per ricostruire l'inizio della finestra
+    # (data ultimo invio + orario configurato).
+    crm_error_summary_time = db.Column(db.Time, nullable=False, default=datetime.strptime("21:00", "%H:%M").time())
+    crm_error_summary_last_sent_date = db.Column(db.Date, nullable=True)
+
     @property
     def closing_days_list(self):
         """Ritorna una lista di stringhe (es. ["Domenica","Sabato"]) se presente, altrimenti vuota."""
