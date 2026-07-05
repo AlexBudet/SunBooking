@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, time, timezone
 from decimal import Decimal
 from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo, Pacchetto, PacchettoTipo, PacchettoStatus
 from appl import app
+from appl.services.error_log import log_crm_error
 import random
 import json
 import re
@@ -815,6 +816,19 @@ def create_appointment():
     except Exception as e:
         db.session.rollback()
         app.logger.error("Errore durante la creazione dell'appuntamento: %s", str(e))
+        try:
+            ctx = {
+                "service_id": data.get("service_id"),
+                "operator_id": data.get("operator_id"),
+                "appointment_date": data.get("appointment_date"),
+                "start_time": data.get("start_time"),
+                "exception": str(e),
+            }
+            log_client_id = _norm_id(data.get("client_id")) if 'client_id' in data else None
+        except Exception:
+            ctx = {"exception": str(e)}
+            log_client_id = None
+        log_crm_error("Errore creazione appuntamento", client_id=log_client_id, context=ctx)
         return jsonify({"error": "Si è verificato un errore interno durante la creazione."}), 500
 
 @calendar_bp.route('/edit/<int:appt_id>', methods=['GET', 'POST'])
@@ -958,6 +972,13 @@ def edit_appointment(appt_id):
         except Exception as e:
             db.session.rollback()
             app.logger.error(f"Errore durante la modifica dell'appuntamento {appt_id}: {e}")
+            try:
+                ctx = {"appointment_id": appt_id, "payload": data, "exception": str(e)}
+                log_client_id = original_client_id
+            except Exception:
+                ctx = {"appointment_id": appt_id, "exception": str(e)}
+                log_client_id = None
+            log_crm_error("Errore modifica appuntamento", client_id=log_client_id, context=ctx)
             return jsonify({"error": "Si è verificato un errore interno durante l'aggiornamento."}), 500
         
 @calendar_bp.route('/update/<int:appt_id>', methods=['POST'])
@@ -1024,6 +1045,7 @@ def delete_appointment(appointment_id):
         appt = db.session.get(Appointment, appointment_id)
         if not appt:
             return jsonify({"error": "Appuntamento non trovato"}), 404
+        client_id_for_log = appt.client_id
 
         # Se l'appuntamento è collegato a una seduta pacchetto, cancella la data_trattamento e resetta stato
         # PROTEZIONE: non toccare mai le sedute già Effettuate (stato == 4)
@@ -1045,7 +1067,13 @@ def delete_appointment(appointment_id):
         db.session.commit()
         return jsonify({"message": "Appuntamento eliminato con successo!"}), 200
     except Exception as e:
+        db.session.rollback()
         app.logger.error(f"Errore durante l'eliminazione dell'appuntamento {appointment_id}: {e}")
+        log_crm_error(
+            "Errore eliminazione appuntamento",
+            client_id=locals().get("client_id_for_log"),
+            context={"appointment_id": appointment_id, "exception": str(e)},
+        )
         return jsonify({"error": "Si è verificato un errore interno durante l'eliminazione."}), 500
 
 @calendar_bp.route('/adjust-duration/<int:appointment_id>', methods=['POST'])

@@ -746,3 +746,18 @@ class BookingErrorLog(db.Model):
     telefono = db.Column(db.String, nullable=True)
     email = db.Column(db.String, nullable=True)
     context = db.Column(db.JSON, nullable=True)  # dettagli extra (data, ora, servizi, eccezione, ecc.)
+
+class CrmErrorLog(db.Model):
+    """Traccia permanente degli errori incontrati nel gestionale CRM (gestione
+    appuntamenti, comunicazione fiscale con la stampante RCH). Un errore puo'
+    capitare lavorando con un cliente o senza (es. blocco OFF, utenza generica):
+    per questo si salva solo client_id (se collegato), non dati anagrafici
+    duplicati - per quelli si risale al cliente con un join su clienti."""
+    __tablename__ = 'crm_error_logs'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    reason = db.Column(db.String(255), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('clienti.id'), nullable=True)
+    context = db.Column(db.JSON, nullable=True)  # dettagli extra (appuntamento, errCode RCH, endpoint, eccezione, ecc.)
