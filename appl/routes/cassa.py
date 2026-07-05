@@ -5,6 +5,7 @@ import tempfile
 import html, re, time as pytime
 from flask import Blueprint, app, render_template, jsonify, request, session, abort, current_app
 from appl.models import Appointment, AppointmentStatus, BusinessInfo, Operator, PrinterModel, Service, ServiceCategory, Client, Receipt, Subcategory, User, Pacchetto, PacchettoRata, PacchettoStatus, db
+from appl.services.error_log import log_crm_error
 from datetime import datetime, date, timedelta
 import requests
 import urllib3
@@ -1098,6 +1099,13 @@ def send_to_rch():
                         "expected_total": expected_total,
                         "retry_after": 3
                     }), 202
+                log_crm_error(
+                    "RCH timeout invio scontrino fiscale",
+                    context={"idempotency_key": idempotency_key, "operatore_id": operatore_id,
+                             "printer_ip": ip, "printer_model": printer_model,
+                             "expected_total": expected_total, "exception": str(exc)},
+                    client_id=cliente_id,
+                )
                 return jsonify({"error": "Stampante in attesa. Controllare carta e riprovare."}), 502
         except Exception as exc:
             current_app.logger.warning("RCH non raggiungibile (network): tentativo lazy recover... (%s)", str(exc))
@@ -1127,6 +1135,13 @@ def send_to_rch():
                         "expected_total": expected_total,
                         "retry_after": 3
                     }), 202
+                log_crm_error(
+                    "RCH non raggiungibile (network) invio scontrino fiscale",
+                    context={"idempotency_key": idempotency_key, "operatore_id": operatore_id,
+                             "printer_ip": ip, "printer_model": printer_model,
+                             "expected_total": expected_total, "exception": str(exc)},
+                    client_id=cliente_id,
+                )
                 return jsonify({"error": "Stampante non raggiungibile. Riprova."}), 502
 
         # Se la prima POST e' andata ma la risposta non e' "OK" (errCode!=0 da qualche parte),
@@ -1165,6 +1180,14 @@ def send_to_rch():
                         "expected_total": expected_total,
                         "retry_after": 3
                     }), 202
+                log_crm_error(
+                    "RCH ha risposto con errore (errCode) invio scontrino fiscale",
+                    context={"idempotency_key": idempotency_key, "operatore_id": operatore_id,
+                             "printer_ip": ip, "printer_model": printer_model,
+                             "expected_total": expected_total,
+                             "response_body": (resp_vendita.text[:400] if resp_vendita is not None else "")},
+                    client_id=cliente_id,
+                )
                 return jsonify({"error": "Stampante in errore. Riprova."}), 502
 
         if not fiscale_recovered:
@@ -1189,6 +1212,12 @@ def send_to_rch():
                     break
 
             if numero_progressivo is None or numero_z is None:
+                log_crm_error(
+                    "RCH: risposta senza progressivo/lastZ (XML malformato o non letto)",
+                    context={"operatore_id": operatore_id, "printer_ip": ip, "printer_model": printer_model,
+                             "expected_total": expected_total},
+                    client_id=cliente_id,
+                )
                 return jsonify({"error": "La stampante non ha restituito il progressivo"}), 500
 
             progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
