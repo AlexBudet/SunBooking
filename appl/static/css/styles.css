@@ -1840,7 +1840,7 @@ body:not(.quarter-55) .appointment-block {
     color: #888 !important;
 }
 
-.appointment-block.status-2 .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto) {
+.appointment-block.status-2 .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto):not(.sposta-pagato) {
     display: none !important;
 }
 
@@ -2776,8 +2776,8 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup
   width: 100% !important;
 }
 
-/* TOUCH: per status-2 mostra SOLO .copia, .nota e .vai-pacchetto */
-body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto) {
+/* TOUCH: per status-2 mostra SOLO .copia, .nota, .vai-pacchetto e .sposta-pagato */
+body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto):not(.sposta-pagato) {
   display: none !important;
 }
 

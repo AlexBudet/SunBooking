@@ -3772,6 +3772,22 @@ document.addEventListener('mouseup', async function(e) {
       return;
   }
 
+  // === APPUNTAMENTO PAGATO (stato 2): consentito, ma con conferma esplicita.
+  // Lo spostamento avviene via /calendar/update (stesso id): pagamento e
+  // scontrino restano collegati.
+  if (String(customDraggedBlock.getAttribute('data-status')) === '2') {
+      const okPaid = window.confirm(
+        'Appuntamento GIÀ PAGATO.\n\n' +
+        'Lo spostamento mantiene il pagamento e lo scontrino collegati.\n\n' +
+        'Continuare con lo spostamento?'
+      );
+      if (!okPaid) {
+          await revertToOldPosition(customDraggedBlock);
+          customDraggedBlock = null;
+          return;
+      }
+  }
+
   const blocksInTargetCell = Array.from(newCell.querySelectorAll('.appointment-block'));
   const hasOffBlock = blocksInTargetCell.some(b =>
     !b.getAttribute('data-client-id') || b.getAttribute('data-client-id') === "dummy" || b.classList.contains('note-off')
