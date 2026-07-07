@@ -156,7 +156,8 @@ function closeAllPopups() {
     '.btn-popup.touch-top-delete',
     '.btn-popup.taglia',
     '.btn-popup.touch-top-cut',
-    '.btn-popup.vai-pacchetto'
+    '.btn-popup.vai-pacchetto',
+    '.btn-popup.sposta-pagato'
   ];
 restoreSelectors.forEach(sel => {
   document.querySelectorAll(sel).forEach(btn => {
@@ -329,9 +330,10 @@ function _filterStatus2TopBarButtons(topBar) {
     const hasVaiPacchetto = btn.classList.contains('vai-pacchetto');
     console.log('Bottone:', classList, '| vai-pacchetto?', hasVaiPacchetto);
     
-    if (btn.classList.contains('copia') || 
-        btn.classList.contains('nota') || 
-        btn.classList.contains('vai-pacchetto')) {
+    if (btn.classList.contains('copia') ||
+        btn.classList.contains('nota') ||
+        btn.classList.contains('vai-pacchetto') ||
+        btn.classList.contains('sposta-pagato')) {
       btn.style.setProperty('display', 'inline-flex', 'important');
       btn.style.setProperty('visibility', 'visible', 'important');
       console.log('  -> MOSTRATO');
@@ -493,11 +495,28 @@ cut.style.display = 'inline-block';
     return;
   }
 
-  // Per blocchi STATUS-2 (pagati): la topBar esiste già nel DOM con i bottoni renderizzati da Jinja
-  // Non fare nulla qui, il filtering verrà fatto nel click handler
+  // Per blocchi STATUS-2 (pagati): la topBar esiste già nel DOM con i bottoni
+  // renderizzati da Jinja; il filtering verrà fatto nel click handler.
+  // Aggiungiamo SOLO il bottone SPOSTA dedicato ai pagati: usa /calendar/update
+  // (stesso appointment id), MAI il flusso taglia/incolla che elimina e ricrea
+  // l'appuntamento con id nuovo scollegandolo dallo scontrino in cassa.
   const status = block.getAttribute('data-status');
   if (status === '2') {
-    console.log('ensureTopBarForTouch: blocco status-2, topBar già presente nel DOM');
+    let move = topBar.querySelector('.btn-popup.sposta-pagato');
+    if (!move) {
+      move = document.createElement('button');
+      move.type = 'button';
+      move.className = 'btn-popup sposta-pagato';
+      move.title = 'Sposta appuntamento pagato';
+      move.appendChild(biIcon('arrows-move'));
+      move.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        startPaidMove(block);
+      }, true);
+      topBar.appendChild(move);
+    }
     return;
   }
 }
@@ -1021,6 +1040,122 @@ function startOffMove(block) {
         cancelOffMove();
         alert('Errore creazione blocco OFF spostato');
       });
+  }, true);
+
+  // ===== SPOSTA APPUNTAMENTO PAGATO (stato 2, touch-ui) =====
+  // A differenza del taglia/incolla (che elimina e ricrea con id nuovo),
+  // questo flusso aggiorna LO STESSO appuntamento via /calendar/update:
+  // stato PAGATO, colore grigio e collegamento allo scontrino restano intatti.
+  let __paidMovePayload = null;
+
+  function startPaidMove(block) {
+    if (!block) return;
+    const apptId = block.getAttribute('data-appointment-id');
+    if (!apptId) return;
+
+    const ok = window.confirm(
+      'Appuntamento GIÀ PAGATO.\n\n' +
+      'Lo spostamento mantiene il pagamento e lo scontrino collegati ' +
+      '(viene aggiornato lo stesso appuntamento, non ricreato).\n\n' +
+      'Continuare con lo spostamento?'
+    );
+    if (!ok) return;
+
+    // Lock contro chiusura popup immediata / handler globali
+    window._touchPopupOpenLock = true;
+    setTimeout(() => { window._touchPopupOpenLock = false; }, 300);
+
+    __paidMovePayload = { apptId: String(apptId) };
+
+    // Evidenzia le celle di origine (se funzione disponibile)
+    try { if (typeof addCutSourceHighlightRange === 'function') addCutSourceHighlightRange(block); } catch(_) {}
+    try { closeAllPopups(); } catch(_) {}
+
+    showPaidMoveBanner('Seleziona una cella per spostare l\'appuntamento PAGATO (tap qui per annullare).');
+  }
+
+  function cancelPaidMove() {
+    __paidMovePayload = null;
+    hidePaidMoveBanner();
+    try { if (typeof clearCutSourceHighlights === 'function') clearCutSourceHighlights(); } catch(_) {}
+  }
+
+  function showPaidMoveBanner(msg) {
+    let bn = document.getElementById('paidMoveBanner');
+    if (!bn) {
+      bn = document.createElement('div');
+      bn.id = 'paidMoveBanner';
+      bn.style.position = 'fixed';
+      bn.style.top = '6px';
+      bn.style.left = '50%';
+      bn.style.transform = 'translateX(-50%)';
+      bn.style.background = '#222';
+      bn.style.color = '#9fe870';
+      bn.style.padding = '6px 14px';
+      bn.style.borderRadius = '8px';
+      bn.style.zIndex = '20000';
+      bn.style.fontSize = '14px';
+      bn.style.cursor = 'pointer';
+      bn.title = 'Clic per annullare';
+      bn.addEventListener('click', cancelPaidMove);
+      document.body.appendChild(bn);
+    }
+    bn.textContent = msg;
+  }
+
+  function hidePaidMoveBanner() {
+    const bn = document.getElementById('paidMoveBanner');
+    if (bn) try { bn.remove(); } catch(_) {}
+  }
+
+  // Listener click celle per completare lo spostamento del pagato
+  document.addEventListener('click', function(e){
+    if (!__paidMovePayload) return;
+    const cell = e.target.closest('.selectable-cell');
+    if (!cell) return;
+    if (cell.classList.contains('calendar-closed')) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Non mischiare appuntamenti con blocchi OFF nella cella di destinazione
+    // (stessa regola del drop desktop)
+    const hasOff = Array.from(cell.querySelectorAll('.appointment-block')).some(b =>
+      !b.getAttribute('data-client-id') ||
+      b.getAttribute('data-client-id') === 'dummy' ||
+      b.classList.contains('note-off')
+    );
+    if (hasOff) {
+      alert('La cella contiene un blocco OFF: scegli un\'altra cella.');
+      return;
+    }
+
+    const operatorId = cell.getAttribute('data-operator-id');
+    const hour = parseInt(cell.getAttribute('data-hour'), 10);
+    const minute = parseInt(cell.getAttribute('data-minute'), 10);
+    let rawDate = cell.getAttribute('data-date') ||
+                  (typeof selectedDate !== 'undefined' ? selectedDate : '');
+    if (!operatorId || isNaN(hour) || isNaN(minute) || !rawDate) {
+      alert('Cella non valida per lo spostamento.');
+      return;
+    }
+    // Normalizza in YYYY-MM-DD (stesso formato di saveDraggedBlockPosition)
+    const dateStr = new Date(rawDate).toISOString().split('T')[0];
+
+    const apptId = __paidMovePayload.apptId;
+    fetch('/calendar/update/' + encodeURIComponent(apptId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+      credentials: 'same-origin',
+      body: JSON.stringify({ operator_id: operatorId, hour: hour, minute: minute, date: dateStr })
+    }).then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      cancelPaidMove();
+      // Ricarica per riposizionare il blocco (stesso pattern dello sposta OFF)
+      location.reload();
+    }).catch(() => {
+      alert('Errore durante lo spostamento dell\'appuntamento pagato.');
+    });
   }, true);
 
 })();
