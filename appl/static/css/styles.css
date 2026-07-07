@@ -1840,9 +1840,7 @@ body:not(.quarter-55) .appointment-block {
     color: #888 !important;
 }
 
-/* status-2: visibili solo copia, nota, vai-pacchetto e TAGLIA (.sposta),
-   riabilitato anche per i pagati per permettere lo spostamento */
-.appointment-block.status-2 .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto):not(.sposta) {
+.appointment-block.status-2 .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto) {
     display: none !important;
 }
 
@@ -2778,8 +2776,8 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup
   width: 100% !important;
 }
 
-/* TOUCH: per status-2 mostra SOLO .copia, .nota, .vai-pacchetto e TAGLIA (.sposta) */
-body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto):not(.sposta) {
+/* TOUCH: per status-2 mostra SOLO .copia, .nota e .vai-pacchetto */
+body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto) {
   display: none !important;
 }
 

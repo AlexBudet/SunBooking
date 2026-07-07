@@ -174,20 +174,16 @@ restoreSelectors.forEach(sel => {
     try { btn.remove(); } catch(_) {}
   });
 
-  // Chiusura DURA delle barre: display:none !important inline, così spariscono
-  // SEMPRE e COMUNQUE (top e bottom), anche se altri handler/CSS hanno lasciato
-  // display inline attivi. Chi riapre (toggle, openTouchPopupForBlock, flussi
-  // copia/taglia) imposta comunque un display inline che sovrascrive questo.
+  // Restore bars and clear inline overrides on containers
   document.querySelectorAll('.appointment-block .popup-buttons, .appointment-block .popup-buttons-bottom')
     .forEach(el => {
       el.style.zIndex = '';
-      el.style.setProperty('display', 'none', 'important');
+      el.style.display = '';
     });
 
   // Close any my-spia popups
   closeAllMySpiaPopups();
 }
-window.closeAllPopups = closeAllPopups;
 
 // In touch mode: disabilita hover e abilita solo click per i my-spia
 function injectTouchMySpiaCSS() {
@@ -333,10 +329,9 @@ function _filterStatus2TopBarButtons(topBar) {
     const hasVaiPacchetto = btn.classList.contains('vai-pacchetto');
     console.log('Bottone:', classList, '| vai-pacchetto?', hasVaiPacchetto);
     
-    if (btn.classList.contains('copia') ||
-        btn.classList.contains('nota') ||
-        btn.classList.contains('vai-pacchetto') ||
-        btn.classList.contains('sposta')) {
+    if (btn.classList.contains('copia') || 
+        btn.classList.contains('nota') || 
+        btn.classList.contains('vai-pacchetto')) {
       btn.style.setProperty('display', 'inline-flex', 'important');
       btn.style.setProperty('visibility', 'visible', 'important');
       console.log('  -> MOSTRATO');
@@ -498,9 +493,8 @@ cut.style.display = 'inline-block';
     return;
   }
 
-  // Per blocchi STATUS-2 (pagati): la topBar esiste già nel DOM con i bottoni
-  // renderizzati da Jinja (incluso il TAGLIA .sposta, riabilitato anche per i
-  // pagati). Non fare nulla qui, il filtering verrà fatto nel click handler.
+  // Per blocchi STATUS-2 (pagati): la topBar esiste già nel DOM con i bottoni renderizzati da Jinja
+  // Non fare nulla qui, il filtering verrà fatto nel click handler
   const status = block.getAttribute('data-status');
   if (status === '2') {
     console.log('ensureTopBarForTouch: blocco status-2, topBar già presente nel DOM');
@@ -800,9 +794,7 @@ if (!wasActive) {
       console.log('  - Bottone classi:', Array.from(btn.classList).join(' '));
     });
     topBar.style.zIndex = '11950';
-    // Riapertura esplicita: la chiusura dura lascia display:none !important
-    // inline sulle barre, quindi qui serve un inline altrettanto forte.
-    topBar.style.setProperty('display', 'flex', 'important');
+    topBar.style.display = 'flex';
     if (isPaid) {
       console.log('>>> È STATUS-2, chiamo filtro...');
       _filterStatus2TopBarButtons(topBar);
@@ -820,13 +812,6 @@ if (!wasActive) {
   }
   if (bottomBar) {
     bottomBar.style.zIndex = '11950';
-    // Riapertura esplicita anche della bottom bar (vedi nota sopra).
-    // Per i pagati (status-2) resta SEMPRE nascosta.
-    if (isPaid) {
-      bottomBar.style.setProperty('display', 'none', 'important');
-    } else {
-      bottomBar.style.setProperty('display', 'grid', 'important');
-    }
   }
 } else {
   console.log('>>> Blocco GIA\' attivo, chiudo tutto');
