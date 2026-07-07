@@ -3685,7 +3685,10 @@ document.querySelectorAll('.appointment-block').forEach(block => {
       if (!isInteractive) {
         e.stopPropagation();
         e.preventDefault();
-        e.stopImmediatePropagation();
+        // In touch-ui il toggle apri/chiudi popup è un listener sullo STESSO
+        // blocco registrato dopo questo: stopImmediatePropagation lo
+        // ucciderebbe e il 2° click non chiuderebbe mai le barre.
+        if (!TOUCH_UI) e.stopImmediatePropagation();
       }
     }, true);
     

@@ -155,7 +155,8 @@ function closeAllPopups() {
     '.btn-popup.touch-top-copy',
     '.btn-popup.touch-top-delete',
     '.btn-popup.taglia',
-    '.btn-popup.touch-top-cut'
+    '.btn-popup.touch-top-cut',
+    '.btn-popup.vai-pacchetto'
   ];
 restoreSelectors.forEach(sel => {
   document.querySelectorAll(sel).forEach(btn => {
@@ -814,6 +815,12 @@ if (!wasActive) {
   }
 } else {
   console.log('>>> Blocco GIA\' attivo, chiudo tutto');
+  // 2° click sul blocco: TUTTI i popup-buttons devono sparire. Ferma qui
+  // l'evento, altrimenti altri handler a valle (cella, delegati) possono
+  // ri-mostrare barre o singoli bottoni appena chiusi.
+  e.stopPropagation();
+  e.preventDefault();
+  e.stopImmediatePropagation();
 }
     }, true);
 
