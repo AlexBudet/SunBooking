@@ -12442,6 +12442,10 @@ document.addEventListener('click', function(e) {
     e.preventDefault();
     e.stopPropagation();
     if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+    // Anche in questo caso il 2° click deve far sparire TUTTI i popup-buttons
+    if (typeof window.closeAllPopups === 'function') {
+      try { window.closeAllPopups(); } catch (_) {}
+    }
     const apptId = block.getAttribute('data-appointment-id');
     if (apptId && typeof openModifyPopup === 'function') openModifyPopup(apptId);
     return;
