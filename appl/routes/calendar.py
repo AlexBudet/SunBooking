@@ -3640,16 +3640,35 @@ def _cd_expand_dates(date_state):
 def _cd_compute_allowed_ranges(
     iso_weekday, orari_state, shift_start_min, shift_end_min, duration_min
 ):
-    """Per il giorno della settimana dato, ritorna lista di (start_min, end_min)
-    in cui possiamo cercare slot, in base ai filtri orari della UI.
+    """Per il giorno della settimana dato, ritorna lista di
+    (start_min, end_min, kind) in cui possiamo cercare slot, in base ai
+    filtri orari della UI. kind:
+      'normal' → tutti gli slot liberi del range
+      'first'  → banda "apertura" (cerca prima disponibilità): il chiamante
+                 si ferma al PRIMO slot libero; il range è limitato alla
+                 fine della fascia Mattino (non si sconfina oltre)
+      'last'   → banda "chiusura" (cerca ultima disponibilità): idem ma a
+                 ritroso, dal termine dello shift fino all'inizio della
+                 fascia Sera
     - Se orari_state è None/empty → tutto lo shift è ammesso.
     - Se orari_state ha bande con .days che includono iso_weekday → uniamo
       gli intervalli (intersezione poi con lo shift).
-    - Per bande con fixed=True (apertura/chiusura) usiamo shift_start/shift_end
-      come riferimento (non gli orari business).
     """
     if not orari_state:
-        return [(shift_start_min, shift_end_min)]
+        return [(shift_start_min, shift_end_min, 'normal')]
+
+    # Orari di riferimento per le bande fisse: la UI invia SEMPRE tutte le
+    # fasce (anche non tickate) con i loro orari, quindi Mattino/Sera sono
+    # leggibili qui anche quando l'utente ha selezionato solo apertura/chiusura.
+    morning_end_min  = None
+    evening_start_min = None
+    for band in orari_state:
+        bid = (band.get('id') or '').strip().lower()
+        if bid == 'mattino':
+            morning_end_min = _cd_hhmm_to_min(band.get('end')) or None
+        elif bid == 'sera':
+            evening_start_min = _cd_hhmm_to_min(band.get('start')) or None
+
     raw_ranges = []
     has_any_band_for_day = False
     for band in orari_state:
@@ -3661,23 +3680,25 @@ def _cd_compute_allowed_ranges(
         if is_fixed:
             bid = (band.get('id') or '').strip().lower()
             if bid == 'apertura':
-                raw_ranges.append((shift_start_min, shift_start_min + duration_min))
+                first_end = morning_end_min if morning_end_min else shift_end_min
+                raw_ranges.append((shift_start_min, first_end, 'first'))
             elif bid == 'chiusura':
-                raw_ranges.append((shift_end_min - duration_min, shift_end_min))
+                last_start = evening_start_min if evening_start_min else shift_start_min
+                raw_ranges.append((last_start, shift_end_min, 'last'))
             continue
         s = _cd_hhmm_to_min(band.get('start'))
         e = _cd_hhmm_to_min(band.get('end'))
         if s < e:
-            raw_ranges.append((s, e))
+            raw_ranges.append((s, e, 'normal'))
     if not has_any_band_for_day:
         return []  # Utente ha definito orari ma nessuno copre questo giorno
     # Intersezione con shift
     constrained = []
-    for s, e in raw_ranges:
+    for s, e, kind in raw_ranges:
         s2 = max(s, shift_start_min)
         e2 = min(e, shift_end_min)
         if e2 - s2 >= duration_min:
-            constrained.append((s2, e2))
+            constrained.append((s2, e2, kind))
     return constrained
 
 
@@ -3709,15 +3730,18 @@ def _cd_compute_free_slots(
 
     SLOT_STEP = 15  # minuti
     slots = []
-    for c_start, c_end in allowed:
+    seen_starts = set()
+    for c_start, c_end, c_kind in allowed:
         candidate = c_start
         # Allinea il primo candidato a multiplo di SLOT_STEP a partire dallo shift
         offset = (candidate - shift_start_min) % SLOT_STEP
         if offset:
             candidate += (SLOT_STEP - offset)
-        while candidate + duration_min <= c_end:
-            slot_s = candidate
-            slot_e = candidate + duration_min
+        candidates = list(range(candidate, c_end - duration_min + 1, SLOT_STEP))
+        if c_kind == 'last':
+            candidates.reverse()
+        for slot_s in candidates:
+            slot_e = slot_s + duration_min
             # Check overlap con appointment
             overlap = False
             for b_s, b_e in busy:
@@ -3725,12 +3749,16 @@ def _cd_compute_free_slots(
                     overlap = True
                     break
             if not overlap:
-                start_dt = datetime.combine(d, dtime(slot_s // 60, slot_s % 60))
-                end_dt   = datetime.combine(d, dtime(slot_e // 60, slot_e % 60))
-                slots.append((start_dt, end_dt))
-                if len(slots) >= max_slots_per_combo:
-                    return slots
-            candidate += SLOT_STEP
+                if slot_s not in seen_starts:
+                    seen_starts.add(slot_s)
+                    start_dt = datetime.combine(d, dtime(slot_s // 60, slot_s % 60))
+                    end_dt   = datetime.combine(d, dtime(slot_e // 60, slot_e % 60))
+                    slots.append((start_dt, end_dt))
+                    if len(slots) >= max_slots_per_combo:
+                        return slots
+                # Bande apertura/chiusura: basta il primo slot utile
+                if c_kind in ('first', 'last'):
+                    break
     return slots
 
 
@@ -3860,6 +3888,7 @@ def api_find_availability():
     op_name_by_id     = {op.id: (op.user_nome or '') for op in candidate_operators}
 
     all_results = []
+    seen_slots  = set()   # (date_iso, 'HH:MM') già emessi → mai duplicati
     debug = {
         'dates_count':       len(dates_to_search),
         'dates_first':       dates_to_search[0].isoformat() if dates_to_search else None,
@@ -4005,7 +4034,7 @@ def api_find_availability():
             'date':       d.isoformat(),
             'iso_wd':     iso_wd,
             'union':      '%s-%s' % (_cd_min_to_hhmm(union_min), _cd_min_to_hhmm(union_max)),
-            'allowed':    [(_cd_min_to_hhmm(a), _cd_min_to_hhmm(b)) for a, b in allowed],
+            'allowed':    [(_cd_min_to_hhmm(a), _cd_min_to_hhmm(b), k) for a, b, k in allowed],
             'chains_found': 0,
         }
 
@@ -4014,21 +4043,32 @@ def api_find_availability():
                 debug['per_day'].append(day_debug)
             continue
 
-        for r_start, r_end in allowed:
+        for r_start, r_end, r_kind in allowed:
             candidate = r_start
             offset = candidate % SLOT_STEP
             if offset:
                 candidate += (SLOT_STEP - offset)
-            while candidate + total_duration <= r_end:
+            candidates = list(range(candidate, r_end - total_duration + 1, SLOT_STEP))
+            # Banda "chiusura" (cerca ultima disponibilità): scandisce a
+            # ritroso dalla fine dello shift.
+            if r_kind == 'last':
+                candidates.reverse()
+            for candidate in candidates:
                 slot_start_dt = datetime.combine(d, dtime(candidate // 60, candidate % 60))
 
                 # Skip slot già passato (oggi, ore precedenti a now)
                 if d == _today and slot_start_dt < now_dt:
-                    candidate += SLOT_STEP
                     continue
 
                 chain = _find_chain(slot_start_dt, shifts_by_op, appts_by_op)
-                if chain:
+                if not chain:
+                    continue
+
+                # Deduplica: uno slot con stessa data+ora può emergere da più
+                # bande orarie sovrapposte — va mostrato UNA volta sola.
+                slot_key = (d.isoformat(), slot_start_dt.strftime('%H:%M'))
+                if slot_key not in seen_slots:
+                    seen_slots.add(slot_key)
                     cur_dt = slot_start_dt
                     services_breakdown = []
                     for i, svc in enumerate(services_list):
@@ -4057,9 +4097,13 @@ def api_find_availability():
                         'same_operator':  len(set(chain)) == 1,
                     })
                     day_debug['chains_found'] += 1
-                    if len(all_results) >= MAX_TOTAL_SLOTS:
-                        break
-                candidate += SLOT_STEP
+
+                # Bande apertura/chiusura: basta il primo slot utile del
+                # giorno (anche se già presente in results da un'altra banda).
+                if r_kind in ('first', 'last'):
+                    break
+                if len(all_results) >= MAX_TOTAL_SLOTS:
+                    break
             if len(all_results) >= MAX_TOTAL_SLOTS:
                 break
 
