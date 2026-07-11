@@ -230,6 +230,11 @@ class Appointment(db.Model):
     booking_session_id = db.Column(db.String(64), nullable=True, index=True) 
     is_cancelled_by_client = db.Column(db.Boolean, default=False)
     pacchetto_seduta_id = db.Column(db.Integer, db.ForeignKey('pacchetto_sedute.id'), nullable=True)
+    # Data dell'ultimo invio del memo WhatsApp mattutino per QUESTO appuntamento.
+    # Colonna scritta/letta dal job mattutino del repo BOOKING (routes/booking.py):
+    # qui in SunBooking è mappata solo per tenere i modelli sincronizzati col DB.
+    # Il gestionale non deve mai valorizzarla: NULL = memo non ancora inviato.
+    morning_memo_sent_date = db.Column(db.Date, nullable=True)
 
     # Relazioni
     client = db.relationship('Client', backref='appointments')
