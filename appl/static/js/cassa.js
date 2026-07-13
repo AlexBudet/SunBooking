@@ -18,22 +18,44 @@ function applyBsTooltip(el, text, opts) {
 document.addEventListener('DOMContentLoaded', function () {
 
 // === Avviso chiusura fiscale dovuta dopo un giorno di chiusura ===
-// Check SOLO su DB (niente stampante): all'apertura della cassa, se IERI era un giorno
-// di chiusura e non risulta una Z registrata da allora, invita a eseguire la chiusura
-// PRIMA di battere scontrini. Best-effort: non disturba se l'endpoint/tabella manca.
+// Check SOLO su DB (niente stampante, niente DGFE): al PRIMO accesso alla cassa del
+// giorno, se IERI il negozio era chiuso (giorno di chiusura settimanale OPPURE giornata
+// senza attivita' in calendario), invita a stampare la chiusura fiscale (Z) prima del
+// primo scontrino. Mostrato una sola volta al giorno: chiuso l'avviso, non ridisturba a
+// ogni ricarica. Per riprovarlo a comando: aprire /cassa?forza-avviso-z=1
+const CHIUSURA_WARNING_KEY = 'cassaAvvisoZMostrato'; // valore = data (YYYY-MM-DD)
+
 (function checkChiusuraDovuta() {
+  const forced = new URLSearchParams(window.location.search).has('forza-avviso-z');
+
   fetch('/cassa/chiusura-dovuta')
     .then(r => (r.ok ? r.json() : null))
     .then(d => {
-      if (d && d.warning && typeof window.showChiusuraMancanteModal === 'function') {
-        window.showChiusuraMancanteModal({
-          message: d.message || 'Dopo un giorno di chiusura devi eseguire una chiusura fiscale (Z) prima di battere scontrini.',
-          hint: 'Esegui la chiusura qui sotto. Se l\'hai gia\' fatta puoi chiudere questo avviso e proseguire.',
-          successMessage: '✅ Chiusura fiscale eseguita. Ora puoi battere scontrini.'
-        });
+      if (!d) return;
+      console.log('[chiusura-dovuta]', d);
+
+      if (!d.warning && !forced) return;
+
+      // Primo accesso del giorno? (il forzato ignora la memoria)
+      const oggi = d.today || new Date().toISOString().slice(0, 10);
+      let giaMostrato = null;
+      try { giaMostrato = localStorage.getItem(CHIUSURA_WARNING_KEY); } catch (_) {}
+      if (!forced && giaMostrato === oggi) return;
+
+      if (typeof window.showChiusuraMancanteModal !== 'function') {
+        console.warn('[chiusura-dovuta] modal non disponibile: avviso non mostrato');
+        return;
       }
+
+      try { localStorage.setItem(CHIUSURA_WARNING_KEY, oggi); } catch (_) {}
+
+      window.showChiusuraMancanteModal({
+        message: d.message || 'Ieri il negozio era chiuso. Stampa la chiusura fiscale (Z) prima di emettere il primo scontrino di oggi.',
+        hint: 'Puoi eseguirla subito qui sotto. Se l\'hai gia\' fatta, chiudi l\'avviso e prosegui.',
+        successMessage: '✅ Chiusura fiscale eseguita. Ora puoi battere scontrini.'
+      });
     })
-    .catch(() => {});
+    .catch(err => console.warn('[chiusura-dovuta] check fallito', err));
 })();
 
 // Popup successo auto-chiudibile

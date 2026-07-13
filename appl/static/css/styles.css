@@ -1840,8 +1840,16 @@ body:not(.quarter-55) .appointment-block {
     color: #888 !important;
 }
 
-.appointment-block.status-2 .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto) {
+.appointment-block.status-2 .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto):not(.sposta) {
     display: none !important;
+}
+
+/* Blocco pagato "in movimento" (taglia premuto, non ancora incollato):
+   resta al suo posto finché non lo si incolla altrove. */
+.appointment-block.moving-paid {
+    outline: 2px dashed #d9534f;
+    outline-offset: -2px;
+    opacity: 0.55;
 }
 
 /* Mostra esplicitamente il bottone vai-pacchetto per appuntamenti pagati collegati a pacchetti */
@@ -2776,8 +2784,8 @@ body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup
   width: 100% !important;
 }
 
-/* TOUCH: per status-2 mostra SOLO .copia, .nota e .vai-pacchetto */
-body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto) {
+/* TOUCH: per status-2 mostra SOLO .copia, .nota, .vai-pacchetto e .sposta */
+body.touch-ui .appointment-block.status-2.active-popup .popup-buttons .btn-popup:not(.copia):not(.nota):not(.vai-pacchetto):not(.sposta) {
   display: none !important;
 }
 

@@ -5116,6 +5116,18 @@ async function onCutClick(e) {
     setTimeout(() => { window._touchPopupOpenLock = false; }, 800);
   }
 
+  // BLOCCO PAGATO (stato 2): non è un taglia (delete + create) ma uno SPOSTAMENTO.
+  // L'appuntamento resta lo stesso (stesso id) così la voce dello scontrino continua
+  // a puntarci: nulla va riscritto in cassa.
+  if (block.getAttribute('data-status') === '2') {
+    const moveStarted = await startPaidBlockMove(block);
+    if (!moveStarted) return;
+    if (typeof window.expandNavigatorIfCollapsed === 'function') {
+      window.expandNavigatorIfCollapsed();
+    }
+    return; // i blocchi pagati sono esclusi dai contigui: si sposta un blocco alla volta
+  }
+
   // TAGLIA
   const cutOk = await cutAsNewPseudoBlock(block);
   if (!cutOk) return;
@@ -7427,6 +7439,19 @@ if (blocksInCell.length >= 2) {
             const minute = parseInt(cell.getAttribute('data-minute'), 10);
             const date = cell.getAttribute('data-date') || window.selectedAppointmentDate || new Date().toISOString().slice(0,10);
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+            // SPOSTAMENTO BLOCCO PAGATO: non si crea nulla, si aggiorna l'appuntamento
+            // esistente (id invariato → scontrino ancora collegato).
+            const paidMoveIndex = (window.pseudoBlocks || []).findIndex(isPaidMovePseudoBlock);
+            if (paidMoveIndex >= 0) {
+              try {
+                await pastePaidMovePseudoBlock(paidMoveIndex, cell, operatorId, hour, minute, date, csrfToken);
+              } finally {
+                window.isCreatingAppointment = false;
+              }
+              return;
+            }
+
             let startTimeInMin = hour * 60 + minute;
             if (!window.commonPseudoBlockColor && window.pseudoBlocks.length > 0) {
               window.commonPseudoBlockColor = window.pseudoBlocks[0].color;
@@ -9900,6 +9925,14 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
     console.warn('restoreCutBlocks/clearNavigator check failed', e);
   }
 
+  // Uno spostamento di blocco pagato annullato non ha conseguenze: l'appuntamento
+  // non è mai stato cancellato, basta togliere l'indicazione "in movimento".
+  try {
+    document.querySelectorAll('.appointment-block.moving-paid')
+      .forEach(b => b.classList.remove('moving-paid'));
+    if (typeof clearCutSourceHighlights === 'function') clearCutSourceHighlights();
+  } catch (_) {}
+
   // Reset dei dati navigator visivi e persistenti
   window.selectedClientIdNav = null;
   window.selectedClientNameNav = "";
@@ -10403,6 +10436,133 @@ async function cutAsNewPseudoBlock(block) {
     alert(error.message);
     return false;
   }
+}
+
+// =============================================================
+//   SPOSTAMENTO BLOCCHI PAGATI (stato 2)
+//   A differenza del taglia (delete + create, id nuovo), qui l'appuntamento
+//   viene solo aggiornato via /calendar/update: l'id resta lo stesso, quindi la
+//   voce dello scontrino che lo referenzia (Receipt.voci[].appointment_id)
+//   continua a puntare all'appuntamento giusto. In cassa non si tocca nulla.
+// =============================================================
+
+const PAID_MOVE_WARNING =
+  'ATTENZIONE: questo appuntamento risulta GIÀ PAGATO.\n\n' +
+  'Spostalo solo se il trattamento NON è ancora stato effettuato ' +
+  '(es. il cliente ha pagato in anticipo e vuole spostare la prenotazione).\n\n' +
+  'Se il trattamento è già stato eseguito, si consiglia di NON spostarlo.\n\n' +
+  'Il pagamento resta collegato a questo appuntamento.\n\nVuoi procedere?';
+
+function isPaidMovePseudoBlock(blk) {
+  return !!(blk && blk._movePaid && blk._origin_appointment_id);
+}
+
+// Mette il blocco pagato "in movimento" nel Navigator SENZA cancellarlo:
+// resta visibile al suo posto finché non viene incollato altrove.
+async function startPaidBlockMove(block) {
+  const appointmentId = block.getAttribute('data-appointment-id');
+  if (!appointmentId) return false;
+
+  // I pagati collegati a un pacchetto hanno il loro flusso dedicato
+  if (block.getAttribute('data-pacchetto-seduta-id') || block.getAttribute('data-pacchetto-id')) {
+    alert('Questo appuntamento pagato è collegato a un pacchetto.\n\nPer riprogrammarlo usa la schermata del pacchetto.');
+    return false;
+  }
+
+  // Lo spostamento gestisce un solo blocco per volta: il Navigator deve essere libero
+  if (Array.isArray(window.pseudoBlocks) && window.pseudoBlocks.length > 0) {
+    alert('Svuota il Navigator prima di spostare un appuntamento pagato.');
+    return false;
+  }
+
+  if (!confirm(PAID_MOVE_WARNING)) return false;
+
+  await copyAsNewPseudoBlock(block, true);
+
+  const pseudo = (window.pseudoBlocks || [])[0];
+  if (!pseudo) return false;
+  pseudo._movePaid = true;
+  pseudo._origin_appointment_id = String(appointmentId);
+
+  // Il blocco NON viene rimosso: lo marchiamo come "in movimento"
+  block.classList.add('moving-paid');
+  try { addCutSourceHighlightRange(block); } catch (_) {}
+
+  saveNavigatorState();
+  return true;
+}
+
+// Incolla di un blocco pagato: UPDATE della posizione, id invariato.
+async function pastePaidMovePseudoBlock(index, cell, operatorId, hour, minute, date, csrfToken) {
+  const blk = window.pseudoBlocks[index];
+  const appointmentId = String(blk._origin_appointment_id);
+  const dateStr = /^\d{4}-\d{2}-\d{2}$/.test(String(date))
+    ? String(date)
+    : new Date(date).toISOString().split('T')[0];
+
+  let resp;
+  try {
+    resp = await fetch(`/calendar/update/${encodeURIComponent(appointmentId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ operator_id: operatorId, hour, minute, date: dateStr })
+    });
+  } catch (err) {
+    console.error('Errore spostamento appuntamento pagato:', err);
+    alert("Errore di rete: l'appuntamento pagato NON è stato spostato.");
+    return;
+  }
+
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => '');
+    console.error('Errore spostamento appuntamento pagato:', resp.status, txt);
+    alert("Errore: l'appuntamento pagato NON è stato spostato. È rimasto al suo posto.");
+    return;
+  }
+
+  // Sposta il blocco esistente nel DOM (stesso nodo, stesso id)
+  const sourceBlock = document.querySelector(`.appointment-block[data-appointment-id="${appointmentId}"]`);
+  const oldCell = sourceBlock ? sourceBlock.closest('td.selectable-cell') : null;
+
+  if (sourceBlock) {
+    sourceBlock.classList.remove('moving-paid');
+    sourceBlock.setAttribute('data-operator-id', operatorId);
+    sourceBlock.setAttribute('data-hour', String(hour));
+    sourceBlock.setAttribute('data-minute', String(minute));
+    if (sourceBlock.hasAttribute('data-date')) sourceBlock.setAttribute('data-date', dateStr);
+    cell.appendChild(sourceBlock);
+    sourceBlock.style.left = '0px';
+    sourceBlock.style.top = '0px';
+  } else {
+    // Blocco non presente nel DOM (es. si è cambiato giorno): ricrealo con lo STESSO id
+    const newBlock = createAppointmentBlockElement({
+      id: appointmentId,
+      client_id: blk.clientId,
+      client_name: blk.clientName,
+      service_id: blk.serviceId,
+      service_name: blk.serviceName,
+      service_tag: blk.tag,
+      duration: blk.duration,
+      colore: blk.color,
+      note: blk.note || '',
+      status: 2,
+      date: dateStr
+    }, operatorId, hour, minute);
+    cell.appendChild(newBlock);
+  }
+
+  if (oldCell && oldCell !== cell) { try { arrangeBlocksInCell(oldCell); } catch (_) {} }
+  try { arrangeBlocksInCell(cell); } catch (_) {}
+
+  window.pseudoBlocks.splice(index, 1);
+  renderPseudoBlocksList();
+  saveNavigatorState();
+  clearCutSourceHighlights();
+
+  if (typeof window.clearNavigator === 'function' && window.pseudoBlocks.length === 0) {
+    try { await window.clearNavigator(false); } catch (_) {}
+  }
+  if (typeof scrollToHourMinute === 'function') scrollToHourMinute(hour, minute);
 }
 
 function copyAndPasteBlockOff() {
