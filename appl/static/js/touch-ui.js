@@ -329,9 +329,10 @@ function _filterStatus2TopBarButtons(topBar) {
     const hasVaiPacchetto = btn.classList.contains('vai-pacchetto');
     console.log('Bottone:', classList, '| vai-pacchetto?', hasVaiPacchetto);
     
-    if (btn.classList.contains('copia') || 
-        btn.classList.contains('nota') || 
-        btn.classList.contains('vai-pacchetto')) {
+    if (btn.classList.contains('copia') ||
+        btn.classList.contains('nota') ||
+        btn.classList.contains('vai-pacchetto') ||
+        btn.classList.contains('sposta')) {
       btn.style.setProperty('display', 'inline-flex', 'important');
       btn.style.setProperty('visibility', 'visible', 'important');
       console.log('  -> MOSTRATO');

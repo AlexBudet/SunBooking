@@ -666,41 +666,97 @@ def _read_printer_lastz(ip, printer_model):
     return None
 
 
+def _is_weekly_closing_day(day):
+    """True se `day` cade in un giorno di chiusura SETTIMANALE configurato
+    (BusinessInfo.closing_days, nomi in inglese es. 'Sunday'). Solo lettura DB.
+    Usa weekday() (locale-independent) per il nome del giorno."""
+    bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
+    if not bi:
+        return False
+    closing = bi.closing_days_list or []
+    if not closing:
+        return False
+    EN_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    return EN_DAYS[day.weekday()] in closing
+
+
+def _day_had_no_activity(day):
+    """GOLDEN RULE: quel giorno il negozio era chiuso se in calendario NON c'e' stata
+    NESSUNA attivita', cioe' contemporaneamente:
+      - nessun APPUNTAMENTO reale (i blocchi OFF/dummy non contano: sono blocchi di
+        servizio, non lavoro svolto), e
+      - nessuna CELLA ATTIVA (tutte le colonne grigie).
+
+    Basta UNA delle due per dire che il negozio era aperto -> nessun avviso. Copre le
+    festivita' infrasettimanali (25 aprile, 2 giugno...) che non sono fra i closing_days,
+    senza dipendere da come sono stati impostati i turni.
+
+    Celle attive: replica la regola del calendario (updateCalendarDisplay in calendar.js).
+    La colonna di un operatore e' tutta grigia solo se ha turni quel giorno e sono TUTTI
+    'OFF' (shift_start_time == shift_end_time, es. 00:00-00:00); se NON ha turni ricade
+    sugli orari di default dell'attivita' -> colonna aperta.
+    """
+    from appl.models import OperatorShift
+
+    # 1) C'e' stato lavoro vero quel giorno? -> aperto (qualunque cosa dicano i turni)
+    day_start = datetime.combine(day, datetime.min.time())
+    day_end = datetime.combine(day, datetime.max.time())
+    appt = (Appointment.query
+            .join(Client, Appointment.client_id == Client.id)
+            .join(Service, Appointment.service_id == Service.id)
+            .filter(Appointment.start_time >= day_start,
+                    Appointment.start_time <= day_end,
+                    Appointment.is_cancelled_by_client == False,
+                    Client.cliente_nome.ilike('%dummy%') == False,
+                    Client.cliente_cognome.ilike('%dummy%') == False,
+                    Service.servizio_nome.ilike('%dummy%') == False)
+            .first())
+    if appt is not None:
+        return False
+
+    # 2) C'era almeno una cella attiva? -> aperto
+    operators = Operator.query.filter_by(is_deleted=False, is_visible=True).all()
+    if not operators:
+        return False  # nessun operatore configurato: non deduciamo nulla
+
+    shifts = OperatorShift.query.filter_by(shift_date=day).all()
+    if not shifts:
+        return False  # nessun turno -> orari default -> celle attive
+
+    by_operator = defaultdict(list)
+    for s in shifts:
+        by_operator[s.operator_id].append(s)
+
+    for op in operators:
+        op_shifts = by_operator.get(op.id)
+        if not op_shifts:
+            return False  # operatore senza turni -> orari default -> colonna aperta
+        if any(s.shift_end_time > s.shift_start_time for s in op_shifts):
+            return False  # almeno un turno reale -> colonna aperta
+
+    # Nessun appuntamento reale E nessuna cella attiva -> giornata chiusa
+    return True
+
+
 def _previous_day_was_closure(today):
-    """True se il giorno PRECEDENTE a `today` e' un giorno di chiusura configurato
-    (BusinessInfo.closing_days, nomi giorno in inglese es. 'Sunday'). Solo lettura DB,
-    nessuna stampante. Usa weekday() (locale-independent) per il nome del giorno."""
+    """True se il giorno PRECEDENTE a `today` era di chiusura, per uno qualsiasi dei due
+    motivi: chiusura settimanale (business info) OPPURE nessuna attivita' in calendario
+    (ne' celle attive ne' appuntamenti reali: festivita' infrasettimanale non segnata
+    fra i closing_days). Ritorna (bool, reason). Solo lettura DB, nessuna stampante."""
+    yesterday = today - timedelta(days=1)
     try:
-        bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
-        if not bi:
-            return False
-        closing = bi.closing_days_list or []
-        if not closing:
-            return False
-        EN_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        yesterday_name = EN_DAYS[(today - timedelta(days=1)).weekday()]
-        return yesterday_name in closing
-    except Exception:
-        return False
+        if _is_weekly_closing_day(yesterday):
+            return True, "weekly_closing_day"
+    except Exception as exc:
+        current_app.logger.warning("closing_days non leggibili: %s", str(exc))
 
-
-def _z_recorded_since(business_id, dt):
-    """True se nel registro DB (fiscal_closures) risulta una chiusura Z eseguita con
-    closed_at >= dt. Best-effort: se la tabella non esiste o errore -> False."""
-    if dt is None:
-        return False
     try:
-        from appl.models import FiscalClosure
-        return db.session.query(FiscalClosure.id).filter(
-            FiscalClosure.business_info_id == business_id,
-            FiscalClosure.closed_at >= dt,
-        ).first() is not None
-    except Exception:
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        return False
+        if _day_had_no_activity(yesterday):
+            return True, "no_activity"
+    except Exception as exc:
+        current_app.logger.warning("attivita' del giorno precedente non leggibile: %s", str(exc))
+
+    return False, "open_day"
 
 
 def _record_fiscal_closure(ip, printer_model, dgfe_total=None):
@@ -741,130 +797,6 @@ def _record_fiscal_closure(ip, printer_model, dgfe_total=None):
             current_app.logger.warning("registrazione chiusura Z fallita: %s", str(exc))
         except Exception:
             pass
-
-
-def _check_chiusura_precedente(ip, printer_model):
-    """Verifica, al PRIMO scontrino fiscale del giorno, se la chiusura fiscale (Z)
-    della sessione precedente e' stata eseguita.
-
-    Logica (fiscalmente robusta): ogni scontrino e' numerato 'ZZZZ-NNNN' dove ZZZZ
-    e' il periodo di chiusura APERTO al momento dell'emissione (= lastZ+1, vedi
-    send_to_rch). Se l'ultimo scontrino di un giorno PRECEDENTE appartiene ancora al
-    periodo aperto sulla stampante (lastZ+1), allora la Z non e' stata eseguita e i
-    nuovi scontrini finirebbero nello stesso periodo fiscale del giorno prima: in quel
-    caso bisogna eseguire la chiusura prima di emettere il primo scontrino di oggi.
-
-    Ritorna {needs_closure: bool, reason: str, ...}. In caso di incertezza (stampante
-    non leggibile, nessuno scontrino precedente, non e' il primo di oggi) NON blocca
-    (fail-open): si blocca SOLO quando si e' certi che manchi la Z, per non fermare
-    mai la normale operativita'.
-    """
-    try:
-        today = date.today()
-        day_start = datetime.combine(today, datetime.min.time())
-
-        # Gate attivo solo al PRIMO scontrino fiscale di oggi (esclusi gli ADJ di
-        # allineamento DGFE, che non sono scontrini reali).
-        today_count = Receipt.query.filter(
-            Receipt.created_at >= day_start,
-            Receipt.is_fiscale == True,
-            or_(Receipt.numero_progressivo.is_(None),
-                ~Receipt.numero_progressivo.like('ADJ-%'))
-        ).count()
-        if today_count > 0:
-            return {"needs_closure": False, "reason": "not_first_today"}
-
-        # Ultimo scontrino fiscale di un giorno PRECEDENTE con progressivo 'Z-N' valido.
-        prev_receipts = Receipt.query.filter(
-            Receipt.created_at < day_start,
-            Receipt.is_fiscale == True,
-        ).order_by(Receipt.created_at.desc()).limit(50).all()
-        last_period = None
-        last_receipt_dt = None
-        for r in prev_receipts:
-            m = re.match(r'^(\d+)-(\d+)$', str(r.numero_progressivo or ""))
-            if m:
-                last_period = int(m.group(1))
-                last_receipt_dt = r.created_at
-                break
-        if last_period is None:
-            return {"needs_closure": False, "reason": "no_prior_receipts"}
-
-        # Periodo di chiusura attualmente APERTO sulla stampante (= ultima Z + 1).
-        last_z = _read_printer_lastz(ip, printer_model)
-        if last_z is None:
-            # Stampante non leggibile: tipicamente c'e' un DOCUMENTO APERTO della sessione
-            # precedente (Z non eseguita), situazione frequente DOPO un giorno di chiusura.
-            # Se la Z fosse stata fatta la stampante sarebbe "pulita" e leggibile (=> z_done,
-            # non arriveremmo qui). Percio': se IERI era un giorno di chiusura configurato e
-            # ci sono scontrini di un giorno precedente, avvisa di fare la Z.
-            if _previous_day_was_closure(today):
-                # MA: se nel registro DB risulta una Z eseguita DOPO l'ultimo scontrino,
-                # la chiusura e' gia' stata fatta -> NESSUN avviso (anche a stampante muta).
-                bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
-                bid = bi.id if bi else 0
-                if _z_recorded_since(bid, last_receipt_dt):
-                    return {"needs_closure": False, "reason": "z_recorded_db"}
-                return {
-                    "needs_closure": True,
-                    "reason": "closure_day_missing_z",
-                    "last_receipt_period": last_period,
-                    "open_period": None,
-                }
-            # Altrimenti non blocchiamo (la stampa stessa rileggera' lastZ).
-            return {"needs_closure": False, "reason": "printer_unreadable"}
-        open_period = last_z + 1
-
-        # Blocco SOLO quando il giorno precedente e' ancora nel periodo aperto:
-        # nessuna Z lo ha chiuso. open_period > last_period => Z eseguita (ok).
-        # open_period < last_period => anomalia (es. stampante sostituita/azzerata):
-        # non blocchiamo per non fermare l'attivita' su un caso ambiguo.
-        if open_period == last_period:
-            return {
-                "needs_closure": True,
-                "reason": "missing_z",
-                "last_receipt_period": last_period,
-                "open_period": open_period,
-            }
-        return {
-            "needs_closure": False,
-            "reason": "z_done" if open_period > last_period else "anomaly",
-            "last_receipt_period": last_period,
-            "open_period": open_period,
-        }
-    except Exception as exc:
-        try:
-            current_app.logger.warning("check chiusura precedente fallito: %s", str(exc))
-        except Exception:
-            pass
-        return {"needs_closure": False, "reason": "error"}
-
-
-def _closure_required_response(ip, printer_model):
-    """Ri-controlla se manca la chiusura Z precedente e, in caso, ritorna la response
-    HTTP 409 needs_closure da restituire al posto del generico errore/'documento aperto'.
-    Altrimenti None. Fail-safe: converte in avviso-Z SOLO quando puo' confermarlo
-    leggendo la stampante (se non leggibile -> None -> resta il flusso generico)."""
-    try:
-        gate = _check_chiusura_precedente(ip, printer_model)
-    except Exception:
-        return None
-    if gate.get("needs_closure"):
-        try:
-            current_app.logger.warning(
-                "RCH errore/timeout + chiusura Z mancante (periodo aperto %s == ultimo scontrino %s): "
-                "richiesta chiusura fiscale.",
-                gate.get("open_period"), gate.get("last_receipt_period")
-            )
-        except Exception:
-            pass
-        return jsonify({
-            "needs_closure": True,
-            "error": "Chiusura fiscale precedente mancante.",
-            "message": ("Attenzione! Esegui una chiusura fiscale (Z) — come prassi dopo "
-                        "un giorno di chiusura — prima di emettere nuovi scontrini."),
-        }), 409
-    return None
 
 
 @cassa_bp.route('/cassa/send-to-rch', methods=['POST'])
@@ -939,24 +871,9 @@ def send_to_rch():
         if not ip:
             return jsonify({"error": "IP stampante RCH non configurato"}), 400
 
-        # GATE CHIUSURA FISCALE: il PRIMO scontrino fiscale del giorno NON viene
-        # stampato se la chiusura (Z) della sessione precedente non e' stata eseguita,
-        # altrimenti i nuovi corrispettivi finirebbero nel periodo fiscale del giorno
-        # prima. In quel caso non stampiamo e chiediamo all'operatore di fare la Z.
-        gate = _check_chiusura_precedente(ip, printer_model)
-        if gate.get("needs_closure"):
-            current_app.logger.warning(
-                "Stampa primo scontrino bloccata: chiusura fiscale precedente mancante "
-                "(periodo aperto %s == ultimo scontrino %s).",
-                gate.get("open_period"), gate.get("last_receipt_period")
-            )
-            return jsonify({
-                "needs_closure": True,
-                "error": "Chiusura fiscale precedente mancante.",
-                "message": ("Prima di emettere il primo scontrino di oggi devi eseguire la "
-                            "chiusura fiscale (Z) della giornata precedente. Esegui la "
-                            "chiusura e riprova a stampare."),
-            }), 409
+        # NOTA: nessun gate bloccante prima della stampa. L'avviso di eseguire la
+        # chiusura (Z) viene dato all'APERTURA della cassa (vedi /cassa/chiusura-dovuta):
+        # la stampa non viene mai impedita.
 
         xml_lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
@@ -1083,12 +1000,6 @@ def send_to_rch():
                     "is_fiscale": True
                 })
             else:
-                # Il timeout puo' dipendere da un DOCUMENTO APERTO della sessione
-                # precedente (tipico dopo un giorno di chiusura senza Z): se la Z manca
-                # davvero, avvisa di farla invece del generico "documento aperto".
-                closure_resp = _closure_required_response(ip, printer_model)
-                if closure_resp:
-                    return closure_resp
                 if idempotency_key:
                     RCH_PENDING[idempotency_key] = _build_pending_entry()
                     return jsonify({
@@ -1120,11 +1031,6 @@ def send_to_rch():
                     "is_fiscale": True
                 })
             else:
-                # Anche su errore di rete: se la stampante e' invece raggiungibile e
-                # manca la Z della sessione precedente, avvisa di eseguire la chiusura.
-                closure_resp = _closure_required_response(ip, printer_model)
-                if closure_resp:
-                    return closure_resp
                 if idempotency_key:
                     RCH_PENDING[idempotency_key] = _build_pending_entry()
                     return jsonify({
@@ -1160,16 +1066,6 @@ def send_to_rch():
                     "is_fiscale": True
                 })
             else:
-                # L'errore stampante potrebbe dipendere dalla CHIUSURA FISCALE (Z) mancante
-                # della sessione precedente: tipico DOPO un giorno di chiusura, quando sono
-                # passate >24h senza Z e la RCH blocca l'emissione del primo scontrino.
-                # Il gate pre-stampa puo' non aver bloccato (es. lastZ momentaneamente non
-                # leggibile -> fail-open): ora la stampante HA risposto, quindi ri-leggiamo
-                # lo stato e, se manca la Z, mostriamo l'avviso corretto invece di un generico
-                # "stampante in errore / riprovare".
-                closure_resp = _closure_required_response(ip, printer_model)
-                if closure_resp:
-                    return closure_resp
                 if idempotency_key:
                     RCH_PENDING[idempotency_key] = _build_pending_entry()
                     return jsonify({
@@ -2371,21 +2267,35 @@ def reconcile_range():
 
 @cassa_bp.route('/cassa/chiusura-dovuta', methods=['GET'])
 def chiusura_dovuta():
-    """Check rapido SOLO su DB (niente stampante) da chiamare all'APERTURA della cassa.
+    """Check SOLO su DB (niente stampante, niente DGFE) da chiamare all'APERTURA della cassa.
 
-    Regola: se IERI era un giorno di chiusura configurato (BusinessInfo.closing_days) e
-    NON risulta una chiusura fiscale (Z) registrata in `fiscal_closures` da allora in poi,
-    segnala che va eseguita la Z prima di battere scontrini ("dopo un giorno di chiusura,
-    fai la chiusura fiscale"). Se la Z risulta gia' fatta -> nessun avviso.
+    Regola: se IERI il negozio era chiuso, avvisa di eseguire la chiusura fiscale (Z)
+    prima di battere scontrini. "Chiuso" significa, indifferentemente:
+      - giorno di chiusura SETTIMANALE (BusinessInfo.closing_days), oppure
+      - NESSUNA ATTIVITA' in calendario: ne' appuntamenti reali ne' celle attive (i
+        blocchi OFF/dummy non contano). Copre le festivita' infrasettimanali (25 aprile,
+        2 giugno...) che NON sono segnate fra i closing_days.
 
-    Fail-safe: in caso di errore (es. tabella non ancora creata) NON disturba.
+    Il registro `fiscal_closures` viene consultato solo per NON avvisare quando la Z
+    risulta gia' fatta, ma e' un di piu': se la tabella manca o la lettura fallisce,
+    l'avviso viene mostrato lo stesso (meglio un avviso in piu' che un silenzio: e' un
+    avviso, non un blocco). La visualizzazione "una sola volta al giorno" e' gestita lato
+    client (primo accesso alla cassa).
     """
+    today = date.today()
     try:
-        today = date.today()
-        if not _previous_day_was_closure(today):
-            return jsonify({"warning": False, "reason": "no_closure_day"})
+        was_closed, closure_reason = _previous_day_was_closure(today)
+    except Exception as exc:
+        current_app.logger.warning("chiusura-dovuta: check giorno precedente fallito: %s", str(exc))
+        return jsonify({"warning": False, "reason": "error", "today": today.isoformat()})
 
-        yesterday = today - timedelta(days=1)
+    if not was_closed:
+        return jsonify({"warning": False, "reason": closure_reason, "today": today.isoformat()})
+
+    # Z gia' registrata da ieri in poi? Best-effort: qualunque problema qui NON silenzia
+    # l'avviso (a differenza di prima, dove un'eccezione lo faceva sparire per sempre).
+    yesterday = today - timedelta(days=1)
+    try:
         from appl.models import FiscalClosure
         bi = BusinessInfo.query.filter_by(is_deleted=False).order_by(BusinessInfo.id.asc()).first()
         bid = bi.id if bi else 0
@@ -2394,24 +2304,24 @@ def chiusura_dovuta():
             FiscalClosure.giorno >= yesterday,
         ).first()
         if z is not None:
-            return jsonify({"warning": False, "reason": "z_done"})
-
-        return jsonify({
-            "warning": True,
-            "reason": "missing_z_after_closure",
-            "message": ("Ieri il negozio era chiuso. Prima di battere scontrini esegui una "
-                        "chiusura fiscale (Z)."),
-        })
+            return jsonify({"warning": False, "reason": "z_done", "today": today.isoformat()})
     except Exception as exc:
         try:
             db.session.rollback()
         except Exception:
             pass
-        try:
-            current_app.logger.warning("chiusura-dovuta check fallito: %s", str(exc))
-        except Exception:
-            pass
-        return jsonify({"warning": False, "reason": "error"})
+        current_app.logger.warning(
+            "chiusura-dovuta: registro chiusure non leggibile (%s): mostro l'avviso comunque.",
+            str(exc)
+        )
+
+    return jsonify({
+        "warning": True,
+        "reason": closure_reason,  # weekly_closing_day | no_activity
+        "today": today.isoformat(),
+        "message": ("Ieri il negozio era chiuso. Stampa la chiusura fiscale (Z) prima di "
+                    "emettere il primo scontrino di oggi."),
+    })
 
 
 @cassa_bp.route('/cassa/chiusura-giornaliera', methods=['POST'])
