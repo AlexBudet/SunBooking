@@ -17,6 +17,117 @@ function applyBsTooltip(el, text, opts) {
 
 document.addEventListener('DOMContentLoaded', function () {
 
+// Modal: chiusura fiscale della sessione precedente mancante.
+// Usato sia dall'avviso non bloccante all'apertura cassa (sotto) sia dal
+// backend quando blocca (409) la stampa del PRIMO scontrino del giorno.
+// Definita qui, a livello top, per essere disponibile subito al caricamento
+// pagina e non solo dopo il primo click su "Stampa" (altrimenti l'avviso
+// di apertura la trova non ancora definita e non mostra nulla).
+window.showChiusuraMancanteModal = function showChiusuraMancanteModal(data) {
+  if (document.getElementById('chiusuraMancanteModal')) return;
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+  const wrap = document.createElement('div');
+  wrap.id = 'chiusuraMancanteModal';
+  const overlay = document.createElement('div');
+  overlay.className = 'modal fade show';
+  overlay.setAttribute('tabindex', '-1');
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.style.display = 'block';
+  overlay.style.background = 'rgba(0,0,0,0.55)';
+  overlay.style.zIndex = '14000';
+
+  const dialog = document.createElement('div');
+  dialog.className = 'modal-dialog modal-dialog-centered';
+  const content = document.createElement('div');
+  content.className = 'modal-content';
+
+  const header = document.createElement('div');
+  header.className = 'modal-header';
+  header.style.background = '#fff5f0';
+  const h5 = document.createElement('h5');
+  h5.className = 'modal-title';
+  h5.textContent = '⚠️ Chiusura fiscale mancante';
+  header.appendChild(h5);
+
+  const body = document.createElement('div');
+  body.className = 'modal-body';
+  const p = document.createElement('p');
+  p.style.marginBottom = '8px';
+  p.textContent = (data && data.message) ||
+    'Prima di emettere il primo scontrino di oggi devi eseguire la chiusura fiscale (Z) della giornata precedente.';
+  body.appendChild(p);
+  const hint = document.createElement('div');
+  hint.style.fontSize = '13px';
+  hint.style.color = '#666';
+  hint.textContent = (data && data.hint) ||
+    'Esegui la chiusura qui sotto, poi premi di nuovo "Stampa". Lo scontrino e\' ancora pronto.';
+  body.appendChild(hint);
+
+  const msg = document.createElement('div');
+  msg.style.marginTop = '10px';
+  msg.style.fontWeight = '500';
+  body.appendChild(msg);
+
+  const footer = document.createElement('div');
+  footer.className = 'modal-footer';
+  const btnChiusura = document.createElement('button');
+  btnChiusura.type = 'button';
+  btnChiusura.className = 'btn btn-warning';
+  btnChiusura.textContent = 'Esegui chiusura fiscale ora';
+  const btnAnnulla = document.createElement('button');
+  btnAnnulla.type = 'button';
+  btnAnnulla.className = 'btn btn-secondary';
+  btnAnnulla.textContent = 'Annulla';
+  footer.appendChild(btnChiusura);
+  footer.appendChild(btnAnnulla);
+
+  btnAnnulla.addEventListener('click', () => wrap.remove());
+
+  btnChiusura.addEventListener('click', async () => {
+    btnChiusura.disabled = true;
+    btnAnnulla.disabled = true;
+    msg.style.color = '';
+    msg.textContent = 'Chiusura fiscale in corso...';
+    try {
+      const r = await fetch('/cassa/chiusura-giornaliera', {
+        method: 'POST',
+        headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
+      });
+      let dd = {};
+      try { dd = await r.json(); } catch (_) {}
+      if (r.ok && (dd.status === 'ok' || dd.code === 200)) {
+        msg.style.color = '#198754';
+        msg.textContent = (data && data.successMessage) ||
+          '✅ Chiusura eseguita. Ora premi di nuovo "Stampa" per emettere lo scontrino.';
+        btnChiusura.style.display = 'none';
+        btnAnnulla.textContent = 'Chiudi';
+        btnAnnulla.disabled = false;
+        btnAnnulla.className = 'btn btn-success';
+      } else {
+        msg.style.color = '#dc3545';
+        msg.textContent = 'Chiusura non riuscita: ' + ((dd && dd.error) || 'errore stampante') + '. Riprova.';
+        btnChiusura.disabled = false;
+        btnAnnulla.disabled = false;
+      }
+    } catch (_) {
+      msg.style.color = '#dc3545';
+      msg.textContent = 'Errore di rete durante la chiusura. Riprova.';
+      btnChiusura.disabled = false;
+      btnAnnulla.disabled = false;
+    }
+  });
+
+  content.appendChild(header);
+  content.appendChild(body);
+  content.appendChild(footer);
+  dialog.appendChild(content);
+  overlay.appendChild(dialog);
+  wrap.appendChild(overlay);
+  document.body.appendChild(wrap);
+};
+
 // === Avviso chiusura fiscale dovuta dopo un giorno di chiusura ===
 // Check SOLO su DB (niente stampante, niente DGFE): al PRIMO accesso alla cassa del
 // giorno, se IERI il negozio era chiuso (giorno di chiusura settimanale OPPURE giornata
@@ -838,115 +949,6 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
         is_fiscale: true,
         idempotency_key: idempotencyKey
       };
-
-// Modal: chiusura fiscale della sessione precedente mancante.
-// Mostrato quando il backend blocca (409) la stampa del PRIMO scontrino del giorno.
-// Offre un pulsante per eseguire subito la chiusura (Z); dopo l'esito positivo
-// l'operatore puo' ri-premere "Stampa" (lo scontrino non viene azzerato).
-window.showChiusuraMancanteModal = function showChiusuraMancanteModal(data) {
-  if (document.getElementById('chiusuraMancanteModal')) return;
-  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-
-  const wrap = document.createElement('div');
-  wrap.id = 'chiusuraMancanteModal';
-  const overlay = document.createElement('div');
-  overlay.className = 'modal fade show';
-  overlay.setAttribute('tabindex', '-1');
-  overlay.setAttribute('role', 'dialog');
-  overlay.setAttribute('aria-modal', 'true');
-  overlay.style.display = 'block';
-  overlay.style.background = 'rgba(0,0,0,0.55)';
-  overlay.style.zIndex = '14000';
-
-  const dialog = document.createElement('div');
-  dialog.className = 'modal-dialog modal-dialog-centered';
-  const content = document.createElement('div');
-  content.className = 'modal-content';
-
-  const header = document.createElement('div');
-  header.className = 'modal-header';
-  header.style.background = '#fff5f0';
-  const h5 = document.createElement('h5');
-  h5.className = 'modal-title';
-  h5.textContent = '⚠️ Chiusura fiscale mancante';
-  header.appendChild(h5);
-
-  const body = document.createElement('div');
-  body.className = 'modal-body';
-  const p = document.createElement('p');
-  p.style.marginBottom = '8px';
-  p.textContent = (data && data.message) ||
-    'Prima di emettere il primo scontrino di oggi devi eseguire la chiusura fiscale (Z) della giornata precedente.';
-  body.appendChild(p);
-  const hint = document.createElement('div');
-  hint.style.fontSize = '13px';
-  hint.style.color = '#666';
-  hint.textContent = (data && data.hint) ||
-    'Esegui la chiusura qui sotto, poi premi di nuovo "Stampa". Lo scontrino e\' ancora pronto.';
-  body.appendChild(hint);
-
-  const msg = document.createElement('div');
-  msg.style.marginTop = '10px';
-  msg.style.fontWeight = '500';
-  body.appendChild(msg);
-
-  const footer = document.createElement('div');
-  footer.className = 'modal-footer';
-  const btnChiusura = document.createElement('button');
-  btnChiusura.type = 'button';
-  btnChiusura.className = 'btn btn-warning';
-  btnChiusura.textContent = 'Esegui chiusura fiscale ora';
-  const btnAnnulla = document.createElement('button');
-  btnAnnulla.type = 'button';
-  btnAnnulla.className = 'btn btn-secondary';
-  btnAnnulla.textContent = 'Annulla';
-  footer.appendChild(btnChiusura);
-  footer.appendChild(btnAnnulla);
-
-  btnAnnulla.addEventListener('click', () => wrap.remove());
-
-  btnChiusura.addEventListener('click', async () => {
-    btnChiusura.disabled = true;
-    btnAnnulla.disabled = true;
-    msg.style.color = '';
-    msg.textContent = 'Chiusura fiscale in corso...';
-    try {
-      const r = await fetch('/cassa/chiusura-giornaliera', {
-        method: 'POST',
-        headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {}
-      });
-      let dd = {};
-      try { dd = await r.json(); } catch (_) {}
-      if (r.ok && (dd.status === 'ok' || dd.code === 200)) {
-        msg.style.color = '#198754';
-        msg.textContent = (data && data.successMessage) ||
-          '✅ Chiusura eseguita. Ora premi di nuovo "Stampa" per emettere lo scontrino.';
-        btnChiusura.style.display = 'none';
-        btnAnnulla.textContent = 'Chiudi';
-        btnAnnulla.disabled = false;
-        btnAnnulla.className = 'btn btn-success';
-      } else {
-        msg.style.color = '#dc3545';
-        msg.textContent = 'Chiusura non riuscita: ' + ((dd && dd.error) || 'errore stampante') + '. Riprova.';
-        btnChiusura.disabled = false;
-        btnAnnulla.disabled = false;
-      }
-    } catch (_) {
-      msg.style.color = '#dc3545';
-      msg.textContent = 'Errore di rete durante la chiusura. Riprova.';
-      btnChiusura.disabled = false;
-      btnAnnulla.disabled = false;
-    }
-  });
-
-  content.appendChild(header);
-  content.appendChild(body);
-  content.appendChild(footer);
-  dialog.appendChild(content);
-  overlay.appendChild(dialog);
-  wrap.appendChild(overlay);
-  document.body.appendChild(wrap);
-};
 
       // Modal attesa/retry
 function showPendingModal(key, expectedTotal) {
