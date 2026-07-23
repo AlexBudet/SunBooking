@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import os, ipaddress, requests
 from sqlalchemy.sql import func, or_
 from .. import db
-from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice
+from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession
 from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
 
 # Blueprint per le rotte delle impostazioni
@@ -4547,3 +4547,66 @@ def solarium_phidget_status():
             'connected': False,
             'message': 'Phidget non rilevata (verifica il collegamento USB).'
         })
+
+@settings_bp.route('/settings/solarium/stats', methods=['GET'])
+def solarium_stats():
+    """Statistiche sedute Solarium: filtra per data (ed eventualmente macchinario)
+    e mostra numero sedute e minuti totali per ciascun macchinario. Conta solo
+    le sedute concluse (fine valorizzata); la durata usa durata_secondi se
+    presente, altrimenti la calcola da fine-inizio."""
+    data_da = request.args.get('data_da') or ''
+    data_a = request.args.get('data_a') or ''
+    device_id = request.args.get('device_id', type=int)
+
+    devices = (SolariumDevice.query
+               .filter_by(is_deleted=False)
+               .order_by(SolariumDevice.order, SolariumDevice.id)
+               .all())
+
+    durata_expr = func.coalesce(
+        SolariumSession.durata_secondi,
+        func.extract('epoch', SolariumSession.fine - SolariumSession.inizio)
+    )
+    query = (db.session.query(
+                SolariumSession.device_id,
+                func.count(SolariumSession.id).label('num_sedute'),
+                func.coalesce(func.sum(durata_expr), 0).label('secondi_totali')
+             )
+             .filter(SolariumSession.fine.isnot(None)))
+
+    if device_id:
+        query = query.filter(SolariumSession.device_id == device_id)
+    if data_da:
+        try:
+            da = datetime.strptime(data_da, '%Y-%m-%d')
+            query = query.filter(SolariumSession.inizio >= da)
+        except ValueError:
+            pass
+    if data_a:
+        try:
+            a = datetime.strptime(data_a, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            query = query.filter(SolariumSession.inizio <= a)
+        except ValueError:
+            pass
+
+    rows = {r.device_id: r for r in query.group_by(SolariumSession.device_id).all()}
+
+    stats = []
+    for d in devices:
+        if device_id and d.id != device_id:
+            continue
+        r = rows.get(d.id)
+        secondi_totali = int(r.secondi_totali) if r and r.secondi_totali else 0
+        stats.append({
+            'device': d,
+            'num_sedute': r.num_sedute if r else 0,
+            'minuti_totali': secondi_totali // 60,
+            'ore_minuti': f"{secondi_totali // 3600}h {(secondi_totali % 3600) // 60:02d}m",
+        })
+
+    return render_template('solarium_stats.html',
+                            stats=stats,
+                            devices=devices,
+                            data_da=data_da,
+                            data_a=data_a,
+                            selected_device_id=device_id)

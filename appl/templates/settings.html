@@ -17,7 +17,7 @@
 <a href="{{ url_for('settings.pacchetti_settings') }}" class="neo-btn{% if request.endpoint == 'settings.pacchetti_settings' %} active{% endif %}">Pacchetti</a>
 {% endif %}
 {% if module_solarium_enabled %}
-<a href="{{ url_for('settings.solarium_settings') }}" class="neo-btn{% if request.endpoint == 'settings.solarium_settings' %} active{% endif %}">Solarium</a>
+<a href="{{ url_for('settings.solarium_settings') }}" class="neo-btn{% if request.endpoint in ('settings.solarium_settings', 'settings.solarium_stats') %} active{% endif %}">Solarium</a>
 {% endif %}
 {% if module_web_enabled %}
 <a href="{{ url_for('settings.marketing') }}" class="neo-btn{% if request.endpoint == 'settings.marketing' %} active{% endif %}">Marketing</a>

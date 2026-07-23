@@ -1,0 +1,69 @@
+<!-- appl/templates/solarium_stats.html -->
+{% extends "settings.html" %}
+{% block settings_content %}
+<div class="page-wide-90">
+
+<h3><i class="bi bi-bar-chart-fill" style="color:#e08a1f;"></i> Solarium — Statistiche Sedute</h3>
+<p style="color:#6c7a89; max-width:700px;">
+  Numero di sedute e minuti totali per macchinario, filtrabili per data. Vengono conteggiate
+  solo le sedute concluse (rilevate dal canale Phidget collegato al macchinario).
+</p>
+
+<a href="{{ url_for('settings.solarium_settings') }}" class="btn btn-sm btn-outline-secondary mb-3">
+  <i class="bi bi-arrow-left"></i> Torna ai Macchinari
+</a>
+
+<!-- ===== Filtri ===== -->
+<form method="GET" action="{{ url_for('settings.solarium_stats') }}" class="row align-items-center mb-4 g-2">
+  <div class="col-md-3">
+    <label class="form-label">Da</label>
+    <input type="date" class="form-control" name="data_da" value="{{ data_da }}">
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">A</label>
+    <input type="date" class="form-control" name="data_a" value="{{ data_a }}">
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Macchinario</label>
+    <select class="form-control" name="device_id">
+      <option value="">Tutti</option>
+      {% for d in devices %}
+      <option value="{{ d.id }}" {% if selected_device_id == d.id %}selected{% endif %}>{{ d.nome }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">&nbsp;</label>
+    <button type="submit" class="btn btn-primary btn-block d-block">Filtra</button>
+  </div>
+</form>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>Macchinario</th>
+      <th class="text-center">N. Sedute</th>
+      <th class="text-center">Minuti Totali</th>
+      <th class="text-center">Ore : Minuti</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in stats %}
+    <tr>
+      <td>{{ s.device.nome }}</td>
+      <td class="text-center">{{ s.num_sedute }}</td>
+      <td class="text-center">{{ s.minuti_totali }}</td>
+      <td class="text-center">{{ s.ore_minuti }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="text-center text-muted">Nessun macchinario configurato.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if stats and stats|sum(attribute='num_sedute') == 0 %}
+<p class="text-muted">Nessuna seduta registrata nel periodo selezionato.</p>
+{% endif %}
+
+</div>
+{% endblock %}
