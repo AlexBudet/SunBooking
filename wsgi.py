@@ -698,6 +698,7 @@ def owner_setup():
                         info['module_base_enabled'] = owner_cfg.module_base_enabled
                         info['module_web_enabled'] = owner_cfg.module_web_enabled
                         info['module_pacchetti_enabled'] = owner_cfg.module_pacchetti_enabled
+                        info['module_solarium_enabled'] = owner_cfg.module_solarium_enabled
                         info['module_base_activated_on'] = (
                             owner_cfg.module_base_activated_on.isoformat()
                             if owner_cfg.module_base_activated_on else None
@@ -709,6 +710,10 @@ def owner_setup():
                         info['module_pacchetti_activated_on'] = (
                             owner_cfg.module_pacchetti_activated_on.isoformat()
                             if owner_cfg.module_pacchetti_activated_on else None
+                        )
+                        info['module_solarium_activated_on'] = (
+                            owner_cfg.module_solarium_activated_on.isoformat()
+                            if owner_cfg.module_solarium_activated_on else None
                         )
             except Exception:
                 pass
@@ -745,8 +750,9 @@ def owner_setup_save(db_idx):
             owner_cfg.module_base_enabled = bool(data.get('module_base_enabled', True))
             owner_cfg.module_web_enabled = bool(data.get('module_web_enabled', True))
             owner_cfg.module_pacchetti_enabled = bool(data.get('module_pacchetti_enabled', True))
+            owner_cfg.module_solarium_enabled = bool(data.get('module_solarium_enabled', False))
             for field in ('module_base_activated_on', 'module_web_activated_on',
-                          'module_pacchetti_activated_on'):
+                          'module_pacchetti_activated_on', 'module_solarium_activated_on'):
                 val = data.get(field)
                 if val:
                     try:

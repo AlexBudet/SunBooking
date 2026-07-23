@@ -297,6 +297,7 @@
           <th>BASE<br><small style="font-weight:400;opacity:.8">Agenda + Report + Clienti</small></th>
           <th>WEB<br><small style="font-weight:400;opacity:.8">WhatsApp + Booking + Marketing</small></th>
           <th>PACCHETTI<br><small style="font-weight:400;opacity:.8">Pacchetti + Prepagate</small></th>
+          <th>SOLARIUM<br><small style="font-weight:400;opacity:.8">Monitor Lampade</small></th>
           <th>AZIONI</th>
         </tr>
       </thead>
@@ -384,6 +385,20 @@
               </label>
               <input type="date" class="date-input" data-mod="pacchetti-date"
                      value="{{ t.module_pacchetti_activated_on or '' }}"
+                     placeholder="Data att.">
+            </div>
+          </td>
+
+          <!-- Modulo SOLARIUM -->
+          <td class="center">
+            <div class="module-cell">
+              <label class="module-toggle">
+                <input type="checkbox" class="mod-check" data-mod="solarium"
+                       {% if t.module_solarium_enabled %}checked{% endif %}>
+                <span class="slider"></span>
+              </label>
+              <input type="date" class="date-input" data-mod="solarium-date"
+                     value="{{ t.module_solarium_activated_on or '' }}"
                      placeholder="Data att.">
             </div>
           </td>
@@ -601,9 +616,11 @@
         module_base_enabled: checked('base'),
         module_web_enabled: checked('web'),
         module_pacchetti_enabled: checked('pacchetti'),
+        module_solarium_enabled: checked('solarium'),
         module_base_activated_on: dateVal('base'),
         module_web_activated_on: dateVal('web'),
         module_pacchetti_activated_on: dateVal('pacchetti'),
+        module_solarium_activated_on: dateVal('solarium'),
       };
     }
 
