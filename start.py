@@ -293,6 +293,18 @@ def start_server():
         waitress_logger.addHandler(file_handler)
         waitress_logger.setLevel(logging.INFO)
 
+        # Bridge Phidget: va avviato SOLO qui, nel processo che serve il web.
+        # get_app() gira in entrambi i processi (padre e figlio server): farlo
+        # partire li' significherebbe aprire lo stesso canale Phidget due volte
+        # ("device is in use", Tosca in conflitto con se stessa) e, soprattutto,
+        # lasciare il canale in mano al processo padre mentre le API di stato
+        # rispondono dal figlio, che non vedrebbe mai la scheda.
+        try:
+            from appl.services.solarium_bridge import start_solarium_bridge
+            threading.Thread(target=start_solarium_bridge, args=(a,), daemon=True).start()
+        except Exception:
+            logger.exception("Solarium: errore avvio bridge Phidget")
+
         logger.info(f"Server Waitress in ascolto su 127.0.0.1:{PORT}")
         serve(a, host='127.0.0.1', port=PORT)
     except Exception as e:
@@ -435,6 +447,27 @@ if __name__ == "__main__":
     # Worker multiprocessing? Non eseguire il main flow (start_server e'
     # gia' richiamato da freeze_support tramite spawn_main).
     if multiprocessing.current_process().name != 'MainProcess':
+        sys.exit(0)
+
+    # ---- Blocco singola istanza --------------------------------------------
+    # console=False rende invisibile una seconda istanza bloccata o silente:
+    # resta in background e si contende in silenzio la scheda Phidget (o la
+    # porta web) con quella "vera", senza dare alcun segnale visibile
+    # all'utente. Un mutex nominato di Windows basta a rilevarlo: se esiste
+    # gia', c'e' gia' un'istanza attiva -> avviso ed uscita immediata.
+    import ctypes
+    _ERROR_ALREADY_EXISTS = 183
+    _single_instance_mutex = ctypes.windll.kernel32.CreateMutexW(
+        None, False, "SunBooking_Tosca_SingleInstance"
+    )
+    if ctypes.windll.kernel32.GetLastError() == _ERROR_ALREADY_EXISTS:
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            "Tosca è già in esecuzione (controlla la barra delle applicazioni o il Task Manager). "
+            "Chiudi l'altra istanza prima di riaprirlo.",
+            "Tosca - già in esecuzione",
+            0x30  # MB_ICONWARNING
+        )
         sys.exit(0)
 
     # Crea splash nel MAIN thread.

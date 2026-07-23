@@ -25,9 +25,27 @@ function applyBsTooltip(el, text, opts) {
 
 (function(){
     const MOBILE_BP = 1200;
+    // S_KEY = valore EFFETTIVO in uso (letto da tutto il resto dell'app).
+    // S_USER = preferenza ESPLICITA dell'utente (checkbox in Info Azienda):
+    //   e' l'unica fonte autorevole e NON viene mai scritta dall'auto-forcing.
+    //   Prima le due cose condividevano la stessa chiave, quindi un forcing
+    //   temporaneo (finestra < 1200px, anche solo durante l'avvio di Chrome)
+    //   cancellava per sempre la scelta dell'utente.
+    // S_FORCED_FLAG / S_PREV stanno in localStorage e non piu' in sessionStorage:
+    //   in sessionStorage venivano persi alla chiusura del browser, lasciando
+    //   il touch forzato acceso per sempre senza piu' modo di ripristinarlo.
     const S_KEY = 'sun_touch_ui';
+    const S_USER = 'sun_touch_ui_user';
     const S_FORCED_FLAG = 'sun_touch_ui_forced';
     const S_PREV = 'sun_touch_ui_prev';
+
+    function userTouchPref() {
+        try {
+            const v = localStorage.getItem(S_USER);
+            if (v === '1' || v === '0') return v;
+        } catch (_) {}
+        return null;
+    }
 
 // =============================================================
 //   TAP-VS-DRAG GATE (globale): scarta i click sintetizzati da
@@ -155,10 +173,11 @@ window.checkPseudoBlocksConflicts = checkPseudoBlocksConflicts;
     function forceTouchOn() {
         try {
             // salva precedente solo la prima volta che forziamo
-            if (!sessionStorage.getItem(S_FORCED_FLAG)) {
-                sessionStorage.setItem(S_PREV, localStorage.getItem(S_KEY) ?? '');
+            if (!localStorage.getItem(S_FORCED_FLAG)) {
+                const pref = userTouchPref();
+                localStorage.setItem(S_PREV, pref !== null ? pref : (localStorage.getItem(S_KEY) ?? ''));
             }
-            sessionStorage.setItem(S_FORCED_FLAG, '1');
+            localStorage.setItem(S_FORCED_FLAG, '1');
             localStorage.setItem(S_KEY, '1');        // mantiene compatibilità con codice esistente
             document.body.classList.add('touch-ui'); // immediato
             window.dispatchEvent(new CustomEvent('touchModeForced', { detail: { forced: true } }));
@@ -168,7 +187,9 @@ window.checkPseudoBlocksConflicts = checkPseudoBlocksConflicts;
     // rimuove il forcing e ripristina il valore salvato (lettura business)
     function restoreTouchSetting() {
         try {
-            const prev = sessionStorage.getItem(S_PREV);
+            // la preferenza esplicita dell'utente vince sempre sullo snapshot
+            const pref = userTouchPref();
+            const prev = pref !== null ? pref : localStorage.getItem(S_PREV);
             // se prev === '1' o '0' / non vuoto, ripristina; altrimenti rimuovi key
             if (prev === '1') {
                 localStorage.setItem(S_KEY, '1');
@@ -180,8 +201,8 @@ window.checkPseudoBlocksConflicts = checkPseudoBlocksConflicts;
                 localStorage.removeItem(S_KEY);
                 document.body.classList.toggle('touch-ui', false);
             }
-            sessionStorage.removeItem(S_FORCED_FLAG);
-            sessionStorage.removeItem(S_PREV);
+            localStorage.removeItem(S_FORCED_FLAG);
+            localStorage.removeItem(S_PREV);
             window.dispatchEvent(new CustomEvent('touchModeForced', { detail: { forced: false } }));
             // segnala al resto dell'app che deve rileggere l'impostazione business
             window.dispatchEvent(new Event('checkBusinessTouchSetting'));
@@ -193,9 +214,18 @@ window.checkPseudoBlocksConflicts = checkPseudoBlocksConflicts;
         if (w < MOBILE_BP) forceTouchOn();
         else {
             // se era forzato, ripristina; altrimenti non intervenire (lascia business setting)
-            if (sessionStorage.getItem(S_FORCED_FLAG)) restoreTouchSetting();
-            // se non forzato, emit event so existing code re-reads business setting if needed
-            else window.dispatchEvent(new Event('checkBusinessTouchSetting'));
+            if (localStorage.getItem(S_FORCED_FLAG)) restoreTouchSetting();
+            else {
+                // Nessun forcing in corso: riallinea il valore effettivo alla
+                // preferenza esplicita dell'utente. Sana anche le installazioni
+                // dove un vecchio forcing era rimasto incastrato su '1'.
+                const pref = userTouchPref();
+                if (pref !== null && localStorage.getItem(S_KEY) !== pref) {
+                    localStorage.setItem(S_KEY, pref);
+                    document.body.classList.toggle('touch-ui', pref === '1');
+                }
+                window.dispatchEvent(new Event('checkBusinessTouchSetting'));
+            }
         }
     }
 

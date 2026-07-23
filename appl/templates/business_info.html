@@ -619,12 +619,26 @@ document.addEventListener('DOMContentLoaded', function() {
   (function(){
     try {
       // Touch UI
+      // 'sun_touch_ui'      = valore effettivo in uso (puo' essere forzato a '1'
+      //                       dall'agenda quando la finestra e' stretta)
+      // 'sun_touch_ui_user' = scelta ESPLICITA fatta qui: e' l'unica autorevole
+      //                       e nessun automatismo la sovrascrive. La checkbox
+      //                       mostra sempre questa, non il valore forzato.
       const key = 'sun_touch_ui';
+      const userKey = 'sun_touch_ui_user';
       const el = document.getElementById('touchUiEnabled');
       if (el) {
-        el.checked = (localStorage.getItem(key) === '1');
+        const pref = localStorage.getItem(userKey);
+        el.checked = (pref === '1' || pref === '0')
+          ? (pref === '1')
+          : (localStorage.getItem(key) === '1');
         el.addEventListener('change', () => {
-          localStorage.setItem(key, el.checked ? '1' : '0');
+          const val = el.checked ? '1' : '0';
+          localStorage.setItem(userKey, val);
+          localStorage.setItem(key, val);
+          // una scelta esplicita annulla qualunque forcing automatico in corso
+          localStorage.removeItem('sun_touch_ui_forced');
+          localStorage.removeItem('sun_touch_ui_prev');
           alert('Impostazione salvata. Ricarica l\'agenda per applicare la modalità touch.');
         });
       }

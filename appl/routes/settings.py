@@ -4520,14 +4520,36 @@ def solarium_phidget_status():
     """Verifica best-effort la disponibilita' della scheda Phidget VINT 8/8/8
     collegata via USB. Richiede la libreria Phidget22 installata sulla
     macchina locale (l'exe desktop, non il cloud): senza hardware collegato
-    o senza libreria disponibile risponde 'non connessa'."""
+    o senza libreria disponibile risponde 'non connessa'.
+
+    Se il bridge di monitoraggio in tempo reale (solarium_bridge) e' gia'
+    attivo con dei canali collegati, riusa quello stato invece di aprire una
+    nuova connessione: un secondo "open" sullo stesso canale fallirebbe con
+    'device is in use' contro la connessione persistente del bridge stesso."""
+    try:
+        from appl.services.solarium_bridge import get_status
+        bridge_connected = get_status()
+    except Exception:
+        bridge_connected = None
+
+    if bridge_connected is not None:
+        return jsonify({
+            'library_available': True,
+            'connected': bridge_connected,
+            'message': ('Phidget 8/8/8 rilevata e collegata (monitoraggio in tempo reale attivo).'
+                        if bridge_connected else
+                        'Phidget non rilevata (verifica il collegamento USB).')
+        })
+
     try:
         from Phidget22.Devices.DigitalInput import DigitalInput
-    except Exception:
+    except Exception as e:
+        app.logger.error("Phidget22: import fallito: %s", str(e))
         return jsonify({
             'library_available': False,
             'connected': False,
-            'message': "Libreria Phidget22 non installata su questo PC."
+            'message': "Libreria Phidget22 non installata su questo PC.",
+            'error_detail': str(e)
         })
 
     try:
@@ -4541,11 +4563,13 @@ def solarium_phidget_status():
             'connected': bool(attached),
             'message': 'Phidget 8/8/8 rilevata e collegata.' if attached else 'Phidget non rilevata (verifica il collegamento USB).'
         })
-    except Exception:
+    except Exception as e:
+        app.logger.error("Phidget22: verifica connessione fallita: %s", str(e))
         return jsonify({
             'library_available': True,
             'connected': False,
-            'message': 'Phidget non rilevata (verifica il collegamento USB).'
+            'message': 'Phidget non rilevata (verifica il collegamento USB).',
+            'error_detail': str(e)
         })
 
 @settings_bp.route('/settings/solarium/stats', methods=['GET'])
