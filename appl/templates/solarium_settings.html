@@ -204,7 +204,11 @@
           dot.classList.add('ko');
           title.textContent = 'Phidget 8/8/8 non collegata';
         }
-        message.textContent = data.message || '';
+        var msg = data.message || '';
+        if (data.error_detail) {
+          msg += ' — Dettaglio tecnico: ' + data.error_detail;
+        }
+        message.textContent = msg;
       })
       .catch(function() {
         dot.classList.add('ko');
