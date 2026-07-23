@@ -1039,6 +1039,67 @@ def list_services_api():
         for s in services
     ])
 
+@calendar_bp.route('/api/solarium/state', methods=['GET'])
+def solarium_state():
+    """Stato in tempo reale dei macchinari solarium per il Monitor Lampade.
+    Lo stato (acceso/ventilazione/pronta) e i tempi si calcolano dalla sessione
+    piu' recente per ciascun macchinario: SolariumSession.fine è NULL finche'
+    il macchinario e' acceso (rilevato dal canale Phidget collegato)."""
+    from ..models import SolariumDevice, SolariumSession
+
+    devices = (SolariumDevice.query
+               .filter_by(is_deleted=False)
+               .order_by(SolariumDevice.order, SolariumDevice.id)
+               .all())
+
+    now = datetime.now(timezone.utc)
+    result = []
+    for d in devices:
+        stato = 'pronta'
+        tempo_lampada = None
+        tempo_ventilazione = None
+        tempo_mancante = None
+
+        sessione_aperta = (SolariumSession.query
+                            .filter_by(device_id=d.id, fine=None)
+                            .order_by(SolariumSession.inizio.desc())
+                            .first())
+        if sessione_aperta:
+            inizio = sessione_aperta.inizio
+            if inizio.tzinfo is None:
+                inizio = inizio.replace(tzinfo=timezone.utc)
+            elapsed = int((now - inizio).total_seconds())
+            stato = 'acceso'
+            tempo_lampada = max(elapsed, 0)
+            tempo_mancante = d.durata_seduta_minuti * 60 - elapsed + d.durata_ventilazione_minuti * 60
+        else:
+            ultima_sessione = (SolariumSession.query
+                                .filter(SolariumSession.device_id == d.id,
+                                        SolariumSession.fine.isnot(None))
+                                .order_by(SolariumSession.fine.desc())
+                                .first())
+            if ultima_sessione and ultima_sessione.fine:
+                fine = ultima_sessione.fine
+                if fine.tzinfo is None:
+                    fine = fine.replace(tzinfo=timezone.utc)
+                elapsed_cooling = int((now - fine).total_seconds())
+                cooling_totale = d.durata_ventilazione_minuti * 60
+                if elapsed_cooling < cooling_totale:
+                    stato = 'ventilazione'
+                    tempo_ventilazione = elapsed_cooling
+                    tempo_mancante = cooling_totale - elapsed_cooling
+
+        result.append({
+            'id': d.id,
+            'nome': d.nome,
+            'stato': stato,
+            'tempo_lampada': tempo_lampada,
+            'tempo_ventilazione': tempo_ventilazione,
+            'tempo_mancante': max(tempo_mancante, 0) if tempo_mancante is not None else None,
+        })
+
+    return jsonify({'devices': result})
+
 @calendar_bp.route('/delete/<int:appointment_id>', methods=['POST'])
 def delete_appointment(appointment_id):
     try:

@@ -177,12 +177,14 @@ def create_app(db_uri: str | None = None):
                 return {
                     'module_web_enabled': owner_cfg.module_web_enabled,
                     'module_pacchetti_enabled': owner_cfg.module_pacchetti_enabled,
+                    'module_solarium_enabled': owner_cfg.module_solarium_enabled,
                 }
         except Exception:
             pass
         return {
             'module_web_enabled': True,
             'module_pacchetti_enabled': True,
+            'module_solarium_enabled': False,
         }
 
     # ---- CONTEXT PROCESSOR: default Cassa visibile (start.py / non-cloud) ----
@@ -223,6 +225,11 @@ def create_app(db_uri: str | None = None):
                 blocked = ('/settings/marketing',
                            '/settings/set_bookings', '/whatsapp_per_operatori')
                 if any(path.startswith(p) for p in blocked):
+                    return redirect(url_for('calendar.calendar_home'))
+            # Modulo SOLARIUM disabilitato: blocca impostazioni e API monitor lampade
+            if not owner_cfg.module_solarium_enabled:
+                blocked_solarium = ('/settings/solarium', '/calendar/api/solarium')
+                if any(path.startswith(p) for p in blocked_solarium):
                     return redirect(url_for('calendar.calendar_home'))
         except Exception:
             pass

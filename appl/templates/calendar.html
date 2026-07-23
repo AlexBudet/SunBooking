@@ -2959,7 +2959,238 @@ document.addEventListener('DOMContentLoaded', function() {
               transition:transform .18s ease, box-shadow .18s ease;">
     <i class="bi bi-calendar-check" style="font-size:1.15rem; color:#fff; pointer-events:none;"></i>
   </div>
+
+  {% if module_solarium_enabled %}
+  <!-- Badge 4: Monitor Lampade (Solarium) -->
+  <div id="solariumBadgeBtn"
+       data-bs-toggle="tooltip"
+       title="MONITOR LAMPADE - Stato in tempo reale dei macchinari solarium (lampade abbronzanti)"
+       aria-label="Apri monitor lampade"
+       style="display:flex; width:44px; height:44px; border-radius:50%;
+              background:linear-gradient(135deg,#f2b84b,#e08a1f);
+              box-shadow:0 4px 14px rgba(224,138,31,0.45);
+              cursor:pointer; align-items:center; justify-content:center;
+              position:relative;
+              transition:transform .18s ease, box-shadow .18s ease;">
+    <i class="bi bi-sun-fill" style="font-size:1.2rem; color:#fff; pointer-events:none;"></i>
+  </div>
+  {% endif %}
 </div>
+
+{% if module_solarium_enabled %}
+<!-- Monitor Lampade (Solarium): barra fissa in fondo allo schermo (margine zero),
+     larga il 90% allineata a sinistra, sempre a tutta larghezza anche con pochi
+     macchinari configurati. Si apre/chiude al click sul badge "sole". -->
+<style>
+  #solariumMonitorBar {
+    display: none;
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    margin: 0;
+    width: 100%;
+    height: 56px;
+    max-height: 61px;
+    z-index: 99997;
+    background: #fff;
+    box-shadow: 0 0 10px rgba(0,0,0,0.15);
+    border-radius: 10px 10px 0 0;
+    align-items: stretch;
+    justify-content: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .solarium-lamp-item {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+    width: calc(12.5% - 10px);
+    max-width: calc(12.5% - 10px);
+    min-width: 130px;
+    margin: 3px 5px;
+    padding: 0 12px;
+    text-align: center;
+    white-space: nowrap;
+    border: 1.5px solid #ccc;
+    border-radius: 6px;
+    background: #f8f9fa;
+  }
+  .solarium-lamp-item.pink { background: #ffedf5; border-color: #ff6fa8; }
+  .solarium-lamp-item.blue { background: #e3fcff; border-color: #1a8fa1; }
+  .solarium-lamp-item .solarium-lamp-name {
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    line-height: 1.15;
+  }
+  .solarium-lamp-item.pink .solarium-lamp-name { color: #ff006f; }
+  .solarium-lamp-item.blue .solarium-lamp-name { color: #1a8fa1; }
+  .solarium-lamp-item .solarium-lamp-name { color: #6c757d; }
+  .solarium-lamp-item .solarium-lamp-status {
+    font-size: 0.68rem;
+    color: #555;
+    line-height: 1.2;
+    white-space: normal;
+  }
+  #solariumMonitorTab {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    position: fixed;
+    left: 20px;
+    bottom: 56px;
+    z-index: 99997;
+    background: linear-gradient(135deg,#f2b84b,#e08a1f);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    padding: 5px 10px 5px 14px;
+    border-radius: 8px 8px 0 0;
+    box-shadow: 0 -2px 6px rgba(0,0,0,0.15);
+    white-space: nowrap;
+  }
+  #solariumMonitorTabClose {
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0 2px;
+  }
+</style>
+<div id="solariumMonitorTab">
+  <span>Monitor Solarium</span>
+  <span id="solariumMonitorTabClose" title="Chiudi monitor lampade" aria-label="Chiudi monitor lampade">&times;</span>
+</div>
+<div id="solariumMonitorBar" role="dialog" aria-label="Monitor lampade solarium"></div>
+
+<script>
+(function() {
+  var badge = document.getElementById('solariumBadgeBtn');
+  var bar = document.getElementById('solariumMonitorBar');
+  var tab = document.getElementById('solariumMonitorTab');
+  var tabClose = document.getElementById('solariumMonitorTabClose');
+  var badgeColumn = document.getElementById('aiBadgeColumn');
+  if (!badge || !bar) return;
+
+  var STORAGE_KEY = 'sun_solarium_monitor_open';
+  var pollTimer = null;
+  var isOpen = false;
+
+  function pad2(n) {
+    n = Math.max(0, Math.floor(n));
+    return (n < 10 ? '0' : '') + n;
+  }
+
+  function fmtMMSS(seconds) {
+    if (seconds === null || seconds === undefined) return '--:--';
+    seconds = Math.max(0, Math.round(seconds));
+    return pad2(Math.floor(seconds / 60)) + ':' + pad2(seconds % 60);
+  }
+
+  function truncate15(name) {
+    name = (name || '').toUpperCase();
+    return name.length > 15 ? name.slice(0, 15) : name;
+  }
+
+  function renderDevices(devices) {
+    bar.innerHTML = '';
+    if (!devices || devices.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'solarium-lamp-item';
+      empty.style.color = '#999';
+      empty.style.fontSize = '0.68rem';
+      empty.textContent = 'Nessun macchinario configurato (Impostazioni > Solarium)';
+      bar.appendChild(empty);
+      return;
+    }
+
+    devices.forEach(function(d) {
+      var item = document.createElement('div');
+      item.className = 'solarium-lamp-item';
+
+      var nameEl = document.createElement('span');
+      nameEl.className = 'solarium-lamp-name';
+      nameEl.textContent = truncate15(d.nome);
+
+      var statusEl = document.createElement('span');
+      statusEl.className = 'solarium-lamp-status';
+
+      if (d.stato === 'acceso') {
+        item.classList.add('pink');
+        statusEl.textContent = 'Partito da: ' + fmtMMSS(d.tempo_lampada) + '  Pronto tra: ' + fmtMMSS(d.tempo_mancante);
+      } else if (d.stato === 'ventilazione') {
+        item.classList.add('blue');
+        statusEl.textContent = 'Cooling da: ' + fmtMMSS(d.tempo_ventilazione) + '  Pronta tra: ' + fmtMMSS(d.tempo_mancante);
+      } else {
+        statusEl.textContent = 'Pronta';
+        statusEl.style.color = '#2ecc71';
+      }
+
+      item.appendChild(nameEl);
+      item.appendChild(statusEl);
+      bar.appendChild(item);
+    });
+  }
+
+  function fetchState() {
+    fetch('/calendar/api/solarium/state')
+      .then(function(r) { return r.json(); })
+      .then(function(data) { renderDevices(data.devices || []); })
+      .catch(function() {});
+  }
+
+  function openBar(persist) {
+    isOpen = true;
+    badge.style.display = 'none';
+    bar.style.display = 'flex';
+    if (tab) tab.style.display = 'flex';
+    if (badgeColumn) badgeColumn.style.bottom = '92px';
+    fetchState();
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(fetchState, 1000);
+    if (persist !== false) {
+      try { localStorage.setItem(STORAGE_KEY, '1'); } catch (_) {}
+    }
+  }
+
+  function closeBar() {
+    isOpen = false;
+    badge.style.display = 'flex';
+    if (tab) tab.style.display = 'none';
+    if (badgeColumn) badgeColumn.style.bottom = '24px';
+    bar.style.display = 'none';
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+  }
+
+  badge.addEventListener('click', function(e) {
+    e.stopPropagation();
+    openBar();
+  });
+
+  if (tabClose) {
+    tabClose.addEventListener('click', function(e) {
+      e.stopPropagation();
+      closeBar();
+    });
+  }
+
+  // Resta aperto tra un cambio pagina e l'altro del calendario (data diversa,
+  // altri modal aperti, ecc.): niente chiusura al click fuori, solo la "X".
+  var wasOpen = false;
+  try { wasOpen = localStorage.getItem(STORAGE_KEY) === '1'; } catch (_) {}
+  if (wasOpen) openBar(false);
+})();
+</script>
+{% endif %}
 
 <!-- Modal Chat AI -->
 <div id="aiChatModal"

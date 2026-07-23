@@ -738,10 +738,13 @@ class OWNER(db.Model):
     cassa_enabled_on_web = db.Column(db.Boolean, nullable=False,
                                      server_default='false', default=False)
 
+    module_solarium_enabled = db.Column(db.Boolean, nullable=False, server_default='false', default=False)
+
     # Date attivazione moduli
     module_base_activated_on = db.Column(db.Date, nullable=True)
     module_web_activated_on = db.Column(db.Date, nullable=True)
     module_pacchetti_activated_on = db.Column(db.Date, nullable=True)
+    module_solarium_activated_on = db.Column(db.Date, nullable=True)
 
     created_at = db.Column(db.DateTime, server_default=func.now(), nullable=False)
     updated_at = db.Column(db.DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -776,3 +779,50 @@ class CrmErrorLog(db.Model):
     reason = db.Column(db.String(255), nullable=False)
     client_id = db.Column(db.Integer, db.ForeignKey('clienti.id'), nullable=True)
     context = db.Column(db.JSON, nullable=True)  # dettagli extra (appuntamento, errCode RCH, endpoint, eccezione, ecc.)
+
+class SolariumDevice(db.Model):
+    """Macchinario solarium (lampada abbronzante) monitorato dalla scheda
+    Phidget 8/8/8: ogni canale digitale rileva circuito aperto/chiuso del
+    relativo macchinario. Le durate sono in minuti."""
+    __tablename__ = 'solarium_devices'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    nome = db.Column(db.String(30), nullable=False)
+    descrizione = db.Column(db.String(500), nullable=True)
+    durata_seduta_minuti = db.Column(db.Integer, nullable=False)
+    durata_ventilazione_minuti = db.Column(db.Integer, nullable=False)
+    # Canale della Phidget 8/8/8 collegato a questo macchinario (0-7)
+    phidget_channel = db.Column(db.Integer, nullable=True)
+    # Collegamento al servizio di cassa (per la correlazione automatica
+    # scontrino/seduta, da implementare in un secondo momento)
+    service_id = db.Column(db.Integer, db.ForeignKey('servizi.id'), nullable=True)
+    order = db.Column(db.Integer, default=0)
+    is_deleted = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, server_default=func.now(), nullable=False)
+    updated_at = db.Column(db.DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    service = db.relationship('Service')
+
+    def __repr__(self):
+        return f"<SolariumDevice {self.nome}>"
+
+class SolariumSession(db.Model):
+    """Seduta registrata per un macchinario solarium: inizio/fine rilevati
+    dal cambio di stato del canale Phidget collegato (circuito chiuso =
+    seduta avviata, circuito riaperto = seduta terminata / avvio ventilazione)."""
+    __tablename__ = 'solarium_sessions'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    device_id = db.Column(db.Integer, db.ForeignKey('solarium_devices.id'), nullable=False)
+    inizio = db.Column(db.DateTime(timezone=True), nullable=False)
+    fine = db.Column(db.DateTime(timezone=True), nullable=True)
+    durata_secondi = db.Column(db.Integer, nullable=True)
+    # Collegamenti opzionali per la correlazione automatica con cliente/scontrino
+    client_id = db.Column(db.Integer, db.ForeignKey('clienti.id'), nullable=True)
+    receipt_id = db.Column(db.Integer, db.ForeignKey('scontrini.id'), nullable=True)
+    created_at = db.Column(db.DateTime, server_default=func.now(), nullable=False)
+
+    device = db.relationship('SolariumDevice')
+
+    def __repr__(self):
+        return f"<SolariumSession device_id={self.device_id} inizio={self.inizio}>"

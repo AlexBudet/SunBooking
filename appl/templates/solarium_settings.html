@@ -1,0 +1,218 @@
+<!-- appl/templates/solarium_settings.html -->
+{% extends "settings.html" %}
+{% block settings_content %}
+<div class="page-wide-90">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<style>
+  .phidget-status-card {
+    background: linear-gradient(180deg, #ffffff 0%, #fbfbfd 100%);
+    border-radius: 12px;
+    box-shadow: 2px 2px 8px #e0e0e0, -2px -2px 8px #ffffff;
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 1.5rem;
+    max-width: 640px;
+  }
+  .phidget-status-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #adb5bd;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 3px rgba(0,0,0,0.04);
+    transition: background .2s;
+  }
+  .phidget-status-dot.ok { background: #2ecc71; }
+  .phidget-status-dot.ko { background: #e74c3c; }
+  .phidget-status-text { flex: 1; }
+  .phidget-status-title { font-weight: 700; font-size: 0.95rem; color: #2f3b4b; }
+  .phidget-status-message { font-size: 0.85rem; color: #6c7a89; margin-top: 2px; }
+  .solarium-device-row td { vertical-align: middle; }
+  .solarium-edit-row { display: none; background: #f7f9fc; }
+  .solarium-edit-row.show { display: table-row; }
+</style>
+
+<h3><i class="bi bi-sun-fill" style="color:#e08a1f;"></i> Solarium — Monitor Lampade</h3>
+<p style="color:#6c7a89; max-width:700px;">
+  Configura la scheda Phidget 8/8/8 (rilevamento circuito aperto/chiuso dei macchinari) e i
+  macchinari solarium (lampade) monitorati dal pulsante <strong>Monitor Lampade</strong> in Calendario.
+</p>
+
+<!-- ===== Stato Phidget 8/8/8 ===== -->
+<div class="phidget-status-card">
+  <span class="phidget-status-dot" id="phidgetStatusDot"></span>
+  <div class="phidget-status-text">
+    <div class="phidget-status-title" id="phidgetStatusTitle">Verifica scheda Phidget 8/8/8 in corso...</div>
+    <div class="phidget-status-message" id="phidgetStatusMessage">&nbsp;</div>
+  </div>
+  <button type="button" class="btn btn-sm btn-outline-secondary" id="phidgetRecheckBtn"
+          data-bs-toggle="tooltip" title="Ripeti la verifica della connessione USB">
+    <i class="bi bi-arrow-clockwise"></i> Verifica
+  </button>
+</div>
+
+<hr class="my-4">
+
+<!-- ===== Aggiungi macchinario ===== -->
+<h3>Aggiungi Nuovo Macchinario</h3>
+<form method="POST" action="{{ url_for('settings.solarium_add_device') }}" class="mb-4" id="add-solarium-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="row align-items-center mb-2">
+    <div class="col-md-4">
+      <input type="text" class="form-control" name="nome" placeholder="Nome (es. D BASSA, ESA, LETTINO)" maxlength="15" required>
+    </div>
+    <div class="col-md-4">
+      <input type="text" class="form-control" name="descrizione" placeholder="Descrizione (opzionale)" maxlength="500">
+    </div>
+    <div class="col-md-2">
+      <input type="number" min="1" class="form-control" name="durata_seduta" placeholder="Durata seduta (min)" required>
+    </div>
+    <div class="col-md-2">
+      <input type="number" min="0" class="form-control" name="durata_ventilazione" placeholder="Durata ventilazione (min)" required>
+    </div>
+  </div>
+  <div class="row align-items-center">
+    <div class="col-md-4">
+      <select class="form-control" name="phidget_channel">
+        <option value="">Canale Phidget (opzionale)</option>
+        {% for ch in range(0, 8) %}
+        <option value="{{ ch }}">Canale {{ ch }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <select class="form-control" name="service_id">
+        <option value="">Servizio collegato (opzionale, per il futuro)</option>
+        {% for s in services %}
+        <option value="{{ s.id }}">{{ s.servizio_nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <button type="submit" class="btn btn-primary btn-block">Aggiungi Macchinario</button>
+    </div>
+  </div>
+</form>
+
+<hr class="my-4">
+<h3>Macchinari Configurati</h3>
+<table class="table" id="solariumDevicesTable">
+  <thead>
+    <tr>
+      <th>Nome</th>
+      <th>Descrizione</th>
+      <th class="text-center">Durata seduta (min)</th>
+      <th class="text-center">Durata ventilazione (min)</th>
+      <th class="text-center">Canale Phidget</th>
+      <th>Servizio collegato</th>
+      <th class="text-center">Azioni</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in devices %}
+    <tr class="solarium-device-row" id="row-{{ d.id }}">
+      <td>{{ d.nome }}</td>
+      <td>{{ d.descrizione or '-' }}</td>
+      <td class="text-center">{{ d.durata_seduta_minuti }}</td>
+      <td class="text-center">{{ d.durata_ventilazione_minuti }}</td>
+      <td class="text-center">{{ d.phidget_channel if d.phidget_channel is not none else '-' }}</td>
+      <td>{{ d.service.servizio_nome if d.service else '-' }}</td>
+      <td class="text-center" style="white-space:nowrap;">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSolariumEdit({{ d.id }})">Modifica</button>
+        <form method="POST" action="{{ url_for('settings.solarium_delete_device', device_id=d.id) }}"
+              style="display:inline;" onsubmit="return confirm('Eliminare questo macchinario?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-sm btn-outline-danger">Elimina</button>
+        </form>
+      </td>
+    </tr>
+    <tr class="solarium-edit-row" id="edit-row-{{ d.id }}">
+      <td colspan="7">
+        <form method="POST" action="{{ url_for('settings.solarium_edit_device', device_id=d.id) }}" class="row align-items-center g-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="col-md-2">
+            <input type="text" class="form-control" name="nome" value="{{ d.nome }}" maxlength="15" required>
+          </div>
+          <div class="col-md-2">
+            <input type="text" class="form-control" name="descrizione" value="{{ d.descrizione or '' }}" maxlength="500">
+          </div>
+          <div class="col-md-2">
+            <input type="number" min="1" class="form-control" name="durata_seduta" value="{{ d.durata_seduta_minuti }}" required>
+          </div>
+          <div class="col-md-2">
+            <input type="number" min="0" class="form-control" name="durata_ventilazione" value="{{ d.durata_ventilazione_minuti }}" required>
+          </div>
+          <div class="col-md-2">
+            <select class="form-control" name="phidget_channel">
+              <option value="">Canale</option>
+              {% for ch in range(0, 8) %}
+              <option value="{{ ch }}" {% if d.phidget_channel == ch %}selected{% endif %}>Canale {{ ch }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <select class="form-control" name="service_id">
+              <option value="">Nessun servizio</option>
+              {% for s in services %}
+              <option value="{{ s.id }}" {% if d.service_id == s.id %}selected{% endif %}>{{ s.servizio_nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-sm btn-primary">Salva</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSolariumEdit({{ d.id }})">Annulla</button>
+          </div>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="text-center text-muted">Nessun macchinario configurato.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+</div>
+
+<script>
+  function toggleSolariumEdit(id) {
+    var row = document.getElementById('edit-row-' + id);
+    if (row) row.classList.toggle('show');
+  }
+
+  function loadPhidgetStatus() {
+    var dot = document.getElementById('phidgetStatusDot');
+    var title = document.getElementById('phidgetStatusTitle');
+    var message = document.getElementById('phidgetStatusMessage');
+    dot.className = 'phidget-status-dot';
+    title.textContent = 'Verifica scheda Phidget 8/8/8 in corso...';
+    message.textContent = '';
+
+    fetch("{{ url_for('settings.solarium_phidget_status') }}")
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.connected) {
+          dot.classList.add('ok');
+          title.textContent = 'Phidget 8/8/8 collegata';
+        } else {
+          dot.classList.add('ko');
+          title.textContent = 'Phidget 8/8/8 non collegata';
+        }
+        message.textContent = data.message || '';
+      })
+      .catch(function() {
+        dot.classList.add('ko');
+        title.textContent = 'Phidget 8/8/8 non collegata';
+        message.textContent = 'Impossibile verificare la connessione.';
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    loadPhidgetStatus();
+    var btn = document.getElementById('phidgetRecheckBtn');
+    if (btn) btn.addEventListener('click', loadPhidgetStatus);
+  });
+</script>
+{% endblock %}

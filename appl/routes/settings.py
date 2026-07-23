@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import os, ipaddress, requests
 from sqlalchemy.sql import func, or_
 from .. import db
-from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio
+from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice
 from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
 
 # Blueprint per le rotte delle impostazioni
@@ -4428,3 +4428,122 @@ def api_help_topic(topic):
     """API per ottenere il contenuto help di un singolo argomento (usato dai tooltip)"""
     help_data = get_help(topic)
     return jsonify(help_data)
+
+# ================= SOLARIUM (Monitor Lampade) ====================
+@settings_bp.route('/settings/solarium', methods=['GET'])
+def solarium_settings():
+    """Pagina impostazioni Solarium: stato Phidget 8/8/8 + gestione macchinari (lampade)."""
+    devices = (SolariumDevice.query
+               .filter_by(is_deleted=False)
+               .order_by(SolariumDevice.order, SolariumDevice.id)
+               .all())
+    services = Service.query.filter(
+        Service.is_deleted == False,
+        Service.servizio_nome != 'dummy'
+    ).order_by(Service.servizio_nome).all()
+    return render_template('solarium_settings.html', devices=devices, services=services)
+
+@settings_bp.route('/settings/solarium/add', methods=['POST'])
+def solarium_add_device():
+    """Aggiunge un nuovo macchinario solarium (lampada)."""
+    try:
+        nome = (request.form.get('nome') or '').strip()
+        descrizione = (request.form.get('descrizione') or '').strip() or None
+        durata_seduta = int(request.form.get('durata_seduta') or 0)
+        durata_ventilazione = int(request.form.get('durata_ventilazione') or 0)
+        canale = request.form.get('phidget_channel')
+        canale = int(canale) if canale not in (None, '') else None
+
+        if not nome or durata_seduta <= 0 or durata_ventilazione < 0:
+            flash("Compila nome e durata seduta correttamente.", "error")
+            return redirect(url_for('settings.solarium_settings'))
+
+        max_order = db.session.query(func.max(SolariumDevice.order)).scalar() or 0
+        nuovo = SolariumDevice(
+            nome=nome,
+            descrizione=descrizione,
+            durata_seduta_minuti=durata_seduta,
+            durata_ventilazione_minuti=durata_ventilazione,
+            phidget_channel=canale,
+            order=max_order + 1
+        )
+        db.session.add(nuovo)
+        db.session.commit()
+        flash("Macchinario aggiunto con successo.", "success")
+    except Exception as e:
+        app.logger.error("Errore durante l'aggiunta del macchinario solarium: %s", str(e))
+        flash("Errore durante l'aggiunta del macchinario.", "error")
+    return redirect(url_for('settings.solarium_settings'))
+
+@settings_bp.route('/settings/solarium/<int:device_id>/edit', methods=['POST'])
+def solarium_edit_device(device_id):
+    """Modifica un macchinario solarium esistente."""
+    device = db.session.get(SolariumDevice, device_id)
+    if not device or device.is_deleted:
+        abort(404)
+    try:
+        nome = request.form.get('nome')
+        if nome:
+            device.nome = nome.strip()
+        descrizione = request.form.get('descrizione')
+        if descrizione is not None:
+            device.descrizione = descrizione.strip() or None
+        durata_seduta = request.form.get('durata_seduta')
+        if durata_seduta:
+            device.durata_seduta_minuti = int(durata_seduta)
+        durata_ventilazione = request.form.get('durata_ventilazione')
+        if durata_ventilazione not in (None, ''):
+            device.durata_ventilazione_minuti = int(durata_ventilazione)
+        canale = request.form.get('phidget_channel')
+        device.phidget_channel = int(canale) if canale not in (None, '') else None
+        service_id = request.form.get('service_id')
+        device.service_id = int(service_id) if service_id not in (None, '') else None
+        db.session.commit()
+        flash("Macchinario aggiornato.", "success")
+    except Exception as e:
+        app.logger.error("Errore durante la modifica del macchinario solarium %s: %s", device_id, str(e))
+        flash("Errore durante la modifica del macchinario.", "error")
+    return redirect(url_for('settings.solarium_settings'))
+
+@settings_bp.route('/settings/solarium/<int:device_id>/delete', methods=['POST'])
+def solarium_delete_device(device_id):
+    """Elimina (soft-delete) un macchinario solarium."""
+    device = db.session.get(SolariumDevice, device_id)
+    if device:
+        device.is_deleted = True
+        db.session.commit()
+        flash("Macchinario eliminato.", "success")
+    return redirect(url_for('settings.solarium_settings'))
+
+@settings_bp.route('/settings/api/solarium/phidget_status', methods=['GET'])
+def solarium_phidget_status():
+    """Verifica best-effort la disponibilita' della scheda Phidget VINT 8/8/8
+    collegata via USB. Richiede la libreria Phidget22 installata sulla
+    macchina locale (l'exe desktop, non il cloud): senza hardware collegato
+    o senza libreria disponibile risponde 'non connessa'."""
+    try:
+        from Phidget22.Devices.DigitalInput import DigitalInput
+    except Exception:
+        return jsonify({
+            'library_available': False,
+            'connected': False,
+            'message': "Libreria Phidget22 non installata su questo PC."
+        })
+
+    try:
+        ch = DigitalInput()
+        ch.setChannel(0)
+        ch.openWaitForAttachment(800)
+        attached = ch.getAttached()
+        ch.close()
+        return jsonify({
+            'library_available': True,
+            'connected': bool(attached),
+            'message': 'Phidget 8/8/8 rilevata e collegata.' if attached else 'Phidget non rilevata (verifica il collegamento USB).'
+        })
+    except Exception:
+        return jsonify({
+            'library_available': True,
+            'connected': False,
+            'message': 'Phidget non rilevata (verifica il collegamento USB).'
+        })
