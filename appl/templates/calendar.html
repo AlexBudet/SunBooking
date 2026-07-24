@@ -2990,8 +2990,9 @@ document.addEventListener('DOMContentLoaded', function() {
     margin: 0;
     width: 100%;
     /* Altezza calcolata sui tasti: immagine lampada 60x60 + bordi/margini */
-    height: 78px;
-    max-height: 78px;
+    height: 88px;
+    max-height: 88px;
+    padding: 0 6px;
     box-sizing: border-box;
     z-index: 99997;
     /* Fondo scuro con sfumatura verticale + riflesso interno in alto: la barra
@@ -3018,11 +3019,12 @@ document.addEventListener('DOMContentLoaded', function() {
     flex: 0 0 auto;
     box-sizing: border-box;
     /* Tasti piu' larghi: devono ospitare l'immagine 60x60 accanto al testo */
-    width: calc(16.666% - 10px);
-    max-width: calc(16.666% - 10px);
-    min-width: 200px;
-    margin: 3px 5px;
-    padding: 0 10px;
+    width: calc(16.666% - 16px);
+    max-width: calc(16.666% - 16px);
+    min-width: 230px;
+    /* Aria attorno ai tasti: dai bordi della barra e tra un tasto e l'altro */
+    margin: 7px 8px;
+    padding: 0 12px;
     text-align: center;
     white-space: nowrap;
     border: 1.5px solid #cbd3de;
@@ -3066,21 +3068,24 @@ document.addEventListener('DOMContentLoaded', function() {
     flex: 1 1 auto;
   }
   .solarium-lamp-item .solarium-lamp-name {
-    font-size: 0.76rem;
+    font-size: 0.92rem;
     font-weight: 700;
     letter-spacing: .02em;
-    line-height: 1.15;
+    line-height: 1.2;
     color: #6c757d;
   }
   .solarium-lamp-item.pink .solarium-lamp-name { color: #fff; }
   .solarium-lamp-item.blue .solarium-lamp-name { color: #fff; }
+  /* Stato su due righe (es. "Partito da: 01:12" / "Pronto tra: 04:48"):
+     ogni riga resta intera, niente a capo a meta' orario. */
   .solarium-lamp-item .solarium-lamp-status {
-    font-size: 0.68rem;
+    font-size: 0.8rem;
     font-weight: 400;
     color: #555;
-    line-height: 1.2;
-    white-space: normal;
+    line-height: 1.25;
+    white-space: nowrap;
   }
+  .solarium-lamp-item .solarium-lamp-status:empty { display: none; }
   .solarium-lamp-item.pink .solarium-lamp-status { color: #fff; }
   .solarium-lamp-item.blue .solarium-lamp-status { color: #fff; }
   #solariumMonitorTab {
@@ -3089,7 +3094,7 @@ document.addEventListener('DOMContentLoaded', function() {
     gap: 10px;
     position: fixed;
     right: 20px;
-    bottom: 73px;
+    bottom: 83px;
     z-index: 99997;
     background: linear-gradient(135deg,#f2b84b,#e08a1f);
     color: #fff;
@@ -3177,15 +3182,19 @@ document.addEventListener('DOMContentLoaded', function() {
       nameEl.className = 'solarium-lamp-name';
       nameEl.textContent = truncate15(d.nome);
 
+      // Due righe di stato: tempo trascorso sopra, tempo mancante sotto
       var statusEl = document.createElement('span');
       statusEl.className = 'solarium-lamp-status';
+      var statusEl2 = document.createElement('span');
+      statusEl2.className = 'solarium-lamp-status';
 
       textEl.appendChild(nameEl);
       textEl.appendChild(statusEl);
+      textEl.appendChild(statusEl2);
       item.appendChild(textEl);
       bar.appendChild(item);
 
-      itemsById[d.id] = { item: item, status: statusEl };
+      itemsById[d.id] = { item: item, status: statusEl, status2: statusEl2 };
     });
   }
 
@@ -3219,12 +3228,15 @@ document.addEventListener('DOMContentLoaded', function() {
       refs.item.classList.remove('pink', 'blue');
       if (d.stato === 'acceso') {
         refs.item.classList.add('pink');
-        refs.status.textContent = 'Partito da: ' + fmtMMSS(d.tempo_lampada) + '  Pronto tra: ' + fmtMMSS(d.tempo_mancante);
+        refs.status.textContent = 'Partito da: ' + fmtMMSS(d.tempo_lampada);
+        refs.status2.textContent = 'Pronto tra: ' + fmtMMSS(d.tempo_mancante);
       } else if (d.stato === 'ventilazione') {
         refs.item.classList.add('blue');
-        refs.status.textContent = 'Cooling da: ' + fmtMMSS(d.tempo_ventilazione) + '  Pronta tra: ' + fmtMMSS(d.tempo_mancante);
+        refs.status.textContent = 'Cooling da: ' + fmtMMSS(d.tempo_ventilazione);
+        refs.status2.textContent = 'Pronta tra: ' + fmtMMSS(d.tempo_mancante);
       } else {
         refs.status.textContent = 'Pronta';
+        refs.status2.textContent = '';
       }
     });
   }
@@ -3241,7 +3253,7 @@ document.addEventListener('DOMContentLoaded', function() {
     badge.style.display = 'none';
     bar.style.display = 'flex';
     if (tab) tab.style.display = 'flex';
-    if (badgeColumn) badgeColumn.style.bottom = '109px';
+    if (badgeColumn) badgeColumn.style.bottom = '119px';
     fetchState();
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(fetchState, 1000);
