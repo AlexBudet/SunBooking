@@ -1046,11 +1046,14 @@ def solarium_state():
     piu' recente per ciascun macchinario: SolariumSession.fine è NULL finche'
     il macchinario e' acceso (rilevato dal canale Phidget collegato)."""
     from ..models import SolariumDevice, SolariumSession
+    from ..services.solarium_images import device_ids_with_image
 
     devices = (SolariumDevice.query
                .filter_by(is_deleted=False)
                .order_by(SolariumDevice.order, SolariumDevice.id)
                .all())
+    # Un'unica query per sapere quali macchinari hanno un'immagine salvata
+    with_image = device_ids_with_image()
 
     now = datetime.now(timezone.utc)
     result = []
@@ -1089,9 +1092,22 @@ def solarium_state():
                     tempo_ventilazione = elapsed_cooling
                     tempo_mancante = cooling_totale - elapsed_cooling
 
+        # URL dell'immagine del tasto (None se non caricata). Il parametro ?v=
+        # e' la versione: cambia solo quando l'immagine viene sostituita, cosi'
+        # il browser la tiene in cache tra un polling e l'altro.
+        immagine_url = None
+        if d.id in with_image:
+            try:
+                versione = int(d.updated_at.timestamp())
+            except Exception:
+                versione = 0
+            immagine_url = url_for('settings.solarium_device_image',
+                                   device_id=d.id) + '?v=' + str(versione)
+
         result.append({
             'id': d.id,
             'nome': d.nome,
+            'immagine_url': immagine_url,
             'stato': stato,
             'tempo_lampada': tempo_lampada,
             'tempo_ventilazione': tempo_ventilazione,
