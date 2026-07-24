@@ -4441,7 +4441,9 @@ def solarium_settings():
         Service.is_deleted == False,
         Service.servizio_nome != 'dummy'
     ).order_by(Service.servizio_nome).all()
-    return render_template('solarium_settings.html', devices=devices, services=services)
+    from ..services.solarium_images import device_ids_with_image
+    return render_template('solarium_settings.html', devices=devices, services=services,
+                           devices_with_image=device_ids_with_image())
 
 @settings_bp.route('/settings/solarium/add', methods=['POST'])
 def solarium_add_device():
@@ -4513,6 +4515,50 @@ def solarium_delete_device(device_id):
         device.is_deleted = True
         db.session.commit()
         flash("Macchinario eliminato.", "success")
+    return redirect(url_for('settings.solarium_settings'))
+
+@settings_bp.route('/settings/solarium/<int:device_id>/image', methods=['GET'])
+def solarium_device_image(device_id):
+    """Immagine del macchinario (mostrata sui tasti del Monitor Lampade)."""
+    from ..services.solarium_images import get_device_image
+    data, mime = get_device_image(device_id)
+    if not data:
+        abort(404)
+    from flask import Response
+    return Response(data, mimetype=mime, headers={
+        # Cache lunga: la barra ridisegna i tasti a ogni polling, il browser
+        # deve servire l'immagine dalla cache e non rifare la richiesta.
+        # L'invalidazione avviene col parametro ?v= (updated_at) nell'URL.
+        'Cache-Control': 'public, max-age=31536000',
+    })
+
+@settings_bp.route('/settings/solarium/<int:device_id>/image/upload', methods=['POST'])
+def solarium_device_image_upload(device_id):
+    """Carica/sostituisce l'immagine di un macchinario solarium."""
+    device = db.session.get(SolariumDevice, device_id)
+    if not device or device.is_deleted:
+        abort(404)
+    from ..services.solarium_images import process_upload, set_device_image
+    try:
+        data, mime = process_upload(request.files.get('immagine'))
+    except ValueError as e:
+        flash(str(e), "error")
+        return redirect(url_for('settings.solarium_settings'))
+    if set_device_image(device_id, data, mime):
+        flash("Immagine del macchinario aggiornata.", "success")
+    else:
+        flash("Impossibile salvare l'immagine: lanciare la migrazione "
+              "migrations/manual_solarium_device_images.sql sul database.", "error")
+    return redirect(url_for('settings.solarium_settings'))
+
+@settings_bp.route('/settings/solarium/<int:device_id>/image/delete', methods=['POST'])
+def solarium_device_image_delete(device_id):
+    """Rimuove l'immagine di un macchinario solarium."""
+    from ..services.solarium_images import clear_device_image
+    if clear_device_image(device_id):
+        flash("Immagine rimossa.", "success")
+    else:
+        flash("Impossibile rimuovere l'immagine.", "error")
     return redirect(url_for('settings.solarium_settings'))
 
 @settings_bp.route('/settings/api/solarium/phidget_status', methods=['GET'])

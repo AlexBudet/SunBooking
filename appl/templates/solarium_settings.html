@@ -33,6 +33,41 @@
   .solarium-device-row td { vertical-align: middle; }
   .solarium-edit-row { display: none; background: #f7f9fc; }
   .solarium-edit-row.show { display: table-row; }
+  /* Miniatura immagine del tasto lampada (in barra e' mostrata a max 60x60) */
+  .solarium-img-thumb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    margin: 0;
+    border: 1.5px dashed #cbd3de;
+    border-radius: 8px;
+    background: #fbfcfe;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .solarium-img-thumb:hover {
+    border-color: #e08a1f;
+    box-shadow: 0 0 0 3px rgba(224, 138, 31, 0.12);
+  }
+  .solarium-img-thumb img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .solarium-img-thumb.has-image { border-style: solid; }
+  .solarium-img-thumb i { font-size: 1.3rem; color: #adb5bd; }
+  .solarium-img-remove {
+    border: none;
+    background: none;
+    color: #c0392b;
+    font-size: 0.95rem;
+    line-height: 1;
+    padding: 2px;
+    cursor: pointer;
+  }
 </style>
 
 <h3><i class="bi bi-sun-fill" style="color:#e08a1f;"></i> Solarium — Monitor Lampade</h3>
@@ -106,6 +141,7 @@
 <table class="table" id="solariumDevicesTable">
   <thead>
     <tr>
+      <th class="text-center">Immagine</th>
       <th>Nome</th>
       <th>Descrizione</th>
       <th class="text-center">Durata seduta (min)</th>
@@ -118,6 +154,35 @@
   <tbody>
     {% for d in devices %}
     <tr class="solarium-device-row" id="row-{{ d.id }}">
+      <td class="text-center" style="white-space:nowrap;">
+        <form method="POST" action="{{ url_for('settings.solarium_device_image_upload', device_id=d.id) }}"
+              enctype="multipart/form-data" style="display:inline-block; vertical-align:middle;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="file" name="immagine" accept="image/*" id="img-input-{{ d.id }}"
+                 style="display:none;" onchange="this.form.submit();">
+          <label for="img-input-{{ d.id }}"
+                 class="solarium-img-thumb {% if d.id in devices_with_image %}has-image{% endif %}"
+                 data-bs-toggle="tooltip"
+                 title="{% if d.id in devices_with_image %}Sostituisci l'immagine del tasto lampada{% else %}Carica un'immagine per il tasto lampada (mostrata a 60x60 px){% endif %}">
+            {% if d.id in devices_with_image %}
+            <img src="{{ url_for('settings.solarium_device_image', device_id=d.id) }}?v={{ d.updated_at.timestamp()|int if d.updated_at else 0 }}"
+                 alt="{{ d.nome }}">
+            {% else %}
+            <i class="bi bi-image"></i>
+            {% endif %}
+          </label>
+        </form>
+        {% if d.id in devices_with_image %}
+        <form method="POST" action="{{ url_for('settings.solarium_device_image_delete', device_id=d.id) }}"
+              style="display:inline-block; vertical-align:middle;"
+              onsubmit="return confirm('Rimuovere l\'immagine di questo macchinario?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="solarium-img-remove" data-bs-toggle="tooltip" title="Rimuovi immagine">
+            <i class="bi bi-x-circle-fill"></i>
+          </button>
+        </form>
+        {% endif %}
+      </td>
       <td>{{ d.nome }}</td>
       <td>{{ d.descrizione or '-' }}</td>
       <td class="text-center">{{ d.durata_seduta_minuti }}</td>
@@ -134,7 +199,7 @@
       </td>
     </tr>
     <tr class="solarium-edit-row" id="edit-row-{{ d.id }}">
-      <td colspan="7">
+      <td colspan="8">
         <form method="POST" action="{{ url_for('settings.solarium_edit_device', device_id=d.id) }}" class="row align-items-center g-2">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="col-md-2">
@@ -173,7 +238,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="text-center text-muted">Nessun macchinario configurato.</td></tr>
+    <tr><td colspan="8" class="text-center text-muted">Nessun macchinario configurato.</td></tr>
     {% endfor %}
   </tbody>
 </table>
@@ -221,6 +286,13 @@
     loadPhidgetStatus();
     var btn = document.getElementById('phidgetRecheckBtn');
     if (btn) btn.addEventListener('click', loadPhidgetStatus);
+
+    // Tooltip Bootstrap della pagina (miniature immagine, verifica Phidget...)
+    if (window.bootstrap && bootstrap.Tooltip) {
+      Array.prototype.slice
+        .call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        .forEach(function(el) { new bootstrap.Tooltip(el); });
+    }
   });
 </script>
 {% endblock %}
