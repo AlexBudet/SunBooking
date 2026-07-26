@@ -121,15 +121,59 @@ def solarium_voci(receipt):
     return [v for v in voci if _is_solarium_voce(v)]
 
 
-def _capacity(receipt):
-    """Quante sedute puo' coprire questo scontrino (n. voci Solarium: uno
-    scontrino con un pacchetto da 2 sedute puo' collegarne fino a 2)."""
-    return len(solarium_voci(receipt))
+def _voce_service_id(v):
+    """Service.id della voce di scontrino, o None se non ricavabile."""
+    raw = v.get('servizio_id') or v.get('id')
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
 
 
-def _used_slots(receipt_id):
-    from appl.models import SolariumSession
-    return SolariumSession.query.filter_by(receipt_id=receipt_id).count()
+def device_service_id(session):
+    """Service di cassa associato al macchinario della seduta.
+
+    E' il perno dell'abbinamento: senza questo, una seduta si legherebbe al
+    pagamento piu' vicino nel tempo QUALUNQUE esso sia, incrociando lampade
+    diverse (un Prestige pagato mentre parte la ESA finiva sulla ESA). La
+    colonna SolariumDevice.service_id esiste in schema proprio per questo
+    ("Collegamento al servizio di cassa per la correlazione automatica
+    scontrino/seduta", models.py) e va configurata in Impostazioni >
+    Solarium per ogni macchinario."""
+    from appl import db
+    from appl.models import SolariumDevice
+    device = session.device
+    if device is None and session.device_id:
+        device = db.session.get(SolariumDevice, session.device_id)
+    return device.service_id if device else None
+
+
+def _voci_for_service(receipt, service_id):
+    """Voci dello scontrino relative ESATTAMENTE al servizio del macchinario."""
+    if not service_id:
+        return []
+    return [v for v in (receipt.voci or [])
+            if isinstance(v, dict) and _voce_service_id(v) == service_id]
+
+
+def _capacity(receipt, service_id):
+    """Quante sedute DI QUEL MACCHINARIO puo' coprire questo scontrino: una
+    per ogni voce di quel servizio (due Prestige sullo stesso scontrino
+    coprono due sedute di Prestige, non una seduta di Prestige e una ESA)."""
+    return len(_voci_for_service(receipt, service_id))
+
+
+def _used_slots(receipt_id, service_id):
+    """Sedute gia' collegate a questo scontrino PER QUEL SERVIZIO (le sedute
+    di altri macchinari sullo stesso scontrino non consumano questi slot)."""
+    from appl.models import SolariumSession, SolariumDevice
+    return (SolariumSession.query
+            .join(SolariumDevice, SolariumSession.device_id == SolariumDevice.id)
+            .filter(SolariumSession.receipt_id == receipt_id,
+                    SolariumDevice.service_id == service_id)
+            .count())
 
 
 def session_payment_status(session):
@@ -148,17 +192,18 @@ def session_payment_status(session):
     return 'in_sospeso' if minuti_da_fine >= MANUAL_REVIEW_AFTER_MIN else 'in_attesa'
 
 
-def _pick_appointment_id(receipt):
-    """Sceglie, tra le voci Solarium dello scontrino, un appointment_id non
-    ancora assegnato a un'altra seduta collegata allo stesso scontrino (per
-    scontrini multi-seduta con voci legate ad appuntamenti diversi). Se le
-    voci non hanno appointment_id (pagamento senza prenotazione), torna None
-    senza bloccare il collegamento seduta<->scontrino."""
+def _pick_appointment_id(receipt, service_id):
+    """Sceglie, tra le voci dello scontrino RELATIVE A QUEL SERVIZIO, un
+    appointment_id non ancora assegnato a un'altra seduta collegata allo
+    stesso scontrino (scontrini con piu' sedute dello stesso macchinario,
+    es. due Prestige per due persone). Se le voci non hanno appointment_id
+    (pagamento senza prenotazione), torna None senza bloccare il
+    collegamento seduta<->scontrino."""
     from appl.models import SolariumSession
     used = {s.appointment_id for s in
             SolariumSession.query.filter_by(receipt_id=receipt.id).all()
             if s.appointment_id}
-    for v in solarium_voci(receipt):
+    for v in _voci_for_service(receipt, service_id):
         appt_id = v.get('appointment_id')
         if appt_id and appt_id not in used:
             return appt_id
@@ -183,9 +228,23 @@ def _preferred_distance(session, receipt_time, criterio):
 
 
 def find_best_receipt(session, tolerance_minutes=AUTO_MATCH_TOLERANCE_MIN):
-    """Miglior scontrino Solarium per questa seduta, entro la tolleranza, o
-    None se nessun candidato e' abbastanza vicino / con capacita' residua."""
+    """Miglior scontrino per questa seduta: DEVE contenere una voce del
+    servizio associato a quel macchinario, ed essere entro la tolleranza.
+
+    Il vincolo sul servizio non e' negoziabile: la sola vicinanza temporale
+    incrocia macchinari diversi (piu' lampade partono/finiscono a pochi
+    minuti l'una dall'altra). Se il macchinario non ha un servizio
+    configurato, NON si abbina nulla: meglio una seduta in sospeso, da
+    sistemare a mano, che un'associazione sbagliata."""
     from appl.models import Receipt
+
+    service_id = device_service_id(session)
+    if not service_id:
+        logger.warning(
+            "Solarium: macchinario id=%s senza servizio di cassa associato: "
+            "abbinamento automatico non possibile (configuralo in "
+            "Impostazioni > Solarium).", session.device_id)
+        return None
 
     criterio = get_criterio()
     inizio = to_naive_local(session.inizio)
@@ -202,9 +261,10 @@ def find_best_receipt(session, tolerance_minutes=AUTO_MATCH_TOLERANCE_MIN):
     best = None
     best_key = None
     for r in receipts:
-        if _capacity(r) == 0:
-            continue
-        if _used_slots(r.id) >= _capacity(r):
+        capacity = _capacity(r, service_id)
+        if capacity == 0:
+            continue  # nessuna voce di QUESTO servizio: non e' questa lampada
+        if _used_slots(r.id, service_id) >= capacity:
             continue
         eff = _effective_distance(session, r.created_at)
         if eff > tolerance_sec:
@@ -235,10 +295,10 @@ def auto_match_pending():
             if receipt:
                 s.receipt_id = receipt.id
                 s.client_id = receipt.cliente_id
-                s.appointment_id = _pick_appointment_id(receipt)
+                s.appointment_id = _pick_appointment_id(receipt, device_service_id(s))
                 db.session.commit()
-                logger.info("Solarium: seduta %s collegata allo scontrino %s (cliente_id=%s, appointment_id=%s)",
-                            s.id, receipt.id, receipt.cliente_id, s.appointment_id)
+                logger.info("Solarium: seduta %s (device %s) collegata allo scontrino %s (cliente_id=%s, appointment_id=%s)",
+                            s.id, s.device_id, receipt.id, receipt.cliente_id, s.appointment_id)
         except Exception as e:
             db.session.rollback()
             logger.error("Solarium matching: errore collegando la seduta %s: %s", s.id, e)
@@ -281,9 +341,15 @@ def list_pending_sessions():
 
 
 def list_candidate_receipts_for_session(session, window_hours=CANDIDATE_WINDOW_HOURS):
-    """Scontrini Solarium con capacita' residua in una finestra ampia
-    attorno alla seduta, ordinati per vicinanza (per la scelta manuale)."""
+    """Scontrini candidati per la scelta manuale: SOLO quelli che contengono
+    una voce del servizio di quel macchinario (stesso vincolo dell'automatico
+    - proporre scontrini di altre lampade porterebbe a rifare a mano lo
+    stesso errore), con capacita' residua, ordinati per vicinanza."""
     from appl.models import Receipt
+
+    service_id = device_service_id(session)
+    if not service_id:
+        return []
 
     inizio = to_naive_local(session.inizio)
     fine = to_naive_local(session.fine) or inizio
@@ -298,9 +364,10 @@ def list_candidate_receipts_for_session(session, window_hours=CANDIDATE_WINDOW_H
 
     candidates = []
     for r in receipts:
-        if _capacity(r) == 0:
+        capacity = _capacity(r, service_id)
+        if capacity == 0:
             continue
-        if _used_slots(r.id) >= _capacity(r):
+        if _used_slots(r.id, service_id) >= capacity:
             continue
         eff = _effective_distance(session, r.created_at)
         candidates.append((eff, r))
@@ -318,16 +385,22 @@ def manual_link(session_id, receipt_id):
     receipt = db.session.get(Receipt, receipt_id)
     if not session or not receipt:
         return False, "Seduta o scontrino non trovato."
-    if _capacity(receipt) == 0:
-        return False, "Lo scontrino selezionato non contiene voci Solarium."
+
+    service_id = device_service_id(session)
+    if not service_id:
+        return False, ("Il macchinario di questa seduta non ha un servizio di cassa "
+                       "associato: impostalo in Impostazioni > Solarium.")
+    capacity = _capacity(receipt, service_id)
+    if capacity == 0:
+        return False, "Lo scontrino selezionato non contiene il servizio di questo macchinario."
     if session.receipt_id == receipt.id:
         return True, None
-    if _used_slots(receipt.id) >= _capacity(receipt):
-        return False, "Lo scontrino selezionato ha gia' tutte le sedute collegate."
+    if _used_slots(receipt.id, service_id) >= capacity:
+        return False, "Lo scontrino selezionato ha gia' tutte le sedute collegate per questo macchinario."
 
     session.receipt_id = receipt.id
     session.client_id = receipt.cliente_id
-    session.appointment_id = _pick_appointment_id(receipt)
+    session.appointment_id = _pick_appointment_id(receipt, service_id)
     db.session.commit()
     return True, None
 

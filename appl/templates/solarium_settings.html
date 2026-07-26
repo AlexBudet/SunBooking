@@ -83,6 +83,18 @@
   <i class="bi bi-link-45deg"></i> Associazioni pagamenti
 </a>
 
+{% set devices_senza_servizio = devices | rejectattr('service_id') | list %}
+{% if devices_senza_servizio %}
+<div class="alert alert-warning" style="max-width:900px;">
+  <i class="bi bi-exclamation-triangle-fill"></i>
+  <strong>Abbinamento pagamenti non attivo per {{ devices_senza_servizio | length }} macchinario/i.</strong>
+  Ogni lampada deve avere il <strong>servizio di cassa</strong> corrispondente (es. il macchinario "ESA"
+  → servizio "Lampada Viso Esafacciale"): è così che una seduta viene abbinata al pagamento giusto e non a
+  quello di un'altra lampada accesa nello stesso momento. Da impostare con "Modifica" su:
+  <strong>{{ devices_senza_servizio | map(attribute='nome') | join(', ') }}</strong>.
+</div>
+{% endif %}
+
 <!-- ===== Criterio abbinamento pagamenti ===== -->
 <div class="phidget-status-card">
   <div class="phidget-status-text">
@@ -145,7 +157,7 @@
     </div>
     <div class="col-md-4">
       <select class="form-control" name="service_id">
-        <option value="">Servizio collegato (opzionale, per il futuro)</option>
+        <option value="">Servizio di cassa collegato (necessario per l'abbinamento)</option>
         {% for s in services %}
         <option value="{{ s.id }}">{{ s.servizio_nome }}</option>
         {% endfor %}
@@ -209,7 +221,13 @@
       <td class="text-center">{{ d.durata_seduta_minuti }}</td>
       <td class="text-center">{{ d.durata_ventilazione_minuti }}</td>
       <td class="text-center">{{ d.phidget_channel if d.phidget_channel is not none else '-' }}</td>
-      <td>{{ d.service.servizio_nome if d.service else '-' }}</td>
+      <td>
+        {% if d.service %}{{ d.service.servizio_nome }}
+        {% else %}<span class="text-danger fw-bold" data-bs-toggle="tooltip"
+              title="Senza servizio collegato le sedute di questo macchinario non possono essere abbinate ai pagamenti">
+          <i class="bi bi-exclamation-triangle-fill"></i> Da impostare
+        </span>{% endif %}
+      </td>
       <td class="text-center" style="white-space:nowrap;">
         <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSolariumEdit({{ d.id }})">Modifica</button>
         <form method="POST" action="{{ url_for('settings.solarium_delete_device', device_id=d.id) }}"

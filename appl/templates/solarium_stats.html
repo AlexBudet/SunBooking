@@ -102,7 +102,9 @@
   .solarium-tl-axis { flex: 0 0 52px; border-right: 1px solid #e3e7ee; }
   .solarium-tl-axis-body { position: relative; }
   .solarium-tl-axis-label { position: absolute; left: 0; right: 4px; text-align: right; font-size: 0.72rem; color: #8a94a3; transform: translateY(-50%); }
-  .solarium-tl-col { flex: 0 0 180px; border-right: 1px solid #eef1f6; }
+  /* Le colonne si allargano per riempire tutta la larghezza del riquadro;
+     sotto i 140px per colonna la griglia scrolla in orizzontale. */
+  .solarium-tl-col { flex: 1 1 0; min-width: 140px; border-right: 1px solid #eef1f6; }
   .solarium-tl-col-head { padding: 6px 8px; font-weight: 700; font-size: 0.82rem; text-align: center; color: #2f3b4b; border-bottom: 1px solid #e3e7ee; background: #f2f4f8; position: sticky; top: 0; }
   .solarium-tl-col-body { position: relative; }
   .solarium-tl-hour-line { position: absolute; left: 0; right: 0; border-top: 1px dashed #eef1f6; }
@@ -142,9 +144,11 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
       </div>
       <div class="modal-body">
-        <div class="input-group mb-3">
-          <input type="text" class="form-control" id="solariumClientHistorySearch" placeholder="Nome, cognome o ID cliente...">
-          <button type="button" class="btn neumorphic-btn" id="solariumClientHistorySearchBtn">Cerca</button>
+        <div class="position-relative mb-3">
+          <input type="text" class="form-control" id="solariumClientHistorySearch"
+                 placeholder="Digita almeno 3 lettere del nome o cognome..." autocomplete="off">
+          <div id="solariumClientResults" class="list-group position-absolute w-100"
+               style="display:none; z-index:1080; max-height:260px; overflow-y:auto; box-shadow:0 6px 18px rgba(0,0,0,0.15);"></div>
         </div>
         <div id="solariumClientHistoryBody">
           <div class="text-muted">Cerca un cliente per vedere le sue sedute Solarium.</div>
@@ -196,15 +200,69 @@
   // Storico sedute Solarium per cliente
   var openBtn = document.getElementById('btnStoricoClienteSolarium');
   var searchInput = document.getElementById('solariumClientHistorySearch');
-  var searchBtn = document.getElementById('solariumClientHistorySearchBtn');
+  var resultsBox = document.getElementById('solariumClientResults');
   var body = document.getElementById('solariumClientHistoryBody');
   if (!openBtn) return;
 
-  function eseguiRicerca() {
+  // Autocomplete clienti: stessa logica del Calendario (endpoint
+  // /calendar/api/search-clients, ricerca dalla 3a lettera, con debounce e
+  // annullamento della richiesta precedente per evitare risposte fuori ordine).
+  var searchTimer = null;
+  var searchController = null;
+
+  function nascondiRisultati() {
+    resultsBox.innerHTML = '';
+    resultsBox.style.display = 'none';
+  }
+
+  function cercaClienti(query) {
+    if (searchController) { try { searchController.abort(); } catch (_) {} }
+    searchController = new AbortController();
+    fetch('/calendar/api/search-clients/' + encodeURIComponent(query), { signal: searchController.signal })
+      .then(function (r) { return r.json(); })
+      .then(function (clients) {
+        if ((searchInput.value || '').trim().length < 3) return nascondiRisultati();
+        if (!Array.isArray(clients) || !clients.length) {
+          resultsBox.innerHTML = '<div class="list-group-item text-muted">Nessun cliente trovato.</div>';
+          resultsBox.style.display = 'block';
+          return;
+        }
+        resultsBox.innerHTML = '';
+        clients.forEach(function (c) {
+          var item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'list-group-item list-group-item-action';
+          item.innerHTML = '<strong>' + c.name + '</strong>' +
+            (c.phone ? ' <span class="text-muted small">' + c.phone + '</span>' : '');
+          item.addEventListener('click', function () {
+            searchInput.value = c.name;
+            nascondiRisultati();
+            caricaStorico(c.id);
+          });
+          resultsBox.appendChild(item);
+        });
+        resultsBox.style.display = 'block';
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        nascondiRisultati();
+      });
+  }
+
+  searchInput.addEventListener('input', function () {
     var q = (searchInput.value || '').trim();
-    if (!q) return;
-    body.innerHTML = '<div class="text-center text-muted">Ricerca...</div>';
-    fetch('{{ url_for("settings.solarium_client_history") }}?q=' + encodeURIComponent(q))
+    clearTimeout(searchTimer);
+    if (q.length < 3) { nascondiRisultati(); return; }
+    searchTimer = setTimeout(function () { cercaClienti(q); }, 250);
+  });
+
+  document.addEventListener('click', function (e) {
+    if (e.target !== searchInput && !resultsBox.contains(e.target)) nascondiRisultati();
+  });
+
+  function caricaStorico(clientId) {
+    body.innerHTML = '<div class="text-center text-muted">Caricamento storico...</div>';
+    fetch('{{ url_for("settings.solarium_client_history") }}?q=' + encodeURIComponent(clientId))
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data || !data.length) {
@@ -238,10 +296,10 @@
   openBtn.addEventListener('click', function () {
     body.innerHTML = '<div class="text-muted">Cerca un cliente per vedere le sue sedute Solarium.</div>';
     searchInput.value = '';
+    nascondiRisultati();
     new bootstrap.Modal(document.getElementById('SolariumClientHistoryModal')).show();
+    setTimeout(function () { searchInput.focus(); }, 300);
   });
-  searchBtn.addEventListener('click', eseguiRicerca);
-  searchInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') eseguiRicerca(); });
 })();
 </script>
 
