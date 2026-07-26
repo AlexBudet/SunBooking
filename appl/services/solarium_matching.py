@@ -86,9 +86,36 @@ def to_naive_local(dt):
     return dt.astimezone().replace(tzinfo=None)
 
 
+def _is_solarium_voce(v):
+    """Vero se la voce e' un servizio di categoria Solarium.
+
+    La chiave 'categoria' nelle voci NON e' affidabile: in cassa.py e'
+    valorizzata esplicitamente per i pagamenti di pacchetto/rata/prepagata,
+    ma i due percorsi piu' comuni per Solarium - pagamento diretto di un
+    singolo servizio appena erogato (blocco 'servizi_json', cassa.py righe
+    389-398) e pagamento da appuntamento (blocco 'appointments_json', righe
+    413-422) - costruiscono la voce SENZA la chiave 'categoria' (ne fiscale
+    ne' non fiscale, il problema e' identico in entrambi i casi). Entrambi
+    quei percorsi valorizzano pero' sempre 'id' con il Service.id reale:
+    usato qui come fallback per risalire alla vera categoria del servizio,
+    senza toccare cassa.py."""
+    if not isinstance(v, dict):
+        return False
+    if v.get('categoria') == 'Solarium':
+        return True
+    if v.get('categoria'):
+        return False  # categoria presente ma diversa: non e' Solarium
+    service_id = v.get('id')
+    if not service_id:
+        return False
+    from appl.models import Service, ServiceCategory
+    servizio = Service.query.get(service_id)
+    return bool(servizio and servizio.servizio_categoria == ServiceCategory.Solarium)
+
+
 def _solarium_voci(receipt):
     voci = receipt.voci or []
-    return [v for v in voci if isinstance(v, dict) and v.get('categoria') == 'Solarium']
+    return [v for v in voci if _is_solarium_voce(v)]
 
 
 def _capacity(receipt):
