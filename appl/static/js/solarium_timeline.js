@@ -45,7 +45,8 @@
   }
 
   function statoLabel(stato) {
-    if (stato === 'collegato') return { text: 'Collegato', cls: 'ok' };
+    if (stato === 'collegato') return { text: 'Pagamento collegato', cls: 'ok' };
+    if (stato === 'appuntamento') return { text: 'Da appuntamento (pagamento da abbinare)', cls: 'appt' };
     if (stato === 'in_sospeso') return { text: 'Da collegare', cls: 'warn' };
     if (stato === 'in_attesa') return { text: 'In attesa abbinamento', cls: 'wait' };
     return { text: 'In corso', cls: 'live' };
@@ -155,10 +156,12 @@
     popupBody.innerHTML = html;
     popup.style.display = 'flex';
 
-    if (!s.in_corso && s.stato_pagamento === 'in_sospeso') {
+    // Anche una seduta gia' identificata dall'appuntamento resta da abbinare
+    // al pagamento: si offrono comunque i candidati.
+    if (!s.in_corso && (s.stato_pagamento === 'in_sospeso' || s.stato_pagamento === 'appuntamento')) {
       var candBox = document.createElement('div');
       candBox.className = 'mt-3';
-      candBox.innerHTML = '<div class="text-muted small mb-1">Ricerca pagamenti vicini...</div>';
+      candBox.innerHTML = '<div class="text-muted small mb-1">Ricerca pagamenti e appuntamenti vicini...</div>';
       popupBody.appendChild(candBox);
 
       var url = cfg.candidatesUrlTemplate.replace('999999', s.id);
@@ -171,31 +174,38 @@
 
   function renderCandidates(box, sessionId, candidati) {
     if (!candidati.length) {
-      box.innerHTML = '<div class="text-muted small">Nessuno scontrino Solarium trovato nelle vicinanze.</div>';
+      box.innerHTML = '<div class="text-muted small">Nessuno scontrino né appuntamento trovato nelle vicinanze per questo macchinario.</div>';
       return;
     }
-    var html = '<div class="text-muted small mb-1">Scontrini candidati:</div>';
+    var html = '<div class="text-muted small mb-1">Candidati (scontrini e appuntamenti):</div>';
     candidati.forEach(function (c) {
+      var isAppuntamento = (c.tipo === 'appuntamento');
+      var etichetta = isAppuntamento
+        ? '<span class="solarium-tl-badge appt">Appuntamento</span>'
+        : '<span class="solarium-tl-badge ok">' + (c.numero_progressivo || 'Scontrino') + '</span>';
       html += '' +
         '<div class="solarium-tl-candidate">' +
         '<div>' +
-        '<strong>' + (c.numero_progressivo || '') + '</strong> - ' + (c.cliente || 'cliente non indicato') +
-        '<br><span class="text-muted small">' + (c.orario || '') + ' - a ' + c.distanza_minuti + ' min - € ' + (c.importo != null ? c.importo.toFixed(2) : '') + '</span>' +
+        etichetta + ' ' + (c.cliente || 'cliente non indicato') +
+        '<br><span class="text-muted small">' + (c.orario || '') + ' - a ' + c.distanza_minuti + ' min - € ' + (c.importo != null ? parseFloat(c.importo).toFixed(2) : '') + '</span>' +
         '</div>' +
-        '<button type="button" class="btn btn-sm btn-outline-success" data-receipt-id="' + c.receipt_id + '">Collega</button>' +
+        '<button type="button" class="btn btn-sm btn-outline-success" data-tipo="' + (isAppuntamento ? 'appuntamento' : 'scontrino') + '"' +
+        ' data-target-id="' + (isAppuntamento ? c.appointment_id : c.receipt_id) + '">Collega</button>' +
         '</div>';
     });
     box.innerHTML = html;
-    box.querySelectorAll('button[data-receipt-id]').forEach(function (btn) {
-      btn.addEventListener('click', function () { linkSession(sessionId, btn.getAttribute('data-receipt-id')); });
+    box.querySelectorAll('button[data-target-id]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        linkSession(sessionId, btn.getAttribute('data-target-id'), btn.getAttribute('data-tipo'));
+      });
     });
   }
 
-  function linkSession(sessionId, receiptId) {
+  function linkSession(sessionId, targetId, tipo) {
     var body = new URLSearchParams();
     body.set('csrf_token', csrfToken());
     body.set('session_id', sessionId);
-    body.set('receipt_id', receiptId);
+    body.set(tipo === 'appuntamento' ? 'appointment_id' : 'receipt_id', targetId);
     fetch(cfg.linkUrl, { method: 'POST', body: body })
       .then(function () {
         closePopup();

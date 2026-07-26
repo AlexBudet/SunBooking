@@ -4472,7 +4472,11 @@ def solarium_matching_review():
     # scontrino, per seduta) e la pagina restava a girare a vuoto. Ora la
     # lista arriva su richiesta, per singola seduta, dall'endpoint
     # /settings/api/solarium/session/<id>/candidates.
-    pending_rows = [{'session': s} for s in solarium_matching.list_pending_sessions()]
+    pending = solarium_matching.list_pending_sessions()
+    pending_client_ids = {s.client_id for s in pending if s.client_id}
+    pending_clients = ({c.id: c for c in Client.query.filter(Client.id.in_(pending_client_ids)).all()}
+                       if pending_client_ids else {})
+    pending_rows = [{'session': s, 'client': pending_clients.get(s.client_id)} for s in pending]
 
     recent_sessions = (SolariumSession.query
                        .filter(SolariumSession.receipt_id.isnot(None))
@@ -4497,14 +4501,21 @@ def solarium_matching_review():
 
 @settings_bp.route('/settings/solarium/associazioni/link', methods=['POST'])
 def solarium_matching_link():
+    """Collega una seduta a uno scontrino oppure a un appuntamento di
+    calendario (il form invia receipt_id o appointment_id)."""
     from ..services import solarium_matching
     session_id = request.form.get('session_id', type=int)
     receipt_id = request.form.get('receipt_id', type=int)
-    if not session_id or not receipt_id:
-        flash("Seduta o scontrino mancante.", "error")
-    else:
+    appointment_id = request.form.get('appointment_id', type=int)
+
+    if not session_id or not (receipt_id or appointment_id):
+        flash("Seduta, scontrino o appuntamento mancante.", "error")
+    elif receipt_id:
         ok, errore = solarium_matching.manual_link(session_id, receipt_id)
         flash("Seduta collegata allo scontrino." if ok else errore, "success" if ok else "error")
+    else:
+        ok, errore = solarium_matching.manual_link_appointment(session_id, appointment_id)
+        flash("Seduta collegata all'appuntamento." if ok else errore, "success" if ok else "error")
     return redirect(url_for('settings.solarium_matching_review'))
 
 @settings_bp.route('/settings/solarium/associazioni/unlink', methods=['POST'])
@@ -4852,19 +4863,35 @@ def solarium_session_candidates(session_id):
     if not session_obj:
         return jsonify({"error": "Seduta non trovata"}), 404
 
-    candidati = solarium_matching.list_candidate_receipts_for_session(session_obj)
-    return jsonify({
-        'candidati': [{
-            'receipt_id': c['receipt'].id,
-            'numero_progressivo': c['receipt'].numero_progressivo,
-            'cliente': (f"{c['receipt'].cliente.cliente_nome} {c['receipt'].cliente.cliente_cognome}"
-                        if c['receipt'].cliente else None),
-            'operatore': c['receipt'].operatore.user_nome if c['receipt'].operatore else None,
-            'orario': c['receipt'].created_at.strftime('%d/%m/%Y %H:%M') if c['receipt'].created_at else None,
-            'importo': c['receipt'].total_amount,
-            'distanza_minuti': c['distanza_minuti'],
-        } for c in candidati]
-    })
+    candidati = [{
+        'tipo': 'scontrino',
+        'receipt_id': c['receipt'].id,
+        'numero_progressivo': c['receipt'].numero_progressivo,
+        'cliente': (f"{c['receipt'].cliente.cliente_nome} {c['receipt'].cliente.cliente_cognome}"
+                    if c['receipt'].cliente else None),
+        'operatore': c['receipt'].operatore.user_nome if c['receipt'].operatore else None,
+        'orario': c['receipt'].created_at.strftime('%d/%m/%Y %H:%M') if c['receipt'].created_at else None,
+        'importo': c['receipt'].total_amount,
+        'distanza_minuti': c['distanza_minuti'],
+    } for c in solarium_matching.list_candidate_receipts_for_session(session_obj)]
+
+    # Anche gli appuntamenti di calendario sono candidati validi: spesso sono
+    # l'unica traccia del cliente (pagamento non ancora fatto, o seduta
+    # scalata da un pacchetto gia' saldato che non genera scontrini).
+    candidati += [{
+        'tipo': 'appuntamento',
+        'appointment_id': c['appointment'].id,
+        'numero_progressivo': None,
+        'cliente': (f"{c['appointment'].client.cliente_nome} {c['appointment'].client.cliente_cognome}"
+                    if c['appointment'].client else None),
+        'operatore': c['appointment'].operator.user_nome if c['appointment'].operator else None,
+        'orario': c['appointment'].start_time.strftime('%d/%m/%Y %H:%M') if c['appointment'].start_time else None,
+        'importo': c['appointment'].service.servizio_prezzo if c['appointment'].service else None,
+        'distanza_minuti': c['distanza_minuti'],
+    } for c in solarium_matching.list_candidate_appointments_for_session(session_obj)]
+
+    candidati.sort(key=lambda c: c['distanza_minuti'])
+    return jsonify({'candidati': candidati})
 
 @settings_bp.route('/settings/api/solarium/client_history', methods=['GET'])
 def solarium_client_history():
