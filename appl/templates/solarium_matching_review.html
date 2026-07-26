@@ -26,50 +26,23 @@
           — {{ s.inizio.strftime('%d/%m/%Y %H:%M') if s.inizio else '—' }}
           → {{ s.fine.strftime('%H:%M') if s.fine else '—' }}
         </span>
+        {% if not (s.device and s.device.service_id) %}
+        <span class="text-danger ms-2">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          Macchinario senza servizio di cassa collegato
+        </span>
+        {% endif %}
       </div>
-      <span class="badge bg-warning text-dark">In sospeso</span>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-warning text-dark">In sospeso</span>
+        <button type="button" class="btn btn-sm btn-outline-primary solarium-find-btn"
+                data-session-id="{{ s.id }}"
+                {% if not (s.device and s.device.service_id) %}disabled{% endif %}>
+          <i class="bi bi-search"></i> Cerca pagamenti
+        </button>
+      </div>
     </div>
-
-    {% if row.candidates %}
-    <table class="table table-sm mb-0">
-      <thead>
-        <tr>
-          <th>Scontrino</th>
-          <th>Cliente</th>
-          <th>Operatore</th>
-          <th class="text-center">Orario</th>
-          <th class="text-center">Distanza</th>
-          <th class="text-end">Importo</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in row.candidates %}
-        {% set r = c.receipt %}
-        <tr>
-          <td>{{ r.numero_progressivo }}</td>
-          <td>{{ (r.cliente.cliente_nome ~ ' ' ~ r.cliente.cliente_cognome) if r.cliente else '—' }}</td>
-          <td>{{ r.operatore.user_nome if r.operatore else '—' }}</td>
-          <td class="text-center">{{ r.created_at.strftime('%d/%m/%Y %H:%M') if r.created_at else '—' }}</td>
-          <td class="text-center">{{ c.distanza_minuti }} min</td>
-          <td class="text-end">€ {{ '%.2f'|format(r.total_amount or 0) }}</td>
-          <td class="text-end">
-            <form method="POST" action="{{ url_for('settings.solarium_matching_link') }}" class="d-inline">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="session_id" value="{{ s.id }}">
-              <input type="hidden" name="receipt_id" value="{{ r.id }}">
-              <button type="submit" class="btn btn-sm btn-outline-success">
-                <i class="bi bi-check2"></i> Collega
-              </button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p class="text-muted mb-0">Nessuno scontrino con categoria Solarium trovato nelle vicinanze.</p>
-    {% endif %}
+    <div class="solarium-candidates" id="candidates-{{ s.id }}"></div>
   </div>
 </div>
 {% else %}
@@ -116,6 +89,63 @@
     {% endfor %}
   </tbody>
 </table>
+
+<script>
+(function () {
+  // I candidati si caricano su richiesta, una seduta alla volta: calcolarli
+  // tutti al caricamento pagina la faceva restare a girare a vuoto.
+  var candidatesUrlTemplate = "{{ url_for('settings.solarium_session_candidates', session_id=999999) }}";
+  var linkUrl = "{{ url_for('settings.solarium_matching_link') }}";
+  var csrf = "{{ csrf_token() }}";
+
+  document.querySelectorAll('.solarium-find-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var sessionId = btn.getAttribute('data-session-id');
+      var box = document.getElementById('candidates-' + sessionId);
+      box.innerHTML = '<div class="text-muted small">Ricerca pagamenti vicini...</div>';
+      btn.disabled = true;
+
+      fetch(candidatesUrlTemplate.replace('999999', sessionId))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          btn.disabled = false;
+          var cand = (data && data.candidati) || [];
+          if (!cand.length) {
+            box.innerHTML = '<div class="text-muted small">Nessuno scontrino con il servizio di questo macchinario trovato nelle vicinanze.</div>';
+            return;
+          }
+          var html = '<table class="table table-sm mb-0"><thead><tr>' +
+            '<th>Scontrino</th><th>Cliente</th><th>Operatore</th>' +
+            '<th class="text-center">Orario</th><th class="text-center">Distanza</th>' +
+            '<th class="text-end">Importo</th><th></th></tr></thead><tbody>';
+          cand.forEach(function (c) {
+            html += '<tr>' +
+              '<td>' + (c.numero_progressivo || '-') + '</td>' +
+              '<td>' + (c.cliente || '-') + '</td>' +
+              '<td>' + (c.operatore || '-') + '</td>' +
+              '<td class="text-center">' + (c.orario || '-') + '</td>' +
+              '<td class="text-center">' + c.distanza_minuti + ' min</td>' +
+              '<td class="text-end">€ ' + (c.importo != null ? parseFloat(c.importo).toFixed(2) : '-') + '</td>' +
+              '<td class="text-end">' +
+                '<form method="POST" action="' + linkUrl + '" class="d-inline">' +
+                  '<input type="hidden" name="csrf_token" value="' + csrf + '">' +
+                  '<input type="hidden" name="session_id" value="' + sessionId + '">' +
+                  '<input type="hidden" name="receipt_id" value="' + c.receipt_id + '">' +
+                  '<button type="submit" class="btn btn-sm btn-outline-success"><i class="bi bi-check2"></i> Collega</button>' +
+                '</form>' +
+              '</td></tr>';
+          });
+          html += '</tbody></table>';
+          box.innerHTML = html;
+        })
+        .catch(function () {
+          btn.disabled = false;
+          box.innerHTML = '<div class="text-danger small">Errore nel caricamento dei pagamenti candidati.</div>';
+        });
+    });
+  });
+})();
+</script>
 
 </div>
 {% endblock %}

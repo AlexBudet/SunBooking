@@ -4467,11 +4467,12 @@ def solarium_matching_review():
     nel tempo; permette anche di annullare un collegamento sbagliato."""
     from ..services import solarium_matching
 
-    pending = solarium_matching.list_pending_sessions()
-    pending_rows = [{
-        'session': s,
-        'candidates': solarium_matching.list_candidate_receipts_for_session(s),
-    } for s in pending]
+    # I candidati NON si calcolano qui: farlo per tutte le sedute in sospeso
+    # significava migliaia di query a ogni apertura della pagina (una per
+    # scontrino, per seduta) e la pagina restava a girare a vuoto. Ora la
+    # lista arriva su richiesta, per singola seduta, dall'endpoint
+    # /settings/api/solarium/session/<id>/candidates.
+    pending_rows = [{'session': s} for s in solarium_matching.list_pending_sessions()]
 
     recent_sessions = (SolariumSession.query
                        .filter(SolariumSession.receipt_id.isnot(None))
