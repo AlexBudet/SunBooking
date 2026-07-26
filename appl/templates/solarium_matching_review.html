@@ -1,0 +1,121 @@
+<!-- appl/templates/solarium_matching_review.html -->
+{% extends "settings.html" %}
+{% block settings_content %}
+<div class="page-wide-90">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<h3><i class="bi bi-link-45deg" style="color:#e08a1f;"></i> Solarium — Associazioni pagamenti</h3>
+<p style="color:#6c7a89; max-width:700px;">
+  Sedute solarium concluse da più di 30 minuti senza un pagamento collegato automaticamente:
+  può capitare se il cliente paga in ritardo, o se il pagamento è troppo distante nel tempo per
+  l'abbinamento automatico. Scegli qui lo scontrino corretto tra i candidati proposti.
+</p>
+
+<a href="{{ url_for('settings.solarium_settings') }}" class="btn btn-sm btn-outline-secondary mb-3">
+  <i class="bi bi-arrow-left"></i> Torna a Solarium
+</a>
+
+{% for row in pending_rows %}
+{% set s = row.session %}
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+      <div>
+        <strong>{{ s.device.nome if s.device else '—' }}</strong>
+        <span class="text-muted">
+          — {{ s.inizio.strftime('%d/%m/%Y %H:%M') if s.inizio else '—' }}
+          → {{ s.fine.strftime('%H:%M') if s.fine else '—' }}
+        </span>
+      </div>
+      <span class="badge bg-warning text-dark">In sospeso</span>
+    </div>
+
+    {% if row.candidates %}
+    <table class="table table-sm mb-0">
+      <thead>
+        <tr>
+          <th>Scontrino</th>
+          <th>Cliente</th>
+          <th>Operatore</th>
+          <th class="text-center">Orario</th>
+          <th class="text-center">Distanza</th>
+          <th class="text-end">Importo</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in row.candidates %}
+        {% set r = c.receipt %}
+        <tr>
+          <td>{{ r.numero_progressivo }}</td>
+          <td>{{ (r.cliente.cliente_nome ~ ' ' ~ r.cliente.cliente_cognome) if r.cliente else '—' }}</td>
+          <td>{{ r.operatore.user_nome if r.operatore else '—' }}</td>
+          <td class="text-center">{{ r.created_at.strftime('%d/%m/%Y %H:%M') if r.created_at else '—' }}</td>
+          <td class="text-center">{{ c.distanza_minuti }} min</td>
+          <td class="text-end">€ {{ '%.2f'|format(r.total_amount or 0) }}</td>
+          <td class="text-end">
+            <form method="POST" action="{{ url_for('settings.solarium_matching_link') }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="session_id" value="{{ s.id }}">
+              <input type="hidden" name="receipt_id" value="{{ r.id }}">
+              <button type="submit" class="btn btn-sm btn-outline-success">
+                <i class="bi bi-check2"></i> Collega
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-muted mb-0">Nessuno scontrino con categoria Solarium trovato nelle vicinanze.</p>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+<p class="text-muted">Nessuna seduta in sospeso: tutte le sedute concluse da più di 30 minuti sono collegate a un pagamento.</p>
+{% endfor %}
+
+<hr class="my-4">
+
+<h3>Ultimi abbinamenti</h3>
+<table class="table table-sm">
+  <thead>
+    <tr>
+      <th>Macchinario</th>
+      <th class="text-center">Seduta</th>
+      <th>Cliente</th>
+      <th>Scontrino</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in recent_linked %}
+    {% set s = row.session %}
+    <tr>
+      <td>{{ s.device.nome if s.device else '—' }}</td>
+      <td class="text-center">
+        {{ s.inizio.strftime('%d/%m/%Y %H:%M') if s.inizio else '—' }}
+        → {{ s.fine.strftime('%H:%M') if s.fine else '—' }}
+      </td>
+      <td>{{ (row.client.cliente_nome ~ ' ' ~ row.client.cliente_cognome) if row.client else '—' }}</td>
+      <td>{{ row.receipt.numero_progressivo if row.receipt else '—' }}</td>
+      <td class="text-end">
+        <form method="POST" action="{{ url_for('settings.solarium_matching_unlink') }}" class="d-inline"
+              onsubmit="return confirm('Rimuovere questo collegamento?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="session_id" value="{{ s.id }}">
+          <button type="submit" class="btn btn-sm btn-outline-danger">
+            <i class="bi bi-x-lg"></i> Scollega
+          </button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="text-center text-muted">Nessun abbinamento registrato.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+</div>
+{% endblock %}

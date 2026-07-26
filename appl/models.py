@@ -817,9 +817,11 @@ class SolariumSession(db.Model):
     inizio = db.Column(db.DateTime(timezone=True), nullable=False)
     fine = db.Column(db.DateTime(timezone=True), nullable=True)
     durata_secondi = db.Column(db.Integer, nullable=True)
-    # Collegamenti opzionali per la correlazione automatica con cliente/scontrino
+    # Collegamenti opzionali per la correlazione automatica con cliente/scontrino/appuntamento
     client_id = db.Column(db.Integer, db.ForeignKey('clienti.id'), nullable=True)
     receipt_id = db.Column(db.Integer, db.ForeignKey('scontrini.id'), nullable=True)
+    # Colonna aggiunta con migrations/manual_solarium_session_appointment.sql
+    appointment_id = db.Column(db.Integer, db.ForeignKey('appuntamenti.id'), nullable=True)
     created_at = db.Column(db.DateTime, server_default=func.now(), nullable=False)
 
     device = db.relationship('SolariumDevice')

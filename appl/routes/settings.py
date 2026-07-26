@@ -4442,8 +4442,77 @@ def solarium_settings():
         Service.servizio_nome != 'dummy'
     ).order_by(Service.servizio_nome).all()
     from ..services.solarium_images import device_ids_with_image
+    from ..services import solarium_matching
     return render_template('solarium_settings.html', devices=devices, services=services,
-                           devices_with_image=device_ids_with_image())
+                           devices_with_image=device_ids_with_image(),
+                           criterio=solarium_matching.get_criterio())
+
+@settings_bp.route('/settings/solarium/matching-criterio', methods=['POST'])
+def solarium_set_matching_criterio():
+    """Salva il criterio di riferimento (inizio/fine seduta) per il
+    collegamento automatico sedute <-> pagamenti."""
+    from ..services import solarium_matching
+    valore = request.form.get('criterio')
+    if valore in ('inizio', 'fine'):
+        solarium_matching.set_criterio(valore)
+        flash("Criterio di abbinamento aggiornato.", "success")
+    else:
+        flash("Valore non valido.", "error")
+    return redirect(url_for('settings.solarium_settings'))
+
+@settings_bp.route('/settings/solarium/associazioni', methods=['GET'])
+def solarium_matching_review():
+    """Strumento di riconciliazione manuale: sedute chiuse da oltre 30 minuti
+    senza uno scontrino collegato, con i pagamenti Solarium candidati vicini
+    nel tempo; permette anche di annullare un collegamento sbagliato."""
+    from ..services import solarium_matching
+
+    pending = solarium_matching.list_pending_sessions()
+    pending_rows = [{
+        'session': s,
+        'candidates': solarium_matching.list_candidate_receipts_for_session(s),
+    } for s in pending]
+
+    recent_sessions = (SolariumSession.query
+                       .filter(SolariumSession.receipt_id.isnot(None))
+                       .order_by(SolariumSession.fine.desc())
+                       .limit(20)
+                       .all())
+    # SolariumSession non ha relationship verso Client/Receipt (solo le FK,
+    # per non toccare models.py): recupero i due oggetti a mano.
+    receipt_ids = {s.receipt_id for s in recent_sessions}
+    client_ids = {s.client_id for s in recent_sessions if s.client_id}
+    receipts_by_id = {r.id: r for r in Receipt.query.filter(Receipt.id.in_(receipt_ids)).all()} if receipt_ids else {}
+    clients_by_id = {c.id: c for c in Client.query.filter(Client.id.in_(client_ids)).all()} if client_ids else {}
+    recent_linked = [{
+        'session': s,
+        'receipt': receipts_by_id.get(s.receipt_id),
+        'client': clients_by_id.get(s.client_id),
+    } for s in recent_sessions]
+
+    return render_template('solarium_matching_review.html',
+                            pending_rows=pending_rows,
+                            recent_linked=recent_linked)
+
+@settings_bp.route('/settings/solarium/associazioni/link', methods=['POST'])
+def solarium_matching_link():
+    from ..services import solarium_matching
+    session_id = request.form.get('session_id', type=int)
+    receipt_id = request.form.get('receipt_id', type=int)
+    if not session_id or not receipt_id:
+        flash("Seduta o scontrino mancante.", "error")
+    else:
+        ok, errore = solarium_matching.manual_link(session_id, receipt_id)
+        flash("Seduta collegata allo scontrino." if ok else errore, "success" if ok else "error")
+    return redirect(url_for('settings.solarium_matching_review'))
+
+@settings_bp.route('/settings/solarium/associazioni/unlink', methods=['POST'])
+def solarium_matching_unlink():
+    from ..services import solarium_matching
+    session_id = request.form.get('session_id', type=int)
+    ok, errore = solarium_matching.manual_unlink(session_id) if session_id else (False, "Seduta mancante.")
+    flash("Collegamento rimosso." if ok else errore, "success" if ok else "error")
+    return redirect(url_for('settings.solarium_matching_review'))
 
 @settings_bp.route('/settings/solarium/add', methods=['POST'])
 def solarium_add_device():
@@ -4680,3 +4749,118 @@ def solarium_stats():
                             data_da=data_da,
                             data_a=data_a,
                             selected_device_id=device_id)
+
+@settings_bp.route('/settings/api/solarium/timeline', methods=['GET'])
+def solarium_timeline_data():
+    """Dati JSON per la timeline sedute (Statistiche Sedute): tutte le sedute
+    di un giorno, una colonna per macchinario. Sola lettura, pensata per il
+    polling (come /calendar/api/solarium/state)."""
+    from datetime import time as dt_time, timezone
+    from ..services import solarium_matching
+
+    data_str = request.args.get('data') or datetime.now().strftime('%Y-%m-%d')
+    try:
+        giorno = datetime.strptime(data_str, '%Y-%m-%d').date()
+    except ValueError:
+        giorno = datetime.now().date()
+
+    business_info = BusinessInfo.query.first()
+    opening_time = (business_info.opening_time if business_info and business_info.opening_time
+                     else dt_time(8, 0))
+    closing_time = (business_info.closing_time if business_info and business_info.closing_time
+                     else dt_time(20, 0))
+
+    devices = (SolariumDevice.query
+               .filter_by(is_deleted=False)
+               .order_by(SolariumDevice.order, SolariumDevice.id)
+               .all())
+
+    # Confini del giorno richiesto in UTC-aware (SolariumSession.inizio/fine
+    # sono aware in UTC), per interrogare il DB con un range corretto invece
+    # di scaricare tutta la tabella e filtrare in Python.
+    local_tz = datetime.now().astimezone().tzinfo
+    day_start_utc = datetime.combine(giorno, dt_time.min).replace(tzinfo=local_tz).astimezone(timezone.utc)
+    day_end_utc = datetime.combine(giorno, dt_time.max).replace(tzinfo=local_tz).astimezone(timezone.utc)
+
+    device_ids = [d.id for d in devices]
+    sessioni = (SolariumSession.query
+                .filter(SolariumSession.device_id.in_(device_ids),
+                        SolariumSession.inizio <= day_end_utc,
+                        or_(SolariumSession.fine.is_(None), SolariumSession.fine >= day_start_utc))
+                .all() if device_ids else [])
+
+    receipt_ids = {s.receipt_id for s in sessioni if s.receipt_id}
+    client_ids = {s.client_id for s in sessioni if s.client_id}
+    receipts_by_id = {r.id: r for r in Receipt.query.filter(Receipt.id.in_(receipt_ids)).all()} if receipt_ids else {}
+    clients_by_id = {c.id: c for c in Client.query.filter(Client.id.in_(client_ids)).all()} if client_ids else {}
+
+    day_start_min = 0
+    day_end_min = 24 * 60
+
+    sedute = []
+    for s in sessioni:
+        inizio_loc = solarium_matching.to_naive_local(s.inizio)
+        fine_loc = solarium_matching.to_naive_local(s.fine)
+        riferimento_fine = fine_loc or datetime.now()
+
+        inizio_min = inizio_loc.hour * 60 + inizio_loc.minute
+        if inizio_loc.date() < giorno:
+            inizio_min = day_start_min
+        fine_min = None
+        if fine_loc is not None:
+            fine_min = fine_loc.hour * 60 + fine_loc.minute
+            if fine_loc.date() > giorno:
+                fine_min = day_end_min
+        inizio_min = max(day_start_min, min(day_end_min, inizio_min))
+        if fine_min is not None:
+            fine_min = max(day_start_min, min(day_end_min, fine_min))
+
+        receipt = receipts_by_id.get(s.receipt_id) if s.receipt_id else None
+        client = clients_by_id.get(s.client_id) if s.client_id else None
+
+        sedute.append({
+            'id': s.id,
+            'device_id': s.device_id,
+            'inizio': inizio_loc.strftime('%H:%M'),
+            'fine': fine_loc.strftime('%H:%M') if fine_loc else None,
+            'inizio_minuti': inizio_min,
+            'fine_minuti': fine_min,
+            'in_corso': s.fine is None,
+            'durata_minuti': int((riferimento_fine - inizio_loc).total_seconds() // 60),
+            'stato_pagamento': solarium_matching.session_payment_status(s),
+            'cliente': (f"{client.cliente_nome} {client.cliente_cognome}" if client else None),
+            'scontrino': receipt.numero_progressivo if receipt else None,
+            'operatore': (receipt.operatore.user_nome if receipt and receipt.operatore else None),
+        })
+
+    return jsonify({
+        'giorno': giorno.strftime('%Y-%m-%d'),
+        'opening_time': opening_time.strftime('%H:%M'),
+        'closing_time': closing_time.strftime('%H:%M'),
+        'devices': [{'id': d.id, 'nome': d.nome} for d in devices],
+        'sedute': sedute,
+    })
+
+@settings_bp.route('/settings/api/solarium/session/<int:session_id>/candidates', methods=['GET'])
+def solarium_session_candidates(session_id):
+    """Scontrini candidati per collegare manualmente una seduta, usato dal
+    popup di dettaglio nella timeline sedute."""
+    from ..services import solarium_matching
+
+    session_obj = db.session.get(SolariumSession, session_id)
+    if not session_obj:
+        return jsonify({"error": "Seduta non trovata"}), 404
+
+    candidati = solarium_matching.list_candidate_receipts_for_session(session_obj)
+    return jsonify({
+        'candidati': [{
+            'receipt_id': c['receipt'].id,
+            'numero_progressivo': c['receipt'].numero_progressivo,
+            'cliente': (f"{c['receipt'].cliente.cliente_nome} {c['receipt'].cliente.cliente_cognome}"
+                        if c['receipt'].cliente else None),
+            'operatore': c['receipt'].operatore.user_nome if c['receipt'].operatore else None,
+            'orario': c['receipt'].created_at.strftime('%d/%m/%Y %H:%M') if c['receipt'].created_at else None,
+            'importo': c['receipt'].total_amount,
+            'distanza_minuti': c['distanza_minuti'],
+        } for c in candidati]
+    })

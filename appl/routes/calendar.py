@@ -1045,8 +1045,9 @@ def solarium_state():
     Lo stato (acceso/ventilazione/pronta) e i tempi si calcolano dalla sessione
     piu' recente per ciascun macchinario: SolariumSession.fine è NULL finche'
     il macchinario e' acceso (rilevato dal canale Phidget collegato)."""
-    from ..models import SolariumDevice, SolariumSession
+    from ..models import SolariumDevice, SolariumSession, Receipt, Client
     from ..services.solarium_images import device_ids_with_image
+    from ..services.solarium_matching import MANUAL_REVIEW_AFTER_MIN
 
     devices = (SolariumDevice.query
                .filter_by(is_deleted=False)
@@ -1067,6 +1068,14 @@ def solarium_state():
                             .filter_by(device_id=d.id, fine=None)
                             .order_by(SolariumSession.inizio.desc())
                             .first())
+        # Ultima seduta conclusa (indipendentemente dallo stato corrente):
+        # serve a mostrare l'abbinamento col pagamento anche mentre la
+        # lampada e' gia' spenta/in ventilazione o e' stata riaccesa.
+        ultima_sessione = (SolariumSession.query
+                            .filter(SolariumSession.device_id == d.id,
+                                    SolariumSession.fine.isnot(None))
+                            .order_by(SolariumSession.fine.desc())
+                            .first())
         if sessione_aperta:
             inizio = sessione_aperta.inizio
             if inizio.tzinfo is None:
@@ -1075,22 +1084,45 @@ def solarium_state():
             stato = 'acceso'
             tempo_lampada = max(elapsed, 0)
             tempo_mancante = d.durata_seduta_minuti * 60 - elapsed + d.durata_ventilazione_minuti * 60
-        else:
-            ultima_sessione = (SolariumSession.query
-                                .filter(SolariumSession.device_id == d.id,
-                                        SolariumSession.fine.isnot(None))
-                                .order_by(SolariumSession.fine.desc())
-                                .first())
-            if ultima_sessione and ultima_sessione.fine:
-                fine = ultima_sessione.fine
-                if fine.tzinfo is None:
-                    fine = fine.replace(tzinfo=timezone.utc)
-                elapsed_cooling = int((now - fine).total_seconds())
-                cooling_totale = d.durata_ventilazione_minuti * 60
-                if elapsed_cooling < cooling_totale:
-                    stato = 'ventilazione'
-                    tempo_ventilazione = elapsed_cooling
-                    tempo_mancante = cooling_totale - elapsed_cooling
+        elif ultima_sessione and ultima_sessione.fine:
+            fine = ultima_sessione.fine
+            if fine.tzinfo is None:
+                fine = fine.replace(tzinfo=timezone.utc)
+            elapsed_cooling = int((now - fine).total_seconds())
+            cooling_totale = d.durata_ventilazione_minuti * 60
+            if elapsed_cooling < cooling_totale:
+                stato = 'ventilazione'
+                tempo_ventilazione = elapsed_cooling
+                tempo_mancante = cooling_totale - elapsed_cooling
+
+        # Abbinamento pagamento dell'ultima seduta conclusa: 'collegato' se
+        # gia' associata a uno scontrino, 'in_sospeso' se sono passati piu'
+        # di MANUAL_REVIEW_AFTER_MIN minuti dalla fine senza abbinamento
+        # (va sistemata da Impostazioni > Solarium > Associazioni pagamenti),
+        # 'in_attesa' se il tempo per l'abbinamento automatico non e' ancora
+        # scaduto.
+        associazione = None
+        if ultima_sessione:
+            if ultima_sessione.receipt_id:
+                receipt = db.session.get(Receipt, ultima_sessione.receipt_id)
+                client = (db.session.get(Client, ultima_sessione.client_id)
+                          if ultima_sessione.client_id else None)
+                associazione = {
+                    'stato': 'collegato',
+                    'cliente': (f"{client.cliente_nome} {client.cliente_cognome}"
+                                if client else None),
+                    'scontrino': receipt.numero_progressivo if receipt else None,
+                }
+            else:
+                fine_us = ultima_sessione.fine
+                if fine_us.tzinfo is None:
+                    fine_us = fine_us.replace(tzinfo=timezone.utc)
+                minuti_da_fine = (now - fine_us).total_seconds() / 60
+                associazione = {
+                    'stato': 'in_sospeso' if minuti_da_fine >= MANUAL_REVIEW_AFTER_MIN else 'in_attesa',
+                    'cliente': None,
+                    'scontrino': None,
+                }
 
         # URL dell'immagine del tasto (None se non caricata). Il parametro ?v=
         # e' la versione: cambia solo quando l'immagine viene sostituita, cosi'
@@ -1112,6 +1144,7 @@ def solarium_state():
             'tempo_lampada': tempo_lampada,
             'tempo_ventilazione': tempo_ventilazione,
             'tempo_mancante': max(tempo_mancante, 0) if tempo_mancante is not None else None,
+            'associazione': associazione,
         })
 
     return jsonify({'devices': result})
