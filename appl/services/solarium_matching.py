@@ -116,7 +116,7 @@ def _is_solarium_voce(v):
     return bool(servizio and servizio.servizio_categoria == ServiceCategory.Solarium)
 
 
-def _solarium_voci(receipt):
+def solarium_voci(receipt):
     voci = receipt.voci or []
     return [v for v in voci if _is_solarium_voce(v)]
 
@@ -124,7 +124,7 @@ def _solarium_voci(receipt):
 def _capacity(receipt):
     """Quante sedute puo' coprire questo scontrino (n. voci Solarium: uno
     scontrino con un pacchetto da 2 sedute puo' collegarne fino a 2)."""
-    return len(_solarium_voci(receipt))
+    return len(solarium_voci(receipt))
 
 
 def _used_slots(receipt_id):
@@ -158,7 +158,7 @@ def _pick_appointment_id(receipt):
     used = {s.appointment_id for s in
             SolariumSession.query.filter_by(receipt_id=receipt.id).all()
             if s.appointment_id}
-    for v in _solarium_voci(receipt):
+    for v in solarium_voci(receipt):
         appt_id = v.get('appointment_id')
         if appt_id and appt_id not in used:
             return appt_id

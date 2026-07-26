@@ -9,19 +9,30 @@
   solo le sedute concluse (rilevate dal canale Phidget collegato al macchinario).
 </p>
 
-<a href="{{ url_for('settings.solarium_settings') }}" class="btn btn-sm btn-outline-secondary mb-3">
-  <i class="bi bi-arrow-left"></i> Torna ai Macchinari
-</a>
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a href="{{ url_for('settings.solarium_settings') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Torna ai Macchinari
+  </a>
+  <button type="button" class="btn neumorphic-btn btn-sm" id="btnStoricoClienteSolarium" style="font-size:0.85rem; padding:6px 14px;">
+    <i class="bi bi-person-lines-fill"></i> Storico cliente
+  </button>
+</div>
 
 <!-- ===== Filtri ===== -->
+<div class="d-flex flex-wrap align-items-center gap-2 mb-2" id="solariumPeriodoQuick">
+  <button type="button" class="btn neumorphic-btn btn-sm solarium-periodo-btn" data-periodo="oggi" style="font-size:0.82rem; padding:6px 14px;">Oggi</button>
+  <button type="button" class="btn neumorphic-btn btn-sm solarium-periodo-btn" data-periodo="ieri" style="font-size:0.82rem; padding:6px 14px;">Ieri</button>
+  <button type="button" class="btn neumorphic-btn btn-sm solarium-periodo-btn" data-periodo="7gg" style="font-size:0.82rem; padding:6px 14px;">Ultimi 7 giorni</button>
+  <button type="button" class="btn neumorphic-btn btn-sm solarium-periodo-btn" data-periodo="mese" style="font-size:0.82rem; padding:6px 14px;">Questo mese</button>
+</div>
 <form method="GET" action="{{ url_for('settings.solarium_stats') }}" class="row align-items-center mb-4 g-2">
   <div class="col-md-3">
     <label class="form-label">Da</label>
-    <input type="date" class="form-control" name="data_da" value="{{ data_da }}">
+    <input type="date" class="form-control" name="data_da" id="solariumDataDaInput" value="{{ data_da }}">
   </div>
   <div class="col-md-3">
     <label class="form-label">A</label>
-    <input type="date" class="form-control" name="data_a" value="{{ data_a }}">
+    <input type="date" class="form-control" name="data_a" id="solariumDataAInput" value="{{ data_a }}">
   </div>
   <div class="col-md-3">
     <label class="form-label">Macchinario</label>
@@ -34,7 +45,7 @@
   </div>
   <div class="col-md-3">
     <label class="form-label">&nbsp;</label>
-    <button type="submit" class="btn btn-primary btn-block d-block">Filtra</button>
+    <button type="submit" class="btn neumorphic-btn btn-block d-block">Filtra</button>
   </div>
 </form>
 
@@ -76,14 +87,14 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
 <div id="solariumTimelineNav" class="d-flex align-items-center gap-2 mb-3">
-  <button type="button" class="btn btn-sm btn-outline-secondary" id="solariumTimelinePrev" title="Giorno precedente">
+  <button type="button" class="btn neumorphic-btn btn-sm" id="solariumTimelinePrev" title="Giorno precedente" style="padding:6px 10px;">
     <i class="bi bi-chevron-left"></i>
   </button>
   <input type="date" class="form-control form-control-sm" id="solariumTimelineDate" style="width:auto;">
-  <button type="button" class="btn btn-sm btn-outline-secondary" id="solariumTimelineNext" title="Giorno successivo">
+  <button type="button" class="btn neumorphic-btn btn-sm" id="solariumTimelineNext" title="Giorno successivo" style="padding:6px 10px;">
     <i class="bi bi-chevron-right"></i>
   </button>
-  <button type="button" class="btn btn-sm btn-outline-secondary" id="solariumTimelineToday">Oggi</button>
+  <button type="button" class="btn neumorphic-btn btn-sm" id="solariumTimelineToday" style="font-size:0.82rem; padding:6px 14px;">Oggi</button>
 </div>
 
 <style>
@@ -100,8 +111,8 @@
   .solarium-tl-block.warn { border-left-color: #c0392b; background: #fbeaea; }
   .solarium-tl-block.wait { border-left-color: #e08a1f; background: #fdf3e6; }
   .solarium-tl-block.live { border-left-color: #dd0b76; background: #fde7f2; }
-  .solarium-tl-block-time { font-size: 0.72rem; font-weight: 700; color: #2f3b4b; white-space: nowrap; }
-  .solarium-tl-block-who { font-size: 0.72rem; color: #555; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+  .solarium-tl-block-time { font-size: 0.72rem; line-height: 1.35; font-weight: 700; color: #2f3b4b; white-space: nowrap; }
+  .solarium-tl-block-who { font-size: 0.72rem; line-height: 1.35; color: #555; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
   .solarium-tl-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 0.78rem; font-weight: 600; }
   .solarium-tl-badge.ok { background: #eaf6ec; color: #2e7d32; }
   .solarium-tl-badge.warn { background: #fbeaea; color: #c0392b; }
@@ -122,6 +133,27 @@
   </div>
 </div>
 
+<!-- Modal Storico Sedute Solarium per Cliente -->
+<div class="modal fade" tabindex="-1" id="SolariumClientHistoryModal">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Storico Sedute Solarium per Cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <div class="input-group mb-3">
+          <input type="text" class="form-control" id="solariumClientHistorySearch" placeholder="Nome, cognome o ID cliente...">
+          <button type="button" class="btn neumorphic-btn" id="solariumClientHistorySearchBtn">Cerca</button>
+        </div>
+        <div id="solariumClientHistoryBody">
+          <div class="text-muted">Cerca un cliente per vedere le sue sedute Solarium.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   var SOLARIUM_TIMELINE_CONFIG = {
     dataUrl: "{{ url_for('settings.solarium_timeline_data') }}",
@@ -130,6 +162,88 @@
   };
 </script>
 <script src="{{ url_for('static', filename='js/solarium_timeline.js') }}"></script>
+
+<script>
+(function () {
+  // Bottoni rapidi periodo (Oggi/Ieri/Ultimi 7 giorni/Questo mese) per il
+  // filtro data della tabella aggregata.
+  function fmtDate(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  document.querySelectorAll('.solarium-periodo-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var da = document.getElementById('solariumDataDaInput');
+      var a = document.getElementById('solariumDataAInput');
+      if (!da || !a) return;
+      var oggi = new Date();
+      var periodo = btn.getAttribute('data-periodo');
+      if (periodo === 'oggi') {
+        da.value = a.value = fmtDate(oggi);
+      } else if (periodo === 'ieri') {
+        var ieri = new Date(oggi); ieri.setDate(ieri.getDate() - 1);
+        da.value = a.value = fmtDate(ieri);
+      } else if (periodo === '7gg') {
+        var sette = new Date(oggi); sette.setDate(sette.getDate() - 6);
+        da.value = fmtDate(sette); a.value = fmtDate(oggi);
+      } else if (periodo === 'mese') {
+        var primoDelMese = new Date(oggi.getFullYear(), oggi.getMonth(), 1);
+        da.value = fmtDate(primoDelMese); a.value = fmtDate(oggi);
+      }
+      da.closest('form').submit();
+    });
+  });
+
+  // Storico sedute Solarium per cliente
+  var openBtn = document.getElementById('btnStoricoClienteSolarium');
+  var searchInput = document.getElementById('solariumClientHistorySearch');
+  var searchBtn = document.getElementById('solariumClientHistorySearchBtn');
+  var body = document.getElementById('solariumClientHistoryBody');
+  if (!openBtn) return;
+
+  function eseguiRicerca() {
+    var q = (searchInput.value || '').trim();
+    if (!q) return;
+    body.innerHTML = '<div class="text-center text-muted">Ricerca...</div>';
+    fetch('{{ url_for("settings.solarium_client_history") }}?q=' + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.length) {
+          body.innerHTML = '<div class="alert alert-info">Nessuna seduta Solarium collegata trovata per questo cliente.</div>';
+          return;
+        }
+        var html = '<table class="table table-striped table-sm"><thead><tr>' +
+          '<th>Cliente</th><th>Data</th><th>Orario</th><th>Macchinario</th>' +
+          '<th class="text-center">Durata</th><th>Scontrino</th><th class="text-end">Prezzo</th><th>Operatore</th>' +
+          '</tr></thead><tbody>';
+        data.forEach(function (r) {
+          html += '<tr>' +
+            '<td>' + (r.client_nome || '-') + '</td>' +
+            '<td>' + (r.data || '-') + '</td>' +
+            '<td>' + (r.ora_inizio || '-') + (r.ora_fine ? (' - ' + r.ora_fine) : '') + '</td>' +
+            '<td>' + (r.device || '-') + '</td>' +
+            '<td class="text-center">' + (r.durata_minuti != null ? (r.durata_minuti + ' min') : '-') + '</td>' +
+            '<td>' + (r.scontrino || '-') + '</td>' +
+            '<td class="text-end">' + (r.prezzo != null ? ('€ ' + parseFloat(r.prezzo).toFixed(2)) : '-') + '</td>' +
+            '<td>' + (r.operatore || '-') + '</td>' +
+            '</tr>';
+        });
+        html += '</tbody></table>';
+        body.innerHTML = html;
+      })
+      .catch(function () {
+        body.innerHTML = '<div class="alert alert-danger">Errore nel caricamento dello storico.</div>';
+      });
+  }
+
+  openBtn.addEventListener('click', function () {
+    body.innerHTML = '<div class="text-muted">Cerca un cliente per vedere le sue sedute Solarium.</div>';
+    searchInput.value = '';
+    new bootstrap.Modal(document.getElementById('SolariumClientHistoryModal')).show();
+  });
+  searchBtn.addEventListener('click', eseguiRicerca);
+  searchInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') eseguiRicerca(); });
+})();
+</script>
 
 </div>
 {% endblock %}

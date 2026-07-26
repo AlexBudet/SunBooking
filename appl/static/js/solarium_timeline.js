@@ -6,8 +6,8 @@
   var root = document.getElementById('solariumTimelineGrid');
   if (!cfg || !root) return;
 
-  var PX_PER_MIN = 3;
-  var MIN_BLOCK_PX = 20;
+  var PX_PER_MIN = 4;
+  var MIN_BLOCK_PX = 38;
 
   var dateInput = document.getElementById('solariumTimelineDate');
   var btnPrev = document.getElementById('solariumTimelinePrev');
