@@ -3088,10 +3088,6 @@ document.addEventListener('DOMContentLoaded', function() {
   .solarium-lamp-item .solarium-lamp-status:empty { display: none; }
   .solarium-lamp-item.pink .solarium-lamp-status { color: #fff; }
   .solarium-lamp-item.blue .solarium-lamp-status { color: #fff; }
-  /* Abbinamento pagamento dell'ultima seduta conclusa (mostrato solo a
-     lampada pronta, nella riga di stato altrimenti vuota). */
-  .solarium-lamp-item .solarium-lamp-status.ok { color: #2e7d32; font-weight: 600; }
-  .solarium-lamp-item .solarium-lamp-status.warn { color: #c0392b; font-weight: 700; }
   #solariumMonitorTab {
     display: none;
     align-items: center;
@@ -3237,7 +3233,6 @@ document.addEventListener('DOMContentLoaded', function() {
       var refs = itemsById[d.id];
       if (!refs) return;
       refs.item.classList.remove('pink', 'blue');
-      refs.status2.classList.remove('ok', 'warn');
       if (d.stato === 'acceso') {
         refs.item.classList.add('pink');
         refs.status.textContent = 'Partito da: ' + fmtMMSS(d.tempo_lampada);
@@ -3248,20 +3243,7 @@ document.addEventListener('DOMContentLoaded', function() {
         refs.status2.textContent = 'Pronta tra: ' + fmtMMSS(d.tempo_mancante);
       } else {
         refs.status.textContent = 'Pronta';
-        // Riga altrimenti vuota: mostra l'abbinamento pagamento dell'ultima
-        // seduta conclusa (cliente/scontrino collegato, o avviso se e' in
-        // sospeso da piu' di 30 minuti - clic apre lo strumento manuale).
-        var a = d.associazione;
-        if (a && a.stato === 'collegato') {
-          var chi = a.cliente || (a.scontrino ? ('Scontrino ' + a.scontrino) : '');
-          refs.status2.textContent = chi ? ('✓ ' + truncate15(chi)) : '';
-          refs.status2.classList.add('ok');
-        } else if (a && a.stato === 'in_sospeso') {
-          refs.status2.textContent = '⚠ Pagamento da collegare';
-          refs.status2.classList.add('warn');
-        } else {
-          refs.status2.textContent = '';
-        }
+        refs.status2.textContent = '';
       }
     });
   }
