@@ -87,8 +87,9 @@
 </div>
 
 <style>
-  #solariumTimelineGrid { display: flex; align-items: flex-start; overflow-x: auto; border: 1px solid #e3e7ee; border-radius: 8px; background: #fbfcfe; }
-  .solarium-tl-axis { position: relative; flex: 0 0 52px; border-right: 1px solid #e3e7ee; }
+  #solariumTimelineGrid { display: flex; align-items: flex-start; overflow-x: auto; overflow-y: auto; max-height: 78vh; border: 1px solid #e3e7ee; border-radius: 8px; background: #fbfcfe; }
+  .solarium-tl-axis { flex: 0 0 52px; border-right: 1px solid #e3e7ee; }
+  .solarium-tl-axis-body { position: relative; }
   .solarium-tl-axis-label { position: absolute; left: 0; right: 4px; text-align: right; font-size: 0.72rem; color: #8a94a3; transform: translateY(-50%); }
   .solarium-tl-col { flex: 0 0 180px; border-right: 1px solid #eef1f6; }
   .solarium-tl-col-head { padding: 6px 8px; font-weight: 700; font-size: 0.82rem; text-align: center; color: #2f3b4b; border-bottom: 1px solid #e3e7ee; background: #f2f4f8; position: sticky; top: 0; }

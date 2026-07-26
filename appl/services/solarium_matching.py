@@ -89,26 +89,29 @@ def to_naive_local(dt):
 def _is_solarium_voce(v):
     """Vero se la voce e' un servizio di categoria Solarium.
 
-    La chiave 'categoria' nelle voci NON e' affidabile: in cassa.py e'
-    valorizzata esplicitamente per i pagamenti di pacchetto/rata/prepagata,
-    ma i due percorsi piu' comuni per Solarium - pagamento diretto di un
-    singolo servizio appena erogato (blocco 'servizi_json', cassa.py righe
-    389-398) e pagamento da appuntamento (blocco 'appointments_json', righe
-    413-422) - costruiscono la voce SENZA la chiave 'categoria' (ne fiscale
-    ne' non fiscale, il problema e' identico in entrambi i casi). Entrambi
-    quei percorsi valorizzano pero' sempre 'id' con il Service.id reale:
-    usato qui come fallback per risalire alla vera categoria del servizio,
-    senza toccare cassa.py."""
+    La chiave 'categoria' nelle voci NON e' affidabile e nel percorso di
+    stampa reale (cassa.js, serializzazione riga->voce al click "Stampa",
+    circa righe 835-845) non e' MAI presente: la voce che finisce davvero
+    in Receipt.voci ha 'servizio_id' (non 'id' - quella e' solo la chiave
+    usata dal precaricamento server-side della pagina, che e' un payload
+    diverso, non quello effettivamente stampato). Qui si risale alla vera
+    categoria tramite 'servizio_id' -> Service.servizio_categoria, senza
+    toccare cassa.py/cassa.js. Tenuto anche 'id' come fallback residuo per
+    eventuali altri percorsi che lo usassero."""
     if not isinstance(v, dict):
         return False
     if v.get('categoria') == 'Solarium':
         return True
     if v.get('categoria'):
         return False  # categoria presente ma diversa: non e' Solarium
-    service_id = v.get('id')
+    service_id = v.get('servizio_id') or v.get('id')
     if not service_id:
         return False
     from appl.models import Service, ServiceCategory
+    try:
+        service_id = int(service_id)
+    except (TypeError, ValueError):
+        return False
     servizio = Service.query.get(service_id)
     return bool(servizio and servizio.servizio_categoria == ServiceCategory.Solarium)
 

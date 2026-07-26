@@ -6,8 +6,8 @@
   var root = document.getElementById('solariumTimelineGrid');
   if (!cfg || !root) return;
 
-  var PX_PER_MIN = 2;
-  var MIN_BLOCK_PX = 16;
+  var PX_PER_MIN = 3;
+  var MIN_BLOCK_PX = 20;
 
   var dateInput = document.getElementById('solariumTimelineDate');
   var btnPrev = document.getElementById('solariumTimelinePrev');
@@ -68,14 +68,23 @@
 
     var axis = document.createElement('div');
     axis.className = 'solarium-tl-axis';
-    axis.style.height = gridHeight + 'px';
+
+    var axisHead = document.createElement('div');
+    axisHead.className = 'solarium-tl-col-head';
+    axisHead.innerHTML = '&nbsp;';
+    axis.appendChild(axisHead);
+
+    var axisBody = document.createElement('div');
+    axisBody.className = 'solarium-tl-axis-body';
+    axisBody.style.height = gridHeight + 'px';
     for (var m = openMin; m <= closeMin; m += 60) {
       var label = document.createElement('div');
       label.className = 'solarium-tl-axis-label';
       label.style.top = ((m - openMin) * PX_PER_MIN) + 'px';
       label.textContent = pad2(Math.floor(m / 60)) + ':00';
-      axis.appendChild(label);
+      axisBody.appendChild(label);
     }
+    axis.appendChild(axisBody);
     root.appendChild(axis);
 
     if (!data.devices.length) {
