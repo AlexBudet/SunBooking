@@ -69,14 +69,21 @@ def set_criterio(value):
 
 
 def to_naive_local(dt):
-    """Normalizza a naive locale: Receipt.created_at e' scritto con
-    datetime.now() (naive, ora locale), mentre SolariumSession.inizio/fine
-    sono aware in UTC (datetime.now(timezone.utc) nel bridge Phidget)."""
+    """Normalizza a naive locale (usata solo su SolariumSession.inizio/fine,
+    mai su Receipt.created_at che e' gia' naive locale).
+
+    BUG CORRETTO: quando il driver Postgres restituisce questi valori senza
+    tzinfo, NON sono gia' ora locale - sono UTC con il tzinfo perso (stesso
+    presupposto usato altrove nel progetto, es. calendar.py/solarium_bridge.py:
+    "if tzinfo is None: replace(tzinfo=timezone.utc)"). Trattarli come gia'
+    locali (versione precedente di questa funzione) sfalsava la finestra di
+    ricerca dell'ampiezza del fuso orario, e nessun abbinamento cadeva mai
+    nella tolleranza."""
     if dt is None:
         return None
-    if dt.tzinfo is not None:
-        return dt.astimezone().replace(tzinfo=None)
-    return dt
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone().replace(tzinfo=None)
 
 
 def _solarium_voci(receipt):
