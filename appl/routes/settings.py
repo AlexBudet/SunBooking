@@ -4864,3 +4864,72 @@ def solarium_session_candidates(session_id):
             'distanza_minuti': c['distanza_minuti'],
         } for c in candidati]
     })
+
+@settings_bp.route('/settings/api/solarium/client_history', methods=['GET'])
+def solarium_client_history():
+    """Storico sedute Solarium per cliente (ricerca per nome o id, stesso
+    pattern di /settings/api/client_history usato in Anagrafica Clienti).
+    Mostra solo le sedute gia' collegate a un cliente (client_id valorizzato
+    dall'abbinamento automatico/manuale)."""
+    from ..services.solarium_matching import solarium_voci
+
+    query = request.args.get('q', '').strip()
+    if not query or len(query) < 1:
+        return jsonify({"error": "Query troppo corta"}), 400
+
+    if query.isdigit():
+        clients = Client.query.filter(
+            Client.is_deleted == False,
+            Client.id == int(query)
+        ).all()
+    else:
+        clients = Client.query.filter(
+            Client.is_deleted == False,
+            or_(
+                Client.cliente_nome.ilike(f"%{query}%"),
+                Client.cliente_cognome.ilike(f"%{query}%")
+            )
+        ).all()
+
+    result = []
+    for client in clients:
+        sessioni = (SolariumSession.query
+                    .filter_by(client_id=client.id)
+                    .order_by(SolariumSession.inizio.desc())
+                    .all())
+        for s in sessioni:
+            receipt = db.session.get(Receipt, s.receipt_id) if s.receipt_id else None
+            prezzo = None
+            if receipt:
+                voci_solarium = solarium_voci(receipt)
+                # Se la seduta ha un appointment_id, prende la voce con lo
+                # stesso appointment_id; altrimenti (walk-in) la prima voce
+                # Solarium disponibile - stessa ambiguita' residua che si ha
+                # gia' su scontrini multi-seduta senza appuntamento a bordo.
+                match = next((v for v in voci_solarium
+                              if s.appointment_id and str(v.get('appointment_id')) == str(s.appointment_id)),
+                             voci_solarium[0] if voci_solarium else None)
+                if match:
+                    prezzo = match.get('prezzo')
+
+            inizio_loc = s.inizio
+            if inizio_loc and inizio_loc.tzinfo:
+                inizio_loc = inizio_loc.astimezone().replace(tzinfo=None)
+            fine_loc = s.fine
+            if fine_loc and fine_loc.tzinfo:
+                fine_loc = fine_loc.astimezone().replace(tzinfo=None)
+
+            result.append({
+                'client_nome': f"{client.cliente_nome} {client.cliente_cognome}",
+                'device': s.device.nome if s.device else None,
+                'data': inizio_loc.strftime('%Y-%m-%d') if inizio_loc else None,
+                'ora_inizio': inizio_loc.strftime('%H:%M') if inizio_loc else None,
+                'ora_fine': fine_loc.strftime('%H:%M') if fine_loc else None,
+                'durata_minuti': s.durata_secondi // 60 if s.durata_secondi else None,
+                'scontrino': receipt.numero_progressivo if receipt else None,
+                'prezzo': prezzo,
+                'operatore': receipt.operatore.user_nome if receipt and receipt.operatore else None,
+            })
+
+    result.sort(key=lambda r: (r['data'] or '', r['ora_inizio'] or ''), reverse=True)
+    return jsonify(result)
