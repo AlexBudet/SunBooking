@@ -79,6 +79,27 @@
 <a href="{{ url_for('settings.solarium_stats') }}" class="btn btn-sm btn-outline-secondary mb-3">
   <i class="bi bi-bar-chart-fill"></i> Statistiche Sedute
 </a>
+<a href="{{ url_for('settings.solarium_matching_review') }}" class="btn btn-sm btn-outline-secondary mb-3">
+  <i class="bi bi-link-45deg"></i> Associazioni pagamenti
+</a>
+
+<!-- ===== Criterio abbinamento pagamenti ===== -->
+<div class="phidget-status-card">
+  <div class="phidget-status-text">
+    <div class="phidget-status-title">Criterio di abbinamento pagamenti</div>
+    <div class="phidget-status-message">
+      A quale istante della seduta deve essere il più vicino possibile il pagamento in cassa,
+      per collegarli automaticamente.
+    </div>
+  </div>
+  <form method="POST" action="{{ url_for('settings.solarium_set_matching_criterio') }}" class="d-flex align-items-center gap-2">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <select name="criterio" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+      <option value="inizio" {% if criterio == 'inizio' %}selected{% endif %}>Inizio seduta (pagamento anticipato)</option>
+      <option value="fine" {% if criterio == 'fine' %}selected{% endif %}>Fine seduta (pagamento posticipato)</option>
+    </select>
+  </form>
+</div>
 
 <!-- ===== Stato Phidget 8/8/8 ===== -->
 <div class="phidget-status-card">

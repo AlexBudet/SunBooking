@@ -65,5 +65,70 @@
 <p class="text-muted">Nessuna seduta registrata nel periodo selezionato.</p>
 {% endif %}
 
+<hr class="my-4">
+
+<h3><i class="bi bi-clock-history" style="color:#e08a1f;"></i> Sedute nel dettaglio</h3>
+<p style="color:#6c7a89; max-width:700px;">
+  Ogni colonna è un macchinario, ogni blocco una seduta: verde se il pagamento è collegato,
+  rosso se è passata più di mezz'ora senza collegamento (clic sul blocco per collegarlo).
+</p>
+
+<meta name="csrf-token" content="{{ csrf_token() }}">
+
+<div id="solariumTimelineNav" class="d-flex align-items-center gap-2 mb-3">
+  <button type="button" class="btn btn-sm btn-outline-secondary" id="solariumTimelinePrev" title="Giorno precedente">
+    <i class="bi bi-chevron-left"></i>
+  </button>
+  <input type="date" class="form-control form-control-sm" id="solariumTimelineDate" style="width:auto;">
+  <button type="button" class="btn btn-sm btn-outline-secondary" id="solariumTimelineNext" title="Giorno successivo">
+    <i class="bi bi-chevron-right"></i>
+  </button>
+  <button type="button" class="btn btn-sm btn-outline-secondary" id="solariumTimelineToday">Oggi</button>
+</div>
+
+<style>
+  #solariumTimelineGrid { display: flex; align-items: flex-start; overflow-x: auto; border: 1px solid #e3e7ee; border-radius: 8px; background: #fbfcfe; }
+  .solarium-tl-axis { position: relative; flex: 0 0 52px; border-right: 1px solid #e3e7ee; }
+  .solarium-tl-axis-label { position: absolute; left: 0; right: 4px; text-align: right; font-size: 0.72rem; color: #8a94a3; transform: translateY(-50%); }
+  .solarium-tl-col { flex: 0 0 180px; border-right: 1px solid #eef1f6; }
+  .solarium-tl-col-head { padding: 6px 8px; font-weight: 700; font-size: 0.82rem; text-align: center; color: #2f3b4b; border-bottom: 1px solid #e3e7ee; background: #f2f4f8; position: sticky; top: 0; }
+  .solarium-tl-col-body { position: relative; }
+  .solarium-tl-hour-line { position: absolute; left: 0; right: 0; border-top: 1px dashed #eef1f6; }
+  .solarium-tl-block { position: absolute; left: 4px; right: 4px; border-radius: 6px; padding: 3px 6px; overflow: hidden; cursor: pointer; border-left: 4px solid #adb5bd; background: #eef1f6; }
+  .solarium-tl-block.ok { border-left-color: #2e7d32; background: #eaf6ec; }
+  .solarium-tl-block.warn { border-left-color: #c0392b; background: #fbeaea; }
+  .solarium-tl-block.wait { border-left-color: #e08a1f; background: #fdf3e6; }
+  .solarium-tl-block.live { border-left-color: #dd0b76; background: #fde7f2; }
+  .solarium-tl-block-time { font-size: 0.72rem; font-weight: 700; color: #2f3b4b; white-space: nowrap; }
+  .solarium-tl-block-who { font-size: 0.72rem; color: #555; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+  .solarium-tl-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 0.78rem; font-weight: 600; }
+  .solarium-tl-badge.ok { background: #eaf6ec; color: #2e7d32; }
+  .solarium-tl-badge.warn { background: #fbeaea; color: #c0392b; }
+  .solarium-tl-badge.wait { background: #fdf3e6; color: #e08a1f; }
+  .solarium-tl-badge.live { background: #fde7f2; color: #dd0b76; }
+  .solarium-tl-candidate { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid #eef1f6; }
+  #solariumSessionPopup { display: none; position: fixed; inset: 0; background: rgba(20,26,36,0.45); z-index: 99999; align-items: center; justify-content: center; }
+  .solarium-session-popup-inner { position: relative; background: #fff; border-radius: 10px; padding: 1.25rem 1.5rem; max-width: 420px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+  .solarium-session-popup-inner .btn-close { position: absolute; top: 12px; right: 12px; }
+</style>
+
+<div id="solariumTimelineGrid"></div>
+
+<div id="solariumSessionPopup">
+  <div class="solarium-session-popup-inner">
+    <button type="button" class="btn-close" id="solariumSessionPopupClose" aria-label="Chiudi"></button>
+    <div id="solariumSessionPopupBody"></div>
+  </div>
+</div>
+
+<script>
+  var SOLARIUM_TIMELINE_CONFIG = {
+    dataUrl: "{{ url_for('settings.solarium_timeline_data') }}",
+    candidatesUrlTemplate: "{{ url_for('settings.solarium_session_candidates', session_id=999999) }}",
+    linkUrl: "{{ url_for('settings.solarium_matching_link') }}"
+  };
+</script>
+<script src="{{ url_for('static', filename='js/solarium_timeline.js') }}"></script>
+
 </div>
 {% endblock %}

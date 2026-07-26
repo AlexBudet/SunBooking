@@ -39,6 +39,16 @@ def start_solarium_bridge(app):
             if not owner_cfg or not owner_cfg.module_solarium_enabled:
                 logger.info("Solarium: modulo non abilitato, bridge Phidget non avviato.")
                 return
+
+            # Riconciliazione pagamenti: gira ogni volta che il modulo e'
+            # attivo, indipendentemente dallo stato dell'hardware Phidget
+            # (che puo' anche non essere ancora configurato/collegato).
+            try:
+                from appl.services.solarium_matching import start_matching_loop
+                start_matching_loop(app)
+            except Exception as e:
+                logger.error("Solarium: impossibile avviare la riconciliazione pagamenti: %s", e)
+
             devices = (SolariumDevice.query
                        .filter(SolariumDevice.is_deleted == False,
                                SolariumDevice.phidget_channel.isnot(None))
