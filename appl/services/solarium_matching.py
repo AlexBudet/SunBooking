@@ -177,12 +177,15 @@ def _used_slots(receipt_id, service_id):
 
 
 def session_payment_status(session):
-    """'collegato' se la seduta ha gia' un pagamento associato, 'in_sospeso'
-    se sono passati piu' di MANUAL_REVIEW_AFTER_MIN minuti dalla fine senza
-    abbinamento, 'in_attesa' se il tempo per l'abbinamento automatico non e'
-    ancora scaduto, None se la seduta e' ancora in corso (fine nulla)."""
+    """'collegato' = pagamento abbinato; 'appuntamento' = cliente identificato
+    dall'appuntamento di calendario ma pagamento non ancora abbinato;
+    'in_sospeso' = passati piu' di MANUAL_REVIEW_AFTER_MIN minuti dalla fine
+    senza alcun abbinamento; 'in_attesa' = tempo per l'abbinamento automatico
+    non ancora scaduto; None = seduta ancora in corso."""
     if session.receipt_id:
         return 'collegato'
+    if session.appointment_id:
+        return 'appuntamento'
     if session.fine is None:
         return None
     fine = session.fine
@@ -275,6 +278,68 @@ def find_best_receipt(session, tolerance_minutes=AUTO_MATCH_TOLERANCE_MIN):
     return best
 
 
+def find_best_appointment(session, tolerance_minutes=AUTO_MATCH_TOLERANCE_MIN):
+    """Miglior APPUNTAMENTO di calendario per questa seduta.
+
+    Serve perche' il pagamento non e' l'unica traccia di chi ha fatto la
+    seduta: l'appuntamento puo' esistere senza scontrino (non ancora
+    pagato, pagato dopo, oppure seduta scalata da un pacchetto gia' saldato,
+    che non genera alcun nuovo scontrino). Vale lo stesso vincolo degli
+    scontrini: il servizio dell'appuntamento deve essere quello del
+    macchinario, altrimenti si incrociano lampade diverse."""
+    from appl.models import Appointment, SolariumSession
+
+    service_id = device_service_id(session)
+    if not service_id:
+        return None
+
+    inizio = to_naive_local(session.inizio)
+    fine = to_naive_local(session.fine) or inizio
+    window_start = min(inizio, fine) - timedelta(minutes=tolerance_minutes)
+    window_end = max(inizio, fine) + timedelta(minutes=tolerance_minutes)
+    tolerance_sec = tolerance_minutes * 60
+
+    appuntamenti = (Appointment.query
+                    .filter(Appointment.service_id == service_id,
+                            Appointment.is_cancelled_by_client == False,
+                            Appointment.start_time >= window_start - timedelta(hours=3),
+                            Appointment.start_time <= window_end)
+                    .all())
+
+    # Un appuntamento non puo' coprire due sedute diverse.
+    gia_usati = {s.appointment_id for s in
+                 SolariumSession.query.filter(SolariumSession.appointment_id.isnot(None)).all()
+                 if s.id != session.id}
+
+    best = None
+    best_dist = None
+    for a in appuntamenti:
+        if a.id in gia_usati:
+            continue
+        dist = _appointment_distance(session, a)
+        if dist > tolerance_sec:
+            continue
+        if best_dist is None or dist < best_dist:
+            best_dist, best = dist, a
+    return best
+
+
+def _appointment_distance(session, appointment):
+    """Distanza minima (secondi) tra gli estremi dell'appuntamento e quelli
+    della seduta: un appuntamento delle 11:45 e una seduta partita alle
+    11:46 distano 60 secondi."""
+    inizio = to_naive_local(session.inizio)
+    fine = to_naive_local(session.fine) or inizio
+    punti_appuntamento = [appointment.start_time]
+    try:
+        punti_appuntamento.append(appointment.end_time)
+    except Exception:
+        pass
+    return min(abs((pa - ps).total_seconds())
+               for pa in punti_appuntamento
+               for ps in (inizio, fine))
+
+
 def auto_match_pending():
     """Tenta il collegamento automatico per tutte le sedute chiuse e non
     ancora collegate. Fail-open per seduta: un errore su una non blocca le
@@ -299,6 +364,22 @@ def auto_match_pending():
                 db.session.commit()
                 logger.info("Solarium: seduta %s (device %s) collegata allo scontrino %s (cliente_id=%s, appointment_id=%s)",
                             s.id, s.device_id, receipt.id, receipt.cliente_id, s.appointment_id)
+                continue
+
+            # Nessuno scontrino: l'appuntamento di calendario e' comunque una
+            # traccia valida di chi ha fatto la seduta (non ancora pagata,
+            # pagata piu' tardi, o scalata da un pacchetto gia' saldato che
+            # non genera scontrini). Collega cliente e appuntamento; il
+            # pagamento potra' arrivare dopo e restera' da abbinare.
+            if s.appointment_id:
+                continue  # gia' identificata: si continua solo a cercarne il pagamento
+            appuntamento = find_best_appointment(s)
+            if appuntamento:
+                s.appointment_id = appuntamento.id
+                s.client_id = appuntamento.client_id
+                db.session.commit()
+                logger.info("Solarium: seduta %s (device %s) collegata all'appuntamento %s (cliente_id=%s, nessuno scontrino)",
+                            s.id, s.device_id, appuntamento.id, appuntamento.client_id)
         except Exception as e:
             db.session.rollback()
             logger.error("Solarium matching: errore collegando la seduta %s: %s", s.id, e)
@@ -373,6 +454,72 @@ def list_candidate_receipts_for_session(session, window_hours=CANDIDATE_WINDOW_H
         candidates.append((eff, r))
     candidates.sort(key=lambda t: t[0])
     return [{'receipt': r, 'distanza_minuti': round(eff / 60, 1)} for eff, r in candidates]
+
+
+def list_candidate_appointments_for_session(session, window_hours=CANDIDATE_WINDOW_HOURS):
+    """Appuntamenti di calendario candidati per la scelta manuale: stesso
+    servizio del macchinario, non annullati, non gia' assegnati a un'altra
+    seduta. Vanno proposti accanto agli scontrini perche' spesso l'unica
+    traccia del cliente e' l'appuntamento (pagamento non ancora fatto o
+    seduta scalata da pacchetto)."""
+    from appl.models import Appointment, SolariumSession
+
+    service_id = device_service_id(session)
+    if not service_id:
+        return []
+
+    inizio = to_naive_local(session.inizio)
+    fine = to_naive_local(session.fine) or inizio
+    window_start = min(inizio, fine) - timedelta(hours=window_hours)
+    window_end = max(inizio, fine) + timedelta(hours=window_hours)
+
+    appuntamenti = (Appointment.query
+                    .filter(Appointment.service_id == service_id,
+                            Appointment.is_cancelled_by_client == False,
+                            Appointment.start_time >= window_start,
+                            Appointment.start_time <= window_end)
+                    .order_by(Appointment.start_time.asc())
+                    .all())
+
+    gia_usati = {s.appointment_id for s in
+                 SolariumSession.query.filter(SolariumSession.appointment_id.isnot(None)).all()
+                 if s.id != session.id}
+
+    candidates = []
+    for a in appuntamenti:
+        if a.id in gia_usati:
+            continue
+        candidates.append((_appointment_distance(session, a), a))
+    candidates.sort(key=lambda t: t[0])
+    return [{'appointment': a, 'distanza_minuti': round(d / 60, 1)} for d, a in candidates]
+
+
+def manual_link_appointment(session_id, appointment_id):
+    """Collega manualmente una seduta a un appuntamento di calendario
+    (cliente identificato, pagamento eventualmente ancora da abbinare)."""
+    from appl import db
+    from appl.models import SolariumSession, Appointment
+
+    session = db.session.get(SolariumSession, session_id)
+    appuntamento = db.session.get(Appointment, appointment_id)
+    if not session or not appuntamento:
+        return False, "Seduta o appuntamento non trovato."
+
+    service_id = device_service_id(session)
+    if service_id and appuntamento.service_id != service_id:
+        return False, "L'appuntamento non e' del servizio di questo macchinario."
+
+    altra = (SolariumSession.query
+             .filter(SolariumSession.appointment_id == appuntamento.id,
+                     SolariumSession.id != session.id)
+             .first())
+    if altra:
+        return False, "Questo appuntamento e' gia' collegato a un'altra seduta."
+
+    session.appointment_id = appuntamento.id
+    session.client_id = appuntamento.client_id
+    db.session.commit()
+    return True, None
 
 
 def manual_link(session_id, receipt_id):
