@@ -8,7 +8,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from gender_guesser.detector import Detector
 from flask import Blueprint, current_app, render_template, request, jsonify, flash, redirect, url_for, session, abort
 from flask import current_app as app
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import os, ipaddress, requests
 from sqlalchemy.sql import func, or_
 from .. import db
@@ -4762,12 +4763,39 @@ def solarium_stats():
                             data_a=data_a,
                             selected_device_id=device_id)
 
+
+# Fuso orario esplicito per la SOLA visualizzazione delle sedute Solarium
+# (calendario lampade, storico cliente). L'app gira sia sul PC del negozio
+# sia su un'istanza cloud (raggiunta da casa/da remoto): affidarsi al fuso
+# orario del sistema operativo (es. dt.astimezone() senza argomenti, come
+# fa to_naive_local() in solarium_matching.py) da' risultati DIVERSI a
+# seconda di quale macchina esegue il calcolo - sul cloud, tipicamente in
+# UTC, gli orari mostrati risultavano sfalsati di alcune ore rispetto a
+# quelli reali visti in negozio. Con un fuso nominato esplicito il risultato
+# e' identico ovunque e si aggiorna da solo al cambio dell'ora legale.
+# Corregge SOLO la visualizzazione: la logica di abbinamento automatico
+# pagamenti in solarium_matching.py resta invariata, non e' nello scope di
+# questa correzione.
+_SOLARIUM_DISPLAY_TZ = ZoneInfo("Europe/Rome")
+
+
+def _solarium_to_rome_naive(dt):
+    """Converte un datetime UTC-aware (o naive-ma-in-realta'-UTC, come
+    restituito da alcuni driver) in ora locale di Roma, senza tzinfo (comoda
+    per confronti/formattazione). Vedi commento su _SOLARIUM_DISPLAY_TZ."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_SOLARIUM_DISPLAY_TZ).replace(tzinfo=None)
+
+
 @settings_bp.route('/settings/api/solarium/timeline', methods=['GET'])
 def solarium_timeline_data():
     """Dati JSON per la timeline sedute (Statistiche Sedute): tutte le sedute
     di un giorno, una colonna per macchinario. Sola lettura, pensata per il
     polling (come /calendar/api/solarium/state)."""
-    from datetime import time as dt_time, timezone
+    from datetime import time as dt_time
     from ..services import solarium_matching
 
     data_str = request.args.get('data') or datetime.now().strftime('%Y-%m-%d')
@@ -4790,7 +4818,7 @@ def solarium_timeline_data():
     # Confini del giorno richiesto in UTC-aware (SolariumSession.inizio/fine
     # sono aware in UTC), per interrogare il DB con un range corretto invece
     # di scaricare tutta la tabella e filtrare in Python.
-    local_tz = datetime.now().astimezone().tzinfo
+    local_tz = _SOLARIUM_DISPLAY_TZ
     day_start_utc = datetime.combine(giorno, dt_time.min).replace(tzinfo=local_tz).astimezone(timezone.utc)
     day_end_utc = datetime.combine(giorno, dt_time.max).replace(tzinfo=local_tz).astimezone(timezone.utc)
 
@@ -4811,8 +4839,8 @@ def solarium_timeline_data():
 
     sedute = []
     for s in sessioni:
-        inizio_loc = solarium_matching.to_naive_local(s.inizio)
-        fine_loc = solarium_matching.to_naive_local(s.fine)
+        inizio_loc = _solarium_to_rome_naive(s.inizio)
+        fine_loc = _solarium_to_rome_naive(s.fine)
         riferimento_fine = fine_loc or datetime.now()
 
         inizio_min = inizio_loc.hour * 60 + inizio_loc.minute

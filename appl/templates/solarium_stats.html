@@ -105,10 +105,14 @@
   /* Le colonne si allargano per riempire tutta la larghezza del riquadro;
      sotto i 140px per colonna la griglia scrolla in orizzontale. */
   .solarium-tl-col { flex: 1 1 0; min-width: 140px; border-right: 1px solid #eef1f6; }
-  .solarium-tl-col-head { padding: 6px 8px; font-weight: 700; font-size: 0.82rem; text-align: center; color: #2f3b4b; border-bottom: 1px solid #e3e7ee; background: #f2f4f8; position: sticky; top: 0; }
+  /* z-index esplicito: senza, l'header sticky (che nel DOM viene PRIMA della
+     colonna) finiva SOTTO ai blocchi (che vengono dopo, nella col-body),
+     perche' a parita' di z-index:auto vince l'elemento successivo nel DOM.
+     Scorrendo il calendario, i blocchi scorrevano sopra l'intestazione. */
+  .solarium-tl-col-head { padding: 6px 8px; font-weight: 700; font-size: 0.82rem; text-align: center; color: #2f3b4b; border-bottom: 1px solid #e3e7ee; background: #f2f4f8; position: sticky; top: 0; z-index: 3; }
   .solarium-tl-col-body { position: relative; }
   .solarium-tl-hour-line { position: absolute; left: 0; right: 0; border-top: 1px dashed #eef1f6; }
-  .solarium-tl-block { position: absolute; left: 4px; right: 4px; border-radius: 6px; padding: 3px 6px; overflow: hidden; cursor: pointer; border-left: 4px solid #adb5bd; background: #eef1f6; }
+  .solarium-tl-block { position: absolute; left: 4px; right: 4px; z-index: 1; border-radius: 6px; padding: 3px 6px; overflow: hidden; cursor: pointer; border-left: 4px solid #adb5bd; background: #eef1f6; }
   .solarium-tl-block.ok { border-left-color: #2e7d32; background: #eaf6ec; }
   .solarium-tl-block.warn { border-left-color: #c0392b; background: #fbeaea; }
   .solarium-tl-block.wait { border-left-color: #e08a1f; background: #fdf3e6; }
@@ -138,15 +142,28 @@
 </div>
 
 <!-- Modal Storico Sedute Solarium per Cliente -->
+<style>
+  /* modal-xl (Bootstrap, max-width 1140px) non bastava a evitare lo scroll
+     orizzontale con 8 colonne + text-nowrap: qui si allarga oltre, senza
+     toccare .modal-xl altrove nel progetto. */
+  #SolariumClientHistoryModal .modal-dialog {
+    max-width: 95vw;
+  }
+</style>
 <div class="modal fade" tabindex="-1" id="SolariumClientHistoryModal">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Storico Sedute Solarium per Cliente</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
       </div>
       <div class="modal-body">
-        <div class="position-relative mb-3">
+        <!-- max-width: il modal e' largo 95vw per la tabella sottostante, ma
+             il campo di ricerca (nome/cognome cliente) non deve seguirla:
+             resta largo quanto serve per un nome, non quanto la tabella.
+             Il risultato dropdown e' w-100 DI QUESTO wrapper, quindi si
+             restringe insieme al campo restando allineato. -->
+        <div class="position-relative mb-3" style="max-width: 380px;">
           <input type="text" class="form-control" id="solariumClientHistorySearch"
                  placeholder="Digita almeno 3 lettere del nome o cognome..." autocomplete="off">
           <div id="solariumClientResults" class="list-group position-absolute w-100"
@@ -271,23 +288,29 @@
           body.innerHTML = '<div class="alert alert-info">Nessuna seduta Solarium collegata trovata per questo cliente.</div>';
           return;
         }
-        var html = '<table class="table table-striped table-sm"><thead><tr>' +
-          '<th>Cliente</th><th>Data</th><th>Orario</th><th>Macchinario</th>' +
-          '<th class="text-center">Durata</th><th>Scontrino</th><th class="text-end">Prezzo</th><th>Operatore</th>' +
+        // table-responsive: se anche col modal allargato (modal-xl) i nomi
+        // piu' lunghi (cliente, macchinario, operatore) non ci stanno in
+        // larghezza, la tabella scorre in orizzontale invece di andare a
+        // capo dentro le celle. text-nowrap sulle celle impedisce proprio
+        // quell'andare a capo che si voleva evitare.
+        var html = '<div class="table-responsive">' +
+          '<table class="table table-striped table-sm"><thead><tr>' +
+          '<th class="text-nowrap">Cliente</th><th class="text-nowrap">Data</th><th class="text-nowrap">Orario</th><th class="text-nowrap">Macchinario</th>' +
+          '<th class="text-center text-nowrap">Durata</th><th class="text-nowrap">Scontrino</th><th class="text-end text-nowrap">Prezzo</th><th class="text-nowrap">Operatore</th>' +
           '</tr></thead><tbody>';
         data.forEach(function (r) {
           html += '<tr>' +
-            '<td>' + (r.client_nome || '-') + '</td>' +
-            '<td>' + (r.data || '-') + '</td>' +
-            '<td>' + (r.ora_inizio || '-') + (r.ora_fine ? (' - ' + r.ora_fine) : '') + '</td>' +
-            '<td>' + (r.device || '-') + '</td>' +
-            '<td class="text-center">' + (r.durata_minuti != null ? (r.durata_minuti + ' min') : '-') + '</td>' +
-            '<td>' + (r.scontrino || '-') + '</td>' +
-            '<td class="text-end">' + (r.prezzo != null ? ('€ ' + parseFloat(r.prezzo).toFixed(2)) : '-') + '</td>' +
-            '<td>' + (r.operatore || '-') + '</td>' +
+            '<td class="text-nowrap">' + (r.client_nome || '-') + '</td>' +
+            '<td class="text-nowrap">' + (r.data || '-') + '</td>' +
+            '<td class="text-nowrap">' + (r.ora_inizio || '-') + (r.ora_fine ? (' - ' + r.ora_fine) : '') + '</td>' +
+            '<td class="text-nowrap">' + (r.device || '-') + '</td>' +
+            '<td class="text-center text-nowrap">' + (r.durata_minuti != null ? (r.durata_minuti + ' min') : '-') + '</td>' +
+            '<td class="text-nowrap">' + (r.scontrino || '-') + '</td>' +
+            '<td class="text-end text-nowrap">' + (r.prezzo != null ? ('€ ' + parseFloat(r.prezzo).toFixed(2)) : '-') + '</td>' +
+            '<td class="text-nowrap">' + (r.operatore || '-') + '</td>' +
             '</tr>';
         });
-        html += '</tbody></table>';
+        html += '</tbody></table></div>';
         body.innerHTML = html;
       })
       .catch(function () {
