@@ -324,15 +324,29 @@ def find_best_appointment(session, tolerance_minutes=AUTO_MATCH_TOLERANCE_MIN):
     return best
 
 
+def _naive_appointment_time(dt):
+    """Appointment.start_time/end_time sono naive-locale per convenzione
+    (colonna DateTime SENZA timezone, a differenza di SolariumSession che e'
+    esplicitamente UTC-aware) - NON vanno convertiti con to_naive_local()
+    (quello presume una sorgente UTC). Qui e' solo una difesa: se per
+    disallineamento fra colonna e driver arriva comunque un tzinfo (visto in
+    log: 'can't subtract offset-naive and offset-aware datetimes'), si toglie
+    SENZA spostare l'orario, perche' le cifre sono gia' quelle giuste in
+    locale."""
+    if dt is not None and dt.tzinfo is not None:
+        return dt.replace(tzinfo=None)
+    return dt
+
+
 def _appointment_distance(session, appointment):
     """Distanza minima (secondi) tra gli estremi dell'appuntamento e quelli
     della seduta: un appuntamento delle 11:45 e una seduta partita alle
     11:46 distano 60 secondi."""
     inizio = to_naive_local(session.inizio)
     fine = to_naive_local(session.fine) or inizio
-    punti_appuntamento = [appointment.start_time]
+    punti_appuntamento = [_naive_appointment_time(appointment.start_time)]
     try:
-        punti_appuntamento.append(appointment.end_time)
+        punti_appuntamento.append(_naive_appointment_time(appointment.end_time))
     except Exception:
         pass
     return min(abs((pa - ps).total_seconds())
