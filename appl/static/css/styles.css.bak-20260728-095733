@@ -561,41 +561,18 @@ td {
     padding: 0px;
     border-radius: 12px;
     background-color: rgba(66, 133, 244, 0.9);
-    /* Rilievo 3D. Il colore del blocco arriva da JS come background-COLOR
-       inline (colore del cliente): qui si sovrappone solo un background-IMAGE,
-       che si compone con qualunque colore senza sostituirlo. I blocchi pagati
-       (.status-2) hanno il loro motivo a pois e restano come sono. */
-    background-image: linear-gradient(180deg,
-        rgba(255, 255, 255, 0.20) 0%,
-        rgba(255, 255, 255, 0.04) 45%,
-        rgba(0, 0, 0, 0.10) 100%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.45),   /* luce sul bordo alto */
-      inset 0 -2px 0 rgba(0, 0, 0, 0.10),        /* ombra sul bordo basso */
-      0 2px 0 rgba(135, 100, 124, 0.22),         /* spessore del blocco */
-      0 4px 10px rgba(135, 100, 124, 0.20);      /* ombra portata */
+    box-shadow: 0 3px 10px rgba(135, 100, 124, 0.18), 0 1px 3px rgba(0, 0, 0, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.15);
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* NB: le transform di hover/active restano IDENTICHE a prima. La barra dei
-   popup e' posizionata rispetto al blocco, e il drag&drop lavora su
-   getBoundingClientRect: cambiare la geometria qui si ripercuote su
-   entrambi. Il rilievo e' ottenuto solo con le ombre. */
 .appointment-block:hover {
     transform: scale(1.015);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.50),
-      inset 0 -2px 0 rgba(0, 0, 0, 0.10),
-      0 4px 0 rgba(135, 100, 124, 0.24),
-      0 8px 18px rgba(135, 100, 124, 0.26);
+    box-shadow: 0 6px 20px rgba(135, 100, 124, 0.25), 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
 .appointment-block:active {
     transform: scale(0.99);
-    box-shadow:
-      inset 0 2px 5px rgba(0, 0, 0, 0.20),
-      0 1px 2px rgba(135, 100, 124, 0.18);
 }
 
 /* Variabili e layout della barra popup sopra al blocco */
@@ -1427,28 +1404,7 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     display: inline-block;
 }
 
-/* Suggerimento accanto a "Svuota" e "−". Parte nascosto: lo accende JS
-   quando ci sono cliente e servizi selezionati. Da navigator collassato
-   sparisce da solo, per la regola che nasconde tutti i figli tranne il
-   pulsante toggle. */
-#navigatorHint {
-    display: none;
-    margin-left: 10px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #9a9a9a;
-    vertical-align: middle;
-    white-space: normal;
-}
-
-/* Pulsante toggle per collassare/espandere il navigator.
-   Sta nel flusso accanto a "Svuota" e segue la STESSA logica: entrambi
-   partono display:none e vengono accesi da calendar.js con
-   style.display='inline-block' quando il navigator entra in uso.
-   NON va posizionato in absolute/sticky: sono stati proprio quei tentativi a
-   far coprire il campo di ricerca dai risultati e a far sparire "Svuota". */
+/* Pulsante toggle per collassare/espandere il navigator */
 .navigator-toggle-btn {
     display: none;
     width: 32px;
@@ -1503,42 +1459,10 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     display: none !important;
 }
 
-/* Quando è collassato, il pulsante toggle è l'unico contenuto: si centra
-   con flex invece che con margin:auto, così resta allineato anche in
-   verticale (con margin:auto lo era solo in orizzontale). */
-.appointmentNavigator.collapsed {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    padding: 0 !important;
-}
-/* Da collassato il quadratino intero E' il pulsante: bersaglio comodo e
-   perfettamente centrato. Serve !important perche' calendar.js scrive
-   display:inline-block inline sull'elemento, che altrimenti vincerebbe. */
+/* Quando è collassato, mostra solo il pulsante toggle centrato */
 .appointmentNavigator.collapsed .navigator-toggle-btn {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    width: 100% !important;
-    height: 100% !important;
-    margin: 0 !important;
-    line-height: 1;
-    font-size: 20px;
-    border-radius: 12px;
-}
-
-/* Flash d'invito: alla prima apertura della pagina il navigator è collassato
-   e pulsa qualche secondo, per far capire che lì si cerca il cliente. */
-@keyframes navAttentionPulse {
-    0%   { box-shadow: 0 0 0 0 rgba(184, 128, 157, 0.7); }
-    70%  { box-shadow: 0 0 0 14px rgba(184, 128, 157, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(184, 128, 157, 0); }
-}
-.appointmentNavigator.collapsed.nav-attention {
-    animation: navAttentionPulse 1.4s ease-out 4;
-}
-@media (prefers-reduced-motion: reduce) {
-    .appointmentNavigator.collapsed.nav-attention { animation: none; }
+    display: block;
+    margin: 0 auto;
 }
 
 /* Imposta il container dei pseudo-blocchi per sfruttare l'intera larghezza del navigator */
@@ -2300,17 +2224,11 @@ body.pseudo-active .appointment-block.active-popup .btn-popup.whatsapp-btn {
     font-size: 1.15em;
     font-weight: bold;
     cursor: pointer;
-    /* Rilievo 3D: lo "spessore" del tasto e' un'ombra secca sotto, l'ombra
-       morbida e' la luce ambiente. Niente gradiente di sfondo, altrimenti
-       verrebbe sovrascritto dai background !important delle categorie
-       (solarium / estetica / prodotti). */
-    transition: transform .08s ease, box-shadow .12s ease,
-                background 0.15s, color 0.15s;
+    transition: background 0.15s, box-shadow 0.15s, color 0.15s;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.95),   /* luce sul bordo alto */
-      inset 0 -2px 0 rgba(0, 0, 0, 0.04),        /* ombra sul bordo basso */
-      0 2px 0 rgba(135, 100, 124, 0.14),         /* spessore del tasto */
-      0 3px 8px rgba(135, 100, 124, 0.11);       /* ombra portata */
+      0 -6px 12px 0 #fff,                /* ombra bianca sopra */
+      4px 4px 12px #e0e0e0,              /* ombra scura sotto */
+      -4px -4px 12px #ffffff;            /* effetto rilievo */
     background: #f7f7f7;
     outline: none;
     text-overflow: ellipsis;
@@ -2319,70 +2237,19 @@ body.pseudo-active .appointment-block.active-popup .btn-popup.whatsapp-btn {
     align-items: center;
     justify-content: center;
     vertical-align: middle;
-    transform: translateY(0);
 }
 
-/* Sollevato: il tasto "viene incontro" */
-.service-btn-custom:hover {
+.service-btn-custom:hover, .service-btn-custom:focus {
     background: #ecece0;
-    transform: translateY(-1px);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.95),
-      inset 0 -2px 0 rgba(0, 0, 0, 0.04),
-      0 3px 0 rgba(135, 100, 124, 0.16),
-      0 6px 13px rgba(135, 100, 124, 0.14);
 }
 
-/* Premuto: scende fino a "schiacciare" lo spessore. Solo :active, non
-   :focus, altrimenti dopo il click resterebbe premuto per sempre. */
-.service-btn-custom:active {
-    transform: translateY(2px);
+.service-btn-custom:active,
+.service-btn-custom:focus {
     box-shadow:
-      inset 0 2px 4px rgba(0, 0, 0, 0.12),
-      0 0 0 rgba(135, 100, 124, 0.14),
-      0 1px 2px rgba(135, 100, 124, 0.12);
+      0 -6px 12px 0 #fff,
+      inset 2px 2px 8px #e0e0e0,
+      inset -2px -2px 8px #ffffff;
     background: #ededed;
-}
-
-/* Accessibilita': anello di focus solo da tastiera, senza falso "premuto" */
-.service-btn-custom:focus-visible {
-    box-shadow:
-      0 0 0 3px rgba(184, 128, 157, 0.55),
-      0 2px 0 rgba(135, 100, 124, 0.14),
-      0 3px 8px rgba(135, 100, 124, 0.11);
-}
-
-/* Cassa aperta nel pannello laterale dell'agenda: al massimo 5 pulsanti per
-   riga invece dei 7 che ci starebbero, cosi' restano leggibili e comodi da
-   premere. La classe la mette cassa.html quando si accorge di essere in un
-   iframe; a tutto schermo non cambia nulla.
-   Il calcolo tiene conto del gap 0.5em di #serviceButtonsContainer. */
-/* Colonna dei pulsanti grigi in alto a destra (Registro Scontrini, DGFE,
-   Chiusura, ...): e' un float:right, quindi i tasti servizio le arrivano
-   appiccicati. Il margine sinistro apre lo spazio fra le due zone. */
-.cassa-side-actions {
-    margin-left: 28px;
-    margin-bottom: 10px;
-}
-html.cassa-embedded .cassa-side-actions {
-    margin-left: 18px;
-}
-
-html.cassa-embedded #serviceButtonsContainer .service-btn-custom {
-    flex: 0 0 calc((100% - 4 * 0.5em) / 5);
-    width: auto;
-    min-width: 0;
-    max-width: none;
-    margin: 0;
-    padding: 12px 10px;
-    font-size: 1.02em;
-}
-
-/* Pannello allargato a tutto schermo (agenda collassata): c'e' di nuovo
-   spazio, quindi si torna a 7 pulsanti per riga. La classe .pane-maximized
-   viene messa sull'iframe dal controller del pannello in calendar.html. */
-html.cassa-embedded.pane-maximized #serviceButtonsContainer .service-btn-custom {
-    flex: 0 0 calc((100% - 6 * 0.5em) / 7);
 }
 
   .tooltip-parent {
@@ -3041,39 +2908,20 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
 
 /* Desktop: larghezza > 1200px => colonne fisse, tutte uguali e proporzionali allo schermo */
 @media (min-width: 1201px) {
-  :root {
-    --calendar-cols-default: 6;   /* fallback se il JS non gira */
-    --op-col-max: 300px;          /* TETTO: la colonna operatore non supera mai questa larghezza */
-    --calendar-side-w: 136px;     /* colonne "Ora": 80px a sinistra (thead) + 56px a destra */
-  }
-
   table.calendar-table,
   table#calendarTable,
   table#calendar {
     table-layout: fixed !important;
-    /* La tabella prende tutta la pagina SOLO finché le colonne restano sotto
-       il tetto --op-col-max: con pochi operatori visibili si ACCORCIA, invece
-       di stirare le colonne superstiti su tutto lo schermo (blocchi larghi
-       quanto il monitor e barre popup smisurate).
-       --calendar-cols è impostata via JS (calendar.html) con il numero di
-       operatori EFFETTIVAMENTE visibili in quel momento. */
-    width: min(
-      100%,
-      calc(var(--calendar-side-w)
-           + var(--calendar-cols, var(--calendar-cols-default)) * var(--op-col-max))
-    ) !important;
-    /* ancorata a sinistra: la posizione dell'agenda non salta quando si
-       nasconde o si rimostra un'operatrice */
-    margin-left: 0 !important;
-    margin-right: auto !important;
+    width: 100% !important;
   }
 
-  /* NB: --calendar-cols viene impostata da JS direttamente sull'elemento
-     <table class="calendar-table"> (vedi calendar.html).
-     La vecchia riga "--calendar-cols: var(--calendar-cols, ...)" era
-     auto-referenziale e quindi invalida per il CSS: di conseguenza veniva
-     scartato anche il calc() delle celle qui sotto, e le colonne finivano
-     semplicemente equidistribuite da table-layout:fixed. */
+  /* imposta il numero di colonne con la variabile; fallback 6 */
+  :root { --calendar-cols-default: 6; }
+
+  table.calendar-table {
+    /* permette override dinamico: es. <table style="--calendar-cols: 8"> */
+    --calendar-cols: var(--calendar-cols, var(--calendar-cols-default));
+  }
 
   table.calendar-table th,
   table.calendar-table td,
@@ -3085,13 +2933,8 @@ body.touch-ui .appointment-block.note-off.active-popup .popup-buttons {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* colonne operatore tutte uguali, nello spazio che resta tolte le due "Ora".
-       Le colonne "Ora" (first/last child) hanno regole più specifiche e
-       mantengono i loro 80px / 56px. */
-    width: calc(
-      (100% - var(--calendar-side-w))
-      / var(--calendar-cols, var(--calendar-cols-default))
-    );
+    /* tutte le colonne uguali: calcola larghezza in percentuale */
+    width: calc(100% / var(--calendar-cols));
   }
   }
 

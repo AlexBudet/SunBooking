@@ -800,7 +800,7 @@ function mostraPopupSelezionePacchetto(pacchetti, callback) {
       const currentPath = window.location.pathname;
       const basePathMatch = currentPath.match(/^(\/s\/\d+\/)/);
       const basePath = basePathMatch ? basePathMatch[1] : '/';
-      window.location.href = `${basePath}pacchetti/detail/${pac.pacchetto_id}`;
+      goToSection(`${basePath}pacchetti/detail/${pac.pacchetto_id}`);
     });
     
     listContainer.appendChild(item);
@@ -2762,6 +2762,39 @@ function updateNavTooltipState() {
 window.updateNavTooltipState = updateNavTooltipState;
 
 /**
+ * Mostra il suggerimento "clicca in agenda per creare l'appuntamento" accanto
+ * ai tasti "Svuota" e "−". Compare solo quando cliente E servizi sono
+ * entrambi selezionati: e' in quel momento che il click in agenda crea
+ * davvero l'appuntamento, prima sarebbe un invito fuorviante.
+ */
+function updateNavigatorHint() {
+  const hint = document.getElementById('navigatorHint');
+  if (!hint) return;
+  const hasClient = !!window.selectedClientIdNav;
+  const hasBlocks = Array.isArray(window.pseudoBlocks) && window.pseudoBlocks.length > 0;
+  hint.style.display = (hasClient && hasBlocks) ? 'inline' : 'none';
+}
+window.updateNavigatorHint = updateNavigatorHint;
+
+/**
+ * Navigazione verso un'altra sezione dell'app (cassa, pacchetti, ...).
+ * In modalita' affiancata (poche operatrici visibili) il controller del
+ * pannello in calendar.html espone window.appNavigate, che carica la sezione
+ * nel riquadro di destra invece di sostituire l'agenda. Se quella modalita'
+ * non e' attiva - o il controller non c'e' - si naviga come sempre.
+ * Va usata al posto di window.location.href per tutti i comandi che portano
+ * fuori dall'agenda, altrimenti sfuggono all'intercettazione.
+ */
+function goToSection(url) {
+  if (typeof window.appNavigate === 'function') {
+    window.appNavigate(url);
+    return;
+  }
+  window.location.href = url;
+}
+window.goToSection = goToSection;
+
+/**
  * Espande il Navigator se è in stato collassato
  */
 function expandNavigatorIfCollapsed() {
@@ -2783,6 +2816,10 @@ window.expandNavigatorIfCollapsed = expandNavigatorIfCollapsed;
  * Ripristina lo stato collapsed/expanded del Navigator all'avvio della pagina
  */
 function restoreNavigatorCollapsedState() {
+    // Comportamento storico, invariato: si ripristina lo stato salvato.
+    // NB: il collasso automatico all'avvio esiste SOLO in modalita'
+    // affiancata (poche operatrici visibili) ed e' gestito dal controller
+    // del pannello in calendar.html, che sa se quella modalita' e' attiva.
     const savedState = localStorage.getItem('navigatorCollapsed');
     if (savedState === 'true') {
         const navigator = document.getElementById('appointmentNavigator');
@@ -3531,7 +3568,7 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
               sessionStorage.setItem('pacchettoSedutaMessage', message);
               
               // Redirect alla pagina pacchetto_detail
-              window.location.href = `/pacchetti/detail/${pInfo.pacchettoId}`;
+              goToSection(`/pacchetti/detail/${pInfo.pacchettoId}`);
             };
             
             // Se è stato chiesto l'invio WhatsApp, aspetta che finisca prima di redirigere
@@ -5334,7 +5371,7 @@ document.addEventListener('DOMContentLoaded', function() {
       'Vuoi aprire ora la scheda pacchetto?'
     );
     if (ok) {
-      window.location.href = `/pacchetti/detail/${pacchettoId}`;
+      goToSection(`/pacchetti/detail/${pacchettoId}`);
     }
   }
 
@@ -5415,7 +5452,7 @@ document.addEventListener('DOMContentLoaded', function() {
     params.set('servizi', JSON.stringify(servizi));
     params.set('operator_name', operatorName);
 
-    window.location.href = `/cassa?${params.toString()}`;
+    goToSection(`/cassa?${params.toString()}`);
   }, true);
 
   // Listener delegato "Nota" anche su blocchi creati dinamicamente.
@@ -6527,15 +6564,34 @@ function handleClientSearchNav(query) {
 
         clearResults();
 
+        // Quanti risultati mostrare. Il server ne restituisce fino a 10; qui
+        // si taglia in base allo spazio realmente disponibile: in modalita'
+        // affiancata (poche operatrici, meta' schermo occupata dal pannello)
+        // la lista deve restare corta.
+        const MAX_ITEMS = document.body.classList.contains('asp-split') ? 5 : 8;
+        if (Array.isArray(clients) && clients.length > MAX_ITEMS) {
+          clients = clients.slice(0, MAX_ITEMS);
+        }
+
+        // I risultati clienti stanno NEL FLUSSO, esattamente come quelli dei
+        // servizi (handleServiceSearchNav non tocca mai 'position', quindi
+        // resta il position:relative del markup). Cosi' spingono in basso i
+        // campi e i tasti invece di coprirli.
+        // Prima erano forzati a position:absolute: da li' il dropdown finiva
+        // sopra al campo di ricerca.
+        // Il max-height e' dimensionato su MAX_ITEMS (~46px a riga): i
+        // risultati ci stanno tutti senza scorrere, e il limite impedisce
+        // comunque al navigator di allungarsi oltre.
         const ensureOverlay = () => {
           const parent = input.parentElement || input.closest('div');
           if (parent && window.getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
-          resultsContainer.style.position = 'absolute';
-          resultsContainer.style.left = input.offsetLeft + 'px';
-          resultsContainer.style.top = (input.offsetTop + input.offsetHeight) + 'px';
+          resultsContainer.style.position = 'relative';
+          resultsContainer.style.left = 'auto';
+          resultsContainer.style.top = 'auto';
           resultsContainer.style.width = '100%';
-          resultsContainer.style.zIndex = '2000';
-          resultsContainer.style.maxHeight = '240px';
+          resultsContainer.style.zIndex = 'auto';
+          resultsContainer.style.marginTop = '6px';
+          resultsContainer.style.maxHeight = (MAX_ITEMS * 46) + 'px';
           resultsContainer.style.overflowY = 'auto';
         };
 
@@ -7053,6 +7109,10 @@ function renderPseudoBlocksList() {
     const clearNavigatorBtn = document.getElementById('clearNavigatorBtn');
     if (clearNavigatorBtn) clearNavigatorBtn.style.display = 'none';
     container.innerHTML = '';
+    // Nessuno pseudoblocco: via anche il suggerimento "clicca in agenda".
+    // Questo ramo esce con return, quindi non passa dal punto piu' in basso
+    // dove il suggerimento viene aggiornato.
+    if (typeof updateNavigatorHint === 'function') updateNavigatorHint();
     return;
   }
 
@@ -7166,7 +7226,8 @@ function renderPseudoBlocksList() {
   if (navigatorToggleBtn) {
     navigatorToggleBtn.style.display = 'inline-block';
   }
-  
+  if (typeof updateNavigatorHint === 'function') updateNavigatorHint();
+
   // Assicurati che il campo servizi sia visibile
   const serviceInput = document.getElementById('serviceInputNav');
   if (serviceInput) {
@@ -7695,7 +7756,7 @@ if (blk.pacchettoSedutaId) {
 }
 
 // ✅ Redirect DOPO aver atteso il fetch
-window.location.href = `${basePath}pacchetti/detail/${blk.pacchettoId}`;
+goToSection(`${basePath}pacchetti/detail/${blk.pacchettoId}`);
 return;
 } else {
     // Nessun pacchetto: il blocco è già nel DOM grazie a createAppointmentBlockElement (sopra).
@@ -7973,7 +8034,7 @@ Promise.all(requests)
             }));
             
             // Redirect a pacchetto_detail
-            window.location.href = `/pacchetti/detail/${firstBlock.pacchettoId}`;
+            goToSection(`/pacchetti/detail/${firstBlock.pacchettoId}`);
             return;
         } catch (err) {
             console.error('Errore aggiornamento data seduta:', err);
@@ -10022,6 +10083,29 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
   if (typeof collapseAppointmentNavigator === 'function') {
     collapseAppointmentNavigator();
   }
+  // Stato azzerato: via anche il suggerimento
+  if (typeof updateNavigatorHint === 'function') updateNavigatorHint();
+
+  // In modalita' affiancata (agenda + pannello destro) "Svuota" non si limita
+  // a ridurre a una riga: riporta il Navigator al quadratino collassato, che
+  // e' lo stato in cui la barra data resta libera e utilizzabile.
+  // NB: va fatto DOPO collapseAppointmentNavigator(), che azzera lo style
+  // inline del toggle; senza riaccenderlo il quadratino resterebbe vuoto.
+  if (document.body.classList.contains('asp-split')) {
+    const navEl = document.getElementById('appointmentNavigator');
+    const toggleBtn = document.getElementById('navigatorToggleBtn');
+    if (navEl && toggleBtn) {
+      navEl.classList.add('collapsed');
+      toggleBtn.textContent = '+';
+      toggleBtn.title = 'Espandi Navigator';
+      toggleBtn.setAttribute('data-bs-original-title', 'Cerca cliente');
+      toggleBtn.style.display = 'inline-block';
+      // Niente scrittura su localStorage: la preferenza salvata deve restare
+      // quella scelta a mano, altrimenti questo automatismo della modalita'
+      // affiancata si trascinerebbe dietro anche negli altri casi.
+    }
+  }
+
   // Rimuovi il flag dopo un breve timeout (oltre ogni eventuale fetch asincrona)
   setTimeout(function() { window._navigatorJustCleared = false; }, 2000);
 
@@ -11198,6 +11282,7 @@ function collapseAppointmentNavigator() {
     const navigatorToggleBtn = document.getElementById('navigatorToggleBtn');
     if (clearNavigatorBtn) clearNavigatorBtn.style.display = 'inline-block';
     if (navigatorToggleBtn) navigatorToggleBtn.style.display = 'inline-block';
+    if (typeof updateNavigatorHint === 'function') updateNavigatorHint();
     return; // Esci senza collassare
   }
   
@@ -11216,6 +11301,7 @@ function collapseAppointmentNavigator() {
   if (clearBtn) clearBtn.style.display = '';
   const toggleBtn = document.getElementById('navigatorToggleBtn');
   if (toggleBtn) toggleBtn.style.display = '';
+  if (typeof updateNavigatorHint === 'function') updateNavigatorHint();
 
   // Rimuovi classe open dal navigator (riporta allo stato iniziale)
   const nav = document.getElementById('appointmentNavigator');
@@ -11455,7 +11541,7 @@ function procediAlPagamentoDaBlocchi(selectedBlocks) {
   // Se operatorIds.size >= 2, NON passare operator_id globale
   // così cassa.html non precompilerà il campo unico
 
-  window.location.href = `/cassa?${params.toString()}`;
+  goToSection(`/cassa?${params.toString()}`);
 }
 
 document.addEventListener('DOMContentLoaded', function() {

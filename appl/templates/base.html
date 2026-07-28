@@ -2,7 +2,85 @@
 <!DOCTYPE html>
 <html lang="it">
     <head>
+        <script>
+          // Pagina caricata DENTRO il pannello laterale dell'agenda (iframe
+          // same-origin). Marcata subito qui nel <head>, prima del primo
+          // disegno, cosi' il menu duplicato non fa nemmeno in tempo a
+          // comparire. A tutto schermo non cambia nulla.
+          try {
+            if (window.self !== window.top) {
+              document.documentElement.classList.add('in-side-pane');
+            }
+          } catch (e) { /* cross-origin: non siamo nel pannello */ }
+
+          // In modalita' affiancata il calendario sta SEMPRE e SOLO a
+          // sinistra: una pagina del pannello che punta all'agenda (es. un
+          // appuntamento cliccato dal Report) non deve caricarne una seconda
+          // qui dentro, ma spostare la vista di quella gia' visibile.
+          // Navigando la finestra principale, l'agenda si posiziona sul
+          // giorno richiesto e il pannello si riapre da solo sulla stessa
+          // scheda, allineato alla nuova data.
+          window.appGoToCalendar = function (url) {
+            if (!url) return;
+            try {
+              if (window.self !== window.top && window.top && window.top.location) {
+                window.top.location.href = url;
+                return;
+              }
+            } catch (e) { /* cross-origin: si prosegue normalmente */ }
+            window.location.href = url;
+          };
+
+          // Stessa regola per i link: un <a> verso l'agenda cliccato dentro
+          // il pannello sposta quella di sinistra invece di aprirne un'altra
+          // qui. In capture, per precedere gli handler della pagina.
+          document.addEventListener('click', function (e) {
+            try {
+              if (window.self === window.top) return;
+              var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+              if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+              var href = a.getAttribute('href') || '';
+              if (!href || href.charAt(0) === '#') return;
+              if (/^(javascript|mailto|tel):/i.test(href)) return;
+              if (href.split('?')[0].split('#')[0].toLowerCase().indexOf('/calendar') === -1) return;
+              e.preventDefault();
+              e.stopPropagation();
+              window.appGoToCalendar(href);
+            } catch (err) { /* non bloccare mai il click */ }
+          }, true);
+        </script>
         <style>
+/* Dentro il pannello laterale la barra di menu e' un doppione: quella buona
+   e' del documento principale, che pilota il pannello stesso. L'<header>
+   contiene solo il menu, quindi si nasconde per intero e si recupera spazio
+   verticale. */
+html.in-side-pane header { display: none !important; }
+html.in-side-pane main { margin-top: 0 !important; }
+
+/* Dentro il pannello il giorno lo comanda la barra data dell'agenda: quella
+   della pagina ospitata sarebbe un secondo comando che puo' disallineare le
+   due meta'. Vanno nascoste ENTRAMBE le versioni: quella desktop e quella
+   per schermi piccoli, che e' proprio la variante che si attiva nel pannello
+   (largo meno di 1200px).
+   Si nascondono, non si rimuovono: il campo #reportDate resta nel DOM e il
+   Report continua a sincronizzarsi via pane_date. */
+html.in-side-pane .calendar-navigation,
+html.in-side-pane .mobile-date-nav { display: none !important; }
+
+/* Le pagine hanno un margine superiore calcolato per lasciare spazio a header
+   fisso + barra data (nel Report vale 56+44 = 100px sotto i 1200px). Qui
+   quegli elementi sono nascosti, quindi quel margine e' solo vuoto: si
+   riporta a un valore minimo. Piu' specifico di .page-wide-90, quindi vince
+   anche sulle regole !important delle singole pagine. */
+html.in-side-pane .page-wide-90 { margin-top: 12px !important; }
+
+/* Le pagine usano <br> come spaziatori in cima, per scavalcare l'header
+   fisso. Nel pannello l'header non c'e', quindi sono solo vuoto: si tolgono
+   quelli figli diretti di <main> (cassa, report, pacchetti...) e i div usati
+   allo stesso scopo, marcati con .pane-top-spacer (settings). */
+html.in-side-pane main > br { display: none !important; }
+html.in-side-pane .pane-top-spacer { display: none !important; }
+
 #quarterResetIcon:hover,
 .d-flex.align-items-center > button:hover {
   color: lightseagreen !important;
@@ -101,43 +179,47 @@
     <header>
         <div style="width:100%">
             <nav class="navbar navbar-expand-lg navbar-light bg-light">
+{# data-nav: identificatore stabile delle voci di menu. Serve all'agenda, che
+   in modalita' affiancata (poche operatrici visibili) nasconde "Agenda" e fa
+   aprire le altre voci nel pannello destro invece di cambiare pagina. Qui non
+   c'e' nessuna logica: base.html e' condiviso da tutte le pagine. #}
 <ul class="navbar-nav mx-auto" id="mainMenu">
     <li class="nav-item">
-        <a class="nav-link menu-link" href="{{ url_for('calendar.calendar_home') }}">
+        <a class="nav-link menu-link" data-nav="agenda" href="{{ url_for('calendar.calendar_home') }}">
             <i class="bi bi-calendar4-week menu-icon"></i>
             <span class="menu-label">Agenda</span>
         </a>
     </li>
     {% if not hide_cassa %}
     <li class="nav-item">
-        <a class="nav-link menu-link" href="{{ url_for('cassa.cassa') }}">
+        <a class="nav-link menu-link" data-nav="cassa" href="{{ url_for('cassa.cassa') }}">
             <i class="bi bi-cash-coin menu-icon"></i>
             <span class="menu-label">Cassa</span>
         </a>
     </li>
     {% endif %}
     <li class="nav-item">
-        <a class="nav-link menu-link" href="{{ url_for('report.report') }}">
+        <a class="nav-link menu-link" data-nav="report" href="{{ url_for('report.report') }}">
             <i class="bi bi-graph-up menu-icon"></i>
             <span class="menu-label">Report</span>
         </a>
     </li>
     {% if module_pacchetti_enabled %}
     <li class="nav-item">
-        <a class="nav-link menu-link" href="{{ url_for('pacchetti.pacchetti_home') }}">
+        <a class="nav-link menu-link" data-nav="pacchetti" href="{{ url_for('pacchetti.pacchetti_home') }}">
             <i class="bi bi-box-seam menu-icon"></i>
             <span class="menu-label">Pacchetti</span>
         </a>
     </li>
     {% endif %}
     <li class="nav-item">
-        <a class="nav-link menu-link" href="{{ url_for('settings.settings_home') }}">
+        <a class="nav-link menu-link" data-nav="tools" href="{{ url_for('settings.settings_home') }}">
             <i class="bi bi-gear menu-icon"></i>
             <span class="menu-label">Tools</span>
         </a>
     </li>
     <li class="nav-item">
-        <a class="nav-link menu-link text-dark" href="{{ url_for('logout') }}" id="logout-link">
+        <a class="nav-link menu-link text-dark" data-nav="logout" href="{{ url_for('logout') }}" id="logout-link">
             <i class="bi bi-box-arrow-right menu-icon"></i>
             <span class="menu-label">Esci</span>
         </a>
@@ -849,6 +931,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
+
     {% block scripts %}{% endblock %}
 </body>
 </html>
