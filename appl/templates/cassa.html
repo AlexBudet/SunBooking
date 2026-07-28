@@ -2,10 +2,22 @@
 
 {% block content %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<script>
+  // Cassa aperta dentro il pannello laterale dell'agenda (iframe same-origin):
+  // segnala la cosa al CSS, che riduce i pulsanti servizio a 5 per riga.
+  // Nessun effetto quando la pagina e' aperta normalmente a tutto schermo.
+  try {
+    if (window.self !== window.top) {
+      document.documentElement.classList.add('cassa-embedded');
+    }
+  } catch (e) {
+    // cross-origin: non siamo nel pannello, si prosegue normalmente
+  }
+</script>
 <br><br><br>
 <div class="page-wide-90">
 <h3>&nbsp;&nbsp;CASSA</h3>
-<div style="float:right; display:flex; flex-direction:column; gap:8px; margin-top: -20px;">
+<div class="cassa-side-actions" style="float:right; display:flex; flex-direction:column; gap:8px; margin-top: -20px;">
   <a href="{{ url_for('cassa.registro_scontrini') }}" class="btn neumorphic-btn" data-bs-toggle="tooltip" data-bs-placement="left" title="Corrispettivi giornalieri">Registro Scontrini</a>
   <a href="#" id="btnRegistroDGFE" class="btn neumorphic-btn" data-bs-toggle="tooltip" data-bs-placement="left" title="Legge il registro giornaliero dalla stampante fiscale">Registro DGFE</a>
   <a href="#" id="btnChiusuraGiornaliera" class="btn neumorphic-btn" data-bs-toggle="tooltip" data-bs-placement="left" title="Clicca per stampare la chiusura fiscale giornaliera">Chiusura Giornaliera</a>
@@ -2109,11 +2121,28 @@ body.touch-ui .bozza-divider-btn { opacity: 1; transform: scale(1); pointer-even
 document.addEventListener('DOMContentLoaded', function() {
   if (!window.bootstrap || !bootstrap.Tooltip) return;
   document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+    // trigger 'hover': senza 'focus' (che e' nel default di Bootstrap) il
+    // tooltip resterebbe aperto dopo il click, perche' il pulsante prende il
+    // fuoco e non riceve mai il mouseleave che lo chiuderebbe. Si vedeva
+    // bene sui pulsanti "Frequenti", "Ultimi", ecc.
     var opts = (el.id === 'bozzaScontrinoLabel')
-      ? { container: 'body', boundary: 'window' }
-      : {};
+      ? { container: 'body', boundary: 'window', trigger: 'hover' }
+      : { trigger: 'hover' };
     try { bootstrap.Tooltip.getOrCreateInstance(el, opts); } catch (_) {}
   });
+
+  // Rete di sicurezza per i tooltip creati altrove piu' in alto in questa
+  // pagina (campi Salone/Cliente, pulsanti laterali): quelle istanze
+  // esistono gia' e getOrCreateInstance non ne cambia le opzioni, quindi si
+  // chiudono a mano al click.
+  document.addEventListener('click', function(e) {
+    var el = e.target && e.target.closest ? e.target.closest('[data-bs-toggle="tooltip"]') : null;
+    if (!el) return;
+    try {
+      var t = bootstrap.Tooltip.getInstance(el);
+      if (t) t.hide();
+    } catch (_) {}
+  }, true);
 });
 </script>
 {% endblock %}

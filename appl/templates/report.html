@@ -3202,7 +3202,7 @@ function caricaHeatmapAppuntamenti(dataRif, giorni = 10) {
                     const ora = cd.ora;
                     sessionStorage.setItem('scrollToHour', ora);
                     sessionStorage.setItem('scrollToMinute', '00');
-                    window.location.href = `/calendar?date=${cd.dataISO}&ora=${ora}:00`;
+                    appGoToCalendar(`/calendar?date=${cd.dataISO}&ora=${ora}:00`);
                 }
             });
         }
@@ -3289,7 +3289,7 @@ function caricaHeatmapIncassi(dataRif, giorni = 10) {
                     const ora = cd.ora;
                     sessionStorage.setItem('scrollToHour', ora);
                     sessionStorage.setItem('scrollToMinute', '00');
-                    window.location.href = `/calendar?date=${cd.dataISO}&ora=${ora}:00`;
+                    appGoToCalendar(`/calendar?date=${cd.dataISO}&ora=${ora}:00`);
                 }
             });
         }
@@ -3563,7 +3563,7 @@ if (apptDate === oggiStr) {
         if (date && hour && minute) {
           sessionStorage.setItem('scrollToHour', hour);
           sessionStorage.setItem('scrollToMinute', minute);
-          window.location.href = `/calendar?date=${date}&ora=${hour}:${minute}`;
+          appGoToCalendar(`/calendar?date=${date}&ora=${hour}:${minute}`);
         }
       });
     });
@@ -4513,6 +4513,37 @@ document.addEventListener('DOMContentLoaded', function() {
       caricaTopClienti(this.dataset.periodo);
     });
   });
+});
+</script>
+
+<script>
+/* Report aperto nel pannello laterale dell'agenda: si allinea al giorno che
+   l'agenda sta mostrando, passato nella query string come pane_date.
+   Non tocca il backend: usa il campo data della pagina e il suo flatpickr,
+   esattamente come fanno i pulsanti giorno precedente/successivo, cosi' si
+   riusa tutta la catena di ricalcolo gia' esistente (triggerReportReload,
+   heatmap, giorno della settimana...).
+   Questo listener e' registrato DOPO quello che inizializza flatpickr, quindi
+   quando gira l'istanza esiste gia'. */
+document.addEventListener('DOMContentLoaded', function() {
+  if (!document.documentElement.classList.contains('in-side-pane')) return;
+
+  var paneDate = null;
+  try {
+    paneDate = new URLSearchParams(window.location.search).get('pane_date');
+  } catch (e) { return; }
+  if (!paneDate || !/^\d{4}-\d{2}-\d{2}$/.test(paneDate)) return;
+
+  var input = document.getElementById('reportDate');
+  if (!input || input.value === paneDate) return;
+
+  var fp = input._flatpickr;
+  if (fp) {
+    fp.setDate(paneDate, true);   // true = scatena onChange, come i tasti giorno
+  } else {
+    input.value = paneDate;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
 });
 </script>
 {% endblock %}
