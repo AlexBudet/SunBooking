@@ -702,6 +702,16 @@ document.addEventListener('DOMContentLoaded', function() {
   pointer-events: auto;
 }
 
+/* A bozza confermata (pronta per la stampa) il tasto SVUOTA/ELIMINA non e'
+   comunque cliccabile, perche' la card ha pointer-events:none e solo
+   .bozza-conferma viene riabilitato sopra. Prima restava visibile ma morto:
+   si nasconde, cosi' sotto allo pseudoscontrino resta solo INDIETRO.
+   Vale SOLO in questo stato: a bozza non confermata SVUOTA/ELIMINA restano
+   visibili e funzionanti come sempre. */
+.pseudoscontrino-bloccato .bozza-svuota {
+  display: none !important;
+}
+
 /* Bozza non confermata mentre un'altra è confermata: grigia e non interagibile,
    tranne il suo tasto CONFERMA che la riattiva. */
 .bozza-disattivata {
