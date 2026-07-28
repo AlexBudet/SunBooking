@@ -598,6 +598,23 @@ td {
       0 1px 2px rgba(135, 100, 124, 0.18);
 }
 
+/* Un blocco piu' lungo di un quarto d'ora overflow-a visivamente oltre la
+   propria cella, nelle righe sottostanti. Se il mouse hoverava una di quelle
+   righe (non la prima), la cella sotto il cursore prende .highlight con
+   z-index:19000 (vedi sopra), mentre il blocco resta a z-index:1: un blocco
+   adiacente in un'altra colonna, che condivide lo stesso contesto di
+   stacking, poteva finire sopra al blocco hoverato e al suo bottone
+   WhatsApp (che eredita lo z-index del genitore, non ha z-index proprio).
+   Un blocco attivamente hoverato deve sempre stare sopra il resto della
+   griglia: 19500 batte le celle .highlight (19000) e qualunque altro
+   blocco, restando comunque sotto a header/navigator/modali (>=20000).
+   Escluso .cut-mode-active: li' lo z-index resta quello scelto a mano da
+   JS (11940), per restare sotto alla barra data mobile durante taglia/copia. */
+.appointment-block:hover:not(.cut-mode-active),
+.appointment-block.active-popup:not(.cut-mode-active) {
+    z-index: 19500 !important;
+}
+
 /* Variabili e layout della barra popup sopra al blocco */
 .appointment-block {
   position: relative;           /* necessario per top assoluto */
@@ -1402,6 +1419,11 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
 
 .clear-navigator-btn {
     display: none;
+    /* Stessa distanza (10px) che il campo cliente e il campo servizio hanno
+       gia' fra loro (margin-bottom inline su quei div): senza questo, il
+       box pseudoblocchi e la riga di "Svuota"/"−"/suggerimento restavano
+       piu' vicini fra loro che tutto il resto. */
+    margin-top: 10px;
     padding: 4px 12px;
     border-radius: 10px;
     border: 1px solid rgba(135, 100, 124, 0.25);
@@ -1434,6 +1456,7 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
 #navigatorHint {
     display: none;
     margin-left: 10px;
+    margin-top: 10px;   /* stessa distanza di "Svuota" e "−" dal box sopra */
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -1451,6 +1474,10 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
    far coprire il campo di ricerca dai risultati e a far sparire "Svuota". */
 .navigator-toggle-btn {
     display: none;
+    /* Stessa distanza di "Svuota" dal box pseudoblocchi sopra: senza questo
+       "Svuota" scendeva di 10px (margine nuovo qui sopra) e il "−" restava
+       piu' in alto, disallineati sulla riga. */
+    margin-top: 10px;
     width: 32px;
     height: 32px;
     border-radius: 10px;
