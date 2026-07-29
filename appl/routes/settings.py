@@ -3465,7 +3465,9 @@ def marketing_search_clients():
             if last_time:
                 if last_time.tzinfo is not None:
                     last_time = last_time.replace(tzinfo=None)
-                giorni_assenza = (now - last_time).days
+                # Confronto tra sole date (non ore trascorse): un appuntamento di ieri sera
+                # deve risultare "1 giorno fa" anche se sono passate poche ore.
+                giorni_assenza = (now.date() - last_time.date()).days
             
             clients_data.append({
                 'id': client.id,

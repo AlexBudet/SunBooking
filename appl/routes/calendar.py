@@ -40,14 +40,19 @@ LOYALTY_DEFAULT = {
 
 
 def _days_between(a, b):
-    """(a - b).days, tollerante a eventuali datetime timezone-aware misti con naive."""
+    """Giorni di calendario tra le date di a e b (non ore trascorse tra i due istanti):
+    confronta le sole date, cosi' un evento di ieri sera risulta "1 giorno fa" anche se
+    sono passate poche ore, e uno di stanotte risulta "oggi" anche se ne sono passate quasi 24.
+    Tollerante a eventuali datetime timezone-aware misti con naive."""
     if a is None or b is None:
         return None
     if getattr(a, 'tzinfo', None) is not None:
         a = a.replace(tzinfo=None)
     if getattr(b, 'tzinfo', None) is not None:
         b = b.replace(tzinfo=None)
-    return (a - b).days
+    da = a.date() if hasattr(a, 'date') else a
+    db_ = b.date() if hasattr(b, 'date') else b
+    return (da - db_).days
 
 
 def _classifica_frequenza_visite(visite_periodo, giorni_periodo):
