@@ -105,7 +105,7 @@
           </div>
           <br>
           <div>
-            <span id="totalAmount" class="fw-bold fs-5 bozza-total">Scontrino: € 0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;
+            <span id="totalAmount" class="fw-bold fs-5 bozza-total" data-bs-toggle="tooltip" data-bs-placement="top" title="Non si può scontare dal totale: applicare lo sconto su una o più voci.">Scontrino: € 0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;
             <span id="totalAmountAll" class="bozza-total-all" style="color: #444; font-size: 1rem;">Totale: € 0.00</span>
             <br><br>
             <button class="btn btn-success ms-2 bozza-conferma" id="confermaBtn">CONFERMA</button>
@@ -1964,6 +1964,13 @@ body.show-op-per-riga .scontrino-row .op-col:hover {
   line-height: 1;
 }
 .scontrino-split-btn:hover { color: #4d2d8a; }
+
+/* Icona metodo di pagamento selezionato: piu' vicina al select "metodo
+   pagamento" e piu' distante dal tasto "Dividi"/badge "Misto" che seguono. */
+.scontrino-pay-icon {
+  margin-left: 2px;
+  margin-right: 10px;
+}
 
 /* Intestazione di gruppo cliente nella bozza multi-cliente */
 .cliente-group-header {

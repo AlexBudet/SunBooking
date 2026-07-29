@@ -1685,6 +1685,7 @@ row.className = 'd-flex align-items-center scontrino-row';
   const nome = document.createElement('div');
   nome.className = 'flex-grow-1 px-2';
   nome.textContent = servizio.nome;
+  applyBsTooltip(nome, 'Servizio');
   row.appendChild(nome);
 
   // Prezzo editabile
@@ -1698,6 +1699,7 @@ row.className = 'd-flex align-items-center scontrino-row';
   prezzo.name = 'prezzo[]';
   prezzo.style.width = '95px';
   prezzo.style.marginRight = '8px';
+  applyBsTooltip(prezzo, 'Costo');
 
   // Se è il pagamento di una carta prepagata, blocca la modifica del prezzo
   if (servizio.prepagata_id) {
@@ -1737,6 +1739,7 @@ row.className = 'd-flex align-items-center scontrino-row';
   sconto.style.width = '70px';
   sconto.style.display = 'inline';
   sconto.style.marginRight = '4px';
+  applyBsTooltip(sconto, 'Sconto');
   row.appendChild(sconto);
 
   const percent = document.createElement('span');
@@ -1760,11 +1763,12 @@ row.className = 'd-flex align-items-center scontrino-row';
     selectPay.appendChild(option);
   });
   selectPay.value = 'pos';
+  applyBsTooltip(selectPay, 'Metodo');
   row.appendChild(selectPay);
 
   // Icona metodo pagamento selezionato
   const payIcon = document.createElement('i');
-  payIcon.className = 'bi bi-calculator ms-2';
+  payIcon.className = 'bi bi-calculator scontrino-pay-icon';
   row.appendChild(payIcon);
 
   // Badge "Misto" mostrato quando il pagamento della riga e' splittato su piu' metodi
@@ -1806,6 +1810,7 @@ row.className = 'd-flex align-items-center scontrino-row';
   const xIcon = document.createElement('i');
   xIcon.className = 'bi bi-x-lg';
   delBtn.appendChild(xIcon);
+  applyBsTooltip(delBtn, 'Azioni');
   delBtn.onclick = function () {
     // NON scollegare l'appuntamento da window.originalAppointmentIds: anche se si
     // toglie o si sostituisce la voce, l'appuntamento PRENOTATO resta legato alla
@@ -1898,10 +1903,10 @@ row.className = 'd-flex align-items-center scontrino-row';
     // Aggiorna il metodo salvato
     row.dataset.vecchioMetodo = nuovoMetodo;
     
-    if (nuovoMetodo === 'pos') payIcon.className = 'bi bi-calculator ms-2';
-    else if (nuovoMetodo === 'cash') payIcon.className = 'bi bi-cash ms-2';
-    else if (nuovoMetodo === 'bank') payIcon.className = 'bi bi-bank ms-2';
-    else if (nuovoMetodo === 'prepagata') payIcon.className = 'bi bi-credit-card ms-2';
+    if (nuovoMetodo === 'pos') payIcon.className = 'bi bi-calculator scontrino-pay-icon';
+    else if (nuovoMetodo === 'cash') payIcon.className = 'bi bi-cash scontrino-pay-icon';
+    else if (nuovoMetodo === 'bank') payIcon.className = 'bi bi-bank scontrino-pay-icon';
+    else if (nuovoMetodo === 'prepagata') payIcon.className = 'bi bi-credit-card scontrino-pay-icon';
 
     // Se NON è cash, la riga torna bianca subito
     if (nuovoMetodo !== 'cash') {
@@ -2025,10 +2030,10 @@ function aggiornaMetodoPagamentoGlobale(tipo) {
       select.value = tipo;
       // Aggiorna icona
       if (icon) {
-        if (tipo === 'pos') icon.className = 'bi bi-calculator ms-2';
-        else if (tipo === 'cash') icon.className = 'bi bi-cash ms-2';
-        else if (tipo === 'bank') icon.className = 'bi bi-bank ms-2';
-        else if (tipo === 'prepagata') icon.className = 'bi bi-credit-card ms-2';
+        if (tipo === 'pos') icon.className = 'bi bi-calculator scontrino-pay-icon';
+        else if (tipo === 'cash') icon.className = 'bi bi-cash scontrino-pay-icon';
+        else if (tipo === 'bank') icon.className = 'bi bi-bank scontrino-pay-icon';
+        else if (tipo === 'prepagata') icon.className = 'bi bi-credit-card scontrino-pay-icon';
       }
     }
     // Se il metodo NON è cash, la riga torna bianca
@@ -3393,7 +3398,7 @@ window.apriModalOperatoreRiga = apriModalOperatoreRiga;
       const icon = row.querySelector('i');
       if (select) {
         select.value = tipo;
-        if (icon) icon.className = (tipo === 'pos') ? 'bi bi-calculator ms-2' : (tipo === 'cash') ? 'bi bi-cash ms-2' : (tipo === 'bank') ? 'bi bi-bank ms-2' : 'bi bi-credit-card ms-2';
+        if (icon) icon.className = (tipo === 'pos') ? 'bi bi-calculator scontrino-pay-icon' : (tipo === 'cash') ? 'bi bi-cash scontrino-pay-icon' : (tipo === 'bank') ? 'bi bi-bank scontrino-pay-icon' : 'bi bi-credit-card scontrino-pay-icon';
       }
       if (tipo !== 'cash') row.style.background = '#fff';
     });
