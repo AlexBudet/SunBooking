@@ -691,6 +691,99 @@ function ensureServiceSelectCircleStyles() {
   document.head.appendChild(style);
 }
 
+// Spunte multi-selezione servizi persistite OLTRE il singolo render della dropdown:
+// una nuova ricerca (testo o "servizi frequenti" al focus) ricostruisce sempre il
+// contenuto di #serviceResultsNav / #serviceResults da zero, quindi lo stato "spuntato"
+// non puo' vivere solo come attributo DOM sull'item (andrebbe perso). Viene tenuto qui,
+// per container (Navigator/Modal), e riapplicato ad ogni render + usato da "CREA (N)".
+function _getTickedServiceMap(containerId) {
+  window._navTickedServicesByContainer = window._navTickedServicesByContainer || {};
+  if (!containerId) containerId = '__default__';
+  if (!window._navTickedServicesByContainer[containerId]) {
+    window._navTickedServicesByContainer[containerId] = new Map();
+  }
+  return window._navTickedServicesByContainer[containerId];
+}
+window._getTickedServiceMap = _getTickedServiceMap;
+
+// Da chiamare dopo aver popolato item.dataset.serviceId/Name/Duration/Tag e prima di
+// appenderlo al container: riapplica la spunta visiva se il servizio era gia' selezionato
+// in una ricerca precedente.
+function _restoreTickedVisual(item, containerId) {
+  const id = item.dataset.serviceId;
+  if (!id) return;
+  const map = _getTickedServiceMap(containerId);
+  if (!map.has(id)) return;
+  item.dataset.ticked = '1';
+  const circleEl = item.querySelector('.svc-select-circle');
+  if (circleEl) {
+    circleEl.classList.add('checked');
+    circleEl.setAttribute('aria-checked', 'true');
+  }
+}
+window._restoreTickedVisual = _restoreTickedVisual;
+
+// Dopo aver renderizzato i risultati "normali" (ricerca testo o lista servizi
+// frequenti), aggiunge in cima al dropdown gli eventuali servizi già spuntati in
+// una ricerca precedente che NON compaiono tra i risultati appena mostrati — così
+// restano sempre visibili tutte le selezioni in corso, non solo quelle che
+// combaciano con l'ultimo termine cercato. `renderedIds` è l'insieme degli id
+// già presenti nel render corrente (per non duplicarli).
+function _renderPinnedTickedItems(container, renderedIds) {
+  if (!container) return;
+  const map = _getTickedServiceMap(container.id);
+  if (map.size === 0) return;
+  const renderedSet = renderedIds instanceof Set ? renderedIds : new Set(renderedIds || []);
+  const missing = Array.from(map.values()).filter(svc => !renderedSet.has(svc.id));
+  if (missing.length === 0) return;
+
+  const isNav = container.id === 'serviceResultsNav';
+  const frag = document.createDocumentFragment();
+
+  missing.forEach(svc => {
+    const item = document.createElement('div');
+    item.className = 'dropdown-item';
+    window.buildServiceDropdownLabel(item, { name: svc.name, duration: svc.duration });
+    item.dataset.serviceId = svc.id;
+    item.dataset.serviceName = svc.name;
+    item.dataset.serviceDuration = svc.duration;
+    item.dataset.serviceTag = svc.tag || '';
+    item.dataset.ticked = '1';
+    const circleEl = item.querySelector('.svc-select-circle');
+    if (circleEl) {
+      circleEl.classList.add('checked');
+      circleEl.setAttribute('aria-checked', 'true');
+    }
+
+    item.addEventListener('click', () => {
+      if (isNav) {
+        if (typeof selectServiceNav === 'function') selectServiceNav(svc.id, svc.name, svc.duration, svc.tag || '');
+      } else if (typeof selectService === 'function') {
+        selectService(svc.id, svc.name, svc.duration);
+      }
+      container.innerHTML = '';
+      container.style.display = 'none';
+    });
+
+    frag.appendChild(item);
+  });
+
+  // Separatore, solo se sotto ci sono anche altri risultati (altrimenti sarebbe l'unica sezione)
+  if (container.firstChild) {
+    const sep = document.createElement('div');
+    sep.className = 'dropdown-item-divider';
+    sep.style.cssText = 'padding:4px 10px;font-size:0.72em;font-weight:600;color:#6c757d;'
+      + 'text-transform:uppercase;letter-spacing:.03em;border-bottom:1px solid #e9ecef;'
+      + 'margin-bottom:2px;pointer-events:none;';
+    sep.textContent = 'Già selezionati';
+    frag.appendChild(sep);
+  }
+
+  container.insertBefore(frag, container.firstChild);
+  if (typeof window.updateServiceMultiSelectBar === 'function') window.updateServiceMultiSelectBar(container);
+}
+window._renderPinnedTickedItems = _renderPinnedTickedItems;
+
 function buildServiceDropdownLabel(item, options) {
   const {
     name = '',
@@ -722,7 +815,23 @@ function buildServiceDropdownLabel(item, options) {
     item.dataset.ticked = nowChecked ? '1' : '';
     circle.classList.toggle('checked', nowChecked);
     circle.setAttribute('aria-checked', String(nowChecked));
+
     const container = item.closest('.results-dropdown');
+    const svcId = item.dataset.serviceId;
+    if (container && svcId) {
+      const map = _getTickedServiceMap(container.id);
+      if (nowChecked) {
+        map.set(svcId, {
+          id: svcId,
+          name: item.dataset.serviceName || '',
+          duration: item.dataset.serviceDuration || '',
+          tag: item.dataset.serviceTag || ''
+        });
+      } else {
+        map.delete(svcId);
+      }
+    }
+
     if (container && typeof window.updateServiceMultiSelectBar === 'function') {
       window.updateServiceMultiSelectBar(container);
     }
@@ -832,6 +941,7 @@ function mostraPopupSelezionePacchetto(pacchetti, callback) {
       
       // Svuota il navigator
       window.pseudoBlocks = [];
+      if (typeof selectedPseudoBlockIndexes !== 'undefined') selectedPseudoBlockIndexes.clear();
       window.navigatorCopyMode = false;
       window.selectedClientIdNav = null;
       window.selectedClientNameNav = "";
@@ -924,13 +1034,11 @@ if (typeof window.applyHighlightToCell !== 'function') {
     // se esistono pseudo-blocchi, evidenzia intervallo basato sulla durata totale
     if (window.pseudoBlocks && Array.isArray(window.pseudoBlocks) && window.pseudoBlocks.length > 0) {
       let totalDuration = 0;
-      if (selectedPseudoBlock) {
-        const index = selectedPseudoBlock.getAttribute('data-index');
-        if (index !== null && window.pseudoBlocks[index]) {
-          totalDuration = parseInt(window.pseudoBlocks[index].duration || 0, 10) || 0;
-        } else {
-          totalDuration = window.pseudoBlocks.reduce((acc, blk) => acc + (parseInt(blk.duration || 0,10) || 0), 0);
-        }
+      if (typeof selectedPseudoBlockIndexes !== 'undefined' && selectedPseudoBlockIndexes.size > 0) {
+        totalDuration = Array.from(selectedPseudoBlockIndexes).reduce((acc, idx) => {
+          const blk = window.pseudoBlocks[idx];
+          return acc + (blk ? (parseInt(blk.duration || 0, 10) || 0) : 0);
+        }, 0);
       } else {
         totalDuration = window.pseudoBlocks.reduce((acc, blk) => acc + (parseInt(blk.duration || 0,10) || 0), 0);
       }
@@ -2103,7 +2211,12 @@ function showClientInfoModal(clientId) {
             statsParts.push(tenure);
           }
           if (fed.ultima_visita_giorni_fa !== null && fed.ultima_visita_giorni_fa !== undefined) {
-            statsParts.push(fed.ultima_visita_giorni_fa === 0 ? 'ultima visita oggi' : `ultima visita ${fed.ultima_visita_giorni_fa} ${fed.ultima_visita_giorni_fa === 1 ? 'giorno' : 'giorni'} fa`);
+            const g = fed.ultima_visita_giorni_fa;
+            let ultimaVisitaLabel;
+            if (g === 0) ultimaVisitaLabel = 'ultima visita oggi';
+            else if (g === 1) ultimaVisitaLabel = 'ultima visita ieri';
+            else ultimaVisitaLabel = `ultima visita ${g} giorni fa`;
+            statsParts.push(ultimaVisitaLabel);
           }
           if (fed.spesa_totale) statsParts.push(`spesa totale €${fed.spesa_totale.toFixed(2)}`);
 
@@ -6551,7 +6664,50 @@ document.addEventListener("DOMContentLoaded", function() {
 
 // computeFontColor è definita una sola volta più sopra.
 
+// Traccia i servizi creati nella sessione Navigator per cui NON è ancora stata
+// chiesta la richiesta di invio WhatsApp automatico (perché al momento della
+// creazione erano rimasti altri pseudoblocchi in coda). Il "debito" viene saldato
+// non appena il Navigator si svuota, sia per creazione dell'ultimo batch sia per
+// rimozione manuale (X singola o "Svuota").
+function _navSessionRecordCreated(clientId, clientName, date, oraStr, serviceLabel) {
+  if (!window._navSession) {
+    window._navSession = { clientId, clientName, date, firstOra: oraStr, servizi: [] };
+  }
+  window._navSession.servizi.push(serviceLabel || 'Servizio');
+}
+window._navSessionRecordCreated = _navSessionRecordCreated;
+
+async function _navSessionMaybeAskWhatsapp() {
+  const sess = window._navSession;
+  if (!sess || !Array.isArray(sess.servizi) || sess.servizi.length === 0) return;
+  window._navSession = null; // consuma subito: evita richieste doppie
+  const want = await chiediInvioWhatsappNavigator();
+  if (want === true) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    await inviaWhatsappAutoSeRichiesto({}, {
+      client_id: sess.clientId,
+      client_name: sess.clientName,
+      data: sess.date,
+      ora: sess.firstOra,
+      servizi: sess.servizi
+    }, csrfToken);
+    alert("Messaggio WhatsApp inviato!");
+  }
+}
+window._navSessionMaybeAskWhatsapp = _navSessionMaybeAskWhatsapp;
+
 function removePseudoBlock(index) {
+  index = parseInt(index, 10);
+  // Riallinea gli indici selezionati: rimuovi quello eliminato, decrementa i successivi
+  if (typeof selectedPseudoBlockIndexes !== 'undefined') {
+    const updated = new Set();
+    selectedPseudoBlockIndexes.forEach(idx => {
+      if (idx === index) return;
+      updated.add(idx > index ? idx - 1 : idx);
+    });
+    selectedPseudoBlockIndexes.clear();
+    updated.forEach(idx => selectedPseudoBlockIndexes.add(idx));
+  }
   window.pseudoBlocks.splice(index, 1);
   renderPseudoBlocksList();
   saveNavigatorState();
@@ -6572,6 +6728,11 @@ function removePseudoBlock(index) {
 
     window.selectedClientIdNav = null;
     window.selectedClientNameNav = "";
+
+    // Navigator svuotato per rimozione manuale: se in questa sessione era già
+    // stato creato almeno un appuntamento senza chiedere WhatsApp (blocchi
+    // rimanenti a quel tempo), chiedilo ora.
+    if (typeof _navSessionMaybeAskWhatsapp === 'function') _navSessionMaybeAskWhatsapp();
   }
 }
 
@@ -6746,10 +6907,13 @@ function selectServiceNav(serviceId, serviceName, serviceDuration, serviceTag) {
 // il controllo pacchetti) — nessuna duplicazione della logica di creazione blocco.
 function updateServiceMultiSelectBar(container) {
   if (!container) return;
-  const tickedItems = Array.from(container.querySelectorAll('.dropdown-item[data-ticked="1"]'));
+  // Conteggio dal magazzino persistito (non dal solo DOM del render corrente):
+  // una spunta fatta in una ricerca precedente resta valida anche se quell'item
+  // non è più tra i risultati mostrati ora.
+  const tickedCount = _getTickedServiceMap(container.id).size;
   let bar = container.querySelector('.service-multiselect-bar');
 
-  if (tickedItems.length === 0) {
+  if (tickedCount === 0) {
     if (bar) bar.remove();
     return;
   }
@@ -6769,20 +6933,20 @@ function updateServiceMultiSelectBar(container) {
     bar.appendChild(btn);
     container.appendChild(bar);
   }
-  bar.querySelector('.service-multiselect-create-btn').textContent = `CREA (${tickedItems.length})`;
+  bar.querySelector('.service-multiselect-create-btn').textContent = `CREA (${tickedCount})`;
 }
 window.updateServiceMultiSelectBar = updateServiceMultiSelectBar;
 
 function createPseudoBlocksFromTicked(container) {
   if (!container) return;
-  const tickedItems = Array.from(container.querySelectorAll('.dropdown-item[data-ticked="1"]'));
+  // Usa il magazzino persistito: include anche i servizi spuntati in ricerche
+  // precedenti e non più visibili nel render corrente del dropdown.
+  const tickedMap = _getTickedServiceMap(container.id);
+  const tickedItems = Array.from(tickedMap.values());
   const isNav = container.id === 'serviceResultsNav';
 
-  tickedItems.forEach(item => {
-    const id = item.dataset.serviceId;
-    const name = item.dataset.serviceName;
-    const duration = item.dataset.serviceDuration;
-    const tag = item.dataset.serviceTag || '';
+  tickedItems.forEach(svc => {
+    const { id, name, duration, tag } = svc;
     if (!id) return;
     if (isNav) {
       if (typeof selectServiceNav === 'function') selectServiceNav(id, name, duration, tag);
@@ -6790,6 +6954,9 @@ function createPseudoBlocksFromTicked(container) {
       if (typeof selectService === 'function') selectService(id, name, duration);
     }
   });
+
+  // Consuma le spunte: sono state trasformate in pseudoblocchi, il debito è saldato.
+  tickedMap.clear();
 
   container.innerHTML = '';
   container.style.display = 'none';
@@ -7038,6 +7205,7 @@ function handleServiceSearchNav(query) {
         empty.className = 'dropdown-item';
         empty.textContent = 'Nessun risultato';
         resultsContainer.appendChild(empty);
+        _renderPinnedTickedItems(resultsContainer, []);
         resultsContainer.style.display = 'block';
         return;
       }
@@ -7053,6 +7221,7 @@ function handleServiceSearchNav(query) {
       // durante l'await pacchetti, la nostra appendChild raddoppierebbe.
       resultsContainer.innerHTML = '';
 
+      const renderedIds = new Set();
       services.forEach(service => {
         const item = document.createElement('div');
         item.className = 'dropdown-item';
@@ -7069,6 +7238,14 @@ function handleServiceSearchNav(query) {
           price,
           hasPacchetto: pacchettoServiceIds.has(id)
         });
+        // Necessari sia per il click diretto sia per la spunta multi-selezione
+        // (createPseudoBlocksFromTicked legge questi dataset).
+        item.dataset.serviceId = id;
+        item.dataset.serviceName = name;
+        item.dataset.serviceDuration = duration;
+        item.dataset.serviceTag = tag;
+        _restoreTickedVisual(item, resultsContainer.id);
+        renderedIds.add(id);
 
         // Listener sicuro (niente onclick inline)
         item.addEventListener('click', () => {
@@ -7079,7 +7256,9 @@ function handleServiceSearchNav(query) {
         resultsContainer.appendChild(item);
       });
 
+      _renderPinnedTickedItems(resultsContainer, renderedIds);
       resultsContainer.style.display = 'block';
+      updateServiceMultiSelectBar(resultsContainer);
     })
     .catch(err => {
       console.error(err);
@@ -7288,6 +7467,7 @@ async function showServicesDropdownNav(services) {
     noResult.className = 'dropdown-item';
     noResult.textContent = 'Nessun risultato';
     resultsContainer.appendChild(noResult);
+    _renderPinnedTickedItems(resultsContainer, []);
     resultsContainer.style.display = 'block';
     return;
   }
@@ -7299,6 +7479,7 @@ async function showServicesDropdownNav(services) {
     noResult.className = 'dropdown-item';
     noResult.textContent = 'Nessun risultato';
     resultsContainer.appendChild(noResult);
+    _renderPinnedTickedItems(resultsContainer, []);
     resultsContainer.style.display = 'block';
     return;
   }
@@ -7314,6 +7495,7 @@ async function showServicesDropdownNav(services) {
   // l'await pacchetti, la nostra forEach raddoppierebbe le voci.
   resultsContainer.innerHTML = '';
 
+  const renderedIds = new Set();
   filteredServices.forEach(sv => {
     const item = document.createElement('div');
     item.className = 'dropdown-item';
@@ -7334,6 +7516,8 @@ async function showServicesDropdownNav(services) {
     item.dataset.serviceName = name;
     item.dataset.serviceDuration = duration;
     item.dataset.serviceTag = tag;
+    _restoreTickedVisual(item, resultsContainer.id);
+    renderedIds.add(id);
 
     item.addEventListener('click', () => {
       // chiama la funzione esistente in modo sicuro
@@ -7350,7 +7534,9 @@ async function showServicesDropdownNav(services) {
     resultsContainer.appendChild(item);
   });
 
+  _renderPinnedTickedItems(resultsContainer, renderedIds);
   resultsContainer.style.display = 'block';
+  updateServiceMultiSelectBar(resultsContainer);
 }
   
   // renderSelectedServicesList: mostra i servizi selezionati nell'apposito div
@@ -7459,6 +7645,7 @@ function renderPseudoBlocksList() {
     row.className = 'pseudo-block';
     row.dataset.index = String(i);
     if (block.note) row.setAttribute('data-note', String(block.note));
+    if (selectedPseudoBlockIndexes.has(i)) row.classList.add('selected');
 
     // Stili inline identici all'HTML originale
     row.style.display = 'flex';
@@ -7880,9 +8067,9 @@ if (blocksInCell.length >= 2) {
                 window._firstCreatedStartTime = minutesToTime(startTimeInMin);
             }
             
-            // Se esiste un pseudo-blocco selezionato, crea solo quell'appuntamento
-            if (selectedPseudoBlock) {
-                const index = selectedPseudoBlock.getAttribute('data-index');
+            // Se è selezionato un solo pseudo-blocco, crea solo quell'appuntamento
+            if (selectedPseudoBlockIndexes.size === 1) {
+                const index = Array.from(selectedPseudoBlockIndexes)[0];
                 const blk = window.pseudoBlocks[index];
                 const startTimeStr = minutesToTime(startTimeInMin);
                 const payload = {
@@ -7945,11 +8132,11 @@ else if (window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_dispo
     // Accumula il servizio appena creato per il memo WhatsApp finale
     if (!window._createdServicesForWhatsapp) window._createdServicesForWhatsapp = [];
     window._createdServicesForWhatsapp.push(blk.serviceName || blk.tag || "Servizio");
+    _navSessionRecordCreated(blk.clientId, blk.clientName, date, startTimeStr, blk.serviceName || blk.tag || "Servizio");
 
     // Rimuovi subito il pseudoblocco consumato
     window.pseudoBlocks.splice(index, 1);
-    if (selectedPseudoBlock) selectedPseudoBlock.classList.remove('selected');
-    selectedPseudoBlock = null;
+    selectedPseudoBlockIndexes.clear();
     renderPseudoBlocksList();
     if (typeof saveNavigatorState === 'function') { try { saveNavigatorState(); } catch(e) {} }
 
@@ -7992,6 +8179,7 @@ else if (window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_dispo
     // Pulisci gli accumulatori
     window._createdServicesForWhatsapp = [];
     window._firstCreatedStartTime = null;
+    window._navSession = null; // già chiesto qui: nessun debito residuo
 
 // *** AGGIUNGI QUESTO DEBUG ***
 console.log("🔍 DEBUG REDIRECT CHECK:");
@@ -8102,6 +8290,216 @@ return;
       window.__suspendCalendarMutationSync = Math.max(0, Number(window.__suspendCalendarMutationSync || 0) - 1);
     });
 
+            } else if (selectedPseudoBlockIndexes.size > 1) {
+                // Sono selezionati PIU' pseudo-blocchi (ma non tutti necessariamente):
+                // crea solo quelli selezionati, contigui a partire dalla cella cliccata,
+                // lasciando gli eventuali pseudoblocchi restanti nel Navigator.
+                const selectedIndexesSorted = Array.from(selectedPseudoBlockIndexes).sort((a, b) => a - b);
+                const blocksToCreate = selectedIndexesSorted.map(idx => window.pseudoBlocks[idx]);
+
+                window.__suspendCalendarMutationSync = Number(window.__suspendCalendarMutationSync || 0) + 1;
+                const requestsSel = blocksToCreate.map(blk => {
+                    const startTimeStr = minutesToTime(startTimeInMin);
+                    startTimeInMin += blk.duration;
+                    const payload = {
+                        client_id: blk.clientId,
+                        service_id: blk.serviceId,
+                        operator_id: operatorId,
+                        appointment_date: date,
+                        start_time: startTimeStr,
+                        duration: blk.duration,
+                        colore: commonColor,
+                        note: blk.note || "",
+                        status: (!blk.clientId && !blk.serviceId) ? 0 : (blk.status || 0)
+                    };
+
+                    if (blk.pacchettoSedutaId) {
+                        payload.pacchetto_seduta_id = blk.pacchettoSedutaId;
+                    } else if (window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_disponibili) {
+                        const sedutaMatch = window.pacchettoSelezionato.sedute_disponibili.find(
+                            s => s.service_id == blk.serviceId
+                        );
+                        if (sedutaMatch) {
+                            payload.pacchetto_seduta_id = sedutaMatch.seduta_id;
+                            blk.pacchettoSedutaId = sedutaMatch.seduta_id;
+                            blk.pacchettoId = window.pacchettoSelezionato.pacchetto_id;
+                            blk.shouldUpdateSeduta = true;
+                        }
+                    }
+
+                    return fetch('/calendar/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify(payload)
+                    })
+                    .then(resp => {
+                        if (!resp.ok) {
+                            return resp.json().then(err => {
+                                throw new Error(err.error || "Errore creazione multipla");
+                            });
+                        }
+                        return resp.json();
+                    });
+                });
+
+                const pseudoBlocksSnapshotSel = blocksToCreate.map(blk => ({
+                    clientId: blk.clientId,
+                    clientName: blk.clientName,
+                    serviceName: blk.serviceName || blk.tag || "Servizio"
+                }));
+
+                Promise.all(requestsSel)
+                .then(async responsesSel => {
+                    // Rimuovi SOLO i pseudo-blocchi selezionati (indici decrescenti per non sfalsare gli altri)
+                    for (let k = selectedIndexesSorted.length - 1; k >= 0; k--) {
+                        window.pseudoBlocks.splice(selectedIndexesSorted[k], 1);
+                    }
+                    selectedPseudoBlockIndexes.clear();
+                    renderPseudoBlocksList();
+                    if (typeof saveNavigatorState === 'function') { try { saveNavigatorState(); } catch(e) {} }
+
+                    const initialCell = cell;
+                    responsesSel.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+
+                    responsesSel.forEach((appointment, idx) => {
+                        const startTimeStr = appointment.start_time;
+                        let appointmentHour, appointmentMinute;
+                        if (typeof startTimeStr === 'string') {
+                            if (startTimeStr.includes('T') || startTimeStr.includes(' ')) {
+                                const startTime = new Date(startTimeStr);
+                                appointmentHour = startTime.getHours();
+                                appointmentMinute = startTime.getMinutes();
+                            } else {
+                                const parts = startTimeStr.split(':');
+                                appointmentHour = parseInt(parts[0], 10);
+                                appointmentMinute = parseInt(parts[1], 10);
+                            }
+                        } else {
+                            appointmentHour = parseInt(initialCell.getAttribute('data-hour'), 10);
+                            appointmentMinute = parseInt(initialCell.getAttribute('data-minute'), 10);
+                        }
+
+                        const targetCell = findCellAt(operatorId, appointmentHour, appointmentMinute);
+                        appointment.colore = commonColor;
+                        appointment.colore_font = computeFontColor(commonColor);
+
+                        const originalBlk = blocksToCreate[idx];
+                        if (originalBlk) {
+                            appointment.service_tag = originalBlk.tag || appointment.service_tag || '';
+                            appointment.service_name = originalBlk.serviceName;
+                            appointment.client_name = originalBlk.clientName;
+                            _navSessionRecordCreated(
+                                originalBlk.clientId, originalBlk.clientName, date,
+                                minutesToTime(appointmentHour * 60 + appointmentMinute),
+                                originalBlk.serviceName || originalBlk.tag || "Servizio"
+                            );
+                        }
+
+                        const blockEl = createAppointmentBlockElement(appointment, operatorId, appointmentHour, appointmentMinute);
+                        if (targetCell) {
+                            targetCell.appendChild(blockEl);
+                            arrangeBlocksInCell(targetCell);
+                        } else {
+                            initialCell.appendChild(blockEl);
+                            arrangeBlocksInCell(initialCell);
+                        }
+                    });
+
+                    blocksToCreate.forEach(pb => consumeCutPseudoBlockOrigin(pb));
+
+                    if (typeof clearCutSourceHighlights === 'function') clearCutSourceHighlights();
+                    if (typeof scrollToHourMinute === 'function') scrollToHourMinute(hour, minute);
+
+                    // Se restano altri pseudoblocchi nel Navigator: niente WhatsApp/redirect, si termina qui.
+                    if (window.pseudoBlocks.length > 0) {
+                        window.isCreatingAppointment = false;
+                        return;
+                    }
+
+                    // Navigator vuoto: chiedi WhatsApp ed eventuale redirect pacchetto.
+                    clearNavigator(false);
+
+                    const wantSel = await chiediInvioWhatsappNavigator();
+                    if (wantSel === true) {
+                        const servizi = pseudoBlocksSnapshotSel.map(blk => blk.serviceName);
+                        const firstAppointment = responsesSel[0];
+                        let oraMsg = '';
+                        if (typeof firstAppointment.start_time === 'string') {
+                            const m = firstAppointment.start_time.match(/(\d{2}:\d{2})/);
+                            oraMsg = m ? m[1] : '';
+                        }
+                        await inviaWhatsappAutoSeRichiesto(firstAppointment, {
+                            client_id: pseudoBlocksSnapshotSel[0].clientId,
+                            client_name: pseudoBlocksSnapshotSel[0].clientName,
+                            data: date,
+                            ora: oraMsg || (('0' + hour).slice(-2) + ':' + ('0' + minute).slice(-2)),
+                            servizi: servizi
+                        }, csrfToken);
+                        alert("Messaggio WhatsApp inviato!");
+                    }
+                    window._navSession = null; // già chiesto qui: nessun debito residuo
+
+                    const firstBlockSel = blocksToCreate[0];
+                    if (firstBlockSel && firstBlockSel.pacchettoSedutaId && firstBlockSel.pacchettoId) {
+                        const dateObj = new Date(date);
+                        const dayStr = ('0' + dateObj.getDate()).slice(-2);
+                        const monthStr = ('0' + (dateObj.getMonth() + 1)).slice(-2);
+                        const yearStr = dateObj.getFullYear();
+                        const formattedDate = `${dayStr}/${monthStr}/${yearStr}`;
+
+                        const firstApptSel = responsesSel[0];
+                        let oraMsg2 = '';
+                        if (typeof firstApptSel.start_time === 'string') {
+                            const m = firstApptSel.start_time.match(/(\d{2}:\d{2})/);
+                            oraMsg2 = m ? m[1] : '';
+                        }
+                        if (!oraMsg2) oraMsg2 = ('0' + hour).slice(-2) + ':' + ('0' + minute).slice(-2);
+
+                        const [hh, mm] = oraMsg2.split(':').map(Number);
+                        const fullDateTime = new Date(date);
+                        fullDateTime.setHours(hh, mm, 0, 0);
+                        const isoDateTime = fullDateTime.toISOString();
+
+                        try {
+                            const updateResp = await fetch(`/pacchetti/api/sedute/${firstBlockSel.pacchettoSedutaId}/update-data`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRFToken': csrfToken
+                                },
+                                body: JSON.stringify({
+                                    data_trattamento: isoDateTime,
+                                    operatore_id: operatorId
+                                })
+                            });
+                            await updateResp.json();
+                            localStorage.setItem('pacchettoSedutaFissata', JSON.stringify({
+                                sedutaId: firstBlockSel.pacchettoSedutaId,
+                                data: formattedDate,
+                                ora: oraMsg2
+                            }));
+                            goToSection(`/pacchetti/detail/${firstBlockSel.pacchettoId}`);
+                            return;
+                        } catch (err) {
+                            console.error('Errore aggiornamento data seduta:', err);
+                            alert('Errore nell\'aggiornamento della seduta. Riprova.');
+                        }
+                    }
+
+                    window.isCreatingAppointment = false;
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert("Errore nella creazione multipla: " + err.message);
+                    window.isCreatingAppointment = false;
+                })
+                .finally(() => {
+                    window.__suspendCalendarMutationSync = Math.max(0, Number(window.__suspendCalendarMutationSync || 0) - 1);
+                });
+
             } else {
                 // Se nessun pseudo-blocco è selezionato, esegue la creazione multipla (macro-blocco)
                 const totalBlocks = window.pseudoBlocks.length;
@@ -8203,7 +8601,8 @@ Promise.all(requests)
     }, csrfToken);
     alert("Messaggio WhatsApp inviato!");
   }
-    
+  window._navSession = null; // già chiesto qui (e navigator svuotato per intero): nessun debito residuo
+
     // Salva i dati dei pseudoBlocks prima di svuotare l'array
     const pseudoBlocksData = [...window.pseudoBlocks];
     console.log("pseudoBlocksData prima del ciclo:", pseudoBlocksData); // [1]
@@ -9016,6 +9415,7 @@ async function showServicesDropdownModal(services) {
     noResult.className = 'dropdown-item';
     noResult.textContent = 'Nessun risultato';
     resultsContainer.appendChild(noResult);
+    _renderPinnedTickedItems(resultsContainer, []);
     resultsContainer.style.display = 'block';
     return;
   }
@@ -9026,6 +9426,7 @@ async function showServicesDropdownModal(services) {
     ? await window.getPacchettoServiceIdsForClient(clientIdModal, serviceIds)
     : new Set();
 
+  const renderedIds = new Set();
   services.forEach(service => {
     const item = document.createElement('div');
     item.className = 'dropdown-item';
@@ -9043,6 +9444,8 @@ async function showServicesDropdownModal(services) {
     item.dataset.serviceId = id;
     item.dataset.serviceName = name;
     item.dataset.serviceDuration = duration;
+    _restoreTickedVisual(item, resultsContainer.id);
+    renderedIds.add(id);
 
     item.addEventListener('click', () => {
       // chiama la funzione di selezione corretta (modal)
@@ -9054,7 +9457,9 @@ async function showServicesDropdownModal(services) {
     resultsContainer.appendChild(item);
   });
 
+  _renderPinnedTickedItems(resultsContainer, renderedIds);
   resultsContainer.style.display = 'block';
+  updateServiceMultiSelectBar(resultsContainer);
 }
 
 // Funzione per gestire la ricerca servizi nel modal
@@ -9083,6 +9488,7 @@ const serviceIds = services.map(s => String(s?.id ?? '')).filter(Boolean);
 const pacchettoServiceIds = clientIdModal
   ? await window.getPacchettoServiceIdsForClient(clientIdModal, serviceIds)
   : new Set();
+const renderedIds = new Set();
 services.slice(0, 10).forEach(service => {
   console.log("Service object:", service); // conserva il log
 
@@ -9098,6 +9504,13 @@ services.slice(0, 10).forEach(service => {
     duration,
     hasPacchetto: pacchettoServiceIds.has(id)
   });
+  // Necessari sia per il click diretto sia per la spunta multi-selezione
+  // (createPseudoBlocksFromTicked legge questi dataset).
+  item.dataset.serviceId = id;
+  item.dataset.serviceName = name;
+  item.dataset.serviceDuration = duration;
+  _restoreTickedVisual(item, resultsContainer.id);
+  renderedIds.add(id);
 
   // click handler al posto di onclick inline
   item.addEventListener('click', () => {
@@ -9108,7 +9521,9 @@ services.slice(0, 10).forEach(service => {
 
   resultsContainer.appendChild(item);
 });
+_renderPinnedTickedItems(resultsContainer, renderedIds);
 resultsContainer.style.display = 'block';
+updateServiceMultiSelectBar(resultsContainer);
 
           }
           resultsContainer.style.display = 'block';
@@ -10280,25 +10695,24 @@ if (typeof appointment !== 'undefined' && appointment.color) {
   }
 }
 
-// Variabile globale per tenere traccia del pseudoblocco attualmente selezionato
-let selectedPseudoBlock = null;
+// Insieme degli indici (in window.pseudoBlocks) dei pseudoblocchi attualmente selezionati.
+// Multi-selezione: ogni click su un pseudoblocco alterna la sua appartenenza all'insieme,
+// senza deselezionare gli altri.
+let selectedPseudoBlockIndexes = new Set();
+window.selectedPseudoBlockIndexes = selectedPseudoBlockIndexes;
 
-// Funzione per gestire il click su un pseudoblocco
+// Funzione per gestire il click su un pseudoblocco (toggle multi-selezione)
 function handlePseudoBlockClick(pseudoBlock) {
-    // Se il pseudoblocco cliccato è già selezionato, deselezionalo
-    if (selectedPseudoBlock === pseudoBlock) {
+    const idx = parseInt(pseudoBlock.getAttribute('data-index'), 10);
+    if (Number.isNaN(idx)) return;
+    if (selectedPseudoBlockIndexes.has(idx)) {
+        selectedPseudoBlockIndexes.delete(idx);
         pseudoBlock.classList.remove('selected');
-        selectedPseudoBlock = null;
-        console.log("Pseudoblocco deselezionato.");
+        console.log("Pseudoblocco deselezionato:", idx);
     } else {
-        // Deseleziona il precedente pseudoblocco selezionato, se esiste
-        if (selectedPseudoBlock) {
-            selectedPseudoBlock.classList.remove('selected');
-        }
-        // Seleziona il nuovo pseudoblocco
+        selectedPseudoBlockIndexes.add(idx);
         pseudoBlock.classList.add('selected');
-        selectedPseudoBlock = pseudoBlock;
-        console.log("Pseudoblocco selezionato:", pseudoBlock);
+        console.log("Pseudoblocco selezionato:", idx);
     }
 }
 
@@ -10346,10 +10760,17 @@ window.clearNavigator = async function clearNavigator(confirmRestore = true) {
     if (typeof clearCutSourceHighlights === 'function') clearCutSourceHighlights();
   } catch (_) {}
 
+  // Svuotamento manuale (bottone "Svuota", non chiamata interna post-creazione):
+  // se in questa sessione era già stato creato almeno un appuntamento senza
+  // chiedere WhatsApp (blocchi rimanenti a quel tempo), chiedilo ora.
+  if (confirmRestore && typeof _navSessionMaybeAskWhatsapp === 'function') _navSessionMaybeAskWhatsapp();
+
   // Reset dei dati navigator visivi e persistenti
   window.selectedClientIdNav = null;
   window.selectedClientNameNav = "";
   window.pseudoBlocks = [];
+  if (typeof selectedPseudoBlockIndexes !== 'undefined') selectedPseudoBlockIndexes.clear();
+  if (typeof _getTickedServiceMap === 'function') _getTickedServiceMap('serviceResultsNav').clear();
   window.navigatorCopyMode = false;
   window.commonPseudoBlockColor = null;
   window.originBlockColor = null;
