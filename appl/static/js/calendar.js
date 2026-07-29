@@ -674,6 +674,23 @@ async function getPacchettoServiceIdsForClient(clientId, serviceIds) {
 }
 window.getPacchettoServiceIdsForClient = getPacchettoServiceIdsForClient;
 
+// Inietta una sola volta lo stile del cerchiolino di selezione multipla servizi
+// (hover/checked non esprimibili con solo inline style).
+function ensureServiceSelectCircleStyles() {
+  if (document.getElementById('svc-select-circle-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'svc-select-circle-styles';
+  style.textContent = `
+    .svc-select-circle { display:inline-flex; align-items:center; justify-content:center;
+      width:20px; height:20px; min-width:20px; border-radius:50%; border:2px solid #adb5bd;
+      background:#fff; color:transparent; font-size:13px; line-height:1; cursor:pointer;
+      transition:background-color .15s ease, border-color .15s ease, color .15s ease; }
+    .svc-select-circle:hover { border-color:#198754; }
+    .svc-select-circle.checked { background:#198754; border-color:#198754; color:#fff; }
+  `;
+  document.head.appendChild(style);
+}
+
 function buildServiceDropdownLabel(item, options) {
   const {
     name = '',
@@ -683,17 +700,44 @@ function buildServiceDropdownLabel(item, options) {
     hasPacchetto = false
   } = options || {};
 
+  ensureServiceSelectCircleStyles();
+
   item.innerHTML = '';
   item.style.display = 'flex';
   item.style.alignItems = 'center';
-  item.style.justifyContent = 'space-between';
+  item.style.justifyContent = 'flex-start';
   item.style.gap = '8px';
+
+  // Cerchiolino di selezione multipla: click indipendente dal resto della riga
+  // (stopPropagation), spunta soltanto — non crea lo pseudoblocco da solo.
+  const circle = document.createElement('span');
+  circle.className = 'svc-select-circle';
+  circle.setAttribute('role', 'checkbox');
+  circle.setAttribute('aria-checked', 'false');
+  circle.innerHTML = '<i class="bi bi-check-lg"></i>';
+  circle.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const nowChecked = item.dataset.ticked !== '1';
+    item.dataset.ticked = nowChecked ? '1' : '';
+    circle.classList.toggle('checked', nowChecked);
+    circle.setAttribute('aria-checked', String(nowChecked));
+    const container = item.closest('.results-dropdown');
+    if (container && typeof window.updateServiceMultiSelectBar === 'function') {
+      window.updateServiceMultiSelectBar(container);
+    }
+  });
+  item.appendChild(circle);
 
   const left = document.createElement('span');
   left.style.display = 'inline-flex';
   left.style.alignItems = 'center';
   left.style.gap = '6px';
   left.style.minWidth = '0';
+  left.style.flex = '1 1 auto';
+  left.style.overflow = 'hidden';
+  left.style.textOverflow = 'ellipsis';
+  left.style.whiteSpace = 'nowrap';
 
   const main = document.createElement('span');
   const baseText = duration
@@ -716,6 +760,8 @@ function buildServiceDropdownLabel(item, options) {
     const right = document.createElement('small');
     right.style.opacity = '0.65';
     right.style.whiteSpace = 'nowrap';
+    right.style.marginLeft = 'auto';
+    right.style.flex = '0 0 auto';
     right.textContent = daysText;
     item.appendChild(right);
   }
@@ -2013,6 +2059,63 @@ function showClientInfoModal(clientId) {
         .catch(err => { console.error(err); noteSaveBtn.textContent = 'Errore'; setTimeout(()=> noteSaveBtn.textContent='Salva',1200); });
       });
 
+      // FEDELTÀ CLIENTE (badge + statistiche, popolato in modo asincrono)
+      const loyaltyContainer = document.createElement('div');
+      loyaltyContainer.style.marginTop = '14px';
+      loyaltyContainer.style.display = 'flex';
+      loyaltyContainer.style.flexWrap = 'wrap';
+      loyaltyContainer.style.alignItems = 'center';
+      loyaltyContainer.style.gap = '10px';
+      body.appendChild(loyaltyContainer);
+
+      const LOYALTY_COLORS = {
+        vip: { bg: '#f3e8ff', fg: '#7c3aed', border: '#c4b5fd' },
+        info: { bg: '#e0f2fe', fg: '#0369a1', border: '#7dd3fc' },
+        warning: { bg: '#fff3e0', fg: '#c2410c', border: '#fdba74' },
+        light: { bg: '#f1f5f9', fg: '#475569', border: '#cbd5e1' },
+        secondary: { bg: '#f1f5f9', fg: '#64748b', border: '#cbd5e1' },
+      };
+
+      fetch(`/calendar/api/client-loyalty/${encodeURIComponent(clientId)}`)
+        .then(r => r.ok ? r.json() : Promise.reject('client_loyalty failed'))
+        .then(fed => {
+          const colors = LOYALTY_COLORS[fed.colore] || LOYALTY_COLORS.light;
+          const badge = document.createElement('span');
+          badge.textContent = `${fed.icon || ''} ${fed.label || ''}`.trim();
+          badge.style.fontWeight = '700';
+          badge.style.fontSize = '0.85em';
+          badge.style.padding = '4px 10px';
+          badge.style.borderRadius = '999px';
+          badge.style.background = colors.bg;
+          badge.style.color = colors.fg;
+          badge.style.border = `1px solid ${colors.border}`;
+          badge.style.whiteSpace = 'nowrap';
+          loyaltyContainer.appendChild(badge);
+
+          const statsParts = [];
+          if (fed.visite_totali) statsParts.push(`${fed.visite_totali} visite totali`);
+          if (fed.cliente_da_giorni) {
+            const anni = Math.floor(fed.cliente_da_giorni / 365);
+            const mesi = Math.floor((fed.cliente_da_giorni % 365) / 30);
+            const tenure = anni > 0
+              ? `cliente da ${anni} ${anni === 1 ? 'anno' : 'anni'}${mesi > 0 ? ` e ${mesi} ${mesi === 1 ? 'mese' : 'mesi'}` : ''}`
+              : mesi > 0 ? `cliente da ${mesi} ${mesi === 1 ? 'mese' : 'mesi'}` : 'nuovo cliente';
+            statsParts.push(tenure);
+          }
+          if (fed.ultima_visita_giorni_fa !== null && fed.ultima_visita_giorni_fa !== undefined) {
+            statsParts.push(fed.ultima_visita_giorni_fa === 0 ? 'ultima visita oggi' : `ultima visita ${fed.ultima_visita_giorni_fa} ${fed.ultima_visita_giorni_fa === 1 ? 'giorno' : 'giorni'} fa`);
+          }
+          if (fed.spesa_totale) statsParts.push(`spesa totale €${fed.spesa_totale.toFixed(2)}`);
+
+          if (statsParts.length) {
+            const stats = document.createElement('small');
+            stats.style.opacity = '0.75';
+            stats.textContent = statsParts.join(' · ');
+            loyaltyContainer.appendChild(stats);
+          }
+        })
+        .catch(err => { console.warn('client-loyalty non disponibile', err); });
+
       const historyAndNextContainer = document.createElement('div');
       historyAndNextContainer.style.flex = '1 1 0';
       historyAndNextContainer.style.minHeight = '0';   // necessario per far funzionare lo scroll in flex
@@ -2323,6 +2426,16 @@ function attachClientPhoneAutoFormat(inputEl, searchFn) {
 }
 window.attachClientPhoneAutoFormat = attachClientPhoneAutoFormat;
 
+// Nasconde il pulsante "+ Aggiungi cliente" accanto al campo di ricerca mentre la
+// dropdown mostra risultati con il proprio tasto "i", per non fare confusione tra i due.
+function setAddClientBtnVisible(resultsContainer, visible) {
+  if (!resultsContainer) return;
+  const scope = resultsContainer.closest('.modal, #appointmentNavigator');
+  const btn = scope && scope.querySelector('.btn-add-client-square');
+  if (btn) btn.style.visibility = visible ? '' : 'hidden';
+}
+window.setAddClientBtnVisible = setAddClientBtnVisible;
+
 function handleClientSearch(query) {
   // fallback sicuro
   query = (query || '').toString().toLowerCase().trim();
@@ -2352,6 +2465,7 @@ function handleClientSearch(query) {
     abortClientSearchRequest('modal');
     resultsContainer.innerHTML = '';
     resultsContainer.style.display = 'none';
+    setAddClientBtnVisible(resultsContainer, true);
     // Se campo cliente svuotato E nessun pseudo-blocco, ripristina tasto OFF
     if (query.length === 0) {
       const clientId = document.getElementById('client_id');
@@ -2396,8 +2510,11 @@ function handleClientSearch(query) {
           empty.textContent = 'Nessun risultato';
           resultsContainer.appendChild(empty);
           resultsContainer.style.display = 'block';
+          setAddClientBtnVisible(resultsContainer, true);
           return;
         }
+
+        setAddClientBtnVisible(resultsContainer, false);
 
         clients.forEach(client => {
           const item = document.createElement('div');
@@ -2419,6 +2536,14 @@ function handleClientSearch(query) {
           txt.style.whiteSpace = 'nowrap';
           txt.textContent = phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name);
           item.appendChild(txt);
+
+          if (client.is_vip) {
+            const vipIcon = document.createElement('span');
+            vipIcon.textContent = '⭐';
+            vipIcon.style.flex = '0 0 auto';
+            applyBsTooltip(vipIcon, 'Cliente VIP - frequenza abituale');
+            item.appendChild(vipIcon);
+          }
 
           const daysSpan = document.createElement('small');
           daysSpan.style.marginLeft = '0.5rem';
@@ -2461,6 +2586,7 @@ function handleClientSearch(query) {
             }
             resultsContainer.innerHTML = '';
             resultsContainer.style.display = 'none';
+            setAddClientBtnVisible(resultsContainer, true);
           });
 
           resultsContainer.appendChild(item);
@@ -2483,6 +2609,7 @@ function handleClientSearch(query) {
         console.error('handleClientSearch error:', err);
         resultsContainer.innerHTML = '';
         resultsContainer.style.display = 'none';
+        setAddClientBtnVisible(resultsContainer, true);
       });
   });
 }
@@ -4902,6 +5029,130 @@ if (!numero) {
   }
 }
 
+// Pannello di anteprima/conferma per l'invio WhatsApp "automatico" (via WhatsApp Web/Unipile)
+// dal pulsante WhatsApp del popup blocco calendario. Attivo solo se window.whatsappPopupAutoSend
+// e' true (impostazione in Tools/WhatsApp) — altrimenti il pulsante resta wa.me manuale.
+// Mostra sempre il testo in una textarea modificabile: l'invio parte SOLO al click su "Invia",
+// mai in automatico senza conferma esplicita (i messaggi WhatsApp via API hanno un costo).
+function showWhatsappAutoSendPanel(payload) {
+  const existing = document.getElementById('whatsappAutoSendOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'whatsappAutoSendOverlay';
+  overlay.style.position = 'fixed';
+  overlay.style.top = '0';
+  overlay.style.left = '0';
+  overlay.style.right = '0';
+  overlay.style.bottom = '0';
+  overlay.style.background = 'rgba(0,0,0,0.35)';
+  overlay.style.zIndex = '99998';
+  overlay.style.display = 'flex';
+  overlay.style.alignItems = 'center';
+  overlay.style.justifyContent = 'center';
+
+  const panel = document.createElement('div');
+  panel.style.background = '#fff';
+  panel.style.borderRadius = '8px';
+  panel.style.boxShadow = '0 6px 18px rgba(0,0,0,0.25)';
+  panel.style.padding = '20px';
+  panel.style.width = '420px';
+  panel.style.maxWidth = '92vw';
+  panel.style.zIndex = '99999';
+
+  const title = document.createElement('div');
+  title.style.fontWeight = '700';
+  title.style.marginBottom = '10px';
+  title.textContent = `Invia WhatsApp a ${payload.nome || 'cliente'}${payload.numero ? ' (' + payload.numero + ')' : ''}`;
+  panel.appendChild(title);
+
+  const warn = document.createElement('div');
+  warn.className = 'text-muted';
+  warn.style.fontSize = '0.85em';
+  warn.style.marginBottom = '8px';
+  warn.textContent = 'Invio via WhatsApp Web collegato: ogni messaggio ha un costo. Controlla/modifica il testo prima di inviare.';
+  panel.appendChild(warn);
+
+  const textarea = document.createElement('textarea');
+  textarea.value = payload.testo || '';
+  textarea.className = 'form-control';
+  textarea.rows = 6;
+  textarea.style.marginBottom = '14px';
+  panel.appendChild(textarea);
+
+  const btnRow = document.createElement('div');
+  btnRow.style.display = 'flex';
+  btnRow.style.gap = '10px';
+  btnRow.style.justifyContent = 'flex-end';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn btn-secondary';
+  cancelBtn.textContent = 'Annulla';
+
+  const sendBtn = document.createElement('button');
+  sendBtn.type = 'button';
+  sendBtn.className = 'btn btn-success';
+  sendBtn.textContent = 'Invia';
+
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(sendBtn);
+  panel.appendChild(btnRow);
+
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  setTimeout(() => textarea.focus(), 50);
+
+  function cleanup() {
+    document.removeEventListener('keydown', onKey);
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  }
+  function onKey(e) {
+    if (e.key === 'Escape') cleanup();
+  }
+  document.addEventListener('keydown', onKey);
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) cleanup(); });
+  cancelBtn.addEventListener('click', cleanup);
+
+  sendBtn.addEventListener('click', async function() {
+    const testoFinale = textarea.value.trim();
+    if (!testoFinale) { textarea.focus(); return; }
+    sendBtn.disabled = true;
+    cancelBtn.disabled = true;
+    sendBtn.textContent = 'Invio...';
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    try {
+      const resp = await fetch('/calendar/send-whatsapp-auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          numero: payload.numero,
+          messaggio: testoFinale,
+          nome: payload.nome || '',
+          client_id: payload.clientId || '',
+          data: payload.data || '',
+          ora: payload.ora || '',
+          appointment_ids: payload.appointmentIds || []
+        })
+      });
+      const ct = (resp.headers.get('content-type') || '').toLowerCase();
+      const json = ct.includes('application/json') ? await resp.json().catch(() => ({})) : {};
+      if (!resp.ok || json.error) {
+        throw new Error(json.error || `Errore ${resp.status}`);
+      }
+      cleanup();
+      alert('Messaggio WhatsApp inviato.');
+    } catch (err) {
+      console.error('Invio WhatsApp automatico fallito', err);
+      sendBtn.disabled = false;
+      cancelBtn.disabled = false;
+      sendBtn.textContent = 'Invia';
+      alert('Invio WhatsApp non riuscito: ' + (err.message || 'errore sconosciuto'));
+    }
+  });
+}
+
 // COPIA - LISTENER DELEGATO (funziona su bottoni esistenti E creati dinamicamente)
 document.addEventListener('click', function(e) {
   let button = e.target.closest('.appointment-block .popup-buttons .btn-popup.copia');
@@ -6486,6 +6737,65 @@ function selectServiceNav(serviceId, serviceName, serviceDuration, serviceTag) {
 
 }
 
+// === Selezione multipla servizi nelle dropdown (modal crea appuntamento + navigator) ===
+// Ogni riga della dropdown ha un cerchiolino selezionabile (aggiunto in buildServiceDropdownLabel,
+// vedi sopra) indipendente dal click sulla riga: cliccare la riga si comporta come sempre (crea
+// subito lo pseudoblocco), cliccare il cerchiolino lo spunta soltanto. Quando c'e' almeno una
+// spunta, in fondo alla dropdown compare "CREA (N)": crea in un colpo solo lo pseudoblocco per
+// ogni servizio spuntato, riusando selectService/selectServiceNav (stessa logica di sempre, incluso
+// il controllo pacchetti) — nessuna duplicazione della logica di creazione blocco.
+function updateServiceMultiSelectBar(container) {
+  if (!container) return;
+  const tickedItems = Array.from(container.querySelectorAll('.dropdown-item[data-ticked="1"]'));
+  let bar = container.querySelector('.service-multiselect-bar');
+
+  if (tickedItems.length === 0) {
+    if (bar) bar.remove();
+    return;
+  }
+
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'service-multiselect-bar';
+    bar.style.cssText = 'display:flex;justify-content:flex-end;padding:8px;position:sticky;bottom:0;background:#fff;border-top:1px solid #e9ecef;';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-success btn-sm service-multiselect-create-btn';
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      createPseudoBlocksFromTicked(container);
+    });
+    bar.appendChild(btn);
+    container.appendChild(bar);
+  }
+  bar.querySelector('.service-multiselect-create-btn').textContent = `CREA (${tickedItems.length})`;
+}
+window.updateServiceMultiSelectBar = updateServiceMultiSelectBar;
+
+function createPseudoBlocksFromTicked(container) {
+  if (!container) return;
+  const tickedItems = Array.from(container.querySelectorAll('.dropdown-item[data-ticked="1"]'));
+  const isNav = container.id === 'serviceResultsNav';
+
+  tickedItems.forEach(item => {
+    const id = item.dataset.serviceId;
+    const name = item.dataset.serviceName;
+    const duration = item.dataset.serviceDuration;
+    const tag = item.dataset.serviceTag || '';
+    if (!id) return;
+    if (isNav) {
+      if (typeof selectServiceNav === 'function') selectServiceNav(id, name, duration, tag);
+    } else {
+      if (typeof selectService === 'function') selectService(id, name, duration);
+    }
+  });
+
+  container.innerHTML = '';
+  container.style.display = 'none';
+}
+window.createPseudoBlocksFromTicked = createPseudoBlocksFromTicked;
+
 function maybeShowPseudoBlock() {
     const container = document.getElementById('selectedServicesList');
     if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
@@ -6531,6 +6841,7 @@ function handleClientSearchNav(query) {
   const clearResults = () => {
     resultsContainer.style.display = 'none';
     while (resultsContainer.firstChild) resultsContainer.removeChild(resultsContainer.firstChild);
+    setAddClientBtnVisible(resultsContainer, true);
   };
 
   // Normalizza la query a minuscolo per consistenza
@@ -6602,8 +6913,11 @@ function handleClientSearchNav(query) {
           resultsContainer.appendChild(empty);
           ensureOverlay();
           resultsContainer.style.display = 'block';
+          setAddClientBtnVisible(resultsContainer, true);
           return;
         }
+
+        setAddClientBtnVisible(resultsContainer, false);
 
         clients.forEach(client => {
           const id = String(client.id ?? '');
@@ -6625,6 +6939,14 @@ function handleClientSearchNav(query) {
           txt.style.whiteSpace = 'nowrap';
           txt.textContent = phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name);
           item.appendChild(txt);
+
+          if (client.is_vip) {
+            const vipIcon = document.createElement('span');
+            vipIcon.textContent = '⭐';
+            vipIcon.style.flex = '0 0 auto';
+            applyBsTooltip(vipIcon, 'Cliente VIP - frequenza abituale');
+            item.appendChild(vipIcon);
+          }
 
           const daysSpan = document.createElement('small');
           daysSpan.style.marginLeft = '8px';
@@ -11814,6 +12136,25 @@ if (ordered.length) servizi_text = ordered.map(s => `• ${s}`).join('\n');
         .replace("{{servizi}}", servizi_text ? ("\n" + servizi_text + "\n") : "")
         .replace("{{sito}}", window.businessWebsite || "")
         .replace("{{nome_istituto}}", window.businessName || "");
+
+      // Invio automatico via API (WhatsApp Web collegato), impostabile in Tools/WhatsApp:
+      // mostra sempre un'anteprima modificabile, l'invio parte solo al click su "Invia".
+      if (window.whatsappPopupAutoSend) {
+        const appointmentIds = (groupBlocks.length ? groupBlocks : (block ? [block] : []))
+          .map(b => b.getAttribute('data-appointment-id'))
+          .filter(Boolean);
+        const clientId = block ? (block.getAttribute('data-client-id') || btn.getAttribute('data-client-id') || '') : (btn.getAttribute('data-client-id') || '');
+        showWhatsappAutoSendPanel({
+          numero: numeroNorm,
+          testo: testo,
+          nome: nomeFmt,
+          clientId: clientId,
+          data: data,
+          ora: ora,
+          appointmentIds: appointmentIds
+        });
+        return;
+      }
 
       const url = `https://wa.me/${numeroNorm.replace(/^\+/, '')}?text=${encodeURIComponent(testo)}`;
 

@@ -1,12 +1,12 @@
 # appl/routes/calendar.py
 from collections import defaultdict
-from flask import Blueprint, logging, make_response, session, render_template, request, redirect, url_for, jsonify, flash, abort
+from flask import Blueprint, logging, make_response, session, render_template, request, redirect, url_for, jsonify, flash, abort, current_app
 from flask_caching import Cache
 from sqlalchemy.orm import joinedload, selectinload
 from datetime import date, time as dtime
 from datetime import datetime, timedelta, time, timezone
 from decimal import Decimal
-from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo, Pacchetto, PacchettoTipo, PacchettoStatus
+from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo, Pacchetto, PacchettoTipo, PacchettoStatus, Receipt
 from appl import app
 from appl.services.error_log import log_crm_error
 import random
@@ -15,12 +15,141 @@ import re
 import os
 import html
 from pytz import timezone as pytz_timezone
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_, or_, case
 from dotenv import load_dotenv
 
-cache = Cache(app, config={'CACHE_TYPE': 'simple'}) 
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
 NEW_CLIENT_MARKER = " ***NUOVO CLIENTE*** "
+
+# Intervallo medio atteso (in giorni) tra due visite per ciascuna fascia di frequenza,
+# usato per capire se un cliente si è allontanato rispetto alla sua abitudine (rischio abbandono).
+LOYALTY_INTERVALLI_ATTESI = {
+    'giornaliera': 3,
+    'settimanale': 8,
+    'bi-settimanale': 16,
+    'mensile': 35,
+}
+
+LOYALTY_DEFAULT = {
+    'visite_totali': 0, 'spesa_totale': 0.0, 'spesa_media': 0.0,
+    'cliente_da_giorni': 0, 'ultima_visita_giorni_fa': None, 'frequenza': None,
+    'categoria': 'occasionale', 'label': 'Cliente occasionale', 'icon': '⚪', 'colore': 'light',
+    'is_vip': False, 'a_rischio': False,
+}
+
+
+def _days_between(a, b):
+    """(a - b).days, tollerante a eventuali datetime timezone-aware misti con naive."""
+    if a is None or b is None:
+        return None
+    if getattr(a, 'tzinfo', None) is not None:
+        a = a.replace(tzinfo=None)
+    if getattr(b, 'tzinfo', None) is not None:
+        b = b.replace(tzinfo=None)
+    return (a - b).days
+
+
+def _classifica_frequenza_visite(visite_periodo, giorni_periodo):
+    """Stessa logica/soglie di calcola_frequenza in report.py (report_clienti), per coerenza in tutta l'app."""
+    if giorni_periodo < 7:
+        return 'occasionale'
+    settimane = giorni_periodo / 7
+    freq = visite_periodo / settimane
+    if freq > 2:
+        return 'giornaliera'
+    elif freq > 1:
+        return 'settimanale'
+    elif freq > 0.5:
+        return 'bi-settimanale'
+    elif freq > 0.2:
+        return 'mensile'
+    return 'occasionale'
+
+
+def _compute_client_loyalty(client_ids):
+    """
+    Wrapper difensivo: la fedeltà è una feature accessoria e non deve MAI far fallire
+    la ricerca clienti (usata anche dai form di creazione/modifica appuntamento). Qualunque
+    eccezione nel calcolo viene loggata e ignorata, restituendo {} (i chiamanti usano
+    LOYALTY_DEFAULT come fallback per-cliente).
+    """
+    try:
+        return _compute_client_loyalty_inner(client_ids)
+    except Exception:
+        current_app.logger.exception("_compute_client_loyalty failed, fallback a LOYALTY_DEFAULT")
+        return {}
+
+
+def _compute_client_loyalty_inner(client_ids):
+    """
+    Calcola frequenza/fedeltà per una lista di clienti a partire dagli scontrini (Receipt = visita pagata).
+    Logica: F (frequenza) = passaggi/settimana negli ultimi 12 mesi (stesse soglie di report_clienti);
+    R (recency) = giorni dall'ultima visita, confrontati con l'intervallo atteso della fascia di frequenza
+    per segnalare un eventuale allontanamento; M (monetary) = spesa totale/media, mostrata come dato di contesto.
+    Ritorna {client_id: {...}} — i clienti senza scontrini non compaiono nel risultato (usare LOYALTY_DEFAULT).
+    """
+    client_ids = [cid for cid in (client_ids or []) if cid]
+    if not client_ids:
+        return {}
+
+    now = datetime.now()
+    finestra_inizio = now - timedelta(days=365)
+
+    rows = (
+        db.session.query(
+            Receipt.cliente_id.label('client_id'),
+            func.count(Receipt.id).label('visite_totali'),
+            func.sum(Receipt.total_amount).label('spesa_totale'),
+            func.min(Receipt.created_at).label('prima_visita'),
+            func.max(Receipt.created_at).label('ultima_visita'),
+            func.sum(case((Receipt.created_at >= finestra_inizio, 1), else_=0)).label('visite_12m'),
+        )
+        .filter(Receipt.cliente_id.in_(client_ids))
+        .group_by(Receipt.cliente_id)
+        .all()
+    )
+
+    result = {}
+    for r in rows:
+        visite_totali = r.visite_totali or 0
+        prima_visita = r.prima_visita
+        ultima_visita = r.ultima_visita
+        recency_giorni = _days_between(now, ultima_visita)
+        cliente_da_giorni = _days_between(now, prima_visita) or 0
+        spesa_totale = round(float(r.spesa_totale or 0), 2)
+        spesa_media = round(spesa_totale / visite_totali, 2) if visite_totali else 0.0
+
+        base = {
+            'visite_totali': visite_totali,
+            'spesa_totale': spesa_totale,
+            'spesa_media': spesa_media,
+            'cliente_da_giorni': cliente_da_giorni,
+            'ultima_visita_giorni_fa': recency_giorni,
+        }
+
+        giorni_finestra = min(cliente_da_giorni, 365) or 1
+        frequenza = _classifica_frequenza_visite(r.visite_12m or 0, giorni_finestra)
+        intervallo_atteso = LOYALTY_INTERVALLI_ATTESI.get(frequenza)
+        a_rischio = bool(
+            intervallo_atteso and recency_giorni is not None and recency_giorni > 3 * intervallo_atteso
+        )
+
+        if a_rischio:
+            categoria, label, icon, colore, is_vip = 'a_rischio', 'A rischio abbandono', '⚠️', 'warning', False
+        elif frequenza in ('giornaliera', 'settimanale'):
+            categoria, label, icon, colore, is_vip = 'vip', 'Cliente VIP', '⭐', 'vip', True
+        elif frequenza in ('bi-settimanale', 'mensile'):
+            categoria, label, icon, colore, is_vip = 'fedele', 'Cliente fedele', '🔵', 'info', False
+        else:
+            categoria, label, icon, colore, is_vip = 'occasionale', 'Cliente occasionale', '⚪', 'light', False
+
+        result[r.client_id] = dict(
+            base, frequenza=frequenza, categoria=categoria, label=label,
+            icon=icon, colore=colore, is_vip=is_vip, a_rischio=a_rischio
+        )
+
+    return result
 
 def is_first_appointment_for_client(client_id):
     """
@@ -437,16 +566,24 @@ def search_clients(query):
         func.lower(Client.cliente_nome) != "dummy",
         func.lower(Client.cliente_cognome) != "dummy",
     ).limit(10).all()
+    loyalty_map = _compute_client_loyalty([client.id for client in clients])
     clients_data = [
         {
             'id': client.id,
             'name': f"{client.cliente_nome} {client.cliente_cognome}",
             'phone': client.cliente_cellulare,
             'note': client.note or '',
+            'is_vip': loyalty_map.get(client.id, LOYALTY_DEFAULT)['is_vip'],
         }
         for client in clients
     ]
     return jsonify(clients_data)
+
+@calendar_bp.route('/api/client-loyalty/<int:client_id>')
+def client_loyalty(client_id):
+    """Frequenza/fedeltà del cliente (badge + statistiche) per il modal Info Cliente."""
+    data = _compute_client_loyalty([client_id])
+    return jsonify(data.get(client_id, dict(LOYALTY_DEFAULT)))
 
 @calendar_bp.route('/clients', methods=['GET'])
 @cache.cached(timeout=300, key_prefix='list_clients')

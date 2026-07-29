@@ -15,6 +15,7 @@ from sqlalchemy.sql import func, or_
 from .. import db
 from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession
 from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
+from .calendar import _compute_client_loyalty, LOYALTY_DEFAULT
 
 # Blueprint per le rotte delle impostazioni
 settings_bp = Blueprint('settings', __name__, template_folder='../templates')
@@ -1455,6 +1456,7 @@ def search_clients_settings():
             Appointment.is_cancelled_by_client == False
         ).group_by(Appointment.client_id).all()
         ultimo_passaggio_dict = {r.client_id: r.ultimo_passaggio for r in ultimo_passaggio_query}
+        loyalty_map = _compute_client_loyalty(client_ids)
 
         for c in clients:
             clients_data.append({
@@ -1468,7 +1470,8 @@ def search_clients_settings():
                 'created_at': (c.created_at.strftime('%d/%m/%Y') if getattr(c, 'created_at', None) else '-'),
                 'num_passaggi': int(num_passaggi_dict.get(c.id, 0)),
                 'ultimo_passaggio': (ultimo_passaggio_dict.get(c.id).strftime('%d/%m/%Y') if ultimo_passaggio_dict.get(c.id) else '-'),
-                'note': getattr(c, 'note', '') or ''
+                'note': getattr(c, 'note', '') or '',
+                'fedelta': loyalty_map.get(c.id, LOYALTY_DEFAULT),
             })
 
     current_app.logger.debug("search-clients -> returning %d items", len(clients_data))
@@ -1517,11 +1520,14 @@ def recent_clients():
             ).group_by(Appointment.client_id).all()
 
             ultimo_passaggio_dict = {row.client_id: row.ultimo_passaggio for row in ultimo_passaggio_query}
+            loyalty_map = _compute_client_loyalty(client_ids)
 
             # Assegna valori ai clienti
             for client in recent_clients:
                 client.num_passaggi = num_passaggi_dict.get(client.id, 0)
                 client.ultimo_passaggio = ultimo_passaggio_dict.get(client.id, None)
+        else:
+            loyalty_map = {}
 
         clients_data = [
             {
@@ -1535,6 +1541,7 @@ def recent_clients():
                 'created_at': client.created_at.strftime('%d/%m/%Y') if client.created_at else '-',
                 'num_passaggi': client.num_passaggi,
                 'ultimo_passaggio': client.ultimo_passaggio.strftime('%d/%m/%Y') if client.ultimo_passaggio else '-',
+                'fedelta': loyalty_map.get(client.id, LOYALTY_DEFAULT),
             }
             for client in recent_clients
         ]
@@ -1703,41 +1710,50 @@ def whatsapp_client_info(client_id):
         "servizi": servizi_text 
     }), 200
 
+def _normalize_bool(val):
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        return val.lower() in ('1', 'true', 'on', 'yes')
+    return bool(val)
+
+
 @settings_bp.route('/api/settings/whatsapp', methods=['GET', 'POST'])
 def api_whatsapp_setting():
-    """GET: ritorna JSON con la preferenza whatsapp_modal_disable.
-       POST: aggiorna la preferenza (JSON body: {"whatsapp_modal_disable": true|false})"""
+    """GET: ritorna JSON con le preferenze whatsapp_modal_disable / whatsapp_popup_auto_send.
+       POST: aggiorna una o entrambe (JSON body: {"whatsapp_modal_disable": bool, "whatsapp_popup_auto_send": bool}).
+       Solo le chiavi presenti nel body vengono aggiornate."""
     try:
         if request.method == 'GET':
             biz = BusinessInfo.query.first()
-            disabled = bool(getattr(biz, 'whatsapp_modal_disable', False)) if biz else False
-            return jsonify({'whatsapp_modal_disable': disabled})
+            return jsonify({
+                'whatsapp_modal_disable': bool(getattr(biz, 'whatsapp_modal_disable', False)) if biz else False,
+                'whatsapp_popup_auto_send': bool(getattr(biz, 'whatsapp_popup_auto_send', False)) if biz else False,
+            })
 
-        # POST -> aggiorna il flag
+        # POST -> aggiorna i flag presenti nel body
         data = request.get_json(silent=True) or request.form or {}
-        val = data.get('whatsapp_modal_disable', None)
-
-        # Normalizza il valore
-        if isinstance(val, bool):
-            disabled = val
-        elif isinstance(val, str):
-            disabled = val.lower() in ('1', 'true', 'on', 'yes')
-        else:
-            disabled = bool(val)
 
         biz = BusinessInfo.query.first()
         if not biz:
             biz = BusinessInfo()
             db.session.add(biz)
 
-        biz.whatsapp_modal_disable = bool(disabled)
+        if 'whatsapp_modal_disable' in data:
+            biz.whatsapp_modal_disable = _normalize_bool(data.get('whatsapp_modal_disable'))
+        if 'whatsapp_popup_auto_send' in data:
+            biz.whatsapp_popup_auto_send = _normalize_bool(data.get('whatsapp_popup_auto_send'))
+
         db.session.commit()
 
-        return jsonify({'whatsapp_modal_disable': bool(biz.whatsapp_modal_disable)}), 200
+        return jsonify({
+            'whatsapp_modal_disable': bool(biz.whatsapp_modal_disable),
+            'whatsapp_popup_auto_send': bool(biz.whatsapp_popup_auto_send),
+        }), 200
 
     except Exception as e:
         current_app.logger.exception("Errore lettura/aggiornamento impostazione whatsapp: %s", e)
-        return jsonify({'whatsapp_modal_disable': False}), 500
+        return jsonify({'whatsapp_modal_disable': False, 'whatsapp_popup_auto_send': False}), 500
 
 @settings_bp.route('/whatsapp', methods=['GET', 'POST'])
 def whatsapp():

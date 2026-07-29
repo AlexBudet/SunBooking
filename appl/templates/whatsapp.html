@@ -124,6 +124,25 @@
     <button type="submit" class="btn btn-success">Salva messaggio</button>
   </form>
 
+  {% if module_web_enabled %}
+  <hr class="my-4">
+  <div class="form-check form-switch mb-2">
+    <input class="form-check-input" type="checkbox" role="switch" id="whatsapp_popup_auto_send"
+           {% if business_info and business_info.whatsapp_popup_auto_send %}checked{% endif %}>
+    <label class="form-check-label" for="whatsapp_popup_auto_send">
+      Invia questo messaggio in automatico (via WhatsApp Web collegato) invece di aprire WhatsApp manualmente
+    </label>
+  </div>
+  <div class="alert alert-warning mb-0">
+    <i class="bi bi-exclamation-triangle"></i>
+    <strong>Attenzione:</strong> con questa opzione attiva, cliccando il pulsante WhatsApp da un appuntamento in calendario
+    il messaggio parte tramite l'account WhatsApp Web collegato qui sopra (vedrai comunque un'anteprima modificabile
+    prima dell'invio effettivo). <strong>Ogni invio ha un costo</strong>: attivalo solo se la postazione non può usare
+    WhatsApp Desktop/Web nel browser (es. PC datato o connessione instabile). Richiede WhatsApp connesso qui sopra,
+    altrimenti l'invio fallirà.
+  </div>
+  {% endif %}
+
 </div><!-- fine container 2 -->
 
 {% if module_web_enabled %}
@@ -339,6 +358,36 @@ function insertWaTag(textareaId, value) {
     .catch(err => {
       console.error('Errore salvataggio impostazione WhatsApp', err);
       cb.checked = !disabled;
+    });
+  });
+})();
+
+(function() {
+  // === Toggle whatsapp_popup_auto_send ===
+  const cb = document.getElementById('whatsapp_popup_auto_send');
+  if (!cb) return;
+
+  cb.addEventListener('change', function () {
+    const enabled = !!cb.checked;
+    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    const endpoint = "{{ url_for('settings.api_whatsapp_setting') }}";
+    fetch(endpoint, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': token
+      },
+      body: JSON.stringify({ whatsapp_popup_auto_send: enabled })
+    })
+    .then(resp => resp.ok ? resp.json() : Promise.reject(resp))
+    .then(json => {
+      console.log('whatsapp_popup_auto_send saved:', json);
+    })
+    .catch(err => {
+      console.error('Errore salvataggio impostazione WhatsApp', err);
+      cb.checked = !enabled;
     });
   });
 })();
