@@ -1810,7 +1810,7 @@ row.className = 'd-flex align-items-center scontrino-row';
   const xIcon = document.createElement('i');
   xIcon.className = 'bi bi-x-lg';
   delBtn.appendChild(xIcon);
-  applyBsTooltip(delBtn, 'Azioni');
+  applyBsTooltip(delBtn, 'Elimina');
   delBtn.onclick = function () {
     // NON scollegare l'appuntamento da window.originalAppointmentIds: anche se si
     // toglie o si sostituisce la voce, l'appuntamento PRENOTATO resta legato alla

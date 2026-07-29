@@ -1824,7 +1824,7 @@ Tab visibile ai ruoli admin per accessi e sicurezza.
 • ricerca guide: campo di ricerca per parole chiave
 • vista categoria: elenco argomenti correlati
 • vista topic: pagina guida con navigazione precedente/successivo
-• utilità finali: contatto supporto e riattivazione tour guidato
+• utilità finali: contatto supporto
 
 <div class=\"help-hint-box\">
 <span class=\"help-hint-label\">Consiglio:</span>
@@ -2094,8 +2094,7 @@ Ogni guida ha:
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ UTILITY FINALI</span>
 In home trovi anche:
-• contatto supporto
-• riattivazione tour guidato""",
+• contatto supporto""",
     },
 
     "tools_tab_booking_web": {
