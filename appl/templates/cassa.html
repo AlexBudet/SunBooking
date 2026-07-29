@@ -105,10 +105,10 @@
           </div>
           <br>
           <div>
-            <span id="totalAmount" class="fw-bold fs-5 bozza-total" data-bs-toggle="tooltip" data-bs-placement="top" title="Non si può scontare dal totale: applicare lo sconto su una o più voci.">Scontrino: € 0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;
+            <span id="totalAmount" class="fw-bold fs-5 bozza-total" data-bs-toggle="tooltip" data-bs-placement="top" title="Non scontare dal totale, è meglio applicare lo sconto a una singola voce">Scontrino: € 0.00</span>&nbsp;&nbsp;&nbsp;&nbsp;
             <span id="totalAmountAll" class="bozza-total-all" style="color: #444; font-size: 1rem;">Totale: € 0.00</span>
             <br><br>
-            <button class="btn btn-success ms-2 bozza-conferma" id="confermaBtn">CONFERMA</button>
+            <button class="btn btn-success ms-2 bozza-conferma" id="confermaBtn" data-bs-toggle="tooltip" data-bs-placement="top" title="Ricontrolla i dati dello scontrino: con un click lo prepari per la stampa">CONFERMA</button>
             <button id="reset-scontrino" class="btn btn-outline-danger bozza-svuota">SVUOTA</button>
             <!-- Subtotali pagamenti, nascosto di default -->
             <div id="subtotaliPagamenti" class="mt-2 bozza-subtot" style="display:none;"></div>
@@ -2144,6 +2144,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // bene sui pulsanti "Frequenti", "Ultimi", ecc.
     var opts = (el.id === 'bozzaScontrinoLabel')
       ? { container: 'body', boundary: 'window', trigger: 'hover' }
+      : (el.id === 'confermaBtn')
+      ? { trigger: 'hover', delay: { show: 2000, hide: 0 } }
       : { trigger: 'hover' };
     try { bootstrap.Tooltip.getOrCreateInstance(el, opts); } catch (_) {}
   });

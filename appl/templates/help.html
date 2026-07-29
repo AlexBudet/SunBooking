@@ -52,10 +52,6 @@
                 <span class="utility-icon">✉️</span>
                 <span class="utility-text">Contatta il supporto</span>
             </div>
-            <div class="help-utility-card tour-card" onclick="resetAllTours()">
-                <span class="utility-icon">🎯</span>
-                <span class="utility-text">Riattiva tour guidato</span>
-            </div>
         </div>
     </div>
     
@@ -412,16 +408,6 @@
 .support-card:hover {
     transform: scale(1.02);
     box-shadow: 0 6px 20px rgba(34, 197, 94, 0.3);
-}
-
-.tour-card {
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-    color: #1e40af;
-}
-
-.tour-card:hover {
-    transform: scale(1.02);
-    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.3);
 }
 
 .utility-icon {
@@ -1569,12 +1555,6 @@ function showView(viewId) {
 }
 
 // ========== UTILITIES ==========
-function resetAllTours() {
-    const tours = ['calendar', 'pacchetti', 'clients', 'settings'];
-    tours.forEach(t => localStorage.removeItem('tour_' + t + '_seen'));
-    alert('Tour guidato riattivato! 🎉\n\nLa prossima volta che visiterai le pagine principali, vedrai di nuovo la guida.');
-}
-
 // Mappa dei video
 const VIDEO_URLS = {
     'pacchetti': 'https://www.youtube.com/embed/VIDEO_ID_PACCHETTI',
