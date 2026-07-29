@@ -297,7 +297,11 @@ class BusinessInfo(db.Model):
     )
     whatsapp_modal_disable = db.Column(db.Boolean, default=False)
     whatsapp_message = db.Column(db.Text, nullable=True)
-    whatsapp_message_auto = db.Column(db.Text) 
+    whatsapp_message_auto = db.Column(db.Text)
+    # Bottone WhatsApp nel popup blocco calendario: se True invia via API (WhatsApp Web
+    # collegato/Unipile) con anteprima editabile invece di aprire wa.me manuale. Da
+    # attivare solo su postazioni senza WhatsApp Desktop, perche' ogni invio ha un costo.
+    whatsapp_popup_auto_send = db.Column(db.Boolean, nullable=False, server_default='false', default=False)
     whatsapp_message_morning = db.Column(db.Text) 
     whatsapp_morning_reminder_enabled = db.Column(db.Boolean, default=False)
     whatsapp_morning_reminder_time = db.Column(db.Time, default=datetime.strptime("08:00", "%H:%M").time())

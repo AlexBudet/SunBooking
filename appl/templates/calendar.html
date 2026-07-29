@@ -1931,6 +1931,9 @@ body.asp-docked-modal-open {
   window.businessWebsite = {{ (business_info.website if business_info and business_info.website else '')|tojson }};
   window.modulePacchettiEnabled = {{ 'true' if module_pacchetti_enabled else 'false' }};
   window.moduleWebEnabled = {{ 'true' if module_web_enabled else 'false' }};
+  // Se attivo, il pulsante WhatsApp del popup blocco invia via API (anteprima+conferma)
+  // invece di aprire wa.me manuale. Impostabile in Tools/WhatsApp.
+  window.whatsappPopupAutoSend = {{ 'true' if (module_web_enabled and business_info and business_info.whatsapp_popup_auto_send) else 'false' }};
 </script>
 <script>
   // Imposta l'endpoint dal url_for del blueprint (assicurati che questa riga sia prima dell'inclusione di calendar.js)

@@ -8,11 +8,11 @@
 
 <style>
 @media (max-width: 1100px) {
-  /* mostra solo Nome(1), Cognome(2), Cellulare(3) e Azioni(10) */
+  /* mostra solo Nome(1), Cognome(2), Cellulare(3) e Azioni(11) */
   #clientsTable th,
   #clientsTable td { white-space: nowrap; }
 
-  /* nascondi colonne 4..9 */
+  /* nascondi colonne 4..10 */
   #clientsTable th:nth-child(4),
   #clientsTable td:nth-child(4),
   #clientsTable th:nth-child(5),
@@ -24,7 +24,9 @@
   #clientsTable th:nth-child(8),
   #clientsTable td:nth-child(8),
   #clientsTable th:nth-child(9),
-  #clientsTable td:nth-child(9) {
+  #clientsTable td:nth-child(9),
+  #clientsTable th:nth-child(10),
+  #clientsTable td:nth-child(10) {
     display: none !important;
   }
 
@@ -35,8 +37,8 @@
   #clientsTable td:nth-child(2),
   #clientsTable th:nth-child(3),
   #clientsTable td:nth-child(3),
-  #clientsTable th:nth-child(10),
-  #clientsTable td:nth-child(10) {
+  #clientsTable th:nth-child(11),
+  #clientsTable td:nth-child(11) {
     display: table-cell !important;
   }
 
@@ -156,6 +158,23 @@
 </form>
 
 <hr class="my-4">
+
+<div class="alert alert-info" id="loyaltyLegendBox">
+  <div style="font-weight:600; margin-bottom:6px;">
+    <i class="bi bi-info-circle"></i> Legenda frequenza/fedeltà cliente
+  </div>
+  <div style="display:flex; flex-wrap:wrap; gap:16px; font-size:0.92em;">
+    <div><span style="font-size:1.1em;">⭐</span> <strong>Cliente VIP</strong> — visite molto frequenti (settimanali/giornaliere)</div>
+    <div><span style="font-size:1.1em;">🔵</span> <strong>Cliente fedele</strong> — visite regolari (mensili/bi-settimanali)</div>
+    <div><span style="font-size:1.1em;">⚪</span> <strong>Cliente occasionale</strong> — visite sporadiche</div>
+    <div><span style="font-size:1.1em;">⚠️</span> <strong>A rischio abbandono</strong> — cliente abituale che non si presenta da più tempo del solito</div>
+  </div>
+  <div class="text-muted" style="font-size:0.85em; margin-top:6px;">
+    La colonna <strong>Fedeltà</strong> nella tabella qui sotto mostra il badge di ogni cliente. Lo stesso badge, con anche visite totali, anzianità e spesa, si vede aprendo il modal <strong>Info cliente</strong> (pulsante "i") dal calendario.
+    La stellina ⭐ VIP compare anche nei risultati di ricerca cliente, sia nel modal di creazione/modifica appuntamento sia nel navigator del calendario.
+  </div>
+</div>
+
 <h3>Cerca Clienti Registrati</h3>
 <!-- Cerca Cliente -->
 <div class="row mb-3">
@@ -177,6 +196,7 @@
 <th class="sortable" data-sort="cliente_creato_il">Creato il <span class="sort-icons">▲<br>▼</span></th>
 <th class="sortable" data-sort="cliente_passaggi">Passaggi <span class="sort-icons">▲<br>▼</span></th>
 <th class="sortable" data-sort="cliente_ultimo_passaggio">Ultimo Passaggio <span class="sort-icons">▲<br>▼</span></th>
+<th>Fedeltà</th>
 <th>Azioni</th>
         </tr>
     </thead>
@@ -690,7 +710,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 populateTable(lastClients);
             })
             .catch(() => {
-                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Errore nel caricamento.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center text-danger">Errore nel caricamento.</td></tr>';
             });
     }
     // Esposta globalmente: il form "Aggiungi Cliente" la richiama per mostrare
@@ -716,7 +736,7 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch((err) => {
                 if (err && err.name === 'AbortError') return;
-                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Errore nella ricerca.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center text-danger">Errore nella ricerca.</td></tr>';
             });
     }
 
@@ -727,7 +747,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (clients.length === 0) {
             const noResultRow = document.createElement('tr');
             const noResultCell = document.createElement('td');
-            noResultCell.colSpan = 10;
+            noResultCell.colSpan = 11;
             noResultCell.className = 'text-center text-muted';
             noResultCell.textContent = 'Nessun cliente trovato.';
             noResultRow.appendChild(noResultCell);
@@ -788,6 +808,32 @@ document.addEventListener('DOMContentLoaded', function() {
             const ultimoPassaggioCell = document.createElement('td');
             ultimoPassaggioCell.textContent = client.ultimo_passaggio;
             row.appendChild(ultimoPassaggioCell);
+
+            // Fedeltà (badge frequenza/fedeltà cliente, vedi legenda sopra la tabella)
+            const fedeltaCell = document.createElement('td');
+            const fed = client.fedelta;
+            if (fed && fed.label) {
+                const FEDELTA_COLORS = {
+                    vip: { bg: '#f3e8ff', fg: '#7c3aed', border: '#c4b5fd' },
+                    info: { bg: '#e0f2fe', fg: '#0369a1', border: '#7dd3fc' },
+                    warning: { bg: '#fff3e0', fg: '#c2410c', border: '#fdba74' },
+                    light: { bg: '#f1f5f9', fg: '#475569', border: '#cbd5e1' },
+                };
+                const colors = FEDELTA_COLORS[fed.colore] || FEDELTA_COLORS.light;
+                const badge = document.createElement('span');
+                badge.textContent = `${fed.icon || ''} ${fed.label || ''}`.trim();
+                badge.style.fontWeight = '600';
+                badge.style.fontSize = '0.82em';
+                badge.style.padding = '3px 8px';
+                badge.style.borderRadius = '999px';
+                badge.style.background = colors.bg;
+                badge.style.color = colors.fg;
+                badge.style.border = `1px solid ${colors.border}`;
+                badge.style.whiteSpace = 'nowrap';
+                badge.style.display = 'inline-block';
+                fedeltaCell.appendChild(badge);
+            }
+            row.appendChild(fedeltaCell);
 
             // Azioni
             const azioniCell = document.createElement('td');
