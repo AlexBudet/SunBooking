@@ -499,6 +499,36 @@ class PromoPacchetto(db.Model):
             'attiva': self.attiva
         }
 
+class PrepagataRicaricaRegola(db.Model):
+    """Soglie di ricarica automatica: se il servizio abbinato (service_id) o un servizio
+    qualsiasi della categoria abbinata (categoria) viene pagato in Cassa esattamente a
+    importo_pagato, la prepagata del cliente viene accreditata di importo_accreditato.
+    Ogni riga ha ESATTAMENTE UNO tra service_id e categoria valorizzato, mai entrambi né
+    nessuno dei due (validato lato route). Più righe per lo stesso service_id/categoria =
+    più soglie per quel servizio/categoria."""
+    __tablename__ = 'prepagata_ricarica_regole'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('servizi.id'), nullable=True)
+    categoria = db.Column(db.String(50), nullable=True)  # alternativa a service_id: es. "Solarium"
+    importo_pagato = db.Column(db.Numeric(10, 2), nullable=False)
+    importo_accreditato = db.Column(db.Numeric(10, 2), nullable=False)
+    attiva = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, server_default=func.now())
+
+    service = db.relationship('Service', backref='prepagata_ricarica_regole')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'service_id': self.service_id,
+            'service_nome': self.service.servizio_nome if self.service else None,
+            'categoria': self.categoria,
+            'importo_pagato': float(self.importo_pagato),
+            'importo_accreditato': float(self.importo_accreditato),
+            'attiva': self.attiva
+        }
+
+
 class SedutaStatus(PyEnum):
     Presente = 1      # Solo presente
     Pianificata = 2   # Pianificata (con data)
@@ -538,6 +568,7 @@ class Pacchetto(db.Model):
     credito_residuo = db.Column(db.Numeric(10, 2), nullable=True)   # Saldo disponibile
     data_scadenza = db.Column(db.Date, nullable=True)               # Scadenza carta
     beneficiario_nome = db.Column(db.String(100), nullable=True)    # Nome beneficiario (se diverso da client)
+    numero_tessera = db.Column(db.String(50), nullable=True, unique=True)  # Numero tessera carta (inserito a mano)
     
     # Vincoli utilizzo prepagata (JSON)
     # Formato: {"tipo": "tutti" | "categoria" | "sottocategoria" | "servizi", 

@@ -1928,6 +1928,7 @@ body.asp-docked-modal-open {
   // Imposta l'endpoint dal url_for del blueprint (assicurati che questa riga sia prima dell'inclusione di calendar.js)
   window.apiWhatsappSettingUrl = {% if module_web_enabled %}"{{ url_for('settings.api_whatsapp_setting') }}"{% else %}null{% endif %};
 </script>
+<script src="{{ url_for('static', filename='js/whatsapp-panel.js') }}"></script>
 <script src="{{ url_for('static', filename='js/calendar.js') }}"></script>
 <script>
     var calendarHomeUrl = "{{ url_for('calendar.calendar_home') }}";

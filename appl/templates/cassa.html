@@ -31,11 +31,23 @@
     placeholder="Cerca servizio..." autocomplete="off"
     style="min-width: 180px; flex: 1 1 220px; max-width: 350px;">
 <div id="serviceDropdown" class="dropdown-menu w-100"></div>
-    <button class="service-bar-btn" id="btnFrequenti" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Servizi e Prodotti più utilizzati in cassa">Frequenti</button>
-    <button class="service-bar-btn" id="btnUltimi" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Ultimi Servizi e Prodotti utilizzati">Ultimi</button>
-    <button class="service-bar-btn" id="btnSolarium" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Solo Servizi e Prodotti Solarium">Solarium</button>
-    <button class="service-bar-btn" id="btnEstetica" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Solo Servizi e Prodotti di Estetica">Estetica</button>
-    <button class="service-bar-btn" id="btnProdotti" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Prodotti in vendita">Prodotti</button>
+    <button class="service-bar-btn filtro-cassa-btn" id="btnFrequenti" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Servizi e Prodotti più utilizzati in cassa">Frequenti</button>
+    <button class="service-bar-btn filtro-cassa-btn" id="btnUltimi" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Ultimi Servizi e Prodotti utilizzati">Ultimi</button>
+    <button class="service-bar-btn filtro-cassa-btn" id="btnSolarium" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Solo Servizi e Prodotti Solarium">Solarium</button>
+    <button class="service-bar-btn filtro-cassa-btn" id="btnEstetica" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Solo Servizi e Prodotti di Estetica">Estetica</button>
+    <button class="service-bar-btn filtro-cassa-btn" id="btnProdotti" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Prodotti in vendita">Prodotti</button>
+    {% if module_pacchetti_enabled %}
+    <button type="button" class="service-bar-btn mode-ricariche-btn" id="btnModeRicariche" style="display:none;"
+            data-bs-toggle="tooltip" data-bs-placement="bottom"
+            title="Ricariche: gli importi selezionati vengono SOMMATI al credito della carta">RICARICHE</button>
+    <button type="button" class="service-bar-btn mode-ricariche-btn" id="btnModeSolariumPrep" style="display:none;"
+            data-bs-toggle="tooltip" data-bs-placement="bottom"
+            title="Servizi Solarium: gli importi vengono SCALATI dal credito della carta">SOLARIUM</button>
+    <button type="button" class="service-bar-btn mode-ricariche-btn" id="btnChiudiModeRicariche"
+            style="display:none; min-width:44px; width:44px; padding:10px 0;"
+            data-bs-toggle="tooltip" data-bs-placement="bottom"
+            title="Chiudi: svuota i campi e torna alla schermata iniziale della Cassa">&times;</button>
+    {% endif %}
   </div>
 <br>
   <!-- Sezione pulsanti servizi -->
@@ -75,11 +87,27 @@
   <div class="dropdown-anchor" style="width:230px; max-width:230px; position:relative;">
     <input type="text" id="clientSearchInputCassa" name="clientSearchInputCassa"
            class="form-control bozza-cliente" placeholder="Cliente generico" autocomplete="off"
-           style="width:100%;"
+           style="width:100%; padding-right:45px;"
            data-bs-toggle="tooltip" data-bs-placement="top"
            title="Seleziona il cliente a cui associare il pagamento">
     <div id="clientDropdownCassa" class="dropdown-menu" style="width:100%;"></div>
+    <button type="button" id="btnNuovoClienteCassa" class="btn btn-add-client-square btn-add-client-nav"
+            data-bs-toggle="tooltip" data-bs-placement="top" title="Aggiungi cliente">
+      +
+    </button>
   </div>
+
+  {% if module_pacchetti_enabled %}
+  <div class="dropdown-anchor" style="width:170px; max-width:170px; position:relative;">
+    <input type="text" id="tesseraSearchInputCassa" name="tesseraSearchInputCassa"
+           class="form-control" placeholder="N. Tessera" autocomplete="off"
+           inputmode="numeric" pattern="[0-9]*"
+           style="width:100%;"
+           data-bs-toggle="tooltip" data-bs-placement="top"
+           title="Cerca il cliente dal numero di tessera della sua carta prepagata">
+    <div id="tesseraDropdownCassa" class="dropdown-menu tessera-dropdown-results"></div>
+  </div>
+  {% endif %}
 </div>
         <br>
         <!-- Container righe servizi selezionati -->
@@ -901,6 +929,34 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
+<!-- Modal Nuovo Cliente (nome, cognome, cellulare) -->
+<div class="modal fade" id="modalNuovoClienteCassa" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-person-plus"></i> Nuovo Cliente</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2">
+          <input type="text" class="form-control" id="nuovoClienteCassaNome" placeholder="Nome" required>
+        </div>
+        <div class="mb-2">
+          <input type="text" class="form-control" id="nuovoClienteCassaCognome" placeholder="Cognome" required>
+        </div>
+        <div class="mb-2">
+          <input type="text" class="form-control" id="nuovoClienteCassaCellulare" placeholder="Cellulare">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-success" onclick="salvaNuovoClienteCassa()">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/whatsapp-panel.js') }}"></script>
 <script src="{{ url_for('static', filename='js/cassa.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 <script>
@@ -1959,6 +2015,86 @@ body.show-op-per-riga .scontrino-row .op-col:hover {
 @keyframes prepagata-auto-flash-anim {
   0%, 100% { background-color: inherit; }
   50% { background-color: #d6c3f7; }
+}
+
+/* Dropdown risultati ricerca per numero tessera: più largo del campo input
+   (che resta stretto), arrotondato, con una riga per risultato (tessera in
+   evidenza + nome cognome + cellulare). */
+.tessera-dropdown-results {
+  min-width: 300px;
+  max-width: 360px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  padding: 6px;
+  overflow: hidden;
+}
+.tessera-dropdown-results .dropdown-item {
+  border-radius: 8px;
+  padding: 8px 10px;
+  white-space: normal;
+}
+.tessera-dropdown-results .dropdown-item:hover,
+.tessera-dropdown-results .dropdown-item:focus {
+  background: #f3e8ff;
+}
+.tessera-result-tessera {
+  font-weight: 700;
+  color: #6f42c1;
+}
+.tessera-result-nome {
+  font-weight: 600;
+  color: #212529;
+}
+.tessera-result-cell {
+  font-size: 0.8em;
+  color: #6c757d;
+}
+
+/* Scheda riepilogo carta prepagata, mostrata tra i pulsanti quando si cerca
+   un cliente dal numero di tessera (modalità RICARICHE). */
+/* Occupa l'intera riga del contenitore flex: così la scheda sta sempre SOPRA
+   tutti i pulsanti e non manda fuori allineamento la griglia sottostante. */
+.prepagata-riepilogo-wrap {
+  flex: 0 0 100%;
+  width: 100%;
+  margin-bottom: 4px;
+}
+.prepagata-riepilogo-card {
+  max-width: 460px;
+  background: #fff;
+  border: 2px solid #81e1ff;
+  border-radius: 14px;
+  padding: 10px 14px;
+  box-shadow: 3px 3px 10px #eee, -3px -3px 10px #fff;
+  font-size: 0.85em;
+  color: #333;
+  text-align: left;
+}
+.prepagata-riepilogo-card .prep-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.prepagata-riepilogo-card .prep-tessera {
+  font-weight: 700;
+  color: #6f42c1;
+}
+.prepagata-riepilogo-card .prep-cliente {
+  font-weight: 600;
+}
+.prepagata-riepilogo-card .prep-saldo {
+  font-size: 1.15em;
+  color: #198754;
+  margin-bottom: 6px;
+}
+.prepagata-riepilogo-card .prep-dettagli div {
+  line-height: 1.5;
+}
+.prepagata-riepilogo-card .prep-lbl {
+  color: #6c757d;
 }
 
 /* Split pagamento: badge "Misto" e pulsante divisione voce */

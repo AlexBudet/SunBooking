@@ -238,24 +238,71 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
   }
   window.capitalizeName = capitalizeName;
 
-  // Carica le carte prepagate attive di un cliente
+  // Modulo Pacchetti (e quindi tutta la parte prepagate) abilitato per questo
+  // negozio dal pannello owner. Letto a ogni chiamata e non una volta sola:
+  // il flag arriva da base.html e potrebbe non essere ancora definito quando
+  // questo file viene valutato. In assenza del flag si assume attivo, come
+  // prima che questo controllo esistesse.
+  function pacchettiAttivi() {
+    return window.modulePacchettiEnabled !== false;
+  }
+  window.pacchettiAttivi = pacchettiAttivi;
+
+  // Cliente per cui l'operatore ha già deciso se usare o no la prepagata: evita
+  // che il modal si ripresenti (la stessa selezione arriva sia dal click sul
+  // dropdown sia dall'observer che controlla dataset.selectedClient).
+  let clienteConSceltaPrepagataFatta = null;
+
+  // Carica le carte prepagate attive di un cliente. Se ne ha almeno una, chiede
+  // conferma all'operatore prima di renderla utilizzabile come metodo di pagamento.
   function caricaPrepagateCliente(clientId, nomeCliente) {
+    // Modulo Pacchetti disabilitato per questo negozio: le rotte /pacchetti/* non
+    // rispondono JSON ma redirigono all'Agenda, quindi la chiamata sarebbe solo
+    // uno spreco (scaricherebbe l'intera pagina Agenda a ogni selezione cliente).
+    if (!pacchettiAttivi()) {
+      window.clientePrepagate = [];
+      return;
+    }
     if (!clientId) {
       window.clientePrepagate = [];
+      clienteConSceltaPrepagataFatta = null;
       aggiornaOpzioniPrepagata();
       return;
     }
     fetch(`/pacchetti/api/prepagate-cliente/${clientId}`)
       .then(res => res.json())
       .then(prepagate => {
-        window.clientePrepagate = Array.isArray(prepagate) ? prepagate : [];
-        console.log('Prepagate caricate:', window.clientePrepagate);
-        aggiornaOpzioniPrepagata();
-        
-        // Mostra modal se ci sono prepagate attive
-        if (window.clientePrepagate.length > 0 && nomeCliente) {
-          mostraModalPrepagate(window.clientePrepagate, nomeCliente);
+        const lista = Array.isArray(prepagate) ? prepagate : [];
+        console.log('Prepagate caricate:', lista);
+
+        // Scelta già fatta per questo cliente: non richiedere di nuovo
+        if (String(clientId) === String(clienteConSceltaPrepagataFatta)) {
+          aggiornaOpzioniPrepagata();
+          return;
         }
+
+        if (!lista.length) {
+          window.clientePrepagate = [];
+          aggiornaOpzioniPrepagata();
+          return;
+        }
+
+        window.clientePrepagate = [];
+        aggiornaOpzioniPrepagata();
+        clienteConSceltaPrepagataFatta = String(clientId);
+        chiediUsoPrepagata(lista, nomeCliente, function (usa) {
+          window.clientePrepagate = usa ? lista : [];
+          aggiornaOpzioniPrepagata();
+          if (!usa) return;
+
+          // Confermato l'uso della carta: si prosegue come se fosse stata cercata
+          // direttamente per numero di tessera (campo tessera compilato + schermata
+          // RICARICHE con riepilogo carta e pulsanti di ricarica).
+          const carta = lista.find(p => p.numero_tessera) || lista[0];
+          const tesseraInput = document.getElementById('tesseraSearchInputCassa');
+          if (tesseraInput) tesseraInput.value = carta.numero_tessera || '';
+          if (typeof attivaModeRicariche === 'function') attivaModeRicariche(carta.id);
+        });
       })
       .catch((err) => {
         console.error('Errore caricamento prepagate:', err);
@@ -264,6 +311,72 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
       });
   }
   window.caricaPrepagateCliente = caricaPrepagateCliente;
+
+  // Attiva le prepagate del cliente SENZA chiedere conferma: usata quando il
+  // cliente è stato trovato cercando il numero di tessera, dove la volontà di
+  // usare quella carta è già implicita nella ricerca fatta dall'operatore.
+  // Marca subito la scelta come presa, così l'observer che rileva il cambio di
+  // cliente non fa comparire il modal di conferma.
+  function usaPrepagateSenzaChiedere(clientId) {
+    if (!clientId || !pacchettiAttivi()) return Promise.resolve();
+    clienteConSceltaPrepagataFatta = String(clientId);
+    return fetch(`/pacchetti/api/prepagate-cliente/${clientId}`)
+      .then(res => res.json())
+      .then(lista => {
+        window.clientePrepagate = Array.isArray(lista) ? lista : [];
+        aggiornaOpzioniPrepagata();
+      })
+      .catch(err => {
+        console.error('Errore caricamento prepagate da tessera:', err);
+        window.clientePrepagate = [];
+        aggiornaOpzioniPrepagata();
+      });
+  }
+  window.usaPrepagateSenzaChiedere = usaPrepagateSenzaChiedere;
+
+  // Chiede se usare la carta prepagata del cliente per il pagamento, mostrando
+  // numero tessera e credito residuo di ogni carta attiva.
+  function chiediUsoPrepagata(prepagate, nomeCliente, onScelta) {
+    const existing = document.getElementById('prepagataConfermaModal');
+    if (existing) existing.remove();
+
+    const esc = s => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'prepagataConfermaModal';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+
+    const carteHtml = prepagate.map(p => `
+      <div style="padding:10px 12px;margin-bottom:8px;background:#f8f9fa;border-radius:10px;border-left:4px solid #6f42c1;text-align:left;">
+        <div style="font-weight:700;color:#6f42c1;">Tessera n. ${esc(p.numero_tessera || '—')}</div>
+        <div style="font-size:1.05em;font-weight:600;color:#198754;">Credito residuo: € ${(p.credito_residuo || 0).toFixed(2)}</div>
+        ${p.data_scadenza ? `<div style="font-size:0.85em;color:#666;">Scadenza: ${esc(p.data_scadenza)}</div>` : ''}
+      </div>`).join('');
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#fff;padding:22px 28px;border-radius:14px;box-shadow:0 4px 22px rgba(0,0,0,0.3);max-width:460px;width:92%;text-align:center;';
+    modal.innerHTML = `
+      <div style="margin-bottom:12px;"><i class="bi bi-credit-card-fill" style="font-size:38px;color:#6f42c1;"></i></div>
+      <h5 style="margin:0 0 14px;font-weight:600;">Vuoi usare la carta prepagata di ${esc(nomeCliente || 'questo cliente')} per il pagamento?</h5>
+      ${carteHtml}
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
+        <button type="button" class="btn btn-secondary" id="prepagataAnnullaBtn">Esci</button>
+        <button type="button" class="btn btn-success" id="prepagataOkBtn">OK</button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    function chiudi(usa) {
+      overlay.remove();
+      if (typeof onScelta === 'function') onScelta(usa);
+    }
+    modal.querySelector('#prepagataOkBtn').addEventListener('click', () => chiudi(true));
+    modal.querySelector('#prepagataAnnullaBtn').addEventListener('click', () => chiudi(false));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) chiudi(false); });
+  }
 
   // Observer: carica prepagate automaticamente quando dataset.selectedClient cambia
   // (copre tutti i casi: calendar, my-spia, dropdown manuale)
@@ -461,86 +574,6 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
   }
   window.provaAutoSelezionaPrepagata = provaAutoSelezionaPrepagata;
 
-  // Mostra modal informativo quando il cliente ha carte prepagate
-  function mostraModalPrepagate(prepagate, nomeCliente) {
-    // Rimuovi eventuale modal esistente
-    const existing = document.getElementById('prepagateInfoModal');
-    if (existing) existing.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'prepagateInfoModal';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
-
-    const modal = document.createElement('div');
-    modal.style.cssText = 'background:#fff;padding:20px 30px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-width:450px;width:90%;position:relative;';
-
-    // Pulsante X per chiudere
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.innerHTML = '&times;';
-    closeBtn.style.cssText = 'position:absolute;top:10px;right:15px;background:none;border:none;font-size:24px;cursor:pointer;color:#666;';
-    closeBtn.onclick = () => overlay.remove();
-    modal.appendChild(closeBtn);
-
-    // Icona carta prepagata
-    const iconDiv = document.createElement('div');
-    iconDiv.innerHTML = '<i class="bi bi-credit-card-fill" style="font-size:40px;color:#0d6efd;"></i>';
-    iconDiv.style.textAlign = 'center';
-    iconDiv.style.marginBottom = '15px';
-    modal.appendChild(iconDiv);
-
-    // Titolo
-    const title = document.createElement('h5');
-    title.style.cssText = 'margin:0 0 15px;text-align:center;font-weight:600;';
-    title.textContent = `${nomeCliente} ha carte prepagate attive!`;
-    modal.appendChild(title);
-
-    // Lista delle prepagate
-    const lista = document.createElement('div');
-    lista.style.cssText = 'max-height:200px;overflow-y:auto;';
-    
-    prepagate.forEach(p => {
-      const item = document.createElement('div');
-      item.style.cssText = 'padding:10px;margin-bottom:8px;background:#f8f9fa;border-radius:8px;border-left:4px solid #0d6efd;';
-      
-      const saldo = document.createElement('div');
-      saldo.style.cssText = 'font-size:1.1em;font-weight:600;color:#198754;';
-      saldo.textContent = `Saldo: € ${p.credito_residuo.toFixed(2)}`;
-      item.appendChild(saldo);
-      
-      if (p.beneficiario && p.beneficiario !== nomeCliente) {
-        const benef = document.createElement('div');
-        benef.style.cssText = 'font-size:0.85em;color:#666;';
-        benef.textContent = `Beneficiario: ${p.beneficiario}`;
-        item.appendChild(benef);
-      }
-      
-      if (p.data_scadenza) {
-        const scad = document.createElement('div');
-        scad.style.cssText = 'font-size:0.85em;color:#666;';
-        scad.textContent = `Scadenza: ${p.data_scadenza}`;
-        item.appendChild(scad);
-      }
-      
-      lista.appendChild(item);
-    });
-    modal.appendChild(lista);
-
-    // Nota
-    const nota = document.createElement('p');
-    nota.style.cssText = 'margin:15px 0 0;font-size:0.9em;color:#666;text-align:center;';
-    nota.innerHTML = 'Puoi selezionare <b>"Prepagata"</b> come metodo di pagamento per ogni riga.';
-    modal.appendChild(nota);
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-
-    // Chiudi cliccando fuori dal modal
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
-  }
-
   // MEMORIZZA gli appointment_id originali portati in cassa (set globale)
   window.originalAppointmentIds = window.originalAppointmentIds || new Set();
 
@@ -673,6 +706,7 @@ const serviceInput = document.getElementById('searchServiceInput');
 let svcReqSeq = 0;  // token per accettare solo l’ultima risposta
 
 serviceInput.addEventListener('input', function () {
+  window.cassaSolariumViewActive = false;
   const q = serviceInput.value.trim();
   const mySeq = ++svcReqSeq;
 
@@ -750,6 +784,7 @@ serviceInput.addEventListener('input', function () {
 
   // Esempio di fetch per "ultimi" servizi
   document.getElementById('btnUltimi').addEventListener('click', function () {
+    window.cassaSolariumViewActive = false;
     fetch('/cassa/api/services?ultimi=1')
       .then(res => res.json())
       .then(servizi => popolaPulsantiServizi(servizi));
@@ -757,6 +792,7 @@ serviceInput.addEventListener('input', function () {
 
   // fetch per "frequenti"
   document.getElementById('btnFrequenti').addEventListener('click', function () {
+    window.cassaSolariumViewActive = false;
     fetch('/cassa/api/services?frequenti=1')
       .then(res => res.json())
       .then(servizi => popolaPulsantiServizi(servizi));
@@ -764,19 +800,27 @@ serviceInput.addEventListener('input', function () {
 
   // fetch per Estetica
   document.getElementById('btnEstetica').addEventListener('click', function () {
+    window.cassaSolariumViewActive = false;
     fetch('/cassa/api/services?categoria=Estetica')
       .then(res => res.json())
       .then(servizi => popolaPulsantiServizi(servizi));
   });
 
-  // fetch per Solarium
+  // fetch per Solarium: dopo i servizi normali, aggiunge (se c'è un cliente reale
+  // caricato) i pulsanti rapidi di ricarica automatica configurati in Tools/Pacchetti
+  // per la categoria Solarium, tra i pulsanti selezionabili della barra servizi.
   document.getElementById('btnSolarium').addEventListener('click', function () {
+    window.cassaSolariumViewActive = true;
     fetch('/cassa/api/services?categoria=Solarium')
       .then(res => res.json())
-      .then(servizi => popolaPulsantiServizi(servizi));
+      .then(servizi => {
+        popolaPulsantiServizi(servizi);
+        if (typeof aggiungiPulsantiRicaricaSolarium === 'function') aggiungiPulsantiRicaricaSolarium();
+      });
   });
 
   document.getElementById('btnProdotti').addEventListener('click', function () {
+    window.cassaSolariumViewActive = false;
     fetch('/cassa/api/services?sottocategoria=Prodotti')
       .then(res => res.json())
       .then(servizi => popolaPulsantiServizi(servizi));
@@ -971,15 +1015,18 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
     // ========== GESTIONE PAGAMENTO CON PREPAGATA ==========
-    // Se ci sono voci pagate con prepagata, scala il credito dalla carta
+    // Se ci sono voci pagate con prepagata, scala il credito dalla carta.
+    // prepagataUtilizzoInfo resta disponibile più sotto (dopo il salvataggio scontrino)
+    // per proporre l'invio del messaggio WhatsApp con i dati della carta.
+    let prepagataUtilizzoInfo = null;
     if (vociConPrepagata.length > 0 && window.clientePrepagate && window.clientePrepagate.length > 0) {
       const totalePrepagata = vociConPrepagata.reduce((sum, v) => sum + v.prezzo, 0);
       const prepagata = window.clientePrepagate[0]; // Usiamo la prima carta disponibile
-      
+
       try {
         // Recupera operatore_id dalle voci o dal campo globale
         const operatoreIdPrepagata = vociConPrepagata[0]?.voce?.operator_id || operatore_id || null;
-        
+
         const scalaturaRes = await fetch(`/pacchetti/api/pacchetti/${prepagata.id}/utilizza`, {
           method: 'POST',
           headers: {
@@ -992,20 +1039,30 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
             operatore_id: operatoreIdPrepagata
           })
         });
-        
+
         const scalaturaData = await scalaturaRes.json();
-        
+
         if (!scalaturaRes.ok || !scalaturaData.success) {
           alert(`Errore scalamento prepagata: ${scalaturaData.error || 'Errore sconosciuto'}`);
           stampaLock = false;
           return;
         }
-        
+
         console.log(`Scalati €${totalePrepagata.toFixed(2)} dalla prepagata. Nuovo saldo: €${scalaturaData.credito_residuo.toFixed(2)}`);
-        
+
         // Aggiorna il saldo locale della prepagata
         prepagata.credito_residuo = scalaturaData.credito_residuo;
-        
+
+        prepagataUtilizzoInfo = {
+          prepagataId: prepagata.id,
+          prepagataNome: prepagata.nome || 'Prepagata',
+          numeroTessera: prepagata.numero_tessera || null,
+          importoScalato: totalePrepagata,
+          creditoResiduo: scalaturaData.credito_residuo,
+          clienteId: cliente_id,
+          descrizione: vociConPrepagata.map(v => v.voce.nome).filter(Boolean).join(', ')
+        };
+
       } catch (err) {
         alert('Errore durante lo scalamento della prepagata: ' + err.message);
         stampaLock = false;
@@ -1501,24 +1558,76 @@ function showPendingModal(key, expectedTotal) {
       await Promise.allSettled(_updatePromises);
     }
 
-    // Svuota lo pseudoscontrino e sblocca
-    resetScontrino(true);
-    stampaLock = false;
+    // Chiude lo scontrino: svuota la bozza e mostra l'esito. Se il pagamento ha usato
+    // una prepagata, prima propone l'invio del messaggio WhatsApp con i dati della carta
+    // (anteprima modificabile, invio solo su conferma) e completa solo dopo che l'operatore
+    // ha chiuso quel pannello (inviato o no) — altrimenti il redirect automatico lo
+    // interromperebbe a metà.
+    function completaChiusuraScontrino() {
+      resetScontrino(true);
+      stampaLock = false;
+      console.log('DEBUG: redirectUrl finale =', redirectUrl);
+      showSuccessPopup('Pagamento registrato con successo!', 5000, () => {
+        if (redirectUrl) {
+          console.log('DEBUG: Eseguo redirect a:', redirectUrl);
+          window.location.href = redirectUrl;
+        } else {
+          window.location.href = '/cassa';
+        }
+      });
+    }
 
-    console.log('DEBUG: redirectUrl finale =', redirectUrl);
-
-    showSuccessPopup('Pagamento registrato con successo!', 5000, () => {
-      if (redirectUrl) {
-        console.log('DEBUG: Eseguo redirect a:', redirectUrl);
-        window.location.href = redirectUrl;
-      } else {
-        window.location.href = '/cassa';
-      }
-    });
+    if (prepagataUtilizzoInfo && typeof window.showWhatsappAutoSendPanel === 'function') {
+      proponiWhatsappPrepagata(prepagataUtilizzoInfo, completaChiusuraScontrino);
+    } else {
+      completaChiusuraScontrino();
+    }
 
     // Termina qui il flusso non fiscale
     return;
 });
+
+// Dopo un pagamento (anche parziale) con carta prepagata, propone l'invio al cliente
+// di un messaggio WhatsApp con i dati della carta (anteprima editabile in
+// showWhatsappAutoSendPanel, invio solo su conferma esplicita dell'operatore).
+// onDone viene richiamato sempre alla chiusura del pannello (inviato o no), per riprendere
+// il normale flusso di chiusura scontrino.
+async function proponiWhatsappPrepagata(info, onDone) {
+  if (!info.clienteId) { onDone(); return; }
+  const cap = window.capitalizeName || (s => s || '');
+  // Nome cliente: preferisci quello già mostrato nel campo di ricerca cassa (è la
+  // selezione fatta dall'operatore, sempre corretta); il fetch sotto serve solo a
+  // recuperare il numero di telefono e, se disponibile, un nome meglio formattato.
+  // MAI usare il nome della carta prepagata come nome cliente.
+  const clientInput = document.getElementById('clientSearchInputCassa');
+  let clienteNome = (clientInput && clientInput.value.trim()) ? cap(clientInput.value.trim()) : 'Cliente';
+  let numero = '';
+  try {
+    const res = await fetch(`/settings/api/client_info/${info.clienteId}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && !data.error) {
+        if (data.display_name) clienteNome = data.display_name;
+        numero = data.cliente_cellulare || '';
+      }
+    }
+  } catch (err) {
+    console.warn('Impossibile recuperare i dati cliente per il messaggio WhatsApp prepagata:', err);
+  }
+  if (!numero) { onDone(); return; }
+
+  const rigaTessera = info.numeroTessera ? `, tessera n. ${info.numeroTessera}` : '';
+  const perServizio = info.descrizione ? ` per ${info.descrizione}` : '';
+  const testo = `Ciao ${clienteNome}${rigaTessera}, abbiamo scalato €${info.importoScalato.toFixed(2)}${perServizio}. Il credito residuo è €${info.creditoResiduo.toFixed(2)}.`;
+
+  window.showWhatsappAutoSendPanel({
+    numero,
+    testo,
+    nome: clienteNome,
+    clientId: info.clienteId,
+    onClose: onDone
+  });
+}
 
   // === ANNULLA ULTIMO SCONTRINO ===
   document.getElementById('btnAnnullaScontrino').addEventListener('click', function(e) {
@@ -3727,4 +3836,390 @@ window.apriModalOperatoreRiga = apriModalOperatoreRiga;
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initRestore);
   else initRestore();
+})();
+
+// ============================================================
+// NUOVO CLIENTE AL VOLO (tasto "+" accanto al campo Cliente in Cassa)
+// Riusa lo stesso endpoint di creazione cliente già usato in Agenda.
+// ============================================================
+document.getElementById('btnNuovoClienteCassa')?.addEventListener('click', function () {
+  document.getElementById('nuovoClienteCassaNome').value = '';
+  document.getElementById('nuovoClienteCassaCognome').value = '';
+  document.getElementById('nuovoClienteCassaCellulare').value = '';
+  new bootstrap.Modal(document.getElementById('modalNuovoClienteCassa')).show();
+  setTimeout(() => document.getElementById('nuovoClienteCassaNome').focus(), 300);
+});
+
+async function salvaNuovoClienteCassa() {
+  const nome = document.getElementById('nuovoClienteCassaNome').value.trim();
+  const cognome = document.getElementById('nuovoClienteCassaCognome').value.trim();
+  const cellulare = document.getElementById('nuovoClienteCassaCellulare').value.trim();
+
+  if (!nome) { alert('Il campo Nome è obbligatorio'); return; }
+  if (!cognome) { alert('Il campo Cognome è obbligatorio'); return; }
+
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+  try {
+    const res = await fetch('/calendar/add-client', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}) },
+      body: JSON.stringify({ cliente_nome: nome, cliente_cognome: cognome, cliente_cellulare: cellulare })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('Errore: ' + (data.error || 'Creazione cliente non riuscita'));
+      return;
+    }
+
+    const cap = window.capitalizeName || (s => s || '');
+    const clientInput = document.getElementById('clientSearchInputCassa');
+    if (clientInput) {
+      window.settingClientProgrammatically = true;
+      clientInput.value = `${cap(data.cliente_nome)} ${cap(data.cliente_cognome)}`.trim();
+      clientInput.dataset.selectedClient = data.cliente_id;
+      clientInput.dispatchEvent(new Event('input'));
+    }
+
+    bootstrap.Modal.getInstance(document.getElementById('modalNuovoClienteCassa'))?.hide();
+  } catch (err) {
+    console.error('Errore creazione nuovo cliente da Cassa:', err);
+    alert('Errore di connessione');
+  }
+}
+
+// ============================================================
+// RICERCA CLIENTE DA NUMERO TESSERA (campo a destra del cliente, in alto in Cassa)
+// ============================================================
+document.getElementById('tesseraSearchInputCassa')?.addEventListener('input', async function () {
+  // Solo cifre: qualsiasi altro carattere digitato viene scartato subito
+  const soloNumeri = this.value.replace(/\D/g, '');
+  if (soloNumeri !== this.value) this.value = soloNumeri;
+  const q = soloNumeri;
+  const dropdown = document.getElementById('tesseraDropdownCassa');
+  if (!dropdown) return;
+  if (q.length < 1) { dropdown.style.display = 'none'; dropdown.innerHTML = ''; return; }
+  try {
+    const res = await fetch('/pacchetti/api/cerca-per-tessera?numero=' + encodeURIComponent(q));
+    const risultati = await res.json();
+    dropdown.innerHTML = '';
+    if (!Array.isArray(risultati) || !risultati.length) { dropdown.style.display = 'none'; return; }
+    const cap = window.capitalizeName || (s => s || '');
+    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    risultati.forEach(r => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'dropdown-item';
+      const nomeCompleto = `${cap(r.client_nome)} ${cap(r.client_cognome)}`.trim();
+      const cellHtml = r.client_cellulare ? `<div class="tessera-result-cell">${esc(r.client_cellulare)}</div>` : '';
+      item.innerHTML = `
+        <div class="tessera-result-tessera">N. ${esc(r.numero_tessera)}</div>
+        <div class="tessera-result-nome">${esc(nomeCompleto)}</div>
+        ${cellHtml}
+      `;
+      item.addEventListener('click', () => selezionaClienteDaTessera(r));
+      dropdown.appendChild(item);
+    });
+    dropdown.style.display = 'block';
+  } catch (err) {
+    console.error('Errore ricerca per numero tessera:', err);
+  }
+});
+
+function selezionaClienteDaTessera(r) {
+  const dropdown = document.getElementById('tesseraDropdownCassa');
+  if (dropdown) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; }
+  document.getElementById('tesseraSearchInputCassa').value = r.numero_tessera || '';
+
+  // Attiva subito la prepagata senza modal di conferma: cercando per numero di
+  // tessera l'operatore ha già espresso la volontà di usare quella carta.
+  // Va fatto PRIMA di impostare il cliente, altrimenti l'observer del campo
+  // cliente farebbe in tempo a mostrare la richiesta di conferma.
+  if (typeof window.usaPrepagateSenzaChiedere === 'function') {
+    window.usaPrepagateSenzaChiedere(r.client_id);
+  }
+
+  const clientInput = document.getElementById('clientSearchInputCassa');
+  if (clientInput) {
+    const cap = window.capitalizeName || (s => s || '');
+    window.settingClientProgrammatically = true;
+    clientInput.value = `${cap(r.client_nome)} ${cap(r.client_cognome)}`.trim();
+    clientInput.dataset.selectedClient = r.client_id;
+    clientInput.dispatchEvent(new Event('input'));
+  }
+
+  attivaModeRicariche(r.prepagata_id);
+}
+
+// Dopo una ricerca per tessera riuscita, la barra filtri (Frequenti/Ultimi/Solarium/
+// Estetica/Prodotti) si nasconde e al suo posto compare solo l'indicatore "RICARICHE"
+// (non cliccabile) con una "x" per tornare alla schermata principale di Cassa.
+// Al posto dei pulsanti servizio compaiono le ricariche configurate in Tools/Pacchetti.
+async function attivaModeRicariche(prepagataId) {
+  window.cassaSolariumViewActive = false;
+  window.prepagataCorrenteId = prepagataId || null;
+  document.querySelectorAll('.filtro-cassa-btn').forEach(btn => { btn.style.display = 'none'; });
+  document.querySelectorAll('.mode-ricariche-btn').forEach(btn => { btn.style.display = ''; });
+  await mostraPulsantiRicariche(prepagataId);
+}
+
+// Tasto RICARICHE: importi che si SOMMANO al credito della carta.
+document.getElementById('btnModeRicariche')?.addEventListener('click', function () {
+  mostraPulsantiRicariche(window.prepagataCorrenteId);
+});
+
+// Tasto SOLARIUM (in modalità prepagata): servizi della categoria Solarium, che
+// vengono SCALATI dal credito (la prepagata attiva li marca automaticamente come
+// pagati con carta quando i vincoli lo consentono).
+document.getElementById('btnModeSolariumPrep')?.addEventListener('click', async function () {
+  const container = document.getElementById('serviceButtonsContainer');
+  try {
+    const res = await fetch('/cassa/api/services?categoria=Solarium');
+    const servizi = await res.json();
+    popolaPulsantiServizi(servizi);
+    if (window.prepagataCorrenteId && container) {
+      const scheda = await creaSchedaRiepilogoPrepagata(window.prepagataCorrenteId);
+      if (scheda) container.insertBefore(scheda, container.firstChild);
+    }
+  } catch (err) {
+    console.error('Errore caricamento servizi Solarium:', err);
+  }
+});
+
+// Popola la griglia con la scheda riepilogo della carta (saldo, ultima ricarica,
+// ultimo utilizzo) seguita dalle ricariche configurate: il testo del pulsante è il
+// credito accreditato (es. "+35"), il dettaglio completo sta nel tooltip.
+async function mostraPulsantiRicariche(prepagataId) {
+  const container = document.getElementById('serviceButtonsContainer');
+  if (!container) return;
+
+  try {
+    if (!ricaricaServiziAbbinatiCache) {
+      const res = await fetch('/pacchetti/api/servizi-ricarica-prepagata');
+      ricaricaServiziAbbinatiCache = await res.json();
+    }
+  } catch (err) {
+    console.error('Errore caricamento ricariche configurate:', err);
+    return;
+  }
+
+  container.innerHTML = '';
+
+  if (prepagataId) {
+    const scheda = await creaSchedaRiepilogoPrepagata(prepagataId);
+    if (scheda) container.appendChild(scheda);
+  }
+
+  const gruppi = ricaricaServiziAbbinatiCache || [];
+  if (!gruppi.length) {
+    const msg = document.createElement('div');
+    msg.className = 'text-muted';
+    msg.style.padding = '10px';
+    msg.textContent = 'Nessuna ricarica configurata. Impostale in Tools / Pacchetti.';
+    container.appendChild(msg);
+    return;
+  }
+
+  gruppi.forEach(g => {
+    g.soglie.forEach(s => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'service-btn-custom service-btn-solarium tooltip-parent';
+      btn.textContent = `+${s.importo_accreditato.toFixed(0)}`;
+      applyBsTooltip(btn, `${g.service_nome}: il cliente paga €${s.importo_pagato.toFixed(2)}, sulla carta vengono caricati €${s.importo_accreditato.toFixed(2)}`, {
+        placement: 'bottom',
+        delay: { show: 300, hide: 100 }
+      });
+      btn.addEventListener('click', async () => {
+        const clientIdNow = document.getElementById('clientSearchInputCassa')?.dataset.selectedClient;
+        if (!clientIdNow) { alert('Seleziona prima un cliente nel campo Cliente, in alto.'); return; }
+        await eseguiRicaricaServizioAbbinato(clientIdNow, g, s);
+      });
+      container.appendChild(btn);
+    });
+  });
+}
+
+// Scheda con lo stato della carta prepagata associata alla tessera cercata.
+async function creaSchedaRiepilogoPrepagata(prepagataId) {
+  let info;
+  try {
+    const res = await fetch(`/pacchetti/api/prepagata/${prepagataId}/riepilogo`);
+    if (!res.ok) return null;
+    info = await res.json();
+    if (!info || info.error) return null;
+  } catch (err) {
+    console.error('Errore caricamento riepilogo prepagata:', err);
+    return null;
+  }
+
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Wrapper a riga intera: il contenitore dei pulsanti è un flex con wrap, quindi
+  // senza questo la scheda starebbe a fianco dei tasti e sfaserebbe la griglia.
+  const wrap = document.createElement('div');
+  wrap.className = 'prepagata-riepilogo-wrap';
+  const card = document.createElement('div');
+  card.className = 'prepagata-riepilogo-card';
+
+  const ric = info.ultima_ricarica;
+  const uti = info.ultimo_utilizzo;
+  const rigaRicarica = ric
+    ? `<div><span class="prep-lbl">Ultima ricarica:</span> +€${ric.importo.toFixed(2)} il ${esc(ric.data || '—')}</div>`
+    : `<div><span class="prep-lbl">Ultima ricarica:</span> nessuna</div>`;
+  const rigaUtilizzo = uti
+    ? `<div><span class="prep-lbl">Ultimo scarico:</span> €${uti.importo.toFixed(2)} il ${esc(uti.data || '—')}${uti.descrizione ? ' — ' + esc(uti.descrizione) : ''}</div>`
+    : `<div><span class="prep-lbl">Ultimo scarico:</span> nessuno</div>`;
+
+  card.innerHTML = `
+    <div class="prep-header">
+      <span class="prep-tessera">Tessera n. ${esc(info.numero_tessera || '—')}</span>
+      <span class="prep-cliente">${esc(info.client_nome)}</span>
+    </div>
+    <div class="prep-saldo">Credito residuo: <strong>€${info.credito_residuo.toFixed(2)}</strong></div>
+    <div class="prep-dettagli">
+      <div><span class="prep-lbl">Utilizzo consentito:</span> ${esc(info.vincolo_label)}</div>
+      ${info.data_scadenza ? `<div><span class="prep-lbl">Scadenza:</span> ${esc(info.data_scadenza)}</div>` : ''}
+      ${rigaRicarica}
+      ${rigaUtilizzo}
+    </div>
+  `;
+  wrap.appendChild(card);
+  return wrap;
+}
+
+function disattivaModeRicariche() {
+  const tesseraInput = document.getElementById('tesseraSearchInputCassa');
+  if (tesseraInput) tesseraInput.value = '';
+  const dropdown = document.getElementById('tesseraDropdownCassa');
+  if (dropdown) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; }
+
+  window.prepagataCorrenteId = null;
+  document.querySelectorAll('.mode-ricariche-btn').forEach(btn => { btn.style.display = 'none'; });
+  document.querySelectorAll('.filtro-cassa-btn').forEach(btn => { btn.style.display = ''; });
+
+  // Torna alla schermata principale: pulsanti servizi "frequenti" come all'avvio
+  fetch('/cassa/api/services?frequenti=1')
+    .then(res => res.json())
+    .then(servizi => popolaPulsantiServizi(servizi))
+    .catch(err => console.error('Errore ripristino servizi frequenti:', err));
+}
+document.getElementById('btnChiudiModeRicariche')?.addEventListener('click', function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+  disattivaModeRicariche();
+});
+
+// Chiude il dropdown tessera se si clicca fuori
+document.addEventListener('click', function (e) {
+  const dropdown = document.getElementById('tesseraDropdownCassa');
+  const input = document.getElementById('tesseraSearchInputCassa');
+  if (dropdown && input && !input.contains(e.target) && !dropdown.contains(e.target)) {
+    dropdown.style.display = 'none';
+  }
+});
+
+// ============================================================
+// RICARICA SERVIZI ABBINATI (configurati in Tools/Pacchetti)
+// Vendere un servizio abbinato a una delle sue soglie accredita automaticamente la
+// carta prepagata del cliente già selezionato in Cassa (esistente, o una nuova).
+// Vedi i pulsanti rapidi Solarium più sotto per l'unico punto di ingresso attuale.
+// ============================================================
+let ricaricaServiziAbbinatiCache = null;
+
+// Trova/crea la prepagata del cliente e aggiunge alla bozza la riga del servizio abbinato
+// già pronta con i campi ricarica_* impostati (il credito si accredita al pagamento,
+// riusando lo stesso meccanismo del tasto "Ricarica Carta" da pacchetto_detail.html).
+// Ritorna true/false in base all'esito, per farsi chiudere il chiamante (modal, ecc.).
+async function eseguiRicaricaServizioAbbinato(clientId, servizioGruppo, soglia) {
+  if (!clientId) { alert('Seleziona prima un cliente'); return false; }
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+  try {
+    const res = await fetch('/pacchetti/api/prepagata-o-crea', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}) },
+      body: JSON.stringify({ client_id: clientId })
+    });
+    const prepagata = await res.json();
+    if (!res.ok || !prepagata.id) {
+      alert('Errore: impossibile trovare o creare la carta prepagata del cliente.');
+      return false;
+    }
+
+    aggiungiRigaServizio({
+      id: servizioGruppo.service_id,
+      nome: servizioGruppo.service_nome,
+      prezzo: soglia.importo_pagato,
+      ricarica_prepagata_id: prepagata.id,
+      ricarica_importo: soglia.importo_pagato,
+      ricarica_credito: soglia.importo_accreditato,
+      ricarica_descrizione: `Ricarica automatica - ${servizioGruppo.service_nome}`
+    });
+    return true;
+  } catch (err) {
+    console.error('Errore conferma ricarica servizio abbinato:', err);
+    alert('Errore di connessione');
+    return false;
+  }
+}
+
+// ============================================================
+// PULSANTI RAPIDI RICARICA SOLARIUM
+// Quando si clicca il filtro "Solarium", tra i pulsanti servizio selezionabili (sotto
+// la barra filtri) compaiono anche le soglie di ricarica automatica configurate in
+// Tools/Pacchetti per la categoria Solarium — ma solo se in Cassa è già caricato un
+// cliente reale (mai per "Cliente generico"/nessun cliente selezionato).
+// ============================================================
+async function aggiungiPulsantiRicaricaSolarium() {
+  // Il pulsante "Solarium" esiste anche senza modulo Pacchetti: senza questo
+  // controllo si chiamerebbe una rotta /pacchetti/* che redirige all'Agenda.
+  if (typeof window.pacchettiAttivi === 'function' && !window.pacchettiAttivi()) return;
+  const container = document.getElementById('serviceButtonsContainer');
+  if (!container) return;
+
+  const clientId = document.getElementById('clientSearchInputCassa')?.dataset.selectedClient;
+  if (!clientId) return; // niente cliente reale: non aggiunge nulla
+
+  try {
+    if (!ricaricaServiziAbbinatiCache) {
+      const res = await fetch('/pacchetti/api/servizi-ricarica-prepagata');
+      ricaricaServiziAbbinatiCache = await res.json();
+    }
+  } catch (err) {
+    console.error('Errore caricamento soglie ricarica Solarium:', err);
+    return;
+  }
+  const gruppiSolarium = (ricaricaServiziAbbinatiCache || []).filter(g => g.categoria === 'Solarium');
+  if (!gruppiSolarium.length) return;
+
+  gruppiSolarium.forEach(g => {
+    g.soglie.forEach(s => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'service-btn-custom service-btn-solarium tooltip-parent';
+      applyBsTooltip(btn, `Ricarica automatica: ${g.service_nome}`, { placement: 'bottom', delay: { show: 1000, hide: 100 } });
+      btn.textContent = `↻ +€${s.importo_accreditato.toFixed(0)} (paga €${s.importo_pagato.toFixed(0)})`;
+      btn.addEventListener('click', async () => {
+        const clientIdNow = document.getElementById('clientSearchInputCassa')?.dataset.selectedClient;
+        if (!clientIdNow) { alert('Seleziona prima un cliente nel campo Cliente, in alto.'); return; }
+        await eseguiRicaricaServizioAbbinato(clientIdNow, g, s);
+      });
+      container.appendChild(btn);
+    });
+  });
+}
+
+// Poller indipendente (non tocca l'observer esistente di caricaPrepagateCliente):
+// se la vista Solarium è quella attiva, ricontrolla i pulsanti rapidi ogni volta che
+// cambia il cliente selezionato (es. cliente caricato dopo aver già aperto Solarium).
+(function watchClientForSolariumButtons() {
+  let lastClientId = null;
+  setInterval(function () {
+    const input = document.getElementById('clientSearchInputCassa');
+    const currentId = input ? (input.dataset.selectedClient || null) : null;
+    if (currentId !== lastClientId) {
+      lastClientId = currentId;
+      if (window.cassaSolariumViewActive) {
+        document.getElementById('btnSolarium')?.click();
+      }
+    }
+  }, 800);
 })();
