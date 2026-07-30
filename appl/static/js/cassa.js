@@ -315,6 +315,10 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
             optPrepagata.value = 'prepagata';
             optPrepagata.textContent = 'Prepagata';
             sel.appendChild(optPrepagata);
+            // Solo alla PRIMA comparsa dell'opzione (non ad ogni refresh, altrimenti
+            // sovrascriveremmo una scelta manuale dell'operatore): prova a selezionare
+            // Prepagata in automatico, in toto o in split se il saldo non basta.
+            provaAutoSelezionaPrepagata(row, sel);
           }
         } else {
           // Servizio non compatibile: rimuovi opzione prepagata
@@ -378,10 +382,16 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
     return window.clientePrepagate.reduce((sum, p) => sum + (p.credito_residuo || 0), 0);
   }
 
-  // Calcola quanto è già assegnato a prepagata nelle righe
-  function getTotaleAssegnatoPrepagata() {
+  // Calcola quanto è già assegnato a prepagata nelle righe (metodo singolo o split)
+  function getTotaleAssegnatoPrepagata(escludiRow) {
     let totale = 0;
     document.querySelectorAll('.scontrino-row').forEach(row => {
+      if (row === escludiRow) return;
+      const pagamenti = typeof getRowPagamenti === 'function' ? getRowPagamenti(row) : null;
+      if (pagamenti && pagamenti.length) {
+        pagamenti.forEach(p => { if (p.metodo === 'prepagata') totale += parseFloat(p.importo) || 0; });
+        return;
+      }
       const metodo = row.querySelector('select')?.value;
       if (metodo === 'prepagata') {
         const prezzo = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0');
@@ -421,6 +431,35 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
     return true;
   }
   window.verificaSaldoPrepagata = verificaSaldoPrepagata;
+
+  // Se il servizio è compatibile con una prepagata del cliente e c'è saldo disponibile,
+  // seleziona automaticamente "Prepagata" come metodo di pagamento della riga (in toto,
+  // o in split con POS per la parte eccedente se il saldo residuo non copre l'intero
+  // importo), con un breve lampeggio per farlo notare all'operatore. Non fa nulla se
+  // il saldo disponibile è zero (lascia il metodo di default).
+  function provaAutoSelezionaPrepagata(row, selectElement) {
+    if (window.multiClienteAttivo) return; // prepagata non ammessa con più clienti
+    const prezzoRiga = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0') || 0;
+    if (prezzoRiga <= 0) return;
+
+    const saldoDisponibile = getSaldoTotalePrepagata() - getTotaleAssegnatoPrepagata(row);
+    if (saldoDisponibile <= 0) return;
+
+    if (saldoDisponibile >= prezzoRiga) {
+      selectElement.value = 'prepagata';
+      selectElement.dispatchEvent(new Event('change'));
+    } else {
+      const quotaPrepagata = Math.round(saldoDisponibile * 100) / 100;
+      const quotaResto = Math.round((prezzoRiga - quotaPrepagata) * 100) / 100;
+      setRowPagamenti(row, [
+        { metodo: 'prepagata', importo: quotaPrepagata },
+        { metodo: 'pos', importo: quotaResto }
+      ]);
+    }
+    row.classList.add('prepagata-auto-flash');
+    setTimeout(() => row.classList.remove('prepagata-auto-flash'), 2000);
+  }
+  window.provaAutoSelezionaPrepagata = provaAutoSelezionaPrepagata;
 
   // Mostra modal informativo quando il cliente ha carte prepagate
   function mostraModalPrepagate(prepagate, nomeCliente) {
@@ -823,15 +862,55 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       const appointment_id = row.dataset.appointmentId || null;
       const rata_id = row.dataset.rataId || null;
       const pacchetto_id = row.dataset.pacchettoId || null;
-      
-      // Se metodo è prepagata, salviamo il prezzo originale e imposteremo a 0 dopo lo scalamento
-      const isPrepagata = (metodo === 'prepagata');
-      
-      const operator_id_riga = row.dataset.operatorId || null;
-      
+
       // Operatore specifico per questa riga (se toggle attivo) oppure globale
       const operatorIdRiga = row.dataset.operatorId || document.getElementById('operatorSelectInput')?.dataset.selectedOperator || null;
-      
+
+      // Split che include una quota "prepagata" (saldo insufficiente coperto in parte dalla
+      // carta e in parte con un altro metodo, vedi provaAutoSelezionaPrepagata): la riga resta
+      // unica a schermo, ma qui va spezzata in due voci separate. È necessario perché solo una
+      // voce con metodo_pagamento === 'prepagata' fa scalare davvero il credito dalla carta più
+      // sotto (blocco "GESTIONE PAGAMENTO CON PREPAGATA"): un semplice voce.pagamenti (come per
+      // gli split cash+pos) non farebbe scalare nulla e registrerebbe l'intero importo sull'altro
+      // metodo.
+      const pagamentiRigaSplit = getRowPagamenti(row);
+      const quotaPrepagataSplit = pagamentiRigaSplit ? pagamentiRigaSplit.find(p => p.metodo === 'prepagata') : null;
+      if (pagamentiRigaSplit && quotaPrepagataSplit) {
+        const baseVoce = { servizio_id, nome, sconto_riga, tipo: 'service', operator_id: operatorIdRiga };
+        if (appointment_id) baseVoce.appointment_id = appointment_id;
+        if (rata_id) baseVoce.rata_id = parseInt(rata_id);
+        if (pacchetto_id) baseVoce.pacchetto_id = parseInt(pacchetto_id);
+        if (row.dataset.clientId) baseVoce.cliente_id = row.dataset.clientId;
+
+        const importoPrepagata = parseFloat(quotaPrepagataSplit.importo) || 0;
+        const vocePrepagata = {
+          ...baseVoce,
+          prezzo: 0,
+          prezzo_originale: importoPrepagata,
+          metodo_pagamento: 'prepagata',
+          is_fiscale: false
+        };
+        vociConPrepagata.push({ voce: vocePrepagata, prezzo: importoPrepagata });
+        voci_non_fiscali.push(vocePrepagata);
+
+        pagamentiRigaSplit.filter(p => p.metodo !== 'prepagata').forEach(p => {
+          const importoResto = parseFloat(p.importo) || 0;
+          const voceResto = {
+            ...baseVoce,
+            prezzo: importoResto,
+            prezzo_originale: importoResto,
+            metodo_pagamento: p.metodo,
+            is_fiscale: !isGrigia
+          };
+          if (isGrigia) voci_non_fiscali.push(voceResto);
+          else voci_fiscali.push(voceResto);
+        });
+        return; // riga già gestita come coppia di voci: salta la logica a metodo singolo sotto
+      }
+
+      // Se metodo è prepagata, salviamo il prezzo originale e imposteremo a 0 dopo lo scalamento
+      const isPrepagata = (metodo === 'prepagata');
+
       const voce = {
         servizio_id,
         nome,
@@ -847,10 +926,10 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       if (rata_id) voce.rata_id = parseInt(rata_id);
       if (pacchetto_id) voce.pacchetto_id = parseInt(pacchetto_id);
 
-      // Split pagamento della singola voce (es. 30 contanti + 20 POS)
-      if (!isPrepagata) {
-        const pagamentiRiga = getRowPagamenti(row);
-        if (pagamentiRiga && pagamentiRiga.length) voce.pagamenti = pagamentiRiga;
+      // Split pagamento della singola voce senza quota prepagata (es. 30 contanti + 20 POS):
+      // qui pagamentiRigaSplit non conteneva 'prepagata', altrimenti saremmo già usciti sopra.
+      if (!isPrepagata && pagamentiRigaSplit && pagamentiRigaSplit.length) {
+        voce.pagamenti = pagamentiRigaSplit;
       }
       // Cliente associato alla riga (solo se la riga lo porta esplicitamente).
       // NB: il cliente globale dello scontrino viene aggiunto al payload più sotto;
@@ -2843,6 +2922,8 @@ async function ricreaDaCalendarSenzaReload(appointmentIds) {
       prezzo: servizio.prezzo,
       tag: servizio.tag,
       sottocategoria: servizio.sottocategoria,
+      categoria: servizio.categoria,
+      sottocategoria_id: servizio.sottocategoria_id,
       appointment_id: apptId
     }, false);
   });
