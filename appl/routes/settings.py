@@ -1720,15 +1720,13 @@ def _normalize_bool(val):
 
 @settings_bp.route('/api/settings/whatsapp', methods=['GET', 'POST'])
 def api_whatsapp_setting():
-    """GET: ritorna JSON con le preferenze whatsapp_modal_disable / whatsapp_popup_auto_send.
-       POST: aggiorna una o entrambe (JSON body: {"whatsapp_modal_disable": bool, "whatsapp_popup_auto_send": bool}).
-       Solo le chiavi presenti nel body vengono aggiornate."""
+    """GET: ritorna JSON con la preferenza whatsapp_modal_disable.
+       POST: aggiorna il flag (JSON body: {"whatsapp_modal_disable": bool})."""
     try:
         if request.method == 'GET':
             biz = BusinessInfo.query.first()
             return jsonify({
                 'whatsapp_modal_disable': bool(getattr(biz, 'whatsapp_modal_disable', False)) if biz else False,
-                'whatsapp_popup_auto_send': bool(getattr(biz, 'whatsapp_popup_auto_send', False)) if biz else False,
             })
 
         # POST -> aggiorna i flag presenti nel body
@@ -1741,19 +1739,16 @@ def api_whatsapp_setting():
 
         if 'whatsapp_modal_disable' in data:
             biz.whatsapp_modal_disable = _normalize_bool(data.get('whatsapp_modal_disable'))
-        if 'whatsapp_popup_auto_send' in data:
-            biz.whatsapp_popup_auto_send = _normalize_bool(data.get('whatsapp_popup_auto_send'))
 
         db.session.commit()
 
         return jsonify({
             'whatsapp_modal_disable': bool(biz.whatsapp_modal_disable),
-            'whatsapp_popup_auto_send': bool(biz.whatsapp_popup_auto_send),
         }), 200
 
     except Exception as e:
         current_app.logger.exception("Errore lettura/aggiornamento impostazione whatsapp: %s", e)
-        return jsonify({'whatsapp_modal_disable': False, 'whatsapp_popup_auto_send': False}), 500
+        return jsonify({'whatsapp_modal_disable': False}), 500
 
 @settings_bp.route('/whatsapp', methods=['GET', 'POST'])
 def whatsapp():

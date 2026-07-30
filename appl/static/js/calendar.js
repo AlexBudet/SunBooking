@@ -5142,9 +5142,8 @@ if (!numero) {
   }
 }
 
-// Pannello di anteprima/conferma per l'invio WhatsApp "automatico" (via WhatsApp Web/Unipile)
-// dal pulsante WhatsApp del popup blocco calendario. Attivo solo se window.whatsappPopupAutoSend
-// e' true (impostazione in Tools/WhatsApp) — altrimenti il pulsante resta wa.me manuale.
+// Pannello di anteprima/conferma per l'invio WhatsApp in background (via WhatsApp Web/Unipile)
+// dal pulsante WhatsApp del popup blocco calendario. Unica modalità di invio dal calendario.
 // Mostra sempre il testo in una textarea modificabile: l'invio parte SOLO al click su "Invia",
 // mai in automatico senza conferma esplicita (i messaggi WhatsApp via API hanno un costo).
 function showWhatsappAutoSendPanel(payload) {
@@ -5169,8 +5168,8 @@ function showWhatsappAutoSendPanel(payload) {
   panel.style.borderRadius = '8px';
   panel.style.boxShadow = '0 6px 18px rgba(0,0,0,0.25)';
   panel.style.padding = '20px';
-  panel.style.width = '420px';
-  panel.style.maxWidth = '92vw';
+  panel.style.width = '560px';
+  panel.style.maxWidth = '94vw';
   panel.style.zIndex = '99999';
 
   const title = document.createElement('div');
@@ -5189,7 +5188,7 @@ function showWhatsappAutoSendPanel(payload) {
   const textarea = document.createElement('textarea');
   textarea.value = payload.testo || '';
   textarea.className = 'form-control';
-  textarea.rows = 6;
+  textarea.rows = 11;
   textarea.style.marginBottom = '14px';
   panel.appendChild(textarea);
 
@@ -5212,6 +5211,19 @@ function showWhatsappAutoSendPanel(payload) {
   btnRow.appendChild(sendBtn);
   panel.appendChild(btnRow);
 
+  const manualRow = document.createElement('div');
+  manualRow.style.marginTop = '12px';
+  manualRow.style.paddingTop = '10px';
+  manualRow.style.borderTop = '1px solid #e5e5e5';
+  manualRow.style.textAlign = 'center';
+
+  const manualLink = document.createElement('a');
+  manualLink.href = '#';
+  manualLink.style.fontSize = '0.85em';
+  manualLink.textContent = 'Preferisci inviarlo tu manualmente? Apri WhatsApp con il messaggio pronto';
+  manualRow.appendChild(manualLink);
+  panel.appendChild(manualRow);
+
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
   setTimeout(() => textarea.focus(), 50);
@@ -5224,8 +5236,26 @@ function showWhatsappAutoSendPanel(payload) {
     if (e.key === 'Escape') cleanup();
   }
   document.addEventListener('keydown', onKey);
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) cleanup(); });
+
+  // Chiude solo se il click è iniziato E finito sull'overlay stesso: durante il
+  // ridimensionamento della textarea il mouseup può ricadere sull'overlay pur
+  // essendo partito dalla maniglia di resize, e non deve chiudere il pannello.
+  let overlayMouseDownOnSelf = false;
+  overlay.addEventListener('mousedown', function(e) { overlayMouseDownOnSelf = (e.target === overlay); });
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay && overlayMouseDownOnSelf) cleanup();
+    overlayMouseDownOnSelf = false;
+  });
   cancelBtn.addEventListener('click', cleanup);
+
+  manualLink.addEventListener('click', function(e) {
+    e.preventDefault();
+    const testoManuale = textarea.value.trim();
+    const numero = String(payload.numero || '').replace(/^\+/, '');
+    const url = `https://wa.me/${numero}?text=${encodeURIComponent(testoManuale)}`;
+    window.open(url, '_blank');
+    cleanup();
+  });
 
   sendBtn.addEventListener('click', async function() {
     const testoFinale = textarea.value.trim();
@@ -12558,38 +12588,21 @@ if (ordered.length) servizi_text = ordered.map(s => `• ${s}`).join('\n');
         .replace("{{sito}}", window.businessWebsite || "")
         .replace("{{nome_istituto}}", window.businessName || "");
 
-      // Invio automatico via API (WhatsApp Web collegato), impostabile in Tools/WhatsApp:
+      // Invio in background via WhatsApp Web collegato (Unipile): unica modalità,
       // mostra sempre un'anteprima modificabile, l'invio parte solo al click su "Invia".
-      if (window.whatsappPopupAutoSend) {
-        const appointmentIds = (groupBlocks.length ? groupBlocks : (block ? [block] : []))
-          .map(b => b.getAttribute('data-appointment-id'))
-          .filter(Boolean);
-        const clientId = block ? (block.getAttribute('data-client-id') || btn.getAttribute('data-client-id') || '') : (btn.getAttribute('data-client-id') || '');
-        showWhatsappAutoSendPanel({
-          numero: numeroNorm,
-          testo: testo,
-          nome: nomeFmt,
-          clientId: clientId,
-          data: data,
-          ora: ora,
-          appointmentIds: appointmentIds
-        });
-        return;
-      }
-
-      const url = `https://wa.me/${numeroNorm.replace(/^\+/, '')}?text=${encodeURIComponent(testo)}`;
-
-      // Copia negli appunti (best effort)
-      if (navigator.clipboard && window.isSecureContext) {
-        try { await navigator.clipboard.writeText(testo); } catch (_) {}
-      } else {
-        const temp = document.createElement('textarea');
-        temp.value = testo; document.body.appendChild(temp); temp.select();
-        try { document.execCommand('copy'); } catch (_) {}
-        document.body.removeChild(temp);
-      }
-
-      window.open(url, '_blank');
+      const appointmentIds = (groupBlocks.length ? groupBlocks : (block ? [block] : []))
+        .map(b => b.getAttribute('data-appointment-id'))
+        .filter(Boolean);
+      const clientId = block ? (block.getAttribute('data-client-id') || btn.getAttribute('data-client-id') || '') : (btn.getAttribute('data-client-id') || '');
+      showWhatsappAutoSendPanel({
+        numero: numeroNorm,
+        testo: testo,
+        nome: nomeFmt,
+        clientId: clientId,
+        data: data,
+        ora: ora,
+        appointmentIds: appointmentIds
+      });
   }, true);
 });
 
