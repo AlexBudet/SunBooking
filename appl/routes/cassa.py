@@ -366,6 +366,15 @@ def cassa():
     if servizi_json:
         try:
             servizi_raw = json.loads(servizi_json)
+            # Precarica categoria/sottocategoria_id dai Service reali (una sola query):
+            # il payload che arriva da Agenda non porta questi campi, e senza di essi
+            # una prepagata con vincolo "solo categoria/sottocategoria" non risulta mai
+            # utilizzabile per i servizi portati in cassa da un appuntamento.
+            _srv_ids = [s.get("id") for s in servizi_raw if s.get("id")]
+            _servizi_db = {}
+            if _srv_ids:
+                for _sv in Service.query.filter(Service.id.in_(_srv_ids)).all():
+                    _servizi_db[_sv.id] = _sv
             # Assicurati che ogni servizio abbia operator_id e operator_nome
             servizi = []
             for s in servizi_raw:
@@ -386,12 +395,15 @@ def cassa():
                     except Exception:
                         pass
                 
+                _sv_db = _servizi_db.get(s.get("id"))
                 srv = {
                     "id": s.get("id"),
                     "nome": clean_str(s.get("nome", "")),
                     "prezzo": s.get("prezzo", 0),
                     "tag": clean_str(s.get("tag", "")),
                     "sottocategoria": clean_str(s.get("sottocategoria", "")),
+                    "categoria": _sv_db.servizio_categoria.value if _sv_db and _sv_db.servizio_categoria else None,
+                    "sottocategoria_id": _sv_db.servizio_sottocategoria_id if _sv_db else None,
                     "appointment_id": appt_id,
                     "operator_id": op_id,
                     "operator_nome": op_nome
@@ -2641,6 +2653,10 @@ def myspia_dettagli():
                 "prezzo": s.servizio_prezzo if s else 0,
                 "tag": s.servizio_tag if s else "",
                 "sottocategoria": s.servizio_sottocategoria.nome if (s and s.servizio_sottocategoria) else "",
+                # Servono per verificare se una prepagata con vincolo "categoria"/"sottocategoria"
+                # è utilizzabile su questo servizio (vedi verificaVincoliPrepagata in cassa.js)
+                "categoria": s.servizio_categoria.value if (s and s.servizio_categoria) else None,
+                "sottocategoria_id": s.servizio_sottocategoria_id if s else None,
                 "appointment_id": a.id,
                 "operator_id": appt_op.id if appt_op else None,
                 "operator_nome": appt_op.user_nome if appt_op else ""

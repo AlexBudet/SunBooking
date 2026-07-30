@@ -967,6 +967,10 @@ async function addInitialServizi(list) {
             prezzo: d.prezzo,
             tag: d.tag,
             sottocategoria: d.sottocategoria,
+            // Servono per verificare se una prepagata con vincolo "categoria"/"sottocategoria"
+            // è utilizzabile su questo servizio (altrimenti l'opzione Prepagata non compare mai)
+            categoria: d.categoria,
+            sottocategoria_id: d.sottocategoria_id,
             appointment_id: s.appointment_id,
             // IMPORTANTE: mantieni operator_id e operator_nome dal servizio originale
             operator_id: s.operator_id || '',
@@ -1357,6 +1361,8 @@ function renderMySpiaList(gruppi) {
           prezzo: servizio.prezzo,
           tag: servizio.tag,
           sottocategoria: servizio.sottocategoria,
+          categoria: servizio.categoria,
+          sottocategoria_id: servizio.sottocategoria_id,
           appointment_id: apptId,
           operator_id: servizio.operator_id || null,
           operator_nome: servizio.operator_nome || '',
@@ -1943,6 +1949,16 @@ body.show-op-per-riga .scontrino-row .op-col:hover {
   background: linear-gradient(180deg, #b8809d 0%, #a06b88 100%);
   border-color: #a06b88;
   color: #fff;
+}
+
+/* Riga con metodo di pagamento "Prepagata" scelto in automatico: breve lampeggio
+   per far notare all'operatore che il sistema ha già selezionato il metodo giusto. */
+.prepagata-auto-flash {
+  animation: prepagata-auto-flash-anim 0.5s ease-in-out 4;
+}
+@keyframes prepagata-auto-flash-anim {
+  0%, 100% { background-color: inherit; }
+  50% { background-color: #d6c3f7; }
 }
 
 /* Split pagamento: badge "Misto" e pulsante divisione voce */
