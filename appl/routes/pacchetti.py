@@ -1000,6 +1000,7 @@ def pacchetto_detail(id):
         'data_sottoscrizione': data_fmt,
         'note': pacchetto.note,
         'status': pacchetto.status.value,
+        'ha_sedute_non_effettuate': any(s['stato'] != SedutaStatus.Effettuata.value for s in sedute),
         'costo_totale_lordo': float(pacchetto.costo_totale_lordo),
         'costo_totale_scontato': float(pacchetto.costo_totale_scontato) if pacchetto.costo_totale_scontato else None,
         'credito_iniziale': float(pacchetto.credito_iniziale) if pacchetto.credito_iniziale else None,
@@ -1771,6 +1772,145 @@ def api_utilizza_prepagata(id):
         'message': f'Scalati €{importo:.2f} dalla carta',
         'credito_residuo': float(nuovo_saldo),
         'carta_esaurita': nuovo_saldo <= 0
+    })
+
+
+def _sedute_residue_e_valore(pacchetto):
+    """Sedute non ancora effettuate (qualsiasi stato tranne Effettuata) e la somma
+    dei loro prezzi a listino (Service.servizio_prezzo attuale). Le sedute omaggio
+    contano quanto quelle pagate: nessuna distinzione, per scelta esplicita."""
+    sedute_residue = [s for s in pacchetto.sedute if s.stato != SedutaStatus.Effettuata.value]
+    importo = sum(
+        (Decimal(str(s.service.servizio_prezzo)) if s.service and s.service.servizio_prezzo else Decimal('0'))
+        for s in sedute_residue
+    )
+    importo = importo.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    return sedute_residue, importo
+
+
+def _trova_prepagata_attiva_cliente(client_id):
+    """Prepagata Attiva/Preventivo più recente del cliente (client_id diretto),
+    usata come destinataria di un accredito. None se il cliente non ne ha."""
+    return Pacchetto.query.filter(
+        Pacchetto.client_id == client_id,
+        Pacchetto.tipo == PacchettoTipo.Prepagata,
+        Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo])
+    ).order_by(Pacchetto.id.desc()).first()
+
+
+@pacchetti_bp.route('/api/pacchetti/<int:id>/residuo-credito', methods=['GET'])
+def api_preview_converti_credito(id):
+    """Anteprima (nessuna scrittura): quanto verrebbe accreditato interrompendo
+    questo pacchetto ora, e su quale carta prepagata (esistente o nuova)."""
+    pacchetto = Pacchetto.query.options(
+        selectinload(Pacchetto.sedute).joinedload(PacchettoSeduta.service)
+    ).get_or_404(id)
+
+    if pacchetto.tipo != PacchettoTipo.Servizi:
+        return jsonify({'success': False, 'error': 'Solo i pacchetti a sedute possono essere convertiti in credito'}), 400
+    if pacchetto.status in (PacchettoStatus.Abbandonato, PacchettoStatus.Completato, PacchettoStatus.Eliminato):
+        return jsonify({'success': False, 'error': 'Questo pacchetto non può essere convertito nel suo stato attuale'}), 400
+
+    sedute_residue, importo = _sedute_residue_e_valore(pacchetto)
+    if not sedute_residue:
+        return jsonify({'success': False, 'error': 'Nessuna seduta residua da convertire'}), 400
+    if importo <= 0:
+        return jsonify({'success': False, 'error': 'Il valore delle sedute residue è pari a zero'}), 400
+
+    prepagata_esistente = _trova_prepagata_attiva_cliente(pacchetto.client_id)
+
+    return jsonify({
+        'success': True,
+        'importo': float(importo),
+        'sedute_residue': [
+            {'service_nome': s.service.servizio_nome if s.service else None, 'prezzo': float(s.service.servizio_prezzo) if s.service and s.service.servizio_prezzo else 0}
+            for s in sedute_residue
+        ],
+        'prepagata_esistente': {
+            'id': prepagata_esistente.id,
+            'nome': prepagata_esistente.nome,
+            'credito_residuo': float(prepagata_esistente.credito_residuo or 0)
+        } if prepagata_esistente else None
+    })
+
+
+@pacchetti_bp.route('/api/pacchetti/<int:id>/converti-credito', methods=['POST'])
+def api_converti_credito_pacchetto(id):
+    """Interrompe un pacchetto a sedute e converte il valore a listino delle
+    sedute non ancora effettuate in credito su una carta Prepagata del cliente
+    (quella già attiva, se esiste, altrimenti ne crea una nuova). Il pacchetto
+    sorgente passa a stato Abbandonato: da qui in poi non è più riconvertibile."""
+    pacchetto = Pacchetto.query.options(
+        joinedload(Pacchetto.client),
+        selectinload(Pacchetto.sedute).joinedload(PacchettoSeduta.service)
+    ).get_or_404(id)
+
+    if pacchetto.tipo != PacchettoTipo.Servizi:
+        return jsonify({'success': False, 'error': 'Solo i pacchetti a sedute possono essere convertiti in credito'}), 400
+    if pacchetto.status in (PacchettoStatus.Abbandonato, PacchettoStatus.Completato, PacchettoStatus.Eliminato):
+        return jsonify({'success': False, 'error': 'Questo pacchetto non può essere convertito nel suo stato attuale'}), 400
+
+    sedute_residue, importo = _sedute_residue_e_valore(pacchetto)
+    if not sedute_residue:
+        return jsonify({'success': False, 'error': 'Nessuna seduta residua da convertire'}), 400
+    if importo <= 0:
+        return jsonify({'success': False, 'error': 'Il valore delle sedute residue è pari a zero'}), 400
+
+    prepagata = _trova_prepagata_attiva_cliente(pacchetto.client_id)
+    is_new = prepagata is None
+    descrizione_mov = (
+        f"Credito da pacchetto interrotto \"{pacchetto.nome}\" (#{pacchetto.id}), "
+        f"{len(sedute_residue)} sedute residue a valore di listino"
+    )
+
+    if not is_new:
+        vecchio_saldo = prepagata.credito_residuo or Decimal('0')
+        nuovo_saldo = vecchio_saldo + importo
+        prepagata.credito_residuo = nuovo_saldo
+        prepagata.credito_iniziale = (prepagata.credito_iniziale or Decimal('0')) + importo
+        if prepagata.status == PacchettoStatus.Preventivo:
+            prepagata.status = PacchettoStatus.Attivo
+        aggiungi_history(prepagata, f"Ricarica €{importo:.2f} da conversione pacchetto #{pacchetto.id} - Nuovo saldo €{nuovo_saldo:.2f}")
+    else:
+        prepagata = Pacchetto(
+            client_id=pacchetto.client_id,
+            nome=f"Prepagata da pacchetto interrotto ({pacchetto.nome})",
+            tipo=PacchettoTipo.Prepagata,
+            status=PacchettoStatus.Attivo,
+            data_sottoscrizione=datetime.now().date(),
+            credito_iniziale=importo,
+            credito_residuo=importo,
+            beneficiario_nome=f"{pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}" if pacchetto.client else None
+        )
+        db.session.add(prepagata)
+        db.session.flush()  # serve prepagata.id per il movimento e la history del pacchetto sorgente
+        nuovo_saldo = importo
+        aggiungi_history(prepagata, f"Creata da conversione pacchetto #{pacchetto.id} - Saldo iniziale €{importo:.2f}")
+
+    movimento = MovimentoPrepagata(
+        pacchetto_id=prepagata.id,
+        tipo_movimento='ricarica',
+        importo=importo,
+        saldo_dopo=nuovo_saldo,
+        descrizione=descrizione_mov
+    )
+    db.session.add(movimento)
+
+    # Interrompi il pacchetto sorgente: da qui in poi il pulsante di conversione
+    # sparisce (status non più tra quelli convertibili), niente doppie conversioni.
+    pacchetto.status = PacchettoStatus.Abbandonato
+    aggiungi_history(pacchetto, f"Interrotto: {len(sedute_residue)} sedute residue convertite in €{importo:.2f} di credito sulla prepagata #{prepagata.id}")
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'importo_convertito': float(importo),
+        'sedute_convertite': len(sedute_residue),
+        'prepagata_id': prepagata.id,
+        'prepagata_nome': prepagata.nome,
+        'prepagata_is_new': is_new,
+        'prepagata_credito_residuo': float(nuovo_saldo)
     })
 
 

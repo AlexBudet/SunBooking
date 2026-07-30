@@ -941,6 +941,14 @@ display: none;
 {% endif %}
 </div>
   </div>
+
+  {% if pacchetto.status in ['attivo', 'preventivo'] and pacchetto.ha_sedute_non_effettuate %}
+  <div class="text-end mt-3" style="width: 51.5%; margin-left: 16%;">
+    <button class="btn btn-outline-danger" onclick="apriModalConvertiCredito()">
+      <i class="bi bi-arrow-repeat"></i> Interrompi e converti residuo in credito
+    </button>
+  </div>
+  {% endif %}
 {% endif %}
   <br><br>
 
@@ -1075,6 +1083,31 @@ display: none;
 </div>
 {% endif %}
 
+{% endif %}
+
+<!-- Modal Interrompi e Converti Residuo in Credito -->
+{% if pacchetto.tipo != 'prepagata' %}
+<div class="modal fade" id="modalConvertiCredito" tabindex="-1" aria-labelledby="modalConvertiCreditoLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="modalConvertiCreditoLabel">
+          <i class="bi bi-arrow-repeat"></i> Interrompi pacchetto e converti in credito
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body" id="convertiCreditoBody">
+        <div class="text-center text-muted py-3" id="convertiCreditoLoading">Calcolo del residuo in corso...</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-danger" id="btnConfermaConvertiCredito" onclick="confermaConvertiCredito()" disabled>
+          <i class="bi bi-arrow-repeat"></i> Conferma conversione
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endif %}
 
 {% endblock %}
@@ -1498,6 +1531,75 @@ async function eseguiRicarica() {
     alert('Errore di connessione');
   }
  }
+
+// ============ INTERROMPI PACCHETTO E CONVERTI RESIDUO IN CREDITO ============
+async function apriModalConvertiCredito() {
+  const modal = new bootstrap.Modal(document.getElementById('modalConvertiCredito'));
+  const body = document.getElementById('convertiCreditoBody');
+  const btnConferma = document.getElementById('btnConfermaConvertiCredito');
+  btnConferma.disabled = true;
+  body.innerHTML = '<div class="text-center text-muted py-3">Calcolo del residuo in corso...</div>';
+  modal.show();
+
+  try {
+    const response = await fetch(`/pacchetti/api/pacchetti/${pacchettoId}/residuo-credito`);
+    const data = await response.json();
+
+    if (!data.success) {
+      body.innerHTML = `<div class="alert alert-warning mb-0">${data.error || 'Impossibile calcolare il residuo'}</div>`;
+      return;
+    }
+
+    const esc = s => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const righeServizi = data.sedute_residue.map(s =>
+      `<tr><td>${esc(s.service_nome || 'Servizio')}</td><td class="text-end">€${Number(s.prezzo).toFixed(2)}</td></tr>`
+    ).join('');
+
+    const destinazione = data.prepagata_esistente
+      ? `una carta prepagata già esistente (<strong>${esc(data.prepagata_esistente.nome)}</strong>, saldo attuale €${data.prepagata_esistente.credito_residuo.toFixed(2)})`
+      : `una <strong>nuova</strong> carta prepagata (il cliente non ne ha ancora una attiva)`;
+
+    body.innerHTML = `
+      <p>Il pacchetto verrà <strong>interrotto</strong> (stato: Abbandonato) e le sedute non ancora effettuate verranno convertite in credito, al loro valore di listino, su ${destinazione}.</p>
+      <table class="table table-sm">
+        <thead><tr><th>Seduta residua</th><th class="text-end">Valore listino</th></tr></thead>
+        <tbody>${righeServizi}</tbody>
+        <tfoot><tr class="fw-bold"><td>Totale credito</td><td class="text-end">€${data.importo.toFixed(2)}</td></tr></tfoot>
+      </table>
+      <div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle"></i> Operazione irreversibile: il pacchetto non potrà essere riattivato.</div>
+    `;
+    btnConferma.disabled = false;
+  } catch (error) {
+    console.error('Errore calcolo residuo:', error);
+    body.innerHTML = '<div class="alert alert-danger mb-0">Errore di connessione</div>';
+  }
+}
+
+async function confermaConvertiCredito() {
+  const btnConferma = document.getElementById('btnConfermaConvertiCredito');
+  btnConferma.disabled = true;
+  try {
+    const response = await fetch(`/pacchetti/api/pacchetti/${pacchettoId}/converti-credito`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      alert(`Convertiti €${data.importo_convertito.toFixed(2)} in credito sulla carta prepagata "${data.prepagata_nome}".`);
+      window.location.href = `/pacchetti/detail/${data.prepagata_id}`;
+    } else {
+      alert('Errore: ' + (data.error || 'Conversione non riuscita'));
+      btnConferma.disabled = false;
+    }
+  } catch (error) {
+    console.error('Errore conversione credito:', error);
+    alert('Errore di connessione');
+    btnConferma.disabled = false;
+  }
+}
 
 // Mostra messaggio se arrivati da calendar dopo aver fissato una seduta
 (function checkPacchettoSedutaMessage() {
