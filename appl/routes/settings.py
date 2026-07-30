@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 import os, ipaddress, requests
 from sqlalchemy.sql import func, or_
 from .. import db
-from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession
+from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession, PrepagataRicaricaRegola
 from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
 from .calendar import _compute_client_loyalty, LOYALTY_DEFAULT
 
@@ -3200,6 +3200,73 @@ def api_delete_promo(promo_id):
     """Elimina una promo."""
     promo = PromoPacchetto.query.get_or_404(promo_id)
     db.session.delete(promo)
+    db.session.commit()
+    return jsonify({'success': True})
+
+# ================= RICARICA AUTOMATICA PREPAGATA (soglie per servizio o per categoria) ====================
+@settings_bp.route('/api/pacchetti/ricarica-regole', methods=['GET'])
+def api_get_ricarica_regole():
+    """Tutte le soglie di ricarica automatica, raggruppate per servizio o per categoria."""
+    regole = (PrepagataRicaricaRegola.query
+              .outerjoin(Service)
+              .order_by(PrepagataRicaricaRegola.categoria, Service.servizio_nome, PrepagataRicaricaRegola.importo_pagato)
+              .all())
+    gruppi = {}
+    for r in regole:
+        if r.service_id:
+            chiave = ('servizio', r.service_id)
+            etichetta = r.service.servizio_nome if r.service else '(servizio eliminato)'
+        else:
+            chiave = ('categoria', r.categoria)
+            etichetta = f"Tutta la categoria: {r.categoria}"
+        gruppi.setdefault(chiave, {
+            'service_id': r.service_id,
+            'categoria': r.categoria if not r.service_id else None,
+            'etichetta': etichetta,
+            'soglie': []
+        })
+        gruppi[chiave]['soglie'].append({'id': r.id, 'importo_pagato': float(r.importo_pagato), 'importo_accreditato': float(r.importo_accreditato), 'attiva': r.attiva})
+    return jsonify(list(gruppi.values()))
+
+@settings_bp.route('/api/pacchetti/ricarica-regole', methods=['POST'])
+def api_create_ricarica_regola():
+    """Aggiunge una soglia di ricarica per un servizio specifico (service_id) oppure per
+    un'intera categoria (categoria): esattamente uno dei due, mai entrambi."""
+    data = request.get_json(silent=True) or {}
+    service_id = data.get('service_id') or None
+    categoria = (data.get('categoria') or '').strip() or None
+
+    if bool(service_id) == bool(categoria):
+        return jsonify({'error': 'Specifica un servizio oppure una categoria, non entrambi né nessuno dei due'}), 400
+    if service_id and not Service.query.get(service_id):
+        return jsonify({'error': 'Servizio non valido'}), 400
+    if categoria and categoria not in [c.value for c in ServiceCategory]:
+        return jsonify({'error': 'Categoria non valida'}), 400
+
+    try:
+        importo_pagato = float(data.get('importo_pagato'))
+        importo_accreditato = float(data.get('importo_accreditato'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Importi non validi'}), 400
+    if importo_pagato <= 0 or importo_accreditato <= 0:
+        return jsonify({'error': 'Gli importi devono essere positivi'}), 400
+
+    regola = PrepagataRicaricaRegola(
+        service_id=service_id,
+        categoria=categoria,
+        importo_pagato=importo_pagato,
+        importo_accreditato=importo_accreditato,
+        attiva=True
+    )
+    db.session.add(regola)
+    db.session.commit()
+    return jsonify({'success': True, 'regola': regola.to_dict()})
+
+@settings_bp.route('/api/pacchetti/ricarica-regole/<int:regola_id>', methods=['DELETE'])
+def api_delete_ricarica_regola(regola_id):
+    """Elimina una singola soglia di ricarica."""
+    regola = PrepagataRicaricaRegola.query.get_or_404(regola_id)
+    db.session.delete(regola)
     db.session.commit()
     return jsonify({'success': True})
 

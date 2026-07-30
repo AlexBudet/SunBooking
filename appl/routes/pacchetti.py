@@ -2,7 +2,7 @@
 import json
 from flask import Blueprint, render_template, request, jsonify, session
 from appl import db
-from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo, PacchettoTipo, MovimentoPrepagata, Subcategory, User
+from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo, PacchettoTipo, MovimentoPrepagata, Subcategory, User, PrepagataRicaricaRegola
 from sqlalchemy import func, or_, and_
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload, selectinload
@@ -420,6 +420,8 @@ def api_pacchetti():
             'credito_iniziale': float(p.credito_iniziale) if p.credito_iniziale else None,
             'saldo_attuale': float(p.credito_residuo) if p.credito_residuo else None,
             'beneficiario_nome': p.beneficiario_nome,
+            'numero_tessera': p.numero_tessera,
+            'vincoli_utilizzo': p.vincoli_utilizzo,
             'data_scadenza': p.data_scadenza.isoformat() if p.data_scadenza else None,
             'credito_residuo': float(p.credito_residuo) if p.credito_residuo else None,
             'operatori_preferiti': operatori_pref,
@@ -712,7 +714,20 @@ def api_update_pacchetto(id):
                 pass
     if 'costo_totale_scontato' in data:
         pacchetto.costo_totale_scontato = data['costo_totale_scontato']
-        
+
+    if 'numero_tessera' in data:
+        nuovo_numero = (data.get('numero_tessera') or '').strip() or None
+        if nuovo_numero:
+            esistente = Pacchetto.query.filter(
+                Pacchetto.numero_tessera == nuovo_numero,
+                Pacchetto.id != pacchetto.id
+            ).first()
+            if esistente:
+                return jsonify({'error': f'Numero tessera già assegnato al pacchetto #{esistente.id}'}), 400
+        pacchetto.numero_tessera = nuovo_numero
+        aggiungi_history(pacchetto, f"Numero tessera impostato a: {nuovo_numero or '(rimosso)'}")
+
+
     if 'sconto_valore' in data:
         sconto = pacchetto.sconto_regole[0] if pacchetto.sconto_regole else None
         if sconto:
@@ -1007,6 +1022,7 @@ def pacchetto_detail(id):
         'credito_residuo': float(pacchetto.credito_residuo) if pacchetto.credito_residuo else None,
         'data_scadenza': pacchetto.data_scadenza.strftime('%d/%m/%Y') if pacchetto.data_scadenza else None,
         'beneficiario_nome': pacchetto.beneficiario_nome,
+        'numero_tessera': pacchetto.numero_tessera,
         'vincoli_utilizzo': pacchetto.vincoli_utilizzo,
         'movimenti_prepagata': movimenti_prepagata,
         'totale_rate_pagate': totale_rate_pagate,
@@ -1914,6 +1930,161 @@ def api_converti_credito_pacchetto(id):
     })
 
 
+@pacchetti_bp.route('/api/cerca-per-tessera', methods=['GET'])
+def api_cerca_per_tessera():
+    """Cerca carte prepagate per numero di tessera (match parziale), per la ricerca
+    cliente da tessera in Cassa. Ritorna cliente + dati carta per ogni corrispondenza."""
+    numero = (request.args.get('numero') or '').strip()
+    if len(numero) < 1:
+        return jsonify([])
+
+    prepagate = (Pacchetto.query
+                 .join(Client)
+                 .filter(
+                     Pacchetto.tipo == PacchettoTipo.Prepagata,
+                     Pacchetto.numero_tessera.ilike(f'%{numero}%'),
+                     Pacchetto.status != PacchettoStatus.Eliminato
+                 )
+                 .limit(8)
+                 .all())
+
+    return jsonify([{
+        'prepagata_id': p.id,
+        'numero_tessera': p.numero_tessera,
+        'credito_residuo': float(p.credito_residuo or 0),
+        'client_id': p.client_id,
+        'client_nome': p.client.cliente_nome if p.client else '',
+        'client_cognome': p.client.cliente_cognome if p.client else '',
+        'client_cellulare': p.client.cliente_cellulare if p.client else ''
+    } for p in prepagate])
+
+
+@pacchetti_bp.route('/api/prepagata/<int:id>/riepilogo', methods=['GET'])
+def api_prepagata_riepilogo(id):
+    """Riepilogo sintetico di una carta prepagata per la Cassa: saldo, vincoli,
+    ultima ricarica e ultimo utilizzo (servizio scaricato e quando)."""
+    p = Pacchetto.query.options(joinedload(Pacchetto.client)).get_or_404(id)
+    if p.tipo != PacchettoTipo.Prepagata:
+        return jsonify({'error': 'Non è una carta prepagata'}), 400
+
+    def _mov_dict(m):
+        if not m:
+            return None
+        return {
+            'importo': float(m.importo or 0),
+            'saldo_dopo': float(m.saldo_dopo or 0),
+            'descrizione': m.descrizione or '',
+            'data': m.data_movimento.strftime('%d/%m/%Y') if m.data_movimento else None
+        }
+
+    ultima_ricarica = (MovimentoPrepagata.query
+                       .filter_by(pacchetto_id=p.id, tipo_movimento='ricarica')
+                       .order_by(MovimentoPrepagata.data_movimento.desc())
+                       .first())
+    ultimo_utilizzo = (MovimentoPrepagata.query
+                       .filter_by(pacchetto_id=p.id, tipo_movimento='utilizzo')
+                       .order_by(MovimentoPrepagata.data_movimento.desc())
+                       .first())
+
+    vincoli = p.vincoli_utilizzo or {}
+    tipo_vincolo = vincoli.get('tipo') if isinstance(vincoli, dict) else None
+    if not tipo_vincolo or tipo_vincolo == 'tutti':
+        vincolo_label = 'Tutti i servizi'
+    elif tipo_vincolo == 'categoria':
+        vincolo_label = f"Solo {vincoli.get('categoria')}"
+    elif tipo_vincolo == 'sottocategoria':
+        sc = Subcategory.query.get(vincoli.get('sottocategoria_id'))
+        vincolo_label = f"Solo {sc.nome}" if sc else 'Solo una sottocategoria'
+    elif tipo_vincolo == 'servizi':
+        vincolo_label = f"Solo {len(vincoli.get('servizi_ids') or [])} servizi specifici"
+    else:
+        vincolo_label = 'Tutti i servizi'
+
+    return jsonify({
+        'id': p.id,
+        'nome': p.nome,
+        'numero_tessera': p.numero_tessera,
+        'status': p.status.value,
+        'client_nome': f"{p.client.cliente_nome} {p.client.cliente_cognome}".strip() if p.client else '',
+        'credito_iniziale': float(p.credito_iniziale or 0),
+        'credito_residuo': float(p.credito_residuo or 0),
+        'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None,
+        'vincolo_label': vincolo_label,
+        'ultima_ricarica': _mov_dict(ultima_ricarica),
+        'ultimo_utilizzo': _mov_dict(ultimo_utilizzo)
+    })
+
+
+@pacchetti_bp.route('/api/servizi-ricarica-prepagata', methods=['GET'])
+def api_servizi_ricarica_prepagata():
+    """Regole "abbinate" a una ricarica automatica di prepagata (servizio specifico o
+    intera categoria), con le loro soglie importo_pagato -> importo_accreditato.
+    Usato dai pulsanti rapidi di Cassa (es. Solarium)."""
+    regole = (PrepagataRicaricaRegola.query
+              .filter(PrepagataRicaricaRegola.attiva == True)
+              .outerjoin(Service)
+              .order_by(PrepagataRicaricaRegola.categoria, Service.servizio_nome, PrepagataRicaricaRegola.importo_pagato)
+              .all())
+    gruppi = {}
+    for r in regole:
+        if r.service_id:
+            chiave = ('servizio', r.service_id)
+            gruppi.setdefault(chiave, {
+                'service_id': r.service_id,
+                'service_nome': r.service.servizio_nome,
+                'categoria': r.service.servizio_categoria.value if r.service.servizio_categoria else None,
+                'soglie': []
+            })
+        else:
+            chiave = ('categoria', r.categoria)
+            gruppi.setdefault(chiave, {
+                'service_id': None,
+                'service_nome': f"Ricarica {r.categoria}",
+                'categoria': r.categoria,
+                'soglie': []
+            })
+        gruppi[chiave]['soglie'].append({
+            'importo_pagato': float(r.importo_pagato),
+            'importo_accreditato': float(r.importo_accreditato)
+        })
+    return jsonify(list(gruppi.values()))
+
+
+@pacchetti_bp.route('/api/prepagata-o-crea', methods=['POST'])
+def api_prepagata_o_crea():
+    """Trova la prepagata attiva del cliente, o ne crea una nuova (credito zero, verrà
+    caricato dalla ricarica stessa) se non ne ha. Usato dalla sezione Cassa "Ricariche
+    Prepagate" per sapere su quale carta accreditare il servizio abbinato appena venduto."""
+    data = request.get_json(silent=True) or {}
+    client_id = data.get('client_id')
+    client = Client.query.get(client_id) if client_id else None
+    if not client:
+        return jsonify({'error': 'Cliente non valido'}), 400
+
+    prepagata = _trova_prepagata_attiva_cliente(client_id)
+    is_new = prepagata is None
+    if is_new:
+        prepagata = Pacchetto(
+            client_id=client_id,
+            nome=f"Prepagata di {client.cliente_nome} {client.cliente_cognome}",
+            tipo=PacchettoTipo.Prepagata,
+            status=PacchettoStatus.Attivo,
+            data_sottoscrizione=datetime.now().date(),
+            credito_iniziale=Decimal('0'),
+            credito_residuo=Decimal('0'),
+            beneficiario_nome=f"{client.cliente_nome} {client.cliente_cognome}"
+        )
+        db.session.add(prepagata)
+        db.session.commit()
+
+    return jsonify({
+        'id': prepagata.id,
+        'nome': prepagata.nome,
+        'credito_residuo': float(prepagata.credito_residuo or 0),
+        'is_new': is_new
+    })
+
+
 @pacchetti_bp.route('/api/prepagate-cliente/<int:client_id>', methods=['GET'])
 def api_prepagate_cliente(client_id):
     """Restituisce le carte prepagate attive di un cliente (per la cassa).
@@ -1960,7 +2131,8 @@ def api_prepagate_cliente(client_id):
             'credito_residuo': float(p.credito_residuo),
             'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None,
             'beneficiario': p.beneficiario_nome,
-            'vincoli_utilizzo': p.vincoli_utilizzo
+            'vincoli_utilizzo': p.vincoli_utilizzo,
+            'numero_tessera': p.numero_tessera
         })
     
     return jsonify(risultati)

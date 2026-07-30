@@ -1189,6 +1189,13 @@ def solarium_state():
     il macchinario e' acceso (rilevato dal canale Phidget collegato)."""
     from ..models import SolariumDevice, SolariumSession
     from ..services.solarium_images import device_ids_with_image
+    from ..services.solarium_bridge import chiudi_sedute_orfane
+
+    # Autocorrezione: se il PC e' stato spento con una lampada accesa, l'evento di
+    # fine non e' mai stato registrato e la seduta risulterebbe aperta all'infinito
+    # (lampada "accesa" da ore nel monitor). Qui viene chiusa d'ufficio quando ha
+    # superato la durata prevista + 2 minuti di tolleranza.
+    chiudi_sedute_orfane()
 
     devices = (SolariumDevice.query
                .filter_by(is_deleted=False)

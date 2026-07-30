@@ -13,7 +13,7 @@ funzionare normalmente, semplicemente senza monitoraggio lampade.
 """
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger('SunBooking')
 
@@ -58,6 +58,11 @@ def start_solarium_bridge(app):
         logger.error("Solarium: impossibile leggere la configurazione macchinari: %s", e)
         return
 
+    # PC spento con una lampada accesa: la seduta e' rimasta aperta senza fine.
+    # Va chiusa PRIMA di leggere lo stato iniziale dei canali, altrimenti una
+    # lampada spenta nel frattempo verrebbe letta come "seduta ancora in corso".
+    chiudi_sedute_orfane(app)
+
     if not device_map:
         logger.info("Solarium: nessun macchinario con canale Phidget assegnato, bridge non avviato.")
         return
@@ -91,6 +96,77 @@ def start_solarium_bridge(app):
         threading.Thread(target=_reconcile_loop, args=(app,), daemon=True).start()
 
 
+def chiudi_sedute_orfane(app=None, solo_device_ids=None):
+    """Chiude le sedute rimaste "aperte" (fine=None) oltre il tempo massimo
+    plausibile: durata prevista del macchinario + 2 minuti di tolleranza.
+
+    Serve quando il PC viene spento con una lampada ancora accesa: l'evento di
+    fine non viene mai registrato e la seduta resterebbe aperta all'infinito
+    (facendo risultare la lampada accesa per sempre). In quel caso la fine
+    viene ricostruita dal sistema come inizio + durata prevista, perche' e' il
+    momento in cui la lampada si e' effettivamente spenta da sola.
+
+    La chiusura ha la precedenza su un eventuale evento Phidget successivo:
+    quando il PC riparte e la Phidget segnala il circuito riaperto, la seduta
+    risulta gia' chiusa e non viene piu' toccata.
+
+    solo_device_ids: se passato, limita l'intervento a quei macchinari.
+    app: necessario solo se chiamata fuori da una request (es. avvio bridge);
+    dentro una request si passa None e si usa il contesto gia' attivo.
+    """
+    from contextlib import nullcontext
+
+    try:
+        ctx = app.app_context() if app is not None else nullcontext()
+        with ctx:
+            return _chiudi_sedute_orfane_impl(solo_device_ids)
+    except Exception as e:
+        logger.error("Solarium: errore chiusura sedute orfane: %s", e)
+        return 0
+
+
+def _chiudi_sedute_orfane_impl(solo_device_ids=None):
+    from appl import db
+    from appl.models import SolariumSession, SolariumDevice
+
+    now = datetime.now(timezone.utc)
+    chiuse = 0
+
+    q = SolariumSession.query.filter_by(fine=None)
+    if solo_device_ids:
+        q = q.filter(SolariumSession.device_id.in_(list(solo_device_ids)))
+    aperte = q.all()
+    if not aperte:
+        return 0
+
+    durate = {d.id: (d.durata_seduta_minuti or 0)
+              for d in SolariumDevice.query.all()}
+
+    for sessione in aperte:
+        durata_minuti = durate.get(sessione.device_id) or 0
+        if durata_minuti <= 0:
+            continue  # senza durata prevista non si puo' stimare la fine
+
+        inizio = sessione.inizio
+        if inizio.tzinfo is None:
+            inizio = inizio.replace(tzinfo=timezone.utc)
+
+        limite = inizio + timedelta(minutes=durata_minuti + 2)
+        if now <= limite:
+            continue  # ancora nella finestra plausibile: seduta in corso
+
+        sessione.fine = inizio + timedelta(minutes=durata_minuti)
+        sessione.durata_secondi = durata_minuti * 60
+        chiuse += 1
+        logger.info("Solarium: seduta orfana chiusa dal sistema "
+                    "(device_id=%s, inizio=%s, fine stimata=%s)",
+                    sessione.device_id, inizio, sessione.fine)
+
+    if chiuse:
+        db.session.commit()
+    return chiuse
+
+
 def _reconcile_loop(app):
     """Rete di sicurezza: ogni 5s rilegge lo stato reale di ogni canale e
     riallinea il DB. Serve se un evento di cambio stato non scatta o si perde
@@ -99,12 +175,24 @@ def _reconcile_loop(app):
     import time
     while True:
         time.sleep(5)
+        device_ids_scollegati = []
         for ch, device_id, channel_num in _channels:
             try:
                 if ch.getAttached():
                     _on_state_change(app, device_id, channel_num, ch.getState())
+                else:
+                    device_ids_scollegati.append(device_id)
             except Exception as e:
                 logger.debug("Solarium: reconcile canale %s fallito: %s", channel_num, e)
+                device_ids_scollegati.append(device_id)
+
+        # Solo per i macchinari il cui canale non e' leggibile (Phidget
+        # scollegata/in errore): li' lo stato reale non arriva piu', quindi si
+        # applica la chiusura per tempo massimo. Per i canali collegati NON va
+        # fatto, altrimenti una seduta piu' lunga del previsto verrebbe chiusa
+        # e subito ricreata dal reconcile (lampada ancora accesa).
+        if device_ids_scollegati:
+            chiudi_sedute_orfane(app, solo_device_ids=device_ids_scollegati)
 
 
 def get_status():

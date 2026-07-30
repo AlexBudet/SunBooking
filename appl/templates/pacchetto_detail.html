@@ -590,7 +590,7 @@ display: none;
 {% if pacchetto.tipo == 'prepagata' %}
   <div class="d-flex mt-4">
     <div class="flex-fill">
-      <div class="neomorphic-div" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+      <div class="neomorphic-div programma-card status-{{ pacchetto.status|lower }}">
         {# pacchetto.status è già una stringa (es. "preventivo") passata dalla route #}
         {% set prepagata_non_pagata = (pacchetto.status == 'preventivo') %}
         {% if prepagata_non_pagata and (pacchetto.credito_iniziale or 0) > 0 %}
@@ -636,7 +636,16 @@ display: none;
           <small class="opacity-75">Beneficiario:</small> <strong>{{ pacchetto.beneficiario_nome }}</strong>
         </div>
         {% endif %}
-        
+
+        <!-- Numero tessera -->
+        <div class="text-center mt-2" id="numeroTesseraDisplay">
+          <small class="opacity-75">N. Tessera:</small>
+          <strong id="numeroTesseraValue">{{ pacchetto.numero_tessera or 'non assegnato' }}</strong>
+          <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="apriModalNumeroTessera()" data-bs-toggle="tooltip" title="Modifica numero tessera">
+            <i class="bi bi-pencil"></i>
+          </button>
+        </div>
+
         <!-- Vincoli utilizzo -->
         <div class="text-center mt-2" id="vincoliUtilizzoDisplay">
           <small class="opacity-75">Utilizzo consentito:</small>
@@ -650,7 +659,7 @@ display: none;
             <strong>Solo {{ pacchetto.vincoli_utilizzo.servizi_ids|length }} servizi specifici</strong>
           {% endif %}
           {% if current_user and current_user.ruolo.value in ['admin', 'owner'] %}
-          <button type="button" class="btn btn-sm btn-outline-light ms-2" onclick="apriModalVincoli()" data-bs-toggle="tooltip" title="Modifica vincoli">
+          <button type="button" class="btn btn-sm btn-outline-secondary ms-2" onclick="apriModalVincoli()" data-bs-toggle="tooltip" title="Modifica vincoli">
             <i class="bi bi-pencil"></i>
           </button>
           {% endif %}
@@ -1025,6 +1034,27 @@ display: none;
   </div>
 </div>
 
+<!-- Modal Numero Tessera -->
+<div class="modal fade" id="modalNumeroTessera" tabindex="-1" aria-labelledby="modalNumeroTesseraLabel" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalNumeroTesseraLabel"><i class="bi bi-credit-card-2-front"></i> Numero Tessera</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label for="numeroTesseraInput" class="form-label">Numero tessera (facoltativo)</label>
+        <input type="text" class="form-control" id="numeroTesseraInput" placeholder="Es: 00123" maxlength="50">
+        <small class="text-muted">Deve essere univoco: se già assegnato a un'altra carta, il salvataggio darà errore.</small>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" onclick="salvaNumeroTessera()">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal Modifica Vincoli Utilizzo -->
 {% if current_user and current_user.ruolo.value in ['admin', 'owner'] %}
 <div class="modal fade" id="modalVincoli" tabindex="-1" aria-labelledby="modalVincoliLabel" aria-hidden="true">
@@ -1329,6 +1359,34 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ============ FUNZIONI CARTA PREPAGATA ============
 let creditoRicaricaManualeSbloccato = false;
+
+function apriModalNumeroTessera() {
+  const valoreAttuale = document.getElementById('numeroTesseraValue').textContent.trim();
+  document.getElementById('numeroTesseraInput').value = (valoreAttuale === 'non assegnato') ? '' : valoreAttuale;
+  new bootstrap.Modal(document.getElementById('modalNumeroTessera')).show();
+  setTimeout(() => document.getElementById('numeroTesseraInput').focus(), 300);
+}
+
+async function salvaNumeroTessera() {
+  const numero = document.getElementById('numeroTesseraInput').value.trim();
+  try {
+    const response = await fetch(`/pacchetti/api/pacchetti/${pacchettoId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ numero_tessera: numero })
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      alert('Errore: ' + (data.error || 'Salvataggio non riuscito'));
+      return;
+    }
+    document.getElementById('numeroTesseraValue').textContent = numero || 'non assegnato';
+    bootstrap.Modal.getInstance(document.getElementById('modalNumeroTessera')).hide();
+  } catch (error) {
+    console.error('Errore salvataggio numero tessera:', error);
+    alert('Errore di connessione');
+  }
+}
 
 function apriModalRicarica() {
   const modal = new bootstrap.Modal(document.getElementById('modalRicarica'));
@@ -3997,6 +4055,7 @@ document.getElementById('btnWhatsapp').addEventListener('click', async function(
   const creditoIniziale = {{ pacchetto.credito_iniziale|default(0, true) }};
   const dataScadenza = "{{ pacchetto.data_scadenza.strftime('%d/%m/%Y') if pacchetto.data_scadenza else '—' }}";
   const beneficiario = "{{ pacchetto.beneficiario_nome|default(pacchetto.client_nome, true)|escapejs }}";
+  const numeroTessera = "{{ pacchetto.numero_tessera|default('', true)|escapejs }}";
   
   const defaultTemplate = isPrepagata 
     ? `Ciao {cliente_nome}! 👋
@@ -4067,6 +4126,7 @@ Ti aspettiamo! 💆‍♀️
       .replace(/{credito_iniziale}/g, creditoIniziale.toFixed(2))
       .replace(/{data_scadenza}/g, dataScadenza)
       .replace(/{beneficiario}/g, beneficiario)
+      .replace(/{numero_tessera}/g, numeroTessera)
       .replace(/{centro_nome}/g, centroNome);
     
     // Copia negli appunti

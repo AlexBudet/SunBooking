@@ -380,6 +380,7 @@
             <table class="table" id="tabellaPrepagate">
                 <thead>
                     <tr>
+                        <th class="sortable-prep" data-sort="numero_tessera">N. Tessera <i class="bi bi-arrow-down-up"></i></th>
                         <th class="sortable-prep" data-sort="client_nome">Cliente <i class="bi bi-arrow-down-up"></i></th>
                         <th class="sortable-prep" data-sort="beneficiario_nome">Beneficiario <i class="bi bi-arrow-down-up"></i></th>
                         <th class="sortable-prep" data-sort="data_sottoscrizione">Creata il <i class="bi bi-arrow-down-up"></i></th>
@@ -1441,8 +1442,13 @@ function generateSeduteOmaggioRows() {
             
             const beneficiario = p.beneficiario_nome || p.client_nome;
             const scadenza = p.data_scadenza ? formatDataIt(p.data_scadenza) : 'Nessuna';
-            
+            const soloSolarium = p.vincoli_utilizzo && p.vincoli_utilizzo.tipo === 'categoria' && p.vincoli_utilizzo.categoria === 'Solarium';
+            const tesseraHtml = p.numero_tessera
+                ? (soloSolarium ? `<span class="badge bg-warning text-dark" title="Solo Solarium">${p.numero_tessera}</span>` : p.numero_tessera)
+                : '<span class="text-muted">—</span>';
+
             tr.innerHTML = `
+                <td>${tesseraHtml}</td>
                 <td><b>${p.client_nome}</b></td>
                 <td>${beneficiario}</td>
                 <td>${formatDataIt(p.data_sottoscrizione)}</td>

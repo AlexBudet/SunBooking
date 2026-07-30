@@ -218,6 +218,7 @@ Ti aspettiamo! 💆‍♀️
           <div>
             <span class="variable-tag" onclick="insertVariablePrepagate('{cliente_nome}')">Nome Cliente</span>
             <span class="variable-tag" onclick="insertVariablePrepagate('{carta_nome}')">Nome Carta</span>
+            <span class="variable-tag" onclick="insertVariablePrepagate('{numero_tessera}')">N. Tessera</span>
             <span class="variable-tag" onclick="insertVariablePrepagate('{beneficiario}')">Beneficiario</span>
             <span class="variable-tag" onclick="insertVariablePrepagate('{credito_residuo}')">Credito Residuo</span>
             <span class="variable-tag" onclick="insertVariablePrepagate('{credito_iniziale}')">Credito Iniziale</span>
@@ -250,6 +251,77 @@ Ti aspettiamo! 💆‍♀️
           </button>
         </div>
 
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sezione Ricarica Automatica Prepagata -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-arrow-repeat"></i> Ricarica Automatica Prepagata</h5>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Abbina un servizio specifico, oppure un'intera categoria (es. tutto il Solarium), a una
+          o più soglie di ricarica: se in Cassa il cliente paga esattamente all'importo di una
+          soglia, la sua carta prepagata (esistente, o una nuova) viene accreditata
+          automaticamente dell'importo indicato.
+        </p>
+
+        <div class="btn-group mb-2" role="group">
+          <input type="radio" class="btn-check" name="ricaricaAmbito" id="ricaricaAmbitoServizio" checked onchange="toggleRicaricaAmbito()">
+          <label class="btn btn-outline-primary btn-sm" for="ricaricaAmbitoServizio">Servizio specifico</label>
+          <input type="radio" class="btn-check" name="ricaricaAmbito" id="ricaricaAmbitoCategoria" onchange="toggleRicaricaAmbito()">
+          <label class="btn btn-outline-primary btn-sm" for="ricaricaAmbitoCategoria">Intera categoria</label>
+        </div>
+
+        <div class="row g-2 align-items-end mb-3">
+          <div class="col-md-5" id="ricaricaServizioWrap">
+            <label for="ricaricaServizioSelect" class="form-label">Servizio</label>
+            <select class="form-select" id="ricaricaServizioSelect">
+              <option value="">-- Seleziona un servizio --</option>
+              {% for gruppo in servizi|groupby('servizio_categoria.value') %}
+              <optgroup label="{{ gruppo.grouper }}">
+              {% for servizio in gruppo.list %}
+              <option value="{{ servizio.id }}">{{ servizio.servizio_nome }}</option>
+              {% endfor %}
+              </optgroup>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-5" id="ricaricaCategoriaWrap" style="display:none;">
+            <label for="ricaricaCategoriaSelect" class="form-label">Categoria</label>
+            <select class="form-select" id="ricaricaCategoriaSelect">
+              <option value="">-- Seleziona una categoria --</option>
+              {% for gruppo in servizi|groupby('servizio_categoria.value') %}
+              <option value="{{ gruppo.grouper }}">{{ gruppo.grouper }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="ricaricaImportoPagato" class="form-label">Il cliente paga (€)</label>
+            <input type="number" class="form-control" id="ricaricaImportoPagato" min="0.01" step="0.01" placeholder="30">
+          </div>
+          <div class="col-md-3">
+            <label for="ricaricaImportoAccreditato" class="form-label">Si carica (€)</label>
+            <input type="number" class="form-control" id="ricaricaImportoAccreditato" min="0.01" step="0.01" placeholder="35">
+          </div>
+          <div class="col-md-1">
+            <button class="btn btn-primary w-100" onclick="addRicaricaRegola()" data-bs-toggle="tooltip" title="Aggiungi soglia">
+              <i class="bi bi-plus-lg"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="ricaricaRegoleList">
+          <div class="text-center text-muted py-3" id="noRicaricaRegoleMessage">
+            <i class="bi bi-credit-card" style="font-size: 1.6rem;"></i>
+            <p class="mt-2 mb-0">Nessun servizio abbinato a una ricarica automatica</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1168,6 +1240,102 @@ async function deletePromo(id) {
   }
 }
 
+// Carica le soglie di ricarica automatica prepagata, raggruppate per servizio
+async function loadRicaricaRegole() {
+  try {
+    const response = await fetch('/settings/api/pacchetti/ricarica-regole');
+    const gruppi = await response.json();
+
+    const container = document.getElementById('ricaricaRegoleList');
+    const noMsg = document.getElementById('noRicaricaRegoleMessage');
+
+    if (!gruppi.length) {
+      container.innerHTML = '';
+      container.appendChild(noMsg);
+      noMsg.style.display = '';
+      return;
+    }
+
+    container.innerHTML = '';
+    gruppi.forEach(g => {
+      const card = document.createElement('div');
+      card.className = 'promo-card mb-2';
+      const soglieHtml = g.soglie.map(s => `
+        <span class="badge bg-light text-dark border me-1 mb-1">
+          €${s.importo_pagato.toFixed(2)} &rarr; €${s.importo_accreditato.toFixed(2)}
+          <a href="#" class="text-danger ms-1" onclick="event.preventDefault(); deleteRicaricaRegola(${s.id})" title="Elimina questa soglia"><i class="bi bi-x-circle"></i></a>
+        </span>`).join('');
+      card.innerHTML = `<strong>${g.etichetta}</strong><br>${soglieHtml}`;
+      container.appendChild(card);
+    });
+  } catch (error) {
+    console.error('Errore caricamento regole ricarica:', error);
+  }
+}
+
+// Mostra il selettore servizio o categoria a seconda dell'ambito scelto
+function toggleRicaricaAmbito() {
+  const isCategoria = document.getElementById('ricaricaAmbitoCategoria').checked;
+  document.getElementById('ricaricaServizioWrap').style.display = isCategoria ? 'none' : '';
+  document.getElementById('ricaricaCategoriaWrap').style.display = isCategoria ? '' : 'none';
+}
+
+// Aggiunge una soglia di ricarica per il servizio o la categoria selezionati
+async function addRicaricaRegola() {
+  const isCategoria = document.getElementById('ricaricaAmbitoCategoria').checked;
+  const serviceId = document.getElementById('ricaricaServizioSelect').value;
+  const categoria = document.getElementById('ricaricaCategoriaSelect').value;
+  const importoPagato = parseFloat(document.getElementById('ricaricaImportoPagato').value);
+  const importoAccreditato = parseFloat(document.getElementById('ricaricaImportoAccreditato').value);
+
+  if (isCategoria && !categoria) { alert('Seleziona una categoria'); return; }
+  if (!isCategoria && !serviceId) { alert('Seleziona un servizio'); return; }
+  if (!importoPagato || importoPagato <= 0 || !importoAccreditato || importoAccreditato <= 0) {
+    alert('Inserisci importi validi (maggiori di zero)');
+    return;
+  }
+
+  const body = isCategoria
+    ? { categoria: categoria, importo_pagato: importoPagato, importo_accreditato: importoAccreditato }
+    : { service_id: parseInt(serviceId), importo_pagato: importoPagato, importo_accreditato: importoAccreditato };
+
+  try {
+    const response = await fetch('/settings/api/pacchetti/ricarica-regole', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (data.success) {
+      document.getElementById('ricaricaImportoPagato').value = '';
+      document.getElementById('ricaricaImportoAccreditato').value = '';
+      loadRicaricaRegole();
+    } else {
+      alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
+    }
+  } catch (error) {
+    console.error('Errore:', error);
+    alert('❌ Errore di connessione');
+  }
+}
+
+// Elimina una singola soglia di ricarica
+async function deleteRicaricaRegola(id) {
+  if (!confirm('Eliminare questa soglia di ricarica?')) return;
+  try {
+    const response = await fetch(`/settings/api/pacchetti/ricarica-regole/${id}`, {
+      method: 'DELETE',
+      headers: { 'X-CSRFToken': csrfToken }
+    });
+    const data = await response.json();
+    if (data.success) loadRicaricaRegole();
+    else alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
+  } catch (error) {
+    console.error('Errore:', error);
+    alert('❌ Errore di connessione');
+  }
+}
+
 // Salva promo
 async function savePromo() {
   const id = document.getElementById('promoId').value;
@@ -1230,7 +1398,8 @@ document.addEventListener('DOMContentLoaded', () => {
     disclaimerTextarea.addEventListener('input', handleDisclaimerInput);
   }
 
-  loadPromo(); 
+  loadPromo();
+  loadRicaricaRegole();
   updatePreview();
   
   // Aggiorna preview quando si modifica il template
