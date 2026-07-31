@@ -1065,6 +1065,27 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       : (document.getElementById('operatorSelectInput').dataset.selectedOperator || null);
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
+    // Carte ricaricate con questo scontrino: sia le ricariche vere e proprie
+    // (righe con ricarica_prepagata_id) sia il primo caricamento di una carta appena
+    // creata (righe con prepagata_id). Servono per proporre il messaggio WhatsApp
+    // anche in caso di ricarica, esattamente come si fa per gli scarichi.
+    // Il saldo aggiornato lo calcola il server al salvataggio, quindi qui si annota
+    // solo quale carta è stata toccata e si rilegge dopo.
+    const prepagateRicaricate = [];
+    [...voci_fiscali, ...voci_non_fiscali].forEach(v => {
+      if (v.ricarica_prepagata_id) {
+        prepagateRicaricate.push({
+          prepagataId: v.ricarica_prepagata_id,
+          importoCaricato: parseFloat(v.ricarica_credito || v.ricarica_importo || 0) || 0
+        });
+      } else if (v.prepagata_id) {
+        // Carta nuova: il credito caricato non viaggia nella voce (lo prende il server
+        // da credito_iniziale), ma per una carta appena attivata il saldo finale È il
+        // credito caricato, quindi lo si legge dal riepilogo insieme al resto.
+        prepagateRicaricate.push({ prepagataId: v.prepagata_id, nuovaCarta: true });
+      }
+    });
+
     // ========== GESTIONE PAGAMENTO CON PREPAGATA ==========
     // Se ci sono voci pagate con prepagata, scala il credito dalla carta.
     // prepagataUtilizzoInfo resta disponibile più sotto (dopo il salvataggio scontrino)
@@ -1470,18 +1491,28 @@ function showPendingModal(key, expectedTotal) {
           window.originalAppointmentIds.clear();
         }
         // 6. Mostra popup successo e poi redirect (UNICO showSuccessPopup)
-        showSuccessPopup('Scontrino stampato con successo!', 3000, () => {
-          if (nonFiscaleResponse && nonFiscaleResponse.redirect_to_pacchetto) {
-            const url = `/pacchetti/detail/${nonFiscaleResponse.redirect_to_pacchetto}`;
-            if (nonFiscaleResponse.rata_importo_modificato) {
-              window.location.href = url + '?ricalcola_rate=1';
+        const mostraEsitoERedirect = () => {
+          showSuccessPopup('Scontrino stampato con successo!', 3000, () => {
+            if (nonFiscaleResponse && nonFiscaleResponse.redirect_to_pacchetto) {
+              const url = `/pacchetti/detail/${nonFiscaleResponse.redirect_to_pacchetto}`;
+              if (nonFiscaleResponse.rata_importo_modificato) {
+                window.location.href = url + '?ricalcola_rate=1';
+              } else {
+                window.location.href = url;
+              }
             } else {
-              window.location.href = url;
+              window.location.href = '/cassa';
             }
-          } else {
-            window.location.href = '/cassa';
-          }
-        });
+          });
+        };
+
+        // Anche sullo scontrino fiscale va proposto il messaggio della carta: le
+        // ricariche sono voci fiscali e passano di qui, non dal ramo non fiscale.
+        const infoCarteFiscali = [
+          ...(prepagataUtilizzoInfo ? [prepagataUtilizzoInfo] : []),
+          ...(await costruisciInfoRicariche(prepagateRicaricate))
+        ];
+        proponiWhatsappPrepagateInSequenza(infoCarteFiscali, mostraEsitoERedirect);
       }
 
       try {
@@ -1632,11 +1663,13 @@ function showPendingModal(key, expectedTotal) {
       });
     }
 
-    if (prepagataUtilizzoInfo && typeof window.showWhatsappAutoSendPanel === 'function') {
-      proponiWhatsappPrepagata(prepagataUtilizzoInfo, completaChiusuraScontrino);
-    } else {
-      completaChiusuraScontrino();
-    }
+    // Messaggio WhatsApp per OGNI movimento di carta dello scontrino: scarichi e
+    // ricariche allo stesso modo (prima le ricariche non lo proponevano affatto).
+    const infoCarte = [
+      ...(prepagataUtilizzoInfo ? [prepagataUtilizzoInfo] : []),
+      ...(await costruisciInfoRicariche(prepagateRicaricate))
+    ];
+    proponiWhatsappPrepagateInSequenza(infoCarte, completaChiusuraScontrino);
 
     // Termina qui il flusso non fiscale
     return;
@@ -1647,6 +1680,55 @@ function showPendingModal(key, expectedTotal) {
 // showWhatsappAutoSendPanel, invio solo su conferma esplicita dell'operatore).
 // onDone viene richiamato sempre alla chiusura del pannello (inviato o no), per riprendere
 // il normale flusso di chiusura scontrino.
+// Rilegge dal server lo stato delle carte ricaricate con lo scontrino appena chiuso
+// (il credito viene accreditato lato server al salvataggio, quindi il saldo giusto si
+// sa solo dopo) e costruisce le info per il pannello WhatsApp.
+async function costruisciInfoRicariche(ricariche) {
+  const infos = [];
+  for (const r of (ricariche || [])) {
+    if (!r.prepagataId) continue;
+    try {
+      const res = await fetch(`/pacchetti/api/prepagata/${r.prepagataId}/riepilogo`);
+      if (!res.ok) continue;
+      const info = await res.json();
+      if (!info || info.error) continue;
+      const saldo = Number(info.credito_residuo || 0);
+      infos.push({
+        tipo: r.nuovaCarta ? 'attivazione' : 'ricarica',
+        prepagataId: r.prepagataId,
+        prepagataNome: info.nome || 'Prepagata',
+        numeroTessera: info.numero_tessera || null,
+        // Carta appena attivata: il caricato coincide col saldo.
+        importoCaricato: r.nuovaCarta ? saldo : Number(r.importoCaricato || 0),
+        creditoResiduo: saldo,
+        clienteId: info.client_id || null,
+        titolare: info.client_nome || null
+      });
+    } catch (err) {
+      console.warn('Impossibile leggere il riepilogo della prepagata ricaricata:', err);
+    }
+  }
+  return infos;
+}
+
+// Propone in sequenza il pannello WhatsApp per ogni movimento di carta dello scontrino
+// (scarichi e ricariche), poi richiama onDone una volta sola alla fine.
+async function proponiWhatsappPrepagateInSequenza(listaInfo, onDone) {
+  const lista = (listaInfo || []).filter(Boolean);
+  if (!lista.length || typeof window.showWhatsappAutoSendPanel !== 'function') {
+    onDone();
+    return;
+  }
+  let i = 0;
+  const prossimo = () => {
+    if (i >= lista.length) { onDone(); return; }
+    const info = lista[i++];
+    proponiWhatsappPrepagata(info, prossimo);
+  };
+  prossimo();
+}
+window.proponiWhatsappPrepagateInSequenza = proponiWhatsappPrepagateInSequenza;
+
 async function proponiWhatsappPrepagata(info, onDone) {
   if (!info.clienteId) { onDone(); return; }
   const cap = window.capitalizeName || (s => s || '');
@@ -1676,8 +1758,15 @@ async function proponiWhatsappPrepagata(info, onDone) {
   if (!numero) { onDone(); return; }
 
   const rigaTessera = info.numeroTessera ? `, tessera n. ${info.numeroTessera}` : '';
-  const perServizio = info.descrizione ? ` per ${info.descrizione}` : '';
-  const testo = `Ciao ${clienteNome}${rigaTessera}, abbiamo scalato €${info.importoScalato.toFixed(2)}${perServizio}. Il credito residuo è €${info.creditoResiduo.toFixed(2)}.`;
+  let testo;
+  if (info.tipo === 'attivazione') {
+    testo = `Ciao ${clienteNome}${rigaTessera}, la tua carta prepagata è attiva con un credito di €${Number(info.creditoResiduo || 0).toFixed(2)}.`;
+  } else if (info.tipo === 'ricarica') {
+    testo = `Ciao ${clienteNome}${rigaTessera}, abbiamo ricaricato €${Number(info.importoCaricato || 0).toFixed(2)}. Il credito disponibile è €${Number(info.creditoResiduo || 0).toFixed(2)}.`;
+  } else {
+    const perServizio = info.descrizione ? ` per ${info.descrizione}` : '';
+    testo = `Ciao ${clienteNome}${rigaTessera}, abbiamo scalato €${Number(info.importoScalato || 0).toFixed(2)}${perServizio}. Il credito residuo è €${Number(info.creditoResiduo || 0).toFixed(2)}.`;
+  }
 
   window.showWhatsappAutoSendPanel({
     numero,
