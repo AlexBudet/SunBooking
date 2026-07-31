@@ -474,6 +474,14 @@ def api_create_pacchetto():
     # CARTA PREPAGATA
     if tipo_pacchetto == 'prepagata':
         credito = Decimal(str(data['credito_iniziale']))
+
+        # Numero tessera assegnabile gia' in creazione (lo fa la Cassa, dove la carta
+        # nasce insieme alla riga di pagamento). E' UNIQUE a DB: va verificato prima.
+        numero_tessera = (data.get('numero_tessera') or '').strip() or None
+        if numero_tessera:
+            gia_usato = Pacchetto.query.filter(Pacchetto.numero_tessera == numero_tessera).first()
+            if gia_usato:
+                return jsonify({'error': f'Numero tessera {numero_tessera} già assegnato'}), 400
         
         # Determina il client_id effettivo:
         # Se c'è un beneficiario selezionato dal DB, associa la prepagata a lui (chi la usa)
@@ -524,7 +532,8 @@ def api_create_pacchetto():
             data_scadenza=datetime.strptime(data['data_scadenza'], '%Y-%m-%d').date() if data.get('data_scadenza') else None,
             costo_totale_lordo=Decimal(str(data.get('importo_pagamento', credito))),
             costo_totale_scontato=Decimal(str(data.get('importo_pagamento', credito))),
-            vincoli_utilizzo=data.get('vincoli_utilizzo')
+            vincoli_utilizzo=data.get('vincoli_utilizzo'),
+            numero_tessera=numero_tessera
         )
         db.session.add(pacchetto)
         db.session.flush()
@@ -1930,6 +1939,48 @@ def api_converti_credito_pacchetto(id):
     })
 
 
+def _vincolo_info(pacchetto):
+    """Descrive il vincolo d'uso di una carta prepagata in una forma pronta per la
+    Cassa: etichetta leggibile + il nome della sottocategoria quando serve. La Cassa
+    usa questi dati per costruire UN SOLO pulsante filtro coerente con la carta
+    (es. "SOLARIUM", oppure il nome della sottocategoria) invece di avere pulsanti
+    fissi che non c'entrano con la tipologia di carta in uso."""
+    vincoli = pacchetto.vincoli_utilizzo if isinstance(pacchetto.vincoli_utilizzo, dict) else {}
+    tipo = vincoli.get('tipo')
+    sottocategoria_nome = None
+
+    if not tipo or tipo == 'tutti':
+        label = 'Tutti i servizi'
+    elif tipo == 'categoria':
+        label = f"Solo {vincoli.get('categoria')}"
+    elif tipo == 'sottocategoria':
+        sc = Subcategory.query.get(vincoli.get('sottocategoria_id'))
+        sottocategoria_nome = sc.nome if sc else None
+        label = f"Solo {sottocategoria_nome}" if sottocategoria_nome else 'Solo una sottocategoria'
+    elif tipo == 'servizi':
+        label = f"Solo {len(vincoli.get('servizi_ids') or [])} servizi specifici"
+    else:
+        label = 'Tutti i servizi'
+
+    return label, vincoli, sottocategoria_nome
+
+
+@pacchetti_bp.route('/api/prossimo-numero-tessera', methods=['GET'])
+def api_prossimo_numero_tessera():
+    """Primo numero di tessera libero, per precompilare la creazione carta in Cassa.
+    Si considerano solo le tessere interamente numeriche (le altre restano possibili,
+    ma non entrano nel conteggio). Il numero proposto e' comunque modificabile."""
+    numeri = []
+    for (n,) in db.session.query(Pacchetto.numero_tessera).filter(
+            Pacchetto.numero_tessera.isnot(None)).all():
+        n = (n or '').strip()
+        if n.isdigit():
+            numeri.append(int(n))
+    prossimo = (max(numeri) + 1) if numeri else 1
+    larghezza = 3 if prossimo < 1000 else len(str(prossimo))
+    return jsonify({'numero': str(prossimo).zfill(larghezza)})
+
+
 @pacchetti_bp.route('/api/cerca-per-tessera', methods=['GET'])
 def api_cerca_per_tessera():
     """Cerca carte prepagate per numero di tessera (match parziale), per la ricerca
@@ -1948,15 +1999,26 @@ def api_cerca_per_tessera():
                  .limit(8)
                  .all())
 
-    return jsonify([{
-        'prepagata_id': p.id,
-        'numero_tessera': p.numero_tessera,
-        'credito_residuo': float(p.credito_residuo or 0),
-        'client_id': p.client_id,
-        'client_nome': p.client.cliente_nome if p.client else '',
-        'client_cognome': p.client.cliente_cognome if p.client else '',
-        'client_cellulare': p.client.cliente_cellulare if p.client else ''
-    } for p in prepagate])
+    risultati = []
+    for p in prepagate:
+        vincolo_label, vincoli, sottocategoria_nome = _vincolo_info(p)
+        risultati.append({
+            'prepagata_id': p.id,
+            'numero_tessera': p.numero_tessera,
+            'credito_residuo': float(p.credito_residuo or 0),
+            'client_id': p.client_id,
+            'client_nome': p.client.cliente_nome if p.client else '',
+            'client_cognome': p.client.cliente_cognome if p.client else '',
+            'client_cellulare': p.client.cliente_cellulare if p.client else '',
+            # Servono alla Cassa per decidere quali pulsanti filtro mostrare e se il
+            # servizio di una riga e' scaricabile su questa carta (vedi cassa.js)
+            'vincoli_utilizzo': vincoli or None,
+            'vincolo_label': vincolo_label,
+            'vincolo_sottocategoria_nome': sottocategoria_nome,
+            'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None,
+            'status': p.status.value
+        })
+    return jsonify(risultati)
 
 
 @pacchetti_bp.route('/api/prepagata/<int:id>/riepilogo', methods=['GET'])
@@ -1986,30 +2048,21 @@ def api_prepagata_riepilogo(id):
                        .order_by(MovimentoPrepagata.data_movimento.desc())
                        .first())
 
-    vincoli = p.vincoli_utilizzo or {}
-    tipo_vincolo = vincoli.get('tipo') if isinstance(vincoli, dict) else None
-    if not tipo_vincolo or tipo_vincolo == 'tutti':
-        vincolo_label = 'Tutti i servizi'
-    elif tipo_vincolo == 'categoria':
-        vincolo_label = f"Solo {vincoli.get('categoria')}"
-    elif tipo_vincolo == 'sottocategoria':
-        sc = Subcategory.query.get(vincoli.get('sottocategoria_id'))
-        vincolo_label = f"Solo {sc.nome}" if sc else 'Solo una sottocategoria'
-    elif tipo_vincolo == 'servizi':
-        vincolo_label = f"Solo {len(vincoli.get('servizi_ids') or [])} servizi specifici"
-    else:
-        vincolo_label = 'Tutti i servizi'
+    vincolo_label, vincoli, vincolo_sottocategoria_nome = _vincolo_info(p)
 
     return jsonify({
         'id': p.id,
         'nome': p.nome,
         'numero_tessera': p.numero_tessera,
         'status': p.status.value,
+        'client_id': p.client_id,
         'client_nome': f"{p.client.cliente_nome} {p.client.cliente_cognome}".strip() if p.client else '',
         'credito_iniziale': float(p.credito_iniziale or 0),
         'credito_residuo': float(p.credito_residuo or 0),
         'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None,
         'vincolo_label': vincolo_label,
+        'vincoli_utilizzo': vincoli or None,
+        'vincolo_sottocategoria_nome': vincolo_sottocategoria_nome,
         'ultima_ricarica': _mov_dict(ultima_ricarica),
         'ultimo_utilizzo': _mov_dict(ultimo_utilizzo)
     })
@@ -2125,6 +2178,7 @@ def api_prepagate_cliente(client_id):
         if p.data_scadenza and p.data_scadenza < oggi:
             continue
         
+        vincolo_label, _vincoli, vincolo_sottocategoria_nome = _vincolo_info(p)
         risultati.append({
             'id': p.id,
             'nome': p.nome,
@@ -2132,7 +2186,12 @@ def api_prepagate_cliente(client_id):
             'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None,
             'beneficiario': p.beneficiario_nome,
             'vincoli_utilizzo': p.vincoli_utilizzo,
-            'numero_tessera': p.numero_tessera
+            'numero_tessera': p.numero_tessera,
+            # Titolare della carta: la Cassa deve poter distinguere "carta del cliente
+            # della bozza" da "carta di un altro cliente" (vedi cartaAttiva in cassa.js)
+            'client_id': p.client_id,
+            'vincolo_label': vincolo_label,
+            'vincolo_sottocategoria_nome': vincolo_sottocategoria_nome
         })
     
     return jsonify(risultati)

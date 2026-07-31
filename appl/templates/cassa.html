@@ -37,16 +37,24 @@
     <button class="service-bar-btn filtro-cassa-btn" id="btnEstetica" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Solo Servizi e Prodotti di Estetica">Estetica</button>
     <button class="service-bar-btn filtro-cassa-btn" id="btnProdotti" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Prodotti in vendita">Prodotti</button>
     {% if module_pacchetti_enabled %}
+    <!-- Crea una carta prepagata restando in Cassa. Compare solo quando il cliente
+         selezionato non ha carte attive (vedi aggiornaPulsanteNuovaTessera). -->
+    <button type="button" class="service-bar-btn filtro-cassa-btn" id="btnNuovaTesseraCassa" style="display:none;"
+            data-bs-toggle="tooltip" data-bs-placement="bottom"
+            title="Crea una carta prepagata per il cliente selezionato, senza uscire dalla Cassa">+ TESSERA</button>
     <button type="button" class="service-bar-btn mode-ricariche-btn" id="btnModeRicariche" style="display:none;"
             data-bs-toggle="tooltip" data-bs-placement="bottom"
             title="Ricariche: gli importi selezionati vengono SOMMATI al credito della carta">RICARICHE</button>
+    <!-- Etichetta e contenuto di questo pulsante dipendono dalla TIPOLOGIA della carta
+         in uso (SOLARIUM, ESTETICA, nome sottocategoria, ...): li imposta cassa.js in
+         attivaModeRicariche. Resta nascosto se la carta non ha vincoli d'uso. -->
     <button type="button" class="service-bar-btn mode-ricariche-btn" id="btnModeSolariumPrep" style="display:none;"
             data-bs-toggle="tooltip" data-bs-placement="bottom"
-            title="Servizi Solarium: gli importi vengono SCALATI dal credito della carta">SOLARIUM</button>
+            title="Servizi ammessi dalla carta: gli importi vengono SCALATI dal credito">SOLARIUM</button>
     <button type="button" class="service-bar-btn mode-ricariche-btn" id="btnChiudiModeRicariche"
             style="display:none; min-width:44px; width:44px; padding:10px 0;"
             data-bs-toggle="tooltip" data-bs-placement="bottom"
-            title="Chiudi: svuota i campi e torna alla schermata iniziale della Cassa">&times;</button>
+            title="Chiudi: torna alla schermata iniziale della Cassa">&times;</button>
     {% endif %}
   </div>
 <br>
@@ -955,6 +963,55 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
+
+{% if module_pacchetti_enabled %}
+<!-- Modal Nuova Carta Prepagata creata direttamente dalla Cassa.
+     Non porta via da questa pagina e non azzera la bozza in corso: alla conferma la
+     carta nasce in stato Preventivo e viene aggiunta UNA RIGA alla bozza corrente,
+     esattamente come una ricarica. La carta si attiva da sola al pagamento. -->
+<div class="modal fade" id="modalNuovaPrepagataCassa" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-credit-card-fill"></i> Nuova Carta Prepagata</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2 text-muted" id="nuovaPrepagataIntestatario" style="font-size:0.9em;"></div>
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label mb-1" style="font-size:0.85em;">N. Tessera</label>
+            <input type="text" class="form-control" id="nuovaPrepagataTessera"
+                   inputmode="numeric" pattern="[0-9]*" placeholder="es. 001">
+          </div>
+          <div class="col-6">
+            <label class="form-label mb-1" style="font-size:0.85em;">Utilizzo consentito</label>
+            <select class="form-select" id="nuovaPrepagataVincolo">
+              <option value="tutti">Tutti i servizi</option>
+              <option value="Solarium">Solo Solarium</option>
+              <option value="Estetica">Solo Estetica</option>
+            </select>
+          </div>
+        </div>
+        <!-- Importi: si scelgono dalle ricariche gia' configurate in Tools/Pacchetti,
+             non a mano. Il pulsante mostra il credito accreditato, il tooltip il
+             dettaglio "paga X, carica Y". -->
+        <label class="form-label mb-1 mt-3" style="font-size:0.85em;">Ricarica</label>
+        <div id="nuovaPrepagataRicariche" style="display:flex; flex-wrap:wrap; gap:0.5em;"></div>
+        <div id="nuovaPrepagataRiepilogo" class="mt-2" style="font-size:0.9em; color:#198754; font-weight:600;"></div>
+        <div class="mt-3" style="font-size:0.85em; color:#6c757d;">
+          La carta viene aggiunta alla bozza come voce da pagare. Il credito si attiva
+          quando lo scontrino viene stampato.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-success" id="btnSalvaNuovaPrepagataCassa">Crea e aggiungi</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <script src="{{ url_for('static', filename='js/whatsapp-panel.js') }}"></script>
 <script src="{{ url_for('static', filename='js/cassa.js') }}"></script>
@@ -2050,6 +2107,13 @@ body.show-op-per-riga .scontrino-row .op-col:hover {
   font-size: 0.8em;
   color: #6c757d;
 }
+
+/* Ricarica selezionata nel modal "Nuova Carta Prepagata" */
+#nuovaPrepagataRicariche .ricarica-scelta {
+  outline: 3px solid #198754;
+  outline-offset: 2px;
+}
+
 
 /* Scheda riepilogo carta prepagata, mostrata tra i pulsanti quando si cerca
    un cliente dal numero di tessera (modalità RICARICHE). */
