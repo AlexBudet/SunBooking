@@ -2591,6 +2591,11 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     appointments.forEach(app => {
+        // Gli appuntamenti ancora da fare (pagati in anticipo o spostati in avanti)
+        // non sono storico: hanno la sezione "Prossimi appuntamenti". Senza questo
+        // filtro finivano in "ULTIMA SETTIMANA", perché anche una data futura
+        // soddisfa appDate >= weekAgo.
+        if (window.isFutureAppointmentRow && window.isFutureAppointmentRow(app.ora_inizio || app.date, now)) return;
         const appDate = new Date(app.date); // Assicurati che app.date sia in formato ISO
         if (appDate >= weekAgo) {
             groups['ULTIMA SETTIMANA'].push(app);
