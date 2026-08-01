@@ -1783,6 +1783,18 @@ function timeToMinutes(timeStr) {
     return h * 60 + m;
 }
 
+// True se la riga di storico è in realtà un appuntamento ancora da fare.
+// /settings/api/client_history restituisce tutti i PAGATI senza filtro di data,
+// quindi ci finiscono anche quelli pagati in anticipo o spostati in avanti:
+// nello storico non ci vanno, hanno la sezione PROSSIMI APPUNTAMENTI.
+function isFutureAppointmentRow(oraInizio, now) {
+  const m = String(oraInizio || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);
+  if (!m) return false;
+  const dt = new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0));
+  return dt.getTime() > (now || new Date()).getTime();
+}
+window.isFutureAppointmentRow = isFutureAppointmentRow;
+
 function showClientInfoModal(clientId) {
   if (!clientId) return;
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
@@ -2276,12 +2288,17 @@ function showClientInfoModal(clientId) {
           }
 
           // raggruppa e crea tabelle come nello tooltip (DOM-safe)
-          const groups = (function(arr){ /* reuse grouping logic inline */ 
+          const groups = (function(arr){ /* reuse grouping logic inline */
             const now = new Date(); const weekAgo = new Date(now); weekAgo.setDate(now.getDate()-7);
             const monthAgo = new Date(now); monthAgo.setMonth(now.getMonth()-1);
             const sixMonthsAgo = new Date(now); sixMonthsAgo.setMonth(now.getMonth()-6);
             const G = { 'ULTIMA SETTIMANA':[], 'ULTIMO MESE':[], 'ULTIMI 6 MESI':[], 'MENO RECENTI':[] };
             arr.forEach(row => {
+              // Gli appuntamenti FUTURI (es. pagati in anticipo) non sono storico:
+              // hanno la loro sezione PROSSIMI APPUNTAMENTI qui sotto. Senza questo
+              // filtro finivano tutti in "ULTIMA SETTIMANA" (dt >= weekAgo è vero
+              // anche per le date a venire).
+              if (isFutureAppointmentRow(row.ora_inizio, now)) return;
               let d = row.ora_inizio && row.ora_inizio.length>10 ? row.ora_inizio.substring(0,10) : row.ora_inizio;
               const dt = d ? new Date(d) : null;
               if (dt && dt >= weekAgo) G['ULTIMA SETTIMANA'].push(row);
@@ -2378,6 +2395,13 @@ function showClientInfoModal(clientId) {
               histContent.appendChild(block);
             }
           });
+
+          // Tutti i passaggi erano appuntamenti futuri: lo storico è vuoto
+          if (!histContent.firstChild) {
+            const em = document.createElement('em');
+            em.textContent = 'Nessuna seduta nello storico';
+            histContent.appendChild(em);
+          }
         })
         .catch(err => {
           histContent.innerHTML = '';
@@ -5428,19 +5452,25 @@ async function onCutClick(e) {
 
   // BLOCCO PAGATO (stato 2): non è un taglia (delete + create) ma uno SPOSTAMENTO.
   // L'appuntamento resta lo stesso (stesso id) così la voce dello scontrino continua
-  // a puntarci: nulla va riscritto in cassa.
-  if (block.getAttribute('data-status') === '2') {
+  // a puntarci: nulla va riscritto in cassa. Come per i blocchi normali se ne possono
+  // accodare più d'uno nel Navigator: si spostano poi in blocco, contigui.
+  const isPaidMove = block.getAttribute('data-status') === '2';
+
+  if (isPaidMove) {
     const moveStarted = await startPaidBlockMove(block);
     if (!moveStarted) return;
-    if (typeof window.expandNavigatorIfCollapsed === 'function') {
-      window.expandNavigatorIfCollapsed();
+  } else {
+    // Tagli normali (delete + create) e spostamenti di pagati (update) non si
+    // mescolano: il piazzamento segue due strade diverse.
+    if ((window.pseudoBlocks || []).some(isPaidMovePseudoBlock)) {
+      alert('Nel Navigator ci sono appuntamenti PAGATI in movimento.\n\n' +
+            'Incollali (o svuota il Navigator) prima di tagliare altri blocchi.');
+      return;
     }
-    return; // i blocchi pagati sono esclusi dai contigui: si sposta un blocco alla volta
+    // TAGLIA
+    const cutOk = await cutAsNewPseudoBlock(block);
+    if (!cutOk) return;
   }
-
-  // TAGLIA
-  const cutOk = await cutAsNewPseudoBlock(block);
-  if (!cutOk) return;
 
   // Espandi Navigator se collassato
   if (typeof window.expandNavigatorIfCollapsed === 'function') {
@@ -5460,11 +5490,26 @@ async function onCutClick(e) {
 
   // Trova blocchi rilevanti
   let contiguous = [];
-  if (typeof getRelevantBlocks === 'function') {
-    try { contiguous = getRelevantBlocks(block).filter(b => b !== block); } catch(_) { contiguous = []; }
-  }
-  if ((!Array.isArray(contiguous) || contiguous.length === 0) && typeof window.findContiguousBlocks === 'function') {
-    try { contiguous = window.findContiguousBlocks(block).filter(b => b !== block); } catch(_) { contiguous = contiguous || []; }
+  if (isPaidMove) {
+    // I pagati hanno un gruppo tutto loro: getRelevantBlocks li scarta di proposito
+    // (serve alle altre funzioni), quindi qui si usa il raggruppamento dedicato.
+    try {
+      const queued = (window.pseudoBlocks || [])
+        .filter(isPaidMovePseudoBlock)
+        .map(pb => String(pb._origin_appointment_id));
+      contiguous = getContiguousPaidBlocks(block).filter(b =>
+        b !== block &&
+        !b.classList.contains('moving-paid') &&
+        queued.indexOf(String(b.getAttribute('data-appointment-id'))) === -1
+      );
+    } catch(_) { contiguous = []; }
+  } else {
+    if (typeof getRelevantBlocks === 'function') {
+      try { contiguous = getRelevantBlocks(block).filter(b => b !== block); } catch(_) { contiguous = []; }
+    }
+    if ((!Array.isArray(contiguous) || contiguous.length === 0) && typeof window.findContiguousBlocks === 'function') {
+      try { contiguous = window.findContiguousBlocks(block).filter(b => b !== block); } catch(_) { contiguous = contiguous || []; }
+    }
   }
 
   console.log('onCutClick -> blocchi rilevanti:', contiguous.length, contiguous);
@@ -6577,6 +6622,14 @@ window._navSessionMaybeAskWhatsapp = _navSessionMaybeAskWhatsapp;
 
 function removePseudoBlock(index) {
   index = parseInt(index, 10);
+
+  // Se è lo spostamento di un pagato, l'appuntamento non è mai stato cancellato:
+  // basta togliere l'indicazione "in movimento" dal blocco rimasto in agenda.
+  const removedBlk = (window.pseudoBlocks || [])[index];
+  const paidOriginId = (typeof isPaidMovePseudoBlock === 'function' && isPaidMovePseudoBlock(removedBlk))
+    ? String(removedBlk._origin_appointment_id)
+    : null;
+
   // Riallinea gli indici selezionati: rimuovi quello eliminato, decrementa i successivi
   if (typeof selectedPseudoBlockIndexes !== 'undefined') {
     const updated = new Set();
@@ -6590,7 +6643,13 @@ function removePseudoBlock(index) {
   window.pseudoBlocks.splice(index, 1);
   renderPseudoBlocksList();
   saveNavigatorState();
-  
+
+  if (paidOriginId) {
+    const src = document.querySelector(`.appointment-block[data-appointment-id="${paidOriginId}"]`);
+    if (src) src.classList.remove('moving-paid');
+    if (typeof refreshPaidMoveHighlights === 'function') refreshPaidMoveHighlights();
+  }
+
   // Se non ci sono più pseudoblocchi, chiama clearNavigator()
   if (!window.pseudoBlocks || window.pseudoBlocks.length === 0) {
     // Qui possiamo chiamare clearNavigator() in modo sicuro
@@ -7027,6 +7086,16 @@ function handleClientSearchNav(query) {
             vipIcon.style.flex = '0 0 auto';
             applyBsTooltip(vipIcon, 'Cliente VIP - frequenza abituale');
             item.appendChild(vipIcon);
+          }
+
+          // Il cliente ha già un appuntamento OGGI: badge lampeggiante accanto
+          // alla stella VIP, per non prenotargliene un altro per sbaglio.
+          if (client.has_appointment_today) {
+            const todayBadge = document.createElement('span');
+            todayBadge.className = 'client-today-badge';
+            todayBadge.textContent = 'TODAY';
+            applyBsTooltip(todayBadge, 'Questo cliente ha già un appuntamento in programma OGGI');
+            item.appendChild(todayBadge);
           }
 
           const daysSpan = document.createElement('small');
@@ -7561,13 +7630,21 @@ function renderPseudoBlocksList() {
     if (block.note) row.setAttribute('data-note', String(block.note));
     if (selectedPseudoBlockIndexes.has(i)) row.classList.add('selected');
 
+    // Uno pseudoblocco nato da un blocco PAGATO resta grigio come il blocco in
+    // agenda (stato 2), non prende il colore cliente: il pagamento è già fatto.
+    const isPaidPseudo = Number(block.status) === 2;
+
     // Stili inline identici all'HTML originale
     row.style.display = 'flex';
     row.style.justifyContent = 'space-between';
     row.style.alignItems = 'center';
     row.style.padding = '5px';
-    row.style.border = `2px solid ${commonColor}`;
+    row.style.border = `2px solid ${isPaidPseudo ? '#e0e0e0' : commonColor}`;
     row.style.marginBottom = '5px';
+    if (isPaidPseudo) {
+      row.style.background = '#e0e0e0';
+      row.style.color = '#888';
+    }
 
     // PATCH: Aggiungi listener per la selezione del pseudoblocco
     row.addEventListener('click', function(e) {
@@ -7954,12 +8031,12 @@ if (blocksInCell.length >= 2) {
             const date = cell.getAttribute('data-date') || window.selectedAppointmentDate || new Date().toISOString().slice(0,10);
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-            // SPOSTAMENTO BLOCCO PAGATO: non si crea nulla, si aggiorna l'appuntamento
-            // esistente (id invariato → scontrino ancora collegato).
-            const paidMoveIndex = (window.pseudoBlocks || []).findIndex(isPaidMovePseudoBlock);
-            if (paidMoveIndex >= 0) {
+            // SPOSTAMENTO BLOCCHI PAGATI: non si crea nulla, si aggiornano gli
+            // appuntamenti esistenti (id invariati → scontrini ancora collegati).
+            // Anche più d'uno alla volta: si piazzano contigui dalla cella cliccata.
+            if ((window.pseudoBlocks || []).some(isPaidMovePseudoBlock)) {
               try {
-                await pastePaidMovePseudoBlock(paidMoveIndex, cell, operatorId, hour, minute, date, csrfToken);
+                await pastePaidMovePseudoBlocks(cell, operatorId, hour, minute, date, csrfToken);
               } finally {
                 window.isCreatingAppointment = false;
               }
@@ -9754,6 +9831,84 @@ function getRelevantBlocks(baseBlock) {
   return unique.length ? unique : [baseBlock];
 }
 
+// Blocchi contigui dello stesso cliente nello stesso giorno, QUALUNQUE sia lo stato.
+// getRelevantBlocks scarta apposta i pagati (la sua logica serve a colore, note,
+// no-show ecc.): qui si replica solo il raggruppamento per orario, senza propagare
+// colori né toccare il DOM. `extraFilter` restringe ulteriormente i candidati.
+function getContiguousClientBlocks(baseBlock, extraFilter) {
+  if (!baseBlock) return [];
+  const baseDate = baseBlock.getAttribute('data-date') || selectedDate;
+  const baseClientId = baseBlock.getAttribute('data-client-id') || '';
+  const baseSession = baseBlock.getAttribute('data-booking_session_id') || '';
+  const baseNome = (baseBlock.getAttribute('data-client-nome') || '').toString().trim().toLowerCase();
+  const baseCognome = (baseBlock.getAttribute('data-client-cognome') || '').toString().trim().toLowerCase();
+
+  const MAX_GAP = Number(window.CONTIGUOUS_BLOCK_MAX_GAP_MINUTES || 30);
+
+  const candidates = Array.from(document.querySelectorAll('.appointment-block')).filter(b => {
+    const bDate = b.getAttribute('data-date') || selectedDate || '';
+    if (String(bDate) !== String(baseDate)) return false;
+    // Solo appuntamenti veri: niente blocchi OFF/pausa
+    if (!b.getAttribute('data-client-id') || !b.getAttribute('data-service-id')) return false;
+    if (typeof extraFilter === 'function' && !extraFilter(b)) return false;
+
+    const bClientId = b.getAttribute('data-client-id') || '';
+    if (baseClientId && bClientId && String(baseClientId) === String(bClientId)) return true;
+
+    const bSession = b.getAttribute('data-booking_session_id') || '';
+    if (baseSession && bSession && String(baseSession) === String(bSession)) return true;
+
+    const bNome = (b.getAttribute('data-client-nome') || '').toString().trim().toLowerCase();
+    const bCognome = (b.getAttribute('data-client-cognome') || '').toString().trim().toLowerCase();
+    return !!(baseNome && baseCognome && bNome === baseNome && bCognome === baseCognome);
+  });
+
+  if (candidates.length === 0) return [baseBlock];
+
+  candidates.sort((a, b) => getBlockStartTime(a) - getBlockStartTime(b));
+
+  let idx = candidates.indexOf(baseBlock);
+  if (idx === -1) {
+    const baseStart = getBlockStartTime(baseBlock);
+    idx = 0;
+    while (idx < candidates.length && getBlockStartTime(candidates[idx]) <= baseStart) idx++;
+    candidates.splice(idx, 0, baseBlock);
+  }
+
+  const group = [baseBlock];
+  for (let i = idx - 1; i >= 0; i--) {
+    const prev = candidates[i];
+    if (getBlockStartTime(group[0]) - getBlockEndTime(prev) <= MAX_GAP) group.unshift(prev);
+    else break;
+  }
+  for (let i = idx + 1; i < candidates.length; i++) {
+    const next = candidates[i];
+    if (getBlockStartTime(next) - getBlockEndTime(group[group.length - 1]) <= MAX_GAP) group.push(next);
+    else break;
+  }
+
+  return Array.from(new Set(group));
+}
+
+// Gruppo di blocchi contigui PAGATI (stato 2): serve a "Togli e sposta".
+function getContiguousPaidBlocks(baseBlock) {
+  return getContiguousClientBlocks(baseBlock, b =>
+    parseInt(b.getAttribute('data-status') || '0', 10) === 2 &&
+    // I pagati di un pacchetto si riprogrammano dalla scheda pacchetto
+    !b.getAttribute('data-pacchetto-seduta-id') &&
+    !b.getAttribute('data-pacchetto-id')
+  );
+}
+
+// Gruppo di blocchi per il promemoria WhatsApp del pulsante popup: TUTTI i servizi
+// contigui del cliente in quel giorno, pagati compresi. Allinea l'anteprima Unipile
+// a quello che il backend (send-whatsapp-auto) elencherebbe da solo: senza questo
+// i blocchi in stato 2 sparivano dall'elenco, perché getRelevantBlocks li scarta.
+function getWhatsappGroupBlocks(baseBlock) {
+  return getContiguousClientBlocks(baseBlock);
+}
+window.getWhatsappGroupBlocks = getWhatsappGroupBlocks;
+
   document.addEventListener('click', function(e) {
     const noShowBtn = e.target.closest('.no-show-button');
     if (!noShowBtn) return;
@@ -10843,8 +10998,35 @@ function restoreCutHighlights() {
   } catch(e) { console.warn('restoreCutHighlights failed', e); }
 }
 
+// I blocchi pagati "in movimento" restano in agenda: dopo un reload o un cambio
+// giorno il DOM è nuovo, quindi la marcatura va riapplicata partendo dal Navigator.
+function restoreMovingPaidMarks() {
+  try {
+    const pseudo = Array.isArray(window.pseudoBlocks) ? window.pseudoBlocks : [];
+    const movingIds = pseudo
+      .filter(pb => typeof isPaidMovePseudoBlock === 'function' && isPaidMovePseudoBlock(pb))
+      .map(pb => String(pb._origin_appointment_id));
+    if (movingIds.length === 0) return;
+
+    document.querySelectorAll('.appointment-block.moving-paid').forEach(b => {
+      if (movingIds.indexOf(String(b.getAttribute('data-appointment-id'))) === -1) {
+        b.classList.remove('moving-paid');
+      }
+    });
+    movingIds.forEach(id => {
+      const b = document.querySelector(`.appointment-block[data-appointment-id="${id}"]`);
+      if (b) {
+        b.classList.add('moving-paid');
+        try { addCutSourceHighlightRange(b); } catch (_) {}
+      }
+    });
+  } catch (e) { console.warn('restoreMovingPaidMarks failed', e); }
+}
+window.restoreMovingPaidMarks = restoreMovingPaidMarks;
+
 document.addEventListener('DOMContentLoaded', function() {
   restoreCutHighlights();
+  restoreMovingPaidMarks();
 });
 
 async function copyAsNewPseudoBlock(block, isCut = false) {
@@ -11240,13 +11422,25 @@ async function startPaidBlockMove(block) {
     return false;
   }
 
-  // Lo spostamento gestisce un solo blocco per volta: il Navigator deve essere libero
-  if (Array.isArray(window.pseudoBlocks) && window.pseudoBlocks.length > 0) {
-    alert('Svuota il Navigator prima di spostare un appuntamento pagato.');
+  if (!Array.isArray(window.pseudoBlocks)) window.pseudoBlocks = [];
+
+  // Lo stesso appuntamento non può finire due volte nel Navigator
+  const already = window.pseudoBlocks.some(pb =>
+    isPaidMovePseudoBlock(pb) && String(pb._origin_appointment_id) === String(appointmentId)
+  );
+  if (already) return false;
+
+  // Nel Navigator possono convivere solo spostamenti di pagati: i tagli normali
+  // seguono un'altra strada (delete + create) e non sono compatibili.
+  const paidInNav = window.pseudoBlocks.filter(isPaidMovePseudoBlock).length;
+  if (window.pseudoBlocks.length > paidInNav) {
+    alert('Il Navigator contiene già blocchi in bozza.\n\n' +
+          'Incollali (o svuota il Navigator) prima di spostare un appuntamento pagato.');
     return false;
   }
 
-  if (!confirm(PAID_MOVE_WARNING)) return false;
+  // L'avviso si mostra una volta sola per gruppo: chi ne accoda un secondo ha già deciso
+  if (paidInNav === 0 && !confirm(PAID_MOVE_WARNING)) return false;
 
   await copyAsNewPseudoBlock(block, true);
 
@@ -11263,13 +11457,10 @@ async function startPaidBlockMove(block) {
   return true;
 }
 
-// Incolla di un blocco pagato: UPDATE della posizione, id invariato.
-async function pastePaidMovePseudoBlock(index, cell, operatorId, hour, minute, date, csrfToken) {
-  const blk = window.pseudoBlocks[index];
+// Sposta UN appuntamento pagato: UPDATE della posizione, id invariato.
+// Ritorna true se lo spostamento è andato a buon fine.
+async function movePaidAppointmentTo(blk, fallbackCell, operatorId, hour, minute, dateStr, csrfToken) {
   const appointmentId = String(blk._origin_appointment_id);
-  const dateStr = /^\d{4}-\d{2}-\d{2}$/.test(String(date))
-    ? String(date)
-    : new Date(date).toISOString().split('T')[0];
 
   let resp;
   try {
@@ -11281,15 +11472,17 @@ async function pastePaidMovePseudoBlock(index, cell, operatorId, hour, minute, d
   } catch (err) {
     console.error('Errore spostamento appuntamento pagato:', err);
     alert("Errore di rete: l'appuntamento pagato NON è stato spostato.");
-    return;
+    return false;
   }
 
   if (!resp.ok) {
     const txt = await resp.text().catch(() => '');
     console.error('Errore spostamento appuntamento pagato:', resp.status, txt);
     alert("Errore: l'appuntamento pagato NON è stato spostato. È rimasto al suo posto.");
-    return;
+    return false;
   }
+
+  const cell = findCellAt(operatorId, hour, minute) || fallbackCell;
 
   // Sposta il blocco esistente nel DOM (stesso nodo, stesso id)
   const sourceBlock = document.querySelector(`.appointment-block[data-appointment-id="${appointmentId}"]`);
@@ -11305,7 +11498,8 @@ async function pastePaidMovePseudoBlock(index, cell, operatorId, hour, minute, d
     sourceBlock.style.left = '0px';
     sourceBlock.style.top = '0px';
   } else {
-    // Blocco non presente nel DOM (es. si è cambiato giorno): ricrealo con lo STESSO id
+    // Blocco non presente nel DOM (es. si è cambiato giorno): ricrealo con lo STESSO
+    // id e con lo STESSO stato 2, così resta grigio/pagato anche appena ricreato.
     const newBlock = createAppointmentBlockElement({
       id: appointmentId,
       client_id: blk.clientId,
@@ -11324,16 +11518,70 @@ async function pastePaidMovePseudoBlock(index, cell, operatorId, hour, minute, d
 
   if (oldCell && oldCell !== cell) { try { arrangeBlocksInCell(oldCell); } catch (_) {} }
   try { arrangeBlocksInCell(cell); } catch (_) {}
+  return true;
+}
 
-  window.pseudoBlocks.splice(index, 1);
+// Incolla di uno o più blocchi pagati: si piazzano contigui a partire dalla cella
+// cliccata, ognuno con un UPDATE (id invariato → scontrino ancora collegato).
+// Se sono selezionati solo alcuni pseudoblocchi si spostano quelli, gli altri
+// restano nel Navigator.
+async function pastePaidMovePseudoBlocks(cell, operatorId, hour, minute, date, csrfToken) {
+  const all = window.pseudoBlocks || [];
+  const dateStr = /^\d{4}-\d{2}-\d{2}$/.test(String(date))
+    ? String(date)
+    : new Date(date).toISOString().split('T')[0];
+
+  let indexes = all.map((b, i) => i).filter(i => isPaidMovePseudoBlock(all[i]));
+  if (typeof selectedPseudoBlockIndexes !== 'undefined' && selectedPseudoBlockIndexes.size > 0) {
+    const selected = Array.from(selectedPseudoBlockIndexes)
+      .filter(i => indexes.indexOf(i) >= 0)
+      .sort((a, b) => a - b);
+    if (selected.length > 0) indexes = selected;
+  }
+  if (indexes.length === 0) return;
+
+  let startTimeInMin = hour * 60 + minute;
+  const moved = [];
+
+  for (const idx of indexes) {
+    const blk = all[idx];
+    const h = Math.floor(startTimeInMin / 60);
+    const m = startTimeInMin % 60;
+    const ok = await movePaidAppointmentTo(blk, cell, operatorId, h, m, dateStr, csrfToken);
+    // Al primo errore ci si ferma: i blocchi non ancora spostati restano nel
+    // Navigator (e al loro posto in agenda), niente stati a metà.
+    if (!ok) break;
+    moved.push(idx);
+    startTimeInMin += (parseInt(blk.duration, 10) || 15);
+  }
+
+  if (moved.length === 0) return;
+
+  // Rimuovi dal Navigator solo quelli effettivamente spostati (indici decrescenti)
+  moved.sort((a, b) => b - a).forEach(i => window.pseudoBlocks.splice(i, 1));
+  if (typeof selectedPseudoBlockIndexes !== 'undefined') selectedPseudoBlockIndexes.clear();
   renderPseudoBlocksList();
   saveNavigatorState();
-  clearCutSourceHighlights();
+  refreshPaidMoveHighlights();
 
   if (typeof window.clearNavigator === 'function' && window.pseudoBlocks.length === 0) {
     try { await window.clearNavigator(false); } catch (_) {}
   }
   if (typeof scrollToHourMinute === 'function') scrollToHourMinute(hour, minute);
+}
+
+// Riallinea gli highlight delle celle sorgente: quelli dei tagli normali vengono
+// dal backup in localStorage, quelli dei pagati dai blocchi ancora "in movimento".
+function refreshPaidMoveHighlights() {
+  try {
+    if (typeof refreshCutSourceHighlightsFromStorage === 'function') {
+      refreshCutSourceHighlightsFromStorage();
+    } else {
+      clearCutSourceHighlights();
+    }
+    document.querySelectorAll('.appointment-block.moving-paid')
+      .forEach(b => { try { addCutSourceHighlightRange(b); } catch (_) {} });
+  } catch (_) {}
 }
 
 function copyAndPasteBlockOff() {
@@ -11823,6 +12071,9 @@ function restoreNavigatorState() {
     // Render dei pseudoBlocks solo se ce ne sono
     try { renderPseudoBlocksList(); } catch (e) { /* ignore */ }
 
+    // Riapplica la marcatura ai pagati ancora in movimento (DOM ricostruito)
+    try { restoreMovingPaidMarks(); } catch (e) { /* ignore */ }
+
     try {
       const cutBlocks = (typeof _loadCutBlocks === 'function') ? _loadCutBlocks() : JSON.parse(localStorage.getItem('cutBlocks') || '[]');
       const pseudo = Array.isArray(window.pseudoBlocks) ? window.pseudoBlocks : [];
@@ -12274,10 +12525,15 @@ document.addEventListener('DOMContentLoaded', function() {
       // Ricava sempre appointmentId dal bottone o dal blocco
       let appointmentId = btn.getAttribute('data-appointment-id') || (block ? block.getAttribute('data-appointment-id') : '') || '';
 
-      // Gruppo contiguo e normalizzazione orario di partenza
+      // Gruppo contiguo e normalizzazione orario di partenza.
+      // NB: si usa getWhatsappGroupBlocks, non getRelevantBlocks: quest'ultima
+      // scarta i blocchi in stato 2 (pagato) e il promemoria finiva per elencare
+      // solo una parte dei servizi del cliente.
       let groupBlocks = [];
       if (block) {
-        groupBlocks = (typeof getRelevantBlocks === 'function') ? getRelevantBlocks(block) : [block];
+        groupBlocks = (typeof getWhatsappGroupBlocks === 'function')
+          ? getWhatsappGroupBlocks(block)
+          : ((typeof getRelevantBlocks === 'function') ? getRelevantBlocks(block) : [block]);
         if (groupBlocks.length > 0) {
           groupBlocks.sort((a, b) => {
             const aStart = (parseInt(a.getAttribute('data-hour'), 10) || 0) * 60 + (parseInt(a.getAttribute('data-minute'), 10) || 0);

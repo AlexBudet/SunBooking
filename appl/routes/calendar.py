@@ -571,7 +571,27 @@ def search_clients(query):
         func.lower(Client.cliente_nome) != "dummy",
         func.lower(Client.cliente_cognome) != "dummy",
     ).limit(10).all()
-    loyalty_map = _compute_client_loyalty([client.id for client in clients])
+    client_ids = [client.id for client in clients]
+    loyalty_map = _compute_client_loyalty(client_ids)
+
+    # Clienti che hanno GIA' un appuntamento oggi: serve al badge "TODAY" del
+    # Navigator, per non prenotarne un altro per sbaglio nello stesso giorno.
+    today_ids = set()
+    if client_ids:
+        oggi = date.today()
+        inizio_giorno = datetime.combine(oggi, time(0, 0))
+        fine_giorno = inizio_giorno + timedelta(days=1)
+        rows = (db.session.query(Appointment.client_id)
+                .filter(
+                    Appointment.client_id.in_(client_ids),
+                    Appointment.start_time >= inizio_giorno,
+                    Appointment.start_time < fine_giorno,
+                    Appointment.is_cancelled_by_client == False
+                )
+                .distinct()
+                .all())
+        today_ids = {r[0] for r in rows}
+
     clients_data = [
         {
             'id': client.id,
@@ -579,6 +599,7 @@ def search_clients(query):
             'phone': client.cliente_cellulare,
             'note': client.note or '',
             'is_vip': loyalty_map.get(client.id, LOYALTY_DEFAULT)['is_vip'],
+            'has_appointment_today': client.id in today_ids,
         }
         for client in clients
     ]
