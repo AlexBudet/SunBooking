@@ -59,7 +59,7 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
 
 {# Macro: una tabella completa del registro a partire da una lista di scontrini.
    Tutto cio' che serve e' passato come argomento per garantire l'accesso nel macro. #}
-{% macro receipts_table(rows, user_role, giorno, date_today) %}
+{% macro receipts_table(rows, user_role, giorno, date_today, ultimo_fiscale_id) %}
 <div style="max-height: 80vh; overflow-y: auto; width: 94%; margin: 0 auto;">
   <table class="table table-bordered table-sm mb-0 registro-table" style="width:100%;">
     <thead class="sticky-thead">
@@ -150,7 +150,17 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
     {% if s.annullato %}
       <button type="button" class="btn btn-sm btn-secondary" style="background:#bcbcbc; border-color:#bcbcbc; color:#fff; pointer-events:none; cursor:not-allowed;" disabled>STORNATO</button>
     {% elif s.total_amount >= 0 and user_role in ['admin', 'owner'] and (giorno == date_today or not s.is_fiscale) %}
-      <button type="button" class="btn btn-sm btn-danger btn-elimina-scontrino">Elimina</button>
+      {# Sull'ultimo documento fiscale la rettifica e' un annullamento, sui
+         precedenti un reso: cambia solo l'etichetta, l'operazione la sceglie
+         il server. Sui non fiscali resta una vera eliminazione. #}
+      {% if s.is_fiscale and s.id != ultimo_fiscale_id %}
+        <span data-bs-toggle="tooltip"
+              title="Il documento non e' l'ultimo emesso: verra' emesso un RESO, cioe' un documento negativo che rettifica questo scontrino. L'originale resta nel registro e nel DGFE.">
+          <button type="button" class="btn btn-sm btn-warning btn-elimina-scontrino" data-tipo="reso">Reso</button>
+        </span>
+      {% else %}
+        <button type="button" class="btn btn-sm btn-danger btn-elimina-scontrino">Elimina</button>
+      {% endif %}
     {% endif %}
   {% endif %}
 </td>
@@ -183,13 +193,13 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
   </div>
 
   <div id="tabFiscali">
-    {{ receipts_table(scontrini_fiscali, user_role, giorno, date_today) }}
+    {{ receipts_table(scontrini_fiscali, user_role, giorno, date_today, ultimo_fiscale_id) }}
   </div>
   <div id="tabTutti" style="display:none;">
-    {{ receipts_table(scontrini, user_role, giorno, date_today) }}
+    {{ receipts_table(scontrini, user_role, giorno, date_today, ultimo_fiscale_id) }}
   </div>
 {% else %}
-  {{ receipts_table(scontrini, user_role, giorno, date_today) }}
+  {{ receipts_table(scontrini, user_role, giorno, date_today, ultimo_fiscale_id) }}
 {% endif %}
 <style>
 .sticky-thead th {
@@ -222,6 +232,14 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+    // Tooltip Bootstrap della pagina (es. "Elimina" disabilitato sui documenti
+    // non ultimi): niente title nativo.
+    if (window.bootstrap && bootstrap.Tooltip) {
+      document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        bootstrap.Tooltip.getOrCreateInstance(el);
+      });
+    }
 
     // Interruttore "Solo fiscali" / "Fiscali + test" (admin/owner)
     const tgl = document.getElementById('toggleTabella');
@@ -448,7 +466,11 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
 
       // === ELIMINA SCONTRINO ===
       if (btn.classList.contains('btn-elimina-scontrino')) {
-        if (confirm('Sei sicuro di voler eliminare questo scontrino?')) {
+        const isReso = btn.dataset.tipo === 'reso';
+        const domanda = isReso
+          ? 'Questo scontrino non e\' l\'ultimo emesso.\n\nVerra\' stampato un RESO: un documento fiscale negativo che lo rettifica. Lo scontrino originale resta nel registro e nel DGFE.\n\nProcedere?'
+          : 'Sei sicuro di voler eliminare questo scontrino?\n\nVerra\' stampato l\'annullamento dell\'ultimo documento emesso.';
+        if (confirm(domanda)) {
           // Crea e mostra popup bloccante
           const loadingModal = document.createElement('div');
           loadingModal.id = 'loadingModal';
@@ -478,18 +500,11 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
             .then(res => {
               document.body.removeChild(loadingModal);
               if (res.ok) {
-                // NON rimuovere la riga: cambia il pulsante a "STORNATO"
-                const eliminaBtn = tr.querySelector('.btn-elimina-scontrino');
-                if (eliminaBtn) {
-                  eliminaBtn.textContent = 'STORNATO';
-                  eliminaBtn.className = 'btn btn-sm btn-secondary';
-                  eliminaBtn.style.background = '#bcbcbc';
-                  eliminaBtn.style.borderColor = '#bcbcbc';
-                  eliminaBtn.style.color = '#fff';
-                  eliminaBtn.style.pointerEvents = 'none';
-                  eliminaBtn.style.cursor = 'not-allowed';
-                  eliminaBtn.disabled = true;
-                }
+                // Ricarica: lo storno cambia sia la riga stornata sia QUALE
+                // scontrino diventa stornabile (il registratore annulla solo
+                // l'ultimo documento). Ridipingere il pulsante lato client
+                // mostrerebbe uno stato che il server non conferma.
+                window.location.reload();
               } else {
                 return res.json().then(data => {
                   alert('Errore durante l\'eliminazione: ' + (data.error || 'Errore sconosciuto'));

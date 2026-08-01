@@ -862,6 +862,33 @@ def send_to_rch():
         # normalizza il prezzo nella voce (2 decimali)
         v["prezzo"] = round(prezzo_val, 2)
 
+    # --- VOCI A ZERO SULLO SCONTRINO FISCALE ---
+    # Una RIGA DI VENDITA a zero (=R1/$0) viene rifiutata dal registratore e
+    # lascia il documento APERTO: da li' in poi ogni stampa fallisce finche' non
+    # si chiude il documento a mano. Ma la voce a zero NON va persa: viene
+    # stampata sullo scontrino come RIGA DESCRITTIVA (="/(testo), manuale PRINT!
+    # sez. 11), che e' esattamente il promemoria per il cliente - compare sul
+    # documento commerciale, senza importo e senza toccare i corrispettivi.
+    # Serve pero' almeno una riga con importo positivo: un documento commerciale
+    # di soli promemoria non esiste (nessun importo da pagare, nessun pagamento
+    # da chiudere). In quel caso le voci a zero diventano non fiscali.
+    zero_fiscali = [v for v in voci if _is_fiscale(v) and float(v.get("prezzo", 0) or 0) == 0]
+    ha_importi_positivi = any(_is_fiscale(v) and float(v.get("prezzo", 0) or 0) > 0 for v in voci)
+    for v in zero_fiscali:
+        # Uno split di pagamento su un importo zero non ha significato.
+        v.pop("pagamenti", None)
+        if not ha_importi_positivi:
+            v["is_fiscale"] = False
+            v["is_non_fiscale"] = True
+            v["metodo_pagamento"] = "contanti"
+            current_app.logger.info(
+                "Voce a zero resa non fiscale (nessun importo positivo sullo scontrino): %s",
+                v.get("nome") or v.get("servizio_id")
+            )
+        # NB: sulla riga promemoria il metodo di pagamento resta quello della
+        # riga, altrimenti uno scontrino tutto POS con un promemoria forzato a
+        # contanti risulterebbe "MIX" nel registro.
+
     # Ricalcola voci fiscali/non fiscali dopo normalizzazione prezzi
     voci_fiscali = [v for v in voci if _is_fiscale(v)]
     voci_non_fiscali = [v for v in voci if not _is_fiscale(v)]
@@ -901,6 +928,16 @@ def send_to_rch():
 
             desc = (v.get("nome") or (srv.servizio_nome if srv else "Servizio"))[:32]
             desc = clean_str(html.unescape(desc)).replace(")", "").replace("(", "").replace("/", "-")
+
+            if prezzo_cents <= 0:
+                # PROMEMORIA: voce a zero stampata come riga descrittiva sul
+                # documento commerciale (="/(testo), manuale PRINT! sez. 11, max
+                # 25 caratteri). Compare sullo scontrino del cliente ma non e'
+                # una vendita: nessun importo, nessun tender, corrispettivi
+                # invariati. La riga di vendita a zero (=R/$0) sarebbe invece
+                # rifiutata e lascerebbe il documento aperto.
+                xml_lines.append(f'<cmd>="/({desc[:25]})</cmd>')
+                continue
 
             reparto = "R2" if getattr(srv, "servizio_sottocategoria", None) and \
                                srv.servizio_sottocategoria.nome.upper() == "PRODOTTI" else "R1"
@@ -951,12 +988,24 @@ def send_to_rch():
         ):
             xml_lines.insert(2, f'<cmd>="/?L/$1/({codice_lotteria})</cmd>')
 
-        if not totali or sum(totali.values()) == 0:
-            xml_lines.append('<cmd>=T5/$0</cmd>')
-        else:
-            for tcode in ("T1", "T2", "T3", "T4", "T5"):
-                if totali.get(tcode, 0) > 0:
-                    xml_lines.append(f'<cmd>={tcode}/${totali[tcode]}</cmd>')
+        if not totali or sum(totali.values()) <= 0:
+            # Non deve accadere: le voci a zero sono gia' state gestite sopra
+            # (promemoria o non fiscali). Se accade, NON si stampa: un pagamento
+            # a zero (=T5/$0) verrebbe rifiutato lasciando il documento aperto
+            # sul registratore, bloccando tutte le stampe successive.
+            log_crm_error(
+                "Stampa fiscale annullata: totale a zero",
+                context={"operatore_id": operatore_id, "printer_ip": ip,
+                         "printer_model": printer_model,
+                         "voci": [{"nome": v.get("nome"), "prezzo": v.get("prezzo")}
+                                  for v in voci_fiscali]},
+                client_id=cliente_id,
+            )
+            return jsonify({"error": "Scontrino fiscale a importo zero: nessun documento emesso."}), 400
+
+        for tcode in ("T1", "T2", "T3", "T4", "T5"):
+            if totali.get(tcode, 0) > 0:
+                xml_lines.append(f'<cmd>={tcode}/${totali[tcode]}</cmd>')
 
         xml_lines.append('</Service>')
         payload_vendita = "\n".join(xml_lines)
@@ -971,7 +1020,10 @@ def send_to_rch():
 
         # expected_total e line_count usati sia per RCH_PENDING sia per il lazy recover
         expected_total = round(sum(float(v.get("prezzo", 0)) for v in voci_fiscali), 2)
-        expected_line_count = len(voci_fiscali)
+        # Solo le righe con importo: le voci a zero sono righe descrittive, che
+        # il parser DGFE non conta (cerca "IVA% importo"). Contarle sfaserebbe il
+        # confronto con la DGFE nel lazy recover.
+        expected_line_count = len([v for v in voci_fiscali if float(v.get("prezzo", 0) or 0) > 0])
 
         def _build_pending_entry():
             return {
@@ -1410,6 +1462,22 @@ def registro_scontrini():
     progressivi_stornati = set()
     
     for storno in storni:
+        # Riferimento esplicito, scritto dalla rettifica stessa (_voci_negative):
+        # annullo o reso sanno quale documento stanno rettificando, non serve
+        # indovinarlo. L'euristica sotto resta solo per le righe negative create
+        # prima di questo riferimento.
+        rif = None
+        rif_tipo = None
+        for v in (storno.voci or []):
+            if isinstance(v, dict) and v.get('_rettifica_di'):
+                rif = str(v.get('_rettifica_di'))
+                rif_tipo = v.get('_rettifica_tipo')
+                break
+        if rif:
+            storno.display_numero_progressivo = f"{'RESO' if rif_tipo == 'reso' else 'STORNO'} {rif}"
+            progressivi_stornati.add(rif)
+            continue
+
         candidati = [
             p for p in positivi
             if (
@@ -1419,7 +1487,7 @@ def registro_scontrini():
                 and p.created_at < storno.created_at
             )
         ]
-        
+
         if candidati:
             originale = max(candidati, key=lambda x: x.created_at)
             storno.display_numero_progressivo = f"STORNO {originale.numero_progressivo}"
@@ -1433,6 +1501,16 @@ def registro_scontrini():
         if not s.is_adjustment and s.is_fiscale and s.total_amount is not None and float(s.total_amount) > 0:
             if s.numero_progressivo and str(s.numero_progressivo) in progressivi_stornati:
                 s.annullato = True
+
+    # 7b. Ultimo scontrino fiscale del giorno: su quello la rettifica e' un
+    #     ANNULLAMENTO, su tutti i precedenti e' un RESO (vedi
+    #     _storna_scontrino_rch). Serve solo a etichettare il pulsante: la
+    #     scelta dell'operazione resta del server.
+    ultimo_fiscale_id = None
+    if giorno == date.today():
+        ultimo_stornabile = _ultimo_scontrino_stornabile()
+        if ultimo_stornabile:
+            ultimo_fiscale_id = ultimo_stornabile.id
 
     # 8. Riepilogo conciliazione DGFE per il giorno (solo informativo, no I/O stampante).
     #    Legge il log di riconciliazione gia' persistito (reconcile_day / Allinea a DGFE)
@@ -1485,6 +1563,7 @@ def registro_scontrini():
         user_role=user_role,
         date_today=date.today(),
         dgfe_recon=dgfe_recon,
+        ultimo_fiscale_id=ultimo_fiscale_id,
     )
 
 @cassa_bp.route('/cassa/api/receipt/<int:receipt_id>')
@@ -1584,17 +1663,16 @@ def api_receipt_delete(id):
         if scontrino.is_fiscale:
             if data_scontrino != oggi:
                 return jsonify({"error": "Eliminazione possibile solo per scontrini fiscali del giorno corrente"}), 400
-            
-            # Storna fiscalmente prima (aggiunge la voce negativa)
-            storno_result = stornare_scontrino_specifico(scontrino)
-            if "error" in storno_result:
-                return jsonify({"error": f"Storno fallito: {storno_result['error']}"}), 400
-            
-            # Ripristina rate pacchetto associate
-            ripristina_rate_da_scontrino(scontrino)
 
-            # NON eliminare lo scontrino originale!
-            # Semplicemente termina qui: la voce negativa è già stata aggiunta da stornare_scontrino_specifico
+            # Storno fiscale: percorso unico, identico a "annulla ultimo scontrino"
+            # e identico per RCH Print 3.0 RT e RCH Print F. Ripristina anche le
+            # rate pacchetto, ma solo a storno confermato dal registratore.
+            storno_result = _storna_scontrino_rch(scontrino)
+            if "error" in storno_result:
+                return jsonify({"error": f"Storno fallito: {storno_result['error']}"}), storno_result.get("status", 400)
+
+            # NON eliminare lo scontrino originale: la voce negativa e' gia' stata
+            # registrata da _storna_scontrino_rch.
             return '', 204
 
         # Per non fiscali, ripristina rate prima di eliminare
@@ -2529,83 +2607,41 @@ def api_myspia():
         current_app.logger.exception("api_myspia error")
         return jsonify([]), 500
 
+def _ultimo_scontrino_stornabile():
+    """Ultimo scontrino fiscale odierno effettivamente stornabile: importo
+    positivo (uno storno non si storna) e progressivo reale (le voci di
+    allineamento DGFE 'ADJ-...' sono escluse)."""
+    oggi = datetime.now().date()
+    candidati = Receipt.query.filter(
+        Receipt.is_fiscale == True,
+        Receipt.created_at >= datetime.combine(oggi, datetime.min.time()),
+        Receipt.created_at <= datetime.combine(oggi, datetime.max.time()),
+        Receipt.total_amount > 0,
+    ).order_by(Receipt.created_at.desc()).all()
+    for r in candidati:
+        prog = str(r.numero_progressivo or '')
+        if prog and not prog.startswith('ADJ-'):
+            return r
+    return None
+
 @cassa_bp.route('/cassa/annulla-ultimo-scontrino', methods=['POST'])
 def annulla_ultimo_scontrino():
-    ultimo = Receipt.query.filter(Receipt.is_fiscale == True).order_by(Receipt.created_at.desc()).first()
-    if not ultimo or not ultimo.numero_progressivo:
+    # Stessa identica logica del tasto "Elimina" del registro scontrini:
+    # unico percorso, uguale per RCH Print 3.0 RT e RCH Print F.
+    ultimo = _ultimo_scontrino_stornabile()
+    if not ultimo:
         return jsonify({"error": "Nessuno scontrino fiscale da annullare"}), 404
-    try:
-        progressivo_str = str(ultimo.numero_progressivo)
-        progressivo_sx, progressivo_dx = progressivo_str.split('-')
-        progressivo_sx = progressivo_sx.zfill(4)
-        progressivo_dx = str(int(progressivo_dx))
-    except Exception as e:
-        current_app.logger.error("Errore durante l'annullamento dell'ultimo scontrino: %s", str(e))
-        return jsonify({"error": "Errore durante l'annullamento."}), 500
-    data_scontrino = ultimo.created_at if ultimo.created_at else datetime.now()
-    data_str = data_scontrino.strftime("%d%m%y")
-    cmd = f"=k/&{data_str}/[{progressivo_sx}/]{progressivo_dx}"
-    xml = f"""<?xml version="1.0" encoding="UTF-8" ?>
-    <Service>
-    <cmd>{cmd}</cmd>
-    </Service>"""
-    ip, printer_model = _get_printer_config()
-    if not ip:
-        return jsonify({"error": "IP stampante RCH non configurato"}), 400
-    url = _rch_url(ip, printer_model)
-    headers = _rch_headers(printer_model)
-    rch_kwargs = _rch_request_kwargs(printer_model)
-    try:
-        resp = requests.post(url, data=xml.encode("UTF-8"), headers=headers, timeout=10,
-                             **rch_kwargs)
-        numero_progressivo = None
-        numero_z = None
-        for cmd in ("=C453/$0", "=DGFE/REG"):
-            payload_prog = f'''<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'''
-            for _ in range(6):
-                pytime.sleep(0.5)
-                resp2 = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=5,
-                                      **rch_kwargs)
-                m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp2.text) or
-                        re.search(r'<C453[^>]*>(\d+)</C453>', resp2.text) or
-                        re.search(r'<result>(\d+)</result>', resp2.text))
-                m_z = re.search(r'<lastZ>(\d+)</lastZ>', resp2.text)
-                if m_doc and m_z:
-                    numero_progressivo = int(m_doc.group(1))
-                    numero_z = int(m_z.group(1)) + 1
-                    break
-            if numero_progressivo is not None and numero_z is not None:
-                break
-        if numero_progressivo is None or numero_z is None:
-            return jsonify({"error": "La stampante non ha restituito il progressivo"}), 500
-        progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
-        voci_storno = []
-        for v in ultimo.voci:
-            voce = v.copy()
-            try:
-                voce['prezzo'] = -abs(float(voce.get('prezzo', 0)))
-            except Exception:
-                voce['prezzo'] = -0.0
-            voce['nome'] = voce.get('nome') or voce.get('servizio_nome') or "STORNO"
-            voci_storno.append(voce)
-        nuovo_receipt = Receipt(
-            created_at       = datetime.now(),
-            total_amount     = -abs(ultimo.total_amount),
-            is_fiscale       = True,
-            voci             = voci_storno,
-            cliente_id       = ultimo.cliente_id,
-            operatore_id     = ultimo.operatore_id,
-            numero_progressivo = progressivo_completo
-        )
-        db.session.add(nuovo_receipt)
-        db.session.commit()
-    except Exception as e:
-        current_app.logger.error("Errore di rete durante l'annullamento: %s", str(e))
-        return jsonify({"error": "Errore di rete durante l'annullamento."}), 500
-    raw = resp.text or ""
-    masked = re.sub(r'([A-Za-z0-9_\-]{8,})', '[REDACTED]', raw)
-    current_app.logger.debug("Annullo raw (masked): %s", masked[:2000])
-    return jsonify({"status": "ok" if resp.status_code == 200 else "error", "code": resp.status_code, "progressivo": progressivo_completo}), resp.status_code
+
+    res = _storna_scontrino_rch(ultimo)
+    if "error" in res:
+        return jsonify({"error": res["error"]}), res.get("status", 400)
+
+    return jsonify({
+        "status": "ok",
+        "code": 200,
+        "progressivo": res["progressivo_storno"],
+        "documento_stornato": res["documento_stornato"],
+    }), 200
 
 @cassa_bp.route('/cassa/api/myspia/dettagli', methods=['POST'])
 def myspia_dettagli():
@@ -2667,99 +2703,306 @@ def myspia_dettagli():
         current_app.logger.exception("Errore /cassa/api/myspia/dettagli")
         return jsonify({"success": False, "error": "Errore interno"}), 500
     
-# Helper per stornare uno scontrino specifico (del giorno corrente)
-def stornare_scontrino_specifico(scontrino):
-    if not scontrino.is_fiscale or not scontrino.numero_progressivo:
-        return {"error": "Scontrino non fiscale o senza progressivo"}
-    
+# =========================================================================
+# STORNO FISCALE: UNICA IMPLEMENTAZIONE, UN SOLO COMANDO, DUE MODELLI
+# =========================================================================
+# Comando e controlli sono gli stessi per RCH Print 3.0 RT e RCH Print F:
+# entrambi parlano il protocollo PRINT!, e l'unica differenza fra i due e' il
+# trasporto (URL, header, verify SSL), gia' incapsulato in _rch_url /
+# _rch_headers / _rch_request_kwargs. Qui NON si ramifica mai sul modello e
+# NON si tentano varianti di comando: si invia sempre e solo la forma
+# documentata nel manuale PRINT! (sez. 15):
+#     =k/&ggmmaa/[chiusura/]numero
+#
+# FATTO ACCERTATO (incidente Biella, RCH Print 3.0 RT, 01/08/2026):
+# quel comando, inviato per il documento 42, ha annullato il 44, cioe'
+# l'ULTIMO documento emesso: il registratore non ha risolto il riferimento.
+# Il difetto era rimasto invisibile perche' l'unico uso storico era "annulla
+# ultimo scontrino", dove il bersaglio corretto e l'ultimo documento
+# coincidono.
+#
+# DUE OPERAZIONI DIVERSE, SCELTE DAL SERVER (_storna_scontrino_rch):
+#
+#  - ULTIMO documento emesso  -> ANNULLAMENTO (=k). Qui le due possibili
+#    semantiche del firmware (riferimento onorato / ultimo documento)
+#    colpiscono lo stesso identico documento, quindi l'esito e' corretto su RT
+#    3.0 e su Print F senza dipendere dal firmware.
+#
+#  - documento PRECEDENTE     -> RESO (=r, manuale PRINT! sez. 14). Il reso non
+#    tocca il documento originale: emette un NUOVO documento negativo che lo
+#    riferisce. Per questo e' l'unica operazione sicura sui documenti non
+#    ultimi: anche nel caso peggiore in cui il registratore non risolvesse il
+#    riferimento, il documento negativo verrebbe emesso comunque per l'importo
+#    giusto, e nessun altro documento puo' essere annullato per errore.
+#    L'originale resta nel registro e nel DGFE, come dev'essere: la rettifica
+#    e' la riga negativa successiva.
+#
+# In entrambi i casi l'esito viene verificato (errCode + avanzamento del
+# progressivo) PRIMA di scrivere qualsiasi cosa in DB, e la riga negativa
+# porta con se' il riferimento esplicito al documento rettificato
+# (chiave '_rettifica_di' nelle voci: nessuna modifica allo schema), cosi' il
+# registro non deve piu' indovinare l'abbinamento in base all'importo.
+def _voci_list(scontrino):
+    """Voci dello scontrino sempre come lista di dict (alcune righe storiche le
+    hanno salvate come stringa JSON)."""
+    voci = scontrino.voci if scontrino else None
+    if isinstance(voci, str):
+        try:
+            voci = json.loads(voci)
+        except Exception:
+            voci = []
+    if not isinstance(voci, list):
+        return []
+    return [v for v in voci if isinstance(v, dict)]
+
+
+def _voci_negative(scontrino, tipo, progressivo_originale):
+    """Voci della riga negativa: stesse voci dell'originale a segno invertito,
+    con il riferimento esplicito al documento rettificato."""
+    voci_out = []
+    for v in _voci_list(scontrino):
+        voce = v.copy()
+        try:
+            voce['prezzo'] = -abs(float(voce.get('prezzo', 0)))
+        except Exception:
+            voce['prezzo'] = -0.0
+        voce['nome'] = voce.get('nome') or voce.get('servizio_nome') or tipo.upper()
+        voce['_rettifica_di'] = progressivo_originale
+        voce['_rettifica_tipo'] = tipo          # 'annullo' | 'reso'
+        voci_out.append(voce)
+    return voci_out
+
+
+def _righe_reso_rch(scontrino, printer_model):
+    """Righe merce e pagamenti del documento di RESO, ricostruiti dalle voci
+    dell'originale. Ritorna (cmds, totale_cents) oppure (None, errore).
+
+    Le voci a importo zero non vengono rese: sull'originale erano righe
+    descrittive (promemoria), non vendite, quindi non c'e' nulla da rimborsare
+    - e una riga di vendita a zero verrebbe comunque rifiutata dal
+    registratore, lasciando il documento aperto.
+    """
+    cmds = []
+    totali = {}
+    totale_cents = 0
+
+    for v in _voci_list(scontrino):
+        try:
+            prezzo = float(v.get('prezzo', 0) or 0)
+        except Exception:
+            prezzo = 0.0
+        cents = int(round(abs(prezzo) * 100))
+        if cents <= 0:
+            continue
+
+        srv = db.session.get(Service, v.get('servizio_id')) if v.get('servizio_id') else None
+        desc = (v.get('nome') or v.get('servizio_nome') or (srv.servizio_nome if srv else 'Servizio'))[:32]
+        desc = clean_str(html.unescape(desc)).replace(")", "").replace("(", "").replace("/", "-")
+        reparto = "R2" if getattr(srv, "servizio_sottocategoria", None) and \
+                           srv.servizio_sottocategoria.nome.upper() == "PRODOTTI" else "R1"
+        cmds.append(f'<cmd>={reparto}/${cents}/({desc})</cmd>')
+        totale_cents += cents
+
+        # Il rimborso segue le stesse forme di pagamento dell'originale
+        # (split compreso), come in send_to_rch.
+        pagamenti_split = v.get('pagamenti')
+        if isinstance(pagamenti_split, list) and pagamenti_split:
+            assegnati = 0
+            for p in pagamenti_split:
+                cents_p = int(round(abs(float(p.get('importo', 0) or 0)) * 100))
+                if cents_p <= 0:
+                    continue
+                tcode_p = _tender_code(p.get('metodo', 'cash'), printer_model)
+                totali[tcode_p] = totali.get(tcode_p, 0) + cents_p
+                assegnati += cents_p
+            diff = cents - assegnati
+            if diff != 0:
+                tcode_first = _tender_code(pagamenti_split[0].get('metodo', 'cash'), printer_model)
+                totali[tcode_first] = totali.get(tcode_first, 0) + diff
+        else:
+            tcode = _tender_code(v.get('metodo_pagamento', 'cash'), printer_model)
+            totali[tcode] = totali.get(tcode, 0) + cents
+
+    if totale_cents <= 0:
+        return None, "Lo scontrino non ha voci con importo positivo da rendere"
+
+    for tcode in ("T1", "T2", "T3", "T4", "T5"):
+        if totali.get(tcode, 0) > 0:
+            cmds.append(f'<cmd>={tcode}/${totali[tcode]}</cmd>')
+
+    return cmds, totale_cents
+
+
+def _storna_scontrino_rch(scontrino):
+    """Rettifica fiscalmente uno scontrino e registra la riga negativa in DB.
+
+    Annullamento se e' l'ultimo documento emesso, altrimenti reso.
+    Ritorna {"success": True, "progressivo_storno": ..., "tipo": ...} oppure
+    {"error": "...", "status": <http status suggerito>}.
+    """
+    # ---------- validazione del documento ----------
+    if not scontrino or not scontrino.is_fiscale or not scontrino.numero_progressivo:
+        return {"error": "Scontrino non fiscale o senza progressivo", "status": 400}
+
+    progressivo_str = str(scontrino.numero_progressivo).strip()
+    if progressivo_str.startswith('ADJ-'):
+        return {"error": "Le voci di allineamento DGFE non sono stornabili", "status": 400}
+
     try:
-        progressivo_str = str(scontrino.numero_progressivo)
         progressivo_sx, progressivo_dx = progressivo_str.split('-')
-        progressivo_sx = progressivo_sx.zfill(4)
-        progressivo_dx = str(int(progressivo_dx))
-    except Exception as e:
-        return {"error": "Progressivo non valido"}
-    
-    data_scontrino = scontrino.created_at.date() if scontrino.created_at else datetime.now().date()
-    oggi = datetime.now().date()
-    if data_scontrino != oggi:
-        return {"error": "Storno possibile solo per scontrini del giorno corrente"}
-    
-    data_str = data_scontrino.strftime("%d%m%y")
-    cmd = f"=k/&{data_str}/[{progressivo_sx}/]{progressivo_dx}"
-    xml = f"""<?xml version="1.0" encoding="UTF-8" ?>
-    <Service>
-    <cmd>{cmd}</cmd>
-    </Service>"""
-    
+        chiusura = progressivo_sx.zfill(4)
+        documento = int(progressivo_dx)
+    except Exception:
+        return {"error": "Progressivo non valido", "status": 400}
+
+    try:
+        importo = float(scontrino.total_amount or 0)
+    except Exception:
+        importo = 0.0
+    if importo <= 0:
+        return {"error": "Una rettifica non puo' essere rettificata a sua volta", "status": 400}
+
+    data_scontrino = scontrino.created_at.date() if scontrino.created_at else None
+    if data_scontrino != datetime.now().date():
+        return {"error": "Operazione possibile solo per scontrini del giorno corrente", "status": 400}
+
     ip, printer_model = _get_printer_config()
     if not ip:
-        return {"error": "IP stampante RCH non configurato"}
-    
+        return {"error": "IP stampante RCH non configurato", "status": 400}
+
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
     rch_kwargs = _rch_request_kwargs(printer_model)
-    
+
+    # ---------- 1. annullo o reso? lo decide il progressivo della stampante ----------
+    doc_prima, _z_prima = _read_progressivo(url, headers, rch_kwargs,
+                                            max_attempts=6, sleep_s=0.5)
+    if doc_prima is None:
+        return {"error": "Stampante non raggiungibile: progressivo non leggibile, operazione annullata",
+                "status": 502}
+
+    data_str = data_scontrino.strftime("%d%m%y")
+    riferimento = f"&{data_str}/[{chiusura}/]{documento}"
+    e_ultimo = (documento == doc_prima)
+
+    if e_ultimo:
+        # ANNULLAMENTO dell'ultimo documento (manuale PRINT! sez. 15).
+        tipo = "annullo"
+        cmds = [f'<cmd>=k/{riferimento}</cmd>']
+    else:
+        # RESO del documento precedente (manuale PRINT! sez. 14): apre il
+        # documento di reso col riferimento all'originale, ne ripete le righe
+        # merce e lo chiude con le stesse forme di pagamento. L'originale non
+        # viene toccato: la rettifica e' questo nuovo documento negativo.
+        tipo = "reso"
+        righe, esito = _righe_reso_rch(scontrino, printer_model)
+        if righe is None:
+            return {"error": esito, "status": 400}   # esito = messaggio d'errore
+        totale_cents = esito
+        if abs(totale_cents - int(round(importo * 100))) > 1:
+            # Le righe ricostruite non fanno il totale dello scontrino: meglio
+            # non emettere nulla che emettere un reso di importo sbagliato.
+            log_crm_error(
+                "Reso non emesso: totale righe diverso dal totale scontrino",
+                context={"receipt_id": scontrino.id, "progressivo": progressivo_str,
+                         "totale_righe_cents": totale_cents,
+                         "totale_scontrino_cents": int(round(importo * 100))},
+                client_id=scontrino.cliente_id,
+            )
+            return {"error": (f"Reso non emesso: le righe ricostruite valgono "
+                              f"{totale_cents/100:.2f} € contro i {importo:.2f} € dello "
+                              f"scontrino."), "status": 409}
+        cmds = [f'<cmd>=r/{riferimento}</cmd>'] + righe
+
+    # ---------- 2. invio ----------
+    # Sequenza in un unico payload, come per la vendita: se una riga venisse
+    # rifiutata a meta' sequenza il documento resterebbe aperto sul
+    # registratore, bloccando le stampe successive.
+    xml = ('<?xml version="1.0" encoding="UTF-8" ?>\n<Service>\n'
+           + "\n".join(cmds) + '\n</Service>')
+
     try:
         resp = requests.post(url, data=xml.encode("UTF-8"), headers=headers, timeout=30,
                              **rch_kwargs)
-        current_app.logger.info("Risposta RCH storno: %s", resp.text)
-        
-        # Leggi nuovo progressivo post-storno (come in annulla_ultimo_scontrino)
-        numero_progressivo = None
-        numero_z = None
-        for cmd in ("=C453/$0", "=DGFE/REG"):
-            payload_prog = f'''<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'''
-            for _ in range(6):
-                pytime.sleep(0.5)
-                resp2 = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=30,
-                                      **rch_kwargs)
-                m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp2.text) or
-                         re.search(r'<C453[^>]*>(\d+)</C453>', resp2.text) or
-                         re.search(r'<result>(\d+)</result>', resp2.text))
-                m_z = re.search(r'<lastZ>(\d+)</lastZ>', resp2.text)
-                if m_doc and m_z:
-                    numero_progressivo = int(m_doc.group(1))
-                    numero_z = int(m_z.group(1)) + 1
-                    break
-            if numero_progressivo is not None and numero_z is not None:
-                break
-        
-        if numero_progressivo is None or numero_z is None:
-            return {"error": "Impossibile leggere progressivo post-storno"}
-        
-        progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
-        
-        # Crea sempre scontrino di storno nel DB (come in annulla_ultimo_scontrino)
-        voci_storno = []
-        for v in scontrino.voci:
-            voce = v.copy()
-            try:
-                voce['prezzo'] = -abs(float(voce.get('prezzo', 0)))
-            except Exception:
-                voce['prezzo'] = -0.0
-            voce['nome'] = voce.get('nome') or voce.get('servizio_nome') or "STORNO"
-            voci_storno.append(voce)
-        
-        nuovo_receipt = Receipt(
-            created_at       = datetime.now(),
-            total_amount     = -abs(scontrino.total_amount),
-            is_fiscale       = True,
-            voci             = voci_storno,
-            cliente_id       = scontrino.cliente_id,
-            operatore_id     = scontrino.operatore_id,
-            numero_progressivo = progressivo_completo  # Sequenziale come DGFE
+    except Exception as exc:
+        current_app.logger.error("%s: errore di rete verso la stampante: %s", tipo, str(exc))
+        log_crm_error(
+            f"{tipo.capitalize()}: stampante non raggiungibile",
+            context={"receipt_id": scontrino.id, "progressivo": progressivo_str,
+                     "payload": xml, "printer_ip": ip, "printer_model": printer_model,
+                     "exception": str(exc)},
+            client_id=scontrino.cliente_id,
         )
-        db.session.add(nuovo_receipt)
-        db.session.commit()
-        
-        # Restituisci flag rch_ok basato su HTTP status (come in annulla_ultimo_scontrino)
-        rch_ok = resp.status_code == 200
-        return {"success": True, "progressivo_storno": progressivo_completo, "rch_ok": rch_ok}
-    except Exception as e:
-        current_app.logger.error("Errore storno specifico: %s", str(e))
-        return {"error": "Errore durante lo storno"}
-    
+        return {"error": f"Stampante non raggiungibile durante il {tipo}: verificare sulla "
+                         f"stampante se il documento e' stato stampato prima di riprovare",
+                "status": 502}
+
+    current_app.logger.info("%s doc %s su %s: %s", tipo, progressivo_str, printer_model,
+                            (resp.text or "")[:400])
+
+    # ---------- 3. verifica esito PRIMA di scrivere in DB ----------
+    # Senza questo controllo il DB registrava la rettifica anche quando il
+    # registratore l'aveva rifiutata, sfasando corrispettivi e DGFE.
+    if not _rch_is_success(resp):
+        log_crm_error(
+            f"{tipo.capitalize()} rifiutato dal registratore (errCode)",
+            context={"receipt_id": scontrino.id, "progressivo": progressivo_str,
+                     "payload": xml, "printer_ip": ip, "printer_model": printer_model,
+                     "errCode": _rch_parse_errcode(resp.text or ""),
+                     "response_body": (resp.text or "")[:400]},
+            client_id=scontrino.cliente_id,
+        )
+        return {"error": f"Il registratore ha rifiutato il {tipo}: nessuna voce registrata",
+                "status": 502}
+
+    doc_dopo, z_dopo = _read_progressivo(url, headers, rch_kwargs, max_attempts=10, sleep_s=0.5)
+    if doc_dopo is None or z_dopo is None:
+        log_crm_error(
+            f"{tipo.capitalize()}: progressivo successivo non leggibile",
+            context={"receipt_id": scontrino.id, "progressivo": progressivo_str,
+                     "printer_ip": ip, "printer_model": printer_model},
+            client_id=scontrino.cliente_id,
+        )
+        return {"error": "Impossibile leggere il progressivo dopo l'operazione: verificare sulla "
+                         "stampante e sul DGFE prima di riprovare", "status": 502}
+    if doc_dopo <= doc_prima:
+        # Annullo e reso emettono a loro volta un documento: se il contatore non
+        # e' avanzato, non e' stato stampato nulla.
+        log_crm_error(
+            f"{tipo.capitalize()} non confermato: progressivo invariato",
+            context={"receipt_id": scontrino.id, "progressivo": progressivo_str,
+                     "doc_prima": doc_prima, "doc_dopo": doc_dopo,
+                     "printer_ip": ip, "printer_model": printer_model},
+            client_id=scontrino.cliente_id,
+        )
+        return {"error": f"{tipo.capitalize()} non confermato dal registratore: nessuna voce registrata",
+                "status": 502}
+
+    progressivo_completo = f"{z_dopo:04d}-{doc_dopo:04d}"
+
+    # ---------- 4. registrazione della riga negativa ----------
+    # L'originale NON viene toccato: la rettifica e' questa riga negativa
+    # successiva, che porta con se' il riferimento al documento rettificato.
+    nuovo_receipt = Receipt(
+        created_at       = datetime.now(),
+        total_amount     = -abs(scontrino.total_amount),
+        is_fiscale       = True,
+        voci             = _voci_negative(scontrino, tipo, progressivo_str),
+        cliente_id       = scontrino.cliente_id,
+        operatore_id     = scontrino.operatore_id,
+        numero_progressivo = progressivo_completo  # Sequenziale come DGFE
+    )
+    db.session.add(nuovo_receipt)
+    db.session.commit()
+
+    # Rate pacchetto: ripristinate solo a operazione riuscita, per entrambi i
+    # punti di ingresso (registro scontrini e "annulla ultimo scontrino").
+    ripristina_rate_da_scontrino(scontrino)
+
+    return {"success": True, "progressivo_storno": progressivo_completo,
+            "documento_stornato": progressivo_str, "tipo": tipo}
+
+
 @cassa_bp.route('/api/user-role')
 def api_user_role():
     user_id = session.get("user_id")
