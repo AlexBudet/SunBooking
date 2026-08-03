@@ -811,6 +811,87 @@ def _record_fiscal_closure(ip, printer_model, dgfe_total=None):
             pass
 
 
+# Sequenza comandi del DOCUMENTO GESTIONALE (=o, manuale PRINT! sez. 17):
+# apertura, righe di testo, chiusura. Il manuale elenca le varianti
+# (=o, =o/*1, =o/&1, =o/&2) senza spiegarle: se la stampante rifiuta questa
+# sequenza, la variante giusta si trova provandola dalla Console RCH
+# (/cassa/rch-console/send-raw) e si cambia QUI, senza toccare il flusso di cassa.
+GESTIONALE_OPEN_CMD = '=o/&1'
+GESTIONALE_CLOSE_CMD = '=o/&2'
+
+
+def _stampa_promemoria_gestionale(voci_zero, cliente_id=None, operatore_id=None):
+    """Stampa le voci a importo zero su un DOCUMENTO GESTIONALE: un foglio
+    NON fiscale, separato dallo scontrino.
+
+    Serve SOLO quando la bozza e' tutta a zero. In quel caso non esiste un
+    documento commerciale su cui appoggiare le righe descrittive: senza importo
+    da incassare non c'e' un =T con cui chiuderlo, e un documento lasciato
+    aperto bloccherebbe ogni stampa successiva. L'unico modo di dare comunque
+    la carta al cliente e' quindi un documento a parte.
+
+    Non fiscale: nessun corrispettivo, nessun progressivo, nessun effetto sulla
+    DGFE. Non solleva mai eccezioni: se la stampa fallisce lo scontrino resta
+    registrato a database e l'errore finisce nei log.
+    Ritorna (ok: bool, info: str).
+    """
+    righe = []
+    for v in voci_zero:
+        srv = db.session.get(Service, v.get("servizio_id")) if v.get("servizio_id") else None
+        desc = (v.get("nome") or (srv.servizio_nome if srv else "Servizio"))
+        desc = clean_str(html.unescape(desc)).replace(")", "").replace("(", "").replace("/", "-")
+        desc = desc.strip()
+        if desc:
+            # Sul gestionale il testo arriva a 32 caratteri (sez. 11, "32 gestionale"),
+            # contro i 25 della riga descrittiva dentro lo scontrino fiscale.
+            righe.append(desc[:32])
+    if not righe:
+        return False, "nessuna riga da stampare"
+
+    ip, printer_model = _get_printer_config()
+    if not ip:
+        return False, "IP stampante RCH non configurato"
+
+    cmds = [f'<cmd>{GESTIONALE_OPEN_CMD}</cmd>']
+    cmds += [f'<cmd>="/({r})</cmd>' for r in righe]
+    cmds.append(f'<cmd>{GESTIONALE_CLOSE_CMD}</cmd>')
+    payload = ('<?xml version="1.0" encoding="UTF-8"?>\n<Service>\n'
+               + "\n".join(cmds) + '\n</Service>')
+    current_app.logger.debug("PAYLOAD GESTIONALE INVIATO:\n%s", payload)
+
+    try:
+        resp = requests.post(
+            _rch_url(ip, printer_model), data=payload.encode("UTF-8"),
+            headers=_rch_headers(printer_model), timeout=30,
+            **_rch_request_kwargs(printer_model)
+        )
+    except Exception as exc:
+        log_crm_error(
+            "Documento gestionale (promemoria voci a zero) non inviato",
+            context={"operatore_id": operatore_id, "printer_ip": ip,
+                     "printer_model": printer_model, "righe": righe,
+                     "exception": str(exc)},
+            client_id=cliente_id,
+        )
+        return False, f"stampante non raggiungibile ({exc})"
+
+    body = (resp.text or "")[:400]
+    current_app.logger.info("RCH gestionale risposta: %s", body or "(vuoto)")
+    if not _rch_is_success(resp):
+        # Tipicamente: variante di =o non supportata da questo modello.
+        log_crm_error(
+            "Documento gestionale rifiutato dalla stampante",
+            context={"operatore_id": operatore_id, "printer_ip": ip,
+                     "printer_model": printer_model, "righe": righe,
+                     "open_cmd": GESTIONALE_OPEN_CMD, "close_cmd": GESTIONALE_CLOSE_CMD,
+                     "response_body": body},
+            client_id=cliente_id,
+        )
+        return False, f"stampante in errore ({body or 'nessuna risposta'})"
+
+    return True, f"{len(righe)} righe"
+
+
 @cassa_bp.route('/cassa/send-to-rch', methods=['POST'])
 def send_to_rch():
     data = request.get_json(force=True)
@@ -874,6 +955,9 @@ def send_to_rch():
     # da chiudere). In quel caso le voci a zero diventano non fiscali.
     zero_fiscali = [v for v in voci if _is_fiscale(v) and float(v.get("prezzo", 0) or 0) == 0]
     ha_importi_positivi = any(_is_fiscale(v) and float(v.get("prezzo", 0) or 0) > 0 for v in voci)
+    # Voci declassate a non fiscali perche' la bozza e' TUTTA a zero: vanno
+    # comunque stampate, ma su un documento gestionale a parte (vedi sotto).
+    voci_promemoria_zero = []
     for v in zero_fiscali:
         # Uno split di pagamento su un importo zero non ha significato.
         v.pop("pagamenti", None)
@@ -881,6 +965,7 @@ def send_to_rch():
             v["is_fiscale"] = False
             v["is_non_fiscale"] = True
             v["metodo_pagamento"] = "contanti"
+            voci_promemoria_zero.append(v)
             current_app.logger.info(
                 "Voce a zero resa non fiscale (nessun importo positivo sullo scontrino): %s",
                 v.get("nome") or v.get("servizio_id")
@@ -1243,6 +1328,25 @@ def send_to_rch():
         results.append({
             "message": "Scontrino non fiscale registrato",
             "is_fiscale": False
+        })
+
+    # =========================
+    # 2-bis. PROMEMORIA SU DOCUMENTO GESTIONALE (bozza tutta a zero)
+    # =========================
+    # Nessun documento commerciale e' stato emesso (nessun importo da incassare),
+    # quindi le voci sono finite tra le non fiscali: senza questa stampa il
+    # cliente non riceverebbe nulla. Non blocca la risposta - il record e' gia'
+    # a database, un errore di stampa qui non deve far fallire l'incasso.
+    if voci_promemoria_zero:
+        ok_gest, info_gest = _stampa_promemoria_gestionale(
+            voci_promemoria_zero, cliente_id, operatore_id
+        )
+        results.append({
+            "message": ("Promemoria stampato su documento gestionale (non fiscale)"
+                        if ok_gest
+                        else f"Promemoria NON stampato: {info_gest}"),
+            "is_fiscale": False,
+            "gestionale_ok": ok_gest
         })
 
     # IMPORTANTE: Gestione prepagata/rate PRIMA di costruire response

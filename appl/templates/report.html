@@ -1887,25 +1887,73 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   </script>
 <script>
+// Prepara una COPIA della tabella Corrispettivi da dare agli export (Excel/PDF).
+// La colonna "Azioni" e' solo interfaccia (bottone "Correggi"): non deve mai
+// finire nei file esportati, altrimenti il tracciato del file cambia a seconda
+// che la cassa sia abilitata o meno. A video la colonna resta dov'e'.
+// Il clone viene agganciato fuori schermo perche' jsPDF-autoTable legge gli
+// stili calcolati delle celle, che su un nodo staccato dal DOM non esistono.
+window.buildCorrispettiviExportTable = function() {
+  const table = document.querySelector('#wrapperTabellaCorrispettivi table');
+  if (!table) return null;
+
+  const clone = table.cloneNode(true);
+  clone.removeAttribute('id');
+  clone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+
+  // Indice di colonna di "Azioni" (assente se la cassa e' disabilitata),
+  // calcolato tenendo conto dei colspan dell'header.
+  const headCells = clone.tHead && clone.tHead.rows[0] ? clone.tHead.rows[0].cells : [];
+  let col = 0, target = -1;
+  for (const th of headCells) {
+    if ((th.textContent || '').trim().toLowerCase() === 'azioni') { target = col; break; }
+    col += th.colSpan || 1;
+  }
+
+  // Rimozione span-aware: la riga "Totale" parte con un <th colspan="2">,
+  // quindi gli indici delle sue celle sono sfalsati rispetto all'header.
+  if (target !== -1) {
+    Array.from(clone.rows).forEach(tr => {
+      let c = 0;
+      for (let i = 0; i < tr.cells.length; i++) {
+        const span = tr.cells[i].colSpan || 1;
+        if (c === target && span === 1) { tr.deleteCell(i); return; }
+        c += span;
+      }
+    });
+  }
+
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:absolute; left:-10000px; top:0;';
+  holder.appendChild(clone);
+  document.body.appendChild(holder);
+  return { table: clone, cleanup: () => holder.remove() };
+};
+</script>
+<script>
 document.addEventListener('DOMContentLoaded', function() {
   const btnExportExcelCorrispettivi = document.getElementById('btnExportExcelCorrispettivi');
   if (btnExportExcelCorrispettivi) {
     btnExportExcelCorrispettivi.addEventListener('click', function() {
-      // Prendi la tabella
-      const table = document.querySelector('#wrapperTabellaCorrispettivi table');
-      if (!table) return;
+      // Copia della tabella senza la colonna "Azioni"
+      const exp = window.buildCorrispettiviExportTable();
+      if (!exp) return;
 
-      // Ottieni mese e anno dal filtro o dalla tabella
-      const dateFrom = document.getElementById('dateFrom').value;
-      const mese = dateFrom ? dateFrom.slice(5,7) : (new Date().getMonth()+1).toString().padStart(2,'0');
-      const anno = dateFrom ? dateFrom.slice(0,4) : new Date().getFullYear();
+      try {
+        // Ottieni mese e anno dal filtro o dalla tabella
+        const dateFrom = document.getElementById('dateFrom').value;
+        const mese = dateFrom ? dateFrom.slice(5,7) : (new Date().getMonth()+1).toString().padStart(2,'0');
+        const anno = dateFrom ? dateFrom.slice(0,4) : new Date().getFullYear();
 
-      // Crea il workbook
-      const wb = XLSX.utils.table_to_book(table, {sheet:"Corrispettivi"});
-      const nomeFile = `corrispettivi_${mese}_${anno}.xlsx`;
+        // Crea il workbook
+        const wb = XLSX.utils.table_to_book(exp.table, {sheet:"Corrispettivi"});
+        const nomeFile = `corrispettivi_${mese}_${anno}.xlsx`;
 
-      // Salva il file (apre la finestra di salvataggio)
-      XLSX.writeFile(wb, nomeFile);
+        // Salva il file (apre la finestra di salvataggio)
+        XLSX.writeFile(wb, nomeFile);
+      } finally {
+        exp.cleanup();
+      }
     });
   }
 });
@@ -3037,9 +3085,12 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 <script>
  document.getElementById('btnExportPdfCorrispettivi').addEventListener('click', function() {
-  const table = document.querySelector('#wrapperTabellaCorrispettivi table');
-  if (!table) return;
+  // Copia della tabella senza la colonna "Azioni"
+  const exp = window.buildCorrispettiviExportTable();
+  if (!exp) return;
+  const table = exp.table;
 
+  try {
   const dateFrom = document.getElementById('dateFrom').value;
   const mese = dateFrom ? dateFrom.slice(5,7) : (new Date().getMonth()+1).toString().padStart(2,'0');
   const anno = dateFrom ? dateFrom.slice(0,4) : new Date().getFullYear();
@@ -3096,6 +3147,9 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
   doc.save(nomeFile);
+  } finally {
+    exp.cleanup();
+  }
 });
 </script>
 <script>
