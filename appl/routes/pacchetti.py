@@ -2,7 +2,7 @@
 import json
 from flask import Blueprint, render_template, request, jsonify, session
 from appl import db
-from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo, PacchettoTipo, MovimentoPrepagata, Subcategory, User, PrepagataRicaricaRegola
+from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo, PacchettoTipo, MovimentoPrepagata, Subcategory, User, PrepagataRicaricaRegola, ServiceCategory
 from sqlalchemy import func, or_, and_
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload, selectinload
@@ -363,7 +363,22 @@ def api_pacchetti():
         )
     if query_status:
         pacchetti_query = pacchetti_query.filter(Pacchetto.status == PacchettoStatus[query_status])
-    
+
+    # Esclusione delle carte "ricaricabili Solarium": hanno un tab dedicato, con
+    # caricamento su richiesta. Tenerle anche qui significava scaricarne centinaia
+    # a ogni apertura della pagina, con rate/sedute/operatori in eager loading:
+    # era la causa del rallentamento. Il caso "categoria = Solarium" si esclude
+    # gia' in SQL, cosi' quelle righe non vengono nemmeno lette.
+    escludi_solarium = request.args.get('escludi_solarium') == '1'
+    if escludi_solarium:
+        v_tipo = Pacchetto.vincoli_utilizzo.op('->>')('tipo')
+        v_cat = Pacchetto.vincoli_utilizzo.op('->>')('categoria')
+        pacchetti_query = pacchetti_query.filter(
+            or_(v_tipo.is_(None),
+                v_tipo != 'categoria',
+                func.coalesce(v_cat, '') != ServiceCategory.Solarium.value)
+        )
+
     # Filtro per tipo (servizi o prepagata)
     tipo_filtro = request.args.get('tipo')
     if tipo_filtro:
@@ -383,6 +398,14 @@ def api_pacchetti():
             pacchetti_query = pacchetti_query.filter(Pacchetto.tipo == PacchettoTipo.Prepagata)
     
     pacchetti = pacchetti_query.all()
+
+    # Restano da togliere le carte vincolate a una LISTA di servizi tutti Solarium:
+    # quel controllo non si puo' fare in SQL, ma sono poche e la query pesante
+    # l'ha gia' evitata il filtro qui sopra.
+    if escludi_solarium:
+        _ids_sol = _ids_servizi_solarium()
+        pacchetti = [p for p in pacchetti
+                     if not _e_ricaricabile_solarium(p.vincoli_utilizzo, _ids_sol)]
 
     # Controllo abbandono: aggiorna status per pacchetti Preventivo non modificati da 3 settimane
     tre_settimane_fa = datetime.now() - timedelta(weeks=3)
@@ -2066,6 +2089,118 @@ def api_prepagata_riepilogo(id):
         'ultima_ricarica': _mov_dict(ultima_ricarica),
         'ultimo_utilizzo': _mov_dict(ultimo_utilizzo)
     })
+
+
+def _ids_servizi_solarium():
+    """Id dei servizi di categoria Solarium (cache per richiesta)."""
+    return {s.id for s in Service.query
+            .filter(Service.servizio_categoria == ServiceCategory.Solarium,
+                    Service.is_deleted == False)
+            .with_entities(Service.id).all()}
+
+
+def _e_ricaricabile_solarium(vincoli, ids_solarium):
+    """Una prepagata e' 'ricaricabile Solarium' quando si puo' usare SOLO per
+    servizi Solarium: o e' vincolata all'intera categoria, o e' vincolata a una
+    lista di servizi che sono tutti Solarium. Le carte libere (nessun vincolo o
+    'tutti') NON lo sono: possono pagare qualsiasi cosa."""
+    if not isinstance(vincoli, dict):
+        return False
+    tipo = vincoli.get('tipo')
+    if tipo == 'categoria':
+        return (vincoli.get('categoria') or '') == ServiceCategory.Solarium.value
+    if tipo == 'servizi':
+        ids = [int(i) for i in (vincoli.get('servizi_ids') or []) if str(i).isdigit()]
+        return bool(ids) and all(i in ids_solarium for i in ids)
+    return False
+
+
+@pacchetti_bp.route('/api/prepagate-solarium', methods=['GET'])
+def api_prepagate_solarium():
+    """Elenco LEGGERO delle carte ricaricabili Solarium, per il tab dedicato.
+
+    Con centinaia di carte importate non si puo' piu' caricare tutto al primo
+    accesso (era il motivo del rallentamento): qui si restituiscono solo le
+    poche righe che servono, e solo i campi mostrati in tabella - niente rate,
+    sedute o operatori in eager loading.
+
+    Modalita':
+      (default)      -> ultimi 5 clienti che hanno scalato una seduta
+                        + ultimi 5 che hanno fatto una ricarica
+      ?q=testo       -> ricerca per nome, cognome o cellulare (min 3 caratteri, max 5)
+      ?tessera=cifre -> ricerca per numero di tessera (match parziale, max 20)
+    """
+    ids_solarium = _ids_servizi_solarium()
+    q = (request.args.get('q') or '').strip()
+    tessera = (request.args.get('tessera') or '').strip()
+
+    base = (Pacchetto.query
+            .join(Client, Client.id == Pacchetto.client_id)
+            .options(joinedload(Pacchetto.client))
+            .filter(Pacchetto.tipo == PacchettoTipo.Prepagata,
+                    Pacchetto.status != PacchettoStatus.Eliminato))
+
+    def serializza(p, ultimo=None):
+        return {
+            'id': p.id,
+            'numero_tessera': p.numero_tessera,
+            'client_id': p.client_id,
+            'client_nome': p.client.cliente_nome if p.client else '',
+            'client_cognome': p.client.cliente_cognome if p.client else '',
+            'client_cellulare': p.client.cliente_cellulare if p.client else '',
+            'credito_residuo': float(p.credito_residuo or 0),
+            'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None,
+            'status': p.status.value if p.status else None,
+            'ultimo_movimento': ultimo,
+        }
+
+    # --- ricerca per tessera: filtra a ogni cifra digitata ---
+    if tessera:
+        righe = (base.filter(Pacchetto.numero_tessera.ilike(f'%{tessera}%'))
+                     .order_by(Pacchetto.numero_tessera).limit(40).all())
+        out = [serializza(p) for p in righe
+               if _e_ricaricabile_solarium(p.vincoli_utilizzo, ids_solarium)]
+        return jsonify(out[:20])
+
+    # --- ricerca per nome / cognome / cellulare ---
+    if q:
+        if len(q) < 3:
+            return jsonify([])
+        like = f'%{q}%'
+        righe = (base.filter(or_(Client.cliente_nome.ilike(like),
+                                 Client.cliente_cognome.ilike(like),
+                                 Client.cliente_cellulare.ilike(like)))
+                     .order_by(Client.cliente_cognome, Client.cliente_nome)
+                     .limit(40).all())
+        out = [serializza(p) for p in righe
+               if _e_ricaricabile_solarium(p.vincoli_utilizzo, ids_solarium)]
+        return jsonify(out[:5])
+
+    # --- default: gli ultimi movimentati, 5 per tipo ---
+    risultato, visti = [], set()
+    for tipo_mov in ('utilizzo', 'ricarica'):
+        recenti = (db.session.query(MovimentoPrepagata.pacchetto_id,
+                                    func.max(MovimentoPrepagata.data_movimento).label('quando'))
+                   .filter(MovimentoPrepagata.tipo_movimento == tipo_mov)
+                   .group_by(MovimentoPrepagata.pacchetto_id)
+                   .order_by(func.max(MovimentoPrepagata.data_movimento).desc())
+                   .limit(60).all())
+        presi = 0
+        for pacchetto_id, quando in recenti:
+            if presi >= 5:
+                break
+            if pacchetto_id in visti:
+                continue
+            p = base.filter(Pacchetto.id == pacchetto_id).first()
+            if not p or not _e_ricaricabile_solarium(p.vincoli_utilizzo, ids_solarium):
+                continue
+            visti.add(pacchetto_id)
+            voce = serializza(p, {'tipo': tipo_mov,
+                                  'quando': quando.strftime('%d/%m/%Y %H:%M') if quando else None})
+            voce['gruppo'] = 'ultime_sedute' if tipo_mov == 'utilizzo' else 'ultime_ricariche'
+            risultato.append(voce)
+            presi += 1
+    return jsonify(risultato)
 
 
 @pacchetti_bp.route('/api/servizi-ricarica-prepagata', methods=['GET'])
