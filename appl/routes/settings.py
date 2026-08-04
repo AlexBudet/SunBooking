@@ -3251,6 +3251,19 @@ def api_create_ricarica_regola():
     if importo_pagato <= 0 or importo_accreditato <= 0:
         return jsonify({'error': 'Gli importi devono essere positivi'}), 400
 
+    # Niente doppioni: la stessa soglia sullo stesso servizio (o sulla stessa
+    # categoria) e' gia' configurata. Senza questo controllo ogni ri-salvataggio
+    # creava una riga in piu', e in Cassa comparivano pulsanti di ricarica
+    # ripetuti. Si risponde success per non far fallire un salvataggio multiplo.
+    esistente = PrepagataRicaricaRegola.query.filter_by(
+        service_id=service_id,
+        categoria=categoria,
+        importo_pagato=importo_pagato,
+        importo_accreditato=importo_accreditato,
+    ).first()
+    if esistente:
+        return jsonify({'success': True, 'regola': esistente.to_dict(), 'gia_presente': True})
+
     regola = PrepagataRicaricaRegola(
         service_id=service_id,
         categoria=categoria,

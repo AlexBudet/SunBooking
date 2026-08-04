@@ -114,6 +114,16 @@
            data-bs-toggle="tooltip" data-bs-placement="top"
            title="Cerca il cliente dal numero di tessera della sua carta prepagata">
     <div id="tesseraDropdownCassa" class="dropdown-menu tessera-dropdown-results"></div>
+    <!-- Cliente senza carte prepagate (tipicamente appena creato col "+"):
+         cercare una tessera non ha senso, quindi al posto del campo compare
+         l'azione per crearne una. Lo scambio lo fa aggiornaPulsanteNuovaTessera. -->
+    <button type="button" id="btnAssociaTesseraCassa" class="btn btn-outline-primary"
+            style="display:none; width:100%; padding:6px 6px; font-size:0.78em;
+                   line-height:1.15; white-space:normal;"
+            data-bs-toggle="tooltip" data-bs-placement="top"
+            title="Crea una carta prepagata per questo cliente assegnandole un numero di tessera">
+      Associa n° tessera prepagata
+    </button>
   </div>
   {% endif %}
 </div>
@@ -1026,6 +1036,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.SERVIZI_PRECOMPILATI = servizi;
     window.RATA_ID_PRECOMPILATA = {{ request.args.get('rata_id') | tojson | safe if request.args.get('rata_id') else 'null' }};
+    // Sito del negozio (BusinessInfo.website): chiude il messaggio WhatsApp
+    // delle carte prepagate. Cambia da tenant a tenant, quindi arriva da qui.
+    window.BUSINESS_WEBSITE = "{{ businessinfo.website|escapejs if businessinfo and businessinfo.website else '' }}";
 
     if (operatorName) {
       const operatorInput = document.getElementById('operatorSelectInput');
@@ -2124,23 +2137,59 @@ body.show-op-per-riga .scontrino-row .op-col:hover {
   width: 100%;
   margin-bottom: 4px;
 }
+/* Scheda compatta: sta sopra la bozza scontrino, quindi si sviluppa in
+   orizzontale invece che a colonna. Le quattro righe di dettaglio scorrono
+   in linea e vanno a capo solo se serve. */
 .prepagata-riepilogo-card {
-  max-width: 460px;
+  max-width: 100%;
   background: #fff;
   border: 2px solid #81e1ff;
   border-radius: 14px;
-  padding: 10px 14px;
+  padding: 6px 12px;
   box-shadow: 3px 3px 10px #eee, -3px -3px 10px #fff;
   font-size: 0.85em;
   color: #333;
   text-align: left;
 }
+/* Due colonne: credito residuo a sinistra, informazioni a destra (allineate a
+   sinistra, non giustificate al bordo). */
+.prepagata-riepilogo-card .prep-corpo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.prepagata-riepilogo-card .prep-credito {
+  flex: 0 0 auto;
+  text-align: left;
+  padding-right: 16px;
+  border-right: 1px solid #e6e6e6;
+}
+.prepagata-riepilogo-card .prep-info {
+  flex: 1 1 auto;
+  min-width: 0;    /* consente il troncamento delle righe lunghe */
+  text-align: left;
+}
+.prepagata-riepilogo-card .prep-credito-lbl {
+  font-size: 0.78em;
+  line-height: 1.2;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.prepagata-riepilogo-card .prep-credito-val {
+  font-size: 1.95em;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #198754;
+  white-space: nowrap;
+}
 .prepagata-riepilogo-card .prep-header {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
-  gap: 8px;
-  margin-bottom: 4px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 1px;
+  line-height: 1.2;
 }
 .prepagata-riepilogo-card .prep-tessera {
   font-weight: 700;
@@ -2150,12 +2199,26 @@ body.show-op-per-riga .scontrino-row .op-col:hover {
   font-weight: 600;
 }
 .prepagata-riepilogo-card .prep-saldo {
-  font-size: 1.15em;
+  /* Il credito è il dato che si guarda per primo: grande, ma con line-height 1
+     così il suo blocco di riga resta alto quanto prima e la scheda non cresce. */
+  font-size: 1.6em;
+  line-height: 1;
+  font-weight: 600;
   color: #198754;
-  margin-bottom: 6px;
+  margin: 0 0 0 auto;   /* credito allineato a destra, sulla stessa riga */
+  white-space: nowrap;
+}
+.prepagata-riepilogo-card .prep-dettagli {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 16px;
 }
 .prepagata-riepilogo-card .prep-dettagli div {
-  line-height: 1.5;
+  line-height: 1.35;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .prepagata-riepilogo-card .prep-lbl {
   color: #6c757d;
