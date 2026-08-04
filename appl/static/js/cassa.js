@@ -1661,7 +1661,13 @@ function showPendingModal(key, expectedTotal) {
         // 6. Mostra popup successo e poi redirect (UNICO showSuccessPopup)
         const mostraEsitoERedirect = () => {
           showSuccessPopup('Scontrino stampato con successo!', 3000, () => {
-            if (nonFiscaleResponse && nonFiscaleResponse.redirect_to_pacchetto) {
+            // Movimenti di carta prepagata (creazione, ricarica, seduta scalata):
+            // si resta in Cassa. Tutto quello che serve - saldo aggiornato e
+            // messaggio al cliente - e' gia' passato di qui, e sbalzare
+            // l'operatore in Pacchetti a fine incasso interrompe il lavoro.
+            // Il redirect resta per i PACCHETTI veri (pagamento rate).
+            if (nonFiscaleResponse && nonFiscaleResponse.redirect_to_pacchetto
+                && !nonFiscaleResponse.prepagata_attivata) {
               const url = `/pacchetti/detail/${nonFiscaleResponse.redirect_to_pacchetto}`;
               if (nonFiscaleResponse.rata_importo_modificato) {
                 window.location.href = url + '?ricalcola_rate=1';
@@ -1770,21 +1776,15 @@ function showPendingModal(key, expectedTotal) {
       }
     }
 
-    // Gestione redirect per prepagata/pacchetto (flusso solo non fiscale)
+    // Gestione redirect per pacchetto (flusso solo non fiscale).
+    // I movimenti di carta prepagata NON portano fuori dalla Cassa: creazione
+    // tessera, ricarica e seduta scalata si concludono qui, con saldo aggiornato
+    // e messaggio al cliente gia' proposti. Il redirect resta solo per i
+    // PACCHETTI veri (es. pagamento di una rata), dove la scheda serve davvero.
     let redirectUrl = null;
-    
-    if (nonFiscaleResponse && nonFiscaleResponse.redirect_to_pacchetto) {
+    if (nonFiscaleResponse && nonFiscaleResponse.redirect_to_pacchetto
+        && !nonFiscaleResponse.prepagata_attivata) {
         redirectUrl = `/pacchetti/detail/${nonFiscaleResponse.redirect_to_pacchetto}`;
-    } else {
-        // Cerca prepagata_id o ricarica_prepagata_id nelle voci originali
-        const tutteLeVoci = [...(voci_fiscali || []), ...(voci_non_fiscali || [])];
-        for (const v of tutteLeVoci) {
-            const pid = v.prepagata_id || v.ricarica_prepagata_id;
-            if (pid) {
-                redirectUrl = `/pacchetti/detail/${pid}`;
-                break;
-            }
-        }
     }
 
     // Aggiorna stato "pagato" (2) per gli appuntamenti coinvolti.
@@ -2060,7 +2060,10 @@ function aggiornaTotale() {
       const metodo = row.querySelector('select')?.value || 'cash';
       const isGrigia = row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc';
       if (!isGrigia && metodo !== 'prepagata') totaleScontrino += prezzo;
-      totaleComplessivo += prezzo;
+      // Anche il totale complessivo esclude le righe a prepagata: quelle non si
+      // incassano, si scalano da un credito gia' pagato. Con una ricarica da 50
+      // e una seduta scalata da 17 il cliente paga 50, non 67.
+      if (metodo !== 'prepagata') totaleComplessivo += prezzo;
     });
     const t = card.querySelector ? card.querySelector('.bozza-total') : document.getElementById('totalAmount');
     const ta = card.querySelector ? card.querySelector('.bozza-total-all') : document.getElementById('totalAmountAll');
