@@ -167,79 +167,25 @@ def verifica_pacchetti_abbandonati():
 
 @pacchetti_bp.route('/')
 def pacchetti_home():
-    # Controlla pacchetti abbandonati al caricamento della pagina
-    verifica_pacchetti_abbandonati()
-    # Pagina principale Pacchetti - carica dati iniziali e applica filtri da query params
-    # Filtri da URL: ?status=Attivo (es. Preventivo, Attivo, Completato, Abbandonato)
-    filter_status = request.args.get('status', '').strip()
-    
-    # Query pacchetti con filtri
-    pacchetti_query = Pacchetto.query.join(Client).filter(Pacchetto.status != PacchettoStatus.Eliminato)
-    if filter_status and filter_status in [s.value for s in PacchettoStatus]:
-        pacchetti_query = pacchetti_query.filter(Pacchetto.status == PacchettoStatus[filter_status])
-    
-    # Limita a 100 per caricamento iniziale (JS può caricare di più con API)
-    pacchetti = pacchetti_query.limit(100).all()
-    
-    # Prepara dati pacchetti per template
-    pacchetti_data = []
-    for p in pacchetti:
-        sedute_info = [{'ordine': s.ordine, 'service_nome': s.service.servizio_nome, 'stato': s.stato} for s in p.sedute]
-        operatori_pref = [f"{o.user_nome}" for o in p.preferred_operators]
-        pacchetti_data.append({
-            'id': p.id,
-            'client_id': p.client_id,
-            'client_nome': f"{p.client.cliente_nome} {p.client.cliente_cognome}",
-            'nome': p.nome,
-            'data_sottoscrizione': p.data_sottoscrizione.isoformat() if p.data_sottoscrizione else None,
-            'note': p.note,
-            'status': p.status.value,
-            'costo_totale_lordo': float(p.costo_totale_lordo),
-            'costo_totale_scontato': float(p.costo_totale_scontato) if p.costo_totale_scontato else None,
-            'operatori_preferiti': operatori_pref,
-            'sedute': sedute_info
-        })
-    
-    # Carica dati iniziali per dropdown (primi 50, JS può cercare di più)
-    clienti = Client.query.filter(Client.is_deleted == False).limit(50).all()
-    clienti_data = [{
-        'id': c.id,
-        'nome': c.cliente_nome,
-        'cognome': c.cliente_cognome,
-        'cellulare': c.cliente_cellulare
-    } for c in clienti]
-    
-    servizi = Service.query.filter(Service.is_deleted == False).limit(50).all()
-    servizi_data = [{
-        'id': s.id,
-        'nome': s.servizio_nome,
-        'categoria': s.servizio_categoria.value,
-        'prezzo': s.servizio_prezzo
-    } for s in servizi]
-    
-    operatori = Operator.query.filter(Operator.is_deleted == False, Operator.user_tipo == 'estetista', Operator.is_visible == True).limit(50).all()
-    operatori_data = [{
-        'id': o.id,
-        'nome': f"{o.user_nome}"
-    } for o in operatori]
-    
-    # Status disponibili per filtri
-    status_options = [s.value for s in PacchettoStatus if s != PacchettoStatus.Eliminato]
-    
+    """Pagina Pacchetti: rende SOLO lo scheletro.
+
+    Prima questa route preparava sei blocchi di dati (pacchetti, clienti,
+    servizi, operatori, status, filtro) che il template NON usa: le liste le
+    carica il JavaScript via API appena la pagina e' pronta. Era lavoro buttato,
+    e con centinaia di prepagate diventava pesantissimo - il ciclo sui 100
+    pacchetti faceva una query in piu' per ogni riga (sedute e operatori
+    preferiti, lazy load), cioe' centinaia di andate e ritorno verso Azure a
+    ogni apertura della pagina. Rimosso: restano solo i due valori che il
+    template usa davvero.
+    """
     # Recupera giorni abbandono da BusinessInfo
     business_info = BusinessInfo.query.first()
     giorni_abbandono = business_info.pacchetti_giorni_abbandono if business_info and business_info.pacchetti_giorni_abbandono else 90
 
     # Carica sottocategorie per vincoli prepagata
     sottocategorie = Subcategory.query.filter_by(is_deleted=False).order_by(Subcategory.nome).all()
-    
+
     return render_template('pacchetti.html',
-                           pacchetti=pacchetti_data,
-                           clienti=clienti_data,
-                           servizi=servizi_data,
-                           operatori=operatori_data,
-                           status_options=status_options,
-                           current_filter_status=filter_status,
                            giorni_abbandono=giorni_abbandono,
                            sottocategorie=sottocategorie)
 
@@ -379,24 +325,17 @@ def api_pacchetti():
                 func.coalesce(v_cat, '') != ServiceCategory.Solarium.value)
         )
 
-    # Filtro per tipo (servizi o prepagata)
+    # Filtro per tipo (servizi o prepagata).
+    # NB: questo blocco era scritto DUE volte di seguito, e con esso la query
+    # veniva eseguita due volte a ogni chiamata: lavoro doppio verso Azure per
+    # un risultato identico.
     tipo_filtro = request.args.get('tipo')
     if tipo_filtro:
         if tipo_filtro == 'servizi':
             pacchetti_query = pacchetti_query.filter(Pacchetto.tipo == PacchettoTipo.Servizi)
         elif tipo_filtro == 'prepagata':
             pacchetti_query = pacchetti_query.filter(Pacchetto.tipo == PacchettoTipo.Prepagata)
-    
-    pacchetti = pacchetti_query.all()
-    
-    # Filtro per tipo (servizi o prepagata)
-    tipo_filtro = request.args.get('tipo')
-    if tipo_filtro:
-        if tipo_filtro == 'servizi':
-            pacchetti_query = pacchetti_query.filter(Pacchetto.tipo == PacchettoTipo.Servizi)
-        elif tipo_filtro == 'prepagata':
-            pacchetti_query = pacchetti_query.filter(Pacchetto.tipo == PacchettoTipo.Prepagata)
-    
+
     pacchetti = pacchetti_query.all()
 
     # Restano da togliere le carte vincolate a una LISTA di servizi tutti Solarium:
