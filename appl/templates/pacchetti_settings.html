@@ -273,24 +273,44 @@ Ti aspettiamo! 💆‍♀️
 
         <div class="btn-group mb-2" role="group">
           <input type="radio" class="btn-check" name="ricaricaAmbito" id="ricaricaAmbitoServizio" checked onchange="toggleRicaricaAmbito()">
-          <label class="btn btn-outline-primary btn-sm" for="ricaricaAmbitoServizio">Servizio specifico</label>
+          <label class="btn btn-outline-primary btn-sm" for="ricaricaAmbitoServizio">Servizi scelti</label>
           <input type="radio" class="btn-check" name="ricaricaAmbito" id="ricaricaAmbitoCategoria" onchange="toggleRicaricaAmbito()">
           <label class="btn btn-outline-primary btn-sm" for="ricaricaAmbitoCategoria">Intera categoria</label>
         </div>
 
         <div class="row g-2 align-items-end mb-3">
           <div class="col-md-5" id="ricaricaServizioWrap">
-            <label for="ricaricaServizioSelect" class="form-label">Servizio</label>
-            <select class="form-select" id="ricaricaServizioSelect">
-              <option value="">-- Seleziona un servizio --</option>
+            <label class="form-label d-flex justify-content-between align-items-center mb-1">
+              <span>Servizi</span>
+              <span class="text-muted small" id="ricaricaServiziCount">0 selezionati</span>
+            </label>
+            <div id="ricaricaServiziPicker" class="border rounded p-2"
+                 style="max-height:240px; overflow-y:auto; background:#fff;">
               {% for gruppo in servizi|groupby('servizio_categoria.value') %}
-              <optgroup label="{{ gruppo.grouper }}">
-              {% for servizio in gruppo.list %}
-              <option value="{{ servizio.id }}">{{ servizio.servizio_nome }}</option>
+              <div class="mb-2">
+                <div class="form-check">
+                  <input class="form-check-input ricarica-cat-check" type="checkbox"
+                         id="ricCat{{ loop.index }}" data-categoria="{{ gruppo.grouper }}">
+                  <label class="form-check-label fw-bold" for="ricCat{{ loop.index }}">{{ gruppo.grouper }}</label>
+                </div>
+                <div class="ps-4">
+                  {% for servizio in gruppo.list %}
+                  <div class="form-check">
+                    <input class="form-check-input ricarica-srv-check" type="checkbox"
+                           id="ricSrv{{ servizio.id }}" value="{{ servizio.id }}"
+                           data-categoria="{{ gruppo.grouper }}">
+                    <label class="form-check-label" for="ricSrv{{ servizio.id }}">{{ servizio.servizio_nome }}</label>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
               {% endfor %}
-              </optgroup>
-              {% endfor %}
-            </select>
+            </div>
+            <div class="form-text">
+              Spunta la categoria per prenderli tutti, poi togli quelli che non ti servono.
+              Gli importi qui accanto si inseriscono una volta sola e valgono per tutti
+              i servizi selezionati.
+            </div>
           </div>
           <div class="col-md-5" id="ricaricaCategoriaWrap" style="display:none;">
             <label for="ricaricaCategoriaSelect" class="form-label">Categoria</label>
@@ -1257,17 +1277,64 @@ async function loadRicaricaRegole() {
     }
 
     container.innerHTML = '';
+
+    // Raggruppa per SOGLIA, non per servizio. In tabella ogni riga e' una coppia
+    // (servizio, soglia), quindi la stessa "paga 30 -> carica 35" abbinata a dieci
+    // servizi produceva dieci riquadri identici, e toglierla voleva dire dieci X.
+    const perSoglia = new Map();
     gruppi.forEach(g => {
-      const card = document.createElement('div');
-      card.className = 'promo-card mb-2';
-      const soglieHtml = g.soglie.map(s => `
-        <span class="badge bg-light text-dark border me-1 mb-1">
-          €${s.importo_pagato.toFixed(2)} &rarr; €${s.importo_accreditato.toFixed(2)}
-          <a href="#" class="text-danger ms-1" onclick="event.preventDefault(); deleteRicaricaRegola(${s.id})" title="Elimina questa soglia"><i class="bi bi-x-circle"></i></a>
-        </span>`).join('');
-      card.innerHTML = `<strong>${g.etichetta}</strong><br>${soglieHtml}`;
-      container.appendChild(card);
+      (g.soglie || []).forEach(s => {
+        const chiave = `${s.importo_pagato}|${s.importo_accreditato}`;
+        if (!perSoglia.has(chiave)) {
+          perSoglia.set(chiave, {
+            importo_pagato: s.importo_pagato,
+            importo_accreditato: s.importo_accreditato,
+            ids: [],
+            etichette: []
+          });
+        }
+        const voce = perSoglia.get(chiave);
+        voce.ids.push(s.id);
+        voce.etichette.push(g.etichetta);
+      });
     });
+
+    Array.from(perSoglia.values())
+      .sort((a, b) => a.importo_pagato - b.importo_pagato)
+      .forEach(voce => {
+        const card = document.createElement('div');
+        card.className = 'promo-card mb-2';
+
+        const testa = document.createElement('div');
+        testa.className = 'd-flex justify-content-between align-items-center';
+
+        const titolo = document.createElement('strong');
+        titolo.textContent = `€${voce.importo_pagato.toFixed(2)} → €${voce.importo_accreditato.toFixed(2)}`;
+        testa.appendChild(titolo);
+
+        const btnDel = document.createElement('button');
+        btnDel.type = 'button';
+        btnDel.className = 'btn btn-sm btn-outline-danger';
+        btnDel.innerHTML = '<i class="bi bi-x-circle"></i>';
+        btnDel.title = voce.ids.length === 1
+          ? 'Elimina questa soglia'
+          : `Elimina questa soglia da tutti i ${voce.ids.length} servizi`;
+        btnDel.addEventListener('click', () => eliminaSogliaRaggruppata(voce));
+        testa.appendChild(btnDel);
+        card.appendChild(testa);
+
+        const elenco = document.createElement('div');
+        elenco.className = 'mt-1';
+        // textContent, non innerHTML: i nomi dei servizi sono dati dell'utente.
+        voce.etichette.forEach(e => {
+          const badge = document.createElement('span');
+          badge.className = 'badge bg-light text-dark border me-1 mb-1';
+          badge.textContent = e;
+          elenco.appendChild(badge);
+        });
+        card.appendChild(elenco);
+        container.appendChild(card);
+      });
   } catch (error) {
     console.error('Errore caricamento regole ricarica:', error);
   }
@@ -1280,42 +1347,136 @@ function toggleRicaricaAmbito() {
   document.getElementById('ricaricaCategoriaWrap').style.display = isCategoria ? '' : 'none';
 }
 
-// Aggiunge una soglia di ricarica per il servizio o la categoria selezionati
+// ---- Selettore multi-servizio ---------------------------------------------
+// La spunta sulla CATEGORIA accende singolarmente tutti i suoi servizi, che
+// restano poi spegnibili uno per uno; e ogni servizio si puo' accendere da solo
+// anche senza aver toccato la categoria. La categoria mostra lo stato
+// indeterminato quando la selezione e' parziale.
+function _ricaricaServiziChecks(categoria) {
+  const base = '#ricaricaServiziPicker .ricarica-srv-check';
+  const sel = categoria ? `${base}[data-categoria="${CSS.escape(categoria)}"]` : base;
+  return Array.from(document.querySelectorAll(sel));
+}
+
+function _aggiornaStatoCategorieRicarica() {
+  document.querySelectorAll('#ricaricaServiziPicker .ricarica-cat-check').forEach(cat => {
+    const figli = _ricaricaServiziChecks(cat.dataset.categoria);
+    const attivi = figli.filter(c => c.checked).length;
+    cat.checked = figli.length > 0 && attivi === figli.length;
+    cat.indeterminate = attivi > 0 && attivi < figli.length;
+  });
+  const tot = _ricaricaServiziChecks().filter(c => c.checked).length;
+  const badge = document.getElementById('ricaricaServiziCount');
+  if (badge) badge.textContent = tot === 1 ? '1 selezionato' : `${tot} selezionati`;
+}
+
+function initRicaricaServiziPicker() {
+  const box = document.getElementById('ricaricaServiziPicker');
+  if (!box || box.dataset.wired) return;
+  box.dataset.wired = '1';
+  box.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.classList && t.classList.contains('ricarica-cat-check')) {
+      _ricaricaServiziChecks(t.dataset.categoria).forEach(c => { c.checked = t.checked; });
+    }
+    _aggiornaStatoCategorieRicarica();
+  });
+  _aggiornaStatoCategorieRicarica();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initRicaricaServiziPicker);
+} else {
+  initRicaricaServiziPicker();
+}
+
+// Aggiunge la soglia ai servizi selezionati (uno o molti) o alla categoria.
+// Gli importi si inseriscono UNA VOLTA SOLA e valgono per tutti i servizi
+// spuntati: l'endpoint accetta una regola per chiamata, quindi qui si cicla e
+// alla fine si riepiloga cosa non e' andato, invece di fermarsi al primo errore.
 async function addRicaricaRegola() {
   const isCategoria = document.getElementById('ricaricaAmbitoCategoria').checked;
-  const serviceId = document.getElementById('ricaricaServizioSelect').value;
   const categoria = document.getElementById('ricaricaCategoriaSelect').value;
+  const serviziSelezionati = _ricaricaServiziChecks()
+    .filter(c => c.checked)
+    .map(c => ({ id: parseInt(c.value), nome: (c.nextElementSibling?.textContent || '').trim() }));
   const importoPagato = parseFloat(document.getElementById('ricaricaImportoPagato').value);
   const importoAccreditato = parseFloat(document.getElementById('ricaricaImportoAccreditato').value);
 
   if (isCategoria && !categoria) { alert('Seleziona una categoria'); return; }
-  if (!isCategoria && !serviceId) { alert('Seleziona un servizio'); return; }
+  if (!isCategoria && !serviziSelezionati.length) { alert('Seleziona almeno un servizio'); return; }
   if (!importoPagato || importoPagato <= 0 || !importoAccreditato || importoAccreditato <= 0) {
     alert('Inserisci importi validi (maggiori di zero)');
     return;
   }
 
-  const body = isCategoria
-    ? { categoria: categoria, importo_pagato: importoPagato, importo_accreditato: importoAccreditato }
-    : { service_id: parseInt(serviceId), importo_pagato: importoPagato, importo_accreditato: importoAccreditato };
+  const richieste = isCategoria
+    ? [{ etichetta: categoria,
+         body: { categoria: categoria, importo_pagato: importoPagato, importo_accreditato: importoAccreditato } }]
+    : serviziSelezionati.map(s => ({
+        etichetta: s.nome || `servizio ${s.id}`,
+        body: { service_id: s.id, importo_pagato: importoPagato, importo_accreditato: importoAccreditato }
+      }));
 
-  try {
-    const response = await fetch('/settings/api/pacchetti/ricarica-regole', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-      body: JSON.stringify(body)
-    });
-    const data = await response.json();
-    if (data.success) {
-      document.getElementById('ricaricaImportoPagato').value = '';
-      document.getElementById('ricaricaImportoAccreditato').value = '';
-      loadRicaricaRegole();
-    } else {
-      alert('❌ Errore: ' + (data.error || 'Errore sconosciuto'));
+  const errori = [];
+  let creati = 0;
+  for (const r of richieste) {
+    try {
+      const response = await fetch('/settings/api/pacchetti/ricarica-regole', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify(r.body)
+      });
+      const data = await response.json();
+      if (data.success) creati++;
+      else errori.push(`${r.etichetta}: ${data.error || 'errore sconosciuto'}`);
+    } catch (error) {
+      console.error('Errore:', error);
+      errori.push(`${r.etichetta}: errore di connessione`);
     }
-  } catch (error) {
-    console.error('Errore:', error);
-    alert('❌ Errore di connessione');
+  }
+
+  if (creati > 0) {
+    // Si svuotano solo gli importi, per poter battere subito la soglia
+    // successiva. La SELEZIONE DEI SERVIZI resta: piu' soglie si impostano
+    // sullo stesso insieme di servizi, rifarla ogni volta sarebbe assurdo.
+    document.getElementById('ricaricaImportoPagato').value = '';
+    document.getElementById('ricaricaImportoAccreditato').value = '';
+    document.getElementById('ricaricaImportoPagato').focus();
+    loadRicaricaRegole();
+  }
+  if (errori.length) {
+    alert(`⚠️ ${errori.length} soglie non aggiunte:\n\n` + errori.join('\n'));
+  }
+}
+
+// Elimina una soglia da TUTTI i servizi a cui e' abbinata. In tabella sono righe
+// distinte e vanno cancellate una per una, ma per chi la usa e' un gesto solo.
+async function eliminaSogliaRaggruppata(voce) {
+  const quanti = voce.ids.length;
+  const etichettaSoglia = `€${voce.importo_pagato.toFixed(2)} → €${voce.importo_accreditato.toFixed(2)}`;
+  const domanda = quanti === 1
+    ? `Eliminare la soglia ${etichettaSoglia}?`
+    : `Eliminare la soglia ${etichettaSoglia} da tutti i ${quanti} servizi a cui è abbinata?`;
+  if (!confirm(domanda)) return;
+
+  const errori = [];
+  for (const id of voce.ids) {
+    try {
+      const response = await fetch(`/settings/api/pacchetti/ricarica-regole/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': csrfToken }
+      });
+      const data = await response.json();
+      if (!data.success) errori.push(data.error || 'errore sconosciuto');
+    } catch (error) {
+      console.error('Errore:', error);
+      errori.push('errore di connessione');
+    }
+  }
+  loadRicaricaRegole();
+  if (errori.length) {
+    alert(`⚠️ ${errori.length} righe non eliminate:\n\n` + errori.join('\n'));
   }
 }
 

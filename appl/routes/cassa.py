@@ -200,6 +200,31 @@ def clean_str(s):
 
 cassa_bp = Blueprint('cassa', __name__)
 
+
+@cassa_bp.errorhandler(Exception)
+def _cassa_errore_non_gestito(exc):
+    """Qualsiasi eccezione non gestita nelle route della cassa esce come JSON,
+    non come pagina HTML di errore.
+
+    Motivo: il frontend fa `await res.json()` e, se il body non e' JSON, si
+    ritrova `data = null` e mostra il generico "Errore durante la stampa
+    fiscale!" - che non dice nulla su cosa sia successo. Cosi' invece il
+    messaggio reale arriva fino all'operatore e finisce nei log col traceback.
+    Le HTTPException (404, 405, i 4xx espliciti) passano invariate.
+    """
+    from werkzeug.exceptions import HTTPException
+    if isinstance(exc, HTTPException):
+        return exc
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    current_app.logger.exception("Eccezione non gestita in una route della cassa")
+    return jsonify({
+        "error": f"Errore interno: {type(exc).__name__}: {exc}"
+    }), 500
+
+
 @cassa_bp.route('/cassa')
 def cassa():
     current_app.logger.debug("GET args in cassa: %s", request.args)
@@ -811,22 +836,58 @@ def _record_fiscal_closure(ip, printer_model, dgfe_total=None):
             pass
 
 
-# Sequenza comandi del DOCUMENTO GESTIONALE (=o, manuale PRINT! sez. 17):
-# apertura, righe di testo, chiusura. Il manuale elenca le varianti
-# (=o, =o/*1, =o/&1, =o/&2) senza spiegarle: se la stampante rifiuta questa
-# sequenza, la variante giusta si trova provandola dalla Console RCH
-# (/cassa/rch-console/send-raw) e si cambia QUI, senza toccare il flusso di cassa.
-GESTIONALE_OPEN_CMD = '=o/&1'
-GESTIONALE_CLOSE_CMD = '=o/&2'
+# Varianti della sequenza DOCUMENTO GESTIONALE (=o, manuale PRINT! sez. 17):
+# (comando_apertura, comando_chiusura). Il manuale elenca =o, =o/*1, =o/&1 e
+# =o/&2 senza dire quale apra e quale chiuda, e nel progetto questo comando non
+# era mai stato usato. Invece di scommettere su una forma sola le proviamo in
+# ordine e ci fermiamo alla prima che la stampante accetta: e' l'unico modo di
+# essere robusti senza avere il registratore sotto mano.
+GESTIONALE_SEQUENZE = [
+    ('=o/&1', '=o/&2'),
+    ('=o', '=o'),
+    ('=o/*1', '=o'),
+]
+
+# Variante risultata valida, memorizzata per la vita del processo: dal secondo
+# scontrino a zero in poi si va dritti a quella giusta, senza ritentare le altre.
+_gestionale_sequenza_ok = None
+
+
+def _righe_promemoria(voci_zero, max_caratteri):
+    """Descrizioni ripulite delle voci a importo zero, pronte per il comando ="."""
+    righe = []
+    for v in voci_zero:
+        srv = db.session.get(Service, v.get("servizio_id")) if v.get("servizio_id") else None
+        desc = (v.get("nome") or (srv.servizio_nome if srv else "Servizio"))
+        desc = clean_str(html.unescape(desc)).replace(")", "").replace("(", "").replace("/", "-")
+        desc = desc.strip()
+        if desc:
+            righe.append(desc[:max_caratteri])
+    return righe
+
+
+def _rch_clear(ip, printer_model):
+    """=K (clear): riporta la stampante a documento chiuso. Va mandato dopo un
+    tentativo rifiutato, perche' un documento rimasto aperto blocca ogni stampa
+    successiva - fiscale compresa. Non solleva mai."""
+    try:
+        requests.post(
+            _rch_url(ip, printer_model),
+            data='<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=K</cmd></Service>'.encode("UTF-8"),
+            headers=_rch_headers(printer_model), timeout=10,
+            **_rch_request_kwargs(printer_model)
+        )
+    except Exception as exc:
+        current_app.logger.warning("=K dopo tentativo gestionale fallito: %s", exc)
 
 
 def _stampa_promemoria_gestionale(voci_zero, cliente_id=None, operatore_id=None):
     """Stampa le voci a importo zero su un DOCUMENTO GESTIONALE: un foglio
     NON fiscale, separato dallo scontrino.
 
-    Serve SOLO quando la bozza e' tutta a zero. In quel caso non esiste un
-    documento commerciale su cui appoggiare le righe descrittive: senza importo
-    da incassare non c'e' un =T con cui chiuderlo, e un documento lasciato
+    Serve quando la bozza non ha nessun importo da incassare. In quel caso non
+    esiste un documento commerciale su cui appoggiare le righe descrittive:
+    senza importo non c'e' un =T con cui chiuderlo, e un documento lasciato
     aperto bloccherebbe ogni stampa successiva. L'unico modo di dare comunque
     la carta al cliente e' quindi un documento a parte.
 
@@ -835,16 +896,11 @@ def _stampa_promemoria_gestionale(voci_zero, cliente_id=None, operatore_id=None)
     registrato a database e l'errore finisce nei log.
     Ritorna (ok: bool, info: str).
     """
-    righe = []
-    for v in voci_zero:
-        srv = db.session.get(Service, v.get("servizio_id")) if v.get("servizio_id") else None
-        desc = (v.get("nome") or (srv.servizio_nome if srv else "Servizio"))
-        desc = clean_str(html.unescape(desc)).replace(")", "").replace("(", "").replace("/", "-")
-        desc = desc.strip()
-        if desc:
-            # Sul gestionale il testo arriva a 32 caratteri (sez. 11, "32 gestionale"),
-            # contro i 25 della riga descrittiva dentro lo scontrino fiscale.
-            righe.append(desc[:32])
+    global _gestionale_sequenza_ok
+
+    # Sul gestionale il testo arriva a 32 caratteri (sez. 11, "32 gestionale"),
+    # contro i 25 della riga descrittiva dentro lo scontrino fiscale.
+    righe = _righe_promemoria(voci_zero, 32)
     if not righe:
         return False, "nessuna riga da stampare"
 
@@ -852,44 +908,66 @@ def _stampa_promemoria_gestionale(voci_zero, cliente_id=None, operatore_id=None)
     if not ip:
         return False, "IP stampante RCH non configurato"
 
-    cmds = [f'<cmd>{GESTIONALE_OPEN_CMD}</cmd>']
-    cmds += [f'<cmd>="/({r})</cmd>' for r in righe]
-    cmds.append(f'<cmd>{GESTIONALE_CLOSE_CMD}</cmd>')
-    payload = ('<?xml version="1.0" encoding="UTF-8"?>\n<Service>\n'
-               + "\n".join(cmds) + '\n</Service>')
-    current_app.logger.debug("PAYLOAD GESTIONALE INVIATO:\n%s", payload)
+    url = _rch_url(ip, printer_model)
+    headers = _rch_headers(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
 
-    try:
-        resp = requests.post(
-            _rch_url(ip, printer_model), data=payload.encode("UTF-8"),
-            headers=_rch_headers(printer_model), timeout=30,
-            **_rch_request_kwargs(printer_model)
-        )
-    except Exception as exc:
-        log_crm_error(
-            "Documento gestionale (promemoria voci a zero) non inviato",
-            context={"operatore_id": operatore_id, "printer_ip": ip,
-                     "printer_model": printer_model, "righe": righe,
-                     "exception": str(exc)},
-            client_id=cliente_id,
-        )
-        return False, f"stampante non raggiungibile ({exc})"
+    # Prima la variante gia' rivelatasi buona, poi le altre.
+    sequenze = list(GESTIONALE_SEQUENZE)
+    if _gestionale_sequenza_ok in sequenze:
+        sequenze.remove(_gestionale_sequenza_ok)
+        sequenze.insert(0, _gestionale_sequenza_ok)
 
-    body = (resp.text or "")[:400]
-    current_app.logger.info("RCH gestionale risposta: %s", body or "(vuoto)")
-    if not _rch_is_success(resp):
-        # Tipicamente: variante di =o non supportata da questo modello.
-        log_crm_error(
-            "Documento gestionale rifiutato dalla stampante",
-            context={"operatore_id": operatore_id, "printer_ip": ip,
-                     "printer_model": printer_model, "righe": righe,
-                     "open_cmd": GESTIONALE_OPEN_CMD, "close_cmd": GESTIONALE_CLOSE_CMD,
-                     "response_body": body},
-            client_id=cliente_id,
-        )
-        return False, f"stampante in errore ({body or 'nessuna risposta'})"
+    tentativi = []
+    for apri, chiudi in sequenze:
+        cmds = [f'<cmd>{apri}</cmd>']
+        cmds += [f'<cmd>="/({r})</cmd>' for r in righe]
+        cmds.append(f'<cmd>{chiudi}</cmd>')
+        payload = ('<?xml version="1.0" encoding="UTF-8"?>\n<Service>\n'
+                   + "\n".join(cmds) + '\n</Service>')
+        current_app.logger.debug("PAYLOAD GESTIONALE (%s ... %s):\n%s", apri, chiudi, payload)
 
-    return True, f"{len(righe)} righe"
+        try:
+            resp = requests.post(url, data=payload.encode("UTF-8"), headers=headers,
+                                 timeout=15, **rch_kwargs)
+        except Exception as exc:
+            # Stampante irraggiungibile o in timeout: le altre varianti
+            # fallirebbero allo stesso modo. Si esce subito, senza far
+            # aspettare l'operatore per tre tentativi di rete.
+            log_crm_error(
+                "Documento gestionale non inviato (stampante irraggiungibile)",
+                context={"operatore_id": operatore_id, "printer_ip": ip,
+                         "printer_model": printer_model, "righe": righe,
+                         "sequenza": f"{apri} ... {chiudi}", "exception": str(exc)},
+                client_id=cliente_id,
+            )
+            return False, f"stampante non raggiungibile ({exc})"
+
+        body = (resp.text or "")[:400]
+        tentativi.append({"apri": apri, "chiudi": chiudi, "risposta": body})
+        if _rch_is_success(resp):
+            _gestionale_sequenza_ok = (apri, chiudi)
+            current_app.logger.info(
+                "Documento gestionale stampato con la sequenza %s ... %s (%d righe)",
+                apri, chiudi, len(righe)
+            )
+            return True, f"{len(righe)} righe (sequenza {apri} ... {chiudi})"
+
+        # Variante rifiutata: pulisci prima di provare la prossima, altrimenti
+        # un'eventuale apertura a meta' resterebbe pendente sul registratore.
+        current_app.logger.warning(
+            "Documento gestionale rifiutato con %s ... %s: %s", apri, chiudi, body or "(vuoto)"
+        )
+        _rch_clear(ip, printer_model)
+
+    log_crm_error(
+        "Documento gestionale: nessuna variante di =o accettata dalla stampante",
+        context={"operatore_id": operatore_id, "printer_ip": ip,
+                 "printer_model": printer_model, "righe": righe,
+                 "tentativi": tentativi},
+        client_id=cliente_id,
+    )
+    return False, "nessuna variante del comando =o accettata (vedi log per le risposte)"
 
 
 @cassa_bp.route('/cassa/send-to-rch', methods=['POST'])
@@ -953,8 +1031,17 @@ def send_to_rch():
     # Serve pero' almeno una riga con importo positivo: un documento commerciale
     # di soli promemoria non esiste (nessun importo da pagare, nessun pagamento
     # da chiudere). In quel caso le voci a zero diventano non fiscali.
-    zero_fiscali = [v for v in voci if _is_fiscale(v) and float(v.get("prezzo", 0) or 0) == 0]
-    ha_importi_positivi = any(_is_fiscale(v) and float(v.get("prezzo", 0) or 0) > 0 for v in voci)
+    # "Zero" va deciso negli stessi centesimi che vede la stampante, non in euro:
+    # un prezzo di 0,004 risulterebbe positivo qui e diventerebbe poi =R1/$0 nel
+    # payload, cioe' proprio la riga che il registratore rifiuta.
+    def _centesimi(v):
+        try:
+            return int(round(float(v.get("prezzo", 0) or 0) * 100))
+        except Exception:
+            return 0
+
+    zero_fiscali = [v for v in voci if _is_fiscale(v) and _centesimi(v) <= 0]
+    ha_importi_positivi = any(_is_fiscale(v) and _centesimi(v) > 0 for v in voci)
     # Voci declassate a non fiscali perche' la bozza e' TUTTA a zero: vanno
     # comunque stampate, ma su un documento gestionale a parte (vedi sotto).
     voci_promemoria_zero = []
@@ -977,6 +1064,27 @@ def send_to_rch():
     # Ricalcola voci fiscali/non fiscali dopo normalizzazione prezzi
     voci_fiscali = [v for v in voci if _is_fiscale(v)]
     voci_non_fiscali = [v for v in voci if not _is_fiscale(v)]
+
+    # --- SEDUTE SCALATE DA CARTA PREPAGATA ---
+    # Non vanno MAI scontrinate: ne' alla stampante ne' nel registro scontrini.
+    # Il pagamento e' gia' tracciato dal movimento sulla carta (endpoint
+    # /pacchetti/api/pacchetti/<id>/utilizza, chiamato dalla cassa prima della
+    # stampa) e al cliente arriva il WhatsApp col saldo aggiornato. Vale anche
+    # quando la seduta scalata sta in uno scontrino con altre voci pagate.
+    # ATTENZIONE: le RICARICHE della carta sono un'altra cosa - sono vendite a
+    # tutti gli effetti, restano fiscali e non passano di qui.
+    def _e_scalo_prepagata(v):
+        return (v.get("metodo_pagamento") == "prepagata"
+                and not v.get("ricarica_prepagata_id"))
+
+    voci_scalo_prepagata = [v for v in voci_non_fiscali if _e_scalo_prepagata(v)]
+    if voci_scalo_prepagata:
+        voci_non_fiscali = [v for v in voci_non_fiscali if not _e_scalo_prepagata(v)]
+        current_app.logger.info(
+            "Sedute scalate da prepagata escluse dal registro scontrini: %s",
+            ", ".join(str(v.get("nome") or v.get("servizio_id")) for v in voci_scalo_prepagata)
+        )
+
     results = []
     oggi = datetime.now().date()
 
@@ -1005,6 +1113,15 @@ def send_to_rch():
         ]
         totali = {}  # tender RCH (es. "T1", "T4") -> centesimi
 
+        # Righe promemoria in attesa: una riga descrittiva (="/(testo)) va emessa
+        # a documento commerciale gia' aperto, e il documento si apre con la prima
+        # riga di vendita. Se la voce a zero e' la prima della bozza, mandarla
+        # subito significherebbe parlare a documento chiuso; quindi si accumula e
+        # si scarica appena passa una riga con importo (che c'e' sempre: se non ci
+        # fosse, le voci a zero sarebbero gia' state declassate a non fiscali).
+        promemoria_pendenti = []
+        vendita_emessa = False
+
         for v in voci_fiscali:
             srv = db.session.get(Service, v.get("servizio_id"))
             prezzo_pieno = float(srv.servizio_prezzo) if srv else float(v.get("prezzo", 0))
@@ -1021,12 +1138,22 @@ def send_to_rch():
                 # una vendita: nessun importo, nessun tender, corrispettivi
                 # invariati. La riga di vendita a zero (=R/$0) sarebbe invece
                 # rifiutata e lascerebbe il documento aperto.
-                xml_lines.append(f'<cmd>="/({desc[:25]})</cmd>')
+                if vendita_emessa:
+                    xml_lines.append(f'<cmd>="/({desc[:25]})</cmd>')
+                else:
+                    promemoria_pendenti.append(desc[:25])
                 continue
 
             reparto = "R2" if getattr(srv, "servizio_sottocategoria", None) and \
                                srv.servizio_sottocategoria.nome.upper() == "PRODOTTI" else "R1"
             xml_lines.append(f'<cmd>={reparto}/${prezzo_cents}/({desc})</cmd>')
+
+            if not vendita_emessa:
+                # Documento ora aperto: si scaricano i promemoria arrivati prima.
+                vendita_emessa = True
+                for testo in promemoria_pendenti:
+                    xml_lines.append(f'<cmd>="/({testo})</cmd>')
+                promemoria_pendenti = []
 
             if prezzo_pieno > 0 and prezzo_finale < prezzo_pieno:
                 sconto = 100 - (prezzo_finale / prezzo_pieno * 100)
@@ -1082,6 +1209,7 @@ def send_to_rch():
                 "Stampa fiscale annullata: totale a zero",
                 context={"operatore_id": operatore_id, "printer_ip": ip,
                          "printer_model": printer_model,
+                         "promemoria_non_stampati": promemoria_pendenti,
                          "voci": [{"nome": v.get("nome"), "prezzo": v.get("prezzo")}
                                   for v in voci_fiscali]},
                 client_id=cliente_id,
@@ -1338,15 +1466,41 @@ def send_to_rch():
     # cliente non riceverebbe nulla. Non blocca la risposta - il record e' gia'
     # a database, un errore di stampa qui non deve far fallire l'incasso.
     if voci_promemoria_zero:
-        ok_gest, info_gest = _stampa_promemoria_gestionale(
-            voci_promemoria_zero, cliente_id, operatore_id
-        )
+        # Rete di sicurezza: qualsiasi imprevisto qui dentro (helper, stampante,
+        # parsing) non deve mai trasformarsi in un 500 e far credere alla cassa
+        # che l'incasso sia fallito. Il Receipt e' gia' salvato.
+        try:
+            ok_gest, info_gest = _stampa_promemoria_gestionale(
+                voci_promemoria_zero, cliente_id, operatore_id
+            )
+        except Exception as exc:
+            current_app.logger.exception("Stampa promemoria gestionale fallita")
+            ok_gest, info_gest = False, str(exc)
         results.append({
             "message": ("Promemoria stampato su documento gestionale (non fiscale)"
                         if ok_gest
                         else f"Promemoria NON stampato: {info_gest}"),
             "is_fiscale": False,
             "gestionale_ok": ok_gest
+        })
+
+    # Appuntamenti delle sedute scalate da prepagata: niente scontrino, ma vanno
+    # comunque marcati PAGATO, altrimenti resterebbero aperti in Calendar.
+    if voci_scalo_prepagata:
+        _ids_prep = [v.get("appointment_id") for v in voci_scalo_prepagata if v.get("appointment_id")]
+        if _ids_prep:
+            try:
+                Appointment.query.filter(Appointment.id.in_(_ids_prep)).update(
+                    {Appointment.stato: AppointmentStatus.PAGATO}, synchronize_session=False
+                )
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception("Marcatura PAGATO sedute prepagata fallita")
+        results.append({
+            "message": f"{len(voci_scalo_prepagata)} sedute scalate da prepagata (nessuno scontrino emesso)",
+            "is_fiscale": False,
+            "scalo_prepagata": True
         })
 
     # IMPORTANTE: Gestione prepagata/rate PRIMA di costruire response

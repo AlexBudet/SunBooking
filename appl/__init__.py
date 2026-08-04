@@ -108,8 +108,14 @@ def create_app(db_uri: str | None = None):
 
     # Opzioni di pool per Azure (opzionali)
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        "pool_size": 15,                # Numero di connessioni persistenti
-        "max_overflow": 10,             # Connessioni extra temporanee
+        # ATTENZIONE: questo pool e' PER TENANT. wsgi.py crea una child app (e
+        # quindi un engine dedicato) per ogni database configurato, percio' il
+        # totale di connessioni aperte e' pool_size x numero di tenant.
+        # Con 15+10 per tenant si superavano i ~50 slot di Azure e il server
+        # rispondeva "remaining connection slots are reserved...", facendo
+        # fallire richieste a caso (compresa la stampa in cassa).
+        "pool_size": 3,                 # Numero di connessioni persistenti
+        "max_overflow": 2,              # Connessioni extra temporanee
         "pool_timeout": 10,             # Timeout breve per ottenere una connessione (secondi)
         "pool_recycle": 360,           # Ricicla connessioni ogni 30 minuti (evita idle drop Azure)
         "pool_pre_ping": True,          # Testa la connessione prima di usarla
