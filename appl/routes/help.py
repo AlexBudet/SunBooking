@@ -767,7 +767,22 @@ Se previsto dalla tua organizzazione commerciale, puoi usare anche una logica da
 • credito promozionale
 • carta cliente ricaricabile
 
-Questa è la configurazione giusta quando il cliente non sta acquistando un protocollo chiuso, ma vuole lasciare credito disponibile da usare nel tempo.""",
+Questa è la configurazione giusta quando il cliente non sta acquistando un protocollo chiuso, ma vuole lasciare credito disponibile da usare nel tempo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ CREARLA DIRETTAMENTE DALLA CASSA</span>
+Non serve passare da Pacchetti: se il cliente selezionato in Cassa <span class="help-strong-dark">non ha ancora nessuna carta</span>, il campo "N. Tessera" lascia il posto al pulsante <span class="help-strong-dark">Associa n° tessera prepagata</span>.
+
+1️⃣ seleziona (o crea con il <span class="help-strong-dark">+</span>) il cliente
+2️⃣ clicca <span class="help-strong-dark">Associa n° tessera prepagata</span>
+3️⃣ il numero di tessera è già proposto — il primo libero — e resta modificabile
+4️⃣ clicca la <span class="help-strong-dark">ricarica</span> desiderata: la carta viene creata subito, senza altre conferme
+
+La riga da incassare finisce automaticamente nella bozza scontrino e la carta diventa quella attiva.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Nota:</span>
+<span class="help-hint-text">Numero di tessera e vincoli d'uso restano sempre modificabili in seguito dalla scheda della carta, in Pacchetti.</span>
+</div>""",
     },
 
     "prepagata_uso": {
@@ -785,7 +800,21 @@ Quando il cliente arriva al pagamento:
 3️⃣ scegli <span class="help-strong-dark">Prepagata</span> come metodo di pagamento
 4️⃣ conferma lo scarico del credito
 
-Così il servizio resta normale a livello Agenda, ma il consumo economico viene preso dal saldo della prepagata.""",
+Così il servizio resta normale a livello Agenda, ma il consumo economico viene preso dal saldo della prepagata.
+
+<span class="help-strong-dark help-subtitle-pill">▸ LA SCHERMATA DELLA CARTA IN CASSA</span>
+Selezionando una tessera in Cassa si apre una <span class="help-strong-dark">schermata unica</span> con tutto a portata di mano:
+• in alto la scheda della carta: a sinistra il <span class="help-strong-dark">credito residuo</span> in evidenza, a destra tessera, intestatario, utilizzo consentito, ultima ricarica e ultima seduta scalata
+• la sezione <span class="help-strong-dark">RICARICHE</span>: importi che si <span class="help-strong-dark">sommano</span> al credito
+• la sezione con i <span class="help-strong-dark">servizi ammessi</span> dalla carta: importi che si <span class="help-strong-dark">scalano</span> dal credito
+• la <span class="help-strong-dark">×</span> per tornare ai pulsanti normali della Cassa
+
+I servizi mostrati sono solo quelli scalabili da quella carta, secondo i vincoli d'uso e le scelte fatte in Tools / Pacchetti.
+
+<span class="help-strong-dark help-subtitle-pill">▸ RIGHE VIOLETTE = DA SCALARE</span>
+Cliccando un servizio da questa schermata la riga nasce già con metodo <span class="help-strong-dark">Prepagata</span> e sfondo <span class="help-strong-dark">violetto</span>: non è né bianca (riga normale) né grigia (riga esclusa dallo scontrino).
+
+Uscendo con la <span class="help-strong-dark">×</span> le righe restano come sono: la bozza non viene toccata e la tessera resta agganciata finché c'è almeno una riga che la usa.""",
     },
 
     "prepagata_pagamento": {
@@ -804,6 +833,28 @@ Quando il cliente usa il credito:
 
 <span class="help-strong-dark help-subtitle-pill">▸ RICARICARE</span>
 Quando il saldo si abbassa, puoi caricare nuovo credito e continuare a usare la stessa logica carta/portafoglio.
+
+La riga di ricarica (o di creazione tessera) è a tutti gli effetti una <span class="help-strong-dark">vendita</span>: va incassata normalmente e non può essere pagata col credito che sta caricando. Per questo su quelle righe il metodo "Prepagata" non compare.
+
+<span class="help-strong-dark help-subtitle-pill">▸ RICARICA E SEDUTA NELLO STESSO SCONTRINO</span>
+Puoi creare la tessera (o ricaricarla) e nello stesso scontrino scalare subito una seduta, anche se il credito non è ancora stato pagato.
+
+Esempio: tessera nuova da <span class="help-strong-dark">35 €</span> + lampada da <span class="help-strong-dark">8 €</span>
+• il credito in arrivo viene già considerato disponibile, quindi la lampada si può mettere su Prepagata
+• alla stampa viene emesso lo scontrino, la carta viene caricata e <span class="help-strong-dark">solo dopo</span> viene scalata la seduta
+• saldo finale: 27 €
+
+Funziona anche quando la ricarica viene passata in <span class="help-strong-dark">modalità test</span> (riga grigia).
+
+<span class="help-strong-dark help-subtitle-pill">▸ LE SEDUTE SCALATE NON VANNO IN SCONTRINO</span>
+Una seduta pagata scalando la carta <span class="help-strong-dark">non viene mai scontrinata</span>: non va alla stampante fiscale e non lascia traccia nel Registro Scontrini. È già stata pagata quando il cliente ha comprato il credito.
+
+Resta tracciata dove conta: nei <span class="help-strong-dark">movimenti della carta</span> e nel messaggio WhatsApp al cliente. Vale anche se la seduta scalata è una fra dieci voci dello stesso scontrino.
+
+<span class="help-strong-dark help-subtitle-pill">▸ IL MESSAGGIO AL CLIENTE</span>
+A fine pagamento viene proposto <span class="help-strong-dark">un solo messaggio WhatsApp per carta</span>, che riepiloga tutti i movimenti di quello scontrino: ricarica, seduta scalata o entrambe, seguiti dal credito disponibile aggiornato e dal sito del centro.
+
+Il testo resta modificabile prima dell'invio.
 
 <span class="help-strong-dark help-subtitle-pill">▸ COSA CONTROLLARE SEMPRE</span>
 • saldo residuo
@@ -855,6 +906,23 @@ Qui conviene configurare tutto ciò che poi rende il lavoro più rapido e unifor
 Più lavori bene in questa sezione, meno dovrai improvvisare quando sei con il cliente davanti.
 
 Questa non è la schermata dove "usi" il pacchetto: è la schermata dove lo <span class="help-strong-dark">prepari bene</span> per farlo funzionare in modo ordinato in Pacchetti, Agenda, Cassa e comunicazioni.
+
+<span class="help-strong-dark help-subtitle-pill">▸ RICARICA AUTOMATICA PREPAGATA</span>
+Qui abbini una o più <span class="help-strong-dark">soglie di ricarica</span> ai servizi: "il cliente paga 30 → sulla carta se ne caricano 35".
+
+I servizi si scelgono da un <span class="help-strong-dark">elenco a spunte raggruppato per categoria</span>:
+• la spunta sulla <span class="help-strong-dark">categoria</span> seleziona singolarmente tutti i suoi servizi
+• ogni servizio resta accendibile o spegnibile <span class="help-strong-dark">con un click</span>, anche senza toccare la categoria
+• la categoria mostra lo stato intermedio quando la selezione è parziale
+
+Gli importi si inseriscono <span class="help-strong-dark">una volta sola</span> e valgono per tutti i servizi spuntati. Dopo aver aggiunto una soglia la selezione <span class="help-strong-dark">resta</span>: puoi battere subito la soglia successiva sugli stessi servizi.
+
+Le soglie salvate sono elencate sotto <span class="help-strong-dark">raggruppate per importo</span>, con l'elenco dei servizi a cui si applicano: la <span class="help-strong-dark">×</span> toglie quella soglia da tutti in un colpo solo.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Nota:</span>
+<span class="help-hint-text">I servizi selezionati qui sono quelli che compaiono come pulsanti in Cassa quando si aggancia una tessera, cioè quelli scalabili da quella carta. In Cassa vedrai <span class="help-strong-dark">un pulsante per soglia</span>, non uno per servizio.</span>
+</div>
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
@@ -1547,6 +1615,16 @@ Questa logica è utile quando, prima di stampare, cambi prezzi, righe o metodi m
 
 In basso trovi anche i bottoni rapidi per applicare il metodo a tutte le righe e leggere i subtotali per metodo.
 
+<span class=\"help-strong-dark\">Attenzione al metodo applicato a tutte le righe</span>
+Le righe già impostate su <span class=\"help-strong-dark\">Prepagata</span> (sfondo violetto) <span class=\"help-strong-dark\">non vengono toccate</span>: il loro importo è destinato a essere scalato dalla carta, e cambiarlo con un gesto pensato per "tutto il resto" significherebbe farsi pagare due volte lo stesso servizio.
+
+Per riportarle a un metodo normale vanno <span class=\"help-strong-dark\">eliminate e riaggiunte</span> fuori dalla schermata della carta.
+
+<span class=\"help-strong-dark\">Voci a importo zero</span>
+Una voce a 0 € non può essere stampata come riga di vendita: il registratore fiscale la rifiuta. Viene quindi riportata sullo scontrino come <span class=\"help-strong-dark\">riga descrittiva</span>, senza importo, così il cliente la vede comunque sul documento.
+
+Se lo scontrino è <span class=\"help-strong-dark\">interamente a zero</span> non esiste un documento commerciale da emettere: in quel caso viene stampato un <span class=\"help-strong-dark\">documento non fiscale</span> separato con l'elenco delle voci, e l'incasso resta comunque registrato.
+
 <span class=\"help-strong-dark\">Dividere il pagamento su più metodi (split)</span>
 Quando un importo viene saldato con più forme di pagamento (es. 50€ = 30 contanti + 20 POS):
 • per una <span class=\"help-strong-dark\">singola voce</span>: clicca l'icona dividi <i class="bi bi-grid-1x2"></i> accanto al metodo e indica gli importi per Cash / POS / Bank
@@ -1697,7 +1775,12 @@ Suggerimenti:
 
 Quando disponibile, usa strumenti di esportazione/stampa in coerenza con i permessi del tuo ruolo.
 
-Per invii amministrativi, usa sempre la vista Corrispettivi del periodo corretto prima dell'export.""",
+Per invii amministrativi, usa sempre la vista Corrispettivi del periodo corretto prima dell'export.
+
+<span class="help-strong-dark help-subtitle-pill">▸ EXPORT CORRISPETTIVI: COSA FINISCE NEL FILE</span>
+I file Excel e PDF del Registro Corrispettivi riportano <span class="help-strong-dark">solo i dati</span>: la colonna <span class="help-strong-dark">Azioni</span>, che a video contiene il pulsante di correzione, non viene mai esportata.
+
+Vale in entrambi i casi, con cassa abilitata o disabilitata: il tracciato del file resta lo stesso e i due export sono confrontabili fra centri diversi.""",
     },
 
     # ========== TOOLS / SETTINGS ==========
