@@ -4504,7 +4504,42 @@ function applicaTesseraSelezionata(carta, r) {
 // Ritorna null quando la carta è libera (nessun filtro dedicato da mostrare).
 function filtroServiziDaCarta(carta) {
   const v = carta && carta.vincoli;
-  if (!v || !v.tipo || v.tipo === 'tutti') return null;
+
+  // Carta SENZA vincoli d'uso (tipicamente quelle importate da un vecchio
+  // gestionale, o create senza specificare la categoria): prima non mostrava
+  // nessun servizio da scalare, solo le ricariche. I servizi scalabili sono
+  // quelli configurati in Tools/Pacchetti: se ce ne sono, si mostrano quelli.
+  // L'etichetta si scopre solo dopo aver letto la configurazione, quindi la
+  // scrive carica() sull'oggetto stesso: la sezione viene intestata dopo.
+  if (!v || !v.tipo || v.tipo === 'tutti') {
+    const filtro = {
+      label: 'SERVIZI',
+      titolo: 'Servizi scalabili dal credito della carta',
+      carica: async () => {
+        let gruppi = [];
+        try {
+          gruppi = await caricaRicaricheConfigurate() || [];
+        } catch (err) {
+          console.warn('Soglie non leggibili:', err);
+          return [];
+        }
+        const ids = [...new Set(gruppi.filter(g => g.service_id).map(g => String(g.service_id)))];
+        if (!ids.length) return [];
+        const categorie = [...new Set(gruppi.filter(g => g.service_id).map(g => g.categoria).filter(Boolean))];
+        if (categorie.length === 1) {
+          filtro.label = String(categorie[0]).toUpperCase();
+          filtro.titolo = `Servizi ${categorie[0]}: gli importi vengono SCALATI dal credito della carta`;
+        }
+        const lista = await Promise.all(ids.map(id =>
+          fetch('/cassa/api/services?id=' + encodeURIComponent(id))
+            .then(r => r.json())
+            .then(a => (Array.isArray(a) ? a[0] : a))
+            .catch(() => null)));
+        return lista.filter(Boolean);
+      }
+    };
+    return filtro;
+  }
 
   if (v.tipo === 'categoria' && v.categoria) {
     return {
@@ -4644,9 +4679,13 @@ async function mostraSchermataCartaCompleta(carta) {
       console.error('Errore caricamento servizi della carta:', err);
     }
   }
-  popolaPulsantiServizi(Array.isArray(servizi) ? servizi : [], { metodoPrepagata: true });
+  const elencoServizi = Array.isArray(servizi) ? servizi : [];
+  popolaPulsantiServizi(elencoServizi, { metodoPrepagata: true });
 
-  if (filtro) {
+  // L'intestazione si mette solo se qualche servizio c'e' davvero: una carta
+  // senza vincoli e senza servizi configurati in Tools non deve mostrare una
+  // sezione vuota. NB: filtro.label puo' essere stato aggiornato da carica().
+  if (filtro && elencoServizi.length) {
     container.insertBefore(
       _intestazioneSezioneCassa(filtro.label, 'Gli importi vengono SCALATI dal credito della carta'),
       container.firstChild

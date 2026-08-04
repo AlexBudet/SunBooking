@@ -285,6 +285,12 @@
                 <i class="bi bi-credit-card me-1"></i> Carte Prepagate
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-solarium" data-bs-toggle="tab" data-bs-target="#panel-solarium"
+                    type="button" role="tab" aria-controls="panel-solarium" aria-selected="false">
+                <i class="bi bi-sun me-1"></i> Ricaricabili Solarium
+            </button>
+        </li>
     </ul>
 
     <!-- Tab Content -->
@@ -395,6 +401,48 @@
                 <tbody id="prepagateTable">
                     <!-- Popolato via JS -->
                 </tbody>
+            </table>
+        </div>
+
+        <!-- ========== TAB RICARICABILI SOLARIUM ========== -->
+        <!-- Carte utilizzabili SOLO per servizi Solarium. Sono centinaia, quindi
+             qui NON si carica tutto: si mostrano gli ultimi movimentati e si cerca
+             a richiesta. E' il tab che ha risolto il rallentamento della pagina. -->
+        <div class="tab-pane fade" id="panel-solarium" role="tabpanel" aria-labelledby="tab-solarium">
+            <div class="row g-2 mb-3">
+                <div class="col-md-4 position-relative">
+                    <label class="form-label mb-1 small text-muted">Cerca cliente</label>
+                    <input type="text" class="form-control" id="solariumCercaNome" autocomplete="off"
+                           placeholder="Nome, cognome o cellulare (min. 3 caratteri)">
+                    <div id="solariumDropdown" class="dropdown-menu" style="width:calc(100% - 1.5rem);"></div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label mb-1 small text-muted">N. tessera</label>
+                    <input type="text" class="form-control" id="solariumCercaTessera" autocomplete="off"
+                           inputmode="numeric" placeholder="Filtra per numero">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary w-100" onclick="caricaSolariumRecenti()"
+                            data-bs-toggle="tooltip" title="Torna agli ultimi movimenti">
+                        <i class="bi bi-arrow-counterclockwise"></i> Recenti
+                    </button>
+                </div>
+            </div>
+
+            <div id="solariumStato" class="text-muted small mb-2"></div>
+
+            <table class="table" id="tabellaSolarium">
+                <thead>
+                    <tr>
+                        <th>N. Tessera</th>
+                        <th>Cliente</th>
+                        <th class="hide-mobile">Cellulare</th>
+                        <th>Saldo</th>
+                        <th class="hide-mobile">Ultimo movimento</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="solariumTable"></tbody>
             </table>
         </div>
     </div>
@@ -1384,9 +1432,153 @@ function generateSeduteOmaggioRows() {
         renderPacchetti();
     }
 
+    // ====================== RICARICABILI SOLARIUM ======================
+    // Le carte sono centinaia: qui non si scarica mai l'elenco completo.
+    // All'apertura del tab si mostrano solo gli ultimi movimentati; il resto
+    // si trova cercando, e ogni ricerca chiede al server solo quel che serve.
+
+    function _solariumStato(testo) {
+        const el = document.getElementById('solariumStato');
+        if (el) el.textContent = testo || '';
+    }
+
+    function _solariumRiga(c, etichettaGruppo) {
+        const tr = document.createElement('tr');
+        const nome = `${c.client_nome || ''} ${c.client_cognome || ''}`.trim();
+        const mov = c.ultimo_movimento
+            ? `${c.ultimo_movimento.tipo === 'ricarica' ? 'Ricarica' : 'Seduta'} · ${c.ultimo_movimento.quando || ''}`
+            : '';
+        tr.innerHTML = `
+            <td><strong>${c.numero_tessera || '—'}</strong></td>
+            <td>${nome || '(senza nome)'}${etichettaGruppo || ''}</td>
+            <td class="hide-mobile">${c.client_cellulare || ''}</td>
+            <td>€ ${Number(c.credito_residuo || 0).toFixed(2)}</td>
+            <td class="hide-mobile">${mov}</td>
+            <td class="text-end">
+                <a class="btn btn-sm btn-outline-primary" href="/pacchetti/detail/${c.id}">Apri</a>
+            </td>`;
+        return tr;
+    }
+
+    function _renderSolarium(lista, raggruppa) {
+        const tbody = document.getElementById('solariumTable');
+        tbody.innerHTML = '';
+        if (!lista.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Nessuna carta trovata.</td></tr>';
+            return;
+        }
+        if (!raggruppa) {
+            lista.forEach(c => tbody.appendChild(_solariumRiga(c)));
+            return;
+        }
+        const gruppi = [
+            ['ultime_sedute', 'Ultime sedute scalate'],
+            ['ultime_ricariche', 'Ultime ricariche'],
+        ];
+        gruppi.forEach(([chiave, titolo]) => {
+            const righe = lista.filter(c => c.gruppo === chiave);
+            if (!righe.length) return;
+            const intest = document.createElement('tr');
+            intest.innerHTML = `<td colspan="6" class="fw-bold text-muted small pt-3">${titolo}</td>`;
+            tbody.appendChild(intest);
+            righe.forEach(c => tbody.appendChild(_solariumRiga(c)));
+        });
+    }
+
+    async function caricaSolariumRecenti() {
+        const nome = document.getElementById('solariumCercaNome');
+        const tess = document.getElementById('solariumCercaTessera');
+        if (nome) nome.value = '';
+        if (tess) tess.value = '';
+        _solariumStato('Caricamento…');
+        try {
+            const r = await fetch('/pacchetti/api/prepagate-solarium');
+            const dati = await r.json();
+            _renderSolarium(dati, true);
+            _solariumStato(dati.length
+                ? 'Ultimi clienti che hanno scalato una seduta o fatto una ricarica.'
+                : 'Nessun movimento recente.');
+        } catch (e) {
+            console.error(e);
+            _solariumStato('Errore nel caricamento.');
+        }
+    }
+    window.caricaSolariumRecenti = caricaSolariumRecenti;
+
+    // Ricerca per nome/cognome/cellulare: parte dal terzo carattere, max 5 esiti
+    // in tendina. Il timer evita una chiamata per ogni tasto premuto.
+    let _timerSolariumNome = null;
+    document.getElementById('solariumCercaNome')?.addEventListener('input', function () {
+        const q = this.value.trim();
+        const dd = document.getElementById('solariumDropdown');
+        clearTimeout(_timerSolariumNome);
+        if (q.length < 3) { dd.classList.remove('show'); dd.innerHTML = ''; return; }
+        _timerSolariumNome = setTimeout(async () => {
+            try {
+                const r = await fetch('/pacchetti/api/prepagate-solarium?q=' + encodeURIComponent(q));
+                const dati = await r.json();
+                dd.innerHTML = '';
+                if (!dati.length) {
+                    dd.innerHTML = '<span class="dropdown-item-text text-muted">Nessun risultato</span>';
+                } else {
+                    dati.forEach(c => {
+                        const a = document.createElement('button');
+                        a.type = 'button';
+                        a.className = 'dropdown-item';
+                        a.textContent = `${c.numero_tessera || '—'} · ${c.client_nome} ${c.client_cognome}`
+                                      + ` · € ${Number(c.credito_residuo || 0).toFixed(2)}`;
+                        a.onclick = () => {
+                            dd.classList.remove('show');
+                            _renderSolarium([c], false);
+                            _solariumStato('Risultato della ricerca.');
+                        };
+                        dd.appendChild(a);
+                    });
+                }
+                dd.classList.add('show');
+                _renderSolarium(dati, false);
+                _solariumStato(`${dati.length} risultati per "${q}".`);
+            } catch (e) { console.error(e); }
+        }, 250);
+    });
+
+    // Ricerca per numero di tessera: filtra a ogni cifra digitata.
+    let _timerSolariumTessera = null;
+    document.getElementById('solariumCercaTessera')?.addEventListener('input', function () {
+        const t = this.value.trim();
+        clearTimeout(_timerSolariumTessera);
+        if (!t) { caricaSolariumRecenti(); return; }
+        _timerSolariumTessera = setTimeout(async () => {
+            try {
+                const r = await fetch('/pacchetti/api/prepagate-solarium?tessera=' + encodeURIComponent(t));
+                const dati = await r.json();
+                _renderSolarium(dati, false);
+                _solariumStato(`${dati.length} tessere che contengono "${t}".`);
+            } catch (e) { console.error(e); }
+        }, 150);
+    });
+
+    // Il tab si popola solo quando lo si apre davvero: nessun costo per chi
+    // resta su Pacchetti o Prepagate.
+    document.getElementById('tab-solarium')?.addEventListener('shown.bs.tab', function () {
+        if (!this.dataset.caricato) {
+            this.dataset.caricato = '1';
+            caricaSolariumRecenti();
+        }
+    });
+
+    document.addEventListener('click', function (e) {
+        const dd = document.getElementById('solariumDropdown');
+        const inp = document.getElementById('solariumCercaNome');
+        if (dd && inp && !inp.contains(e.target) && !dd.contains(e.target)) dd.classList.remove('show');
+    });
+
     // Carica carte prepagate
     async function loadPrepagate(params = {}) {
         params.tipo = 'prepagata';
+        // Le ricaricabili Solarium hanno il loro tab: qui sarebbero centinaia di
+        // righe inutili, ed erano la causa del caricamento lentissimo.
+        params.escludi_solarium = '1';
         const query = new URLSearchParams(params).toString();
         const response = await fetch(`/pacchetti/api/pacchetti?${query}`);
         prepagateData = await response.json();
