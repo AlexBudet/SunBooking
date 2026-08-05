@@ -875,6 +875,11 @@ La regola pratica è semplice: ogni volta che la prepagata viene usata, il clien
 
 Ci finisce una carta quando è vincolata all'intera categoria Solarium, oppure a una lista di servizi che sono tutti Solarium. Le carte libere, che pagano qualsiasi cosa, restano nel tab "Carte Prepagate": i due elenchi non si sovrappongono mai.
 
+<span class="help-strong-dark help-subtitle-pill">▸ ARRIVARCI E TORNARE INDIETRO</span>
+Dall'<span class="help-strong-dark">Agenda</span> si arriva alla scheda di una carta in un click: sul blocco appuntamento, l'icona della <span class="help-strong-dark">tesserina</span> accanto al nome del cliente apre direttamente la sua ricaricabile. Stessa cosa per l'icona del <span class="help-strong-dark">pacchetto</span>. Se il cliente ha più di una carta si apre la prima; il fumetto che compare passandoci sopra le elenca tutte.
+
+Dalla scheda della carta, in alto accanto al titolo, c'è il pulsante <span class="help-strong-dark">"← Ricaricabili Solarium"</span> che riporta al tab giusto. Serve perché la voce "Pacchetti" del menu in alto riapre sempre il primo tab, non quello da cui eri partito.
+
 <span class="help-strong-dark help-subtitle-pill">▸ COSA VEDI APRENDOLO</span>
 Il tab <span class="help-strong-dark">non carica tutte le carte</span>: sarebbero centinaia e la pagina diventerebbe lentissima. Mostra due tabelle brevi:
 • <span class="help-strong-dark">Ultime sedute scalate</span> — gli ultimi 5 clienti che hanno consumato credito
@@ -1820,6 +1825,28 @@ L'export Corrispettivi è pensato proprio per essere inviato comodamente al comm
 Alcuni pulsanti sono visibili solo a ruoli abilitati (admin).""",
     },
 
+    "report_no_show": {
+        "title": "🚫 Report: pannello No-show",
+        "content": """Il pannello <span class="help-strong-dark">NO-SHOW</span> elenca chi aveva un appuntamento e non si è presentato: giorno, ora, servizi saltati e nome del cliente.
+
+Di default mostra gli <span class="help-strong-dark">ultimi 10</span>, dal più recente.
+
+<span class="help-strong-dark help-subtitle-pill">▸ UNA VISITA, NON UN SERVIZIO</span>
+Chi salta due o tre servizi di fila conta come <span class="help-strong-dark">una assenza sola</span>, non due o tre: gli appuntamenti dello stesso cliente nello stesso giorno vengono raggruppati, con l'orario del primo e l'elenco completo di quello che è saltato. Altrimenti una singola cliente che non si presenta riempirebbe da sola tutto l'elenco.
+
+<span class="help-strong-dark help-subtitle-pill">▸ IL DETTAGLIO SOTTO IL MOUSE</span>
+La riga resta corta per farcene stare dieci. Passandoci sopra compare tutto il resto: <span class="help-strong-dark">numero di telefono</span>, elenco esteso dei servizi, quanto tempo è rimasto libero in agenda e l'eventuale nota dell'appuntamento.
+
+È da lì che parte la telefonata di recupero: hai il numero senza dover cercare la scheda cliente.
+
+<span class="help-strong-dark help-subtitle-pill">▸ CONFRONTARE DUE PERIODI</span>
+In alto nel pannello ci sono due caselle data, <span class="help-strong-dark">dal</span> e <span class="help-strong-dark">al</span>: cliccandole si apre il calendario. Impostandole entrambe l'elenco si limita a quel periodo e l'intestazione dice quanti no-show ci sono stati.
+
+Servono <span class="help-strong-dark">tutte e due</span>: con una sola casella compilata l'intervallo non esiste e resta la vista standard. Il pulsante con la freccia circolare svuota le date e torna agli ultimi 10.
+
+Impostando prima un intervallo e poi un altro si confrontano due periodi qualsiasi — per esempio lo stesso mese di due anni diversi, o i mesi prima e dopo l'introduzione del promemoria WhatsApp.""",
+    },
+
     "report_heatmap": {
         "title": "🔥 Report: le due heatmap (appuntamenti e incassi)",
         "content": """Le due <span class="help-strong-dark">heatmap</span> rispondono a una domanda che le tabelle non sanno dare: <span class="help-strong-dark">quando</span> lavori davvero.
@@ -1895,6 +1922,8 @@ Il badge colorato confronta il periodo scelto col <span class="help-strong-dark"
     "report_saturazione_agenda": {
         "title": "📆 Report: Saturazione agenda",
         "content": """Il pannello <span class="help-strong-dark">SATURAZIONE AGENDA</span> dice quanto è piena l'agenda: le <span class="help-strong-dark">ore prenotate</span> rispetto alle <span class="help-strong-dark">ore di turno</span> inserite nel periodo.
+
+<span class="help-strong-dark">Lo vedono solo admin e owner.</span> Se non lo trovi in Report è per questo: misura il rendimento delle persone, e non è un dato di servizio come l'incasso o gli appuntamenti del giorno. Nel pannello ogni operatrice compare col solo <span class="help-strong-dark">nome</span>.
 
 È il conto che trasforma "siamo stati pieni" in un numero. Serve per capire se conviene aggiungere ore, se un turno del mattino sta girando a vuoto, o se qualcuno è al limite e va alleggerito.
 
@@ -2839,6 +2868,7 @@ def get_topics_by_category():
             "report_corrispettivi_ufficiali",
             "report_pulsanti_operativi",
             "report_andamento_annuale",
+            "report_no_show",
             "report_heatmap",
             "report_scontrino_medio",
             "report_saturazione_agenda",

@@ -578,6 +578,28 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
+<div class="tile-neumorphic tile-large" id="tile-no-show">
+  <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
+  <div class="tile-title d-flex align-items-center justify-content-between flex-wrap" style="padding-right:15px; gap:6px;">
+    <span data-bs-toggle="tooltip" data-bs-placement="bottom"
+          title="Chi aveva un appuntamento e non si è presentato. Passa il mouse su una riga per telefono e dettagli">NO-SHOW</span>
+    <div class="d-flex align-items-center" style="gap:4px;">
+      <input type="text" class="form-control form-control-sm no-show-data" id="noShowDal"
+             placeholder="dal" autocomplete="off" style="width:92px;">
+      <input type="text" class="form-control form-control-sm no-show-data" id="noShowAl"
+             placeholder="al" autocomplete="off" style="width:92px;">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="noShowRecenti"
+              data-bs-toggle="tooltip" title="Torna agli ultimi 10">
+        <i class="bi bi-arrow-counterclockwise"></i>
+      </button>
+    </div>
+  </div>
+  <div class="stat-voce mb-1" id="no-show-periodo">ultimi 10 in ordine di tempo</div>
+  <div class="tile-lista-scroll" id="no-show-list">
+    <span class="text-muted">Caricamento...</span>
+  </div>
+</div>
+
 <div class="tile-neumorphic tile-large" id="tile-scontrino-medio">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
@@ -610,6 +632,11 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
+{# Rendimento delle persone: lo vedono solo admin e owner. Il tile non viene
+   proprio generato per gli altri ruoli, cosi' non compare nemmeno nell'elenco
+   delle impostazioni tile. L'endpoint rifiuta comunque le richieste non
+   autorizzate: nascondere non e' proteggere. #}
+{% if current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
 <div class="tile-neumorphic tile-large" id="tile-saturazione-agenda">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
@@ -627,6 +654,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <span class="text-muted">Caricamento...</span>
   </div>
 </div>
+{% endif %}
 
 <style>
 /* --- Stili condivisi dai tile aggiunti ------------------------------------ */
@@ -3644,10 +3672,37 @@ document.addEventListener('DOMContentLoaded', function() {
     const ids = Array.from(grid.querySelectorAll(tileSelector)).map(t => t.id);
     localStorage.setItem('reportTilesOrder', JSON.stringify(ids));
   }
+  /* L'ordine in cui i tile stanno nell'HTML e' l'ordine predefinito voluto:
+     va letto PRIMA di riordinare, perche' subito dopo viene sovrascritto. */
+  const ordineCanonico = Array.from(grid.querySelectorAll(tileSelector)).map(t => t.id);
+
   function ripristinaOrdine() {
     const saved = localStorage.getItem('reportTilesOrder');
     if (!saved) return;
-    JSON.parse(saved).forEach(id => {
+
+    let salvati;
+    try { salvati = JSON.parse(saved); } catch (e) { return; }
+    if (!Array.isArray(salvati)) return;
+
+    /* I tile aggiunti dopo l'ultimo salvataggio non compaiono nell'elenco
+       memorizzato. Prima venivano semplicemente lasciati dov'erano mentre tutti
+       i tile noti gli finivano dietro: risultato, ogni tile nuovo si piazzava
+       in cima alla pagina, anche quando nell'HTML stava in fondo.
+       Ora ognuno viene inserito subito dopo il vicino che lo precede
+       nell'ordine predefinito, cosi' arriva dove l'ho messo io e l'ordine
+       scelto dall'utente resta intatto. */
+    const finale = salvati.filter(id => document.getElementById(id));
+    ordineCanonico.forEach((id, posizione) => {
+      if (finale.indexOf(id) !== -1) return;
+      let inserimento = 0;
+      for (let i = posizione - 1; i >= 0; i--) {
+        const trovato = finale.indexOf(ordineCanonico[i]);
+        if (trovato !== -1) { inserimento = trovato + 1; break; }
+      }
+      finale.splice(inserimento, 0, id);
+    });
+
+    finale.forEach(id => {
       const tile = document.getElementById(id);
       if (tile) grid.appendChild(tile);
     });
@@ -4919,21 +4974,92 @@ document.addEventListener('DOMContentLoaded', function() {
     el.className = 'delta-badge ' + (v > 0.05 ? 'su' : (v < -0.05 ? 'giu' : 'pari'));
   }
 
-  /* I tooltip generati via JS devono essere Bootstrap come tutti gli altri. */
-  function bsTip(el, testo) {
+  /* I tooltip generati via JS devono essere Bootstrap come tutti gli altri.
+     Bootstrap li aggancia a <body>, non alla riga: dentro un elenco che
+     scorre restavano quindi appesi in mezzo allo schermo finche' non si
+     tornava sopra alla riga. Qui li si chiude a mano appena il mouse se ne
+     va, al click e al primo scatto di scroll del contenitore. */
+  function bsTip(el, testo, opzioni) {
     if (!el || !testo) return;
+    opzioni = opzioni || {};
     el.setAttribute('data-bs-toggle', 'tooltip');
-    el.setAttribute('data-bs-placement', 'top');
+    el.setAttribute('data-bs-placement', opzioni.placement || 'top');
+    if (opzioni.html) el.setAttribute('data-bs-html', 'true');
     el.setAttribute('title', testo);
     try {
-      if (window.bootstrap && bootstrap.Tooltip) new bootstrap.Tooltip(el);
+      if (!window.bootstrap || !bootstrap.Tooltip) return;
+      var tip = new bootstrap.Tooltip(el, {
+        html: !!opzioni.html,
+        placement: opzioni.placement || 'top',
+        // Solo hover: con 'focus' il tooltip resta aperto dopo un click.
+        trigger: 'hover',
+        animation: false,
+        container: 'body'
+      });
+      var chiudi = function () { try { tip.hide(); } catch (e) {} };
+      el.addEventListener('mouseleave', chiudi);
+      el.addEventListener('click', chiudi);
     } catch (e) { /* tooltip non critico */ }
+  }
+
+  /* Toglie di mezzo i tooltip di un elenco PRIMA di riscriverlo: se si
+     cancella la riga senza smontarli, restano orfani attaccati a <body> e
+     non li chiude piu' nessuno. */
+  function ripulisciTooltipIn(contenitore) {
+    if (!contenitore || !window.bootstrap || !bootstrap.Tooltip) return;
+    contenitore.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+      try {
+        var tip = bootstrap.Tooltip.getInstance(el);
+        if (tip) { tip.hide(); tip.dispose(); }
+      } catch (e) { /* niente da smontare */ }
+    });
+  }
+
+  /* Scorrendo l'elenco il puntatore resta fermo sulla riga, quindi Bootstrap
+     non riceve nessun mouseleave e il tooltip rimane li' sospeso mentre il
+     contenuto scorre sotto. Allo scroll si chiude tutto. */
+  function chiudiTooltipAlloScroll(contenitore) {
+    if (!contenitore) return;
+    contenitore.addEventListener('scroll', function () {
+      if (!window.bootstrap || !bootstrap.Tooltip) return;
+      contenitore.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        try {
+          var tip = bootstrap.Tooltip.getInstance(el);
+          if (tip) tip.hide();
+        } catch (e) { /* non critico */ }
+      });
+    }, { passive: true });
   }
 
   function esc(s) {
     var d = document.createElement('div');
     d.textContent = s == null ? '' : String(s);
     return d.innerHTML;
+  }
+
+  /* Apertura dei link delle notizie.
+     Nel browser (cloud) basta target="_blank": si apre una scheda normale.
+     Nell'app installata invece il gestionale gira dentro una finestra Chrome
+     lanciata con --app su un profilo isolato, quindi "_blank" aprirebbe una
+     finestra spoglia di quel profilo, senza preferiti ne' sessioni. Li' si
+     chiede al programma di passare il link al browser predefinito. */
+  var APP_LOCALE = {% if is_cloud %}false{% else %}true{% endif %};
+
+  function apriLinkEsterno(e, url) {
+    if (!APP_LOCALE || !url) return;   // sul cloud lascia fare al browser
+    e.preventDefault();
+    var headers = { 'Content-Type': 'application/json' };
+    var token = document.querySelector('meta[name="csrf-token"]');
+    if (token) headers['X-CSRFToken'] = token.getAttribute('content');
+    fetch('/api/apri_link_esterno', {
+      method: 'POST', headers: headers, body: JSON.stringify({ url: url })
+    }).then(function (r) {
+      // Se il programma non riesce ad aprirlo, si ripiega sul comportamento
+      // normale: meglio una finestra scomoda che un link che non fa niente.
+      if (!r.ok) window.open(url, '_blank', 'noopener');
+    }).catch(function () {
+      window.open(url, '_blank', 'noopener');
+    });
   }
 
   /* Collega i bottoni di un gruppo periodo alla funzione di ricarica. */
@@ -5100,6 +5226,7 @@ document.addEventListener('DOMContentLoaded', function() {
           return;
         }
 
+        ripulisciTooltipIn(lista);
         lista.innerHTML = '';
         d.rows.forEach(function (r) {
           var riga = document.createElement('div');
@@ -5172,6 +5299,12 @@ document.addEventListener('DOMContentLoaded', function() {
               esc(n.categoria || 'beauty') + '</span>' + titolo + '</div>' +
             (n.sintesi ? '<div class="news-beauty-sintesi">' + esc(n.sintesi) + '</div>' : '') +
             (meta ? '<div class="news-beauty-meta">' + meta + '</div>' : '');
+          if (n.url) {
+            var link = item.querySelector('a');
+            if (link) {
+              link.addEventListener('click', function (e) { apriLinkEsterno(e, n.url); });
+            }
+          }
           lista.appendChild(item);
         });
       })
@@ -5209,6 +5342,109 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.disabled = false;
         btn.innerHTML = iconaOriginale;
       });
+  }
+
+  // ---------------------------------------------------------------- TILE 5
+  function caricaNoShow() {
+    var lista = document.getElementById('no-show-list');
+    if (!lista) return;
+
+    var dal = document.getElementById('noShowDal');
+    var al = document.getElementById('noShowAl');
+    var qs = 'limit=10';
+    // Entrambe le date o nessuna: con una sola l'intervallo non esiste.
+    if (dal && al && dal.value && al.value) {
+      qs += '&dateFrom=' + dal.value + '&dateTo=' + al.value;
+    }
+
+    fetch('/api/report_no_show?' + qs)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var intestazione = document.getElementById('no-show-periodo');
+        if (intestazione) {
+          intestazione.textContent = d.periodo
+            ? d.totale + ' nel periodo ' + d.periodo
+            : 'ultimi 10 in ordine di tempo';
+        }
+
+        if (!d.rows || !d.rows.length) {
+          lista.innerHTML = '<span class="text-muted">' +
+            (d.periodo ? 'Nessun no-show in questo periodo.' : 'Nessun no-show registrato.') +
+            '</span>';
+          return;
+        }
+
+        ripulisciTooltipIn(lista);
+        lista.innerHTML = '';
+        d.rows.forEach(function (n) {
+          var riga = document.createElement('div');
+          riga.className = 'riga-lista';
+
+          var servizi = (n.servizi && n.servizi.length) ? n.servizi.join(', ') : 'servizio non indicato';
+          riga.innerHTML =
+            '<div style="min-width:0;">' +
+              '<div class="riga-nome">' + esc(n.nome) + '</div>' +
+              '<div class="riga-dettaglio">' + esc(servizi) + '</div>' +
+            '</div>' +
+            '<div style="text-align:right; white-space:nowrap;">' +
+              '<div style="font-weight:600;">' + esc(n.ora) + '</div>' +
+              '<div class="riga-dettaglio">' + esc(n.giorno) + ' ' + esc(n.data) + '</div>' +
+            '</div>';
+
+          // Il dettaglio esteso sta nel tooltip: la riga resta compatta, ma
+          // passandoci sopra si ha tutto quello che serve per richiamare.
+          var dettaglio = [
+            '<strong>' + esc(n.nome) + '</strong>',
+            esc(n.giorno) + ' ' + esc(n.data) + ' alle ' + esc(n.ora),
+            n.cellulare ? '📞 ' + esc(n.cellulare) : 'nessun numero in scheda',
+            (n.servizi && n.servizi.length)
+              ? 'Servizi persi: ' + esc(n.servizi.join(', '))
+              : 'Servizio non indicato',
+          ];
+          if (n.durata) dettaglio.push('Tempo rimasto libero: ' + n.durata + ' min');
+          if (n.note) dettaglio.push('Nota: ' + esc(n.note));
+
+          bsTip(riga, dettaglio.join('<br>'), { html: true, placement: 'left' });
+
+          lista.appendChild(riga);
+        });
+      })
+      .catch(function () {
+        lista.innerHTML = '<span class="text-danger">Errore nel caricamento.</span>';
+      });
+  }
+
+  function inizializzaDateNoShow() {
+    var dal = document.getElementById('noShowDal');
+    var al = document.getElementById('noShowAl');
+    if (!dal || !al) return;
+
+    // Stesso calendario del resto della pagina: formato italiano a video,
+    // ISO nel valore inviato al server.
+    if (window.flatpickr) {
+      var opzioni = {
+        dateFormat: 'Y-m-d',
+        altInput: true,
+        altFormat: 'd/m/Y',
+        locale: (flatpickr.l10ns && flatpickr.l10ns.it) ? 'it' : undefined,
+        onChange: function () { caricaNoShow(); }
+      };
+      flatpickr(dal, opzioni);
+      flatpickr(al, opzioni);
+    } else {
+      dal.addEventListener('change', caricaNoShow);
+      al.addEventListener('change', caricaNoShow);
+    }
+
+    var reset = document.getElementById('noShowRecenti');
+    if (reset) {
+      reset.addEventListener('click', function () {
+        [dal, al].forEach(function (i) {
+          if (i._flatpickr) i._flatpickr.clear(); else i.value = '';
+        });
+        caricaNoShow();
+      });
+    }
   }
 
   // ---------------------------------------------------------------- TILE 6
@@ -5305,9 +5541,18 @@ document.addEventListener('DOMContentLoaded', function() {
       btnOroscopo.addEventListener('click', function () { aggiornaOroscopo(btnOroscopo); });
     }
 
+    inizializzaDateNoShow();
+
+    // Elenchi che scorrono: allo scroll i tooltip vanno chiusi, altrimenti
+    // restano sospesi perche' il puntatore non lascia mai la riga.
+    ['no-show-list', 'saturazione-list'].forEach(function (id) {
+      chiudiTooltipAlloScroll(document.getElementById(id));
+    });
+
     caricaAndamentoAnnuale();
     caricaScontrinoMedio();
     caricaSaturazioneAgenda();
+    caricaNoShow();
     caricaNewsBeauty();
     caricaOroscopo();
 

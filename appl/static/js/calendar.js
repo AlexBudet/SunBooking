@@ -527,6 +527,12 @@ function enableCreateApptModalLock(modalEl) {
   const handler = (e) => {
     const t = e.target;
     if (modalEl.contains(t)) return;
+    // I pannelli WhatsApp non sono modal Bootstrap ma div agganciati a <body>,
+    // quindi i controlli sui .modal qui sotto non li riconoscerebbero: senza
+    // questa riga i loro click verrebbero mangiati da questo lock (che gira in
+    // fase di cattura, prima dei pannelli) e al posto di funzionare comparirebbe
+    // l'avviso di "click fuori dal modal".
+    if (t.closest && t.closest('#whatsappAutoSendOverlay, #whatsappNavigatorConfirmOverlay')) return;
     // Ignora click dentro qualsiasi altro modal (aperto o in chiusura)
     const anyModal = t.closest('.modal');
     if (anyModal && anyModal !== modalEl) return;
@@ -3057,6 +3063,40 @@ function goToSection(url) {
   window.location.href = url;
 }
 window.goToSection = goToSection;
+
+/* =============================================================
+   BADGE PACCHETTO / RICARICABILE -> SCHEDA IN TOOLS/PACCHETTI
+
+   Gestore unico e delegato: i blocchi appuntamento nascono in due modi
+   diversi (renderizzati da calendar.html al caricamento, ricreati da
+   creaBloccoAppuntamento dopo ogni modifica) e un listener attaccato al
+   singolo badge sopravviverebbe solo al primo dei due.
+
+   stopPropagation e' obbligatorio: senza, il click aprirebbe anche il popup
+   del blocco sottostante, e si finirebbe sulla scheda con un popup aperto
+   alle spalle.
+============================================================= */
+document.addEventListener('click', function(e) {
+  const badge = e.target.closest
+    ? e.target.closest('.pacchetto-badge[data-pacchetto-id], .prepagata-badge[data-prepagata-id]')
+    : null;
+  if (!badge) return;
+
+  const id = badge.getAttribute('data-pacchetto-id') || badge.getAttribute('data-prepagata-id');
+  if (!id) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  // Il tooltip resta appeso al <body> quando la pagina cambia: va chiuso a mano.
+  try {
+    const tip = window.bootstrap && bootstrap.Tooltip
+      ? bootstrap.Tooltip.getInstance(badge) : null;
+    if (tip) tip.hide();
+  } catch (_) { /* non critico */ }
+
+  goToSection(`/pacchetti/detail/${id}`);
+});
 
 /**
  * Espande il Navigator se è in stato collassato
@@ -7866,19 +7906,35 @@ function chiediInvioWhatsappNavigator() {
   }
   return new Promise(resolve => {
     // Rimuovi eventuale popup precedente
-    const existing = document.getElementById('whatsappNavigatorConfirm');
+    const existing = document.getElementById('whatsappNavigatorConfirmOverlay');
 
     if (existing) existing.remove();
+
+    /* Sfondo che copre la pagina.
+       Prima il pannello era un position:fixed sospeso sopra l'agenda, senza
+       niente sotto: un click accanto ai pulsanti finiva dritto su una
+       .selectable-cell e faceva partire il posizionamento di un blocco.
+       L'overlay intercetta quei click e ferma la propagazione, cosi' mentre la
+       domanda e' aperta il calendario non riceve piu' niente. */
+    const overlay = document.createElement('div');
+    overlay.id = 'whatsappNavigatorConfirmOverlay';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.background = 'rgba(0,0,0,0.25)';
+    overlay.style.zIndex = '99998';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    ['mousedown', 'mouseup', 'click', 'dblclick', 'pointerdown', 'pointerup',
+     'touchstart', 'touchend', 'contextmenu'].forEach(function(evento) {
+      overlay.addEventListener(evento, function(ev) { ev.stopPropagation(); });
+    });
 
     // Crea il popup
     const panel = document.createElement('div');
     panel.id = 'whatsappNavigatorConfirm';
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-label', 'Conferma invio WhatsApp');
-    panel.style.position = 'fixed';
-    panel.style.top = '50%';
-    panel.style.left = '50%';
-    panel.style.transform = 'translate(-50%, -50%)';
     panel.style.background = '#fff';
     panel.style.boxShadow = '0 6px 18px rgba(0,0,0,0.12)';
     panel.style.border = '1px solid #ddd';
@@ -7921,13 +7977,19 @@ function chiediInvioWhatsappNavigator() {
     btnRow.appendChild(yes);
     panel.appendChild(btnRow);
 
-    document.body.appendChild(panel);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
     setTimeout(() => yes.focus(), 50);
 
     function cleanup() {
-      const p = document.getElementById('whatsappNavigatorConfirm');
-      if (p && p.parentNode) p.parentNode.removeChild(p);
       document.removeEventListener('keydown', onKey);
+      // Sparisce subito alla vista ma resta cliccabile fino al tick successivo:
+      // togliendolo durante il click, chi piu' avanti usa elementFromPoint
+      // troverebbe il buco e leggerebbe il calendario sottostante.
+      overlay.style.opacity = '0';
+      setTimeout(function() {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      }, 0);
     }
     function onKey(e) {
       if (e.key === 'Escape') {
@@ -9045,6 +9107,9 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
         titleParts.push('Pacchetto collegato');
       }
       pacchettoBadge.setAttribute('title', titleParts.join('<br>'));
+      // Id sul badge: serve al gestore delegato piu' in basso per aprire la
+      // scheda del pacchetto senza dover risalire al blocco.
+      if (pacchettoId) pacchettoBadge.setAttribute('data-pacchetto-id', pacchettoId);
       pacchettoBadge.style.cssText = 'margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;';
       pClient.appendChild(pacchettoBadge);
     }
@@ -9072,6 +9137,10 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
       }
 
       prepagataBadge.setAttribute('title', tooltipHtml);
+      // Con piu' carte si apre la prima: il tooltip le elenca tutte comunque.
+      if (prepagateCards[0] && prepagateCards[0].id) {
+        prepagataBadge.setAttribute('data-prepagata-id', prepagateCards[0].id);
+      }
       prepagataBadge.style.cssText = 'margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;color:#0d6efd;';
       pClient.appendChild(prepagataBadge);
     }

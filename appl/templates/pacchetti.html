@@ -897,6 +897,27 @@
         updateFormStepsVisibility();  // ricalcola la visibilità degli step (servizi o prepagata)
     }
 
+    /* Apertura diretta di un tab via URL: /pacchetti/?tab=solarium
+       Serve a chi torna dalla scheda di una carta e vuole ritrovare l'elenco da
+       cui era partito, invece del primo tab. */
+    document.addEventListener('DOMContentLoaded', function() {
+        var tab;
+        try { tab = new URLSearchParams(window.location.search).get('tab'); }
+        catch (e) { return; }
+        if (!tab) return;
+
+        var bottoni = {
+            servizi:   'tab-servizi',
+            prepagate: 'tab-prepagate',
+            solarium:  'tab-solarium'
+        };
+        var bottone = document.getElementById(bottoni[tab.toLowerCase()] || '');
+        // Il tab Solarium esiste solo se il modulo e' attivo: se manca non si
+        // fa niente e resta aperto il tab predefinito.
+        if (!bottone || !window.bootstrap || !bootstrap.Tab) return;
+        try { new bootstrap.Tab(bottone).show(); } catch (e) { /* non critico */ }
+    });
+
     // Event listener per i radio button tipo pacchetto
     document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('input[name="tipoPacchetto"]').forEach(radio => {

@@ -1937,7 +1937,15 @@ def report_saturazione_agenda():
     Gli operatori senza turni inseriti nel periodo non entrano nel totale
     (denominatore sconosciuto) ma restano in elenco con saturazione nulla, cosi'
     e' evidente che mancano i turni.
+
+    Riservato ad admin e owner: e' una misura del rendimento delle persone, non
+    un dato di servizio. Il tile e' nascosto agli altri ruoli, e qui il rifiuto
+    e' ripetuto lato server perche' nascondere non e' proteggere.
     """
+    user = db.session.get(User, session.get('user_id'))
+    if not user or getattr(user.ruolo, 'value', None) not in ('admin', 'owner'):
+        return jsonify({'error': 'Non autorizzato'}), 403
+
     start, end, giorni = _periodo_da_request()
     if start is None:
         return jsonify({'error': 'Date non valide'}), 400
@@ -2015,7 +2023,9 @@ def report_saturazione_agenda():
             tot_disp += disp
             tot_pren += pren
         rows.append({
-            'operatore': f"{op.user_nome or ''} {op.user_cognome or ''}".strip() or f"Operatore {op_id}",
+            # Solo il nome: in istituto ci si chiama per nome, e il cognome
+            # allungherebbe la riga rubando spazio alla barra di saturazione.
+            'operatore': (op.user_nome or '').strip() or f"Operatore {op_id}",
             'tipo': op.user_tipo or '',
             'ore_disponibili': round(disp / 60, 1),
             'ore_prenotate': round(pren / 60, 1),
@@ -2106,6 +2116,136 @@ def api_news_beauty():
         'rows': rows,
         'aggiornato': aggiornato.strftime('%d/%m/%Y %H:%M') if aggiornato else None,
     })
+
+
+def _nome_proprio(testo):
+    """
+    Nome e cognome con l'iniziale maiuscola e il resto minuscolo.
+
+    In anagrafica i nomi entrano come capita - tutto maiuscolo da un import,
+    tutto minuscolo da chi scrive di fretta - e in elenco la differenza si vede.
+    str.title() va bene anche con apostrofi e trattini ("d'angelo" -> "D'Angelo",
+    "anna-maria" -> "Anna-Maria"), che e' il caso che conta qui.
+    """
+    return ' '.join(p.title() for p in (testo or '').split())
+
+
+@report_bp.route('/api/report_no_show')
+def report_no_show():
+    """
+    Ultimi no-show: clienti che avevano un appuntamento e non si sono presentati.
+
+    Un cliente che salta due servizi di fila e' UNA assenza, non due: gli
+    appuntamenti vengono raggruppati per cliente e giorno, con l'orario del
+    primo e l'elenco dei servizi persi.
+
+    Senza date restituisce i piu' recenti; con dateFrom/dateTo si limita a quel
+    periodo, cosi' si possono confrontare due intervalli qualsiasi.
+    """
+    try:
+        limit = int(request.args.get('limit', 10))
+    except (TypeError, ValueError):
+        limit = 10
+    limit = max(1, min(limit, 50))
+
+    q = (Appointment.query
+         .options(joinedload(Appointment.client), joinedload(Appointment.service))
+         .filter(Appointment.stato == AppointmentStatus.NON_ARRIVATO))
+
+    date_from = request.args.get('dateFrom')
+    date_to = request.args.get('dateTo')
+    periodo = None
+    if date_from and date_to:
+        try:
+            inizio = datetime.strptime(date_from, "%Y-%m-%d")
+            fine = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+        except ValueError:
+            return jsonify({'error': 'Date non valide'}), 400
+        if fine <= inizio:
+            return jsonify({'error': 'Date non valide'}), 400
+        q = q.filter(Appointment.start_time >= inizio, Appointment.start_time < fine)
+        periodo = f"{inizio.strftime('%d/%m/%Y')} - {(fine - timedelta(days=1)).strftime('%d/%m/%Y')}"
+
+    # Si legge qualche riga in piu' del necessario: dopo il raggruppamento per
+    # cliente/giorno le righe calano, e servirne 10 vuol dire partire da di piu'.
+    appuntamenti = q.order_by(Appointment.start_time.desc()).limit(limit * 6).all()
+
+    gruppi = {}
+    for a in appuntamenti:
+        if not a.client_id or not a.start_time:
+            continue
+        cliente = a.client
+        if cliente is None or getattr(cliente, 'is_deleted', False):
+            continue
+        chiave = (a.client_id, a.start_time.date())
+        g = gruppi.setdefault(chiave, {
+            'client_id': a.client_id,
+            'nome': _nome_proprio(f"{cliente.cliente_nome or ''} {cliente.cliente_cognome or ''}") or 'Cliente',
+            'cellulare': (cliente.cliente_cellulare or '').strip(),
+            'quando': a.start_time,
+            'servizi': [],
+            'durata': 0,
+            'note': (a.note or '').strip(),
+        })
+        if a.start_time < g['quando']:
+            g['quando'] = a.start_time
+        nome_servizio = getattr(a.service, 'servizio_nome', None)
+        if nome_servizio and nome_servizio.lower() != 'dummy':
+            g['servizi'].append(nome_servizio)
+        g['durata'] += int(a.duration or 0)
+
+    ordinati = sorted(gruppi.values(), key=lambda g: g['quando'], reverse=True)[:limit]
+
+    giorni_it = ('Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom')
+    rows = []
+    for g in ordinati:
+        quando = g['quando']
+        rows.append({
+            'client_id': g['client_id'],
+            'nome': g['nome'],
+            'cellulare': g['cellulare'],
+            'giorno': giorni_it[quando.weekday()],
+            'data': quando.strftime('%d/%m/%Y'),
+            'ora': quando.strftime('%H:%M'),
+            'servizi': g['servizi'],
+            'durata': g['durata'],
+            'note': g['note'],
+        })
+
+    return jsonify({'rows': rows, 'periodo': periodo, 'totale': len(rows)})
+
+
+@report_bp.route('/api/apri_link_esterno', methods=['POST'])
+def api_apri_link_esterno():
+    """
+    Apre un link nel browser PREDEFINITO del computer. Solo per l'app locale.
+
+    Serve perche' l'exe mostra il gestionale dentro una finestra Chrome lanciata
+    con --app e un profilo isolato: un link con target="_blank" si aprirebbe in
+    un'altra finestra di quel profilo separato, senza barra indirizzi e senza i
+    preferiti o le sessioni dell'utente (e in modalita' chiosco lo lascerebbe
+    incastrato a schermo intero). Meglio consegnare il link al browser vero.
+
+    Sul cloud e' DISATTIVATO e non potrebbe essere altrimenti: li' il "server"
+    e' una macchina Azure, aprire un browser su quella non avrebbe senso.
+    Il permesso arriva da una variabile impostata solo da start.py, quindi in
+    produzione la funzione e' spenta per assenza, non per configurazione.
+    """
+    if os.getenv('SUNBOOKING_LOCALE') != '1':
+        return jsonify({'ok': False, 'errore': 'Disponibile solo sull\'app locale'}), 403
+
+    url = (request.get_json(silent=True) or {}).get('url', '')
+    if not isinstance(url, str) or not url.startswith(('http://', 'https://')):
+        return jsonify({'ok': False, 'errore': 'Indirizzo non valido'}), 400
+
+    try:
+        import webbrowser
+        webbrowser.open(url)
+    except Exception as exc:
+        current_app.logger.warning("Apertura link esterno fallita: %s", exc)
+        return jsonify({'ok': False, 'errore': 'Apertura non riuscita'}), 500
+
+    return jsonify({'ok': True})
 
 
 @report_bp.route('/api/oroscopo')

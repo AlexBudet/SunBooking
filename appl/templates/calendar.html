@@ -411,6 +411,7 @@
    data-bs-toggle="tooltip"
    data-bs-html="true"
   title="Pacchetto creato il {{ appt.pacchetto_tooltip_created_on or '-' }}<br>Seduta {{ appt.pacchetto_tooltip_seduta_progressivo or appt.pacchetto_seduta.ordine }} di {{ appt.pacchetto_tooltip_sedute_totali or (appt.pacchetto_seduta.pacchetto.sedute|length if appt.pacchetto_seduta.pacchetto else '') }}"
+   data-pacchetto-id="{{ appt.pacchetto_seduta.pacchetto_id }}"
    style="margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;"></i>
 {% endif %}
 {% if appt.client_id and prepagate_per_cliente.get(appt.client_id) %}
@@ -420,6 +421,7 @@
    data-bs-toggle="tooltip"
    data-bs-html="true"
    title="<strong>💳 Carta Prepagata</strong><br>{% for c in carte %}{{ c.nome|e }}: <strong>€{{ '%.2f'|format(c.credito_residuo) }}</strong>{% if c.data_scadenza %} (scad. {{ c.data_scadenza }}){% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}{% if carte|length > 1 %}<br><strong>Totale: €{{ '%.2f'|format(credito_totale) }}</strong>{% endif %}"
+   data-prepagata-id="{{ carte[0].id }}"
    style="margin-right:3px;font-size:0.85em;opacity:0.7;cursor:pointer;color:#0d6efd;"></i>
 {% endif %}
 {% if appt.client and appt.client.is_deleted %}
