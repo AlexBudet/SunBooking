@@ -271,6 +271,14 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
   popup.appendChild(btnOk);
 
   overlay.appendChild(popup);
+  // L'overlay copre lo schermo ma e' figlio di <body>: senza questo blocco i
+  // click ci salgono sopra fino a document, dove la Cassa ha i propri gestori
+  // delegati. I pulsanti dentro al pannello continuano a funzionare, perche' i
+  // loro handler girano prima che l'evento arrivi fin qui.
+  ['mousedown', 'mouseup', 'click', 'dblclick', 'pointerdown', 'pointerup',
+   'touchstart', 'touchend', 'contextmenu'].forEach(function(evento) {
+    overlay.addEventListener(evento, function(ev) { ev.stopPropagation(); });
+  });
   document.body.appendChild(overlay);
 
   // Countdown visivo
@@ -556,6 +564,14 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
     `;
 
     overlay.appendChild(modal);
+    // L'overlay copre lo schermo ma e' figlio di <body>: senza questo blocco i
+    // click ci salgono sopra fino a document, dove la Cassa ha i propri gestori
+    // delegati. I pulsanti dentro al pannello continuano a funzionare, perche' i
+    // loro handler girano prima che l'evento arrivi fin qui.
+    ['mousedown', 'mouseup', 'click', 'dblclick', 'pointerdown', 'pointerup',
+     'touchstart', 'touchend', 'contextmenu'].forEach(function(evento) {
+      overlay.addEventListener(evento, function(ev) { ev.stopPropagation(); });
+    });
     document.body.appendChild(overlay);
 
     function chiudi(usa, carta) {
@@ -4637,6 +4653,14 @@ function chiediConfermaCambioCliente(carta, r, nomeBozza) {
   `;
 
   overlay.appendChild(modal);
+  // L'overlay copre lo schermo ma e' figlio di <body>: senza questo blocco i
+  // click ci salgono sopra fino a document, dove la Cassa ha i propri gestori
+  // delegati. I pulsanti dentro al pannello continuano a funzionare, perche' i
+  // loro handler girano prima che l'evento arrivi fin qui.
+  ['mousedown', 'mouseup', 'click', 'dblclick', 'pointerdown', 'pointerup',
+   'touchstart', 'touchend', 'contextmenu'].forEach(function(evento) {
+    overlay.addEventListener(evento, function(ev) { ev.stopPropagation(); });
+  });
   document.body.appendChild(overlay);
 
   const chiudi = () => overlay.remove();

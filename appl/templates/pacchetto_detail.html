@@ -5,7 +5,26 @@
 <br>
   <br><br>
 <div class="container mt-3">
-    <h3 class="mt-2">&nbsp;&nbsp;&nbsp;Dettaglio Pacchetto</h3>
+  <div class="d-flex align-items-center flex-wrap mt-2" style="gap:12px;">
+    <h3 class="mb-0">&nbsp;&nbsp;&nbsp;Dettaglio Pacchetto</h3>
+    {# Il menu in alto porta sempre al primo tab di Pacchetti: da qui si torna
+       all'elenco da cui si e' arrivati, che per le ricaricabili e' un altro tab. #}
+    {% if pacchetto.e_ricaricabile_solarium %}
+    <a href="{{ url_for('pacchetti.pacchetti_home') }}?tab=solarium"
+       class="btn btn-outline-secondary btn-sm"
+       data-bs-toggle="tooltip"
+       title="Torna all'elenco delle Ricaricabili Solarium">
+      <i class="bi bi-arrow-left"></i> <i class="bi bi-sun"></i> Ricaricabili Solarium
+    </a>
+    {% elif pacchetto.tipo == 'prepagata' %}
+    <a href="{{ url_for('pacchetti.pacchetti_home') }}?tab=prepagate"
+       class="btn btn-outline-secondary btn-sm"
+       data-bs-toggle="tooltip"
+       title="Torna all'elenco delle Carte Prepagate">
+      <i class="bi bi-arrow-left"></i> <i class="bi bi-credit-card"></i> Carte Prepagate
+    </a>
+    {% endif %}
+  </div>
   <style>
     .neomorphic-div {
       background: rgb(255, 255, 255);

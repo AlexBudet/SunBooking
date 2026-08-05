@@ -254,6 +254,13 @@ logging.getLogger('waitress.queue').setLevel(logging.ERROR)
 # ============================================================================
 from appl import create_app, db
 
+# Marca l'esecuzione locale (exe con finestra Chrome in modalita' --app).
+# Serve a distinguerla dal cloud: qui il "server" e' il PC dell'utente, percio'
+# aprire un link nel browser di sistema e' legittimo. Su Azure la variabile non
+# esiste e la funzione resta disattivata - la si imposta solo qui, mai nel .env,
+# proprio perche' non deve poter finire per sbaglio in produzione.
+os.environ['SUNBOOKING_LOCALE'] = '1'
+
 db_uri = os.getenv('SQLALCHEMY_DATABASE_URI')
 
 _app = None

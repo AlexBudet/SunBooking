@@ -59,10 +59,16 @@ def compress_pdf(file_data):
         return file_data
 
 def capitalize_name(name):
-    """Normalizza un nome: prima lettera maiuscola, resto minuscolo per ogni parola"""
+    """Normalizza un nome: prima lettera maiuscola, resto minuscolo per ogni parola.
+
+    Si usa title() e non capitalize(): quest'ultimo guarda solo la prima lettera
+    della parola e lasciava "d'angelo" -> "D'angelo", "anna-maria" ->
+    "Anna-maria". Con title() l'iniziale riparte anche dopo apostrofo e trattino,
+    che in un'anagrafica italiana non e' un caso raro.
+    """
     if not name:
         return name
-    return ' '.join(word.capitalize() for word in name.split())
+    return ' '.join(word.title() for word in name.split())
 
 pacchetti_bp = Blueprint('pacchetti', __name__)
 
@@ -371,7 +377,7 @@ def api_pacchetti():
         result.append({
             'id': p.id,
             'client_id': p.client_id,
-            'client_nome': f"{p.client.cliente_nome} {p.client.cliente_cognome}",
+            'client_nome': f"{capitalize_name(p.client.cliente_nome)} {capitalize_name(p.client.cliente_cognome)}",
             'nome': p.nome,
             'tipo': p.tipo.value if p.tipo else 'servizi',
             'data_sottoscrizione': p.data_sottoscrizione.isoformat() if p.data_sottoscrizione else None,
@@ -986,7 +992,7 @@ def pacchetto_detail(id):
     return render_template('pacchetto_detail.html', pacchetto={
         'id': pacchetto.id,
         'client_id': pacchetto.client_id,
-        'client_nome': f"{pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}" if pacchetto.client else '',
+        'client_nome': f"{capitalize_name(pacchetto.client.cliente_nome)} {capitalize_name(pacchetto.client.cliente_cognome)}" if pacchetto.client else '',
         'client_cellulare': pacchetto.client.cliente_cellulare if pacchetto.client else '',
         'nome': pacchetto.nome,
         'tipo': pacchetto.tipo.value if pacchetto.tipo else 'Servizi',
@@ -1012,6 +1018,12 @@ def pacchetto_detail(id):
         'sedute': sedute,
         'rate': rate,
         'sconto': sconto_dict,
+        # Serve al template per offrire il ritorno al tab giusto: dalla scheda
+        # di una ricaricabile Solarium la voce "Pacchetti" del menu riporterebbe
+        # al primo tab, non a quello da cui si e' arrivati.
+        'e_ricaricabile_solarium': _e_ricaricabile_solarium(
+            pacchetto.vincoli_utilizzo, _ids_servizi_solarium()
+        ),
         'pagamento': pagamento_dict
     }, sottocategorie=Subcategory.query.filter_by(is_deleted=False).order_by(Subcategory.nome).all())
 
@@ -1976,8 +1988,8 @@ def api_cerca_per_tessera():
             'numero_tessera': p.numero_tessera,
             'credito_residuo': float(p.credito_residuo or 0),
             'client_id': p.client_id,
-            'client_nome': p.client.cliente_nome if p.client else '',
-            'client_cognome': p.client.cliente_cognome if p.client else '',
+            'client_nome': capitalize_name(p.client.cliente_nome) if p.client else '',
+            'client_cognome': capitalize_name(p.client.cliente_cognome) if p.client else '',
             'client_cellulare': p.client.cliente_cellulare if p.client else '',
             # Servono alla Cassa per decidere quali pulsanti filtro mostrare e se il
             # servizio di una riga e' scaricabile su questa carta (vedi cassa.js)
@@ -2025,7 +2037,7 @@ def api_prepagata_riepilogo(id):
         'numero_tessera': p.numero_tessera,
         'status': p.status.value,
         'client_id': p.client_id,
-        'client_nome': f"{p.client.cliente_nome} {p.client.cliente_cognome}".strip() if p.client else '',
+        'client_nome': f"{capitalize_name(p.client.cliente_nome)} {capitalize_name(p.client.cliente_cognome)}".strip() if p.client else '',
         'credito_iniziale': float(p.credito_iniziale or 0),
         'credito_residuo': float(p.credito_residuo or 0),
         'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None,
@@ -2104,8 +2116,10 @@ def api_prepagate_solarium():
             'id': p.id,
             'numero_tessera': p.numero_tessera,
             'client_id': p.client_id,
-            'client_nome': p.client.cliente_nome if p.client else '',
-            'client_cognome': p.client.cliente_cognome if p.client else '',
+            # In anagrafica i nomi entrano come capita (import in maiuscolo,
+            # inserimenti di fretta in minuscolo): in elenco si normalizzano.
+            'client_nome': capitalize_name(p.client.cliente_nome) if p.client else '',
+            'client_cognome': capitalize_name(p.client.cliente_cognome) if p.client else '',
             'client_cellulare': p.client.cliente_cellulare if p.client else '',
             'credito_residuo': float(p.credito_residuo or 0),
             'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None,

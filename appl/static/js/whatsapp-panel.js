@@ -87,7 +87,15 @@ function showWhatsappAutoSendPanel(payload) {
 
   function cleanup() {
     document.removeEventListener('keydown', onKey);
-    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    // Rimozione differita di un tick: se si toglie l'overlay mentre il click è
+    // ancora in corso, chi più avanti nella catena usa elementFromPoint trova
+    // il buco e legge l'elemento sottostante, cioè il calendario.
+    // Sparisce subito alla vista, ma resta cliccabile fino alla rimozione:
+    // con pointer-events:none il buco si aprirebbe comunque.
+    overlay.style.opacity = '0';
+    setTimeout(function() {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }, 0);
     // Fires on ANY chiusura del pannello (invio, annulla, invio manuale, Esc): utile a chi
     // ha aperto il pannello per riprendere il proprio flusso solo dopo che l'operatore ha
     // deciso, indipendentemente dall'esito.
@@ -97,6 +105,17 @@ function showWhatsappAutoSendPanel(payload) {
     if (e.key === 'Escape') cleanup();
   }
   document.addEventListener('keydown', onKey);
+
+  // L'overlay copre lo schermo ma è figlio di <body>: senza questo blocco ogni
+  // click ci passa sopra e continua a salire fino a document, dove l'Agenda ha
+  // molti handler delegati (creazione blocchi, chiusura popup, gestori touch).
+  // Il risultato erano click che "attraversavano" il pannello e finivano per
+  // agire sul calendario sottostante. I pulsanti del pannello continuano a
+  // funzionare: i loro handler girano prima, mentre l'evento sale fino a qui.
+  ['mousedown', 'mouseup', 'click', 'dblclick', 'pointerdown', 'pointerup',
+   'touchstart', 'touchend', 'contextmenu'].forEach(function(evento) {
+    overlay.addEventListener(evento, function(e) { e.stopPropagation(); });
+  });
 
   // Chiude solo se il click è iniziato E finito sull'overlay stesso: durante il
   // ridimensionamento della textarea il mouseup può ricadere sull'overlay pur
