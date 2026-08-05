@@ -666,8 +666,82 @@ display: none;
         </div>
       </div>
 
-      <!-- Storico Movimenti -->
-      <h5 class="mt-4 mb-3"><i class="bi bi-clock-history"></i> Storico Movimenti</h5>
+      <!-- Storico Movimenti: in pagina si vedono solo gli ultimi 5 per tipo,
+           in due tabelle separate. Lo storico completo sta nel modal, perche'
+           su una carta importata sono centinaia di righe. I movimenti arrivano
+           gia' ordinati dal piu' recente al meno recente. -->
+      <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+        <h5 class="mb-0"><i class="bi bi-arrow-up-circle text-success"></i> Ultime 5 ricariche</h5>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-toggle="modal" data-bs-target="#modalStoricoCompleto">
+          <i class="bi bi-list-ul"></i> Mostra tutto
+        </button>
+      </div>
+      <table class="table table-sm table-hover" id="ultimeRicaricheTable">
+        <thead>
+          <tr>
+            <th>Data e ora</th>
+            <th>Tipo di ricarica</th>
+            <th class="text-end">Importo</th>
+            <th class="text-end">Saldo dopo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ricariche = pacchetto.movimenti_prepagata | selectattr('tipo', 'equalto', 'ricarica') | list %}
+          {% for m in ricariche[:5] %}
+          <tr class="table-success">
+            <td>{{ m.data }}</td>
+            <td>{{ m.descrizione or 'Ricarica' }}</td>
+            <td class="text-end fw-bold text-success">€{{ '%.2f'|format(m.importo) }}</td>
+            <td class="text-end">€{{ '%.2f'|format(m.saldo_dopo) }}</td>
+          </tr>
+          {% endfor %}
+          {% if ricariche|length == 0 %}
+          <tr><td colspan="4" class="text-center text-muted">Nessuna ricarica registrata</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+
+      <h5 class="mt-4 mb-2"><i class="bi bi-arrow-down-circle text-warning"></i> Ultime 5 sedute scalate</h5>
+      <table class="table table-sm table-hover" id="ultimeSeduteTable">
+        <thead>
+          <tr>
+            <th>Data e ora</th>
+            <th>Tipo di seduta</th>
+            <th class="text-end">Importo</th>
+            <th class="text-end">Saldo dopo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set sedute_scalate = pacchetto.movimenti_prepagata | rejectattr('tipo', 'equalto', 'ricarica') | list %}
+          {% for m in sedute_scalate[:5] %}
+          <tr class="table-warning">
+            <td>{{ m.data }}</td>
+            <td>{{ m.descrizione or 'Seduta scalata' }}</td>
+            <td class="text-end fw-bold text-warning">€{{ '%.2f'|format(m.importo) }}</td>
+            <td class="text-end">€{{ '%.2f'|format(m.saldo_dopo) }}</td>
+          </tr>
+          {% endfor %}
+          {% if sedute_scalate|length == 0 %}
+          <tr><td colspan="4" class="text-center text-muted">Nessuna seduta scalata</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+
+      <!-- Storico completo: modal Bootstrap standard, quindi z-index 24510,
+           sopra header (22000) e a tutti gli elementi di pagina. -->
+      <div class="modal fade" id="modalStoricoCompleto" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title"><i class="bi bi-clock-history"></i> Storico movimenti completo</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <!-- Lo scroll e' imposto qui e non lasciato a .modal-dialog-scrollable:
+                 con centinaia di movimenti il corpo sbordava sotto il contenitore
+                 invece di scorrere. Il max-height e' relativo alla finestra, cosi'
+                 intestazione e piede del modal restano sempre visibili. -->
+            <div class="modal-body" style="max-height:70vh; overflow-y:auto; overflow-x:auto;">
       <table class="table table-sm table-hover" id="movimentiTable">
         <thead>
           <tr>
@@ -709,6 +783,13 @@ display: none;
           {% endif %}
         </tbody>
       </table>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Pulsante Ricarica (solo se la carta è già stata pagata/attivata) -->
       {% if not prepagata_non_pagata %}
@@ -1543,7 +1624,27 @@ function appendMovimentoRow(m) {
     <td>${esc(m.descrizione) || '&mdash;'}</td>
     <td><span class="text-muted fst-italic">non selezionato</span></td>
   `;
-  tbody.appendChild(tr);
+  // Il piu' recente va in CIMA, come in tutte le tabelle di storico.
+  tbody.insertBefore(tr, tbody.firstChild);
+
+  // Aggiorna anche la tabellina di riepilogo in pagina (ricariche o sedute),
+  // altrimenti il movimento appena fatto si vedrebbe solo aprendo "Mostra tutto".
+  const riepilogo = document.getElementById(isRicarica ? 'ultimeRicaricheTable' : 'ultimeSeduteTable');
+  const corpo = riepilogo && riepilogo.querySelector('tbody');
+  if (corpo) {
+    const vuoto = corpo.querySelector('td[colspan="4"]');
+    if (vuoto) vuoto.closest('tr').remove();
+    const riga = document.createElement('tr');
+    riga.className = isRicarica ? 'table-success' : 'table-warning';
+    riga.innerHTML = `
+      <td>${esc(m.data || '')}</td>
+      <td>${esc(m.descrizione) || (isRicarica ? 'Ricarica' : 'Seduta scalata')}</td>
+      <td class="text-end fw-bold ${isRicarica ? 'text-success' : 'text-warning'}">&euro;${importoNum.toFixed(2)}</td>
+      <td class="text-end">&euro;${saldoNum.toFixed(2)}</td>`;
+    corpo.insertBefore(riga, corpo.firstChild);
+    // Resta una tabella da 5 righe: la piu' vecchia esce.
+    while (corpo.rows.length > 5) corpo.deleteRow(corpo.rows.length - 1);
+  }
 }
 
 async function eseguiRicarica() {

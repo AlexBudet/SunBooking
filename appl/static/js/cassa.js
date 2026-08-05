@@ -419,8 +419,23 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
           return;
         }
 
+        // Si chiede di usare la carta SOLO se in bozza c'e' gia' qualcosa che
+        // quella carta puo' pagare. Un cliente con tessera Solarium che viene
+        // portato in cassa per un servizio di Estetica non deve vedersi
+        // comparire nessuna domanda: la tessera non c'entra con quel lavoro.
+        // Se poi si aggiunge un servizio compatibile, la domanda arriva li'
+        // (vedi valutaPrepagataDopoAggiunta).
+        const utilizzabili = lista.filter(c => bozzaHaServizioPerCarta(c));
+        if (!utilizzabili.length) {
+          prepagateInAttesa = lista;
+          mostraTesseraPrecaricata(lista[0]);
+          aggiornaOpzioniPrepagata();
+          if (typeof window.aggiornaPulsanteNuovaTessera === 'function') window.aggiornaPulsanteNuovaTessera();
+          return;
+        }
+
         clienteConSceltaPrepagataFatta = String(clientId);
-        chiediUsoPrepagata(lista, nomeCliente, function (usa, cartaScelta) {
+        chiediUsoPrepagata(utilizzabili, nomeCliente, function (usa, cartaScelta) {
           const scelta = usa ? (cartaScelta || lista[0]) : null;
           attivaCarta(scelta);
           if (scelta && typeof window.attivaModeRicariche === 'function') {
@@ -434,6 +449,74 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
       });
   }
   window.caricaPrepagateCliente = caricaPrepagateCliente;
+
+  // Carte del cliente NON ancora proposte, perche' in bozza non c'era niente che
+  // potessero pagare. Restano in attesa: se arriva un servizio compatibile, si
+  // chiede in quel momento.
+  let prepagateInAttesa = [];
+
+  // Vero se almeno una voce della bozza rientra nei vincoli d'uso della carta.
+  function bozzaHaServizioPerCarta(carta) {
+    const vincoli = carta && carta.vincoli;
+    const righe = document.querySelectorAll('#scontrinoRowsContainer .scontrino-row');
+    for (const row of righe) {
+      const servizio = {
+        id: row.dataset.servizioId ? parseInt(row.dataset.servizioId) : null,
+        categoria: row.dataset.categoria || null,
+        sottocategoria_id: row.dataset.sottocategoriaId ? parseInt(row.dataset.sottocategoriaId) : null
+      };
+      if (servizioAmmessoDaVincoli(vincoli, servizio)) return true;
+    }
+    return false;
+  }
+
+  // Mette il numero di tessera nel campo di ricerca e lo rende cliccabile:
+  // un click apre la schermata della carta, senza passare da nessuna domanda.
+  function mostraTesseraPrecaricata(carta) {
+    const input = document.getElementById('tesseraSearchInputCassa');
+    if (!input || !carta) return;
+    input.value = carta.numero_tessera || '';
+    input.dataset.cartaPrecaricata = String(carta.id);
+    input.style.cursor = 'pointer';
+    applyBsTooltip(input, `Tessera di questo cliente — clicca per aprirla e scalare il credito`);
+  }
+
+  // Click sulla tessera precaricata: aggancia la carta e apre la sua schermata.
+  document.getElementById('tesseraSearchInputCassa')?.addEventListener('click', function () {
+    const id = this.dataset.cartaPrecaricata;
+    if (!id || window.cartaAttiva) return;
+    const carta = (prepagateInAttesa || []).find(c => String(c.id) === String(id))
+               || (window.clientePrepagateDisponibili || []).find(c => String(c.id) === String(id));
+    if (!carta) return;
+    nascondiTooltipDi(this);
+    clienteConSceltaPrepagataFatta = String(carta.client_id || '');
+    prepagateInAttesa = [];
+    attivaCarta(carta);
+    if (typeof window.attivaModeRicariche === 'function') window.attivaModeRicariche(carta);
+  });
+
+  // Dopo l'aggiunta di una voce: se una carta era in attesa e ora la bozza
+  // contiene qualcosa che puo' pagare, e' il momento di chiedere.
+  function valutaPrepagataDopoAggiunta() {
+    if (!prepagateInAttesa.length || window.cartaAttiva || window.multiClienteAttivo) return;
+    const utilizzabili = prepagateInAttesa.filter(c => bozzaHaServizioPerCarta(c));
+    if (!utilizzabili.length) return;
+    const lista = prepagateInAttesa;
+    prepagateInAttesa = [];
+    clienteConSceltaPrepagataFatta = String(utilizzabili[0].client_id || '');
+    chiediUsoPrepagata(utilizzabili, '', function (usa, cartaScelta) {
+      const scelta = usa ? (cartaScelta || utilizzabili[0]) : null;
+      attivaCarta(scelta);
+      if (scelta && typeof window.attivaModeRicariche === 'function') {
+        window.attivaModeRicariche(scelta);
+      } else if (!scelta) {
+        // Rifiutata: non si richiede piu' per questo cliente.
+        prepagateInAttesa = [];
+      }
+      void lista;
+    });
+  }
+  window.valutaPrepagataDopoAggiunta = valutaPrepagataDopoAggiunta;
 
   // Chiede se usare la carta prepagata del cliente per il pagamento, mostrando
   // numero tessera e credito residuo di ogni carta attiva.
@@ -665,6 +748,63 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
   }
 
   // Verifica se si può assegnare prepagata a una riga
+  // Credito ancora spendibile: quello della carta meno quanto gia' assegnato
+  // alle ALTRE righe della bozza (la riga in esame va esclusa dal conteggio).
+  function creditoAncoraSpendibile(row) {
+    const residuo = getSaldoTotalePrepagata() - getTotaleAssegnatoPrepagata(row);
+    return Math.max(0, Math.round(residuo * 100) / 100);
+  }
+  window.creditoAncoraSpendibile = creditoAncoraSpendibile;
+
+  // Mette la riga su prepagata scalando TUTTO il credito disponibile.
+  // Se il credito non basta per l'intera voce non si rifiuta piu' l'operazione:
+  // si divide la riga in due, com'era il "reset credito" del vecchio gestionale.
+  // Esempio: lampada viso 8 EUR con 5 EUR residui -> 5 da prepagata, 3 da incassare.
+  // Il credito non puo' mai andare sotto zero: la quota prepagata e' al massimo
+  // il residuo.
+  // Ritorna 'intera' | 'split' | false (false = l'operatore ha annullato).
+  function scalaCreditoDisponibile(row, selectElement, prezzoRiga, metodoResto) {
+    const residuo = creditoAncoraSpendibile(row);
+
+    if (residuo <= 0) {
+      alert('La carta non ha più credito disponibile.\n\n'
+          + 'Le altre righe della bozza lo hanno già impegnato tutto.');
+      return false;
+    }
+    if (residuo + 0.001 >= prezzoRiga) {
+      selectElement.value = 'prepagata';
+      selectElement.dispatchEvent(new Event('change'));
+      return 'intera';
+    }
+
+    const quotaPrepagata = Math.round(residuo * 100) / 100;
+    const quotaResto = Math.round((prezzoRiga - quotaPrepagata) * 100) / 100;
+    const resto = ['cash', 'pos', 'bank'].includes(metodoResto) ? metodoResto : 'pos';
+    const etichette = { cash: 'contanti', pos: 'POS', bank: 'altro' };
+
+    const ok = confirm(
+      `Credito insufficiente per l'intera voce.\n\n`
+      + `Voce: € ${prezzoRiga.toFixed(2)}\n`
+      + `Credito residuo: € ${quotaPrepagata.toFixed(2)}\n\n`
+      + `Scalo tutto il credito e incasso la differenza di € ${quotaResto.toFixed(2)} `
+      + `in ${etichette[resto]}?\n\n`
+      + `La riga verrà divisa in due: € ${quotaPrepagata.toFixed(2)} da prepagata `
+      + `+ € ${quotaResto.toFixed(2)} da pagare.`
+    );
+    if (!ok) return false;
+
+    setRowPagamenti(row, [
+      { metodo: 'prepagata', importo: quotaPrepagata },
+      { metodo: resto, importo: quotaResto }
+    ]);
+    selectElement.value = resto;
+    row.dataset.vecchioMetodo = resto;
+    aggiornaTotale();
+    aggiornaSubtotaliPagamenti();
+    return 'split';
+  }
+  window.scalaCreditoDisponibile = scalaCreditoDisponibile;
+
   function verificaSaldoPrepagata(prezzoRiga, selectElement) {
     const saldoDisponibile = getSaldoTotalePrepagata();
     const giàAssegnato = getTotaleAssegnatoPrepagata();
@@ -1147,7 +1287,11 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       // NB: il cliente globale dello scontrino viene aggiunto al payload più sotto;
       // qui NON va usato perché la const cliente_id è dichiarata dopo il ciclo (TDZ).
       if (row.dataset.clientId) voce.cliente_id = row.dataset.clientId;
-      
+      // Categoria della riga: per le voci SENZA servizio a listino (vendita o
+      // ricarica di una carta prepagata) e' l'unico modo che hanno i report per
+      // attribuirle a Estetica o Solarium invece di lasciarle senza categoria.
+      if (row.dataset.categoria) voce.categoria = row.dataset.categoria;
+
       // IMPORTANTE: Copia prepagata_id e ricarica_prepagata_id dal dataset della riga
       const prepagataId = row.dataset.prepagataId;
       const ricaricaPrepagataId = row.dataset.ricaricaPrepagataId;
@@ -1307,8 +1451,20 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
         );
       }
       const idempotencyKey = generaIdempotencyKey();
+
+      // Le sedute scalate dalla carta viaggiano INSIEME alle voci fiscali, non
+      // nella chiamata separata: solo cosi' il backend puo' stamparle come riga
+      // descrittiva a zero sullo scontrino. Restano marcate is_fiscale=false,
+      // quindi lato registro finiscono comunque fra i record non fiscali.
+      // Vanno tolte da voci_non_fiscali, altrimenti verrebbero registrate due volte.
+      const _eScaloPrepagata = v => v.metodo_pagamento === 'prepagata' && !v.ricarica_prepagata_id;
+      const vociScaloPerScontrino = voci_non_fiscali.filter(_eScaloPrepagata);
+      if (vociScaloPerScontrino.length) {
+        voci_non_fiscali = voci_non_fiscali.filter(v => !_eScaloPrepagata(v));
+      }
+
       const payloadFiscale = {
-        voci: voci_fiscali,
+        voci: [...voci_fiscali, ...vociScaloPerScontrino],
         cliente_id,
         operatore_id,
         is_fiscale: true,
@@ -2489,12 +2645,18 @@ row.className = 'd-flex align-items-center scontrino-row';
       return;
     }
 
-    // Se si seleziona prepagata, verifica il saldo
+    // Prepagata scelta a mano: si scala TUTTO il credito disponibile. Se non
+    // basta per l'intera voce, la riga viene divisa in due invece di rifiutare
+    // l'operazione (era il "reset credito" del vecchio gestionale).
     if (nuovoMetodo === 'prepagata') {
       const prezzoRiga = parseFloat(prezzo.value) || 0;
-      if (!verificaSaldoPrepagata(prezzoRiga, selectPay)) {
-        // Ripristina il metodo precedente
-        selectPay.value = vecchioMetodo;
+      const residuo = (typeof creditoAncoraSpendibile === 'function')
+        ? creditoAncoraSpendibile(row) : 0;
+      if (residuo + 0.001 < prezzoRiga) {
+        const esito = scalaCreditoDisponibile(row, selectPay, prezzoRiga, vecchioMetodo);
+        if (!esito) { selectPay.value = vecchioMetodo; }
+        // Con lo split la riga e' gia' stata sistemata da scalaCreditoDisponibile
+        // (metodo, pagamenti e totali): qui non c'e' altro da fare.
         return;
       }
     }
@@ -2529,7 +2691,14 @@ row.className = 'd-flex align-items-center scontrino-row';
     if (servizio.sottocategoria && String(servizio.sottocategoria).toLowerCase() === 'prodotti') {
       return;
     }
-    if (selectPay.value === 'cash') {
+    // Con lo split il menu e' nascosto: il metodo che conta per il grigio e'
+    // quello della parte NON prepagata (es. reset credito prepagata+contanti,
+    // che deve poter essere messo in grigio come una normale riga a contanti).
+    const _pagSplit = getRowPagamenti(row);
+    const _metodoEffettivo = _pagSplit
+      ? ((_pagSplit.find(p => p.metodo !== 'prepagata') || {}).metodo || 'cash')
+      : selectPay.value;
+    if (_metodoEffettivo === 'cash') {
       if (row.style.background === 'rgb(220, 220, 220)' || row.style.background === '#dcdcdc') {
         row.style.background = '#fff';
       } else {
@@ -2625,6 +2794,13 @@ row.className = 'd-flex align-items-center scontrino-row';
       });
     }
   }, 100);
+
+  // Se il cliente ha una carta rimasta "in attesa" (non proposta perche' in
+  // bozza non c'era nulla che potesse pagare) e questa voce e' compatibile,
+  // e' il momento di chiedere se scalare dal credito.
+  // NB: via window, perche' la funzione vive nella closure di inizializzazione
+  // e da qui (funzione top-level) il nome nudo non sarebbe visibile.
+  if (typeof window.valutaPrepagataDopoAggiunta === 'function') window.valutaPrepagataDopoAggiunta();
 }
 
 // Cambia metodo pagamento globale.
@@ -2831,7 +3007,11 @@ function setRowPagamenti(row, arr) {
     if (payIcon && payIcon.tagName === 'I') payIcon.style.display = 'none';
     if (badge) {
       const riass = arr.map(p => `${String(p.metodo).toUpperCase()} €${(parseFloat(p.importo) || 0).toFixed(2)}`).join(' + ');
-      badge.textContent = 'Misto';
+      // Con una quota a prepagata non e' un semplice "Misto": e' il reset credito,
+      // cioe' la carta svuotata e la differenza incassata. Va detto a chiaro.
+      const conPrepagata = arr.some(p => p.metodo === 'prepagata');
+      badge.textContent = conPrepagata ? 'Reset credito' : 'Misto';
+      badge.classList.toggle('badge-reset-credito', conPrepagata);
       badge.setAttribute('title', riass);
       try {
         const t = bootstrap.Tooltip.getInstance(badge);
@@ -2855,21 +3035,42 @@ function apriSplitPagamentoRiga(row) {
   if (prezzo <= 0) { alert('Imposta prima un prezzo per dividere il pagamento.'); return; }
   const esistenti = getRowPagamenti(row);
   const iniziali = { cash: 0, pos: 0, bank: 0 };
+
+  // RESET CREDITO: se la riga ha gia' una quota a prepagata, quella e' il credito
+  // residuo della carta e NON si tocca - e' esattamente quanto la tessera puo'
+  // coprire. Si divide solo la DIFFERENZA fra contanti/POS/altro, con la stessa
+  // automazione di sempre. Senza questo, aprendo "Misto" la quota prepagata
+  // spariva e il credito non veniva piu' scalato.
+  const quotaPrepagata = esistenti
+    ? (esistenti.filter(p => p.metodo === 'prepagata')
+                .reduce((t, p) => t + (parseFloat(p.importo) || 0), 0))
+    : 0;
+  const daDividere = Math.round((prezzo - quotaPrepagata) * 100) / 100;
+
   if (esistenti) {
     esistenti.forEach(p => { if (iniziali.hasOwnProperty(p.metodo)) iniziali[p.metodo] += parseFloat(p.importo) || 0; });
   } else {
     const m = row.querySelector('select')?.value || 'cash';
     if (iniziali.hasOwnProperty(m)) iniziali[m] = prezzo; else iniziali.cash = prezzo;
   }
-  apriSplitModal(prezzo, iniziali, 'Dividi pagamento voce', function (arr) {
-    if (arr.length <= 1) {
+
+  const titolo = quotaPrepagata > 0
+    ? `Reset credito · € ${quotaPrepagata.toFixed(2)} dalla carta (fisso)`
+    : 'Dividi pagamento voce';
+
+  apriSplitModal(daDividere, iniziali, titolo, function (arr) {
+    // La quota prepagata torna sempre in testa: e' fuori dalla divisione.
+    const finale = quotaPrepagata > 0
+      ? [{ metodo: 'prepagata', importo: quotaPrepagata }, ...arr]
+      : arr;
+    if (finale.length <= 1) {
       setRowPagamenti(row, null);
-      if (arr.length === 1) {
+      if (finale.length === 1) {
         const s = row.querySelector('select');
-        if (s) { s.value = arr[0].metodo; s.dispatchEvent(new Event('change')); }
+        if (s) { s.value = finale[0].metodo; s.dispatchEvent(new Event('change')); }
       }
     } else {
-      setRowPagamenti(row, arr);
+      setRowPagamenti(row, finale);
     }
   });
 }
@@ -5106,6 +5307,9 @@ document.getElementById('btnSalvaNuovaPrepagataCassa')?.addEventListener('click'
     aggiungiRigaServizio({
       id: null,
       nome: `Carta Prepagata${numeroTessera ? ' n. ' + numeroTessera : ''} - ${clientInput.value || ''}`.trim(),
+      // Categoria = quella del vincolo d'uso scelto per la carta: una tessera
+      // solo-Solarium e' una vendita Solarium anche se non ha un servizio dietro.
+      categoria: (vincoloSel && vincoloSel !== 'tutti') ? vincoloSel : '',
       prezzo: importo,
       prepagata_id: data.id,
       credito_da_caricare: credito

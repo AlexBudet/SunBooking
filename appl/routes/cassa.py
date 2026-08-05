@@ -1077,11 +1077,16 @@ def send_to_rch():
         return (v.get("metodo_pagamento") == "prepagata"
                 and not v.get("ricarica_prepagata_id"))
 
+    # Le sedute scalate RESTANO nel registro come record non fiscale a importo
+    # zero: sono comunque passate dalla cassa e serve la traccia. Non vengono
+    # tolte da voci_non_fiscali, quindi finiscono nel Receipt non fiscale.
+    # Sullo scontrino compaiono come RIGA DESCRITTIVA, ma solo se il documento
+    # esiste gia' per altri motivi: una seduta scalata non fa nascere uno
+    # scontrino da sola (vedi il blocco fiscale piu' sotto).
     voci_scalo_prepagata = [v for v in voci_non_fiscali if _e_scalo_prepagata(v)]
     if voci_scalo_prepagata:
-        voci_non_fiscali = [v for v in voci_non_fiscali if not _e_scalo_prepagata(v)]
         current_app.logger.info(
-            "Sedute scalate da prepagata escluse dal registro scontrini: %s",
+            "Sedute scalate da prepagata registrate a zero (non fiscali): %s",
             ", ".join(str(v.get("nome") or v.get("servizio_id")) for v in voci_scalo_prepagata)
         )
 
@@ -1190,6 +1195,16 @@ def send_to_rch():
                 p.get("metodo", "cash") in ("pos", "bank")
                 for p in (v.get("pagamenti") or [])
             )
+
+        # SEDUTE SCALATE DALLA CARTA sullo scontrino: righe descrittive a importo
+        # zero, con lo stesso comando dei promemoria (="/(testo), max 25 char).
+        # Non sono vendite - il cliente le ha gia' pagate comprando il credito -
+        # quindi nessun reparto, nessun tender, corrispettivi invariati.
+        # Si aggiungono SOLO se il documento e' gia' stato aperto da una riga di
+        # vendita: una seduta scalata non fa nascere uno scontrino da sola.
+        if vendita_emessa and voci_scalo_prepagata:
+            for testo in _righe_promemoria(voci_scalo_prepagata, 25):
+                xml_lines.append(f'<cmd>="/({testo})</cmd>')
 
         codice_lotteria = (data.get("lotteria") or "").strip().upper()
         pagamenti_digitali = any(_voce_ha_digitale(v) for v in voci_fiscali)

@@ -2040,19 +2040,10 @@ def update_status(appointment_id):
     }
     return jsonify({"status_name": tooltips.get(new_status, "Status sconosciuto")})
 
-@calendar_bp.route('/api/appointment_status', methods=['POST'])
-def api_appointment_status():
-    data = request.get_json()
-    ids = data.get('ids', [])
-    if not ids:
-        return jsonify({"success": False, "error": "Nessun appuntamento selezionato"}), 400
-    # Ottimizzazione: query unica invece di loop N+1
-    appointments = Appointment.query.filter(
-        Appointment.id.in_(ids),
-        Appointment.is_cancelled_by_client == False
-    ).all()
-    result = [{"id": app.id, "stato": app.stato.value if hasattr(app.stato, "value") else app.stato} for app in appointments]
-    return jsonify({"success": True, "appointments": result})
+# NB: qui viveva POST /api/appointment_status, rimossa il 05/08/2026 insieme al
+# suo unico chiamante (aggiornaStatoAppuntamenti in calendar.js). Restituiva lo
+# stato di una lista di appuntamenti per ricolorarne i blocchi; nessun url_for,
+# nessun altro riferimento in tutto il progetto.
 
 @calendar_bp.route('/calendar.html')
 def calendar_html():

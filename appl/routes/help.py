@@ -846,10 +846,15 @@ Esempio: tessera nuova da <span class="help-strong-dark">35 €</span> + lampada
 
 Funziona anche quando la ricarica viene passata in <span class="help-strong-dark">modalità test</span> (riga grigia).
 
-<span class="help-strong-dark help-subtitle-pill">▸ LE SEDUTE SCALATE NON VANNO IN SCONTRINO</span>
-Una seduta pagata scalando la carta <span class="help-strong-dark">non viene mai scontrinata</span>: non va alla stampante fiscale e non lascia traccia nel Registro Scontrini. È già stata pagata quando il cliente ha comprato il credito.
+<span class="help-strong-dark help-subtitle-pill">▸ COME COMPARE UNA SEDUTA SCALATA</span>
+Una seduta pagata scalando la carta <span class="help-strong-dark">non è una vendita</span>: il cliente l'ha già pagata quando ha comprato il credito. Non muove i corrispettivi e non finisce mai fra gli importi incassati.
 
-Resta tracciata dove conta: nei <span class="help-strong-dark">movimenti della carta</span> e nel messaggio WhatsApp al cliente. Vale anche se la seduta scalata è una fra dieci voci dello stesso scontrino.
+Viene però <span class="help-strong-dark">tracciata ovunque serva</span>:
+• sullo scontrino, come <span class="help-strong-dark">riga descrittiva a importo zero</span> — si legge il nome del servizio, senza prezzo
+• nel <span class="help-strong-dark">Registro Scontrini</span>, come record <span class="help-strong-dark">non fiscale a zero</span> (visibile ad admin e owner)
+• nei <span class="help-strong-dark">movimenti della carta</span> e nel messaggio WhatsApp al cliente
+
+<span class="help-strong-dark">Una seduta scalata non fa però nascere uno scontrino da sola.</span> Se nella bozza c'è solo quella, non viene stampato nulla: non c'è niente da incassare, e un documento commerciale senza importo non esiste. Compare sullo scontrino solo quando il documento è già aperto da almeno una voce da pagare.
 
 <span class="help-strong-dark help-subtitle-pill">▸ IL MESSAGGIO AL CLIENTE</span>
 A fine pagamento viene proposto <span class="help-strong-dark">un solo messaggio WhatsApp per carta</span>, che riepiloga tutti i movimenti di quello scontrino: ricarica, seduta scalata o entrambe, seguiti dal credito disponibile aggiornato e dal sito del centro.
@@ -864,6 +869,35 @@ Il testo resta modificabile prima dell'invio.
 La regola pratica è semplice: ogni volta che la prepagata viene usata, il cliente deve poter capire chiaramente quanto aveva e quanto resta.""",
     },
 
+    "prepagata_solarium_tab": {
+        "title": "☀️ Tab Ricaricabili Solarium",
+        "content": """Nella pagina Pacchetti, accanto a "Carte Prepagate", c'è il tab <span class="help-strong-dark">Ricaricabili Solarium</span>: raccoglie le carte che si possono usare <span class="help-strong-dark">solo per servizi Solarium</span>.
+
+Ci finisce una carta quando è vincolata all'intera categoria Solarium, oppure a una lista di servizi che sono tutti Solarium. Le carte libere, che pagano qualsiasi cosa, restano nel tab "Carte Prepagate": i due elenchi non si sovrappongono mai.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA VEDI APRENDOLO</span>
+Il tab <span class="help-strong-dark">non carica tutte le carte</span>: sarebbero centinaia e la pagina diventerebbe lentissima. Mostra due tabelle brevi:
+• <span class="help-strong-dark">Ultime sedute scalate</span> — gli ultimi 5 clienti che hanno consumato credito
+• <span class="help-strong-dark">Ultime ricariche</span> — gli ultimi 5 che hanno caricato
+
+In entrambe il movimento più recente è in cima, a scendere.
+
+<span class="help-strong-dark help-subtitle-pill">▸ TROVARE UNA CARTA</span>
+Le altre si cercano, e la ricerca chiede al server solo quello che serve:
+• <span class="help-strong-dark">Cerca cliente</span> — nome, cognome o cellulare; parte dal terzo carattere e propone al massimo 5 risultati
+• <span class="help-strong-dark">N. tessera</span> — filtra a ogni cifra digitata, anche parziale
+
+Il pulsante <span class="help-strong-dark">Recenti</span> riporta alle due tabelle di partenza. Svuotando il campo tessera si torna indietro da solo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ APRIRE E ELIMINARE</span>
+La riga è cliccabile per intero e apre la scheda della carta. Il pulsante <span class="help-strong-dark">Elimina</span> a destra compare solo per admin e owner.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Se una carta che ti aspetti non compare qui, controlla il suo "Utilizzo consentito" nella scheda: se non è vincolata al Solarium, la trovi nel tab Carte Prepagate.</span>
+</div>""",
+    },
+
     "prepagata_controllo": {
         "title": "🎯 Prepagate: controlli utili, memo e lettura rapida",
         "content": """Una buona gestione della prepagata non è solo incasso: è anche chiarezza nel tempo.
@@ -875,6 +909,15 @@ Quando apri la scheda o la sezione relativa, dovresti leggere subito:
 • importo caricato
 • saldo residuo
 • movimenti principali
+
+<span class="help-strong-dark help-subtitle-pill">▸ LO STORICO NELLA SCHEDA</span>
+La scheda della carta mostra due tabelle brevi, non l'elenco completo:
+• <span class="help-strong-dark">Ultime 5 ricariche</span> — che ricarica è stata fatta, con data e ora
+• <span class="help-strong-dark">Ultime 5 sedute scalate</span> — quale seduta, con data e ora
+
+Il movimento più recente è sempre in cima. Per vedere tutto c'è il pulsante <span class="help-strong-dark">Mostra tutto</span>, che apre lo storico completo in una finestra a parte con anche importo, saldo progressivo e descrizione.
+
+Su una carta importata da un vecchio gestionale i movimenti possono essere centinaia: per questo in pagina restano solo gli ultimi.
 
 <span class="help-strong-dark help-subtitle-pill">▸ MEMO O RIEPILOGO</span>
 Quando serve, conviene consegnare o inviare un riepilogo semplice del credito residuo, soprattutto nei casi in cui il cliente usa la prepagata a distanza di settimane o mesi.
@@ -1631,7 +1674,21 @@ Quando un importo viene saldato con più forme di pagamento (es. 50€ = 30 cont
 • per <span class=\"help-strong-dark\">tutto lo scontrino</span>: usa il tasto <span class=\"help-strong-dark\"><i class="bi bi-grid-1x2"></i> Dividi</span> in basso
 • <span class=\"help-strong-dark\">auto-compilazione</span>: appena scrivi l'importo in Cash, il campo POS si completa da solo con il resto (e viceversa). Bank resta manuale ed è escluso da questo automatismo; ogni valore resta comunque modificabile a mano.
 
-La voce divisa resta <span class=\"help-strong-dark\">una sola riga</span> sullo scontrino (e una sola riga stampata): il totale viene solo ripartito sui metodi indicati. Una voce con pagamento diviso mostra il badge <span class=\"help-strong-dark\">Misto</span>.""",
+La voce divisa resta <span class=\"help-strong-dark\">una sola riga</span> sullo scontrino (e una sola riga stampata): il totale viene solo ripartito sui metodi indicati. Una voce con pagamento diviso mostra il badge <span class=\"help-strong-dark\">Misto</span>.
+
+<span class=\"help-strong-dark\">Reset credito: quando la carta non copre l'intera voce</span>
+Se il cliente ha una prepagata ma il credito non basta per il servizio, non serve rinunciare né uscire dal programma: si <span class=\"help-strong-dark\">scala tutto il credito residuo</span> e si incassa solo la differenza.
+
+Esempio: lampada viso da <span class=\"help-strong-dark\">8 €</span> con <span class=\"help-strong-dark\">5 €</span> sulla carta. Metti la riga su Prepagata e il programma propone di dividerla: <span class=\"help-strong-dark\">5 € dalla carta + 3 € da incassare</span>. Confermi e la riga si spacca da sola.
+
+Cosa sapere:
+• il <span class=\"help-strong-dark\">credito non va mai sotto zero</span>: la quota della carta è al massimo il residuo
+• la voce resta <span class=\"help-strong-dark\">un solo servizio</span> — un solo appuntamento da collegare, una sola riga nei report
+• il badge diventa <span class=\"help-strong-dark\">Reset credito</span> (violetto) invece di "Misto"
+• riaprendo la divisione con l'icona dividi, la <span class=\"help-strong-dark\">quota della carta è fissa</span> e non si può modificare: si ridistribuisce solo la differenza fra contanti, POS e altro
+• se la parte da incassare è in contanti, la riga si può mettere in grigio come una qualsiasi
+
+Per riportare la voce a un metodo normale va eliminata e riaggiunta fuori dalla schermata della carta.""",
     },
 
     "cassa_registro_ruoli": {
@@ -1761,6 +1818,150 @@ L'export Corrispettivi è pensato proprio per essere inviato comodamente al comm
 • <span class=\"help-strong-dark\">Operatori</span>: performance per operatore
 
 Alcuni pulsanti sono visibili solo a ruoli abilitati (admin).""",
+    },
+
+    "report_heatmap": {
+        "title": "🔥 Report: le due heatmap (appuntamenti e incassi)",
+        "content": """Le due <span class="help-strong-dark">heatmap</span> rispondono a una domanda che le tabelle non sanno dare: <span class="help-strong-dark">quando</span> lavori davvero.
+
+Ogni riga è un giorno, ogni colonna una fascia oraria. Più la cella è scura, più c'è: appuntamenti nella prima, incasso nella seconda. Il giorno più recente è in alto.
+
+<span class="help-strong-dark help-subtitle-pill">▸ LE COLONNE SONO DA UN QUARTO D'ORA</span>
+Su <span class="help-strong-dark">10 e 30 giorni</span> ogni colonna vale 15 minuti: si vede se la gente arriva alle 9 in punto o alle 9 e mezza, cosa che con le colonne da un'ora restava nascosta.
+
+Su <span class="help-strong-dark">1 anno</span> si torna all'ora piena: con 365 righe ogni cella da 15 minuti sarebbe più sottile di un pixel, quindi si pagherebbe il dettaglio senza poterlo vedere.
+
+Le scritte sull'asse restano comunque una per ora tonda: cinquantadue orari scritti sarebbero illeggibili.
+
+<span class="help-strong-dark help-subtitle-pill">▸ QUALI ORE VEDI</span>
+La fascia parte dai tuoi <span class="help-strong-dark">orari di apertura e chiusura</span>, non da orari fissi. In più le fasce di testa e di coda in cui non è mai successo niente vengono tolte: non ha senso che due colonne sempre vuote rubino spazio alle ore piene.
+
+I <span class="help-strong-dark">buchi in mezzo restano</span>, invece: la pausa pranzo vuota è un'informazione, non un difetto.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME LEGGERE I COLORI</span>
+Il colore pieno non corrisponde al massimo assoluto del periodo, ma al livello sopra il quale sta il <span class="help-strong-dark">10% di celle più alto</span>. È voluto: su un anno intero basterebbe un sabato eccezionale a portare il tetto così in alto da far sembrare quasi vuote tutte le altre ore.
+
+Quindi <span class="help-strong-dark">il colore va letto dentro il periodo scelto</span>, non confrontato fra periodi diversi.
+
+<span class="help-strong-dark help-subtitle-pill">▸ CLICCA UNA CELLA</span>
+Un click su una cella apre l'<span class="help-strong-dark">Agenda su quel giorno, posizionata su quel preciso quarto d'ora</span>. È il modo più rapido per passare da "questa fascia è sempre scarica" a vedere cosa c'era davvero in agenda.""",
+    },
+
+    "report_andamento_annuale": {
+        "title": "📊 Report: Andamento anno su anno",
+        "content": """Il pannello <span class="help-strong-dark">ANDAMENTO ANNO SU ANNO</span> mette a confronto, mese per mese, quanto hai incassato <span class="help-strong-dark">quest'anno</span> e quanto avevi incassato <span class="help-strong-dark">nello stesso mese dell'anno scorso</span>.
+
+È il grafico che separa il vero andamento dalla stagionalità. Un ottobre più basso di settembre non vuol dire niente da solo — l'estetica è un mestiere stagionale. Un ottobre più basso dell'ottobre precedente, invece, è un'informazione.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME SI LEGGONO LE BARRE</span>
+Le due barre sono <span class="help-strong-dark">sovrapposte</span>, non affiancate:
+• la barra <span class="help-strong-dark">grigia larga</span>, sul fondo, è l'anno precedente
+• la barra <span class="help-strong-dark">azzurra stretta</span>, davanti, è l'anno in corso
+
+Così il confronto si legge a colpo d'occhio: dove l'azzurro <span class="help-strong-dark">supera</span> il grigio stai andando meglio dell'anno scorso, dove resta <span class="help-strong-dark">dentro</span> il grigio stai andando peggio.
+
+I mesi non ancora arrivati restano vuoti: una barra a zero farebbe sembrare un crollo dove semplicemente il mese non c'è ancora.
+
+<span class="help-strong-dark help-subtitle-pill">▸ IL NUMERO E IL BADGE IN ALTO</span>
+Il numero grande è il totale dell'anno in corso <span class="help-strong-dark">fino a oggi</span>. Il badge colorato lo confronta con l'anno precedente <span class="help-strong-dark">limitato agli stessi mesi</span>, non con l'anno intero: a marzo si confrontano tre mesi con tre mesi, altrimenti risulteresti sempre in perdita fino a dicembre.
+
+<span class="help-strong-dark help-subtitle-pill">▸ FISCALI O FISCALI + TEST</span>
+Se sei <span class="help-strong-dark">admin o owner</span> trovi in alto il selettore fra <span class="help-strong-dark">Fiscali</span> e <span class="help-strong-dark">Fiscali + test</span>: serve quando vuoi vedere il volume di lavoro reale, prove comprese, invece del solo incassato ufficiale.
+
+Il ruolo <span class="help-strong-dark">user</span> non vede il selettore e riceve <span class="help-strong-dark">sempre e solo i dati fiscali</span>. Non è una questione di interfaccia: il filtro è applicato dal server, quindi non è aggirabile.
+
+<span class="help-strong-dark help-subtitle-pill">▸ SE IL PANNELLO NON C'È</span>
+Il grafico compare solo quando c'è <span class="help-strong-dark">più di 6 mesi di storico</span> di scontrini. Sotto quella soglia il confronto anno su anno metterebbe mesi pieni contro mesi vuoti, dando un quadro falso: perciò il pannello non viene proprio caricato, e ricompare da solo quando lo storico è abbastanza lungo.""",
+    },
+
+    "report_scontrino_medio": {
+        "title": "🧾 Report: Scontrino medio",
+        "content": """Il pannello <span class="help-strong-dark">SCONTRINO MEDIO</span> mostra quanto lascia in media un cliente ogni volta che passa in cassa.
+
+È il numero che spiega le variazioni di incasso: se incassi meno, o sono passate <span class="help-strong-dark">meno persone</span> o <span class="help-strong-dark">ognuna ha speso meno</span>. Sono due problemi diversi e si risolvono in modo diverso — meno passaggi è un problema di agenda e di richiami, scontrino più basso è un problema di proposta.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA ENTRA NEL CALCOLO</span>
+Entrano tutti gli scontrini del periodo con <span class="help-strong-dark">importo maggiore di zero</span>, fiscali e non fiscali.
+
+Restano fuori gli <span class="help-strong-dark">scontrini a zero</span>, cioè le sedute scalate da una prepagata o da un pacchetto già pagato in precedenza. È voluto: quel cliente ha già pagato quando ha caricato la carta, contarlo come "passaggio da zero euro" abbasserebbe la media senza che sia mancato un incasso.
+
+<span class="help-strong-dark help-subtitle-pill">▸ VOCI PER SCONTRINO</span>
+Quante righe ci sono in media su ogni scontrino. È l'indicatore delle <span class="help-strong-dark">vendite aggiunte</span>: se vale poco più di 1, vuol dire che quasi nessuno esce con un prodotto o un secondo servizio oltre a quello prenotato. Farlo salire è il modo più rapido per alzare lo scontrino medio senza ritoccare i listini.
+
+<span class="help-strong-dark help-subtitle-pill">▸ IL CONFRONTO</span>
+Il badge colorato confronta il periodo scelto col <span class="help-strong-dark">periodo precedente di pari durata</span>. Su 30 giorni, quindi, coi 30 giorni prima.""",
+    },
+
+    "report_saturazione_agenda": {
+        "title": "📆 Report: Saturazione agenda",
+        "content": """Il pannello <span class="help-strong-dark">SATURAZIONE AGENDA</span> dice quanto è piena l'agenda: le <span class="help-strong-dark">ore prenotate</span> rispetto alle <span class="help-strong-dark">ore di turno</span> inserite nel periodo.
+
+È il conto che trasforma "siamo stati pieni" in un numero. Serve per capire se conviene aggiungere ore, se un turno del mattino sta girando a vuoto, o se qualcuno è al limite e va alleggerito.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME SI LEGGE</span>
+La percentuale grande in alto è il totale dell'istituto. Sotto, ogni operatore ha la sua barra:
+• sotto il <span class="help-strong-dark">75%</span> — barra azzurra, c'è spazio libero in agenda
+• dal <span class="help-strong-dark">75% in su</span> — barra verde, il turno è ben sfruttato
+• sopra il <span class="help-strong-dark">100%</span> — barra rossa: ci sono appuntamenti sovrapposti o fuori turno
+
+Il 100% pieno non è un obiettivo realistico: fra un cliente e l'altro servono margini, e un'agenda satura al 95% è un'agenda che non regge un ritardo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ ATTENZIONE AI TURNI MANCANTI</span>
+Il calcolo si basa sui <span class="help-strong-dark">turni inseriti in Agenda</span>. Un operatore senza turni inseriti nel periodo mostra un trattino al posto della percentuale e <span class="help-strong-dark">non entra nel totale</span>: senza le ore disponibili il conto non si può fare.
+
+Se vedi diversi trattini, il pannello non è rotto — mancano i turni. Inseriscili e il dato compare da solo.""",
+    },
+
+    "report_news_beauty": {
+        "title": "📰 Report: pannello Dal mondo beauty",
+        "content": """Il pannello <span class="help-strong-dark">DAL MONDO BEAUTY</span> mostra due o tre notizie che riguardano il tuo lavoro: normativa del settore estetico, regole su solarium e apparecchiature, tendenze e andamento del mercato in Italia.
+
+La ricerca guarda agli <span class="help-strong-dark">ultimi tre mesi</span>, dando la precedenza alle notizie più recenti. Il settore estetico italiano produce poche notizie al giorno: restringere la finestra a pochi giorni avrebbe lasciato il pannello vuoto quasi sempre.
+
+Le notizie vengono cercate <span class="help-strong-dark">automaticamente due volte a settimana</span>, il <span class="help-strong-dark">lunedì</span> e il <span class="help-strong-dark">giovedì</span> mattina, da un assistente automatico che consulta il web e seleziona le fonti affidabili: testate di settore, associazioni di categoria, fonti istituzionali. Restano fuori blog personali, e-commerce e comunicati pubblicitari.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME SI LEGGE</span>
+Ogni notizia ha un'etichetta colorata che dice di cosa parla:
+• <span class="help-strong-dark">NORMATIVA</span> — obblighi, scadenze, leggi e regolamenti
+• <span class="help-strong-dark">SOLARIUM</span> — regole e novità su lampade e abbronzatura
+• <span class="help-strong-dark">ESTETICA</span> — trattamenti, tecniche, formazione
+• <span class="help-strong-dark">MERCATO</span> — andamento del settore
+
+Il titolo è cliccabile e apre l'articolo originale in una nuova scheda. In fondo al pannello trovi la data dell'ultimo aggiornamento.
+
+<span class="help-strong-dark help-subtitle-pill">▸ AGGIORNARE SUBITO</span>
+Se sei <span class="help-strong-dark">admin o owner</span>, in alto a destra c'è il pulsante con la freccia circolare: fa partire una ricerca immediata senza aspettare lunedì o giovedì. La ricerca può richiedere fino a un minuto.
+
+Ogni ricerca ha un piccolo costo, perché interroga un servizio esterno. Per questo il pulsante <span class="help-strong-dark">non rifà la ricerca se le notizie sono state scaricate da meno di un'ora</span>: te lo dice e basta, senza spendere niente. Se invece il tentativo precedente era fallito, riprova subito — così dopo aver sistemato il problema non devi aspettare.
+
+<span class="help-strong-dark">Aprire la pagina Report non costa mai nulla</span>: le notizie vengono lette dall'archivio, non ricercate.
+
+<span class="help-strong-dark help-subtitle-pill">▸ SE IL PANNELLO È VUOTO</span>
+Può capitare che il pannello dica <span class="help-strong-dark">"Nessuna notizia disponibile al momento"</span>. Non c'è niente da fare e niente da segnalare: se dietro c'è un problema tecnico, viene registrato da solo nel <span class="help-strong-dark">riepilogo errori</span> che arriva a chi gestisce il gestionale. Al ricontrollo successivo il pannello si ripopola da sé.
+
+<span class="help-approfondimento-box"><span class="help-approfondimento-label">Approfondimento:</span><span class="help-approfondimento-text"><br>Le notizie sono <span class="help-strong-dark">le stesse per tutti gli istituti</span>: la ricerca viene fatta una volta sola e il risultato viene copiato nel database di ciascuno.<br>Le notizie non sono un parere legale. Prima di prendere decisioni su obblighi o scadenze, verifica sempre sulla fonte originale o con la tua associazione di categoria.</span></span>""",
+    },
+
+    "report_oroscopo": {
+        "title": "✨ Report: Oroscopo della settimana",
+        "content": """Il pannello <span class="help-strong-dark">OROSCOPO DELLA SETTIMANA</span> è l'unico del Report che non serve a niente, ed è voluto. Dodici segni, tono da rivista in sala d'attesa, battute sul mestiere: la cera, le lampade, la cliente delle tre che arriva alle tre e mezza.
+
+Si rinnova <span class="help-strong-dark">ogni lunedì mattina</span>, così il primo caffè della settimana ha qualcosa da leggere. Scorri l'elenco per trovare il tuo segno.
+
+<span class="help-strong-dark help-subtitle-pill">▸ NESSUN DATO DELLE CLIENTI ESCE DALL'APP</span>
+L'oroscopo è scritto da un assistente automatico, ma <span class="help-strong-dark">non riceve nessun dato dell'anagrafica</span>: né nomi, né numeri, né storico appuntamenti. Conosce solo il nome dell'istituto e la stagione.
+
+Per questo le battute parlano di <span class="help-strong-dark">"la cliente delle tre"</span> o <span class="help-strong-dark">"quella del pacchetto da dieci"</span> e mai di persone vere. Non è una limitazione tecnica, è una scelta: un oroscopo che nomina una cliente in carne e ossa farebbe ridere una persona e sentire osservate tutte le altre.
+
+<span class="help-strong-dark help-subtitle-pill">▸ RISCRIVERLO SUBITO</span>
+Se sei <span class="help-strong-dark">admin o owner</span> hai il pulsante con la freccia circolare: ne scrive uno nuovo senza aspettare lunedì. Come per le notizie, se è stato scritto da <span class="help-strong-dark">meno di un'ora</span> il pulsante non lo rifà — te lo dice e basta, senza spendere nulla.
+
+Aprire il Report invece non costa mai niente: l'oroscopo viene letto dall'archivio, non riscritto.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Se salta un lunedì (l'app spenta, un problema di rete) il pannello non resta indietro di due settimane: passati otto giorni si riscrive da solo al primo avvio utile, in qualunque giorno.</span>
+</div>""",
     },
 
     "report_esportazione_lettura": {
@@ -2637,6 +2838,12 @@ def get_topics_by_category():
             "report_previsioni_tile_edit",
             "report_corrispettivi_ufficiali",
             "report_pulsanti_operativi",
+            "report_andamento_annuale",
+            "report_heatmap",
+            "report_scontrino_medio",
+            "report_saturazione_agenda",
+            "report_news_beauty",
+            "report_oroscopo",
             "report_esportazione_lettura"
         ],
         "Pacchetti": [
@@ -2650,6 +2857,7 @@ def get_topics_by_category():
             "prepagata_create",
             "prepagata_uso",
             "prepagata_pagamento",
+            "prepagata_solarium_tab",
             "prepagata_controllo",
             "pacchetto_settings"
         ],

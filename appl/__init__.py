@@ -153,6 +153,17 @@ def create_app(db_uri: str | None = None):
     app.register_blueprint(report_bp)
     app.register_blueprint(pacchetti_bp, url_prefix="/pacchetti")
 
+    # ---- SCAN NOTIZIE BEAUTY (thread interno, due volte a settimana) ----
+    # Il modulo si auto-disattiva se manca ANTHROPIC_API_KEY: in quel caso non
+    # parte nessun thread e non viene fatta nessuna chiamata. Il thread viene
+    # avviato una sola volta dal primo tenant registrato; gli altri si limitano
+    # a registrarsi per ricevere le stesse notizie nel proprio database.
+    try:
+        from appl.news_beauty import register_app as _register_news
+        _register_news(app)
+    except Exception:
+        app.logger.exception("[news_beauty] registrazione fallita")
+
     # ---- SECURITY HEADERS ----
     @app.after_request
     def add_security_headers(response):
