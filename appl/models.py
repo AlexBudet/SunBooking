@@ -863,3 +863,52 @@ class SolariumSession(db.Model):
 
     def __repr__(self):
         return f"<SolariumSession device_id={self.device_id} inizio={self.inizio}>"
+
+class BeautyNews(db.Model):
+    """Notizie dal mondo beauty / estetica / normativa / solarium raccolte due
+    volte a settimana dallo scan automatico (appl/news_beauty.py), che interroga
+    l'API di Claude con la ricerca web attiva.
+
+    Le notizie sono le stesse per tutti i tenant: lo scan viene eseguito una
+    sola volta e il risultato viene scritto nel database di ogni tenant, cosi'
+    la pagina Report legge sempre e solo dal proprio DB.
+
+    Ogni scan genera un batch nuovo (scan_batch). Le notizie vecchie restano in
+    tabella come archivio: il tile mostra soltanto l'ultimo batch."""
+    __tablename__ = 'beauty_news'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    scan_batch = db.Column(db.String(40), nullable=False, index=True)  # es. 20260805T0700
+    titolo = db.Column(db.String(300), nullable=False)
+    sintesi = db.Column(db.Text, nullable=True)
+    categoria = db.Column(db.String(50), nullable=True)   # beauty | estetica | normativa | solarium
+    fonte = db.Column(db.String(200), nullable=True)      # nome della testata
+    url = db.Column(db.String(1000), nullable=True)
+    data_notizia = db.Column(db.Date, nullable=True)      # data della notizia, se nota
+    ordine = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, server_default=func.now(), nullable=False)
+
+    def __repr__(self):
+        return f"<BeautyNews {self.scan_batch} {self.titolo[:40]}>"
+
+class Oroscopo(db.Model):
+    """Oroscopo settimanale in chiave estetista, generato una volta a settimana
+    (il lunedi') dallo stesso thread che raccoglie le notizie - vedi
+    appl/oroscopo.py.
+
+    In tabella finisce solo il testo per segno: simbolo e periodo dello zodiaco
+    sono dati fissi e stanno nel codice, non ha senso salvarli ogni settimana.
+
+    Come le notizie, e' identico per tutti i tenant: si genera una volta sola e
+    si scrive nel database di ciascuno."""
+    __tablename__ = 'oroscopo_settimanale'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    scan_batch = db.Column(db.String(40), nullable=False, index=True)
+    segno = db.Column(db.String(30), nullable=False)
+    testo = db.Column(db.Text, nullable=False)
+    ordine = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, server_default=func.now(), nullable=False)
+
+    def __repr__(self):
+        return f"<Oroscopo {self.scan_batch} {self.segno}>"

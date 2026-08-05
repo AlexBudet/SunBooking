@@ -3,7 +3,7 @@ from flask import Blueprint, current_app, request, jsonify, render_template, sen
 from sqlalchemy.orm import joinedload
 import requests
 from sqlalchemy import func, cast, Date
-from appl.models import Appointment, AppointmentStatus, Operator, Client, AppointmentSource, BusinessInfo, Receipt, Service, ServiceCategory, Subcategory, User
+from appl.models import Appointment, AppointmentStatus, Operator, OperatorShift, Client, AppointmentSource, BusinessInfo, Receipt, Service, ServiceCategory, Subcategory, User
 from appl import db
 import pandas as pd
 import os
@@ -557,14 +557,21 @@ def report_day():
                     altro_servizi += prezzo
 
             svc = services_by_id.get(sid) if sid else None
-            if svc and svc.servizio_categoria == ServiceCategory.Estetica:
+            # Righe SENZA servizio a listino (vendita/ricarica di una carta
+            # prepagata: nascono con servizio_id nullo) finivano nel totale
+            # generale ma in nessuna categoria. Se la voce porta con se' la
+            # categoria, la si usa come ripiego.
+            _cat_voce = (voce.get('categoria') or '').strip() if isinstance(voce, dict) else ''
+            _e_estetica = (svc and svc.servizio_categoria == ServiceCategory.Estetica) or                           (not svc and _cat_voce == ServiceCategory.Estetica.value)
+            _e_solarium = (svc and svc.servizio_categoria == ServiceCategory.Solarium) or                           (not svc and _cat_voce == ServiceCategory.Solarium.value)
+            if _e_estetica:
                 if is_fisc: estetica_fiscale += prezzo
                 else:       estetica_test += prezzo
                 if is_prod:
                     estetica_prodotti += prezzo
                 else:
                     estetica_servizi += prezzo
-            elif svc and svc.servizio_categoria == ServiceCategory.Solarium:
+            elif _e_solarium:
                 if is_fisc: solarium_fiscale += prezzo
                 else:       solarium_test += prezzo
                 if is_prod:
@@ -841,6 +848,116 @@ def appuntamenti_giorno():
         {"client_id": a.client_id, "id": a.id} for a in appuntamenti if a.client_id
     ])
 
+# --- Griglia oraria condivisa dalle due heatmap -----------------------------
+HEATMAP_ORA_INIZIO_DEF = 8
+HEATMAP_ORA_FINE_DEF = 21      # esclusa
+
+
+def _heatmap_fascia():
+    """
+    Fascia oraria da mostrare, presa dagli orari di apertura dell'istituto.
+
+    Prima erano fissate 8-21 nel codice: chi apre alle 10 si ritrovava due
+    colonne sempre vuote in testa, che rubavano spazio alle ore in cui si
+    lavora davvero.
+    """
+    try:
+        info = BusinessInfo.query.first()
+    except Exception:
+        db.session.rollback()
+        info = None
+
+    if not info or not info.opening_time or not info.closing_time:
+        return HEATMAP_ORA_INIZIO_DEF, HEATMAP_ORA_FINE_DEF
+
+    inizio = info.opening_time.hour
+    # La chiusura alle 19:30 richiede anche la colonna delle 19.
+    fine = info.closing_time.hour + (1 if info.closing_time.minute else 0)
+    if fine <= inizio:
+        return HEATMAP_ORA_INIZIO_DEF, HEATMAP_ORA_FINE_DEF
+    return inizio, min(fine, 24)
+
+
+GIORNI_BREVI = ('Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom')
+
+
+def _heatmap_etichetta_giorno(giorno, giorni_param):
+    """
+    "Lun 13/03" invece del solo "13/03".
+
+    Il giorno della settimana e' l'informazione che si cerca davvero in una
+    heatmap ("il martedi' e' sempre scarico"), e ricavarlo a mente da una data
+    non si fa. Sui periodi lunghi resta solo la data: le etichette sono poche e
+    distanti, e il giorno della settimana li' non aggiunge niente.
+    """
+    if giorni_param <= 40:
+        return f"{GIORNI_BREVI[giorno.weekday()]} {giorno.strftime('%d/%m')}"
+    return giorno.strftime('%d/%m')
+
+
+def _heatmap_passo(giorni_param):
+    """
+    Ampiezza della colonna in minuti.
+
+    Il quarto d'ora rende la lettura molto piu' fluida, ma quadruplica le
+    colonne: su 10 o 30 giorni non si sente, su un anno intero ogni cella
+    diventerebbe piu' sottile di un pixel - si pagherebbe il costo senza
+    vedere il dettaglio. Oltre i due mesi si resta quindi all'ora piena.
+    """
+    return 60 if giorni_param > 60 else 15
+
+
+def _heatmap_etichette(passo, inizio, fine):
+    return [f"{h:02d}:{m:02d}"
+            for h in range(inizio, fine)
+            for m in range(0, 60, passo)]
+
+
+def _heatmap_colonna(ora, minuto, passo, inizio, fine):
+    """Indice X di un orario, oppure None se fuori dalla fascia mostrata."""
+    if ora < inizio or ora >= fine:
+        return None
+    per_ora = 60 // passo
+    return (ora - inizio) * per_ora + (minuto // passo)
+
+
+def _heatmap_scala(valori):
+    """
+    Valore a cui la scala colore arriva a saturazione.
+
+    Non si usa il massimo assoluto: su periodi lunghi basta una singola ora
+    eccezionale (un sabato pieno, uno scontrino grosso) per portare il tetto
+    cosi' in alto che tutte le altre celle finiscono nel primo decimo della
+    scala, cioe' quasi bianche. Si prende il 90esimo percentile, cosi' il
+    decimo di celle piu' alto satura e tutto il resto usa davvero i colori.
+    """
+    numeri = sorted(v['v'] for v in valori if v['v'] > 0)
+    if not numeri:
+        return 1
+    indice = min(int(len(numeri) * 0.9), len(numeri) - 1)
+    return max(numeri[indice], 1)
+
+
+def _heatmap_ritaglia(valori, etichette):
+    """
+    Toglie le colonne vuote in testa e in coda.
+
+    Anche stando dentro gli orari di apertura capita che le prime e le ultime
+    fasce non abbiano mai niente: mostrarle allarga la griglia e schiaccia le
+    ore piene. I buchi in mezzo (la pausa pranzo) restano, perche' quelli sono
+    un'informazione.
+    """
+    if not valori:
+        return valori, etichette
+    primo = min(v['x'] for v in valori)
+    ultimo = max(v['x'] for v in valori)
+    if primo == 0 and ultimo == len(etichette) - 1:
+        return valori, etichette
+    for v in valori:
+        v['x'] -= primo
+    return valori, etichette[primo:ultimo + 1]
+
+
 @report_bp.route('/api/heatmap_appuntamenti')
 def heatmap_appuntamenti():
     data_rif = request.args.get("data_rif")
@@ -851,12 +968,17 @@ def heatmap_appuntamenti():
 
     # Nuovo parametro giorni con default 10
     giorni_param = request.args.get("giorni", 10, type=int)
-    
+    passo = _heatmap_passo(giorni_param)
+    ora_da, ora_a = _heatmap_fascia()
+
     # Costruisci lista giorni dal più vecchio (indice 0) al più recente (indice n-1)
     data_inizio = data_rif - timedelta(days=giorni_param - 1)
     giorni = [data_inizio + timedelta(days=i) for i in range(giorni_param)]
-    giorni_label = [g.strftime('%d/%m') for g in giorni]
-    ore = [f"{h:02d}" for h in range(8, 21)]
+    giorni_label = [_heatmap_etichetta_giorno(g, giorni_param) for g in giorni]
+    # Date in chiaro: evitano al browser di rifare i conti cella per cella e
+    # tolgono di mezzo gli sfasamenti di fuso di toISOString().
+    giorni_iso = [g.strftime('%Y-%m-%d') for g in giorni]
+    ore = _heatmap_etichette(passo, ora_da, ora_a)
 
     # Crea mappa data -> indice Y
     data_to_y = {g.date(): i for i, g in enumerate(giorni)}
@@ -866,6 +988,7 @@ def heatmap_appuntamenti():
         db.session.query(
             func.date(Appointment.start_time).label('giorno'),
             func.extract('hour', Appointment.start_time).label('ora'),
+            func.extract('minute', Appointment.start_time).label('minuto'),
             func.count(Appointment.id).label('count')
         )
         .join(Client, Appointment.client_id == Client.id)
@@ -883,25 +1006,37 @@ def heatmap_appuntamenti():
         )
         .group_by(
             func.date(Appointment.start_time),
-            func.extract('hour', Appointment.start_time)
+            func.extract('hour', Appointment.start_time),
+            func.extract('minute', Appointment.start_time)
         )
         .all()
     )
 
-    valori = []
+    # I minuti arrivano al minuto esatto: qui si accorpano nella colonna del
+    # loro slot, sommando le righe che ci cadono dentro.
+    conteggi = defaultdict(int)
     for row in results:
         y = data_to_y.get(row.giorno)
-        x = int(row.ora) - 8
-        if y is not None and 0 <= x < len(ore):
-            valori.append({'x': x, 'y': y, 'v': row.count})
+        x = _heatmap_colonna(int(row.ora), int(row.minuto), passo, ora_da, ora_a)
+        if y is not None and x is not None:
+            conteggi[(x, y)] += row.count
 
-    operatori_totali = Operator.query.filter_by(is_deleted=False, is_visible=True).count()
+    valori = [{'x': x, 'y': y, 'v': v} for (x, y), v in conteggi.items()]
+    valori, ore = _heatmap_ritaglia(valori, ore)
+
+    # La scala colore si tara sui dati, non sul numero di operatori: con le
+    # colonne da 15 minuti gli appuntamenti si distribuiscono e in una cella ne
+    # cadono uno o due, per cui una scala fissata sugli operatori lasciava tutto
+    # quasi bianco e illeggibile.
+    massimo = _heatmap_scala(valori)
 
     return jsonify({
         'giorni': giorni_label,
+        'giorni_iso': giorni_iso,
         'ore': ore,
+        'passo_minuti': passo,
         'valori': valori,
-        'max_legend': operatori_totali + 1
+        'max_legend': massimo
     })
 
 @report_bp.route('/api/heatmap_incassi')
@@ -915,6 +1050,8 @@ def heatmap_incassi():
 
     # Nuovo parametro giorni con default 10
     giorni_param = request.args.get("giorni", 10, type=int)
+    passo = _heatmap_passo(giorni_param)
+    ora_da, ora_a = _heatmap_fascia()
 
     user_id = session.get("user_id")
     user = db.session.get(User, user_id)
@@ -922,8 +1059,9 @@ def heatmap_incassi():
     # Costruisci lista giorni dal più vecchio (indice 0) al più recente (indice n-1)
     data_inizio = data_rif - timedelta(days=giorni_param - 1)
     giorni = [data_inizio + timedelta(days=i) for i in range(giorni_param)]
-    giorni_label = [g.strftime('%d/%m') for g in giorni]
-    ore = [f"{h:02d}" for h in range(8, 21)]
+    giorni_label = [_heatmap_etichetta_giorno(g, giorni_param) for g in giorni]
+    giorni_iso = [g.strftime('%Y-%m-%d') for g in giorni]
+    ore = _heatmap_etichette(passo, ora_da, ora_a)
 
     # Crea mappa data -> indice Y
     data_to_y = {g.date(): i for i, g in enumerate(giorni)}
@@ -933,6 +1071,7 @@ def heatmap_incassi():
         db.session.query(
             func.date(Receipt.created_at).label('giorno'),
             func.extract('hour', Receipt.created_at).label('ora'),
+            func.extract('minute', Receipt.created_at).label('minuto'),
             func.sum(Receipt.total_amount).label('totale')
         )
         .filter(
@@ -940,37 +1079,40 @@ def heatmap_incassi():
             Receipt.created_at <= datetime.combine(data_rif.date(), datetime.max.time())
         )
     )
-    
+
     # Filtro fiscale solo per user
     if user and user.ruolo.value == "user":
         query = query.filter(Receipt.is_fiscale == True)
-    
+
     results = (
         query
         .group_by(
             func.date(Receipt.created_at),
-            func.extract('hour', Receipt.created_at)
+            func.extract('hour', Receipt.created_at),
+            func.extract('minute', Receipt.created_at)
         )
         .all()
     )
 
-    # Costruisci la mappa dei valori
-    valori = []
-    max_incasso = 0
+    # Somma gli scontrini che cadono nello stesso slot.
+    totali = defaultdict(float)
     for row in results:
         y = data_to_y.get(row.giorno)
-        x = int(row.ora) - 8
-        incasso = float(row.totale or 0)
-        if y is not None and 0 <= x < len(ore):
-            valori.append({'x': x, 'y': y, 'v': incasso})
-            if incasso > max_incasso:
-                max_incasso = incasso
+        x = _heatmap_colonna(int(row.ora), int(row.minuto), passo, ora_da, ora_a)
+        if y is not None and x is not None:
+            totali[(x, y)] += float(row.totale or 0)
+
+    valori = [{'x': x, 'y': y, 'v': round(v, 2)} for (x, y), v in totali.items()]
+    valori, ore = _heatmap_ritaglia(valori, ore)
+    max_incasso = _heatmap_scala(valori)
 
     return jsonify({
         'giorni': giorni_label,
+        'giorni_iso': giorni_iso,
         'ore': ore,
+        'passo_minuti': passo,
         'valori': valori,
-        'max_legend': max_incasso if max_incasso > 0 else 1000
+        'max_legend': max_incasso
     })
 
 @report_bp.route('/api/next_appointments')
@@ -1580,5 +1722,480 @@ def top_clienti_spesa():
             'spesa_totale': round(float(r.spesa_totale or 0), 2),
             'passaggi': r.passaggi
         })
-    
+
     return jsonify(top10)
+
+
+# =============================================================================
+# TILE AGGIUNTIVI REPORT
+# Quattro indicatori "da gestionale estetica": fidelizzazione, acquisizione,
+# valore medio e produttivita'. Nessuno duplica i tile gia' presenti.
+# Convenzione parametri: ?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD (come gli altri
+# endpoint del blueprint); dateTo e' INCLUSO nel periodo.
+# =============================================================================
+
+def _periodo_da_request():
+    """dateFrom/dateTo -> (start, end_esclusivo, giorni). (None, None, 0) se mancano."""
+    date_from = request.args.get('dateFrom')
+    date_to = request.args.get('dateTo')
+    if not date_from or not date_to:
+        return None, None, 0
+    try:
+        start = datetime.strptime(date_from, "%Y-%m-%d")
+        end = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        return None, None, 0
+    if end <= start:
+        return None, None, 0
+    return start, end, max((end - start).days, 1)
+
+
+def _variazione_perc(attuale, precedente):
+    """Delta % fra due valori. None quando il precedente e' zero (non calcolabile)."""
+    if not precedente:
+        return None
+    return round(((attuale - precedente) / precedente) * 100, 1)
+
+
+# --- Appuntamenti che contano come "visita realmente avvenuta/prevista" -------
+def _filtri_visita():
+    return [
+        Appointment.is_cancelled_by_client.isnot(True),
+        Appointment.stato != AppointmentStatus.NON_ARRIVATO,
+    ]
+
+
+MESI_BREVI = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu',
+              'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
+
+
+@report_bp.route('/api/report_andamento_annuale')
+def report_andamento_annuale():
+    """
+    Incasso mese per mese, anno in corso confrontato con l'anno precedente.
+
+    Visibilita' dei dati per ruolo:
+    - ruolo 'user'  -> SOLO scontrini fiscali, senza possibilita' di cambiare
+    - admin/owner   -> puo' includere anche i test con ?test=1
+
+    Il grafico ha senso solo con abbastanza storico: se fra il primo e l'ultimo
+    scontrino passano meno di 6 mesi il confronto anno su anno confronterebbe
+    mesi pieni con mesi vuoti, quindi si risponde storico_sufficiente=false e il
+    tile non viene mostrato.
+    """
+    user = db.session.get(User, session.get('user_id'))
+    e_user = bool(user and getattr(user.ruolo, 'value', None) == 'user')
+
+    # Il ruolo 'user' non vede i test: il parametro viene ignorato, non negato.
+    includi_test = (not e_user) and request.args.get('test') in ('1', 'true', 'si')
+
+    oggi = date.today()
+    try:
+        anno = int(request.args.get('anno', oggi.year))
+    except (TypeError, ValueError):
+        anno = oggi.year
+    anno = max(2000, min(anno, oggi.year + 1))
+    anno_prec = anno - 1
+
+    filtri = [
+        Receipt.created_at >= datetime(anno_prec, 1, 1),
+        Receipt.created_at < datetime(anno + 1, 1, 1),
+    ]
+    if not includi_test:
+        filtri.append(Receipt.is_fiscale.is_(True))
+
+    # --- Ampiezza dello storico -------------------------------------------
+    estremi_filtri = [] if includi_test else [Receipt.is_fiscale.is_(True)]
+    primo, ultimo = (
+        db.session.query(func.min(Receipt.created_at), func.max(Receipt.created_at))
+        .filter(*estremi_filtri)
+        .first()
+    ) or (None, None)
+
+    if not primo or not ultimo:
+        return jsonify({'storico_sufficiente': False, 'mesi_storico': 0,
+                        'puo_vedere_test': not e_user})
+
+    giorni_storico = (ultimo - primo).days
+    mesi_storico = int(giorni_storico / 30.4)
+    if giorni_storico < 183:
+        return jsonify({'storico_sufficiente': False, 'mesi_storico': mesi_storico,
+                        'puo_vedere_test': not e_user})
+
+    # --- Totali per anno e mese -------------------------------------------
+    corrente = [None] * 12
+    precedente = [0.0] * 12
+    for y, m, tot in (
+        db.session.query(
+            func.extract('year', Receipt.created_at),
+            func.extract('month', Receipt.created_at),
+            func.sum(Receipt.total_amount),
+        )
+        .filter(*filtri)
+        .group_by(
+            func.extract('year', Receipt.created_at),
+            func.extract('month', Receipt.created_at),
+        )
+        .all()
+    ):
+        indice = int(m) - 1
+        valore = round(float(tot or 0), 2)
+        if int(y) == anno:
+            corrente[indice] = valore
+        elif int(y) == anno_prec:
+            precedente[indice] = valore
+
+    # I mesi non ancora arrivati restano vuoti: una barra a zero farebbe
+    # sembrare un crollo dove semplicemente il mese non c'e' ancora.
+    ultimo_mese = oggi.month if anno == oggi.year else 12
+    for i in range(12):
+        if i < ultimo_mese and corrente[i] is None:
+            corrente[i] = 0.0
+        elif i >= ultimo_mese:
+            corrente[i] = None
+
+    tot_corrente = sum(v for v in corrente if v)
+    tot_precedente = sum(precedente)
+    # Confronto onesto: l'anno precedente limitato agli stessi mesi.
+    tot_precedente_periodo = sum(precedente[:ultimo_mese])
+
+    return jsonify({
+        'storico_sufficiente': True,
+        'mesi_storico': mesi_storico,
+        'anno': anno,
+        'anno_precedente': anno_prec,
+        'labels': MESI_BREVI,
+        'corrente': corrente,
+        'precedente': precedente,
+        'ultimo_mese': ultimo_mese,
+        'totale_corrente': round(tot_corrente, 2),
+        'totale_precedente': round(tot_precedente, 2),
+        'totale_precedente_periodo': round(tot_precedente_periodo, 2),
+        'delta': _variazione_perc(tot_corrente, tot_precedente_periodo),
+        'includi_test': includi_test,
+        'puo_vedere_test': not e_user,
+    })
+
+
+@report_bp.route('/api/report_scontrino_medio')
+def report_scontrino_medio():
+    """
+    Valore medio del passaggio in cassa nel periodo, confrontato con il periodo
+    precedente di pari durata. Sono esclusi gli scontrini a importo zero (le
+    sedute scalate da prepagata/pacchetto), che altrimenti abbasserebbero la
+    media pur non essendo un incasso mancato.
+    """
+    start, end, giorni = _periodo_da_request()
+    if start is None:
+        return jsonify({'error': 'Date non valide'}), 400
+
+    def _calcola(p_start, p_end):
+        receipts = (
+            db.session.query(Receipt.total_amount, Receipt.voci, Receipt.is_fiscale)
+            .filter(
+                Receipt.created_at >= p_start,
+                Receipt.created_at < p_end,
+                Receipt.total_amount > 0,
+            )
+            .all()
+        )
+        n = len(receipts)
+        totale = sum(float(r.total_amount or 0) for r in receipts)
+        fiscale = sum(float(r.total_amount or 0) for r in receipts if r.is_fiscale)
+        n_voci = 0
+        for r in receipts:
+            try:
+                n_voci += len(_to_list(r.voci) or [])
+            except Exception:
+                pass
+        return {
+            'scontrini': n,
+            'incasso': round(totale, 2),
+            'incasso_fiscale': round(fiscale, 2),
+            'medio': round(totale / n, 2) if n else 0.0,
+            'voci_medie': round(n_voci / n, 1) if n else 0.0,
+        }
+
+    attuale = _calcola(start, end)
+    precedente = _calcola(start - timedelta(days=giorni), start)
+
+    return jsonify({
+        'giorni': giorni,
+        'attuale': attuale,
+        'precedente': precedente,
+        'delta_medio': _variazione_perc(attuale['medio'], precedente['medio']),
+        'delta_scontrini': _variazione_perc(attuale['scontrini'], precedente['scontrini']),
+    })
+
+
+@report_bp.route('/api/report_saturazione_agenda')
+def report_saturazione_agenda():
+    """
+    Quanto e' piena l'agenda: minuti prenotati / minuti di turno disponibili,
+    nel periodo, per operatore e in totale.
+
+    Gli operatori senza turni inseriti nel periodo non entrano nel totale
+    (denominatore sconosciuto) ma restano in elenco con saturazione nulla, cosi'
+    e' evidente che mancano i turni.
+    """
+    start, end, giorni = _periodo_da_request()
+    if start is None:
+        return jsonify({'error': 'Date non valide'}), 400
+
+    # ---- Minuti disponibili dai turni -------------------------------------
+    disponibili = defaultdict(int)
+    turni = (
+        db.session.query(
+            OperatorShift.operator_id,
+            OperatorShift.shift_start_time,
+            OperatorShift.shift_end_time,
+        )
+        .filter(
+            OperatorShift.shift_date >= start.date(),
+            OperatorShift.shift_date < end.date(),
+        )
+        .all()
+    )
+    for op_id, t_start, t_end in turni:
+        if not t_start or not t_end:
+            continue
+        minuti = (
+            datetime.combine(date.today(), t_end) - datetime.combine(date.today(), t_start)
+        ).total_seconds() / 60
+        if minuti > 0:
+            disponibili[op_id] += int(minuti)
+
+    # ---- Minuti prenotati --------------------------------------------------
+    prenotati = defaultdict(int)
+    appuntamenti = defaultdict(int)
+    for op_id, minuti, quanti in (
+        db.session.query(
+            Appointment.operator_id,
+            func.sum(Appointment._duration),
+            func.count(Appointment.id),
+        )
+        .filter(
+            Appointment.start_time >= start,
+            Appointment.start_time < end,
+            *_filtri_visita()
+        )
+        .group_by(Appointment.operator_id)
+        .all()
+    ):
+        prenotati[op_id] = int(minuti or 0)
+        appuntamenti[op_id] = int(quanti or 0)
+
+    op_ids = set(disponibili) | set(prenotati)
+    if not op_ids:
+        return jsonify({
+            'giorni': giorni,
+            'saturazione': 0.0,
+            'ore_prenotate': 0.0,
+            'ore_disponibili': 0.0,
+            'rows': [],
+        })
+
+    operatori = {
+        o.id: o for o in Operator.query.filter(Operator.id.in_(list(op_ids))).all()
+    }
+
+    rows = []
+    tot_disp = 0
+    tot_pren = 0
+    for op_id in op_ids:
+        op = operatori.get(op_id)
+        if op is None or getattr(op, 'is_deleted', False):
+            continue
+        disp = disponibili.get(op_id, 0)
+        pren = prenotati.get(op_id, 0)
+        # Nel totale entrano solo gli operatori con turni inseriti, altrimenti il
+        # denominatore sarebbe falsato. Sopra il 100% significa sovrapposizioni
+        # o appuntamenti fuori turno: e' un dato vero, non va tagliato.
+        if disp:
+            tot_disp += disp
+            tot_pren += pren
+        rows.append({
+            'operatore': f"{op.user_nome or ''} {op.user_cognome or ''}".strip() or f"Operatore {op_id}",
+            'tipo': op.user_tipo or '',
+            'ore_disponibili': round(disp / 60, 1),
+            'ore_prenotate': round(pren / 60, 1),
+            'appuntamenti': appuntamenti.get(op_id, 0),
+            'saturazione': round((pren / disp) * 100, 1) if disp else None,
+        })
+
+    rows.sort(key=lambda r: (r['saturazione'] is None, -(r['saturazione'] or 0)))
+
+    return jsonify({
+        'giorni': giorni,
+        'saturazione': round((tot_pren / tot_disp) * 100, 1) if tot_disp else 0.0,
+        'ore_prenotate': round(tot_pren / 60, 1),
+        'ore_disponibili': round(tot_disp / 60, 1),
+        'rows': rows,
+    })
+
+
+# =============================================================================
+# NOTIZIE DAL MONDO BEAUTY
+# Alimentate dallo scan automatico in appl/news_beauty.py (API di Claude con
+# ricerca web, due volte a settimana). Qui si legge soltanto quanto e' gia'
+# stato salvato in tabella: la pagina Report non chiama mai l'API direttamente.
+# =============================================================================
+
+@report_bp.route('/api/news_beauty')
+def api_news_beauty():
+    """
+    Ultimo batch di notizie salvato per questo tenant.
+
+    Regola sulla comunicazione dei guasti: all'utente finale il tile dice
+    soltanto che al momento non ci sono notizie. Credito esaurito, chiave
+    revocata, tabella mancante sono fatti tecnici che non lo riguardano e che
+    non puo' risolvere; finiscono nel report errori (crm_error_logs) e, per chi
+    puo' intervenire, nel campo 'dettaglio' visibile solo ad admin/owner.
+    """
+    from appl.models import BeautyNews
+
+    user = db.session.get(User, session.get('user_id'))
+    e_tecnico = bool(user and getattr(user.ruolo, 'value', None) in ('admin', 'owner'))
+    NEUTRO = 'Nessuna notizia disponibile al momento.'
+
+    def _vuoto(dettaglio=None):
+        risposta = {'rows': [], 'aggiornato': None, 'messaggio': NEUTRO}
+        if e_tecnico and dettaglio:
+            risposta['dettaglio'] = dettaglio
+        return jsonify(risposta)
+
+    try:
+        ultimo = db.session.query(func.max(BeautyNews.scan_batch)).scalar()
+    except Exception:
+        db.session.rollback()
+        return _vuoto('Tabella beauty_news non presente su questo database: '
+                      'esegui migrations/manual_beauty_news.sql')
+
+    if not ultimo:
+        dettaglio = None
+        if e_tecnico:
+            try:
+                from appl.news_beauty import stato as news_stato
+                s = news_stato()
+                if not s.get('abilitato'):
+                    dettaglio = 'Scan non attivo: manca ANTHROPIC_API_KEY.'
+                elif s.get('ultimo_errore'):
+                    dettaglio = 'Ultimo tentativo: ' + str(s['ultimo_errore'])
+                else:
+                    dettaglio = 'Scan attivo, nessuna raccolta ancora eseguita.'
+            except Exception:
+                pass
+        return _vuoto(dettaglio)
+
+    notizie = (BeautyNews.query
+               .filter(BeautyNews.scan_batch == ultimo)
+               .order_by(BeautyNews.ordine.asc(), BeautyNews.id.asc())
+               .all())
+
+    rows = [{
+        'titolo': n.titolo,
+        'sintesi': n.sintesi or '',
+        'categoria': n.categoria or '',
+        'fonte': n.fonte or '',
+        'url': n.url or '',
+        'data': n.data_notizia.strftime('%d/%m/%Y') if n.data_notizia else '',
+    } for n in notizie]
+
+    aggiornato = notizie[0].created_at if notizie else None
+    return jsonify({
+        'rows': rows,
+        'aggiornato': aggiornato.strftime('%d/%m/%Y %H:%M') if aggiornato else None,
+    })
+
+
+@report_bp.route('/api/oroscopo')
+def api_oroscopo():
+    """Oroscopo della settimana. Stessa regola delle notizie sui guasti: a
+    video un messaggio neutro, il motivo tecnico solo ad admin/owner."""
+    from appl.models import Oroscopo
+    from appl.oroscopo import DETTAGLI_SEGNO
+
+    user = db.session.get(User, session.get('user_id'))
+    e_tecnico = bool(user and getattr(user.ruolo, 'value', None) in ('admin', 'owner'))
+    NEUTRO = "L'oroscopo di questa settimana non è ancora pronto."
+
+    def _vuoto(dettaglio=None):
+        risposta = {'rows': [], 'aggiornato': None, 'messaggio': NEUTRO}
+        if e_tecnico and dettaglio:
+            risposta['dettaglio'] = dettaglio
+        return jsonify(risposta)
+
+    try:
+        ultimo = db.session.query(func.max(Oroscopo.scan_batch)).scalar()
+    except Exception:
+        db.session.rollback()
+        return _vuoto('Tabella oroscopo_settimanale non presente: '
+                      'esegui migrations/manual_oroscopo.sql')
+
+    if not ultimo:
+        dettaglio = None
+        if e_tecnico:
+            try:
+                from appl.oroscopo import stato as oroscopo_stato
+                s = oroscopo_stato()
+                dettaglio = (s.get('ultimo_errore')
+                             or ('Attivo, non ancora generato.' if s.get('abilitato')
+                                 else 'Non attivo: manca ANTHROPIC_API_KEY.'))
+            except Exception:
+                pass
+        return _vuoto(dettaglio)
+
+    righe = (Oroscopo.query
+             .filter(Oroscopo.scan_batch == ultimo)
+             .order_by(Oroscopo.ordine.asc(), Oroscopo.id.asc())
+             .all())
+
+    rows = []
+    for r in righe:
+        extra = DETTAGLI_SEGNO.get(r.segno, {})
+        rows.append({
+            'segno': r.segno,
+            'simbolo': extra.get('simbolo', '★'),
+            'periodo': extra.get('periodo', ''),
+            'testo': r.testo,
+        })
+
+    aggiornato = righe[0].created_at if righe else None
+    return jsonify({
+        'rows': rows,
+        'aggiornato': aggiornato.strftime('%d/%m/%Y') if aggiornato else None,
+    })
+
+
+@report_bp.route('/api/oroscopo/refresh', methods=['POST'])
+def api_oroscopo_refresh():
+    """Rigenera l'oroscopo. Solo admin/owner: ogni chiamata ha un costo."""
+    user = db.session.get(User, session.get('user_id'))
+    if not user or getattr(user.ruolo, 'value', None) not in ('admin', 'owner'):
+        return jsonify({'ok': False, 'errore': 'Non autorizzato'}), 403
+
+    try:
+        from appl.oroscopo import esegui
+        esito = esegui(force=True)
+    except Exception as exc:
+        current_app.logger.exception("[oroscopo] refresh manuale fallito: %s", exc)
+        return jsonify({'ok': False, 'errore': str(exc)}), 500
+
+    return jsonify(esito), (200 if esito.get('ok') else 400)
+
+
+@report_bp.route('/api/news_beauty/refresh', methods=['POST'])
+def api_news_beauty_refresh():
+    """Forza uno scan immediato. Solo admin/owner: ogni chiamata ha un costo."""
+    user = db.session.get(User, session.get('user_id'))
+    if not user or getattr(user.ruolo, 'value', None) not in ('admin', 'owner'):
+        return jsonify({'ok': False, 'errore': 'Non autorizzato'}), 403
+
+    try:
+        from appl.news_beauty import esegui_scan
+        esito = esegui_scan(force=True)
+    except Exception as exc:
+        current_app.logger.exception("[news_beauty] refresh manuale fallito: %s", exc)
+        return jsonify({'ok': False, 'errore': str(exc)}), 500
+
+    return jsonify(esito), (200 if esito.get('ok') else 400)

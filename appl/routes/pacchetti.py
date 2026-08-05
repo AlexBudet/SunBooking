@@ -966,7 +966,14 @@ def pacchetto_detail(id):
     # Prepara movimenti prepagata se è una carta prepagata
     movimenti_prepagata = []
     if pacchetto.tipo == PacchettoTipo.Prepagata:
-        for m in pacchetto.movimenti_prepagata:
+        # Piu' recente in ALTO, a scendere: e' l'ordine che serve a chi guarda la
+        # scheda ("cosa e' successo per ultimo?"). La relazione li restituisce in
+        # ordine di inserimento, quindi vanno ordinati esplicitamente.
+        _movimenti_ordinati = sorted(
+            pacchetto.movimenti_prepagata,
+            key=lambda x: (x.data_movimento or datetime.min, x.id),
+            reverse=True)
+        for m in _movimenti_ordinati:
             movimenti_prepagata.append({
                 'id': m.id,
                 'tipo': m.tipo_movimento,
@@ -2069,6 +2076,19 @@ def api_prepagate_solarium():
       ?q=testo       -> ricerca per nome, cognome o cellulare (min 3 caratteri, max 5)
       ?tessera=cifre -> ricerca per numero di tessera (match parziale, max 20)
     """
+    # Modulo Solarium disabilitato per questo tenant: l'endpoint non risponde.
+    # Il tab e' gia' nascosto lato template, ma la rotta va chiusa comunque -
+    # nascondere un pulsante non e' un controllo di accesso.
+    # (Il modulo Pacchetti e' gia' coperto: /pacchetti/* viene bloccato in blocco
+    #  da enforce_module_access in appl/__init__.py.)
+    try:
+        from appl.models import OWNER
+        _cfg = OWNER.query.first()
+        if _cfg is not None and not _cfg.module_solarium_enabled:
+            return jsonify([])
+    except Exception:
+        pass
+
     ids_solarium = _ids_servizi_solarium()
     q = (request.args.get('q') or '').strip()
     tessera = (request.args.get('tessera') or '').strip()
@@ -2214,7 +2234,13 @@ def api_prepagata_o_crea():
 
 @pacchetti_bp.route('/api/prepagate-cliente/<int:client_id>', methods=['GET'])
 def api_prepagate_cliente(client_id):
-    """Restituisce le carte prepagate attive di un cliente (per la cassa).
+    """Restituisce le carte prepagate di un cliente (per la cassa).
+
+    NB: si restituiscono anche le carte a credito ZERO e quelle passate a
+    "Completato" perche' esaurite. Filtrarle via, come si faceva prima,
+    significava far sparire la tessera dalla cassa proprio quando serviva
+    ricaricarla - e impediva di scalare l'ultimo credito residuo dividendo
+    la voce fra prepagata e contanti.
     Cerca sia per client_id diretto che per beneficiario_nome (retrocompatibilità
     per prepagate create prima della riassociazione automatica)."""
     
@@ -2222,8 +2248,8 @@ def api_prepagate_cliente(client_id):
     prepagate = Pacchetto.query.filter(
         Pacchetto.client_id == client_id,
         Pacchetto.tipo == PacchettoTipo.Prepagata,
-        Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo]),
-        Pacchetto.credito_residuo > 0
+        Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo,
+                              PacchettoStatus.Completato]),
     ).all()
     
     # Retrocompatibilità: cerca anche prepagate dove il beneficiario_nome corrisponde
@@ -2234,8 +2260,8 @@ def api_prepagate_cliente(client_id):
         prepagate_beneficiario = Pacchetto.query.filter(
             Pacchetto.client_id != client_id,
             Pacchetto.tipo == PacchettoTipo.Prepagata,
-            Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo]),
-            Pacchetto.credito_residuo > 0,
+            Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo,
+                                  PacchettoStatus.Completato]),
             func.lower(func.trim(Pacchetto.beneficiario_nome)) == nome_completo
         ).all()
         

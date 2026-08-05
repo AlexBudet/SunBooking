@@ -285,12 +285,14 @@
                 <i class="bi bi-credit-card me-1"></i> Carte Prepagate
             </button>
         </li>
+        {% if module_solarium_enabled %}
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="tab-solarium" data-bs-toggle="tab" data-bs-target="#panel-solarium"
                     type="button" role="tab" aria-controls="panel-solarium" aria-selected="false">
                 <i class="bi bi-sun me-1"></i> Ricaricabili Solarium
             </button>
         </li>
+        {% endif %}
     </ul>
 
     <!-- Tab Content -->
@@ -404,6 +406,7 @@
             </table>
         </div>
 
+        {% if module_solarium_enabled %}
         <!-- ========== TAB RICARICABILI SOLARIUM ========== -->
         <!-- Carte utilizzabili SOLO per servizi Solarium. Sono centinaia, quindi
              qui NON si carica tutto: si mostrano gli ultimi movimentati e si cerca
@@ -431,21 +434,65 @@
 
             <div id="solariumStato" class="text-muted small mb-2"></div>
 
-            <table class="table" id="tabellaSolarium">
-                <thead>
-                    <tr>
-                        <th>N. Tessera</th>
-                        <th>Cliente</th>
-                        <th class="hide-mobile">Cellulare</th>
-                        <th>Saldo</th>
-                        <th class="hide-mobile">Ultimo movimento</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="solariumTable"></tbody>
-            </table>
+            <!-- Vista di default: due tabelle distinte, ognuna col proprio titolo
+                 SOPRA e la propria riga di intestazione delle colonne. -->
+            <div id="solariumRecenti">
+                <h6 class="mt-2 mb-2"><i class="bi bi-arrow-down-circle text-warning"></i> Ultime sedute scalate</h6>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>N. Tessera</th>
+                            <th>Cliente</th>
+                            <th class="hide-mobile">Cellulare</th>
+                            <th>Saldo</th>
+                            <th class="hide-mobile">Ultimo movimento</th>
+                            {% if current_user and current_user.ruolo.value != 'user' %}
+                            <th class="hide-mobile">Azioni</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody id="solariumSeduteTable"></tbody>
+                </table>
+
+                <h6 class="mt-4 mb-2"><i class="bi bi-arrow-up-circle text-success"></i> Ultime ricariche</h6>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>N. Tessera</th>
+                            <th>Cliente</th>
+                            <th class="hide-mobile">Cellulare</th>
+                            <th>Saldo</th>
+                            <th class="hide-mobile">Ultimo movimento</th>
+                            {% if current_user and current_user.ruolo.value != 'user' %}
+                            <th class="hide-mobile">Azioni</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody id="solariumRicaricheTable"></tbody>
+                </table>
+            </div>
+
+            <!-- Vista ricerca: una tabella sola, i risultati non sono divisi per tipo -->
+            <div id="solariumRisultati" style="display:none;">
+                <table class="table" id="tabellaSolarium">
+                    <thead>
+                        <tr>
+                            <th>N. Tessera</th>
+                            <th>Cliente</th>
+                            <th class="hide-mobile">Cellulare</th>
+                            <th>Saldo</th>
+                            <th class="hide-mobile">Ultimo movimento</th>
+                            {% if current_user and current_user.ruolo.value != 'user' %}
+                            <th class="hide-mobile">Azioni</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody id="solariumTable"></tbody>
+                </table>
+            </div>
         </div>
     </div>
+        {% endif %}
 </div>
 
 <!-- Modal per aggiungere/modificare pacchetto -->
@@ -1432,6 +1479,7 @@ function generateSeduteOmaggioRows() {
         renderPacchetti();
     }
 
+{% if module_solarium_enabled %}
     // ====================== RICARICABILI SOLARIUM ======================
     // Le carte sono centinaia: qui non si scarica mai l'elenco completo.
     // All'apertura del tab si mostrano solo gli ultimi movimentati; il resto
@@ -1448,40 +1496,60 @@ function generateSeduteOmaggioRows() {
         const mov = c.ultimo_movimento
             ? `${c.ultimo_movimento.tipo === 'ricarica' ? 'Ricarica' : 'Seduta'} · ${c.ultimo_movimento.quando || ''}`
             : '';
+        // Stessa resa degli altri tab: riga intera cliccabile, classe status-*
+        // per la colorazione e cella .actions col pulsante nello stesso formato.
+        const statusKey = (c.status || 'Attivo').toLowerCase();
+        tr.classList.add(`status-${statusKey}`);
+        tr.style.cursor = 'pointer';
+        tr.onclick = () => { window.location.href = '/pacchetti/detail/' + c.id; };
         tr.innerHTML = `
             <td><strong>${c.numero_tessera || '—'}</strong></td>
-            <td>${nome || '(senza nome)'}${etichettaGruppo || ''}</td>
+            <td><b>${nome || '(senza nome)'}</b>${etichettaGruppo || ''}</td>
             <td class="hide-mobile">${c.client_cellulare || ''}</td>
-            <td>€ ${Number(c.credito_residuo || 0).toFixed(2)}</td>
+            <td><strong>€ ${Number(c.credito_residuo || 0).toFixed(2)}</strong></td>
             <td class="hide-mobile">${mov}</td>
-            <td class="text-end">
-                <a class="btn btn-sm btn-outline-primary" href="/pacchetti/detail/${c.id}">Apri</a>
-            </td>`;
+            ${userRuolo !== 'user' ? `
+            <td class="actions hide-mobile">
+                <button type="button" class="btn btn-danger btn-sm btn-xxs"
+                        onclick="event.stopPropagation(); deletePacchetto(${c.id})">Elimina</button>
+            </td>
+            ` : ''}`;
         return tr;
     }
 
+    // raggruppa = true  -> vista di default, due tabelle con i rispettivi titoli
+    // raggruppa = false -> esito di una ricerca, tabella unica
     function _renderSolarium(lista, raggruppa) {
-        const tbody = document.getElementById('solariumTable');
-        tbody.innerHTML = '';
-        if (!lista.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Nessuna carta trovata.</td></tr>';
-            return;
-        }
+        const boxRecenti = document.getElementById('solariumRecenti');
+        const boxRisultati = document.getElementById('solariumRisultati');
+
         if (!raggruppa) {
+            boxRecenti.style.display = 'none';
+            boxRisultati.style.display = '';
+            const tbody = document.getElementById('solariumTable');
+            tbody.innerHTML = '';
+            if (!lista.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-muted">Nessuna carta trovata.</td></tr>';
+                return;
+            }
             lista.forEach(c => tbody.appendChild(_solariumRiga(c)));
             return;
         }
-        const gruppi = [
-            ['ultime_sedute', 'Ultime sedute scalate'],
-            ['ultime_ricariche', 'Ultime ricariche'],
-        ];
-        gruppi.forEach(([chiave, titolo]) => {
+
+        boxRisultati.style.display = 'none';
+        boxRecenti.style.display = '';
+        [['ultime_sedute', 'solariumSeduteTable', 'Nessuna seduta scalata di recente.'],
+         ['ultime_ricariche', 'solariumRicaricheTable', 'Nessuna ricarica recente.']
+        ].forEach(([chiave, idCorpo, vuoto]) => {
+            const corpo = document.getElementById(idCorpo);
+            if (!corpo) return;
+            corpo.innerHTML = '';
             const righe = lista.filter(c => c.gruppo === chiave);
-            if (!righe.length) return;
-            const intest = document.createElement('tr');
-            intest.innerHTML = `<td colspan="6" class="fw-bold text-muted small pt-3">${titolo}</td>`;
-            tbody.appendChild(intest);
-            righe.forEach(c => tbody.appendChild(_solariumRiga(c)));
+            if (!righe.length) {
+                corpo.innerHTML = `<tr><td colspan="6" class="text-muted">${vuoto}</td></tr>`;
+                return;
+            }
+            righe.forEach(c => corpo.appendChild(_solariumRiga(c)));
         });
     }
 
@@ -1572,6 +1640,8 @@ function generateSeduteOmaggioRows() {
         const inp = document.getElementById('solariumCercaNome');
         if (dd && inp && !inp.contains(e.target) && !dd.contains(e.target)) dd.classList.remove('show');
     });
+
+{% endif %}
 
     // Carica carte prepagate
     async function loadPrepagate(params = {}) {

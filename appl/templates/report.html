@@ -290,6 +290,45 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <div class="report-tiles-grid" id="report-tiles-grid">
+<!-- Primo tile della griglia: e' quello che si vuole vedere per primo
+     entrando in Report. Chi lo sposta col drag si salva il proprio ordine
+     in localStorage e da li' in poi vince la sua scelta. -->
+<div class="tile-neumorphic tile-large" id="tile-news-beauty">
+  <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
+  <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
+    <span data-bs-toggle="tooltip" data-bs-placement="bottom"
+          title="Notizie su estetica, normativa e solarium raccolte automaticamente due volte a settimana">DAL MONDO BEAUTY</span>
+    {% if current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnRefreshNews"
+            data-bs-toggle="tooltip" title="Cerca subito nuove notizie. Di norma si aggiorna da solo il lunedì e il giovedì: se le notizie sono state scaricate da meno di un'ora il pulsante non rifà la ricerca.">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+    {% endif %}
+  </div>
+  <div class="news-beauty-list" id="news-beauty-list">
+    <span class="text-muted">Caricamento...</span>
+  </div>
+  <div class="stat-voce mt-2" id="news-beauty-aggiornato"></div>
+</div>
+
+<div class="tile-neumorphic tile-large" id="tile-oroscopo">
+  <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
+  <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
+    <span data-bs-toggle="tooltip" data-bs-placement="bottom"
+          title="L'oroscopo della settimana in versione estetista. Si rinnova ogni lunedì">✨ OROSCOPO DELLA SETTIMANA</span>
+    {% if current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnRefreshOroscopo"
+            data-bs-toggle="tooltip" title="Riscrivilo adesso. Di norma si rinnova da solo il lunedì: se è stato scritto da meno di un'ora il pulsante non lo rifà.">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+    {% endif %}
+  </div>
+  <div class="oroscopo-list" id="oroscopo-list">
+    <span class="text-muted">Caricamento...</span>
+  </div>
+  <div class="stat-voce mt-2" id="oroscopo-aggiornato"></div>
+</div>
+
 <div class="tile-neumorphic tile-large" id="tile-stats-oggi">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; left:10px; z-index:2;"></button>
   <div class="tile-title" data-bs-toggle="tooltip" data-bs-placement="bottom"
@@ -514,6 +553,184 @@ document.addEventListener('DOMContentLoaded', function() {
     <span class="text-muted">Caricamento...</span>
   </div>
 </div>
+
+<!-- ===================================================================== -->
+<!-- TILE AGGIUNTIVI: andamento anno su anno, valore medio, produttivita'  -->
+<!-- ===================================================================== -->
+
+<div class="tile-neumorphic tile-large" id="tile-andamento-annuale">
+  <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
+  <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
+    <span data-bs-toggle="tooltip" data-bs-placement="bottom"
+          title="Incasso mese per mese: anno in corso a confronto con l'anno precedente">ANDAMENTO ANNO SU ANNO</span>
+    <div class="btn-group btn-group-sm" role="group" id="andamento-tipo-dati" style="display:none;">
+      <button type="button" class="btn btn-outline-secondary btn-andamento-dati active" data-test="0">Fiscali</button>
+      <button type="button" class="btn btn-outline-secondary btn-andamento-dati" data-test="1">Fiscali + test</button>
+    </div>
+  </div>
+  <div class="d-flex align-items-baseline justify-content-center" style="gap:10px; flex-wrap:wrap;">
+    <span class="stat-euro fs-3" id="andamento-totale">-</span>
+    <span class="delta-badge" id="andamento-delta"></span>
+  </div>
+  <div class="stat-voce mb-1" id="andamento-confronto">-</div>
+  <div style="width:100%; height:230px; position:relative;">
+    <canvas id="graficoAndamentoAnnuale"></canvas>
+  </div>
+</div>
+
+<div class="tile-neumorphic tile-large" id="tile-scontrino-medio">
+  <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
+  <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
+    <span data-bs-toggle="tooltip" data-bs-placement="bottom"
+          title="Quanto lascia in media un cliente a ogni passaggio in cassa. Le sedute scalate da prepagata (importo zero) non sono conteggiate">SCONTRINO MEDIO</span>
+    <div class="btn-group btn-group-sm" role="group">
+      <button type="button" class="btn btn-outline-secondary btn-scontrino-periodo" data-giorni="7">7 gg</button>
+      <button type="button" class="btn btn-outline-secondary btn-scontrino-periodo active" data-giorni="30">30 gg</button>
+      <button type="button" class="btn btn-outline-secondary btn-scontrino-periodo" data-giorni="365">1 anno</button>
+    </div>
+  </div>
+  <div class="stat-euro fs-2" id="scontrino-medio">-</div>
+  <div class="stat-voce mb-3">
+    periodo precedente: <span id="scontrino-medio-prec">-</span>
+    <span class="delta-badge" id="scontrino-delta"></span>
+  </div>
+  <div class="d-flex justify-content-center" style="gap:26px; text-align:center;">
+    <div>
+      <div style="font-size:1.4rem; font-weight:600;" id="scontrino-numero">-</div>
+      <div class="stat-voce">scontrini</div>
+    </div>
+    <div>
+      <div style="font-size:1.4rem; font-weight:600;" id="scontrino-incasso">-</div>
+      <div class="stat-voce">incassato</div>
+    </div>
+    <div>
+      <div style="font-size:1.4rem; font-weight:600;" id="scontrino-voci">-</div>
+      <div class="stat-voce">voci per scontrino</div>
+    </div>
+  </div>
+</div>
+
+<div class="tile-neumorphic tile-large" id="tile-saturazione-agenda">
+  <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
+  <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
+    <span data-bs-toggle="tooltip" data-bs-placement="bottom"
+          title="Quanto e' piena l'agenda: ore prenotate rispetto alle ore di turno inserite. Chi non ha turni inseriti non entra nel totale">SATURAZIONE AGENDA</span>
+    <div class="btn-group btn-group-sm" role="group">
+      <button type="button" class="btn btn-outline-secondary btn-saturazione-periodo" data-giorni="1">Giorno</button>
+      <button type="button" class="btn btn-outline-secondary btn-saturazione-periodo active" data-giorni="7">7 gg</button>
+      <button type="button" class="btn btn-outline-secondary btn-saturazione-periodo" data-giorni="30">30 gg</button>
+    </div>
+  </div>
+  <div class="fs-2" id="saturazione-perc">-</div>
+  <div class="stat-voce mb-2" id="saturazione-ore">-</div>
+  <div class="tile-lista-scroll" id="saturazione-list">
+    <span class="text-muted">Caricamento...</span>
+  </div>
+</div>
+
+<style>
+/* --- Stili condivisi dai tile aggiunti ------------------------------------ */
+.tile-lista-scroll {
+  width: 100%;
+  max-height: 210px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  text-align: left;
+  font-size: 0.92rem;
+}
+.tile-lista-scroll .riga-lista {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 6px;
+  border-bottom: 1px solid #e9ecef;
+}
+.tile-lista-scroll .riga-lista:last-child { border-bottom: none; }
+.tile-lista-scroll .riga-nome {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile-lista-scroll .riga-dettaglio { color: #777; font-size: 0.82rem; }
+
+.delta-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.delta-badge.su   { background: #e3f5e8; color: #1e7d3a; }
+.delta-badge.giu  { background: #fdeaea; color: #b02a2a; }
+.delta-badge.pari { background: #eef0f4; color: #666; }
+
+.barra-saturazione {
+  flex: 1 1 auto;
+  height: 8px;
+  border-radius: 4px;
+  background: #eef0f4;
+  overflow: hidden;
+  min-width: 50px;
+}
+.barra-saturazione > span { display: block; height: 100%; background: #4a90d9; }
+.barra-saturazione > span.piena  { background: #1e7d3a; }
+.barra-saturazione > span.troppo { background: #b02a2a; }
+
+.news-beauty-list { width: 100%; text-align: left; max-height: 300px; overflow-y: auto; }
+.news-beauty-item { padding: 8px 4px; border-bottom: 1px solid #e9ecef; }
+.news-beauty-item:last-child { border-bottom: none; }
+.news-beauty-item a { text-decoration: none; color: #1a4b7a; font-weight: 600; }
+.news-beauty-item a:hover { text-decoration: underline; }
+.news-beauty-sintesi { font-size: 0.88rem; color: #555; margin-top: 3px; }
+.news-beauty-meta { font-size: 0.78rem; color: #888; margin-top: 3px; }
+.news-cat {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-right: 6px;
+}
+.news-cat.normativa { background: #fdeaea; color: #b02a2a; }
+.news-cat.solarium  { background: #fff3d6; color: #96700f; }
+.news-cat.estetica  { background: #f3e8fb; color: #6b2d9e; }
+.news-cat.mercato   { background: #e3f5e8; color: #1e7d3a; }
+.news-cat.beauty    { background: #eef0f4; color: #555; }
+
+/* --- Oroscopo ------------------------------------------------------------- */
+.oroscopo-list { width: 100%; text-align: left; max-height: 300px; overflow-y: auto; }
+.oroscopo-segno {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 4px;
+  border-bottom: 1px solid #f0e6f5;
+}
+.oroscopo-segno:last-child { border-bottom: none; }
+.oroscopo-simbolo {
+  flex: 0 0 34px;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  text-align: center;
+  color: #8e5bb5;
+}
+.oroscopo-nome { font-weight: 700; color: #6b2d9e; letter-spacing: .3px; }
+.oroscopo-periodo { font-size: 0.72rem; color: #999; font-weight: 400; margin-left: 6px; }
+.oroscopo-testo { font-size: 0.88rem; color: #555; margin-top: 2px; }
+
+@media (prefers-color-scheme: dark) {
+  .oroscopo-segno { border-bottom-color: #3a3f47; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .tile-lista-scroll .riga-lista { border-bottom-color: #3a3f47; }
+  .news-beauty-item { border-bottom-color: #3a3f47; }
+}
+</style>
 
 <!-- Modal corrispettivi -->
 <div class="modal fade" id="modalCorrispettivi" tabindex="-1" aria-labelledby="modalCorrispettiviLabel" aria-hidden="true">
@@ -3182,38 +3399,36 @@ function caricaHeatmapAppuntamenti(dataRif, giorni = 10) {
         url: '/api/heatmap_appuntamenti',
         data: { data_rif: dataRif, giorni: giorni },
         success: function(res) {
+            /* Una riga di customdata per giorno, riempita con la data ISA che
+               arriva gia' pronta dal server. Prima si costruiva un oggetto per
+               OGNI cella, creando un Date a testa: con il quarto d'ora sarebbero
+               diventati quasi ventimila oggetti e il grafico ci metteva un'era
+               ad apparire. Ora e' una stringa per riga. */
             const z = [];
             const customdata = [];
             const numGiorni = res.giorni.length;
-            
+            const numColonne = res.ore.length;
+
             for (let y = 0; y < numGiorni; y++) {
-                z.push(new Array(res.ore.length).fill(0));
-                customdata.push([]);
-                for (let x = 0; x < res.ore.length; x++) {
-                    // Calcola la data effettiva per questo punto
-                    const dataRifDate = dataRif ? new Date(dataRif) : new Date();
-                    const giorniIndietro = numGiorni - 1 - y;
-                    const dataEffettiva = new Date(dataRifDate);
-                    dataEffettiva.setDate(dataEffettiva.getDate() - giorniIndietro);
-                    const dataISO = dataEffettiva.toISOString().slice(0, 10);
-                    customdata[y].push({
-                        giorno: res.giorni[y],
-                        ora: res.ore[x],
-                        dataISO: dataISO
-                    });
-                }
+                z.push(new Array(numColonne).fill(0));
+                customdata.push(new Array(numColonne).fill(res.giorni_iso[y]));
             }
             
             res.valori.forEach(function(v) {
-                if (v.y >= 0 && v.y < numGiorni && v.x >= 0 && v.x < res.ore.length) {
+                if (v.y >= 0 && v.y < numGiorni && v.x >= 0 && v.x < numColonne) {
                     z[v.y][v.x] = v.v;
                 }
             });
 
-            // Adatta altezza in base ai giorni
-            let altezza = 260;
-            if (giorni === 30) altezza = 350;
-            if (giorni === 365) altezza = 420;
+            /* Altezza proporzionata al numero di righe: sotto i ~14px per riga
+               le etichette dei giorni si accavallano.
+               Il minimo e' 292px perche' il tile "large" e' alto 352px (due
+               righe di griglia da 170 piu' 12 di gap) e il titolo con i tasti
+               di periodo ne occupa una cinquantina: cosi' la heatmap a 10
+               giorni riempie il riquadro invece di lasciare una fascia vuota. */
+            let altezza = numGiorni > 60
+                ? 620                                   // vista annuale: serve tutto lo spazio possibile
+                : Math.min(560, Math.max(292, 70 + numGiorni * 15));
             $('#heatmapAppuntamenti').css('height', altezza + 'px');
 
             Plotly.newPlot('heatmapAppuntamenti', [{
@@ -3223,26 +3438,53 @@ function caricaHeatmapAppuntamenti(dataRif, giorni = 10) {
                 customdata: customdata,
                 type: 'heatmap',
                 colorscale: [
-                    [0, 'white'],
+                    // Zero trasparente, non bianco: un bianco pieno coprirebbe
+                    // le righe della griglia, che Plotly disegna sotto le celle.
+                    [0, 'rgba(255,255,255,0)'],
                     [0.5, '#ff66b2'],
                     [1, '#cc0066']
                 ],
+                // Un pixel di stacco fa leggere la griglia come celle distinte,
+                // ma SOLO se le celle sono piu' alte di qualche pixel: su un anno
+                // intero la riga e' alta poco piu' di un pixel e lo stacco se la
+                // mangerebbe tutta, lasciando la heatmap completamente bianca.
+                xgap: numColonne > 60 ? 0 : 1,
+                ygap: numGiorni > 60 ? 0 : 1,
                 zmin: 0,
                 zmax: res.max_legend,
                 showscale: false,
                 hoverongaps: false,
-                hovertemplate: '<b>%{y}</b> ore %{x}:00<br>Appuntamenti: %{z}<extra></extra>'
+                hovertemplate: '<b>%{y}</b> ore %{x}<br>Appuntamenti: %{z}<extra></extra>'
             }], {
-                margin: { t: 10, b: 40, l: 50, r: 10 },
-                xaxis: { 
-                    title: '', 
-                    tickfont: { size: 11 }, 
-                    dtick: giorni > 30 ? 2 : 1 
+                margin: { t: 10, b: 44, l: numGiorni > 40 ? 54 : 76, r: 10 },
+                xaxis: {
+                    title: '',
+                    type: 'category',
+                    tickfont: { size: 10 },
+                    tickangle: 0,
+                    // Le colonne possono essere di 15', ma si scrive
+                    // un'etichetta ogni ora piena: 52 scritte sarebbero illeggibili.
+                    dtick: Math.max(1, 60 / (res.passo_minuti || 60)),
+                    // Riga verticale a ogni ora piena, tenue e sullo sfondo.
+                    showgrid: true,
+                    gridcolor: 'rgba(120,130,145,0.18)',
+                    gridwidth: 1,
+                    ticks: 'outside',
+                    ticklen: 3
                 },
-                yaxis: { 
-                    title: '', 
-                    tickfont: { size: giorni > 30 ? 8 : 11 },
-                    dtick: giorni > 30 ? 7 : 1
+                yaxis: {
+                    title: '',
+                    type: 'category',
+                    // Una data ogni N righe, scegliendo N in modo che restino
+                    // sempre una quindicina di etichette leggibili.
+                    tickfont: { size: numGiorni > 40 ? 9 : 10 },
+                    dtick: numGiorni > 120 ? 14 : (numGiorni > 40 ? 7 : (numGiorni > 20 ? 2 : 1)),
+                    // Riga orizzontale in corrispondenza delle date etichettate.
+                    showgrid: true,
+                    gridcolor: 'rgba(120,130,145,0.18)',
+                    gridwidth: 1,
+                    ticks: 'outside',
+                    ticklen: 3
                 },
                 paper_bgcolor: 'rgba(0,0,0,0)',
                 plot_bgcolor: 'rgba(0,0,0,0)'
@@ -3251,12 +3493,16 @@ function caricaHeatmapAppuntamenti(dataRif, giorni = 10) {
             // Click per andare al calendario
             document.getElementById('heatmapAppuntamenti').on('plotly_click', function(data) {
                 const pt = data.points[0];
-                const cd = pt.customdata;
-                if (cd && cd.dataISO) {
-                    const ora = cd.ora;
+                const dataISO = pt.customdata;              // 'AAAA-MM-GG'
+                const orario = String(pt.x || '').split(':');   // ['08','15']
+                if (dataISO && orario[0]) {
+                    const ora = orario[0];
+                    const minuti = orario[1] || '00';
+                    // Col quarto d'ora il calendario si apre sullo slot esatto,
+                    // non piu' solo sull'inizio dell'ora.
                     sessionStorage.setItem('scrollToHour', ora);
-                    sessionStorage.setItem('scrollToMinute', '00');
-                    appGoToCalendar(`/calendar?date=${cd.dataISO}&ora=${ora}:00`);
+                    sessionStorage.setItem('scrollToMinute', minuti);
+                    appGoToCalendar(`/calendar?date=${dataISO}&ora=${ora}:${minuti}`);
                 }
             });
         }
@@ -3269,38 +3515,36 @@ function caricaHeatmapIncassi(dataRif, giorni = 10) {
         url: '/api/heatmap_incassi',
         data: { data_rif: dataRif, giorni: giorni },
         success: function(res) {
+            /* Una riga di customdata per giorno, riempita con la data ISA che
+               arriva gia' pronta dal server. Prima si costruiva un oggetto per
+               OGNI cella, creando un Date a testa: con il quarto d'ora sarebbero
+               diventati quasi ventimila oggetti e il grafico ci metteva un'era
+               ad apparire. Ora e' una stringa per riga. */
             const z = [];
             const customdata = [];
             const numGiorni = res.giorni.length;
-            
+            const numColonne = res.ore.length;
+
             for (let y = 0; y < numGiorni; y++) {
-                z.push(new Array(res.ore.length).fill(0));
-                customdata.push([]);
-                for (let x = 0; x < res.ore.length; x++) {
-                    // Calcola la data effettiva per questo punto
-                    const dataRifDate = dataRif ? new Date(dataRif) : new Date();
-                    const giorniIndietro = numGiorni - 1 - y;
-                    const dataEffettiva = new Date(dataRifDate);
-                    dataEffettiva.setDate(dataEffettiva.getDate() - giorniIndietro);
-                    const dataISO = dataEffettiva.toISOString().slice(0, 10);
-                    customdata[y].push({
-                        giorno: res.giorni[y],
-                        ora: res.ore[x],
-                        dataISO: dataISO
-                    });
-                }
+                z.push(new Array(numColonne).fill(0));
+                customdata.push(new Array(numColonne).fill(res.giorni_iso[y]));
             }
             
             res.valori.forEach(function(v) {
-                if (v.y >= 0 && v.y < numGiorni && v.x >= 0 && v.x < res.ore.length) {
+                if (v.y >= 0 && v.y < numGiorni && v.x >= 0 && v.x < numColonne) {
                     z[v.y][v.x] = v.v;
                 }
             });
 
-            // Adatta altezza in base ai giorni
-            let altezza = 260;
-            if (giorni === 30) altezza = 350;
-            if (giorni === 365) altezza = 420;
+            /* Altezza proporzionata al numero di righe: sotto i ~14px per riga
+               le etichette dei giorni si accavallano.
+               Il minimo e' 292px perche' il tile "large" e' alto 352px (due
+               righe di griglia da 170 piu' 12 di gap) e il titolo con i tasti
+               di periodo ne occupa una cinquantina: cosi' la heatmap a 10
+               giorni riempie il riquadro invece di lasciare una fascia vuota. */
+            let altezza = numGiorni > 60
+                ? 620                                   // vista annuale: serve tutto lo spazio possibile
+                : Math.min(560, Math.max(292, 70 + numGiorni * 15));
             $('#heatmapIncassi').css('height', altezza + 'px');
 
             Plotly.newPlot('heatmapIncassi', [{
@@ -3310,26 +3554,53 @@ function caricaHeatmapIncassi(dataRif, giorni = 10) {
                 customdata: customdata,
                 type: 'heatmap',
                 colorscale: [
-                    [0, 'white'],
+                    // Zero trasparente, non bianco: un bianco pieno coprirebbe
+                    // le righe della griglia, che Plotly disegna sotto le celle.
+                    [0, 'rgba(255,255,255,0)'],
                     [0.5, '#66b3ff'],
                     [1, '#0066cc']
                 ],
+                // Un pixel di stacco fa leggere la griglia come celle distinte,
+                // ma SOLO se le celle sono piu' alte di qualche pixel: su un anno
+                // intero la riga e' alta poco piu' di un pixel e lo stacco se la
+                // mangerebbe tutta, lasciando la heatmap completamente bianca.
+                xgap: numColonne > 60 ? 0 : 1,
+                ygap: numGiorni > 60 ? 0 : 1,
                 zmin: 0,
                 zmax: res.max_legend || 1000,
                 showscale: false,
                 hoverongaps: false,
-                hovertemplate: '<b>%{y}</b> ore %{x}:00<br>Incasso: € %{z:.2f}<extra></extra>'
+                hovertemplate: '<b>%{y}</b> ore %{x}<br>Incasso: € %{z:.2f}<extra></extra>'
             }], {
-                margin: { t: 10, b: 40, l: 50, r: 10 },
-                xaxis: { 
-                    title: '', 
-                    tickfont: { size: 11 }, 
-                    dtick: giorni > 30 ? 2 : 1 
+                margin: { t: 10, b: 44, l: numGiorni > 40 ? 54 : 76, r: 10 },
+                xaxis: {
+                    title: '',
+                    type: 'category',
+                    tickfont: { size: 10 },
+                    tickangle: 0,
+                    // Le colonne possono essere di 15', ma si scrive
+                    // un'etichetta ogni ora piena: 52 scritte sarebbero illeggibili.
+                    dtick: Math.max(1, 60 / (res.passo_minuti || 60)),
+                    // Riga verticale a ogni ora piena, tenue e sullo sfondo.
+                    showgrid: true,
+                    gridcolor: 'rgba(120,130,145,0.18)',
+                    gridwidth: 1,
+                    ticks: 'outside',
+                    ticklen: 3
                 },
-                yaxis: { 
-                    title: '', 
-                    tickfont: { size: giorni > 30 ? 8 : 11 },
-                    dtick: giorni > 30 ? 7 : 1
+                yaxis: {
+                    title: '',
+                    type: 'category',
+                    // Una data ogni N righe, scegliendo N in modo che restino
+                    // sempre una quindicina di etichette leggibili.
+                    tickfont: { size: numGiorni > 40 ? 9 : 10 },
+                    dtick: numGiorni > 120 ? 14 : (numGiorni > 40 ? 7 : (numGiorni > 20 ? 2 : 1)),
+                    // Riga orizzontale in corrispondenza delle date etichettate.
+                    showgrid: true,
+                    gridcolor: 'rgba(120,130,145,0.18)',
+                    gridwidth: 1,
+                    ticks: 'outside',
+                    ticklen: 3
                 },
                 paper_bgcolor: 'rgba(0,0,0,0)',
                 plot_bgcolor: 'rgba(0,0,0,0)'
@@ -3338,12 +3609,16 @@ function caricaHeatmapIncassi(dataRif, giorni = 10) {
             // Click per andare al calendario
             document.getElementById('heatmapIncassi').on('plotly_click', function(data) {
                 const pt = data.points[0];
-                const cd = pt.customdata;
-                if (cd && cd.dataISO) {
-                    const ora = cd.ora;
+                const dataISO = pt.customdata;              // 'AAAA-MM-GG'
+                const orario = String(pt.x || '').split(':');   // ['08','15']
+                if (dataISO && orario[0]) {
+                    const ora = orario[0];
+                    const minuti = orario[1] || '00';
+                    // Col quarto d'ora il calendario si apre sullo slot esatto,
+                    // non piu' solo sull'inizio dell'ora.
                     sessionStorage.setItem('scrollToHour', ora);
-                    sessionStorage.setItem('scrollToMinute', '00');
-                    appGoToCalendar(`/calendar?date=${cd.dataISO}&ora=${ora}:00`);
+                    sessionStorage.setItem('scrollToMinute', minuti);
+                    appGoToCalendar(`/calendar?date=${dataISO}&ora=${ora}:${minuti}`);
                 }
             });
         }
@@ -4599,5 +4874,460 @@ document.addEventListener('DOMContentLoaded', function() {
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }
 });
+</script>
+
+<script>
+/* =========================================================================
+   TILE AGGIUNTIVI + NOTIZIE BEAUTY
+   Tutti i tile qui sotto prendono come data di riferimento quella scelta in
+   #reportDate (come gli altri tile della pagina) e la usano come FINE del
+   periodo; ogni tile ha il proprio selettore di durata.
+   ========================================================================= */
+(function () {
+  'use strict';
+
+  function dataRiferimento() {
+    var el = document.getElementById('reportDate');
+    var v = el && el.value ? el.value : '';
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : new Date().toISOString().slice(0, 10);
+  }
+
+  /* Periodo che FINISCE nella data di riferimento e dura `giorni` giorni. */
+  function periodo(giorni) {
+    var fine = new Date(dataRiferimento() + 'T12:00:00');
+    var inizio = new Date(fine.getTime());
+    inizio.setDate(inizio.getDate() - (giorni - 1));
+    var iso = function (d) { return d.toISOString().slice(0, 10); };
+    return 'dateFrom=' + iso(inizio) + '&dateTo=' + iso(fine);
+  }
+
+  function euro(n) {
+    return '€ ' + (Number(n) || 0).toLocaleString('it-IT', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+  }
+
+  function scriviDelta(el, delta) {
+    if (!el) return;
+    if (delta === null || delta === undefined) {
+      el.textContent = '';
+      el.className = 'delta-badge';
+      return;
+    }
+    var v = Number(delta);
+    el.textContent = (v > 0 ? '+' : '') + v.toFixed(1) + '%';
+    el.className = 'delta-badge ' + (v > 0.05 ? 'su' : (v < -0.05 ? 'giu' : 'pari'));
+  }
+
+  /* I tooltip generati via JS devono essere Bootstrap come tutti gli altri. */
+  function bsTip(el, testo) {
+    if (!el || !testo) return;
+    el.setAttribute('data-bs-toggle', 'tooltip');
+    el.setAttribute('data-bs-placement', 'top');
+    el.setAttribute('title', testo);
+    try {
+      if (window.bootstrap && bootstrap.Tooltip) new bootstrap.Tooltip(el);
+    } catch (e) { /* tooltip non critico */ }
+  }
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  /* Collega i bottoni di un gruppo periodo alla funzione di ricarica. */
+  function collegaPeriodo(selettore, callback) {
+    document.querySelectorAll(selettore).forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll(selettore).forEach(function (b) {
+          b.classList.remove('active');
+        });
+        btn.classList.add('active');
+        callback(parseInt(btn.dataset.giorni, 10));
+      });
+    });
+  }
+
+  function giorniAttivi(selettore, predefinito) {
+    var attivo = document.querySelector(selettore + '.active');
+    var n = attivo ? parseInt(attivo.dataset.giorni, 10) : NaN;
+    return isNaN(n) ? predefinito : n;
+  }
+
+  // ---------------------------------------------------------------- TILE 1
+  /* Andamento anno su anno: barre sovrapposte (grouped:false), l'anno
+     precedente largo e chiaro sul fondo, l'anno in corso stretto e pieno
+     davanti. Il tile viene RIMOSSO dal DOM se lo storico e' inferiore a 6
+     mesi: cosi' non compare nemmeno nella modale delle impostazioni e non
+     lascia uno stato "nascosto" in localStorage. */
+  var graficoAndamento = null;
+
+  function caricaAndamentoAnnuale(includiTest) {
+    var tile = document.getElementById('tile-andamento-annuale');
+    var canvas = document.getElementById('graficoAndamentoAnnuale');
+    if (!tile || !canvas || typeof Chart === 'undefined') return;
+
+    if (includiTest === undefined) {
+      var attivo = document.querySelector('#andamento-tipo-dati .btn-andamento-dati.active');
+      includiTest = attivo ? attivo.dataset.test === '1' : false;
+    }
+
+    var anno = parseInt(dataRiferimento().slice(0, 4), 10);
+
+    fetch('/api/report_andamento_annuale?anno=' + anno + '&test=' + (includiTest ? '1' : '0'))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.storico_sufficiente) {
+          tile.remove();
+          return;
+        }
+
+        /* Il selettore Fiscali / Fiscali+test esiste solo per admin e owner:
+           il ruolo "user" vede sempre e solo i fiscali. */
+        var selettore = document.getElementById('andamento-tipo-dati');
+        if (selettore) selettore.style.display = d.puo_vedere_test ? '' : 'none';
+
+        document.getElementById('andamento-totale').textContent = euro(d.totale_corrente);
+        scriviDelta(document.getElementById('andamento-delta'), d.delta);
+        document.getElementById('andamento-confronto').textContent =
+          d.anno + ' a oggi · stesso periodo ' + d.anno_precedente + ': ' +
+          euro(d.totale_precedente_periodo);
+
+        if (graficoAndamento) graficoAndamento.destroy();
+        graficoAndamento = new Chart(canvas.getContext('2d'), {
+          type: 'bar',
+          data: {
+            labels: d.labels,
+            datasets: [
+              {
+                label: String(d.anno_precedente),
+                data: d.precedente,
+                backgroundColor: 'rgba(150, 160, 175, 0.35)',
+                borderColor: 'rgba(150, 160, 175, 0.6)',
+                borderWidth: 1,
+                grouped: false,
+                order: 2,
+                barPercentage: 0.92,
+                categoryPercentage: 0.86
+              },
+              {
+                label: String(d.anno),
+                data: d.corrente,
+                backgroundColor: 'rgba(74, 144, 217, 0.9)',
+                borderWidth: 0,
+                grouped: false,
+                order: 1,
+                barPercentage: 0.5,
+                categoryPercentage: 0.86
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+              tooltip: {
+                callbacks: {
+                  label: function (ctx) {
+                    if (ctx.parsed.y === null) return null;
+                    return ctx.dataset.label + ': ' + euro(ctx.parsed.y);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  font: { size: 10 },
+                  callback: function (v) {
+                    return v >= 1000 ? '€ ' + (v / 1000) + 'k' : '€ ' + v;
+                  }
+                }
+              }
+            }
+          }
+        });
+      })
+      .catch(function () {
+        document.getElementById('andamento-totale').textContent = '-';
+      });
+  }
+
+  // ---------------------------------------------------------------- TILE 2
+  function caricaScontrinoMedio(giorni) {
+    giorni = giorni || giorniAttivi('#tile-scontrino-medio .btn-scontrino-periodo', 30);
+
+    fetch('/api/report_scontrino_medio?' + periodo(giorni))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var a = d.attuale || {};
+        var p = d.precedente || {};
+        document.getElementById('scontrino-medio').textContent = euro(a.medio);
+        document.getElementById('scontrino-medio-prec').textContent = euro(p.medio);
+        document.getElementById('scontrino-numero').textContent = a.scontrini || 0;
+        document.getElementById('scontrino-incasso').textContent = euro(a.incasso);
+        document.getElementById('scontrino-voci').textContent = (a.voci_medie || 0).toFixed(1);
+        scriviDelta(document.getElementById('scontrino-delta'), d.delta_medio);
+      })
+      .catch(function () {
+        document.getElementById('scontrino-medio').textContent = '-';
+      });
+  }
+
+  // ---------------------------------------------------------------- TILE 4
+  function caricaSaturazioneAgenda(giorni) {
+    var lista = document.getElementById('saturazione-list');
+    if (!lista) return;
+    giorni = giorni || giorniAttivi('#tile-saturazione-agenda .btn-saturazione-periodo', 7);
+
+    fetch('/api/report_saturazione_agenda?' + periodo(giorni))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        document.getElementById('saturazione-perc').textContent =
+          d.ore_disponibili ? (d.saturazione || 0).toFixed(1) + '%' : '-';
+        document.getElementById('saturazione-ore').textContent =
+          d.ore_disponibili
+            ? (d.ore_prenotate || 0) + ' ore prenotate su ' + d.ore_disponibili + ' ore di turno'
+            : 'Nessun turno inserito nel periodo';
+
+        if (!d.rows || !d.rows.length) {
+          lista.innerHTML = '<span class="text-muted">Nessun operatore con turni o appuntamenti.</span>';
+          return;
+        }
+
+        lista.innerHTML = '';
+        d.rows.forEach(function (r) {
+          var riga = document.createElement('div');
+          riga.className = 'riga-lista';
+
+          var perc = r.saturazione;
+          var classe = perc === null ? '' : (perc > 100 ? 'troppo' : (perc >= 75 ? 'piena' : ''));
+          var larghezza = perc === null ? 0 : Math.min(perc, 100);
+
+          riga.innerHTML =
+            '<div style="min-width:0; flex:0 0 34%;">' +
+              '<div class="riga-nome">' + esc(r.operatore) + '</div>' +
+              '<div class="riga-dettaglio">' + r.appuntamenti + ' appuntamenti</div>' +
+            '</div>' +
+            '<div class="barra-saturazione"><span class="' + classe +
+              '" style="width:' + larghezza + '%"></span></div>' +
+            '<div style="flex:0 0 52px; text-align:right; font-weight:600;">' +
+              (perc === null ? '—' : perc.toFixed(0) + '%') +
+            '</div>';
+
+          bsTip(riga, perc === null
+            ? 'Nessun turno inserito per questo operatore nel periodo'
+            : r.ore_prenotate + ' ore prenotate su ' + r.ore_disponibili + ' ore di turno');
+          lista.appendChild(riga);
+        });
+      })
+      .catch(function () {
+        lista.innerHTML = '<span class="text-danger">Errore nel caricamento.</span>';
+      });
+  }
+
+  // ---------------------------------------------------------------- TILE 5
+  /* `nota` compare in fondo come riga piccola: serve dopo un refresh manuale
+     non andato a buon fine, per non cancellare le notizie gia' a video solo
+     per dire che non e' stato scaricato niente di nuovo. */
+  function caricaNewsBeauty(nota) {
+    var lista = document.getElementById('news-beauty-list');
+    if (!lista) return;
+
+    fetch('/api/news_beauty')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var footer = document.getElementById('news-beauty-aggiornato');
+        footer.textContent = d.aggiornato ? 'Aggiornato il ' + d.aggiornato : '';
+        if (nota) {
+          footer.textContent = (footer.textContent ? footer.textContent + ' · ' : '') + nota;
+        }
+
+        if (!d.rows || !d.rows.length) {
+          /* Messaggio neutro per chiunque. Il "dettaglio" tecnico lo manda il
+             server solo ad admin/owner: l'utente finale non deve sapere che e'
+             finito il credito o che manca una tabella. */
+          lista.innerHTML = '<span class="text-muted">' +
+            esc(d.messaggio || 'Nessuna notizia disponibile al momento.') + '</span>' +
+            (d.dettaglio ? '<div class="news-beauty-meta" style="margin-top:6px;">' +
+              esc(d.dettaglio) + '</div>' : '');
+          return;
+        }
+
+        lista.innerHTML = '';
+        d.rows.forEach(function (n) {
+          var item = document.createElement('div');
+          item.className = 'news-beauty-item';
+          var titolo = n.url
+            ? '<a href="' + esc(n.url) + '" target="_blank" rel="noopener">' + esc(n.titolo) + '</a>'
+            : '<strong>' + esc(n.titolo) + '</strong>';
+          var meta = [n.fonte, n.data].filter(Boolean).map(esc).join(' · ');
+          item.innerHTML =
+            '<div><span class="news-cat ' + esc(n.categoria || 'beauty') + '">' +
+              esc(n.categoria || 'beauty') + '</span>' + titolo + '</div>' +
+            (n.sintesi ? '<div class="news-beauty-sintesi">' + esc(n.sintesi) + '</div>' : '') +
+            (meta ? '<div class="news-beauty-meta">' + meta + '</div>' : '');
+          lista.appendChild(item);
+        });
+      })
+      .catch(function () {
+        lista.innerHTML = '<span class="text-danger">Errore nel caricamento.</span>';
+      });
+  }
+
+  function aggiornaNewsBeauty(btn) {
+    var lista = document.getElementById('news-beauty-list');
+    var iconaOriginale = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    if (lista) lista.innerHTML = '<span class="text-muted">Ricerca in corso, può richiedere un minuto...</span>';
+
+    var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+    var token = document.querySelector('meta[name="csrf-token"]');
+    if (token) headers['X-CSRFToken'] = token.getAttribute('content');
+
+    fetch('/api/news_beauty/refresh', { method: 'POST', headers: headers })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        /* In ogni caso si ricarica dal database: se lo scan e' andato a buon
+           fine si vedono le notizie nuove, se non e' partito restano quelle di
+           prima. Il motivo finisce come nota piccola in fondo - il pulsante lo
+           vedono solo admin e owner, cioe' chi puo' intervenire. */
+        caricaNewsBeauty(
+          (d && d.ok) ? null : ((d && d.errore) || 'Aggiornamento non riuscito.')
+        );
+      })
+      .catch(function () {
+        caricaNewsBeauty('Aggiornamento non riuscito.');
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.innerHTML = iconaOriginale;
+      });
+  }
+
+  // ---------------------------------------------------------------- TILE 6
+  function caricaOroscopo(nota) {
+    var lista = document.getElementById('oroscopo-list');
+    if (!lista) return;
+
+    fetch('/api/oroscopo')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var footer = document.getElementById('oroscopo-aggiornato');
+        footer.textContent = d.aggiornato ? 'Settimana del ' + d.aggiornato : '';
+        if (nota) {
+          footer.textContent = (footer.textContent ? footer.textContent + ' · ' : '') + nota;
+        }
+
+        if (!d.rows || !d.rows.length) {
+          lista.innerHTML = '<span class="text-muted">' +
+            esc(d.messaggio || "L'oroscopo di questa settimana non è ancora pronto.") + '</span>' +
+            (d.dettaglio ? '<div class="news-beauty-meta" style="margin-top:6px;">' +
+              esc(d.dettaglio) + '</div>' : '');
+          return;
+        }
+
+        lista.innerHTML = '';
+        d.rows.forEach(function (s) {
+          var riga = document.createElement('div');
+          riga.className = 'oroscopo-segno';
+          riga.innerHTML =
+            '<div class="oroscopo-simbolo">' + esc(s.simbolo) + '</div>' +
+            '<div style="min-width:0;">' +
+              '<div><span class="oroscopo-nome">' + esc(s.segno) + '</span>' +
+              (s.periodo ? '<span class="oroscopo-periodo">' + esc(s.periodo) + '</span>' : '') +
+              '</div>' +
+              '<div class="oroscopo-testo">' + esc(s.testo) + '</div>' +
+            '</div>';
+          lista.appendChild(riga);
+        });
+      })
+      .catch(function () {
+        lista.innerHTML = '<span class="text-danger">Errore nel caricamento.</span>';
+      });
+  }
+
+  function aggiornaOroscopo(btn) {
+    var lista = document.getElementById('oroscopo-list');
+    var iconaOriginale = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    if (lista) lista.innerHTML = '<span class="text-muted">Sto consultando le stelle...</span>';
+
+    var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+    var token = document.querySelector('meta[name="csrf-token"]');
+    if (token) headers['X-CSRFToken'] = token.getAttribute('content');
+
+    fetch('/api/oroscopo/refresh', { method: 'POST', headers: headers })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        // Come per le notizie: si ricarica sempre dall'archivio, cosi' un
+        // tentativo a vuoto non cancella l'oroscopo gia' a video.
+        caricaOroscopo((d && d.ok) ? null : ((d && d.errore) || 'Aggiornamento non riuscito.'));
+      })
+      .catch(function () { caricaOroscopo('Aggiornamento non riuscito.'); })
+      .finally(function () {
+        btn.disabled = false;
+        btn.innerHTML = iconaOriginale;
+      });
+  }
+
+  // ---------------------------------------------------------------- avvio
+  document.addEventListener('DOMContentLoaded', function () {
+    collegaPeriodo('#tile-scontrino-medio .btn-scontrino-periodo', caricaScontrinoMedio);
+    collegaPeriodo('#tile-saturazione-agenda .btn-saturazione-periodo', caricaSaturazioneAgenda);
+
+    /* Selettore Fiscali / Fiscali+test del grafico annuale (solo admin/owner:
+       per il ruolo "user" il gruppo di bottoni resta nascosto e il server
+       ignora comunque il parametro). */
+    document.querySelectorAll('#andamento-tipo-dati .btn-andamento-dati').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('#andamento-tipo-dati .btn-andamento-dati')
+          .forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        caricaAndamentoAnnuale(btn.dataset.test === '1');
+      });
+    });
+
+    var btnNews = document.getElementById('btnRefreshNews');
+    if (btnNews) {
+      btnNews.addEventListener('click', function () { aggiornaNewsBeauty(btnNews); });
+    }
+
+    var btnOroscopo = document.getElementById('btnRefreshOroscopo');
+    if (btnOroscopo) {
+      btnOroscopo.addEventListener('click', function () { aggiornaOroscopo(btnOroscopo); });
+    }
+
+    caricaAndamentoAnnuale();
+    caricaScontrinoMedio();
+    caricaSaturazioneAgenda();
+    caricaNewsBeauty();
+    caricaOroscopo();
+
+    /* Cambiando la data di riferimento si ricaricano i tile legati al periodo.
+       Il grafico annuale si ricarica solo se cambia l'ANNO: dentro lo stesso
+       anno mostrerebbe esattamente gli stessi dodici mesi. */
+    var dateInput = document.getElementById('reportDate');
+    if (dateInput) {
+      var annoCorrente = dataRiferimento().slice(0, 4);
+      dateInput.addEventListener('change', function () {
+        caricaScontrinoMedio();
+        caricaSaturazioneAgenda();
+        var nuovoAnno = dataRiferimento().slice(0, 4);
+        if (nuovoAnno !== annoCorrente) {
+          annoCorrente = nuovoAnno;
+          caricaAndamentoAnnuale();
+        }
+      });
+    }
+  });
+})();
 </script>
 {% endblock %}

@@ -12472,34 +12472,10 @@ if (deleteBtn) {
   });
 });
 
-function aggiornaStatoAppuntamenti(ids) {
-  fetch('/api/appointment_status', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids: ids })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.success) {
-      data.appointments.forEach(app => {
-        const blocco = document.querySelector('.appointment-block[data-appointment-id="' + app.id + '"]');
-        if (blocco) {
-          // Aggiorna la classe in base allo stato
-          blocco.classList.remove('lampeggia', 'default', 'pagato', 'non_arrivato');
-          if (app.stato == 1) {
-            blocco.classList.add('lampeggia');
-          } else if (app.stato == 0) {
-            blocco.classList.add('default');
-          } else if (app.stato == 2) {
-            blocco.classList.add('pagato');
-          } else if (app.stato == 3) {
-            blocco.classList.add('non_arrivato');
-          }
-        }
-      });
-    }
-  });
-}
+// NB: qui viveva aggiornaStatoAppuntamenti(ids), rimossa il 05/08/2026 perche'
+// codice morto: nessuna chiamata in tutto il progetto (js, html, py) e mai
+// esposta su window. Aggiornava le classi dei blocchi leggendo lo stato da
+// /api/appointment_status, endpoint che ora non ha piu' nessun chiamante.
 
 document.addEventListener('DOMContentLoaded', function() {
   document.addEventListener('click', async function(e) {
