@@ -6,7 +6,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from datetime import date, time as dtime
 from datetime import datetime, timedelta, time, timezone
 from decimal import Decimal
-from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo, Pacchetto, PacchettoTipo, PacchettoStatus, Receipt
+from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo, Pacchetto, PacchettoTipo, PacchettoStatus, Receipt, SolariumSession
 from appl import app
 from appl.services.error_log import log_crm_error
 import random
@@ -1329,6 +1329,21 @@ def delete_appointment(appointment_id):
                     seduta.operatore_id = None
                     seduta.stato = 1  # SedutaStatus.Presente
                     app.logger.info(f"Cancellata data_trattamento e stato resetato per seduta {seduta.id} del pacchetto {seduta.pacchetto_id}")
+
+        # Le sedute solarium registrate dal bridge Phidget puntano all'appuntamento
+        # (solarium_sessions.appointment_id). Finche' su un database quella FK resta
+        # senza ON DELETE SET NULL, PostgreSQL rifiuta la cancellazione con una
+        # ForeignKeyViolation e in Agenda si vede solo un 500: capitava sui blocchi
+        # dei macchinari (es. lettino) che avevano gia' una seduta registrata.
+        # La seduta e' un fatto realmente accaduto: NON si cancella, si stacca soltanto.
+        sedute_staccate = db.session.query(SolariumSession).filter(
+            SolariumSession.appointment_id == appointment_id
+        ).update({SolariumSession.appointment_id: None}, synchronize_session=False)
+        if sedute_staccate:
+            app.logger.info(
+                f"Scollegate {sedute_staccate} sedute solarium dall'appuntamento "
+                f"{appointment_id} prima della cancellazione (storico conservato)"
+            )
 
         db.session.delete(appt)
         db.session.commit()
