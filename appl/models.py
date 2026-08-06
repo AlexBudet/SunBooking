@@ -856,7 +856,15 @@ class SolariumSession(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey('clienti.id'), nullable=True)
     receipt_id = db.Column(db.Integer, db.ForeignKey('scontrini.id'), nullable=True)
     # Colonna aggiunta con migrations/manual_solarium_session_appointment.sql
-    appointment_id = db.Column(db.Integer, db.ForeignKey('appuntamenti.id'), nullable=True)
+    # ON DELETE SET NULL: la seduta e' un fatto realmente accaduto e va conservata
+    # anche se l'appuntamento viene poi cancellato dall'Agenda. Senza questa regola
+    # PostgreSQL applica NO ACTION e rifiuta la cancellazione dell'appuntamento
+    # (ForeignKeyViolation), che in Agenda si vedeva solo come errore 500.
+    appointment_id = db.Column(
+        db.Integer,
+        db.ForeignKey('appuntamenti.id', ondelete='SET NULL'),
+        nullable=True
+    )
     created_at = db.Column(db.DateTime, server_default=func.now(), nullable=False)
 
     device = db.relationship('SolariumDevice')

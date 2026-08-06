@@ -13,7 +13,6 @@ HELP_TOPICS = {
     # ========== CALENDARIO ==========
 "calendar_create_appointment": {
     "title": "✏️ Crea un Appuntamento in Agenda",
-    "image": "Agenda_ModalCreaAppuntamento.png",
     "content": """Hai due modi per creare un appuntamento in Agenda: il <span class="help-strong-dark">click su cella vuota</span> per la creazione rapida, oppure il <span class="help-strong-dark">Navigator Appuntamenti</span> per flussi più articolati.
 
 <span class="help-strong-dark help-subtitle-pill">▸ Click su cella vuota (metodo rapido)</span>
@@ -48,7 +47,6 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 
 "calendar_drag": {
     "title": "🖱️ Spostare un appuntamento? Facilissimo!",
-    "image": "Agenda_Navigator.png",
     "content": """Funziona come sul telefono: tocca, tieni premuto e trascina!
 
 📍 **Per spostare:** clicca sulla parte alta dell'appuntamento, sulla **BARRA DI TRASCINAMENTO** (la riconosci perché passandoci sopra col mouse il puntatore diventa una manina) e trascinalo dove vuoi
@@ -67,7 +65,6 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 
     "calendar_status": {
         "title": "🎨 I colori dei blocchi appuntamento - cosa significano",
-        "image": "Agenda_Panoramica.png",
         "content": """Ogni colore ti dice subito lo stato del blocco appuntamento:
 
 🟢🟤🔴🟡 **Colorato** → L'appuntamento è programmato (il colore si può modificare)
@@ -91,7 +88,6 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 
 "calendar_block_buttons": {
     "title": "Blocco Appuntamento - I PULSANTI",
-    "image": "Agenda_BloccoPulsanti.png",
     "content": """I pulsanti **popup** compaiono passando il puntatore sul blocco; i pulsanti **interni** sono sempre visibili dentro il blocco stesso.
 
 <span class="help-strong-dark help-subtitle-pill">▸ Pulsanti popup — compaiono al passaggio del puntatore</span>
@@ -128,7 +124,6 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 
     "funzioni_blocchi": {
         "title": "✂️ Maneggiare i blocchi appuntamenti: le funzioni 'Togli e Sposta', 'Copia Blocco' e 'Aggiungi Servizio'",
-        "image": "Agenda_Navigator.png",
         "content": """Sopra ogni blocco appuntamento trovi tre pulsanti fondamentali per gestire gli appuntamenti in modo rapido ed efficiente!
 
 <span class="help-strong-dark help-subtitle-pill">✂️ TAGLIA (Togli e Sposta)</span>
@@ -192,7 +187,6 @@ Queste note speciali ti aiutano a riconoscere subito situazioni particolari! ✨
 
     "calendar_paid_block": {
         "title": "✅ Blocchi \"PAGATO\" - appuntamenti completati",
-        "image": "Agenda_Panoramica.png",
         "content": """I blocchi **grigio chiaro** sono appuntamenti già **completati e pagati**. Hanno funzionalità ridotte rispetto ai blocchi normali, perché rappresentano lo storico del cliente!
 
 🎨 **COME RICONOSCERLI**
@@ -218,7 +212,6 @@ I blocchi pagati hanno meno pulsanti rispetto ai blocchi normali:
 
     "calendar_off_block": {
         "title": "🚫 I Blocchi OFF - pause e impegni di servizio",
-        "image": "Agenda_Panoramica.png",
         "content": """I **Blocchi OFF** sono diversi dai blocchi appuntamento: servono per bloccare fasce orarie per attività di servizio come pause, riunioni o altri impegni. In pratica disattivano le celle del calendario, impostandole come "non prenotabili" per i clienti.
 
 📌 **A COSA SERVONO**
@@ -251,7 +244,6 @@ Una volta creato, il blocco OFF ha questi controlli:
     # ========== CASSA ==========
     "cassa_crea_scontrino": {
         "title": "🧾 Creare uno scontrino",
-        "image": "Cassa_Panoramica.png",
         "content": """Creare uno scontrino è semplicissimo!
 
 1️⃣ Vai nella sezione **Cassa**
@@ -447,7 +439,6 @@ Qui hai il controllo totale sulla tua rubrica clienti! 📋""",
     # ========== PACCHETTI ==========
     "pacchetto_panorama": {
         "title": "🎁 Come creare un pacchetto",
-        "image": "Pacchetti_Elenco.png",
         "content": """Questa guida copre la creazione del <span class="help-strong-dark">Pacchetto servizi</span> vero e proprio: cioè un programma a sedute che vuoi vendere a un cliente, con eventuale sconto commerciale, omaggi e piano rateale.
 
 Se vuoi prima configurare modelli e impostazioni pacchetti, vai a <span class="help-strong-dark">[[TOOLS / PACCHETTI|tools_tab_pacchetti]]</span>.
@@ -541,7 +532,6 @@ L'obiettivo non è solo archiviare, ma poter recuperare il consenso in modo chia
 
     "pacchetto_stati_dettaglio": {
         "title": "🎨 Colori STATUS pacchetti, sezioni e tooltip",
-        "image": "Pacchetti_Elenco.png",
         "content": """La pagina Pacchetti non serve solo a vedere l'elenco: ti aiuta a leggere velocemente lo stato commerciale e operativo di ogni programma.
 
 <span class="help-strong-dark help-subtitle-pill">▸ COLORI / STATUS</span>
@@ -575,7 +565,6 @@ da qui basterà <span class="help-strong-dark">cliccare sul pacchetto</span> per
     
     "pacchetto_uso": {
         "title": "📅 Come segnare un appuntamento collegato a un Pacchetto",
-        "image": "Pacchetto_Scheda.png",
         "content": """Un pacchetto è davvero utile quando viene collegato bene anche alla parte Agenda.
 
 <span class="help-strong-dark help-subtitle-pill">▸ PARTENDO DA PACCHETTO</span>
@@ -703,7 +692,6 @@ Tra WhatsApp, PDF e stampa scegli in base alla situazione:
 
     "prepagata": {
         "title": "💳 Prepagate: panoramica operativa completa",
-        "image": "Prepagata_Scheda.png",
         "content": """La <span class="help-strong-dark">prepagata</span> non è un pacchetto a sedute: è un <span class="help-strong-dark">credito economico</span> che il cliente usa nel tempo.
 
 <span class="help-strong-dark help-subtitle-pill">▸ DIFFERENZA CHIAVE RISPETTO AL PACCHETTO</span>
@@ -860,7 +848,6 @@ La regola pratica è semplice: ogni volta che la prepagata viene usata, il clien
 
     "prepagata_solarium_tab": {
         "title": "☀️ Tab Ricaricabili Solarium",
-        "image": "Prepagata_Scheda.png",
         "content": """Nella pagina Pacchetti, accanto a "Carte Prepagate", c'è il tab <span class="help-strong-dark">Ricaricabili Solarium</span>: raccoglie le carte che si possono usare <span class="help-strong-dark">solo per servizi Solarium</span>.
 
 Ci finisce una carta quando è vincolata all'intera categoria Solarium, oppure a una lista di servizi che sono tutti Solarium. Le carte libere, che pagano qualsiasi cosa, restano nel tab "Carte Prepagate": i due elenchi non si sovrappongono mai.
@@ -1271,7 +1258,6 @@ Se il modulo è attivo, alcuni blocchi o pannelli possono mostrare informazioni 
     # ========== OPERATORI ==========
     "operator_shifts": {
         "title": "📅 Impostare i turni",
-        "image": "Agenda_Turni.png",
         "content": """Gestisci gli orari di lavoro facilmente!
 
 1️⃣ Vai nel **Calendario Turni**
@@ -1394,7 +1380,6 @@ Alcuni elementi **NON** hanno durata:
     # ========== AGENDA (NUOVA STRUTTURA) ==========
     "agenda_create_modify_delete": {
         "title": "🗂️ Agenda: creare, modificare e cancellare appuntamenti",
-        "image": "Agenda_ModalCreaAppuntamento.png",
         "content": """La sezione Agenda serve a <span class=\"help-strong-dark\">creare</span>, <span class=\"help-strong-dark\">modificare</span>, <span class=\"help-strong-dark\">spostare</span> e <span class=\"help-strong-dark\">chiudere</span> gli appuntamenti.
 
 <span class=\"help-strong-dark\">Creazione</span>
@@ -1416,7 +1401,6 @@ L'idea corretta è questa: l'Agenda è la vista operativa del lavoro giornaliero
 
     "agenda_turni": {
         "title": "🕒 Impostare i turni degli operatori",
-        "image": "Agenda_Turni.png",
         "content": """I turni definiscono quando un operatore è disponibile per nuove prenotazioni. Gli appuntamenti si potranno creare <span class=\"help-strong-dark\">solo</span> negli orari di turno impostati.
 
 Per impostare i turni di base di ogni operatore (orari settimanali, preset ricorrenti), vedi <span class=\"help-strong-dark\">[[OPERATORI / TURNI|tools_tab_operatori]]</span>.
@@ -1544,7 +1528,6 @@ Nella pratica: prima selezioni il blocco, poi tocchi i pulsanti contestuali.
     # ========== CASSA (DETTAGLIO OPERATIVO) ==========
     "cassa_filtri_ricerca": {
         "title": "🧾 Cassa: bozza scontrino, metodi di pagamento e stampa",
-        "image": "Cassa_Panoramica.png",
         "content": """Qui trovi il flusso completo in 3 parti, senza passaggi separati.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ PARTE 1: Creare la bozza scontrino</span>
@@ -1677,7 +1660,6 @@ Per riportare la voce a un metodo normale va eliminata e riaggiunta fuori dalla 
 
     "cassa_registro_ruoli": {
         "title": "📚 Cassa: Registro Scontrini e differenze per ruolo",
-        "image": "Cassa_Registro.png",
         "content": """Il <span class=\"help-strong-dark\">Registro Scontrini</span> è lo storico giornaliero dei documenti emessi.
 
 Che cosa puoi fare:
@@ -1720,7 +1702,6 @@ Questi pulsanti vanno usati con attenzione perché incidono sulla parte fiscale 
     # ========== REPORT ==========
     "report_navigazione_filtri": {
         "title": "📊 Report: navigazione data e filtri avanzati",
-        "image": "Report_Panoramica.png",
         "content": """La pagina Report include una barra di navigazione simile all'Agenda:
 
 • frecce giorno precedente/successivo
@@ -1738,7 +1719,6 @@ Dopo aver impostato i filtri usa il tasto **VAI** per ricalcolare tutti i widget
 
     "report_sezioni_principali": {
         "title": "📈 Report: sezioni principali e pannelli KPI",
-        "image": "Report_Panoramica.png",
         "content": """In alto trovi i <span class=\"help-strong-dark\">pannelli KPI</span> (in precedenza indicati anche come tile) e sotto i pulsanti di sezione.
 
 <span class=\"help-strong-dark\">Che cosa significa KPI?</span>
@@ -1773,7 +1753,6 @@ I pannelli non si modificano "a mano" direttamente dal widget: si aggiornano cam
 
     "report_corrispettivi_ufficiali": {
         "title": "🧾 Report: sezione Corrispettivi (dati ufficiali)",
-        "image": "Report_Corrispettivi.png",
         "content": """La sezione <span class=\"help-strong-dark\">Corrispettivi</span> raccoglie i <span class=\"help-strong-dark\">dati ufficiali degli incassi</span> generati dalla cassa.
 
 Questa è la sezione di riferimento per la contabilità ordinaria.
@@ -1991,7 +1970,6 @@ Vale in entrambi i casi, con cassa abilitata o disabilitata: il tracciato del fi
     # ========== TOOLS / SETTINGS ==========
     "tools_panorama": {
         "title": "🧰 Tools: guida completa tab per tab",
-        "image": "Tools_Tabs.png",
         "content": """La sezione Tools (Settings) contiene tutti i tab di configurazione del gestionale. Qui sotto trovi una guida completa con <span class=\"help-strong-dark\">una sottosezione per ogni tab</span>, spiegando le varie parti visibili in pagina e il loro uso pratico.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ OPERATORI</span>
@@ -2118,7 +2096,6 @@ In base al ruolo, alcune azioni possono essere limitate o mostrate in sola lettu
 
     "tools_tab_servizi": {
         "title": "💆 SERVIZI: form, tabella, descrizioni e sottocategorie",
-        "image": "Tools_Tabs.png",
         "content": """Questo tab gestisce il catalogo operativo usato in Agenda, Cassa, Report e moduli opzionali.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ FORM "AGGIUNGI SERVIZIO"</span>
