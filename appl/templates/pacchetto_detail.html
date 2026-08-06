@@ -1666,6 +1666,17 @@ function appendMovimentoRow(m) {
   }
 }
 
+// La ricarica non ricarica la pagina: le classi status-* sono state stampate dal
+// server quando la carta era ancora esaurita, quindi la scheda resterebbe grigia
+// anche con il credito appena messo. Qui si passa a "attivo" (azzurro) le stesse
+// classi che il backend ha gia' aggiornato sul record.
+function aggiornaVesteStatusAttivo() {
+  document.querySelectorAll('.status-completato').forEach(el => {
+    el.classList.remove('status-completato');
+    el.classList.add('status-attivo');
+  });
+}
+
 async function eseguiRicarica() {
   const importo = parseFloat(document.getElementById('importoRicarica').value);
   const descrizione = document.getElementById('descrizioneRicarica').value.trim();
@@ -1699,6 +1710,7 @@ async function eseguiRicarica() {
       if (data.movimento && typeof appendMovimentoRow === 'function') {
         appendMovimentoRow(data.movimento);
       }
+      if (data.credito_residuo > 0) aggiornaVesteStatusAttivo();
 
       alert(`Ricarica di €${importo.toFixed(2)} effettuata con successo!`);
     } else {

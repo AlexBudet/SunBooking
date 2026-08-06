@@ -1519,7 +1519,14 @@ function generateSeduteOmaggioRows() {
             : '';
         // Stessa resa degli altri tab: riga intera cliccabile, classe status-*
         // per la colorazione e cella .actions col pulsante nello stesso formato.
-        const statusKey = (c.status || 'Attivo').toLowerCase();
+        // Il colore segue il CREDITO, non lo stato salvato: una carta esaurita
+        // diventa "Completato" (grigia) e ricaricandola torna spendibile, quindi
+        // con saldo positivo va mostrata azzurra come nel tab Prepagate.
+        const statusRaw = (c.status || 'Attivo').toLowerCase();
+        const saldo = Number(c.credito_residuo || 0);
+        const statusKey = (statusRaw === 'abbandonato' || statusRaw === 'preventivo')
+                        ? statusRaw
+                        : (saldo > 0 ? 'attivo' : 'completato');
         tr.classList.add(`status-${statusKey}`);
         tr.style.cursor = 'pointer';
         tr.onclick = () => { window.location.href = '/pacchetti/detail/' + c.id; };

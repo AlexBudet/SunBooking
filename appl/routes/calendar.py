@@ -301,6 +301,19 @@ def _build_pacchetto_tooltip_data(pacchetto_seduta):
     }
 
 
+# Stati in cui una carta con credito e' spendibile in cassa: sono gli stessi che
+# ritorna /pacchetti/api/prepagate-cliente. "Completato" e' incluso di proposito:
+# la carta ci finisce quando il credito arriva a zero, e una volta ricaricata
+# torna spendibile - il badge in Agenda deve seguire il CREDITO, non lo stato
+# rimasto indietro. Fuori restano solo Abbandonato ed Eliminato, che sono
+# decisioni prese a mano.
+STATI_PREPAGATA_SPENDIBILE = [
+    PacchettoStatus.Attivo,
+    PacchettoStatus.Preventivo,
+    PacchettoStatus.Completato,
+]
+
+
 def _get_active_prepagate_by_client_ids(client_ids):
     """Ritorna mappa client_id -> elenco carte prepagate attive con credito residuo."""
     result = {}
@@ -311,9 +324,14 @@ def _get_active_prepagate_by_client_ids(client_ids):
     prepagate_attive = Pacchetto.query.filter(
         Pacchetto.client_id.in_(ids),
         Pacchetto.tipo == PacchettoTipo.Prepagata,
-        Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo]),
+        Pacchetto.status.in_(STATI_PREPAGATA_SPENDIBILE),
         Pacchetto.credito_residuo > 0
     ).all()
+
+    # Se fra queste c'e' una carta rimasta "Completato" con credito, la si
+    # rimette Attiva: il badge lo si mostra comunque, ma il dato va corretto.
+    from appl.routes.pacchetti import allinea_status_prepagate_con_credito
+    allinea_status_prepagate_con_credito(prepagate_attive)
 
     for p in prepagate_attive:
         if p.client_id not in result:
@@ -479,9 +497,11 @@ def calendar_home():
         prepagate_attive = Pacchetto.query.filter(
             Pacchetto.client_id.in_(client_ids_oggi),
             Pacchetto.tipo == PacchettoTipo.Prepagata,
-            Pacchetto.status.in_([PacchettoStatus.Attivo, PacchettoStatus.Preventivo]),
+            Pacchetto.status.in_(STATI_PREPAGATA_SPENDIBILE),
             Pacchetto.credito_residuo > 0
         ).all()
+        from appl.routes.pacchetti import allinea_status_prepagate_con_credito
+        allinea_status_prepagate_con_credito(prepagate_attive)
         for p in prepagate_attive:
             if p.client_id not in prepagate_per_cliente:
                 prepagate_per_cliente[p.client_id] = []
