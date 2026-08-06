@@ -1645,7 +1645,31 @@ function initPseudoBlockSelection() {
 }
 document.addEventListener('DOMContentLoaded', initPseudoBlockSelection);
 
+// =============================================================
+//   REFRESH E DRAG NON POSSONO CONVIVERE
+// =============================================================
+// renderAppointmentsFromServer() cancella TUTTI i blocchi e li ricrea da zero.
+// Se la risposta del server arriva mentre si sta trascinando un blocco, quel
+// blocco viene rimosso dal DOM a meta' trascinamento: il mousemove continua a
+// spostare un elemento che non e' piu' in pagina, quindi non si vede scorrere
+// niente e il blocco ricompare gia' a destinazione solo al rilascio.
+// Con la linea veloce non si nota, perche' le fetch tornano prima che si inizi
+// a trascinare; con connessione lenta o instabile la risposta partita al
+// caricamento della pagina (o dopo l'ultima modifica) arriva secondi dopo,
+// spesso proprio durante il drag - ed e' il caso segnalato.
+// Finche' c'e' un drag o un resize in corso il refresh si mette in coda.
+function calendarRefreshDaRimandare() {
+  return !!(window._isDraggingBlock || window._isResizingBlock);
+}
+
+function rimandaCalendarRefresh() {
+  window.__calendarRefreshPending = true;
+}
+
 function renderAppointmentsFromServer(appointments, date) {
+  // Arrivata mentre l'operatore trascina: non si tocca il DOM, si rimanda.
+  if (calendarRefreshDaRimandare()) { rimandaCalendarRefresh(); return; }
+
   const cells = document.querySelectorAll('.selectable-cell');
   if (!cells || cells.length === 0) return;
 
@@ -1692,6 +1716,11 @@ function renderAppointmentsFromServer(appointments, date) {
 }
 
   function fetchCalendarData() {
+    // Drag o resize in corso: non si parte nemmeno con le fetch, il refresh
+    // resta in coda e lo fa partire il rilascio del mouse.
+    if (calendarRefreshDaRimandare()) { rimandaCalendarRefresh(); return; }
+    window.__calendarRefreshPending = false;
+
     const date = selectedDate;
     const operatorCells = document.querySelectorAll('.selectable-cell');
     const operatorIds = new Set();
@@ -1717,6 +1746,10 @@ function renderAppointmentsFromServer(appointments, date) {
     // Aspetta il completamento di tutte le fetch
     Promise.all([...promises, appointmentsPromise])
         .then(() => {
+            // Il drag puo' essere iniziato mentre le fetch erano in volo:
+            // arrangeAllBlocks() riscrive left/width dei blocchi e combatterebbe
+            // con la posizione che il mouse sta imponendo al blocco trascinato.
+            if (calendarRefreshDaRimandare()) { rimandaCalendarRefresh(); return; }
             // Applica il ridimensionamento dopo il rendering
             arrangeAllBlocks();
             // Ripristina i pseudo-blocchi
@@ -4195,6 +4228,23 @@ if (oldCell) {
   customDraggedBlock = null;
 });
 
+// Refresh rimasto in coda perche' c'era un drag/resize in corso.
+// Nel caso normale non serve: il drop salva la posizione e il sync di fine
+// mutazione ricarica gia' il calendario. Serve quando il trascinamento finisce
+// senza salvare (rientro nella cella di partenza, drop annullato, resize a
+// vuoto): senza questo, l'aggiornamento scartato resterebbe perso fino al
+// prossimo reload. Registrato DOPO l'handler del drop, che azzera
+// _isDraggingBlock come prima cosa: qui il flag e' gia' a false.
+document.addEventListener('mouseup', function() {
+  if (!window.__calendarRefreshPending) return;
+  setTimeout(function() {
+    if (!window.__calendarRefreshPending) return;            // gia' rinfrescato
+    if (calendarRefreshDaRimandare()) return;                // e' ripartito un drag
+    if (Number(window.__salvataggiDragInCorso || 0) > 0) return;  // ci pensa il sync del salvataggio
+    if (typeof fetchCalendarData === 'function') fetchCalendarData();
+  }, 800);
+});
+
 function onBlockMouseUp(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -4705,10 +4755,14 @@ async function saveDraggedBlockPosition(block, cell) {
 
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
+  // Con linea lenta questa POST puo' durare secondi: finche' e' in volo il
+  // refresh di riserva non deve partire, o ridisegnerebbe il blocco nella
+  // vecchia posizione (il server non sa ancora che si e' spostato).
+  window.__salvataggiDragInCorso = Number(window.__salvataggiDragInCorso || 0) + 1;
   try {
     const resp = await fetch(`/calendar/update/${appointmentId}`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'X-CSRFToken': csrfToken
       },
@@ -4722,6 +4776,9 @@ async function saveDraggedBlockPosition(block, cell) {
     }
   } catch (err) {
     console.error("Errore salvataggio posizione:", err);
+  } finally {
+    const rimasti = Number(window.__salvataggiDragInCorso || 0) - 1;
+    window.__salvataggiDragInCorso = rimasti > 0 ? rimasti : 0;
   }
 }
 

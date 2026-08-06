@@ -111,6 +111,47 @@ def riattiva_prepagata_se_ricaricata(pacchetto):
         aggiungi_history(pacchetto, f"Riattivata da ricarica (era {precedente})")
 
 
+def allinea_status_prepagate_con_credito(pacchetti=None):
+    """Regola di ferro: una carta prepagata con credito NON puo' stare in
+    "Completato". Quello stato significa "esaurita" e in elenco vale grigio,
+    fuori dall'Agenda e fuori dai filtri; se il saldo e' tornato sopra zero la
+    carta e' di nuovo spendibile e deve risultare Attiva.
+
+    Il controllo lo fa il programma da solo, in due modi:
+      - senza argomenti: un solo UPDATE su tutte le carte, si usa all'avvio per
+        rimettere in riga quelle ricaricate prima che questo controllo esistesse;
+      - con una lista di carte gia' caricate: corregge solo quelle, cosi' ogni
+        pagina che le mostra le sistema mentre le legge.
+
+    Non tocca Abbandonate ed Eliminate: quelle sono decisioni prese a mano, non
+    conseguenze del saldo.
+    """
+    if pacchetti is None:
+        modificate = (db.session.query(Pacchetto)
+                      .filter(Pacchetto.tipo == PacchettoTipo.Prepagata,
+                              Pacchetto.status == PacchettoStatus.Completato,
+                              Pacchetto.credito_residuo > 0)
+                      .update({Pacchetto.status: PacchettoStatus.Attivo},
+                              synchronize_session=False))
+        if modificate:
+            db.session.commit()
+        return modificate
+
+    da_riattivare = [
+        p for p in pacchetti
+        if p is not None
+        and getattr(p.tipo, 'value', p.tipo) == PacchettoTipo.Prepagata.value
+        and (p.credito_residuo or 0) > 0
+        and p.status == PacchettoStatus.Completato
+    ]
+    for p in da_riattivare:
+        p.status = PacchettoStatus.Attivo
+        aggiungi_history(p, "Riattivata automaticamente: la carta ha di nuovo credito")
+    if da_riattivare:
+        db.session.commit()
+    return len(da_riattivare)
+
+
 def get_ultima_modifica(pacchetto):
     """Restituisce il datetime dell'ultima modifica dal campo history"""
     try:
@@ -389,7 +430,10 @@ def api_pacchetti():
     
     if pacchetti_modificati:
         db.session.commit()
-    
+
+    # Carte con credito rimaste in "Completato": si sistemano qui, mentre si legge.
+    allinea_status_prepagate_con_credito(pacchetti)
+
     result = []
     for p in pacchetti:
         # Calcola se tutte le rate sono pagate
@@ -884,6 +928,10 @@ def pacchetto_detail(id):
 
     # Aggiorna lo status del pacchetto prima di mostrare la pagina
     aggiorna_status_pacchetto(pacchetto)
+
+    # Prepagata con credito ma ancora "Completato": si corregge prima di
+    # stampare la scheda, altrimenti la si vedrebbe grigia con i soldi sopra.
+    allinea_status_prepagate_con_credito([pacchetto])
 
     # ── SECOND CHECK: sincronizza sedute con appuntamenti in calendario ──────
     # Carica tutti gli Appointment collegati alle sedute di questo pacchetto
@@ -2137,6 +2185,10 @@ def api_prepagate_solarium():
                     Pacchetto.status != PacchettoStatus.Eliminato))
 
     def serializza(p, ultimo=None):
+        # Carta con credito rimasta "Completato": la si rimette Attiva qui, prima
+        # di mandarla in elenco, cosi' non compare piu' grigia. Se non c'e' niente
+        # da correggere la chiamata non scrive nulla.
+        allinea_status_prepagate_con_credito([p])
         return {
             'id': p.id,
             'numero_tessera': p.numero_tessera,
@@ -2308,7 +2360,10 @@ def api_prepagate_cliente(client_id):
         for p in prepagate_beneficiario:
             if p.id not in ids_trovati:
                 prepagate.append(p)
-    
+
+    # Le carte con credito tornate spendibili non devono restare "Completato".
+    allinea_status_prepagate_con_credito(prepagate)
+
     risultati = []
     oggi = datetime.now().date()
     

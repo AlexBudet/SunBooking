@@ -153,6 +153,23 @@ def create_app(db_uri: str | None = None):
     app.register_blueprint(report_bp)
     app.register_blueprint(pacchetti_bp, url_prefix="/pacchetti")
 
+    # ---- CARTE PREPAGATE: STATO ALLINEATO AL CREDITO ----
+    # Una carta con credito non puo' restare "Completato" (= esaurita): sarebbe
+    # grigia in elenco, senza badge in Agenda e fuori dai filtri, pur avendo
+    # soldi sopra. Le carte ricaricate prima che questo controllo esistesse
+    # sono rimaste indietro: si sistemano qui, con un solo UPDATE all'avvio.
+    # Durante l'uso ci pensano le pagine che le leggono (elenchi, Agenda, Cassa).
+    with app.app_context():
+        try:
+            from appl.routes.pacchetti import allinea_status_prepagate_con_credito
+            corrette = allinea_status_prepagate_con_credito()
+            if corrette:
+                app.logger.info(
+                    "[prepagate] %s carte con credito riportate ad Attivo all'avvio", corrette)
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("[prepagate] allineamento stato/credito all'avvio fallito")
+
     # ---- SCAN NOTIZIE BEAUTY (thread interno, due volte a settimana) ----
     # Il modulo si auto-disattiva se manca ANTHROPIC_API_KEY: in quel caso non
     # parte nessun thread e non viene fatta nessuna chiamata. Il thread viene
