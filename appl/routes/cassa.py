@@ -1538,10 +1538,11 @@ def send_to_rch():
                     vecchio_saldo = pacchetto.credito_residuo or Decimal('0')
                     nuovo_saldo = vecchio_saldo + credito_da_caricare
                     pacchetto.credito_residuo = nuovo_saldo
-                    
-                    # Se era in preventivo, attivala
-                    if pacchetto.status == PacchettoStatus.Preventivo:
-                        pacchetto.status = PacchettoStatus.Attivo
+
+                    # Torna Attiva se aveva credito a zero (era Completato,
+                    # cioe' grigia in elenco) o se era ancora un Preventivo.
+                    from appl.routes.pacchetti import riattiva_prepagata_se_ricaricata
+                    riattiva_prepagata_se_ricaricata(pacchetto)
                     
                     from appl.models import MovimentoPrepagata
                     movimento = MovimentoPrepagata(

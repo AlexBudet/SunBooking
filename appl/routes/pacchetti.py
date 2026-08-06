@@ -86,6 +86,31 @@ def aggiungi_history(pacchetto, azione):
     pacchetto.history = json.dumps(history)
 
 
+def riattiva_prepagata_se_ricaricata(pacchetto):
+    """Riporta ad Attivo una carta prepagata che e' tornata ad avere credito.
+
+    Quando il credito si esaurisce la carta viene segnata Completato, che in
+    elenco significa layout grigio da "chiusa". Ricaricandola il saldo tornava
+    positivo ma lo stato restava indietro: la carta funzionava in cassa e
+    risultava terminata in Pacchetti. Copre anche il caso di una carta ancora
+    in Preventivo che riceve il primo caricamento.
+
+    Non tocca le carte Abbandonate o Eliminate: quelle sono decisioni prese a
+    mano, non conseguenze del saldo, e non vanno riaperte da un movimento.
+    """
+    if pacchetto is None:
+        return
+    tipo = getattr(pacchetto.tipo, 'value', pacchetto.tipo)
+    if tipo != PacchettoTipo.Prepagata.value:
+        return
+    if (pacchetto.credito_residuo or 0) <= 0:
+        return
+    if pacchetto.status in (PacchettoStatus.Completato, PacchettoStatus.Preventivo):
+        precedente = pacchetto.status.value
+        pacchetto.status = PacchettoStatus.Attivo
+        aggiungi_history(pacchetto, f"Riattivata da ricarica (era {precedente})")
+
+
 def get_ultima_modifica(pacchetto):
     """Restituisce il datetime dell'ultima modifica dal campo history"""
     try:
@@ -1680,6 +1705,7 @@ def api_ricarica_prepagata(id):
     nuovo_saldo = vecchio_saldo + importo
     pacchetto.credito_residuo = nuovo_saldo
     pacchetto.credito_iniziale = (pacchetto.credito_iniziale or Decimal('0')) + importo
+    riattiva_prepagata_se_ricaricata(pacchetto)
     
     # Registra movimento (tipo 'ricarica': in precedenza era erroneamente 'utilizzo')
     operatore_id = data.get('operatore_id')
@@ -1874,8 +1900,7 @@ def api_converti_credito_pacchetto(id):
         nuovo_saldo = vecchio_saldo + importo
         prepagata.credito_residuo = nuovo_saldo
         prepagata.credito_iniziale = (prepagata.credito_iniziale or Decimal('0')) + importo
-        if prepagata.status == PacchettoStatus.Preventivo:
-            prepagata.status = PacchettoStatus.Attivo
+        riattiva_prepagata_se_ricaricata(prepagata)
         aggiungi_history(prepagata, f"Ricarica €{importo:.2f} da conversione pacchetto #{pacchetto.id} - Nuovo saldo €{nuovo_saldo:.2f}")
     else:
         prepagata = Pacchetto(
