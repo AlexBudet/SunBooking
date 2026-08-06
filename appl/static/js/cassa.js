@@ -17,6 +17,21 @@
 // in rgb(), quindi serve anche quella forma per i confronti.
 const COLORE_RIGA_PREPAGATA = '#ece5f6';
 const COLORE_RIGA_PREPAGATA_RGB = 'rgb(236, 229, 246)';
+
+/* Nomi con l'iniziale maiuscola e il resto minuscolo.
+   La stessa funzione esiste in calendar.js, ma quel file su Cassa NON viene
+   caricato: qui dentro cinque punti scrivevano gia'
+   `window.capitalizeName || (s => s || '')` e ricadevano tutti sull'identita',
+   quindi i nomi restavano come stanno in anagrafica (spesso TUTTI MAIUSCOLI da
+   import). Definendola qui quei cinque punti tornano a funzionare da soli.
+   Il confine \b fa ripartire l'iniziale anche dopo apostrofo e trattino
+   ("d'angelo" -> "D'Angelo"), come il capitalize_name lato server. */
+if (typeof window.capitalizeName !== 'function') {
+  window.capitalizeName = function (name) {
+    if (!name) return name;
+    return String(name).toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+  };
+}
 function eRigaPrepagata(row) {
   const sfondo = row && row.style ? row.style.background : '';
   return sfondo === COLORE_RIGA_PREPAGATA || sfondo === COLORE_RIGA_PREPAGATA_RGB;
@@ -487,7 +502,26 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
     input.dataset.cartaPrecaricata = String(carta.id);
     input.style.cursor = 'pointer';
     applyBsTooltip(input, `Tessera di questo cliente — clicca per aprirla e scalare il credito`);
+
+    /* Il numero compare da solo dopo aver scelto il cliente: senza un segnale
+       sembra un campo riempito e basta, non qualcosa su cui si puo' cliccare.
+       La classe fa un lampo e lascia il campo evidenziato finche' resta
+       precaricato. Si toglie e rimette per far ripartire l'animazione anche
+       quando si cambia cliente col campo gia' evidenziato. */
+    input.classList.remove('tessera-precaricata');
+    void input.offsetWidth;            // forza il ricalcolo, altrimenti il browser non rianima
+    input.classList.add('tessera-precaricata');
   }
+
+  /* Torna un campo normale: niente evidenza, niente mano sul cursore. */
+  function spegniTesseraPrecaricata() {
+    const input = document.getElementById('tesseraSearchInputCassa');
+    if (!input) return;
+    input.classList.remove('tessera-precaricata');
+    input.style.cursor = '';
+    delete input.dataset.cartaPrecaricata;
+  }
+  window.spegniTesseraPrecaricata = spegniTesseraPrecaricata;
 
   // Click sulla tessera precaricata: aggancia la carta e apre la sua schermata.
   document.getElementById('tesseraSearchInputCassa')?.addEventListener('click', function () {
@@ -497,6 +531,7 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
                || (window.clientePrepagateDisponibili || []).find(c => String(c.id) === String(id));
     if (!carta) return;
     nascondiTooltipDi(this);
+    spegniTesseraPrecaricata();
     clienteConSceltaPrepagataFatta = String(carta.client_id || '');
     prepagateInAttesa = [];
     attivaCarta(carta);
@@ -2410,7 +2445,9 @@ row.className = 'd-flex align-items-center scontrino-row';
   row.dataset.operatorNome = servizio.operator_nome || '';
   // Cliente associato alla riga (usato per gli scontrini multi-cliente da "Clienti in istituto")
   row.dataset.clientId = servizio.cliente_id ? String(servizio.cliente_id) : '';
-  row.dataset.clientNome = servizio.cliente_nome || '';
+  // Normalizzato alla fonte: da questo dataset il nome finisce nell'intestazione
+  // del gruppo e nel campo cliente della bozza.
+  row.dataset.clientNome = window.capitalizeName(servizio.cliente_nome || '') || '';
 
   // Se la riga proviene da un appuntamento del calendar, memorizza l'id originale
   if (servizio.appointment_id) {
@@ -2830,8 +2867,20 @@ function aggiornaMetodoPagamentoGlobale(tipo) {
     const selectRiga = row.querySelector('select[name="metodo_pagamento[]"]') || row.querySelector('select');
     if (selectRiga && selectRiga.value === 'prepagata') return;
 
+    // Anche le righe in MISTO che contengono una quota prepagata restano ferme.
+    // Il controllo sopra guarda solo il metodo della select, e una riga da reset
+    // credito ha "misto": passava il filtro e finiva nella riga qui sotto, che
+    // azzera lo split - cancellando anche la parte gia' scalata dalla tessera.
+    // Per cambiare il metodo della sola parte non coperta dal credito si usa il
+    // comando "misto" della riga, che e' fatto apposta.
+    const pagamentiRiga = getRowPagamenti(row);
+    const haQuotaPrepagata = Array.isArray(pagamentiRiga) && pagamentiRiga.some(
+      p => p && p.metodo === 'prepagata' && (parseFloat(p.importo) || 0) > 0
+    );
+    if (haQuotaPrepagata) return;
+
     // Applicare un metodo globale annulla eventuali split pagamento sulla riga
-    if (getRowPagamenti(row)) setRowPagamenti(row, null);
+    if (pagamentiRiga) setRowPagamenti(row, null);
     const select = row.querySelector('select');
     const icon = row.querySelector('i');
     // Aggiorna il metodo di pagamento
@@ -3283,7 +3332,7 @@ function aggiornaStatoMultiCliente() {
         const r = rows.find(rr => rr.dataset.clientId === distinct[0]);
         if (r && r.dataset.clientNome) {
           window.settingClientProgrammatically = true;
-          clientInput.value = r.dataset.clientNome;
+          clientInput.value = window.capitalizeName(r.dataset.clientNome) || '';
           clientInput.dataset.selectedClient = distinct[0];
         }
       }
@@ -3544,7 +3593,8 @@ async function ripristinaModifichePseudoscontrino() {
     } catch {}
   }
   if (modifiche.cliente) {
-    document.getElementById('clientSearchInputCassa').value = modifiche.cliente.nome || '';
+    document.getElementById('clientSearchInputCassa').value =
+      window.capitalizeName(modifiche.cliente.nome || '') || '';
     document.getElementById('clientSearchInputCassa').dataset.selectedClient = modifiche.cliente.id || '';
   }
 
@@ -3718,7 +3768,8 @@ async function ricreaDaCalendarSenzaReload(appointmentIds) {
     const input = document.getElementById('clientSearchInputCassa');
     if (input) {
       window.settingClientProgrammatically = true;
-      input.value = (data.cliente_nome || '') + ' ' + (data.cliente_cognome || '');
+      input.value = (window.capitalizeName(data.cliente_nome || '') + ' ' +
+                     window.capitalizeName(data.cliente_cognome || '')).trim();
       input.dataset.selectedClient = data.cliente_id || '';
       input.dispatchEvent(new Event('input'));
     }
