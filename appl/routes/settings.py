@@ -4457,8 +4457,36 @@ def help_page():
     # Le categorie "Booking via Web" e "Versione Touch" restano visibili integralmente
     # perché contengono informazioni utili anche al ruolo user.
     if current_user and current_user.ruolo.value == 'user':
-        for _cat in ('Report', 'Pacchetti', 'Generali'):
-            categories.pop(_cat, None)
+        categories.pop('Generali', None)
+
+        # Report resta visibile, come Pacchetti: la voce e' nel menu per tutti i
+        # ruoli e i pannelli il ruolo user li vede gia' (con i soli dati fiscali).
+        # Fuori restano le due guide contabili, pensate per chi manda i dati al
+        # commercialista, e la saturazione agenda, il cui pannello e' comunque
+        # riservato ad admin e owner.
+        if 'Report' in categories:
+            report_fuori_ruolo = {
+                'report_corrispettivi_ufficiali',
+                'report_esportazione_lettura',
+                'report_saturazione_agenda',
+            }
+            categories['Report'] = [
+                k for k in categories['Report'] if k not in report_fuori_ruolo
+            ]
+            if not categories['Report']:
+                categories.pop('Report', None)
+
+        # Pacchetti NON viene piu' nascosta per intero: la voce e' nel menu per
+        # tutti i ruoli, quindi una collaboratrice apre la pagina, vende una
+        # carta e scala una seduta - ma prima non trovava una riga di guida su
+        # come farlo. Restano fuori solo le impostazioni, che stanno in Tools e
+        # non sono roba da banco (regole di ricarica automatica, promozioni).
+        if 'Pacchetti' in categories:
+            categories['Pacchetti'] = [
+                k for k in categories['Pacchetti'] if k != 'pacchetto_settings'
+            ]
+            if not categories['Pacchetti']:
+                categories.pop('Pacchetti', None)
 
         if 'Tools' in categories:
             user_tools_allowed = {
