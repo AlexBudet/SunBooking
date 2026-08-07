@@ -2066,6 +2066,16 @@ body:not(.quarter-55) .appointment-block {
   transform: translateY(-50%) !important;
   }
 
+/* Nel Navigator il contenitore del "+" ospita anche #clientResultsNav, che sta nel
+   flusso: quando compare la riga "Nessun risultato" il contenitore passa da 42px a
+   90px e il top:50% qui sopra trascinava il pulsante 24px piu' in basso, staccandolo
+   dall'input. Qui il pulsante viene ancorato all'input, non all'altezza del padre:
+   (39px input - 32px pulsante) / 2 = 3.5px. */
+#appointmentNavigator .btn-add-client-nav {
+  top: 3.5px !important;
+  transform: none !important;
+}
+
 .btn-add-client-square {
   width: 32px !important;
   height: 32px !important;
