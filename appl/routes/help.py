@@ -306,6 +306,7 @@ Tutto collegato, zero errori! ✨""",
     # ========== CLIENTI ==========
     "client_phone_search": {
         "title": "📞 Numero di cellulare: salvataggio, ricerca e WhatsApp",
+        "image": "Cliente_Nuovo.png",
         "content": """<span class="help-strong-dark help-subtitle-pill">▸ FORMATO DEL NUMERO</span>
 
 Tosca salva sempre il numero <span class="help-strong-dark">senza spazi</span>, indipendentemente da come lo scrivi. Per i numeri italiani basta il numero a <span class="help-strong-dark">10 cifre</span> (es. <span class="help-strong-dark">3331234567</span>): il <span class="help-strong-dark">+39</span> viene aggiunto automaticamente al momento dell'invio WhatsApp. Per i clienti esteri usa <span class="help-strong-dark">+</span> seguito dal prefisso paese (es. <span class="help-strong-dark">+33123456789</span>).
@@ -328,7 +329,8 @@ Se incolli un numero <span class="help-strong-dark">con spazi</span>, dopo 1 sec
 
     "client_search": {
         "title": "🔍 Ricerca cliente in Agenda + Nuovo cliente + Info rapida",
-        "content": """Questa è la guida unica per tutto il flusso cliente in Agenda: ricerca, inserimento rapido nuovo cliente e finestra info.
+        "image": "Agenda_CercaCliente.png",
+        "content":"""Questa è la guida unica per tutto il flusso cliente in Agenda: ricerca, inserimento rapido nuovo cliente e finestra info.
 
 <span class="help-strong-dark help-subtitle-pill">▸ RICERCA CLIENTE IN AGENDA</span>
 Nei campi di <span>ricerca cliente</span>, puoi cercare per:
@@ -369,7 +371,8 @@ Per il dettaglio completo (campi modificabili e tabelle), vedi <span class="help
 
 "client_new": {
     "title": "👤 Aggiungere un nuovo cliente",
-    "content": """Il modo più veloce per aggiungere un nuovo cliente è usare il **TASTO +** accanto al campo di ricerca cliente nella finestra di creazione appuntamento o nel Navigator Appuntamenti in Agenda!
+    "image": "Cliente_Nuovo.png",
+    "content":"""Il modo più veloce per aggiungere un nuovo cliente è usare il **TASTO +** accanto al campo di ricerca cliente nella finestra di creazione appuntamento o nel Navigator Appuntamenti in Agenda!
 
 Da lì, basta scrivere **NOME, COGNOME e CELLULARE**: il cliente viene subito aggiunto alla tua rubrica clienti!
 
@@ -395,7 +398,8 @@ Puoi inserire clienti anche da **Impostazioni → Clienti** (tab "Clienti"), dov
 
 "client_info_window": {
     "title": "ℹ️ Finestra Info Cliente",
-    "content": """Al click sull'**ICONA "i"** a fianco dei risultati della ricerca cliente si apre una finestra dove puoi visualizzare e modificare rapidamente i dati del cliente.
+    "image": "Cliente_InfoModal.png",
+    "content":"""Al click sull'**ICONA "i"** a fianco dei risultati della ricerca cliente si apre una finestra dove puoi visualizzare e modificare rapidamente i dati del cliente.
 
 Puoi modificare **NOME, COGNOME, CELLULARE ed EMAIL** nei campi in alto, e aggiungere o modificare la **NOTA SALVATA** per quel cliente.
 
@@ -414,7 +418,8 @@ Così hai tutto sotto controllo e puoi gestire i dati cliente in modo semplice e
 
     "client_settings": {
         "title": "⚙️ Gestione Clienti da Impostazioni",
-        "content": """In **Impostazioni → Clienti** (tab "Clienti") trovi tutte le funzioni avanzate per gestire la tua rubrica clienti!
+        "image": "Clienti_Tools.png",
+        "content":"""In **Impostazioni → Clienti** (tab "Clienti") trovi tutte le funzioni avanzate per gestire la tua rubrica clienti!
 
 ➕ **INSERIRE UN NUOVO CLIENTE**
 Dal menu in alto clicca su **Tools** per aggiungere un nuovo cliente con tutti i dati:
@@ -1291,7 +1296,8 @@ Gli appuntamenti si potranno creare **solo** negli orari di turno!
     # ========== SERVIZI ==========
     "service_create": {
         "title": "💆 Creare un servizio",
-        "content": """Aggiungi i tuoi trattamenti in pochi click!
+        "image": "Servizi_Tools.png",
+        "content":"""Aggiungi i tuoi trattamenti in pochi click!
 
 1️⃣ Vai in **Impostazioni → Servizi**
 
@@ -1316,7 +1322,8 @@ Il servizio appare subito nel menu appuntamenti 🎉
 
     "service_categories": {
         "title": "📂 Categorie e Sottocategorie",
-        "content": """I servizi sono organizzati in **CATEGORIE** e **SOTTOCATEGORIE** per una gestione ordinata!
+        "image": "Servizio_Form.png",
+        "content":"""I servizi sono organizzati in **CATEGORIE** e **SOTTOCATEGORIE** per una gestione ordinata!
 
 📁 **CATEGORIE PRINCIPALI**
 Le categorie di default sono:
@@ -1344,7 +1351,8 @@ Le **SOTTOCATEGORIE** di Servizi a differenza delle categorie sono **completamen
 
     "service_vs_products": {
         "title": "🛒 Servizi vs Prodotti",
-        "content": """In Tosca puoi gestire sia **SERVIZI** che **PRODOTTI**, ma hanno caratteristiche diverse!
+        "image": "Servizi_Tools.png",
+        "content":"""In Tosca puoi gestire sia **SERVIZI** che **PRODOTTI**, ma hanno caratteristiche diverse!
 
 💆 **SERVIZI**
 • Hanno una **DURATA** obbligatoria (15 min, 30 min, ecc.)
@@ -1366,7 +1374,8 @@ Alcuni servizi come gli **abbonamenti** o le **carte prepagate** non hanno durat
 
     "service_duration": {
         "title": "⏱️ Durata dei servizi",
-        "content": """La **DURATA** è fondamentale per i servizi sul calendario!
+        "image": "Servizio_Form.png",
+        "content":"""La **DURATA** è fondamentale per i servizi sul calendario!
 
 ⏰ **COME FUNZIONA**
 • Ogni servizio ha una durata espressa in **minuti**

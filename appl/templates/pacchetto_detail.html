@@ -4185,7 +4185,8 @@ document.getElementById('btnWhatsapp').addEventListener('click', async function(
   // Variabili specifiche per prepagata
   const creditoResiduo = {{ pacchetto.credito_residuo|default(0, true) }};
   const creditoIniziale = {{ pacchetto.credito_iniziale|default(0, true) }};
-  const dataScadenza = "{{ pacchetto.data_scadenza.strftime('%d/%m/%Y') if pacchetto.data_scadenza else '—' }}";
+  // data_scadenza arriva dalla route gia' formattata come stringa gg/mm/aaaa
+  const dataScadenza = "{{ pacchetto.data_scadenza if pacchetto.data_scadenza else '—' }}";
   const beneficiario = "{{ pacchetto.beneficiario_nome|default(pacchetto.client_nome, true)|escapejs }}";
   const numeroTessera = "{{ pacchetto.numero_tessera|default('', true)|escapejs }}";
   
