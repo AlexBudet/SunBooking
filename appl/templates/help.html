@@ -584,31 +584,67 @@
     margin-bottom: 16px;
 }
 
-/* Immagini inline nel contenuto */
+/* Immagini inline nel contenuto.
+   Niente bordo colorato: incorniciava lo screenshot e, sui modali con angoli
+   arrotondati, il raggio del bordo non coincideva con quello dentro l'immagine
+   una volta scalata. Restano raggio e ombra, che bastano a staccarla dal testo. */
 .help-inline-image {
     display: block;
     max-width: 100%;
     margin: 20px auto;
     border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-    border: 3px solid #fce7f3;
-}
-
-.help-inline-image.gif {
-    border-color: #dbeafe;
+    /* drop-shadow e NON box-shadow: box-shadow segue il rettangolo dell'elemento,
+       quindi sugli screenshot di modali con angoli resi trasparenti lasciava
+       quattro quadratini bianchi ombreggiati agli spigoli. drop-shadow segue il
+       canale alpha, percio' l'ombra abbraccia la sagoma reale dell'immagine. */
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.18));
 }
 
 /* Immagine principale dell'argomento (quella in cima).
-   Su schermi larghi veniva resa a ~960px e si mangiava tutta la schermata,
-   costringendo a scorrere prima di arrivare al testo: qui la si tiene entro
-   una misura di lettura. Sotto i 900px torna a larghezza piena, dove lo
-   spazio è poco e rimpicciolirla la renderebbe illeggibile. */
+   Tenuta entro una misura di lettura per non mangiarsi la schermata, ma larga
+   abbastanza da restare leggibile: la colonna del contenuto e' 1060px.
+   Sotto i 900px torna a larghezza piena. */
 .help-topic-image {
-    max-width: 560px;
+    max-width: 820px;
     margin: 4px auto 24px;
 }
 
+/* Immagine di testa + didascalia: una schermata senza spiegazione, seguita da
+   un testo che parla d'altro, e' fuorviante. La didascalia dice COSA si sta
+   guardando e DA DOVE ci si arriva, prima che inizi il discorso. */
+.help-topic-figure {
+    max-width: 820px;
+    margin: 4px auto 24px;
+}
+
+.help-topic-figure .help-topic-image {
+    margin: 0 auto 10px;
+}
+
+.help-topic-caption {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #4b5563;
+    text-align: left;
+}
+
+.help-topic-caption .help-caption-path {
+    display: block;
+    margin-top: 6px;
+    color: #0d9488;
+    font-weight: 600;
+}
+
+.help-topic-caption .help-caption-path i {
+    margin-right: 4px;
+}
+
 @media (max-width: 900px) {
+    .help-topic-figure {
+        max-width: 100%;
+        margin: 4px auto 18px;
+    }
+
     .help-topic-image {
         max-width: 100%;
         margin: 4px auto 18px;
@@ -778,14 +814,13 @@
 
 .help-inline-img-wrap {
     flex: 2;
-    max-width: 400px;
+    max-width: 540px;
 }
 
 .help-inline-img-wrap .help-inline-image {
     width: 100%;
     margin: 0;
-    border: 3px solid #fff;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    filter: drop-shadow(0 6px 14px rgba(0,0,0,0.20));
 }
 
 @media (max-width: 700px) {
@@ -892,7 +927,9 @@ const HELP_DATA = {
                 key: "{{ key }}",
                 title: {{ topic.title|tojson }},
                 content: {{ topic.content|tojson }},
-                image: {{ topic.image|default('')|tojson }}
+                image: {{ topic.image|default('')|tojson }},
+                image_caption: {{ topic.image_caption|default('')|tojson }},
+                image_path: {{ topic.image_path|default('')|tojson }}
             }{% if not loop.last %},{% endif %}
             {% endfor %}
         ]
@@ -1274,7 +1311,19 @@ function renderTopic() {
     // fondo a un argomento lungo rischiava di non essere mai vista.
     if (topic.image) {
         const isGif = topic.image.endsWith('.gif');
-        content = `<img src="${STATIC_BASE}${topic.image}" class="help-inline-image help-topic-image ${isGif ? 'gif' : ''}" alt="${topic.title}">` + content;
+        const cap = topic.image_caption || '';
+        const path = topic.image_path || '';
+        // Senza didascalia si resta al comportamento di prima: nessun riquadro
+        // vuoto sotto le immagini non ancora descritte.
+        const capHtml = (cap || path)
+            ? `<figcaption class="help-topic-caption">${cap}`
+              + (path ? `<span class="help-caption-path"><i class="bi bi-signpost-split"></i>${path}</span>` : '')
+              + `</figcaption>`
+            : '';
+        content = `<figure class="help-topic-figure">`
+            + `<img src="${STATIC_BASE}${topic.image}" class="help-inline-image help-topic-image ${isGif ? 'gif' : ''}" alt="${cap || topic.title}">`
+            + capHtml
+            + `</figure>` + content;
     }
 
     document.getElementById('topicBody').innerHTML = content;

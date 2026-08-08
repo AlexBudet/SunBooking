@@ -14,6 +14,8 @@ HELP_TOPICS = {
 "calendar_create_appointment": {
     "title": "✏️ Crea un Appuntamento in Agenda",
     "image": "Agenda_ModalCreaAppuntamento.png",
+    "image_caption": "Il modal <b>Nuovo Appuntamento</b>: ora di inizio e operatore sono già precompilati dalla cella cliccata. Nel campo cliente il tasto <b>+</b> verde crea al volo una nuova anagrafica; sotto, i servizi scelti diventano mini-blocchi che puoi togliere con la <b>X</b>.",
+    "image_path": "Agenda › click su una cella vuota della griglia",
     "content": """Hai due modi per creare un appuntamento in Agenda: il <span class="help-strong-dark">click su cella vuota</span> per la creazione rapida, oppure il <span class="help-strong-dark">Navigator Appuntamenti</span> per flussi più articolati.
 
 <span class="help-strong-dark help-subtitle-pill">▸ Click su cella vuota (metodo rapido)</span>
@@ -49,6 +51,8 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 "calendar_drag": {
     "title": "🖱️ Spostare un appuntamento? Facilissimo!",
     "image": "Agenda_Navigator.png",
+    "image_caption": "Il <b>Navigator Appuntamenti</b> con due mini-blocchi già pronti: finché restano lì, ogni click sulla griglia li posiziona. <b>Svuota</b> li azzera tutti.",
+    "image_path": "Agenda › riquadro in alto a destra",
     "content": """Funziona come sul telefono: tocca, tieni premuto e trascina!
 
 📍 **Per spostare:** clicca sulla parte alta dell'appuntamento, sulla **BARRA DI TRASCINAMENTO** (la riconosci perché passandoci sopra col mouse il puntatore diventa una manina) e trascinalo dove vuoi
@@ -67,7 +71,9 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 
     "calendar_status": {
         "title": "🎨 I colori dei blocchi appuntamento - cosa significano",
-        "image": "Agenda_Panoramica.png",
+    "image": "Agenda_Griglia.png",
+    "image_caption": "La griglia con una colonna per operatore: il <b>colore</b> distingue i clienti — tutti i blocchi di uno stesso cliente nella giornata hanno la stessa tinta — e il <b>grigio</b> segnala un appuntamento già pagato.",
+    "image_path": "Agenda",
         "content": """Ogni colore ti dice subito lo stato del blocco appuntamento:
 
 🟢🟤🔴🟡 **Colorato** → L'appuntamento è programmato (il colore si può modificare)
@@ -91,7 +97,9 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 
 "calendar_block_buttons": {
     "title": "Blocco Appuntamento - I PULSANTI",
-    "image": "Agenda_BloccoPulsanti.png",
+    "image": "Agenda_BloccoPulsantiTouch.png",
+    "image_caption": "Cliccando dentro un blocco compare la barra scura: <b>elimina</b>, <b>taglia</b>, <b>copia</b>, <b>colore</b>, <b>cassa</b> e <b>aggiungi servizio</b>. In modalità touch si apre al primo tocco.",
+    "image_path": "Agenda › click dentro un blocco appuntamento",
     "content": """I pulsanti **popup** compaiono passando il puntatore sul blocco; i pulsanti **interni** sono sempre visibili dentro il blocco stesso.
 
 <span class="help-strong-dark help-subtitle-pill">▸ Pulsanti popup — compaiono al passaggio del puntatore</span>
@@ -110,6 +118,9 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 },
 
 "calendar_block_click": {
+    "image": "Agenda_BloccoPulsantiTouch.png",
+    "image_caption": "Cliccando dentro un blocco compare la barra scura: <b>elimina</b>, <b>taglia</b>, <b>copia</b>, <b>colore</b>, <b>cassa</b> e <b>aggiungi servizio</b>. A destra l'info box con data di creazione, ultima modifica, nota cliente e recapito.",
+    "image_path": "Agenda › click dentro un blocco appuntamento",
     "title": "🖱️ Click dentro il blocco appuntamento",
     "content": """• 🗑️ **Cestino** (in alto a sinistra) → Apre una finestra con diverse opzioni:
    - **ELIMINA** il singolo blocco
@@ -129,6 +140,8 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
     "funzioni_blocchi": {
         "title": "✂️ Maneggiare i blocchi appuntamenti: le funzioni 'Togli e Sposta', 'Copia Blocco' e 'Aggiungi Servizio'",
         "image": "Agenda_Navigator.png",
+        "image_caption": "Il <b>Navigator Appuntamenti</b>: da qui si preparano i servizi prima di decidere dove metterli in agenda.",
+        "image_path": "Agenda › riquadro in alto a destra",
         "content": """Sopra ogni blocco appuntamento trovi tre pulsanti fondamentali per gestire gli appuntamenti in modo rapido ed efficiente!
 
 <span class="help-strong-dark help-subtitle-pill">✂️ TAGLIA (Togli e Sposta)</span>
@@ -150,6 +163,9 @@ Ideale quando il cliente decide di aggiungere un trattamento extra! 💆""",
     },
 
     "calendar_note": {
+    "image": "Agenda_BloccoPulsantiTouch.png",
+    "image_caption": "A destra del blocco l'<b>info box</b>: data di creazione, ultima modifica, <b>nota cliente</b> in giallo, servizio prenotato e recapito. Compare insieme alla barra dei pulsanti.",
+    "image_path": "Agenda › click dentro un blocco appuntamento",
         "title": "📝 Tooltip e Note nel blocco appuntamento",
         "content": """In Tosca puoi visualizzare informazioni e aggiungere due tipi di note, tutte visibili nel tooltip informativo del blocco appuntamento!
 
@@ -193,6 +209,8 @@ Queste note speciali ti aiutano a riconoscere subito situazioni particolari! ✨
     "calendar_paid_block": {
         "title": "✅ Blocchi \"PAGATO\" - appuntamenti completati",
         "image": "Agenda_Panoramica.png",
+        "image_caption": "La griglia dell'Agenda: gli appuntamenti già incassati in Cassa diventano <b>grigi</b> e non si spostano più.",
+        "image_path": "Agenda",
         "content": """I blocchi **grigio chiaro** sono appuntamenti già **completati e pagati**. Hanno funzionalità ridotte rispetto ai blocchi normali, perché rappresentano lo storico del cliente!
 
 🎨 **COME RICONOSCERLI**
@@ -219,6 +237,8 @@ I blocchi pagati hanno meno pulsanti rispetto ai blocchi normali:
     "calendar_off_block": {
         "title": "🚫 I Blocchi OFF - pause e impegni di servizio",
         "image": "Agenda_Panoramica.png",
+        "image_caption": "La griglia dell'Agenda: le fasce <b>tratteggiate</b> sono i blocchi OFF, cioè pause e impegni di servizio in cui non si prendono appuntamenti.",
+        "image_path": "Agenda",
         "content": """I **Blocchi OFF** sono diversi dai blocchi appuntamento: servono per bloccare fasce orarie per attività di servizio come pause, riunioni o altri impegni. In pratica disattivano le celle del calendario, impostandole come "non prenotabili" per i clienti.
 
 📌 **A COSA SERVONO**
@@ -252,6 +272,8 @@ Una volta creato, il blocco OFF ha questi controlli:
     "cassa_crea_scontrino": {
         "title": "🧾 Creare uno scontrino",
         "image": "Cassa_Panoramica.png",
+        "image_caption": "La <b>Cassa</b>: in alto i filtri e i pulsanti rapidi dei servizi, al centro la <b>bozza scontrino</b> con prezzo, sconto e metodo per ogni riga, a destra gli strumenti fiscali.",
+        "image_path": "Cassa",
         "content": """Creare uno scontrino è semplicissimo!
 
 1️⃣ Vai nella sezione **Cassa**
@@ -265,6 +287,9 @@ Lo scontrino viene creato e salvato automaticamente! 🎉""",
     },
     
     "cassa_pagamento": {
+    "image": "Cassa_BozzaCompilata.png",
+    "image_caption": "La <b>bozza scontrino</b> con tre voci: per ognuna prezzo, sconto in percentuale e metodo di pagamento. In basso il totale, i pulsanti per applicare un metodo a tutte le righe e <b>CONFERMA</b> per emettere lo scontrino.",
+    "image_path": "Cassa › aggiungi i servizi dai pulsanti in alto",
         "title": "💰 Registrare un pagamento",
         "content": """Registra i pagamenti in pochi click!
 
@@ -286,6 +311,9 @@ Puoi anche dividere il pagamento su più metodi (split): usa l'icona dividi acca
     },
     
     "cassa_blocchi_appuntamento": {
+    "image": "Cassa_ClientiInIstituto.png",
+    "image_caption": "Da <b>Clienti in istituto</b> si collega la cassa agli appuntamenti del giorno: il blocco scelto entra in bozza con servizio e prezzo già compilati.",
+    "image_path": "Cassa › riquadro Clienti in istituto",
         "title": "📅 Collegare cassa e appuntamenti",
         "content": """La cassa si collega automaticamente agli appuntamenti!
 
@@ -307,6 +335,8 @@ Tutto collegato, zero errori! ✨""",
     "client_phone_search": {
         "title": "📞 Numero di cellulare: salvataggio, ricerca e WhatsApp",
         "image": "Cliente_Nuovo.png",
+        "image_caption": "Il modal <b>Aggiungi Nuovo Cliente</b>: nome, cognome e cellulare, poi <b>Salva Cliente</b>. Il numero inserito qui è quello che poi permette di ritrovare la persona cercandola per telefono.",
+        "image_path": "Agenda › campo cliente › tasto + verde",
         "content": """<span class="help-strong-dark help-subtitle-pill">▸ FORMATO DEL NUMERO</span>
 
 Tosca salva sempre il numero <span class="help-strong-dark">senza spazi</span>, indipendentemente da come lo scrivi. Per i numeri italiani basta il numero a <span class="help-strong-dark">10 cifre</span> (es. <span class="help-strong-dark">3331234567</span>): il <span class="help-strong-dark">+39</span> viene aggiunto automaticamente al momento dell'invio WhatsApp. Per i clienti esteri usa <span class="help-strong-dark">+</span> seguito dal prefisso paese (es. <span class="help-strong-dark">+33123456789</span>).
@@ -330,6 +360,8 @@ Se incolli un numero <span class="help-strong-dark">con spazi</span>, dopo 1 sec
     "client_search": {
         "title": "🔍 Ricerca cliente in Agenda + Nuovo cliente + Info rapida",
         "image": "Agenda_CercaCliente.png",
+        "image_caption": "Il campo di ricerca cliente: bastano tre lettere e compaiono i nominativi col cellulare. Il pallino con i giorni dice da quanto la persona non viene; il tasto giallo <b>i</b> apre la finestra Info Cliente.",
+        "image_path": "Agenda › Navigator Appuntamenti › campo Cerca Cliente",
         "content":"""Questa è la guida unica per tutto il flusso cliente in Agenda: ricerca, inserimento rapido nuovo cliente e finestra info.
 
 <span class="help-strong-dark help-subtitle-pill">▸ RICERCA CLIENTE IN AGENDA</span>
@@ -399,6 +431,8 @@ Puoi inserire clienti anche da **Impostazioni → Clienti** (tab "Clienti"), dov
 "client_info_window": {
     "title": "ℹ️ Finestra Info Cliente",
     "image": "Cliente_InfoModal.png",
+    "image_caption": "La finestra <b>Info Cliente</b>: ogni campo si salva singolarmente, sotto ci sono le note e la fascia con visite totali, anzianità, ultima visita e spesa complessiva. In fondo lo storico degli appuntamenti e i prossimi già prenotati.",
+    "image_path": "Agenda › campo cliente › tasto giallo i",
     "content":"""Al click sull'**ICONA "i"** a fianco dei risultati della ricerca cliente si apre una finestra dove puoi visualizzare e modificare rapidamente i dati del cliente.
 
 Puoi modificare **NOME, COGNOME, CELLULARE ed EMAIL** nei campi in alto, e aggiungere o modificare la **NOTA SALVATA** per quel cliente.
@@ -453,6 +487,8 @@ Qui hai il controllo totale sulla tua rubrica clienti! 📋""",
     "pacchetto_panorama": {
         "title": "🎁 Come creare un pacchetto",
         "image": "Pacchetti_Elenco.png",
+        "image_caption": "L'elenco dei <b>Pacchetti Servizi</b>, con i tre tab in alto: Pacchetti Servizi, Carte Prepagate e Ricaricabili Solarium. Il colore del bordo indica lo stato; in grigio quelli completati.",
+        "image_path": "Pacchetti",
         "content": """Questa guida copre la creazione del <span class="help-strong-dark">Pacchetto servizi</span> vero e proprio: cioè un programma a sedute che vuoi vendere a un cliente, con eventuale sconto commerciale, omaggi e piano rateale.
 
 Se vuoi prima configurare modelli e impostazioni pacchetti, vai a <span class="help-strong-dark">[[TOOLS / PACCHETTI|tools_tab_pacchetti]]</span>.
@@ -499,6 +535,9 @@ Infine per creare il pacchetto cliccare su <span class="help-strong-dark">SALVA<
     },
 
     "pacchetto_tools_settings": {
+    "image": "Pacchetti_Tabs.png",
+    "image_caption": "I tre tab della sezione Pacchetti: <b>Pacchetti Servizi</b> per i percorsi a sedute, <b>Carte Prepagate</b> per le carte a credito e <b>Ricaricabili Solarium</b> per quelle vincolate ai soli servizi Solarium.",
+    "image_path": "Pacchetti › barra dei tab in alto",
         "title": "⚙️ Impostazioni del Pacchetto",
         "content": """Prima di vendere un pacchetto al cliente, conviene configurare bene le sue impostazioni in <span class="help-strong-dark">Tools / Pacchetti</span>.
 
@@ -547,6 +586,8 @@ L'obiettivo non è solo archiviare, ma poter recuperare il consenso in modo chia
     "pacchetto_stati_dettaglio": {
         "title": "🎨 Colori STATUS pacchetti, sezioni e tooltip",
         "image": "Pacchetti_Elenco.png",
+        "image_caption": "L'elenco pacchetti: il bordo colorato di ogni riga segnala lo stato, e la riga grigia è un pacchetto completato.",
+        "image_path": "Pacchetti › tab Pacchetti Servizi",
         "content": """La pagina Pacchetti non serve solo a vedere l'elenco: ti aiuta a leggere velocemente lo stato commerciale e operativo di ogni programma.
 
 <span class="help-strong-dark help-subtitle-pill">▸ COLORI / STATUS</span>
@@ -581,6 +622,8 @@ da qui basterà <span class="help-strong-dark">cliccare sul pacchetto</span> per
     "pacchetto_uso": {
         "title": "📅 Come segnare un appuntamento collegato a un Pacchetto",
         "image": "Pacchetto_Scheda.png",
+        "image_caption": "La scheda di un pacchetto: le sedute con data, trattamento, operatore e la spunta <b>EFFETTUATA</b>; le righe col trattino sono quelle ancora da fare. In fondo il riquadro <b>PAGAMENTO</b> con sconto applicato e stato delle rate.",
+        "image_path": "Pacchetti › Pacchetti Servizi › click sul pacchetto",
         "content": """Un pacchetto è davvero utile quando viene collegato bene anche alla parte Agenda.
 
 <span class="help-strong-dark help-subtitle-pill">▸ PARTENDO DA PACCHETTO</span>
@@ -709,6 +752,8 @@ Tra WhatsApp, PDF e stampa scegli in base alla situazione:
     "prepagata": {
         "title": "💳 Prepagate: panoramica operativa completa",
         "image": "Prepagata_Scheda.png",
+        "image_caption": "La scheda di una carta prepagata: <b>importo pagato</b>, <b>credito iniziale</b>, <b>credito residuo</b> e scadenza, con numero tessera e utilizzo consentito modificabili dalle matite. Sotto, le ultime ricariche e le ultime sedute scalate.",
+        "image_path": "Pacchetti › Carte Prepagate › click sulla carta",
         "content": """La <span class="help-strong-dark">prepagata</span> non è un pacchetto a sedute: è un <span class="help-strong-dark">credito economico</span> che il cliente usa nel tempo.
 
 <span class="help-strong-dark help-subtitle-pill">▸ DIFFERENZA CHIAVE RISPETTO AL PACCHETTO</span>
@@ -748,6 +793,9 @@ Quando la usi, ragiona sempre come su un portafoglio cliente: non si scaricano s
     },
 
     "prepagata_create": {
+    "image": "Prepagata_Riepilogo.png",
+    "image_caption": "Il riepilogo di una carta appena creata: <b>importo pagato</b>, <b>credito iniziale</b>, <b>credito residuo</b> e scadenza. Numero tessera e utilizzo consentito si cambiano dalle matite.",
+    "image_path": "Pacchetti › Carte Prepagate › click sulla carta",
         "title": "💳 Come creare una prepagata",
         "content": """Per creare una prepagata devi ragionare in termini di <span class="help-strong-dark">credito caricato</span>, non di numero sedute.
 
@@ -813,6 +861,9 @@ Uscendo con la <span class="help-strong-dark">×</span> le righe restano come so
     },
 
     "prepagata_pagamento": {
+    "image": "Prepagata_Riepilogo.png",
+    "image_caption": "Il <b>credito residuo</b> è il saldo spendibile: cala a ogni seduta scalata e risale a ogni ricarica. Sotto trovi le ultime ricariche e le ultime sedute.",
+    "image_path": "Pacchetti › Carte Prepagate › click sulla carta",
         "title": "💶 Prepagate: pagamenti, ricariche e saldo residuo",
         "content": """La vita economica della prepagata ruota intorno a tre elementi:
 • carico iniziale
@@ -866,6 +917,8 @@ La regola pratica è semplice: ogni volta che la prepagata viene usata, il clien
     "prepagata_solarium_tab": {
         "title": "☀️ Tab Ricaricabili Solarium",
         "image": "Prepagata_Scheda.png",
+        "image_caption": "Una carta <b>Ricaricabile Solarium</b>: l'utilizzo consentito è <b>Solo Solarium</b>, e in fondo il tasto verde <b>Ricarica Carta</b>.",
+        "image_path": "Pacchetti › Ricaricabili Solarium › click sulla carta",
         "content": """Nella pagina Pacchetti, accanto a "Carte Prepagate", c'è il tab <span class="help-strong-dark">Ricaricabili Solarium</span>: raccoglie le carte che si possono usare <span class="help-strong-dark">solo per servizi Solarium</span>.
 
 Ci finisce una carta quando è vincolata all'intera categoria Solarium, oppure a una lista di servizi che sono tutti Solarium. Le carte libere, che pagano qualsiasi cosa, restano nel tab "Carte Prepagate": i due elenchi non si sovrappongono mai.
@@ -1241,6 +1294,9 @@ Inoltre puoi personalizzare il messaggio mostrato al cliente, così il sito comu
         },
 
         "booking_servizi_operatori": {
+    "image": "booking2.png",
+    "image_caption": "L'elenco dei servizi prenotabili online, raggruppati per <b>sottocategoria</b>. Il pallino <b>i</b> compare solo sui servizi che hanno una descrizione: il cliente ci clicca e la legge prima di scegliere.",
+    "image_path": "Portale prenotazioni › Cerca un servizio",
         "title": "👩‍💼 Booking via Web: servizi visibili e operatori associati",
         "content": """Nel pannello Booking Web trovi una tabella servizi dedicata al modulo online.
 
@@ -1404,6 +1460,8 @@ Alcuni elementi **NON** hanno durata:
     "agenda_create_modify_delete": {
         "title": "🗂️ Agenda: creare, modificare e cancellare appuntamenti",
         "image": "Agenda_ModalCreaAppuntamento.png",
+        "image_caption": "Il modal <b>Nuovo Appuntamento</b>, da cui si crea e si modifica: cliente, servizi e conferma in un unico passaggio.",
+        "image_path": "Agenda › click su una cella vuota della griglia",
         "content": """La sezione Agenda serve a <span class=\"help-strong-dark\">creare</span>, <span class=\"help-strong-dark\">modificare</span>, <span class=\"help-strong-dark\">spostare</span> e <span class=\"help-strong-dark\">chiudere</span> gli appuntamenti.
 
 <span class=\"help-strong-dark\">Creazione</span>
@@ -1426,6 +1484,8 @@ L'idea corretta è questa: l'Agenda è la vista operativa del lavoro giornaliero
     "agenda_turni": {
         "title": "🕒 Impostare i turni degli operatori",
         "image": "Agenda_Turni.png",
+        "image_caption": "Il modal del turno: si impostano <b>inizio</b> e <b>fine</b>, oppure si segna <b>Giorno di riposo</b>. Sotto, la visualizzazione rapida del mese con gli orari giorno per giorno e gli <b>OFF</b> evidenziati in rosa.",
+        "image_path": "Agenda › click sul nome dell'operatore",
         "content": """I turni definiscono quando un operatore è disponibile per nuove prenotazioni. Gli appuntamenti si potranno creare <span class=\"help-strong-dark\">solo</span> negli orari di turno impostati.
 
 Per impostare i turni di base di ogni operatore (orari settimanali, preset ricorrenti), vedi <span class=\"help-strong-dark\">[[OPERATORI / TURNI|tools_tab_operatori]]</span>.
@@ -1446,6 +1506,9 @@ Nella stessa finestra trovi la sezione <span class=\"help-strong-dark\">Visualiz
     },
 
     "calendar_info_box": {
+    "image": "Agenda_InfoBox.png",
+    "image_caption": "L'<b>INFO BOX</b>: si digita nome o cellulare per avere la scheda di un cliente, oppure si usano le scorciatoie <b>Servizi</b>, <b>Operatore</b>, <b>Negozio</b> e <b>Web</b> per consultare listino, turni, dati del salone e prenotazioni online.",
+    "image_path": "Agenda › badge azzurro con la i, in basso a destra",
         "title": "ℹ️ INFO BOX: info su cliente, servizio, operatore, negozio e booking web",
         "content": """L'<span class=\"help-strong-dark\">INFO BOX</span> è il badge azzurro con la \"i\" che trovi nella colonna badge in basso a destra dell'Agenda. Apre un pannello laterale dove ottieni in pochi click informazioni dettagliate su cinque aree del gestionale, senza uscire dalla pagina Agenda.
 
@@ -1476,6 +1539,9 @@ Mostra le configurazioni essenziali del modulo <span class=\"help-strong-dark\">
     },
 
     "calendar_cerca_un_buco": {
+    "image": "Agenda_CercaUnBuco.png",
+    "image_caption": "Il pannello <b>Cerca disponibilità</b>: a sinistra cliente, operatore preferito e servizi; a destra l'intervallo di date e la griglia degli orari, dove si spuntano le fasce (Apertura, Mattino, Pausa pranzo, Pomeriggio, Sera, Chiusura) giorno per giorno. Senza spunte cerca in tutti gli orari di apertura.",
+    "image_path": "Agenda › badge verde col calendario, in basso a destra",
         "title": "🔍 CERCA UN BUCO: trova subito una disponibilità",
         "content": """Il badge <span class=\"help-strong-dark\">\"Cerca un Buco\"</span> (verde, con icona calendario) si trova nella colonna badge in basso a destra dell'Agenda, sotto al pulsante INFO BOX. Apre il modal <span class=\"help-strong-dark\">Cerca disponibilità</span>: incroci cliente, operatore, servizi, date e fasce orarie e Tosca ti propone gli slot liberi compatibili.
 
@@ -1513,6 +1579,9 @@ Se nel <span class=\"help-strong-dark\">Navigator Appuntamenti</span> hai già c
     },
 
     "agenda_touch_mode": {
+    "image": "Agenda_BloccoPulsantiTouch.png",
+    "image_caption": "In modalità <b>touch</b> la barra dei pulsanti si apre al primo tocco sul blocco, senza bisogno di passarci sopra col mouse.",
+    "image_path": "Agenda › modalità touch attiva › tocca un blocco",
         "title": "📱 Agenda in modalità TOUCH: differenze operative",
         "content": """La modalità TOUCH cambia il modo in cui interagisci con i blocchi appuntamento.
 
@@ -1553,7 +1622,9 @@ Nella pratica: prima selezioni il blocco, poi tocchi i pulsanti contestuali.
     # ========== CASSA (DETTAGLIO OPERATIVO) ==========
     "cassa_filtri_ricerca": {
         "title": "🧾 Cassa: bozza scontrino, metodi di pagamento e stampa",
-        "image": "Cassa_Panoramica.png",
+        "image": "Cassa_BozzaCompilata.png",
+        "image_caption": "La <b>bozza scontrino</b> con tre voci: per ognuna prezzo, sconto e metodo di pagamento. In basso il totale, i pulsanti che applicano un metodo a tutte le righe e <b>CONFERMA</b> per la stampa.",
+        "image_path": "Cassa › aggiungi i servizi dai pulsanti in alto",
         "content": """Qui trovi il flusso completo in 3 parti, senza passaggi separati.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ PARTE 1: Creare la bozza scontrino</span>
@@ -1604,6 +1675,9 @@ I documenti non fiscali/test sono trattati in modo distinto nel Registro.""",
     },
 
     "cassa_myspia_save_reset": {
+    "image": "Cassa_ClientiInIstituto.png",
+    "image_caption": "Il riquadro <b>Clienti in istituto</b>: elenca chi è già arrivato, così puoi portarne l'appuntamento in cassa senza cercarlo in Agenda.",
+    "image_path": "Cassa › riquadro in alto a destra",
         "title": "💾 Cassa: Clienti in istituto + Salva/Reset bozza",
         "content": """In basso a destra trovi il riquadro <span class=\"help-strong-dark help-subtitle-pill\">Clienti in istituto</span>
 
@@ -1635,6 +1709,9 @@ Questa logica è utile quando, prima di stampare, cambi prezzi, righe o metodi m
     },
 
     "cassa_sconti_metodi_stampa_test": {
+    "image": "Cassa_RigaScontrino.png",
+    "image_caption": "Una singola riga della bozza: <b>prezzo</b> modificabile, <b>sconto %</b> che ricalcola il prezzo, il <b>metodo</b> di pagamento, poi le icone per la calcolatrice, per dividere il pagamento su più metodi e per eliminare la riga.",
+    "image_path": "Cassa › una riga della bozza scontrino",
         "title": "🧮 Cassa: sconti e metodi di pagamento",
         "content": """Ogni riga della bozza può essere rifinita prima della conferma.
 
@@ -1687,6 +1764,8 @@ Per riportare la voce a un metodo normale va eliminata e riaggiunta fuori dalla 
     "cassa_registro_ruoli": {
         "title": "📚 Cassa: Registro Scontrini e differenze per ruolo",
         "image": "Cassa_Registro.png",
+        "image_caption": "Il <b>Registro Giornaliero Scontrini</b>: si sceglie la data in alto, il toggle commuta fra <b>solo fiscali</b> e <b>fiscali + test</b>, e ogni riga si può visualizzare o eliminare.",
+        "image_path": "Cassa › Registro Scontrini",
         "content": """Il <span class=\"help-strong-dark\">Registro Scontrini</span> è lo storico giornaliero dei documenti emessi.
 
 Che cosa puoi fare:
@@ -1730,6 +1809,8 @@ Questi pulsanti vanno usati con attenzione perché incidono sulla parte fiscale 
     "report_navigazione_filtri": {
         "title": "📊 Report: navigazione data e filtri avanzati",
         "image": "Report_Panoramica.png",
+        "image_caption": "In alto la data con le frecce per scorrere i giorni, e la riga dei filtri: <b>Corrispettivi</b>, <b>Incasso per categoria</b>, <b>Passaggi cassa</b>, <b>Clienti</b>, <b>Operatori</b>. L'ingranaggio a destra apre le impostazioni dei pannelli.",
+        "image_path": "Report › barra in alto",
         "content": """La pagina Report include una barra di navigazione simile all'Agenda:
 
 • frecce giorno precedente/successivo
@@ -1748,6 +1829,8 @@ Dopo aver impostato i filtri usa il tasto **VAI** per ricalcolare tutti i widget
     "report_sezioni_principali": {
         "title": "📈 Report: sezioni principali e pannelli KPI",
         "image": "Report_Panoramica.png",
+        "image_caption": "I quattro riquadri in cima — incasso totale, passaggi in cassa, no-show e tasso di completamento — e sotto i pannelli richiudibili: incasso del giorno con la torta dei metodi, appuntamenti conclusi, incasso stimato e heatmap.",
+        "image_path": "Report",
         "content": """In alto trovi i <span class=\"help-strong-dark\">pannelli KPI</span> (in precedenza indicati anche come tile) e sotto i pulsanti di sezione.
 
 <span class=\"help-strong-dark\">Che cosa significa KPI?</span>
@@ -1783,6 +1866,8 @@ I pannelli non si modificano "a mano" direttamente dal widget: si aggiornano cam
     "report_corrispettivi_ufficiali": {
         "title": "🧾 Report: sezione Corrispettivi (dati ufficiali)",
         "image": "Report_Corrispettivi.png",
+        "image_caption": "Il tab <b>Corrispettivi</b> con l'intervallo Da/A e le scorciatoie Oggi, mese e anno. Il riquadro Incasso totale separa contanti, POS e altro, e soprattutto distingue i <b>FISCALI</b> dai <b>TEST</b>.",
+        "image_path": "Report › Corrispettivi",
         "content": """La sezione <span class=\"help-strong-dark\">Corrispettivi</span> raccoglie i <span class=\"help-strong-dark\">dati ufficiali degli incassi</span> generati dalla cassa.
 
 Questa è la sezione di riferimento per la contabilità ordinaria.
@@ -2001,6 +2086,8 @@ Vale in entrambi i casi, con cassa abilitata o disabilitata: il tracciato del fi
     "tools_panorama": {
         "title": "🧰 Tools: guida completa tab per tab",
         "image": "Tools_Tabs.png",
+        "image_caption": "La barra dei tab di <b>Tools</b>, da cui si raggiungono tutte le configurazioni: Operatori, Servizi, Clienti, WhatsApp, Pacchetti, Solarium, Marketing, Info Azienda, Centro Assistenza, Booking Web e Utenti.",
+        "image_path": "Tools",
         "content": """La sezione Tools (Settings) contiene tutti i tab di configurazione del gestionale. Qui sotto trovi una guida completa con <span class=\"help-strong-dark\">una sottosezione per ogni tab</span>, spiegando le varie parti visibili in pagina e il loro uso pratico.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ OPERATORI</span>
@@ -2128,6 +2215,8 @@ In base al ruolo, alcune azioni possono essere limitate o mostrate in sola lettu
     "tools_tab_servizi": {
         "title": "💆 SERVIZI: form, tabella, descrizioni e sottocategorie",
         "image": "Tools_Tabs.png",
+        "image_caption": "Il tab <b>SERVIZI</b>: sopra il modulo per aggiungere un servizio (nome, tag, durata, prezzo, categoria e sottocategoria), sotto l'elenco di quelli registrati con Descrizione, Storico, Modifica ed Elimina.",
+        "image_path": "Tools › SERVIZI",
         "content": """Questo tab gestisce il catalogo operativo usato in Agenda, Cassa, Report e moduli opzionali.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ FORM "AGGIUNGI SERVIZIO"</span>
@@ -2171,6 +2260,9 @@ In fondo pagina puoi esportare il listino in TXT/PDF, con opzione per includere 
     },
 
     "tools_tab_clienti": {
+    "image": "Tools_BarraTab.png",
+    "image_caption": "La barra dei tab di <b>Tools</b>: da qui si passa fra Operatori, Servizi, Clienti, WhatsApp, Pacchetti, Solarium, Marketing, Info Azienda, Centro Assistenza, Booking Web e Utenti.",
+    "image_path": "Tools › CLIENTI",
         "title": "👤 CLIENTI: inserimento, ricerca, note, storico e duplicati",
         "content": """Questo tab è il centro di gestione anagrafica clienti.
 
@@ -2610,6 +2702,9 @@ Gli appuntamenti già passati al momento del click non vengono toccati. Se il li
     },
 
     "booking_pagina_pubblica": {
+    "image": "booking1.png",
+    "image_caption": "Il <b>portale prenotazioni</b> come lo vede il cliente: intestazione con nome del salone, indirizzo e telefono, il campo per cercare un servizio e gli avvisi configurabili — la nota sui trattamenti lunghi e il consenso a privacy e condizioni di vendita.",
+    "image_path": "l'indirizzo della tua pagina pubblica (lo trovi in Tools › BOOKING WEB)",
         "title": "📱 Cosa vede il cliente sulla pagina di prenotazione",
         "content": """La pagina di prenotazione pubblica è ciò che il cliente apre dal link <span class="help-strong-dark">[[PAGINA PRENOTAZIONI|tools_tab_booking_web]]</span>. Conoscere il flusso aiuta a guidare i clienti al telefono.
 
