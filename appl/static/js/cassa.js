@@ -856,6 +856,82 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
   }
   window.scalaCreditoDisponibile = scalaCreditoDisponibile;
 
+  // Quando in bozza arriva credito NUOVO - una ricarica, o la prima attivazione
+  // della tessera - le righe gia' spezzate in "reset credito" vanno rifatte da
+  // capo: la ricarica va A MONTE di tutto, e la seduta si scala dal credito che
+  // ci sara' dopo averla contata.
+  //
+  // Senza questo passaggio la riga restava divisa con la quota calcolata sul
+  // vecchio saldo, e lo scontrino sommava la differenza da incassare ALLA
+  // ricarica. Caso reale (Sun City, 08/08/2026): 5 EUR di residuo, Hybrid da 13
+  // portata dall'Agenda -> split 5 + 8. Poi ricarica da 50 (60 di credito): lo
+  // scontrino chiedeva 8 + 50 = 58 invece dei soli 50, e il credito finale era
+  // sbagliato. Corretto: solo la ricarica da 50, e 60 + 5 - 13 = 52 di residuo.
+  // Vale in entrambi i versi: se la ricarica viene tolta dalla bozza il credito
+  // cala di nuovo, e una riga rimasta interamente a prepagata tornerebbe a
+  // scoprire la carta. Per questo si guardano sia le righe spezzate sia quelle
+  // tutte a prepagata, riportando ognuna a quello che il saldo consente ADESSO.
+  function riallineaResetCredito() {
+    if (!window.cartaAttiva) return;
+    document.querySelectorAll('#scontrinoRowsContainer .scontrino-row').forEach(row => {
+      // Le righe che CARICANO credito non si pagano mai col credito stesso.
+      if (row.dataset.prepagataId || row.dataset.ricaricaPrepagataId) return;
+
+      const sel = row.querySelector('select[name="metodo_pagamento[]"]');
+      const pagamenti = (typeof getRowPagamenti === 'function') ? getRowPagamenti(row) : null;
+      const quotaAttuale = pagamenti
+        ? pagamenti.filter(p => p.metodo === 'prepagata')
+                   .reduce((t, p) => t + (parseFloat(p.importo) || 0), 0)
+        : (sel && sel.value === 'prepagata'
+             ? parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0') || 0
+             : 0);
+      // Riga che non tocca il credito (o split fra soli contanti/POS): non c'entra.
+      if (quotaAttuale <= 0) return;
+
+      const prezzoRiga = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0') || 0;
+      if (prezzoRiga <= 0) return;
+
+      const disponibile = creditoAncoraSpendibile(row);
+
+      // Il credito copre l'intera voce: niente reset credito, tutta a prepagata.
+      // Basta rimettere il metodo - il gestore del change annulla da solo lo split.
+      if (disponibile + 0.001 >= prezzoRiga) {
+        if (pagamenti && sel && sel.querySelector('option[value="prepagata"]')) {
+          sel.value = 'prepagata';
+          sel.dispatchEvent(new Event('change'));
+        }
+        return;
+      }
+
+      // Copre solo in parte: serve lo split, con la quota aggiornata al saldo.
+      const nuovaQuota = Math.round(disponibile * 100) / 100;
+      if (pagamenti && Math.abs(nuovaQuota - quotaAttuale) < 0.005) return;
+      // Se lo split aveva piu' metodi oltre alla prepagata, la differenza si
+      // riaccorpa sul primo: e' l'unico modo di ripartirla senza inventare.
+      const resto = (pagamenti && (pagamenti.find(p => p.metodo !== 'prepagata') || {}).metodo)
+                    || (row.dataset.vecchioMetodo !== 'prepagata' && row.dataset.vecchioMetodo)
+                    || 'pos';
+      if (nuovaQuota <= 0) {
+        setRowPagamenti(row, null);
+        if (sel) { sel.value = resto; sel.dispatchEvent(new Event('change')); }
+        return;
+      }
+      setRowPagamenti(row, [
+        { metodo: 'prepagata', importo: nuovaQuota },
+        { metodo: resto, importo: Math.round((prezzoRiga - nuovaQuota) * 100) / 100 }
+      ]);
+      if (sel) sel.value = resto;
+      row.dataset.vecchioMetodo = resto;
+      // Se la riga arrivava da "tutta a prepagata" era violetta: ora una parte si
+      // incassa davvero, quindi torna bianca come le altre righe fiscali.
+      if (row.style.background === COLORE_RIGA_PREPAGATA
+          || row.style.background === COLORE_RIGA_PREPAGATA_RGB) {
+        row.style.background = '#fff';
+      }
+    });
+  }
+  window.riallineaResetCredito = riallineaResetCredito;
+
   function verificaSaldoPrepagata(prezzoRiga, selectElement) {
     const saldoDisponibile = getSaldoTotalePrepagata();
     const giàAssegnato = getTotaleAssegnatoPrepagata();
@@ -2630,6 +2706,9 @@ row.className = 'd-flex align-items-center scontrino-row';
     row.remove();
     aggiornaTotale();
     aggiornaSubtotaliPagamenti();
+    // Togliere una riga cambia il credito disponibile: se spariva la ricarica, le
+    // voci rimaste a prepagata devono tornare a spezzarsi sul saldo vero.
+    if (typeof window.riallineaResetCredito === 'function') window.riallineaResetCredito();
     if (typeof aggiornaStatoMultiCliente === 'function') aggiornaStatoMultiCliente();
 
     // Rifotografa la bozza rimasta (prima si filtrava per id servizio, che toglieva
@@ -2770,6 +2849,14 @@ row.className = 'd-flex align-items-center scontrino-row';
   // Aggiorna opzione prepagata se il cliente ha carte prepagate
   if (typeof window.aggiornaOpzioniPrepagata === 'function') {
     window.aggiornaOpzioniPrepagata();
+  }
+
+  // La riga appena aggiunta porta credito nuovo (ricarica o attivazione tessera):
+  // le righe gia' spezzate in "reset credito" vanno ricalcolate sul saldo che
+  // risultera' dopo. La ricarica sta a monte, lo scalo viene dopo.
+  if ((servizio.prepagata_id || servizio.ricarica_prepagata_id)
+      && typeof window.riallineaResetCredito === 'function') {
+    window.riallineaResetCredito();
   }
 
   // Se stiamo gestendo blocchi da calendar, l'aggiunta di una riga extra è una modifica
