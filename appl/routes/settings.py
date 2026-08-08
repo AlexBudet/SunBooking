@@ -4424,6 +4424,11 @@ def help_page():
             "content": content,
             "image": topic.get("image"),
             "video": topic.get("video"),
+            # Didascalia e percorso vanno passati esplicitamente: qui il topic
+            # viene RICOSTRUITO campo per campo, quindi tutto cio' che non e'
+            # elencato sparisce prima di arrivare al template.
+            "image_caption": topic.get("image_caption"),
+            "image_path": topic.get("image_path"),
         }
     categories = get_topics_by_category()
 

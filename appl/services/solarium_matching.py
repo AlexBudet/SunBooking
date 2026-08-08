@@ -195,17 +195,26 @@ def session_payment_status(session):
     return 'in_sospeso' if minuti_da_fine >= MANUAL_REVIEW_AFTER_MIN else 'in_attesa'
 
 
-def _pick_appointment_id(receipt, service_id):
-    """Sceglie, tra le voci dello scontrino RELATIVE A QUEL SERVIZIO, un
-    appointment_id non ancora assegnato a un'altra seduta collegata allo
-    stesso scontrino (scontrini con piu' sedute dello stesso macchinario,
-    es. due Prestige per due persone). Se le voci non hanno appointment_id
-    (pagamento senza prenotazione), torna None senza bloccare il
-    collegamento seduta<->scontrino."""
+def appuntamenti_gia_presi(escludi_session_id=None):
+    """Appuntamenti gia' collegati a una seduta. Un appuntamento vale per UNA
+    sola seduta: se il cliente ha fatto due lampade, in Agenda ci sono due
+    blocchi e ognuno prende la sua."""
     from appl.models import SolariumSession
-    used = {s.appointment_id for s in
-            SolariumSession.query.filter_by(receipt_id=receipt.id).all()
-            if s.appointment_id}
+    return {s.appointment_id for s in
+            SolariumSession.query.filter(SolariumSession.appointment_id.isnot(None)).all()
+            if s.appointment_id and s.id != escludi_session_id}
+
+
+def _pick_appointment_id(receipt, service_id, escludi_session_id=None):
+    """Sceglie, tra le voci dello scontrino RELATIVE A QUEL SERVIZIO, un
+    appointment_id non ancora assegnato ad ALCUNA altra seduta. Se le voci non
+    hanno appointment_id (pagamento senza prenotazione), torna None senza
+    bloccare il collegamento seduta<->scontrino.
+
+    L'esclusione e' GLOBALE, non piu' limitata alle sedute dello stesso
+    scontrino: era proprio quel perimetro stretto a lasciar passare due sedute
+    sullo stesso appuntamento quando arrivavano da scontrini diversi."""
+    used = appuntamenti_gia_presi(escludi_session_id)
     for v in _voci_for_service(receipt, service_id):
         appt_id = v.get('appointment_id')
         if appt_id and appt_id not in used:
@@ -354,10 +363,73 @@ def _appointment_distance(session, appointment):
                for ps in (inizio, fine))
 
 
+def _abbinamento_globale(sessions, tolerance_minutes=AUTO_MATCH_TOLERANCE_MIN):
+    """Decide in UN COLPO SOLO quale appuntamento va a quale seduta.
+
+    Prima ogni seduta sceglieva per conto suo l'appuntamento piu' vicino, senza
+    sapere cosa avevano preso le altre: due lampade partite a pochi minuti di
+    distanza finivano sullo stesso blocco di Agenda, ed ecco i doppioni sullo
+    stesso cliente. Qui si costruiscono TUTTE le coppie (seduta, appuntamento)
+    ammissibili, si ordinano per distanza temporale e si assegnano 1:1 partendo
+    dalla piu' convincente: appuntamento assegnato, appuntamento fuori gioco
+    per tutte le altre sedute.
+
+    L'Agenda e' la fonte di verita': se un cliente ha due blocchi, le due
+    sedute ne prendono uno ciascuna, che e' il caso legittimo.
+
+    Ritorna {session_id: Appointment}.
+    """
+    from appl.models import Appointment
+
+    tolerance_sec = tolerance_minutes * 60
+    presi = appuntamenti_gia_presi()
+    coppie = []
+
+    for s in sessions:
+        service_id = device_service_id(s)
+        if not service_id:
+            continue
+        inizio = to_naive_local(s.inizio)
+        fine = to_naive_local(s.fine) or inizio
+        window_start = min(inizio, fine) - timedelta(minutes=tolerance_minutes)
+        window_end = max(inizio, fine) + timedelta(minutes=tolerance_minutes)
+        candidati = (Appointment.query
+                     .filter(Appointment.service_id == service_id,
+                             Appointment.is_cancelled_by_client == False,
+                             Appointment.start_time >= window_start - timedelta(hours=3),
+                             Appointment.start_time <= window_end)
+                     .all())
+        for a in candidati:
+            if a.id in presi:
+                continue
+            dist = _appointment_distance(s, a)
+            if dist <= tolerance_sec:
+                coppie.append((dist, s.id, a))
+
+    # Distanza crescente; a parita', id piu' bassi per un esito deterministico.
+    coppie.sort(key=lambda t: (t[0], t[1], t[2].id))
+
+    scelte, sedute_fatte, appuntamenti_fatti = {}, set(), set()
+    for dist, session_id, a in coppie:
+        if session_id in sedute_fatte or a.id in appuntamenti_fatti:
+            continue
+        scelte[session_id] = a
+        sedute_fatte.add(session_id)
+        appuntamenti_fatti.add(a.id)
+    return scelte
+
+
 def auto_match_pending():
-    """Tenta il collegamento automatico per tutte le sedute chiuse e non
-    ancora collegate. Fail-open per seduta: un errore su una non blocca le
-    altre."""
+    """Tenta il collegamento automatico per le sedute chiuse e non ancora
+    collegate. Fail-open per seduta: un errore su una non blocca le altre.
+
+    Ordine delle priorita': prima CHI (l'appuntamento in Agenda, che identifica
+    il cliente), poi QUANTO (lo scontrino, che puo' arrivare anche molto dopo o
+    non arrivare affatto, es. seduta scalata da un pacchetto gia' saldato).
+    Prima si partiva dallo scontrino e l'appuntamento si deduceva dalle sue
+    voci: un giro piu' lungo e meno affidabile, visto che la verita' su chi era
+    steso sotto la lampada sta in Agenda.
+    """
     from appl import db
     from appl.models import SolariumSession
 
@@ -367,36 +439,45 @@ def auto_match_pending():
                         SolariumSession.receipt_id.is_(None),
                         SolariumSession.fine >= cutoff)
                 .all())
+    if not sessions:
+        return
 
-    for s in sessions:
+    # --- passo 1: CHI, con assegnamento 1:1 sull'intero gruppo ---
+    da_assegnare = [s for s in sessions if not s.appointment_id]
+    scelte = _abbinamento_globale(da_assegnare)
+    for s in da_assegnare:
+        a = scelte.get(s.id)
+        if not a:
+            continue
         try:
-            receipt = find_best_receipt(s)
-            if receipt:
-                s.receipt_id = receipt.id
-                s.client_id = receipt.cliente_id
-                s.appointment_id = _pick_appointment_id(receipt, device_service_id(s))
-                db.session.commit()
-                logger.info("Solarium: seduta %s (device %s) collegata allo scontrino %s (cliente_id=%s, appointment_id=%s)",
-                            s.id, s.device_id, receipt.id, receipt.cliente_id, s.appointment_id)
-                continue
-
-            # Nessuno scontrino: l'appuntamento di calendario e' comunque una
-            # traccia valida di chi ha fatto la seduta (non ancora pagata,
-            # pagata piu' tardi, o scalata da un pacchetto gia' saldato che
-            # non genera scontrini). Collega cliente e appuntamento; il
-            # pagamento potra' arrivare dopo e restera' da abbinare.
-            if s.appointment_id:
-                continue  # gia' identificata: si continua solo a cercarne il pagamento
-            appuntamento = find_best_appointment(s)
-            if appuntamento:
-                s.appointment_id = appuntamento.id
-                s.client_id = appuntamento.client_id
-                db.session.commit()
-                logger.info("Solarium: seduta %s (device %s) collegata all'appuntamento %s (cliente_id=%s, nessuno scontrino)",
-                            s.id, s.device_id, appuntamento.id, appuntamento.client_id)
+            s.appointment_id = a.id
+            s.client_id = a.client_id
+            db.session.commit()
+            logger.info("Solarium: seduta %s (device %s) collegata all'appuntamento %s (cliente_id=%s)",
+                        s.id, s.device_id, a.id, a.client_id)
         except Exception as e:
             db.session.rollback()
-            logger.error("Solarium matching: errore collegando la seduta %s: %s", s.id, e)
+            logger.error("Solarium matching: errore collegando la seduta %s all'appuntamento: %s", s.id, e)
+
+    # --- passo 2: QUANTO, senza mai sovrascrivere il CHI deciso sopra ---
+    for s in sessions:
+        try:
+            if s.receipt_id:
+                continue
+            receipt = find_best_receipt(s)
+            if not receipt:
+                continue
+            s.receipt_id = receipt.id
+            if not s.client_id:
+                s.client_id = receipt.cliente_id
+            if not s.appointment_id:
+                s.appointment_id = _pick_appointment_id(receipt, device_service_id(s), s.id)
+            db.session.commit()
+            logger.info("Solarium: seduta %s (device %s) agganciata allo scontrino %s (cliente_id=%s, appointment_id=%s)",
+                        s.id, s.device_id, receipt.id, s.client_id, s.appointment_id)
+        except Exception as e:
+            db.session.rollback()
+            logger.error("Solarium matching: errore agganciando lo scontrino alla seduta %s: %s", s.id, e)
 
 
 def _loop(app):
