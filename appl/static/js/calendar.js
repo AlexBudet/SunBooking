@@ -5278,11 +5278,20 @@ document.addEventListener('click', function(e) {
       // quindi visivamente sopra il blocco, e e.target può atterrare sul blocco in alto,
       // non sul blocco il cui popup è stato cliccato.
       const allPopupBars = document.querySelectorAll('.appointment-block:not(.note-off) .popup-buttons');
+      // Il confronto sulle sole coordinate ignora cosa sta SOPRA: con una finestra
+      // aperta ("Cerca un buco", INFO BOX, Monitor lampade) un click DENTRO la
+      // finestra cadeva sulla barra del blocco sottostante e ne premeva il
+      // pulsante. elementFromPoint restituisce l'elemento realmente in cima,
+      // quindi rispetta la sovrapposizione: il recupero del click deviato da
+      // pointer-events continua a funzionare (li' l'elemento in cima E' la barra),
+      // ma non scatta piu' quando davanti c'e' davvero qualcos'altro.
+      const inCima = document.elementFromPoint(e.clientX, e.clientY);
       for (const pb of allPopupBars) {
         const pbr = pb.getBoundingClientRect();
         if (pbr.width > 0 && pbr.height > 0 &&
             e.clientX >= pbr.left && e.clientX <= pbr.right &&
-            e.clientY >= pbr.top  && e.clientY <= pbr.bottom) {
+            e.clientY >= pbr.top  && e.clientY <= pbr.bottom &&
+            inCima && pb.contains(inCima)) {
           const copiaBtn = pb.querySelector('.btn-popup.copia');
           if (copiaBtn) {
             const br = copiaBtn.getBoundingClientRect();
@@ -10667,11 +10676,16 @@ document.addEventListener('click', function(e) {
     // quindi visivamente sopra il blocco, e clickedBlock potrebbe essere il blocco in alto
     // mentre il popup appartiene al blocco sottostante. Query globale per trovare il match corretto.
     const popupBars = document.querySelectorAll('.appointment-block .popup-buttons, .appointment-block .popup-buttons-bottom');
+    // Stessa correzione della barra "copia": senza il controllo di cio' che sta
+    // in cima, un click dentro una finestra aperta sopra il calendario veniva
+    // scambiato per un click sulla barra popup sottostante.
+    const inCima = document.elementFromPoint(e.clientX, e.clientY);
     for (const pb of popupBars) {
       const r = pb.getBoundingClientRect();
       if (r.width > 0 && r.height > 0 &&
           e.clientX >= r.left && e.clientX <= r.right &&
-          e.clientY >= r.top  && e.clientY <= r.bottom) {
+          e.clientY >= r.top  && e.clientY <= r.bottom &&
+          inCima && pb.contains(inCima)) {
         return;
       }
     }

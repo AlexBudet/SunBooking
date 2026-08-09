@@ -2927,14 +2927,25 @@ body.touch-ui .appointment-block .client-info-link {
   cursor: pointer !important;
 }
 
-/* TOUCH-UI: evidenzia il link nome cliente quando il blocco è attivo */
+/* TOUCH-UI: evidenzia il link nome cliente quando il blocco è attivo.
+   La targhetta è arrotondata e con un po' di respiro attorno al testo, così
+   il bersaglio da toccare è più generoso senza allargare il blocco: il
+   padding rientra nella larghezza (box-sizing) e max-width impedisce a un
+   nome lungo di sfondare la colonna dell'operatore. */
 body.touch-ui .appointment-block.active-popup .client-info-link {
   display: inline-block;
-  text-decoration: underline; /* sottolineatura per rafforzare la cliccabilità */
+  /* Niente sottolineatura: con la targhetta piena è ridondante e appesantisce. */
+  text-decoration: none !important;
   box-shadow: none;
   font-size: 0.95em;
-  background-color: #000 !important; /* Sfondo nero assicurato */
+  /* Stesso sfondo dei .btn-popup, così la targhetta appartiene visivamente
+     alla stessa famiglia dei pulsanti che le compaiono sopra. */
+  background: linear-gradient(to top, #5c5c5c, #2c2c2c) !important;
   color: #fff !important;            /* Testo SEMPRE bianco */
+  padding: 2px 10px;
+  border-radius: 8px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 body.touch-ui .appointment-block.status-2 .popup-buttons .btn-popup.copia {
