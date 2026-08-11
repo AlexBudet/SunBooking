@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Form di attivazione e firma contratto — progetto tecnico</title>
+<style>
+:root{
+  --ink:#1a1a1a; --muted:#5b6470; --line:#d8dde4; --bg:#ffffff;
+  --accent:#8a6d3b; --note-bg:#fdf6e3; --note-line:#d9b96c;
+  --ph-bg:#fff3b0; --ph-ink:#5c4700;
+  --code-bg:#f4f6f8;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:#eceff3; color:var(--ink);
+  font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  font-size:16px; line-height:1.65;
+}
+.sheet{
+  max-width:900px; margin:0 auto; background:var(--bg);
+  padding:56px 64px 80px; box-shadow:0 0 0 1px rgba(0,0,0,.06),0 8px 32px rgba(0,0,0,.10);
+}
+h1{
+  font-size:1.75rem; line-height:1.25; margin:2.4em 0 .6em;
+  padding-bottom:.4em; border-bottom:2px solid var(--ink); letter-spacing:.01em;
+}
+h1:first-child{margin-top:0}
+h2{font-size:1.28rem; margin:2em 0 .5em; padding-bottom:.25em; border-bottom:1px solid var(--line)}
+h3{font-size:1.08rem; margin:1.7em 0 .4em; color:#111}
+h4{font-size:1rem; margin:1.4em 0 .3em; color:var(--muted); text-transform:uppercase; letter-spacing:.05em}
+p{margin:.7em 0}
+ul,ol{margin:.7em 0; padding-left:1.5em}
+li{margin:.3em 0}
+hr{border:0; border-top:1px solid var(--line); margin:2.2em 0}
+a{color:#0b5aa2}
+strong{font-weight:700}
+code{
+  font-family:"Cascadia Mono",Consolas,"SF Mono",Menlo,monospace;
+  font-size:.86em; background:var(--code-bg); padding:.12em .38em;
+  border-radius:3px; border:1px solid var(--line);
+}
+pre{
+  background:var(--code-bg); border:1px solid var(--line); border-radius:6px;
+  padding:14px 16px; overflow-x:auto; font-size:.82rem; line-height:1.5;
+  font-family:"Cascadia Mono",Consolas,"SF Mono",Menlo,monospace;
+}
+pre code{background:none; border:0; padding:0; font-size:1em}
+table{border-collapse:collapse; width:100%; margin:1.1em 0; font-size:.92rem}
+th,td{border:1px solid var(--line); padding:8px 11px; text-align:left; vertical-align:top}
+th{background:#f2f5f8; font-weight:700}
+tr:nth-child(even) td{background:#fafbfc}
+blockquote{
+  margin:1.2em 0; padding:12px 18px; background:var(--note-bg);
+  border-left:4px solid var(--note-line); font-size:.94rem; color:#4a3e22;
+}
+blockquote p{margin:.35em 0}
+.ph{background:var(--ph-bg); color:var(--ph-ink); padding:0 .25em; border-radius:2px; font-style:italic}
+.toolbar{
+  position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--line);
+  padding:10px 16px; display:flex; gap:14px; align-items:center; justify-content:center;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif; font-size:.82rem; color:var(--muted);
+}
+.toolbar button{
+  font:inherit; padding:5px 14px; border:1px solid var(--line); border-radius:5px;
+  background:#f7f9fb; cursor:pointer; color:var(--ink);
+}
+.toolbar button:hover{background:#eef2f6}
+.pagebreak{page-break-before:always; break-before:page}
+@media print{
+  body{background:#fff; font-size:10.5pt}
+  .sheet{max-width:none; box-shadow:none; padding:0}
+  .toolbar{display:none}
+  h1,h2,h3{page-break-after:avoid; break-after:avoid}
+  table,blockquote,pre{page-break-inside:avoid; break-inside:avoid}
+  .ph{background:none; border-bottom:1px dotted #999; color:#000}
+  @page{size:A4; margin:20mm 18mm}
+}
+</style>
+</head>
+<body>
+<div class="toolbar"><span>Documento locale &mdash; nessun dato esce dal computer</span><button onclick="window.print()">Stampa / Salva come PDF</button></div>
+<div class="sheet">
+<h1>Form di attivazione e firma contratto — progetto tecnico</h1>
+<p>Documento di progetto. Nulla di quanto qui descritto è ancora implementato.</p>
+<hr>
+<h2>1. Dove vive il form</h2>
+<p>**Dentro l'app Tosca, nella root app di <code>wsgi.py</code>, su rotta pubblica. Non su IONOS.**</p>
+<p><code>wsgi.py</code> monta ogni tenant su <code>/s/&lt;idx&gt;</code> tramite <code>DispatcherMiddleware</code>; la <strong>root app</strong> (<code>root_app</code>) serve già <code>/owner-login</code>, <code>/owner-setup</code> e le API di billing. È l'unico posto che:</p>
+<ul><li>conosce l'elenco dei database (<code>collect_db_pool()</code> legge <code>SQLALCHEMY_DATABASE_URI&lt;N&gt;</code>);</li><li>sa creare un tenant da zero (<code>owner_setup_add_tenant()</code>, <code>wsgi.py:786</code>);</li><li>può scrivere nel <code>.env</code> e montare il child <strong>senza riavvio</strong>.</li></ul>
+<p>Un form su IONOS dovrebbe invece esporre in rete le credenziali del PostgreSQL Azure, duplicare i modelli e non potrebbe comunque fare il provisioning. Non ha senso.</p>
+<p><strong>Ruolo di IONOS:</strong> sito vetrina/landing. Il pulsante "Attiva TOSCA" punta a <code>https://&lt;dominio-tosca&gt;/attiva/&lt;token&gt;</code>. Se si vuole un indirizzo pulito, un record CNAME <code>attiva.&lt;dominio&gt;</code> verso l'App Service Azure e un custom domain sul servizio.</p>
+<p>Rotte da aggiungere alla root app:</p>
+<table><thead><tr><th>Rotta</th><th>Metodo</th><th>Auth</th><th>Scopo</th></tr></thead><tbody><tr><td><code>/owner-setup/invite</code></td><td>POST</td><td>owner</td><td>Genera link di attivazione per un nuovo cliente</td></tr><tr><td><code>/attiva/&lt;token&gt;</code></td><td>GET</td><td>token</td><td>Mostra il form (wizard)</td></tr><tr><td><code>/attiva/&lt;token&gt;/step</code></td><td>POST</td><td>token</td><td>Salva un passo (bozza)</td></tr><tr><td><code>/attiva/&lt;token&gt;/pdf</code></td><td>GET</td><td>token</td><td>Anteprima contratto compilato</td></tr><tr><td><code>/attiva/&lt;token&gt;/otp</code></td><td>POST</td><td>token</td><td>Invia / verifica OTP</td></tr><tr><td><code>/attiva/&lt;token&gt;/firma</code></td><td>POST</td><td>token</td><td>Registra la firma e chiude la pratica</td></tr><tr><td><code>/webhook/firma</code></td><td>POST</td><td>HMAC</td><td>Callback del provider di firma (opzione A)</td></tr></tbody></table>
+<p>Il token <strong>non deve mai</strong> dare accesso a dati di alcun tenant: la rotta pubblica parla solo con il registry.</p>
+<hr>
+<h2>2. Dove finiscono i dati</h2>
+<p>Il problema di fondo: <strong>quando il cliente compila il form, il suo database non esiste ancora.</strong> Serve quindi uno store centrale, che oggi manca (i dati contratto stanno in <code>owner_billing.json</code>, un file su disco — fragile su App Service, non transazionale, non interrogabile).</p>
+<p>**Proposta: un database centrale <code>tosca_registry</code>**, separato dai DB tenant, a cui le app tenant non si connettono affatto. È la risposta più forte al requisito "campi che non verranno visualizzati nell'app di Tosca": non è una questione di template, è un database diverso.</p>
+<p>Bonus: è lo stesso registry che serve al piano dei 100 tenant per il login senza scansione totale, e manda in pensione <code>owner_billing.json</code>.</p>
+<pre><code>┌────────────────────────────┐
+│  tosca_registry (centrale) │  ← form pubblico, owner-setup, billing
+│  tenant / invite /         │
+│  contract / signature /    │
+│  consent / invoice         │
+└─────────────┬──────────────┘
+              │ provisioning (dopo firma + incasso)
+              ▼
+┌────────────────────────────┐
+│  DB tenant  (uno per       │  ← app Tosca: business_info, owners, clienti...
+│  cliente, /s/&lt;idx&gt;)        │
+└────────────────────────────┘</code></pre>
+<h3>Schema del registry</h3>
+<pre><code>CREATE TABLE tenant (
+  id                 serial PRIMARY KEY,
+  idx                integer UNIQUE,              -- indice /s/&lt;idx&gt;, NULL finché non provisionato
+  db_uri_enc         text,                        -- cifrata a riposo (Fernet), mai in chiaro
+  business_name      varchar(150) NOT NULL,
+  status             varchar(20)  NOT NULL,       -- invited|signed|provisioning|active|suspended|terminated
+  created_at         timestamptz  NOT NULL DEFAULT now(),
+  provisioned_at     timestamptz
+);
+
+CREATE TABLE onboarding_invite (
+  id            serial PRIMARY KEY,
+  token_hash    varchar(64) UNIQUE NOT NULL,      -- sha256 del token; il token in chiaro sta solo nel link
+  tenant_id     integer REFERENCES tenant(id) ON DELETE CASCADE,
+  email         varchar(120),
+  expires_at    timestamptz NOT NULL,
+  opened_at     timestamptz,
+  used_at       timestamptz,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE contract (
+  id                    serial PRIMARY KEY,
+  tenant_id             integer NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  status                varchar(20) NOT NULL DEFAULT &#x27;draft&#x27;,  -- draft|ready|signed|void
+  contract_version      varchar(20) NOT NULL,                  -- es. &quot;1.0&quot;
+  -- anagrafica (fonte di verità; copiata su business_info al provisioning)
+  legal_business_name   varchar(150),
+  trade_name            varchar(150),
+  legal_form            varchar(50),
+  vat_number            varchar(20),
+  fiscal_code           varchar(16),
+  rea_number            varchar(20),
+  rea_province          varchar(2),
+  pec                   varchar(120),
+  sdi_code              varchar(7),
+  -- sede legale
+  legal_address         varchar(200),
+  legal_cap             varchar(10),
+  legal_city            varchar(100),
+  legal_province        varchar(2),
+  -- sede operativa (negozio)
+  op_same_as_legal      boolean DEFAULT true,
+  op_address            varchar(200),
+  op_cap                varchar(10),
+  op_city               varchar(100),
+  op_province           varchar(2),
+  -- contatti
+  email                 varchar(120),
+  phone                 varchar(30),
+  mobile                varchar(30),
+  website               varchar(200),
+  -- firmatario
+  signer_first_name     varchar(80),
+  signer_last_name      varchar(80),
+  signer_fiscal_code    varchar(16),
+  signer_role           varchar(50),
+  signer_mobile         varchar(30),              -- utenza per l&#x27;OTP
+  signer_email          varchar(120),
+  -- pre-configurazione dell&#x27;istanza
+  opening_time          time,
+  closing_time          time,
+  closing_days          text,                     -- JSON, stesso formato di business_info
+  vat_percentage        numeric(5,2) DEFAULT 22.0,
+  operators_count       integer,
+  printer_model         varchar(30),              -- rch_print_rt | rch_print_f | none
+  current_software      varchar(100),
+  has_data_to_migrate   boolean,
+  -- moduli e condizioni economiche
+  module_base           boolean DEFAULT true,
+  module_web            boolean DEFAULT false,
+  module_pacchetti      boolean DEFAULT false,
+  module_solarium       boolean DEFAULT false,
+  starter_total         numeric(10,2),
+  saas_monthly_amount   numeric(10,2),
+  -- SEPA: mai l&#x27;IBAN completo
+  sepa_mandate_ref      varchar(64),
+  sepa_iban_last4       varchar(4),
+  sepa_signed_at        timestamptz,
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  updated_at            timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE contract_consent (
+  id            serial PRIMARY KEY,
+  contract_id   integer NOT NULL REFERENCES contract(id) ON DELETE CASCADE,
+  kind          varchar(40) NOT NULL,   -- contract | art1341 | dpa | remote_support | not_consumer
+  accepted      boolean NOT NULL,
+  doc_version   varchar(20),
+  doc_sha256    varchar(64),
+  accepted_at   timestamptz NOT NULL DEFAULT now(),
+  ip            varchar(45),
+  user_agent    text
+);
+
+CREATE TABLE contract_signature (
+  id                 serial PRIMARY KEY,
+  contract_id        integer NOT NULL REFERENCES contract(id) ON DELETE CASCADE,
+  method             varchar(30) NOT NULL,   -- otp_ses | provider_fea | provider_feq
+  provider           varchar(50),
+  provider_envelope  varchar(120),           -- id pratica lato provider
+  otp_sent_at        timestamptz,
+  otp_verified_at    timestamptz,
+  otp_destination    varchar(30),            -- ultime cifre del cellulare
+  signed_at          timestamptz,
+  ip                 varchar(45),
+  user_agent         text,
+  pdf_sha256         varchar(64) NOT NULL,
+  pdf_bytes          bytea,                  -- oppure blob storage + URL
+  audit_json         jsonb
+);</code></pre>
+<p><code>invoice</code> e <code>payment</code> migrano da <code>owner_billing.json</code> mantenendo i campi attuali (<code>activation_date</code>, <code>contract_start_date</code>, <code>starter_expiry_date</code>, <code>starter_total</code>, <code>saas_monthly_amount</code>, <code>saas_next_renewal</code>, <code>max_payment_days</code>, <code>fiscozen_contact_id</code>, <code>revolut_account_ref</code>), così <code>_compliance_status()</code> continua a funzionare invariato.</p>
+<hr>
+<h2>3. Campi del form e destinazione</h2>
+<p>Wizard in 6 passi, salvataggio progressivo. <code>*</code> = obbligatorio.</p>
+<h3>Passo 1 — Anagrafica azienda</h3>
+<table><thead><tr><th>Campo</th><th>Destinazione</th></tr></thead><tbody><tr><td>Ragione sociale / denominazione *</td><td><code>contract.legal_business_name</code> → <code>business_info.business_name</code></td></tr><tr><td>Insegna / nome commerciale</td><td><code>contract.trade_name</code></td></tr><tr><td>Forma giuridica * (select)</td><td><code>contract.legal_form</code></td></tr><tr><td>Partita IVA *</td><td><code>contract.vat_number</code> → <code>business_info.vat_code</code></td></tr><tr><td>Codice fiscale (se diverso)</td><td><code>contract.fiscal_code</code> → <code>business_info.fiscal_code</code> <em>(nuova colonna)</em></td></tr><tr><td>N. REA + provincia</td><td><code>contract.rea_number</code>, <code>rea_province</code></td></tr><tr><td>PEC *</td><td><code>contract.pec</code> → <code>business_info.pec_code</code></td></tr><tr><td>Codice destinatario SDI</td><td><code>contract.sdi_code</code> → <code>business_info.sdi_code</code> <em>(nuova colonna)</em></td></tr></tbody></table>
+<h3>Passo 2 — Sedi</h3>
+<table><thead><tr><th>Campo</th><th>Destinazione</th></tr></thead><tbody><tr><td>Sede legale: indirizzo, CAP, città, prov. *</td><td><code>contract.legal_*</code></td></tr><tr><td>"La sede operativa coincide" (checkbox)</td><td><code>contract.op_same_as_legal</code></td></tr><tr><td>Sede operativa: indirizzo, CAP, città, prov.</td><td><code>contract.op_*</code> → <code>business_info.address / cap / city / province</code></td></tr></tbody></table>
+<p>La sede operativa è quella che finisce in Tosca: è l'indirizzo del negozio, quello che il cliente finale vede.</p>
+<h3>Passo 3 — Contatti e firmatario</h3>
+<table><thead><tr><th>Campo</th><th>Destinazione</th></tr></thead><tbody><tr><td>Nome e cognome legale rappresentante *</td><td><code>contract.signer_first_name</code>, <code>signer_last_name</code></td></tr><tr><td>Codice fiscale del firmatario *</td><td><code>contract.signer_fiscal_code</code></td></tr><tr><td>Qualifica * (titolare / amministratore / procuratore)</td><td><code>contract.signer_role</code></td></tr><tr><td>Cellulare del firmatario *</td><td><code>contract.signer_mobile</code> — <strong>è l'utenza dell'OTP</strong></td></tr><tr><td>E-mail aziendale *</td><td><code>contract.email</code> → <code>business_info.email</code></td></tr><tr><td>Telefono negozio</td><td><code>contract.phone</code> → <code>business_info.phone</code></td></tr><tr><td>Cellulare negozio</td><td><code>contract.mobile</code> → <code>business_info.mobile</code></td></tr><tr><td>Sito web</td><td><code>contract.website</code> → <code>business_info.website</code></td></tr></tbody></table>
+<h3>Passo 4 — Pre-configurazione del negozio</h3>
+<table><thead><tr><th>Campo</th><th>Destinazione</th></tr></thead><tbody><tr><td>Orario apertura *</td><td><code>contract.opening_time</code> → <code>business_info.opening_time</code> <strong>(NOT NULL)</strong></td></tr><tr><td>Orario chiusura *</td><td><code>contract.closing_time</code> → <code>business_info.closing_time</code> <strong>(NOT NULL)</strong></td></tr><tr><td>Giorni di chiusura</td><td><code>contract.closing_days</code> → <code>business_info.closing_days</code></td></tr><tr><td>Aliquota IVA prevalente</td><td><code>contract.vat_percentage</code> → <code>business_info.vat_percentage</code></td></tr><tr><td>Numero operatori *</td><td><code>contract.operators_count</code> — dimensiona la migrazione</td></tr><tr><td>Registratore telematico (nessuno / Print!T 3.0 RT / Print F)</td><td><code>contract.printer_model</code> → <code>business_info.printer_model</code></td></tr><tr><td>Gestionale attuale</td><td><code>contract.current_software</code></td></tr><tr><td>Ha dati da migrare</td><td><code>contract.has_data_to_migrate</code></td></tr></tbody></table>
+<p>I due orari sono l'unico motivo per cui oggi <code>owner_setup_add_tenant()</code> deve inventare 9:00-19:00 (<code>wsgi.py:841</code>): sono <code>nullable=False</code> senza default. Chiedendoli nel form il default sparisce.</p>
+<h3>Passo 5 — Moduli e condizioni economiche</h3>
+<table><thead><tr><th>Campo</th><th>Destinazione</th></tr></thead><tbody><tr><td>TOSCA BASE (sempre attivo)</td><td><code>contract.module_base</code> → <code>OWNER.module_base_enabled</code></td></tr><tr><td>Prenotazioni online</td><td><code>contract.module_web</code> → <code>OWNER.module_web_enabled</code></td></tr><tr><td>Pacchetti e prepagate</td><td><code>contract.module_pacchetti</code> → <code>OWNER.module_pacchetti_enabled</code></td></tr><tr><td>Strumenti solarium</td><td><code>contract.module_solarium</code> → <code>OWNER.module_solarium_enabled</code></td></tr><tr><td>Starter 6 mesi (importo)</td><td><code>contract.starter_total</code> → registry billing</td></tr><tr><td>Canone mensile</td><td><code>contract.saas_monthly_amount</code> → registry billing</td></tr><tr><td>IBAN per mandato SEPA</td><td><strong>al PSP, non in Tosca</strong>: si salvano solo <code>sepa_mandate_ref</code> e <code>sepa_iban_last4</code></td></tr></tbody></table>
+<p>Gli importi vanno precompilati dall'owner al momento dell'invito e mostrati in sola lettura al cliente: non è il cliente a scegliersi il prezzo.</p>
+<h3>Passo 6 — Consensi e firma</h3>
+<table><thead><tr><th>Consenso</th><th><code>contract_consent.kind</code></th></tr></thead><tbody><tr><td>Presa visione e accettazione del contratto e degli Allegati A, B, C</td><td><code>contract</code></td></tr><tr><td>Approvazione specifica clausole artt. 1341-1342 c.c. (elenco esteso, checkbox separata)</td><td><code>art1341</code></td></tr><tr><td>Nomina a Responsabile del trattamento (Allegato B)</td><td><code>dpa</code></td></tr><tr><td>Autorizzazione assistenza remota (Supremo / TeamViewer)</td><td><code>remote_support</code></td></tr><tr><td>Dichiarazione di agire nell'esercizio dell'attività d'impresa (non consumatore)</td><td><code>not_consumer</code></td></tr></tbody></table>
+<p>Ogni riga registra <code>doc_version</code>, <code>doc_sha256</code>, <code>ip</code>, <code>user_agent</code>, <code>accepted_at</code>. La checkbox delle clausole 1341 <strong>deve essere separata e successiva</strong> a quella del contratto: è il corrispettivo digitale della doppia firma.</p>
+<hr>
+<h2>4. Come far firmare — e il problema dell'art. 1341</h2>
+<p>Il punto delicato. L'art. 1341 co. 2 c.c. richiede l'approvazione <strong>specifica per iscritto</strong> delle clausole onerose; il contratto qui è un modulo predisposto dal Licenziante, quindi si applica in pieno. Una firma elettronica <strong>semplice</strong> (spunta + OTP) ha efficacia probatoria <em>liberamente valutabile dal giudice</em> (art. 20 CAD, art. 25 eIDAS) e con essa il requisito di forma scritta delle clausole vessatorie è <strong>contestabile</strong>.</p>
+<p>Serve un servizio di <strong>richiesta firma</strong>: io carico il documento, il cliente firma da remoto <strong>senza possedere un certificato</strong>, il servizio lo identifica al volo con OTP e restituisce PDF firmato più audit trail. Non serve un servizio di <em>firma digitale</em> (quelli servono a firmare i propri documenti: il firmatario deve già avere un certificato qualificato, e imporlo a ogni estetista è attrito insostenibile in fase di onboarding).</p>
+<h3>Provider scelto: Certyneo — prezzi verificati il 10/08/2026</h3>
+<table><thead><tr><th>Piano</th><th>Costo</th><th>Incluso</th></tr></thead><tbody><tr><td><strong>Free</strong></td><td>€ 0, senza scadenza</td><td><strong>5 buste/mese</strong>, firma <strong>AES eIDAS con OTP</strong>, audit trail con timestamp, conservazione prove 10 anni, 1 utente. <strong>API esclusa</strong></td></tr><tr><td><strong>Personal</strong></td><td>€ 9/mese (€ 108/anno)</td><td>25 buste/mese, AES, <strong>API REST + webhook</strong></td></tr><tr><td>Standard</td><td>€ 19/mese</td><td>volumi maggiori</td></tr><tr><td>Business</td><td>€ 39/mese</td><td>buste illimitate</td></tr><tr><td>QES (firma qualificata)</td><td>€ 9,90/firma</td><td>a consumo, se mai servisse il livello massimo</td></tr></tbody></table>
+<p>Editore francese, hosting in UE, nessuna esposizione al Cloud Act.</p>
+<p><strong>Perché non gli altri:</strong></p>
+<ul><li><strong>Youtrust (ex Yousign)</strong> — Free 2 richieste/mese, One € 9/mese (10 richieste), Plus</li></ul>
+<p>€ 23/mese/utente. Ma la <strong>FEA è a costo extra e solo sui piani annuali Plus/Pro</strong>: per lo stesso lavoro si parte da ~€ 276/anno più il sovrapprezzo FEA.</p>
+<ul><li><strong>cheFirma (Intesi Group)</strong> — € 7,99/firma, FEQ vera, ma è il verso sbagliato: serve a</li></ul>
+<p>firmare i <em>propri</em> documenti, non a farli firmare a terzi. Utile solo per un'eventuale controfirma del Licenziante.</p>
+<ul><li><strong>Namirial / InfoCert</strong> — QTSP italiani, più riconoscibili in giudizio, ma sensibilmente più</li></ul>
+<p>cari a questi volumi.</p>
+<h3>Come si integra Certyneo — dalle specifiche OpenAPI, verificate il 10/08/2026</h3>
+<p>Base URL <code>https://certyneo.com/api/v1</code>, autenticazione <code>Authorization: Bearer sk_test_&lt;hex&gt;</code> / <code>sk_live_&lt;hex&gt;</code>, chiavi generate da <em>Settings → API</em> nel dashboard.</p>
+<p><strong>Il flusso completo sono quattro chiamate:</strong></p>
+<pre><code>1  POST /documents                     multipart, il PDF del contratto (max 50 MB)
+                                       → { data: { id } }
+
+2  POST /envelopes                     { subject, documentIds: [id],
+                                         recipients: [{ email, name, phone, role:&quot;SIGNER&quot; }],
+                                         fields: [...],                 ← posizioni firma
+                                         signatureLevel: &quot;ADVANCED&quot;,
+                                         requireSmsOtp: true,
+                                         expiresAt }
+                                       → { id, status: &quot;DRAFT&quot; }
+
+3  POST /envelopes/{id}/send           nessun body → DRAFT diventa SENT,
+                                       parte l&#x27;invito al firmatario
+
+4  webhook envelope.completed          → GET /envelopes/{id}/signed-document   (PDF firmato)
+                                       → GET /envelopes/{id}/audit-trail       (PDF prove)</code></pre>
+<p><strong>Livello di firma.</strong> <code>signatureLevel: "ADVANCED"</code> è la AES dell'art. 26 eIDAS e richiede <code>requireSmsOtp: true</code> più il <code>phone</code> del firmatario in formato <strong>E.164</strong> (<code>+393331234567</code>). Passare <code>requireSmsOtp: false</code> su ADVANCED restituisce errore <code>ADVANCED_REQUIRES_STRONG_AUTH</code>. Il livello <code>SIMPLE</code> è la firma semplice, <code>QUALIFIED</code> richiede video-identificazione e non è disponibile sul deploy base.</p>
+<p><strong>Campi firma.</strong> Due strade: posizionare i campi per coordinate (<code>fieldType: "SIGNATURE"</code> / <code>"DATE_SIGNED"</code>, con <code>pageNumber</code>, <code>x</code>, <code>y</code>, <code>width</code>, <code>height</code>) oppure creare un <strong>template</strong> dal dashboard e passare <code>templateId</code>. Per un contratto che ha <strong>due sottoscrizioni distinte</strong> — corpo del contratto e blocco ex artt. 1341-1342 — il template è più manutenibile: le coordinate vanno rifatte a ogni modifica del testo.</p>
+<p><strong>Webhook.</strong> Si registrano con <code>POST /webhooks</code> <code>{ url, events, active }</code>. Eventi utili: <code>envelope.completed</code>, <code>recipient.signed</code>, <code>envelope.declined</code>, <code>envelope.expired</code>.</p>
+<p>**Regalo inatteso: <code>POST /sepa-mandates</code>.<strong> Genera il PDF del </strong>mandato SEPA** già compilato con creditore, debitore, IBAN e RUM, dentro una busta con i campi firma pre-posizionati. Risolve in una chiamata il passo 5 del wizard. Attenzione però: lo schema <code>creditor</code> chiede <code>ics</code> e <code>siret</code>, campi di impianto francese — va verificato cosa accettano per un creditore italiano (il CID rilasciato dalla banca al posto dell'ICS).</p>
+<h3>Un punto in cui mi ero sbagliato: l'embedded signing</h3>
+<p><strong>Nelle specifiche OpenAPI non esiste un endpoint di sessione incorporabile</strong>, né un campo <code>signUrl</code> nella risposta della busta. <code>POST /envelopes/{id}/send</code> <span class="ph">&laquo;dispensa inviti&raquo;</span> via e-mail/SMS/WhatsApp: <strong>il cliente firma sulla pagina di Certyneo</strong>, non dentro Tosca.</p>
+<p>Non è un problema per il requisito vero — <strong>il contratto non viaggia mai come file</strong> e non si stampa niente — ma va detto chiaramente: si consegna un link, come già previsto, solo che a inviarlo è Certyneo invece di Tosca, e la firma avviene sul loro dominio. Il ritorno su Tosca avviene via webhook.</p>
+<p>Se l'iframe conta davvero, è la seconda domanda da fare al loro supporto insieme a quella sul piano: la pagina sviluppatori accennava a un <code>signUrl</code> da condividere, ma nelle specifiche non compare.</p>
+<h3>Firma dentro Tosca, senza invii e senza stampe</h3>
+<p><strong>Non serve mandare niente al cliente e non si stampa nulla.</strong> L'API di Certyneo, creata la busta, restituisce un **<code>signUrl</code>**: è il server di Tosca a riceverlo, quindi è Tosca a decidere dove mandare il browser del cliente. Nessuna e-mail entra nel flusso.</p>
+<pre><code>cliente nel wizard  →  clic &quot;Firma&quot;
+                          │
+                          ▼
+        Tosca: POST /envelopes  →  Certyneo restituisce signUrl
+                          │
+                          ▼
+        browser del cliente va al signUrl (redirect o iframe)
+        OTP via SMS  →  firma
+                          │
+                          ▼
+        webhook envelope.completed  →  Tosca salva PDF + audit,
+        contract.status = signed, e riporta il cliente su una
+        pagina &quot;fatto&quot; di Tosca</code></pre>
+<p>Il pattern esiste già in casa: la connessione WhatsApp incorpora il flusso Unipile in un iframe (<code>connect-iframe</code> in <code>whatsapp.html</code>). Stessa idea.</p>
+<p><strong>Il contratto non viaggia mai come file.</strong> L'unica cosa che si consegna al cliente è il <strong>link</strong> <code>/attiva/&lt;token&gt;</code> — via WhatsApp, e-mail, o aperto direttamente sul PC del negozio durante l'appuntamento di attivazione. Da lì in poi documento, lettura, firma e conferma stanno tutti dentro il browser: nessun PDF da scaricare, allegare, stampare o rispedire.</p>
+<p>Dopo la firma il PDF firmato viene inviato al cliente come <strong>copia di cortesia</strong>: non è un passaggio del flusso, ma è buona pratica che chi firma riceva copia di ciò che ha sottoscritto.</p>
+<p><strong>Unico punto aperto sul flusso:</strong> la documentazione non dice se Certyneo consenta il framing (<code>X-Frame-Options</code>). Il redirect al <code>signUrl</code> funziona in ogni caso e riporta il cliente su Tosca subito dopo la firma; l'iframe, che sarebbe ancora più fluido, va testato.</p>
+<h3>Sequenza consigliata</h3>
+<ol><li><strong>Prova a costo zero:</strong> piano Free, 5 buste/mese, per verificare con un contratto vero che la firma AES + OTP funzioni e che il PDF prodotto sia quello che vuoi — <strong>prima</strong> di scrivere l'integrazione.</li><li><strong>Poi l'integrazione</strong> (passo 7 dell'ordine di lavoro), sul piano che include l'API.</li></ol>
+<h3>Alternative italiane e modelli a consumo — verificate il 10/08/2026</h3>
+<table><thead><tr><th>Opzione</th><th>Modello</th><th>Costo</th><th>API</th><th>Firma</th></tr></thead><tbody><tr><td><strong>Certyneo Free</strong></td><td>SaaS</td><td><strong>€ 0</strong> — 5 buste/mese</td><td>da confermare</td><td>AES</td></tr><tr><td><strong>Certyneo Personal</strong></td><td>SaaS</td><td>€ 108/anno — 25 buste/mese</td><td>sì</td><td>AES</td></tr><tr><td><strong>InfoCert GoSign — coupon</strong></td><td><strong>a consumo</strong></td><td>~€ 3,30/firma (3 firme SPID € 9,90)</td><td><strong>no, manuale</strong></td><td>AES o QES a scelta</td></tr><tr><td><strong>Confirmo</strong> (Confirmo S.r.l., P.I. 08336150720)</td><td>SaaS, vincolo <strong>12 mesi</strong></td><td><strong>da € 30/mese = € 360/anno</strong>, più un costo proporzionale per ogni certificato AES/QES</td><td>sì</td><td>AES/QES</td></tr><tr><td>PandaDoc</td><td>SaaS</td><td>solo <strong>Enterprise</strong>, su richiesta</td><td>solo Enterprise</td><td>—</td></tr><tr><td>Documenso self-hosted</td><td>—</td><td>€ 0 licenza + infrastruttura</td><td>sì</td><td>SES</td></tr></tbody></table>
+<p><strong>Il modello a consumo esiste ed è italiano: sono i coupon GoSign di InfoCert.</strong> Si acquista un pacchetto di firme e si ricevono <span class="ph">&laquo;coupon anonimi e monouso&raquo;</span> da far usare a terzi, scegliendo in fase di firma fra livello avanzato e qualificato. Nessun canone, QTSP italiano accreditato AgID, massimo peso probatorio.</p>
+<h3>I coupon: far firmare il cliente a spese proprie, senza API</h3>
+<p><strong>È esattamente lo scenario per cui i coupon esistono.</strong> Dalle pagine InfoCert, testuale:</p>
+<blockquote><p><span class="ph">&laquo;È possibile fare firmare i propri clienti, dipendenti e fornitori sia utilizzando le firme del proprio pacchetto o, in alternativa, <strong>fornendo dei coupon di firma</strong> per facilitare la gestione dei processi con <strong>gli interlocutori che non hanno una firma digitale</strong>.&raquo;</span></p></blockquote>
+<blockquote><p><span class="ph">&laquo;Nel caso si scelga di far utilizzare a terzi le firme, si riceverà una e-mail contenente un elenco di <strong>coupon anonimi e monouso</strong> utilizzabili nel processo di firma, in numero corrispondente a quello di firme acquistate.&raquo;</span></p></blockquote>
+<p>Si comprano N firme, si ricevono N coupon, se ne consegna uno al cliente: <strong>paga il Licenziante, firma il Cliente</strong>, e il Cliente non deve possedere né acquistare nulla.</p>
+<p><strong>Ma i flussi documentati sono due, e cambiano molto l'attrito per il cliente:</strong></p>
+<table><thead><tr><th></th><th>Flusso A — coupon su Desktop</th><th>Flusso B — <span class="ph">&laquo;Richiedi Firma&raquo;</span> su Sign Cloud</th></tr></thead><tbody><tr><td>Come firma il cliente</td><td>installa <strong>InfoCert Sign Desktop</strong>, inserisce il coupon</td><td>riceve e-mail, clicca <strong><span class="ph">&laquo;Vai alla firma&raquo;</span></strong>, firma <strong>nel browser</strong></td></tr><tr><td>Installazioni</td><td>sì, un'applicazione</td><td><strong>nessuna</strong></td></tr><tr><td>Identificazione</td><td><strong>SPID</strong> del cliente</td><td>selezione del nome; certificati qualificati se posseduti</td></tr><tr><td>Livello firma</td><td><strong>qualificata</strong> (one-shot rilasciata via SPID)</td><td>firma semplice generata dalla piattaforma, salvo certificato proprio</td></tr><tr><td>Coupon utilizzabile</td><td>sì, è il suo flusso</td><td><strong>non documentato</strong></td></tr></tbody></table>
+<p>Il flusso A dà il massimo peso probatorio — firma qualificata, che chiude ogni discussione sulle clausole ex artt. 1341-1342 — ma chiede al cliente di installare un programma e di avere SPID, proprio nel momento in cui si sta chiudendo la vendita. Il flusso B è quello comodo (link, browser, niente installazioni) ma la guida non dice se accetti i coupon né a che livello firmi.</p>
+<p><strong>La domanda da fare a InfoCert è una sola e precisa:</strong></p>
+<blockquote><p><em>Un coupon di firma acquistato da me può essere speso dal destinatario dentro il flusso <span class="ph">&laquo;Richiedi Firma&raquo;</span> di Infocert Sign Cloud — quindi firmando dal browser, senza installare nulla — e con quale livello di firma?</em></p></blockquote>
+<p>Se la risposta è sì, InfoCert vince su tutta la linea: € 3,30 a contratto, QTSP italiano, nessun canone, nessuna installazione per il cliente, e nessuna API necessaria.</p>
+<p><strong>Le API GoSign, invece, sono un binario commerciale separato.</strong> Le API GoSign esistono e sono documentate (<code>developers.infocert.digital/gosign/</code>, con Swagger, modalità Draft e Immediate, supporto a firmatari esterni), ma il portale <strong>non ha registrazione self-service, né sandbox pubblica, né listino</strong>: l'unico accesso indicato è <em>Contact us</em>. È lo stesso schema di PandaDoc — prodotto retail a consumo da una parte, integrazione a contratto dall'altra. Non ho trovato evidenza che i coupon a € 3,30 siano pilotabili via API, e tutti i segnali indicano di no. <strong>Va chiesto a InfoCert:</strong> è una domanda sola e vale la pena farla.</p>
+<h3>Dove vive il contratto firmato — indipendente dal provider</h3>
+<p>Qualunque strada si scelga, il PDF firmato torna indietro: con Certyneo da <code>GET /envelopes/{id}/signed-document</code> e <code>/audit-trail</code>, con i coupon InfoCert scaricandolo a mano una volta. <strong>Da lì in poi la conservazione è la stessa</strong>, e resta solo digitale.</p>
+<p><strong>Copia autorevole nel registry, non nel database del tenant.</strong></p>
+<pre><code>contract_signature.pdf_bytes        bytea   il PDF firmato
+contract_signature.pdf_sha256       varchar impronta, per provare che non è cambiato
+contract_signature.audit_json       jsonb   audit trail del provider</code></pre>
+<p>Il motivo è pratico, non formale: il contratto è un documento <strong>fra il Licenziante e il Cliente</strong>, e va conservato <strong>10 anni</strong> (art. 2220 c.c.). Se vivesse solo nel database del tenant, alla cessazione del rapporto — quando quel database viene dismesso — sparirebbe proprio la prova del rapporto. Il registry è anche il posto dove sta già tutto il resto della pratica.</p>
+<p><strong>Copia di sola lettura nel tenant, sì.</strong> Una volta firmato, conviene copiare lo stesso PDF nel database del tenant e mostrarlo in Tosca (Centro Assistenza o Info Azienda) come <em>"Il tuo contratto"</em>: il cliente se lo riscarica quando vuole senza chiederlo, e nessuno stampa niente. La copia è ridondante per definizione, e va bene così.</p>
+<p>Precedente in casa: <code>BusinessInfo.logo_image</code> è già un <code>LargeBinary</code> in <code>db.deferred</code> — salvare binari nel database è pratica esistente del progetto, non una novità.</p>
+<h3>La cosa da tenere a mente sulle cifre</h3>
+<p>A 20-50 contratti l'anno il conto è: coupon € 66-165, Certyneo Personal € 108, Certyneo Free € 0. <strong>Sono tutte cifre irrilevanti rispetto al canone che quei contratti generano.</strong> La scelta non va fatta sul prezzo ma su due criteri veri:</p>
+<ul><li><strong>peso probatorio</strong> — QTSP italiano accreditato AgID con possibilità di firma qualificata</li></ul>
+<p>(InfoCert) contro firma avanzata di un editore francese (Certyneo);</p>
+<ul><li><strong>automazione</strong> — API self-service (Certyneo) contro passaggio manuale (coupon).</li></ul>
+<p>E soprattutto: <strong>la scelta si può rimandare.</strong> I passi 1-6 dell'ordine di lavoro — registry, migrazione del billing, <code>provision_tenant()</code>, wizard, generazione del PDF — sono identici con qualsiasi provider. Il provider entra in gioco solo al passo 7.</p>
+<p><strong>Il punto di pareggio.</strong> A ~€ 3,30 a firma, i coupon convengono <strong>fino a circa 30 contratti l'anno</strong>; oltre, Certyneo Personal a € 108/anno (che ne consente 300) costa meno. Confirmo, unico altro italiano con API trovato, parte da <strong>più del triplo</strong> di Certyneo e con vincolo annuale.</p>
+<blockquote><p>⚠️ I prezzi dei coupon InfoCert vengono da fonti terze (chitelodice.it, diritto.it), non dal listino ufficiale: vanno verificati su infocert.it prima di decidere. Quelli di Confirmo e Certyneo vengono invece dalle loro pagine.</p></blockquote>
+<h3>Se l'API di Certyneo risultasse a pagamento: alternative gratuite</h3>
+<p>Verificate il 10/08/2026, in ordine di robustezza probatoria decrescente.</p>
+<table><thead><tr><th>Via</th><th>Costo</th><th>API in <strong>produzione</strong></th><th>Chi attesta la firma</th></tr></thead><tbody><tr><td><strong>Certyneo Free</strong></td><td>€ 0, 5 buste/mese, AES + OTP</td><td>da confermare</td><td><strong>Terzo neutrale</strong></td></tr><tr><td><strong>Documenso self-hosted</strong></td><td>€ 0 di licenza (AGPL-3.0), API e iframe inclusi</td><td>Sì</td><td><strong>Tu</strong></td></tr><tr><td><strong>DocuSeal self-hosted</strong></td><td>€ 0 di licenza, ma API, embedded e white-label sono sul Pro ($ 20/utente/mese)</td><td>solo a pagamento</td><td><strong>Tu</strong></td></tr><tr><td><strong>Costruita in casa</strong></td><td>€ 0, salvo il costo degli OTP</td><td>Sì, tutto in casa</td><td><strong>Tu</strong></td></tr><tr><td>~~PandaDoc~~</td><td>—</td><td>❌ <strong>solo piano Enterprise</strong></td><td>—</td></tr></tbody></table>
+<h3>PandaDoc: escluso per l'integrazione, verificato sulle loro pagine</h3>
+<p>Tecnicamente sarebbe perfetto — l'embedded signing è documentato per bene: <code>POST /public/v1/documents/{id}/session</code> crea la sessione, la libreria <code>pandadoc-signing</code> la incorpora nella pagina, e l'invio con <code>"silent": true</code> <strong>salta del tutto le notifiche e-mail</strong>. Eventi <code>document.completed</code> e webhook inclusi.</p>
+<p>Il problema è l'accesso. Dalla loro documentazione di supporto, testuale:</p>
+<blockquote><p><span class="ph">&laquo;You must have an active <strong>Enterprise</strong> plan to access the Production API.&raquo;</span> <span class="ph">&laquo;Contact our Sales team to get access to the Production API key.&raquo;</span></p></blockquote>
+<p>Il <strong>Sandbox</strong> è gratuito ma inservibile per contratti veri: PDF con watermark, prefisso <code>[DEV]</code> sui documenti, e soprattutto <strong>si può inviare solo a indirizzi del proprio dominio</strong> (il sistema confronta il dominio di mittente e destinatario). Serve a costruire un proof of concept, non a far firmare le clienti.</p>
+<p>I <span class="ph">&laquo;60 documenti/anno con API gratuita&raquo;</span> che circolano in rete vengono da blog di <strong>concorrenti</strong> (eversign, SignWell, Verdocs, bindlegal), non da PandaDoc: quel numero riguarda il piano <strong>Free eSign via interfaccia web</strong>, non l'API. PandaDoc resta quindi utilizzabile <strong>a mano</strong> — carichi il contratto e lo mandi dal loro sito — ma non integrabile in Tosca senza Enterprise, il cui prezzo è solo su richiesta commerciale.</p>
+<p><strong>Ne segue che Certyneo torna il candidato principale</strong>, e la domanda <span class="ph">&laquo;da quale piano parte l'API&raquo;</span> diventa la sola cosa che decide.</p>
+<p><strong>Sul self-hosted, due avvertenze che contano più del prezzo:</strong></p>
+<ol><li><strong>Sei tu il custode della prova.</strong> Generi il documento, gestisci l'OTP, scrivi l'audit trail e lo conservi. Se un cliente contesta la firma, sei giudice e parte. Quello che si compra con i 9-40 €/mese di un provider non è la tecnologia: è <strong>un terzo neutrale che attesta il processo</strong>. Su un contratto che contiene limitazioni di responsabilità e foro esclusivo, non è un dettaglio.</li><li><strong>Self-hosted non vuol dire gratis.</strong> Documenso o DocuSeal sono un altro servizio da far girare, con il suo database, sulla stessa infrastruttura Azure che è <strong>già al limite</strong> (PostgreSQL B1ms, cfr. piano 100 tenant). Il costo si sposta da licenza a infrastruttura e manutenzione, e cresce proprio quando cresci tu.</li></ol>
+<p>Il livello di firma ottenibile in self-hosted o in casa è comunque <strong>firma elettronica semplice</strong>, non AES: è l'opzione debole sulle clausole ex art. 1341 già segnalata sopra.</p>
+<h3>Da verificare prima di impegnarsi — bloccante sul costo</h3>
+<p><strong>Non è chiaro da quale piano parta l'API</strong>, e le fonti si contraddicono tre volte: una dà l'API inclusa nel Free, la pagina del piano gratuito dice che <span class="ph">&laquo;API REST, webhook, SSO, integrazioni sono riservate ai piani a pagamento&raquo;</span>, la guida comparativa la dà <strong>dal piano Business</strong>. La pagina sviluppatori non lo specifica.</p>
+<p>La differenza è fra <strong>€ 0, € 108/anno e € 468/anno</strong>: è la prima domanda da fare a Certyneo, prima di qualsiasi decisione. Da chiedere insieme: se il <code>signUrl</code> sia incorporabile in iframe.</p>
+<p>Documentazione OpenAPI: <code>https://certyneo.com/api/v1/openapi</code> — webhook <code>envelope.created</code>, <code>envelope.completed</code>, <code>envelope.declined</code>, firmati HMAC SHA-256.</p>
+<p>Resta da chiarire con l'avvocato se la AES con OTP sia sufficiente per l'approvazione specifica delle clausole ex art. 1341 co. 2 c.c., o se per quel solo blocco convenga la QES a consumo.</p>
+<hr>
+<h2>5. Flusso completo</h2>
+<pre><code> owner                      cliente                        sistema
+   │                           │                              │
+   ├─ /owner-setup            │                              │
+   │  &quot;Nuovo cliente&quot; ────────────────────────────────────►  crea tenant(status=invited)
+   │  (nome, email, importi)  │                              crea contract(status=draft)
+   │                           │                              genera token, salva token_hash
+   │  ◄── link da inviare ─────┼──────────────────────────────┘
+   │                           │
+   │      link via mail/WA ───►│
+   │                           ├─ GET /attiva/&lt;token&gt; ──────► valida token (scadenza, non usato)
+   │                           ├─ passi 1..5 ───────────────► UPDATE contract (bozza)
+   │                           ├─ anteprima PDF ────────────► render contratto compilato
+   │                           ├─ passo 6: consensi ────────► INSERT contract_consent
+   │                           ├─ firma ────────────────────► provider FEA / OTP
+   │                           │                              INSERT contract_signature
+   │                           │                              contract.status = signed
+   │                           │                              tenant.status  = signed
+   │                           │                              invite.used_at = now()
+   │  ◄── notifica firma ──────┼──────────────────────────────┤
+   │                           │  ◄── PDF firmato via mail ───┤
+   │                           │                              │
+   ├─ incasso Starter          │                              │
+   ├─ &quot;Attiva&quot; ───────────────────────────────────────────►  provision_tenant(contract)
+   │                           │                              ├ CREATE DATABASE + utente
+   │                           │                              ├ create_app(uri) + db.create_all()
+   │                           │                              ├ BusinessInfo dai dati del form
+   │                           │                              ├ OWNER dai moduli firmati
+   │                           │                              ├ utente owner copiato
+   │                           │                              ├ _write_env_var(...)
+   │                           │                              └ mount /s/&lt;idx&gt;  (no restart)
+   │  ◄── credenziali ─────────┼──────────────────────────────┘</code></pre>
+<p><strong>Il provisioning avviene dopo la firma e l'incasso, non prima.</strong> Due ragioni: un DB creato per una trattativa non chiusa resta lì a consumare connessioni (e il PostgreSQL B1ms è già al limite, cfr. piano 100 tenant), e l'art. 7.1 fa decorrere il contratto dal pagamento.</p>
+<p>Il refactor concreto: estrarre da <code>owner_setup_add_tenant()</code> (<code>wsgi.py:786-921</code>) una funzione <code>provision_tenant(contract) -&gt; idx</code>. La rotta owner esistente diventa un chiamante che costruisce un <code>contract</code> al volo; il flusso da form ne diventa il secondo chiamante. Nessuna logica duplicata.</p>
+<hr>
+<h2>6. Sicurezza della rotta pubblica</h2>
+<table><thead><tr><th>Rischio</th><th>Contromisura</th></tr></thead><tbody><tr><td>Enumerazione token</td><td>Token 32 byte da <code>secrets.token_urlsafe</code>, in DB solo lo SHA-256, 404 generico su token non valido/scaduto/usato</td></tr><tr><td>Riuso del link</td><td><code>used_at</code> valorizzato alla firma; dopo, il link mostra solo la ricevuta</td></tr><tr><td>Brute force OTP</td><td>Max 5 tentativi, OTP a 6 cifre valido 10 minuti, nuovo invio con cooldown 60 s</td></tr><tr><td>Spam / bot</td><td>Rate limit per IP (riusare lo schema di <code>_owner_login_check_rate</code>, <code>wsgi.py:465</code>) + honeypot</td></tr><tr><td>CSRF</td><td>Token CSRF sui POST del wizard</td></tr><tr><td>Manomissione importi</td><td><code>starter_total</code> e <code>saas_monthly_amount</code> in sola lettura, impostati dall'owner all'invito e mai accettati dal client</td></tr><tr><td>Dati in transito</td><td>Solo HTTPS, HSTS</td></tr><tr><td>IBAN</td><td>Mai salvato in chiaro: va al PSP, in DB restano <code>mandate_ref</code> e ultime 4 cifre</td></tr><tr><td>Accesso ai tenant</td><td>La rotta pubblica non apre nessuna sessione applicativa e non tocca i DB tenant</td></tr></tbody></table>
+<hr>
+<h2>7. Modifiche a <code>models.py</code></h2>
+<p>Tre sole colonne nuove in <code>business_info</code>, tutte per dati che l'app usa davvero in fattura e nei documenti; tutto il resto del contratto sta nel registry.</p>
+<pre><code>    legal_business_name = db.Column(String(150), nullable=True)  # ragione sociale completa
+    fiscal_code         = db.Column(String(16),  nullable=True)  # CF, distinto da vat_code (P.IVA)
+    sdi_code            = db.Column(String(7),   nullable=True)  # codice destinatario, distinto da PEC</code></pre>
+<p>Query di allineamento da eseguire <strong>su ciascuno dei tre tenant</strong> (<code>suncity</code>, <code>sunexp3</code>, <code>sunbookingdb</code>), da finestra psql:</p>
+<pre><code>ALTER TABLE business_info ADD COLUMN IF NOT EXISTS legal_business_name varchar(150);
+ALTER TABLE business_info ADD COLUMN IF NOT EXISTS fiscal_code         varchar(16);
+ALTER TABLE business_info ADD COLUMN IF NOT EXISTS sdi_code            varchar(7);</code></pre>
+<p>Nessuna modifica a <code>OWNER</code>: i quattro flag <code>module_*</code> e le date di attivazione coprono già quanto serve al contratto.</p>
+<hr>
+<h2>8. Ordine di lavoro proposto</h2>
+<ol><li><strong>Account Certyneo</strong>: registrarsi, chiarire da quale piano parte l'API, generare una chiave <code>sk_test_</code>, provare a mano un contratto vero dal dashboard. Zero codice, e chiude le due incognite (piano e iframe) prima di investire tempo.</li><li>Validazione legale del contratto e conferma del livello di firma (ADVANCED / AES).</li><li>Creazione del database <code>tosca_registry</code> e dei modelli (<code>appl/registry_models.py</code>, binding separato — le app tenant non devono vederlo).</li><li>Migrazione di <code>owner_billing.json</code> nel registry, con <code>_compliance_status()</code> invariato.</li><li>Estrazione di <code>provision_tenant()</code> da <code>owner_setup_add_tenant()</code>.</li><li>Generazione invito da <code>/owner-setup</code> + rotta <code>/attiva/&lt;token&gt;</code> con il wizard.</li><li>Generazione PDF del contratto compilato (template + WeasyPrint o equivalente). È il prerequisito della firma: oggi il contratto esiste in Markdown e HTML, non in PDF.</li><li>Integrazione Certyneo: <code>POST /documents</code> → <code>POST /envelopes</code> → <code>POST /envelopes/{id}/send</code>, più la rotta pubblica che riceve i webhook (verifica HMAC) e archivia PDF firmato e audit trail in <code>contract_signature</code>.</li><li>Pulsante "Attiva" nel pannello owner che chiama <code>provision_tenant()</code>.</li><li>Le tre colonne nuove in <code>business_info</code> e le query sui tre tenant.</li></ol>
+<p>Passi 1-4 sono indipendenti dal form e si possono fare subito: il registry serve comunque, con o senza contratto online.</p>
+</div>
+</body>
+</html>

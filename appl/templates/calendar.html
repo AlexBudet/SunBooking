@@ -871,9 +871,20 @@ body.asp-docked-modal-open {
   'use strict';
 
   var MIN_VIEWPORT = 1201;   // sotto: layout agenda mobile, niente pannello
-  var ASP_MIN_W    = 600;    // px minimi perche' il pannello sia usabile
-  var MAX_OPS      = 2;      // oltre 2 operatrici la parte destra e' troppo stretta
-  var GAP          = 10;     // deve combaciare con --asp-gap
+
+  // Soglie CONDIVISE con syncCalendarCols (Fase 1). Devono essere le stesse:
+  // il tetto sulle colonne e il pannello vanno decisi sugli stessi numeri,
+  // altrimenti nascono fasce vuote che nessuno dei due gestisce (l'agenda si
+  // accorcia ma il pannello non compare). Esposte su window invece di
+  // duplicarle: questo blocco gira a inizio pagina, syncCalendarCols dopo.
+  var ASP = window.AGENDA_PANE = {
+    MIN_W:   600,   // px minimi perche' il pannello sia usabile
+    MAX_OPS: 3,     // oltre 3 operatrici la parte destra e' troppo stretta
+    GAP:     10     // deve combaciare con --asp-gap
+  };
+  var ASP_MIN_W = ASP.MIN_W;
+  var MAX_OPS   = ASP.MAX_OPS;
+  var GAP       = ASP.GAP;
   var LS_OPEN      = 'asp_open';
   var LS_TAB       = 'asp_tab';
   var LS_PAGE      = 'asp_page';
@@ -2100,6 +2111,11 @@ document.addEventListener('DOMContentLoaded', function() {
           var OP_COL_MAX = 300;   // tetto della singola colonna operatore
           var SIDE_W     = 136;   // colonne "Ora": 80px a sinistra + 56px a destra
 
+          // Soglie del pannello laterale, definite una volta sola nel suo
+          // controller (Fase 2). Il fallback copre il caso in cui quel blocco
+          // non sia ancora girato.
+          var ASP = window.AGENDA_PANE || { MIN_W: 600, MAX_OPS: 3, GAP: 10 };
+
           var visible = 0;
           document.querySelectorAll('th[data-operator-id]').forEach(function(th) {
               if (getComputedStyle(th).display !== 'none') visible++;
@@ -2110,10 +2126,33 @@ document.addEventListener('DOMContentLoaded', function() {
           // Sotto i 1201px vale il layout mobile (scroll orizzontale): niente tetto.
           if (window.innerWidth < 1201) {
               table.style.removeProperty('width');
+              document.documentElement.style.removeProperty('--agenda-right');
               return visible;
           }
-          var w = Math.min(container.clientWidth, SIDE_W + visible * OP_COL_MAX);
+          // Il tetto si applica SOLO se lo spazio che avanza basta davvero al
+          // pannello. Altrimenti resterebbe una fascia vuota che nessuno usa:
+          // colonne strette e mezzo schermo sprecato. In quel caso meglio
+          // l'agenda a tutta finestra. Cosi' la decisione vale su qualunque
+          // monitor, senza soglie fisse da tenere allineate a mano.
+          var full   = container.clientWidth;
+          var capped = SIDE_W + visible * OP_COL_MAX;
+          var useCap = visible <= ASP.MAX_OPS
+                    && capped < full
+                    && (full - capped - ASP.GAP) >= ASP.MIN_W;
+
+          var w = useCap ? capped : full;
           table.style.setProperty('width', w + 'px', 'important');
+
+          // Pubblica il bordo DESTRO della tabella come variabile globale, cosi'
+          // la colonna dei badge flottanti (INFO, Cerca un buco, Solarium) puo'
+          // ancorarsi all'agenda invece che al bordo della finestra. Con poche
+          // operatrici la tabella si accorcia e i badge, restando fixed a
+          // destra, finivano lontani dall'agenda, sopra lo spazio del pannello.
+          // Si usa getBoundingClientRect() e non clientWidth perche' serve la
+          // coordinata rispetto al viewport: e' quella a cui guarda position:fixed.
+          document.documentElement.style.setProperty(
+              '--agenda-right', Math.round(table.getBoundingClientRect().right) + 'px'
+          );
           return visible;
       };
 
@@ -3953,8 +3992,10 @@ document.addEventListener('DOMContentLoaded', function() {
      z-index 99990: sta sopra qualsiasi elemento di pagina ma SOTTO le
      finestre che aprono i badge (pannello INFO = 99998, modal dedicati
      useranno z-index >= 99997). -->
+<!-- La posizione ORIZZONTALE non e' inline ma nel foglio di stile qui sotto:
+     deve seguire il bordo destro dell'agenda, non quello della finestra. -->
 <div id="aiBadgeColumn"
-     style="position:fixed; bottom:24px; right:12px; z-index:99990;
+     style="position:fixed; bottom:24px; z-index:99990;
             display:flex; flex-direction:column; gap:10px;
             align-items:center;">
 
@@ -4746,6 +4787,20 @@ document.addEventListener('DOMContentLoaded', function() {
   #aiChatModal {
     display: none !important;
   }
+}
+
+/* Colonna badge ancorata all'AGENDA, non alla finestra.
+   Con poche operatrici la tabella si accorcia (tetto --op-col-max) e resta
+   spazio vuoto a destra: i badge, che erano fixed a right:12px, finivano
+   lontani dall'agenda e sopra l'area del pannello laterale. --agenda-right e'
+   il bordo destro reale della tabella, pubblicato da syncCalendarCols().
+   56px = 44px di badge + 12px di margine, cioe' lo stesso stacco di prima.
+   Il fallback 100vw copre l'istante prima che il JS giri: in quel caso i badge
+   stanno dove stavano, all'angolo della finestra. */
+#aiBadgeColumn {
+  right: auto;
+  left: calc(var(--agenda-right, 100vw) - 56px);
+  transition: left .18s ease;
 }
 
 #aiBadgeBtn:hover {

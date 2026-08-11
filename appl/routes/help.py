@@ -97,9 +97,9 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 
 "calendar_block_buttons": {
     "title": "Blocco Appuntamento - I PULSANTI",
-    "image": "Agenda_BloccoPulsantiTouch.png",
-    "image_caption": "Cliccando dentro un blocco compare la barra scura: <b>elimina</b>, <b>taglia</b>, <b>copia</b>, <b>colore</b>, <b>cassa</b> e <b>aggiungi servizio</b>. In modalità touch si apre al primo tocco.",
-    "image_path": "Agenda › click dentro un blocco appuntamento",
+    "image": "Agenda_BloccoPulsanti.png",
+    "image_caption": "Passando il puntatore sul blocco compare la barra scura: <b>elimina</b>, <b>taglia</b>, <b>copia</b>, <b>colore</b>, <b>cassa</b> e <b>aggiungi servizio</b>.",
+    "image_path": "Agenda › puntatore sopra un blocco appuntamento",
     "content": """I pulsanti **popup** compaiono passando il puntatore sul blocco; i pulsanti **interni** sono sempre visibili dentro il blocco stesso.
 
 <span class="help-strong-dark help-subtitle-pill">▸ Pulsanti popup — compaiono al passaggio del puntatore</span>
@@ -1042,25 +1042,52 @@ Se il modulo è attivo, puoi gestire:
     },
 
     "whatsapp_connect": {
-        "title": "📱 Collegare WhatsApp",
-        "content": """Per usare il modulo WhatsApp devi prima collegare l'account Business.
+        "title": "📱 Collegare WhatsApp con il QR Code",
+        "image": "Whatsapp_QRCode.png",
+        "image_caption": "Dopo il click su <b>Connetti WhatsApp</b> compare il riquadro con il <b>QR code</b> da inquadrare col telefono. Sotto, il pulsante <b>Annulla</b> e la scritta <b>In attesa di connessione…</b>: resta lì finché il telefono non ha completato la scansione.",
+        "image_path": "Tools › WhatsApp › pulsante Connetti WhatsApp",
+        "content": """Il collegamento si fa <span class="help-strong-dark">una volta sola</span>, inquadrando un QR code col telefono. Funziona sia con <span class="help-strong-dark">WhatsApp</span> normale sia con <span class="help-strong-dark">WhatsApp Business</span>: quello che colleghi è il numero da cui partiranno i messaggi ai clienti.
 
-Flusso base:
-1️⃣ vai in <span class="help-strong-dark">Impostazioni → WhatsApp</span>
-2️⃣ clicca <span class="help-strong-dark">Connetti WhatsApp</span>
-3️⃣ si apre il flusso con QR code o pagina di connessione
-4️⃣ dal telefono apri WhatsApp → Dispositivi collegati
-5️⃣ inquadra il QR
+<span class="help-strong-dark help-subtitle-pill">▸ PRIMA DI INIZIARE</span>
+• tieni il <span class="help-strong-dark">telefono in mano</span>, carico e connesso a Internet
+• decidi <span class="help-strong-dark">quale numero</span> collegare: è quello che i clienti vedranno come mittente
+• il QR resta valido pochi minuti: se scade, basta rifare il giro
 
-Quando la connessione è attiva, la schermata mostra lo stato collegato e il numero associato.
+<span class="help-strong-dark help-subtitle-pill">▸ SUL COMPUTER</span>
+1️⃣ vai in <span class="help-strong-dark">Tools → WhatsApp</span>
+2️⃣ in cima trovi il riquadro <span class="help-strong-dark">Connessione WhatsApp Business</span>. Se non hai ancora collegato nulla vedi il triangolo giallo con la scritta <span class="help-strong-dark">WhatsApp non connesso</span>
+3️⃣ clicca il pulsante verde <span class="help-strong-dark">Connetti WhatsApp</span>
+4️⃣ compare il riquadro con il <span class="help-strong-dark">QR code</span> e la scritta <span class="help-strong-dark">In attesa di connessione…</span>
 
-Nota operativa:
-• nella versione desktop locale sono disponibili più opzioni di connessione
-• il telefono/account deve restare correttamente connesso per permettere gli invii
+<span class="help-strong-dark help-subtitle-pill">▸ SUL TELEFONO</span>
+5️⃣ apri <span class="help-strong-dark">WhatsApp</span> (o <span class="help-strong-dark">WhatsApp Business</span>)
+6️⃣ <span class="help-strong-dark">Android:</span> tocca i <span class="help-strong-dark">tre puntini ⋮</span> in alto a destra → <span class="help-strong-dark">Dispositivi collegati</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="help-strong-dark">iPhone:</span> tocca <span class="help-strong-dark">Impostazioni</span> in basso a destra → <span class="help-strong-dark">Dispositivi collegati</span>
+7️⃣ tocca <span class="help-strong-dark">Collega un dispositivo</span> e sblocca col volto o l'impronta
+8️⃣ <span class="help-strong-dark">inquadra il QR code</span> che vedi sullo schermo del computer
+
+<span class="help-strong-dark help-subtitle-pill">▸ CONNESSIONE RIUSCITA</span>
+Dopo qualche secondo il riquadro cambia da solo: pallino verde con la spunta, la scritta <span class="help-strong-dark">WhatsApp Connesso</span> e sotto il <span class="help-strong-dark">numero</span> collegato. Non devi salvare nulla, il collegamento è già memorizzato.
+
+Da quel momento compaiono due pulsanti:
+• <span class="help-strong-dark">Aggiorna stato</span> — ricontrolla la connessione se hai un dubbio
+• <span class="help-strong-dark">Disconnetti</span> — scollega il numero (serve per cambiare account)
+
+<span class="help-strong-dark help-subtitle-pill">▸ SE QUALCOSA NON VA</span>
+• <span class="help-strong-dark">Il QR non si carica o resta bianco:</span> clicca <span class="help-strong-dark">Annulla</span> e poi di nuovo <span class="help-strong-dark">Connetti WhatsApp</span>
+• <span class="help-strong-dark">Resta "In attesa di connessione…":</span> il telefono non ha completato la scansione. Riprova dal punto 5️⃣
+• <span class="help-strong-dark">Compare un riquadro rosso di errore:</span> usa il pulsante <span class="help-strong-dark">Riprova</span>
+• <span class="help-strong-dark">Torna "non connesso" da solo dopo qualche giorno:</span> è normale se il telefono è rimasto a lungo spento o senza rete. Rifai il collegamento
+• <span class="help-strong-dark">Vedi il messaggio "disponibile solo nella versione desktop locale":</span> il collegamento col QR si fa dal computer del negozio, non dalla Web App
+
+<div class="help-hint-box">
+<span class="help-hint-label">Importante:</span>
+<span class="help-hint-text">Il telefono collegato deve restare <span class="help-strong-dark">acceso e connesso a Internet</span>: se si spegne o resta troppo a lungo offline, gli invii si fermano. Non serve invece tenere aperta nessuna finestra sul computer.</span>
+</div>
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Fai un test con il tuo numero interno subito dopo la connessione: conferma prima invio manuale e poi invio automatico.</span>
+<span class="help-hint-text">Subito dopo il collegamento fai una <span class="help-strong-dark">prova con il tuo numero</span>: prima un invio manuale dal blocco in Agenda, poi controlla che arrivi. Meglio scoprire un problema adesso che il giorno dei promemoria automatici. Vedi <span class="help-strong-dark">[[MESSAGGI E TEMPLATE|whatsapp_messaggi_template]]</span> e <span class="help-strong-dark">[[PROMEMORIA AUTOMATICI|whatsapp_auto]]</span>.</span>
 </div>""",
     },
 
@@ -2306,22 +2333,34 @@ Le azioni possono variare in base al ruolo attivo (utente operativo o amministra
 
     "tools_tab_whatsapp": {
         "title": "💬 WHATSAPP: connessione, test e uso operativo",
-        "content": """Questo tab è dedicato al <span class=\"help-strong-dark\">modulo opzionale WhatsApp</span>.
+        "image": "Whatsapp_Tools_Panoramica.png",
+        "image_caption": "La pagina <b>Tools › WhatsApp</b>: in cima il riquadro <b>Connessione WhatsApp Business</b> con lo stato del collegamento, sotto le sezioni dei messaggi e delle automazioni.",
+        "image_path": "Tools › WhatsApp",
+        "content": """Questo tab è dedicato al <span class=\"help-strong-dark\">modulo opzionale WhatsApp</span>. È il punto da cui si collega il numero e si configurano tutti gli invii.
 
-<span class=\"help-strong-dark help-subtitle-pill\">▸ PARTI PRINCIPALI DELLA PAGINA</span>
-• stato connessione canale
-• parametri di collegamento/configurazione
-• pulsanti di connessione/disconnessione/test
-• aree informative su stato sessione e errori
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COM'È FATTA LA PAGINA, DALL'ALTO IN BASSO</span>
+• <span class=\"help-strong-dark\">Connessione WhatsApp Business</span> — lo stato del collegamento e il pulsante per collegare il numero col QR code
+• <span class=\"help-strong-dark\">Messaggio WhatsApp manuale</span> — il testo proposto quando invii dal blocco appuntamento in Agenda
+• <span class=\"help-strong-dark\">Promemoria automatici</span> — messaggio e orario dei promemoria ai clienti
+• <span class=\"help-strong-dark\">Memo turni operatori</span> — il riepilogo serale con i turni del giorno dopo
+• <span class=\"help-strong-dark\">Memo mattutino</span> — il riepilogo ai clienti attesi in giornata
 
-<span class=\"help-strong-dark help-subtitle-pill\">▸ COSA SI PUÒ FARE DA QUI</span>
-• avviare o verificare la connessione
-• controllare che il canale sia pronto all'invio
-• diagnosticare problemi di sessione
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COME CAPIRE SE È TUTTO A POSTO</span>
+Guarda solo il riquadro in cima:
+• <span class=\"help-strong-dark\">pallino verde con la spunta</span> + numero → il canale è pronto, gli invii partono
+• <span class=\"help-strong-dark\">triangolo giallo</span> → nessun numero collegato, nessun messaggio può partire
+• <span class=\"help-strong-dark\">riquadro rosso</span> → errore di connessione, usa <span class=\"help-strong-dark\">Riprova</span>
+
+Se hai un dubbio, il pulsante <span class=\"help-strong-dark\">Aggiorna stato</span> ricontrolla subito senza toccare nient'altro.
+
+<div class=\"help-hint-box\">
+<span class=\"help-hint-label\">Attenzione:</span>
+<span class=\"help-hint-text\">Se il riquadro in cima non è verde, <span class=\"help-strong-dark\">anche gli invii automatici restano fermi</span>: promemoria, memo turni e memo mattutino non partono. Vale la pena dare un'occhiata ogni tanto, soprattutto dopo aver cambiato o riavviato il telefono.</span>
+</div>
 
 Per i flussi completi di messaggistica e automazioni vai anche a:
 • <span class=\"help-strong-dark\">[[WHATSAPP: PANORAMICA|whatsapp_panorama]]</span>
-• <span class=\"help-strong-dark\">[[WHATSAPP: CONNESSIONE|whatsapp_connect]]</span>
+• <span class=\"help-strong-dark\">[[COLLEGARE WHATSAPP COL QR CODE|whatsapp_connect]]</span>
 • <span class=\"help-strong-dark\">[[WHATSAPP: TEMPLATE|whatsapp_messaggi_template]]</span>
 • <span class=\"help-strong-dark\">[[WHATSAPP: AUTOMAZIONI|whatsapp_auto]]</span>""",
     },

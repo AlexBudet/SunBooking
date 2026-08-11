@@ -4556,6 +4556,124 @@ def api_help_topic(topic):
     help_data = get_help(topic)
     return jsonify(help_data)
 
+
+# ===================== CONTATTA IL SUPPORTO =====================
+# Le richieste di assistenza previste dal contratto (art. 9.1) arrivano via
+# WhatsApp al numero dell'owner, inviate dall'account WhatsApp del negozio
+# stesso tramite Unipile.
+SUPPORT_WHATSAPP = os.getenv('SUPPORT_WHATSAPP', '+39 389 5586307')
+# Usato solo dal fallback lato browser quando l'invio non riesce.
+SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'info@tosca-crm.it')
+
+
+@settings_bp.route('/api/help/contatta-supporto', methods=['POST'])
+def api_help_contatta_supporto():
+    """Invia al supporto una richiesta scritta dall'utente dal Centro Assistenza.
+
+    Il negozio mittente NON viene preso dal client ma riletto qui da BusinessInfo:
+    e' l'unico modo perche' il destinatario sappia con certezza da quale tenant
+    arriva la richiesta. Ogni child app di wsgi.py e' agganciata al database del
+    proprio tenant, quindi la query restituisce gia' il negozio giusto.
+    """
+    user_id = session.get('user_id')
+    current_user = db.session.get(User, user_id) if user_id else None
+    if not current_user:
+        return jsonify(success=False, error='Sessione scaduta. Rientra e riprova.'), 401
+
+    data = request.get_json(silent=True) or {}
+    oggetto = (data.get('oggetto') or '').strip()
+    messaggio = (data.get('messaggio') or '').strip()
+    rispondi_a = (data.get('rispondi_a') or '').strip()
+
+    if not messaggio:
+        return jsonify(success=False, error='Scrivi il messaggio prima di inviare.'), 400
+    if len(messaggio) > 5000:
+        return jsonify(success=False, error='Messaggio troppo lungo (max 5000 caratteri).'), 400
+    if not oggetto:
+        oggetto = 'Richiesta di assistenza'
+
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    negozio = (business_info.business_name if business_info else None) or 'Negozio senza nome'
+    citta = (business_info.city if business_info else '') or ''
+    email_negozio = (business_info.email if business_info else '') or ''
+    if not rispondi_a:
+        rispondi_a = email_negozio
+
+    # /s/<idx> nel cloud, vuoto sull'eseguibile locale: aiuta a capire su quale
+    # istanza intervenire senza doverlo chiedere al cliente.
+    istanza = request.script_root or '(locale)'
+
+    testo = (
+        f"🆘 RICHIESTA ASSISTENZA TOSCA\n"
+        f"────────────────────\n"
+        f"Negozio: {negozio}\n"
+        f"Città: {citta or '—'}\n"
+        f"Utente: {current_user.username} ({current_user.ruolo.value})\n"
+        f"Istanza: {istanza}\n"
+        f"Risposta a: {rispondi_a or '—'}\n"
+        f"Inviato: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n"
+        f"────────────────────\n"
+        f"Oggetto: {oggetto}\n\n"
+        f"{messaggio}"
+    )
+
+    # ===== INVIO VIA UNIPILE (WhatsApp) =====
+    # Il messaggio parte dall'account WhatsApp del negozio: se il negozio non
+    # ha collegato WhatsApp la richiesta non puo' partire, e il modal ripiega
+    # sul mailto lato browser.
+    unipile_dsn = os.getenv('UNIPILE_DSN')
+    unipile_token = os.getenv('UNIPILE_ACCESS_TOKEN')
+    unipile_account_id = business_info.unipile_account_id if business_info else None
+
+    if not (unipile_dsn and unipile_token and unipile_account_id):
+        current_app.logger.error(
+            "[supporto] Unipile non disponibile per '%s' (dsn=%s token=%s account=%s)",
+            negozio, bool(unipile_dsn), bool(unipile_token), bool(unipile_account_id)
+        )
+        return jsonify(
+            success=False,
+            error="WhatsApp non è collegato su questa postazione, quindi non possiamo inviare la richiesta.",
+            fallback=True,
+        ), 503
+
+    # Numero del supporto in formato Unipile: solo cifre + @s.whatsapp.net
+    destinatario = re.sub(r'\D', '', SUPPORT_WHATSAPP)
+    if destinatario.startswith('00'):
+        destinatario = destinatario[2:]
+    if not destinatario.startswith('39') and len(destinatario) <= 10:
+        destinatario = '39' + destinatario
+    if len(destinatario) < 8:
+        current_app.logger.error("[supporto] numero supporto non valido: %r", SUPPORT_WHATSAPP)
+        return jsonify(success=False, error='Numero del supporto non configurato correttamente.',
+                       fallback=True), 500
+
+    try:
+        # Form-encoded (data=), non json=: e' quanto si aspetta Unipile.
+        response = requests.post(
+            f"https://{unipile_dsn}/api/v1/chats",
+            data={
+                'account_id': unipile_account_id,
+                'attendees_ids': f"{destinatario}@s.whatsapp.net",
+                'text': testo,
+            },
+            headers={'X-API-KEY': unipile_token, 'accept': 'application/json'},
+            timeout=30,
+        )
+    except Exception:
+        current_app.logger.exception("[supporto] invio WhatsApp fallito per '%s'", negozio)
+        return jsonify(success=False, error='Non siamo riusciti a inviare la richiesta.',
+                       fallback=True), 502
+
+    if response.status_code not in (200, 201, 202):
+        current_app.logger.error(
+            "[supporto] Unipile http=%s body=%s", response.status_code, (response.text or '')[:500]
+        )
+        return jsonify(success=False, error='Non siamo riusciti a inviare la richiesta.',
+                       fallback=True), 502
+
+    current_app.logger.info("[supporto] richiesta inviata da '%s' (%s)", negozio, current_user.username)
+    return jsonify(success=True, negozio=negozio)
+
 # ================= SOLARIUM (Monitor Lampade) ====================
 @settings_bp.route('/settings/solarium', methods=['GET'])
 def solarium_settings():

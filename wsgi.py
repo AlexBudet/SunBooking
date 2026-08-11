@@ -516,16 +516,155 @@ _BILLING_DEFAULTS = {
     'payments': [],
 }
 
-def _load_billing():
+# ── Storage della fatturazione ────────────────────────────────────────────
+# La forma dei dati resta quella del vecchio JSON: un dict con chiave str(idx)
+# e dentro i campi di _BILLING_DEFAULTS piu' le liste invoices/payments. Cosi'
+# _compliance_status(), owner_setup() e tutte le rotte /owner-setup/billing/*
+# non cambiano di una riga: cambia solo DOVE i dati vengono letti e scritti.
+#
+# Se REGISTRY_DATABASE_URI non e' configurata si continua a usare il file, che
+# resta anche come rete di sicurezza durante il passaggio.
+
+def _registry_on():
+    try:
+        from appl.registry_models import registry_enabled
+        return registry_enabled()
+    except Exception:
+        return False
+
+
+def _iso(d):
+    return d.isoformat() if d is not None else None
+
+
+def _load_billing_json():
     try:
         with open(_BILLING_JSON, 'r', encoding='utf-8') as f:
             return json.load(f)
     except (FileNotFoundError, ValueError):
         return {}
 
+
+def _load_billing():
+    if not _registry_on():
+        return _load_billing_json()
+    try:
+        from appl.registry_models import (registry_session, Tenant, Billing,
+                                          Invoice, Payment)
+        out = {}
+        with registry_session() as s:
+            rows = (s.query(Billing, Tenant)
+                     .join(Tenant, Tenant.id == Billing.tenant_id)
+                     .filter(Tenant.idx.isnot(None))
+                     .all())
+            for b, t in rows:
+                entry = dict(_BILLING_DEFAULTS)
+                entry.update({
+                    'activation_date':     _iso(b.activation_date),
+                    'contract_start_date': _iso(b.contract_start_date),
+                    'starter_expiry_date': _iso(b.starter_expiry_date),
+                    'starter_total':       float(b.starter_total) if b.starter_total is not None else None,
+                    'saas_monthly_amount': float(b.saas_monthly_amount) if b.saas_monthly_amount is not None else None,
+                    'saas_next_renewal':   _iso(b.saas_next_renewal),
+                    'max_payment_days':    b.max_payment_days,
+                    'is_owner_db':         bool(b.is_owner_db),
+                    'fiscozen_contact_id': b.fiscozen_contact_id,
+                    'revolut_account_ref': b.revolut_account_ref,
+                    'invoices': [], 'payments': [],
+                })
+                for i in s.query(Invoice).filter_by(tenant_id=t.id).order_by(Invoice.date).all():
+                    entry['invoices'].append({
+                        'id': i.id, 'date': _iso(i.date) or '', 'number': i.number or '',
+                        'description': i.description or '',
+                        'amount': float(i.amount or 0), 'paid': bool(i.paid),
+                        'fiscozen_id': i.fiscozen_id, 'fiscozen_url': i.fiscozen_url,
+                    })
+                for p in s.query(Payment).filter_by(tenant_id=t.id).order_by(Payment.date).all():
+                    entry['payments'].append({
+                        'id': p.id, 'date': _iso(p.date) or '',
+                        'amount': float(p.amount or 0), 'method': p.method or '',
+                        'reference': p.reference or '', 'revolut_id': p.revolut_id,
+                    })
+                out[str(t.idx)] = entry
+        return out
+    except Exception:
+        # Un registro irraggiungibile non deve rendere inutilizzabile
+        # owner-setup: si ripiega sul file e si annota l'errore.
+        root_app.logger.exception("[registry] lettura fatturazione fallita, uso il JSON")
+        return _load_billing_json()
+
+
 def _save_billing(data):
-    with open(_BILLING_JSON, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    if not _registry_on():
+        with open(_BILLING_JSON, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return
+    from datetime import date as _date
+    from appl.registry_models import (registry_session, Tenant, Billing,
+                                      Invoice, Payment)
+
+    def _d(v):
+        try:
+            return _date.fromisoformat(v) if v else None
+        except (ValueError, TypeError):
+            return None
+
+    with registry_session() as s:
+        for key, entry in data.items():
+            try:
+                idx = int(key)
+            except (TypeError, ValueError):
+                continue
+
+            t = s.query(Tenant).filter_by(idx=idx).one_or_none()
+            if t is None:
+                # Un idx che non e' ancora nel registro: lo si crea con il nome
+                # del database, lo stesso ripiego di db_label() in owner_setup.
+                t = Tenant(idx=idx, business_name=db_label(pool.get(idx, '')) or f'tenant{idx}',
+                           status='active')
+                s.add(t)
+                s.flush()
+
+            b = s.query(Billing).filter_by(tenant_id=t.id).one_or_none()
+            if b is None:
+                b = Billing(tenant_id=t.id)
+                s.add(b)
+
+            b.activation_date     = _d(entry.get('activation_date'))
+            b.contract_start_date = _d(entry.get('contract_start_date'))
+            b.starter_expiry_date = _d(entry.get('starter_expiry_date'))
+            b.starter_total       = entry.get('starter_total')
+            b.saas_monthly_amount = entry.get('saas_monthly_amount')
+            b.saas_next_renewal   = _d(entry.get('saas_next_renewal'))
+            b.max_payment_days    = int(entry.get('max_payment_days') or 15)
+            b.is_owner_db         = bool(entry.get('is_owner_db'))
+            b.fiscozen_contact_id = entry.get('fiscozen_contact_id')
+            b.revolut_account_ref = entry.get('revolut_account_ref')
+
+            # Righe figlie riscritte per intero: e' la stessa semantica del
+            # vecchio JSON (si salvava tutto il dizionario) e a questi volumi
+            # costa meno di un diff riga per riga.
+            s.query(Invoice).filter_by(tenant_id=t.id).delete(synchronize_session=False)
+            for inv in entry.get('invoices', []):
+                s.add(Invoice(
+                    id=inv['id'], tenant_id=t.id, date=_d(inv.get('date')),
+                    number=inv.get('number') or None,
+                    description=inv.get('description') or None,
+                    amount=round(float(inv.get('amount') or 0), 2),
+                    paid=bool(inv.get('paid')),
+                    fiscozen_id=inv.get('fiscozen_id'),
+                    fiscozen_url=inv.get('fiscozen_url'),
+                ))
+
+            s.query(Payment).filter_by(tenant_id=t.id).delete(synchronize_session=False)
+            for pay in entry.get('payments', []):
+                s.add(Payment(
+                    id=pay['id'], tenant_id=t.id, date=_d(pay.get('date')),
+                    amount=round(float(pay.get('amount') or 0), 2),
+                    method=pay.get('method') or None,
+                    reference=pay.get('reference') or None,
+                    revolut_id=pay.get('revolut_id'),
+                ))
 
 def _billing_entry(billing, idx):
     key = str(idx)
