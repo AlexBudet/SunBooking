@@ -23,7 +23,10 @@
   <a href="#" id="btnChiusuraGiornaliera" class="btn neumorphic-btn" data-bs-toggle="tooltip" data-bs-placement="left" title="Clicca per stampare la chiusura fiscale giornaliera">Chiusura Giornaliera</a>
   <a href="#" id="btnAnnullaScontrino" class="btn neumorphic-btn" data-bs-toggle="tooltip" data-bs-placement="left" title="Annulla l'ultimo scontrino emesso">Annulla Scontrino</a>
   {% if user_role in ['admin', 'owner'] %}
-  <a href="#" id="btnConsoleRCH" class="btn neumorphic-btn" style="background: #ff5722; color: white;" data-bs-toggle="tooltip" data-bs-placement="left" title="Accesso alla console di gestione RCH">🔧 Console RCH</a>
+  <!-- Colore in styles.css (#btnConsoleRCH), non inline: la scorciatoia
+       "background:" cancellava la patina lucida di .neumorphic-btn e questo
+       restava l'unico tasto piatto della colonna. -->
+  <a href="#" id="btnConsoleRCH" class="btn neumorphic-btn" data-bs-toggle="tooltip" data-bs-placement="left" title="Accesso alla console di gestione RCH">Console RCH</a>
   {% endif %}
 </div>
 <div class="service-bar" style="display: flex; align-items: center; gap: 0.7em; padding-left: 25px !important; padding-right: 25px !important; flex-wrap: wrap; max-width: 96%;">

@@ -1,0 +1,164 @@
+================================================================================
+  TOSCA - TASK LIST DI AVVIO
+  Conti da aprire, decisioni aperte, ordine di esecuzione
+  Aggiornato: 11/08/2026
+================================================================================
+
+
+--------------------------------------------------------------------------------
+BLOCCO 0 - LA PARTITA IVA BLOCCA TUTTO IL RESTO
+--------------------------------------------------------------------------------
+
+  [ ] Aprire la PARTITA IVA (ditta individuale)
+      Senza, non puoi: aprire il conto business, attivare Stripe, emettere
+      fatture, completare l'intestazione del contratto.
+      Serve anche per: REA e PEC gia' indicate nel contratto.
+
+      >> Quando arriva, compilare nel contratto (art. "Identificazione delle
+         parti"): Partita IVA e numero REA. Sono gli ultimi due segnaposto
+         importanti rimasti.
+
+
+--------------------------------------------------------------------------------
+BLOCCO 1 - INCASSARE
+--------------------------------------------------------------------------------
+
+  [ ] CONTO BUSINESS con IBAN italiano
+      Serve a: ricevere i 599 EUR di attivazione (bonifico, o la 1a rata da
+      230,78) e i versamenti di Stripe.
+      Revolut Business "Basic" 10 EUR/mese, oppure Tot da 7 EUR/mese.
+      NON serve Qonto (49 EUR/mese) a questi volumi.
+      NOTA: Revolut resta valido come CONTO; per gli INCASSI e' scartato in
+      favore di Stripe (vedi sotto).
+
+  [ ] STRIPE - incasso del canone mensile via SEPA Direct Debit
+      Costo: 0,35 EUR per addebito riuscito. Nessun canone.
+      (addebito fallito 3,50 EUR - disputa 15,00 EUR)
+      Perche' Stripe e non la banca:
+        - il mandato SEPA e' emesso sotto il Creditor Identifier di STRIPE,
+          quindi NON devi chiedere il CID alla tua banca (verificare in fase
+          di attivazione)
+        - manda un webhook direttamente a Tosca con dentro l'ID del cliente:
+          sai sempre CHI ha pagato COSA
+      Con Revolut invece l'incasso SDD richiede il conto Merchant, il tuo CID
+      e il passaggio da un account executive. Piu' complicato, non piu' economico.
+
+  [ ] NIENTE ZAPIER
+      Il trigger "New Transaction" scatta su OGNI movimento del conto (anche
+      le spese), quindi i 100 task/mese gratuiti finiscono subito. E una
+      transazione bancaria non dice CHI ha pagato: con cinque clienti che
+      versano 39 EUR lo stesso giorno, l'automazione tira a indovinare.
+      I 599 EUR di attivazione sono un evento raro: li vedo io sul conto.
+
+
+--------------------------------------------------------------------------------
+BLOCCO 2 - FATTURARE
+--------------------------------------------------------------------------------
+
+  [ ] OPENAPI - fatturazione elettronica
+      openapi.it/prodotti/fatturazione-elettronica
+      FiscoZen SCARTATO: troppo caro.
+
+      DECISO: la TRASMISSIONE e la CONSERVAZIONE restano fuori da Tosca.
+      Motivo: per emettere fatture B2B serve trasmettere l'XML FatturaPA al
+      SdI, gestire ricevute di consegna/scarto e garantire la CONSERVAZIONE
+      A NORMA PER 10 ANNI. Quest'ultima e' un servizio regolamentato, e il
+      contratto stesso (art. 14.3) dichiara che Tosca NON e' conservatore
+      accreditato.
+
+      QUELLO CHE FA TOSCA: prepara la fattura e l'XML dal pannello owner,
+      appoggiandosi al registro, e la manda a OpenAPI via API. OpenAPI fa
+      SdI + conservazione. Al commercialista va solo l'elenco fatture nel
+      formato che chiede per le liquidazioni.
+
+      Il commercialista serve comunque con una P.IVA nuova.
+
+      >> Agganci gia' pronti nel registro:
+         billing.einvoice_customer_id, invoice.einvoice_id, invoice.einvoice_url
+         (rinominati il 12/08/2026, prima erano fiscozen_*)
+
+
+--------------------------------------------------------------------------------
+BLOCCO 3 - FAR FIRMARE IL CONTRATTO
+--------------------------------------------------------------------------------
+
+  [ ] INFOCERT - pacchetto di firme con COUPON
+      Costo indicativo: ~3,30 EUR a firma, nessun canone. QTSP italiano.
+      DA VERIFICARE SUL LISTINO UFFICIALE infocert.it (i prezzi che ho sono
+      da fonti terze).
+
+      >> PRIMA DI COMPRARE, UNA DOMANDA SOLA A INFOCERT:
+         "Un coupon di firma acquistato da me puo' essere speso dal
+          destinatario dentro il flusso 'Richiedi Firma' di Infocert Sign
+          Cloud - quindi firmando dal browser, senza installare nulla - e con
+          quale livello di firma?"
+
+         SE SI  -> perfetto: 3,30 EUR a contratto, niente canone, niente
+                   installazioni per la cliente, niente API da integrare.
+         SE NO  -> restano due strade:
+                   a) flusso con InfoCert Sign Desktop: firma QUALIFICATA
+                      (il massimo), ma la cliente deve installare un
+                      programma e avere SPID;
+                   b) Certyneo: firma avanzata, comodissima, automatizzabile.
+                      Chiedere DA QUALE PIANO PARTE L'API: le loro pagine
+                      dicono tre cose diverse, il ballo e' fra 0, 108 e 468
+                      EUR l'anno.
+
+  [ ] AVVOCATO - validazione del contratto PRIMA di farlo firmare a chiunque
+      Punti su cui insistere:
+        - clausole ex artt. 1341-1342 c.c. e loro approvazione in forma
+          elettronica (basta la firma avanzata o serve la qualificata?)
+        - Allegato B (DPA art. 28 GDPR)
+        - limitazione di responsabilita' (art. 23) e massimale
+
+
+--------------------------------------------------------------------------------
+BLOCCO 4 - DA COMPLETARE NEL CONTRATTO
+--------------------------------------------------------------------------------
+
+  [ ] Partita IVA e numero REA (quando arrivano)
+  [ ] Requisiti minimi CPU e RAM (Allegato A.5)
+      Li rilevo da Gestione risorse con l'Agenda aperta su una giornata piena:
+      e' il caso peggiore. Tutto il resto dell'Allegato A.5 e' gia' compilato
+      e misurato.
+  [ ] Allegato B: nomi e sedi dei fornitori (hosting, messaggistica, firma)
+      Ogni riga deve corrispondere a un contratto ex art. 28 realmente in
+      essere: elencare un fornitore senza quel contratto e' una non conformita'
+      dichiarata per iscritto.
+  [ ] Allegato C: tariffa oraria dell'assistenza straordinaria
+
+
+--------------------------------------------------------------------------------
+BLOCCO 5 - DA COSTRUIRE IN TOSCA (in ordine)
+--------------------------------------------------------------------------------
+
+  [ ] Generazione del PDF del contratto compilato
+      Prerequisito della firma. Oggi il contratto esiste in Markdown e HTML,
+      non in PDF.
+
+  [ ] Firma nel wizard (dipende dalla risposta di InfoCert)
+
+  [ ] Endpoint /webhook/stripe
+      Verifica la firma del webhook e segna la fattura pagata nel registro.
+      Le tabelle invoice e payment ci sono gia'.
+
+  [ ] Attivazione automatica dopo il pagamento
+      Pagamento incassato -> provision_tenant() -> il negozio nasce su /s/<idx>
+
+
+--------------------------------------------------------------------------------
+GIA' FATTO (non rifare)
+--------------------------------------------------------------------------------
+
+  [x] Database registro tosca_registry + 8 tabelle
+  [x] appl/registry_models.py (engine separato da quello dei negozi)
+  [x] Migrazione di owner_billing.json nel registro, con ripiego sul file
+  [x] provision_tenant() + creazione automatica del database
+  [x] Invito dal pannello owner con link monouso (scade in 14 giorni)
+  [x] Form pubblico di attivazione a 5 passi
+  [x] Listino: STANDARD 39 / PREMIUM 59 / prezzo concordato con motivazione
+      obbligatoria; i moduli aggiuntivi sono bloccati sui contratti STANDARD
+  [x] Contratto + Allegati A, B, C
+  [x] Supporto via WhatsApp nel Centro Assistenza
+
+================================================================================

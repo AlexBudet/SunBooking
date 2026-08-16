@@ -1,8 +1,8 @@
 # appl/oroscopo.py
 """
 Oroscopo settimanale in chiave estetista: dodici segni, tono leggero, battute
-sul mestiere (cerette, lampade, ricostruzioni, la cliente che arriva in
-ritardo). Operazione simpatia, non astrologia.
+sulla giornata in istituto (la cliente in ritardo, il telefono che squilla,
+l'agenda che si riempie). Operazione simpatia, non astrologia.
 
 COME FUNZIONA
 -------------
@@ -14,11 +14,18 @@ Cadenza: una volta a settimana, il LUNEDI'. Se l'app e' rimasta spenta e sono
 passati piu' di OROSCOPO_MAX_GIORNI giorni, riparte al primo avvio utile anche
 in un altro giorno - meglio un oroscopo di martedi' che un tile vuoto.
 
-PRIVACY: all'API non viene mandato NESSUN dato dei clienti. Solo il nome
-dell'istituto e la stagione. Le battute girano su situazioni tipiche del
-mestiere, mai su persone reali: i nomi veri non escono dall'app, e un oroscopo
-che nomina una cliente vera sarebbe divertente per una persona sola e
-imbarazzante per tutte le altre.
+UN TESTO SOLO PER TUTTI: si genera una volta e si scrive nel database di ogni
+tenant. Quindi il testo deve essere neutro - niente nome del centro, niente
+trattamenti specifici. Prima si mandava all'API il nome del PRIMO tenant, e
+tutti gli altri si ritrovavano nel report l'oroscopo di quel negozio, col suo
+nome dentro. Se un giorno si vorra' un oroscopo su misura per ogni negozio, va
+spostata la generazione dentro il ciclo sui tenant: costa una chiamata a testa.
+
+PRIVACY: all'API non viene mandato NESSUN dato dei clienti, e nemmeno il nome
+dell'istituto: solo la data e la stagione. Le battute girano su situazioni
+tipiche del mestiere, mai su persone reali: i nomi veri non escono dall'app, e
+un oroscopo che nomina una cliente vera sarebbe divertente per una persona sola
+e imbarazzante per tutte le altre.
 
 COSTO: nessuna ricerca web, solo scrittura. Poche migliaia di token in uscita
 una volta a settimana, cioe' pochi centesimi al mese.
@@ -116,39 +123,65 @@ def _dovuto(ultimo, adesso=None):
 # ---------------------------------------------------------------------------
 # Generazione
 # ---------------------------------------------------------------------------
+# ATTENZIONE, LEGGERE PRIMA DI TOCCARE QUESTI PROMPT.
+# L'oroscopo si genera UNA VOLTA SOLA e la stessa identica riga finisce nel
+# database di TUTTI i tenant (vedi esegui(): una chiamata, poi _salva su ogni
+# app). E' una scelta di costo: una chiamata a settimana invece di una per
+# negozio, che a cento negozi sarebbero cento.
+# La conseguenza e' che il testo deve andare bene per QUALUNQUE centro. Prima
+# qui dentro c'erano il nome dell'istituto (preso dal primo tenant) e un elenco
+# di trattamenti: il risultato era che tutti si leggevano l'oroscopo del primo
+# negozio, con il suo nome dentro, e battute su servizi che magari non offrono.
+# Quindi: niente nomi propri, niente trattamenti specifici. Se un giorno si
+# vorranno battute sui servizi veri di ogni negozio, non basta cambiare il
+# prompt: va spostata la generazione dentro il ciclo sui tenant, sapendo che il
+# costo si moltiplica per il loro numero.
 PROMPT_SISTEMA = (
     "Scrivi l'oroscopo settimanale per le ragazze di un centro estetico "
     "italiano. Lo leggono il lunedi' mattina mentre aprono, e deve strappare "
     "un sorriso: tono da rivista in sala d'attesa, un filo kitsch, mai serio "
     "sul serio. "
-    "Le battute nascono dal mestiere - cerette, lampade, ricostruzione unghie, "
-    "la cliente che arriva in ritardo e vuole tutto, il telefono che squilla "
-    "mentre hai le mani nella cera, il magazzino da riordinare. "
+    "Le battute nascono dalla giornata in istituto: la cliente che arriva in "
+    "ritardo e vuole tutto, il telefono che squilla nel momento peggiore, "
+    "l'agenda che si riempie di colpo, la sala d'attesa piena, il magazzino da "
+    "riordinare, la collega che ti legge nel pensiero, la cliente che cambia "
+    "idea all'ultimo. "
     "Sii affettuosa, mai cattiva: le clienti si prendono in giro con simpatia, "
     "non si sfottono. Niente previsioni che possano preoccupare davvero "
-    "(salute, soldi, amore in crisi): e' un gioco, non un responso."
+    "(salute, soldi, amore in crisi): e' un gioco, non un responso.\n\n"
+    "DUE REGOLE FERME. Lo stesso testo viene letto in centri diversi, che non "
+    "conosci e che offrono servizi diversi fra loro:\n"
+    "1. NON nominare mai il centro: ne' un nome proprio che ti sembra di "
+    "sapere, ne' uno inventato. Al massimo \"l'istituto\", \"il centro\", "
+    "\"qui\". Un nome sbagliato lo leggerebbe come un errore chiunque.\n"
+    "2. NON nominare trattamenti specifici (ricostruzione unghie, ceretta, "
+    "lampade, laser, massaggi, extension...): chi non li fa si trova una "
+    "battuta su un servizio che non offre. Resta sul lavoro in generale - "
+    "l'appuntamento, la cliente, l'agenda, i prodotti, le mani che non si "
+    "fermano mai, la giornata che vola."
 )
 
 
-def _prompt_utente(nome_centro):
+def _prompt_utente():
     oggi = datetime.now()
     stagione = ('inverno', 'inverno', 'primavera', 'primavera', 'primavera',
                 'estate', 'estate', 'estate', 'autunno', 'autunno', 'autunno',
                 'inverno')[oggi.month - 1]
-    riferimento = f' Il centro si chiama "{nome_centro}".' if nome_centro else ''
 
     return (
         f"Settimana che inizia il {oggi.strftime('%d/%m/%Y')}, siamo in "
-        f"{stagione}.{riferimento}\n\n"
+        f"{stagione}.\n\n"
         f"Scrivi l'oroscopo per tutti e dodici i segni, in questo ordine: "
         f"{', '.join(NOMI_SEGNI)}.\n\n"
         f"Per ogni segno: 2 frasi, massimo 230 caratteri in tutto. Una battuta "
-        f"o un'immagine legata al lavoro in istituto, e una piccola spinta "
+        f"o un'immagine legata alla giornata in istituto, e una piccola spinta "
         f"positiva per la settimana. Varia gli argomenti fra un segno e "
-        f"l'altro: se hai gia' fatto la battuta sulla ceretta non rifarla.\n\n"
-        f"Ogni tanto (non a tutti i segni) puoi tirare in ballo il centro o la "
-        f"stagione. Non inventare nomi di clienti: parla di \"la cliente delle "
-        f"tre\", \"quella del pacchetto da dieci\", cose cosi'.\n\n"
+        f"l'altro: se hai gia' fatto la battuta sul telefono che squilla non "
+        f"rifarla.\n\n"
+        f"Ogni tanto (non a tutti i segni) puoi tirare in ballo la stagione, "
+        f"oppure il centro ma solo in modo generico e senza nome. Non "
+        f"inventare nomi di clienti: parla di \"la cliente delle tre\", "
+        f"\"quella del pacchetto da dieci\", cose cosi'.\n\n"
         f"Rispondi con un array JSON e nient'altro, senza testo prima o dopo. "
         f"Ogni elemento:\n"
         f'  "segno": il nome esatto del segno come te l\'ho scritto\n'
@@ -156,19 +189,7 @@ def _prompt_utente(nome_centro):
     )
 
 
-def _nome_centro(app):
-    from appl import db
-    from appl.models import BusinessInfo
-    with app.app_context():
-        try:
-            info = BusinessInfo.query.first()
-            return (info.business_name or '').strip() if info else ''
-        except Exception:
-            db.session.rollback()
-            return ''
-
-
-def _chiama_claude(nome_centro):
+def _chiama_claude():
     import anthropic
     client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
 
@@ -178,7 +199,7 @@ def _chiama_claude(nome_centro):
         model=_modello(),
         max_tokens=_max_token(),
         system=PROMPT_SISTEMA,
-        messages=[{"role": "user", "content": _prompt_utente(nome_centro)}],
+        messages=[{"role": "user", "content": _prompt_utente()}],
     ) as stream:
         risposta = stream.get_final_message()
 
@@ -208,6 +229,51 @@ def _normalizza(dati):
         if segno in DETTAGLI_SEGNO and testo and segno not in per_segno:
             per_segno[segno] = testo[:600]
     return [(s, per_segno[s]) for s in NOMI_SEGNI if s in per_segno]
+
+
+def _nomi_centri(apps):
+    """Nomi di tutti i centri registrati, per il controllo qui sotto.
+    Si scartano i nomi corti (<5 caratteri): sono spesso parole comuni e
+    filtrerebbero righe innocenti."""
+    from appl import db
+    from appl.models import BusinessInfo
+    nomi = []
+    for _etichetta, app in apps:
+        with app.app_context():
+            try:
+                info = BusinessInfo.query.first()
+                nome = ((info.business_name or '').strip() if info else '')
+            except Exception:
+                db.session.rollback()
+                nome = ''
+        if len(nome) >= 5:
+            nomi.append(nome.lower())
+    return nomi
+
+
+def _scarta_righe_con_nomi(righe, nomi, app):
+    """Rete di sicurezza al nome del centro.
+
+    Il prompt vieta di nominare l'istituto, ma un prompt e' un vincolo morbido:
+    il modello puo' sempre tirare fuori un nome, e siccome QUESTO STESSO TESTO
+    finisce in tutti i tenant, basta una riga per far leggere a un negozio il
+    nome di un altro. Era esattamente il difetto segnalato ("Sun City" nel
+    report di un altro centro). Qui la riga incriminata si butta e basta: se ne
+    restano meno di sei, esegui() tratta il batch come incompleto e riprova
+    alla prossima occasione, invece di pubblicare qualcosa di sbagliato."""
+    if not nomi:
+        return righe
+    pulite = []
+    for segno, testo in righe:
+        minuscolo = testo.lower()
+        trovato = next((n for n in nomi if n in minuscolo), None)
+        if trovato:
+            app.logger.warning(
+                "[oroscopo] riga '%s' scartata: nomina un centro (%s)",
+                segno, trovato)
+            continue
+        pulite.append((segno, testo))
+    return pulite
 
 
 def _salva(app, righe, batch):
@@ -279,7 +345,7 @@ def esegui(force=False):
         return {'ok': False, 'errore': 'Oroscopo non ancora dovuto'}
 
     try:
-        testo = _chiama_claude(_nome_centro(app_principale))
+        testo = _chiama_claude()
     except Exception as exc:
         _ultimo_errore = _errore_leggibile(exc)
         app_principale.logger.exception("[oroscopo] generazione fallita: %s", exc)
@@ -288,6 +354,7 @@ def esegui(force=False):
         return {'ok': False, 'errore': _ultimo_errore}
 
     righe = _normalizza(_estrai_json(testo))
+    righe = _scarta_righe_con_nomi(righe, _nomi_centri(apps), app_principale)
     if len(righe) < 6:
         _ultimo_errore = 'Oroscopo incompleto, riprovo alla prossima occasione'
         if not force:

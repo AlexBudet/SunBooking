@@ -186,8 +186,8 @@ CREATE TABLE contract_signature (
 
 `invoice` e `payment` migrano da `owner_billing.json` mantenendo i campi attuali
 (`activation_date`, `contract_start_date`, `starter_expiry_date`, `starter_total`,
-`saas_monthly_amount`, `saas_next_renewal`, `max_payment_days`, `fiscozen_contact_id`,
-`revolut_account_ref`), così `_compliance_status()` continua a funzionare invariato.
+`saas_monthly_amount`, `saas_next_renewal`, `max_payment_days`, `einvoice_customer_id`,
+`payment_customer_ref`), così `_compliance_status()` continua a funzionare invariato.
 
 ---
 
@@ -694,10 +694,48 @@ quanto serve al contratto.
 
 ## 8. Ordine di lavoro proposto
 
-0. **Account Certyneo**: registrarsi, chiarire da quale piano parte l'API, generare una chiave
-   `sk_test_`, provare a mano un contratto vero dal dashboard. Zero codice, e chiude le due
-   incognite (piano e iframe) prima di investire tempo.
-1. Validazione legale del contratto e conferma del livello di firma (ADVANCED / AES).
+> ### ⚠️ Da ricordare: il primo cliente sarà `/s/4`, non `/s/5`
+>
+> `tosca_registry` è il quarto database **sul server**, ma **non è un tenant**: ha la sua
+> `REGISTRY_DATABASE_URI` apposta, e `collect_db_pool()` non lo vede. Poiché
+> `next_idx = max(pool.keys()) + 1` e `pool` contiene solo gli idx 1, 2, 3 dei database
+> dell'owner, **il primo cliente a pagamento prende `idx 4` e vive su `/s/4`**.
+>
+> Lo stesso avviso è nel commento sopra `next_idx` in `wsgi.py`.
+
+### ✅ Fatto
+
+- **Database `tosca_registry`** creato su Azure (stesso server, quarto database, costo zero) con
+  le 8 tabelle.
+- **`appl/registry_models.py`**: modelli e sessione con engine dedicato, indipendente
+  dall'istanza `db` di Flask-SQLAlchemy che è legata al tenant corrente.
+- **Migrazione di `owner_billing.json`**: `_load_billing()` / `_save_billing()` in `wsgi.py`
+  leggono e scrivono nel registro mantenendo identica la forma dei dati, quindi
+  `_compliance_status()` e le rotte `/owner-setup/billing/*` non sono state toccate. Se
+  `REGISTRY_DATABASE_URI` manca si torna al file da solo: valvola di sicurezza per il rollout.
+  Il JSON non è stato cancellato.
+
+### ⬜ Da fare
+
+0. **Fatturazione elettronica via OpenAPI** (`openapi.it/prodotti/fatturazione-elettronica`),
+   quando arriva la partita IVA: generazione dell'XML per l'AE dal pannello owner, appoggiandosi
+   al registro. Le colonne `billing.einvoice_customer_id`, `invoice.einvoice_id` e
+   `invoice.einvoice_url` esistono già come aggancio. Per gli incassi l'orientamento è
+   **Stripe** (eventualmente affiancato da PayPal), non Revolut; l'aggancio è
+   `billing.payment_customer_ref` e `payment.provider_payment_id`.
+1. **Eccezione database proprietari**: `idx 1 (suncity)`, `2 (sunexp3)` e `3 (sunbookingdb,
+   database di prova)` sono tutti dell'owner e **non richiedono contratto né link di
+   attivazione**. Il flag `billing.is_owner_db` è già `true` su tutti e tre ed è quello che
+   `_compliance_status()` usa per restituire `owner`; va esteso al flusso contrattuale (niente
+   invito, niente firma, nessuna richiesta di dati). I tenant creati dal form nascono invece con
+   `is_owner_db = false`, quindi fatturabili, che è già il default di `_BILLING_DEFAULTS`.
+2. Validazione legale del contratto e conferma del livello di firma.
+3. **Estrazione di `provision_tenant()`** da `owner_setup_add_tenant()` (`wsgi.py:786-921`).
+4. **Form contratto** su pagina HTML pubblica, raggiunta da **link personalizzato generato dal
+   pannello owner** alla creazione di una nuova utenza.
+5. **Generazione del PDF** del contratto compilato: oggi esiste in Markdown e HTML, non in PDF,
+   ed è il prerequisito della firma.
+6. **Firma con coupon InfoCert** integrata nel contratto.
 2. Creazione del database `tosca_registry` e dei modelli (`appl/registry_models.py`, binding
    separato — le app tenant non devono vederlo).
 3. Migrazione di `owner_billing.json` nel registry, con `_compliance_status()` invariato.

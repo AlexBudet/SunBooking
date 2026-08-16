@@ -1,36 +1,19 @@
-SETTINGS:
-TERMINARE CENTRO ASSISTENZA
-- Aggiornamento a stili Glamour in varie parti di Settings
-- Velocizzare e migliorare tab "Booking Web" -> vedere se si possono impostare anche ALCUNI GIORNI per alcuni servizi
-- in Servizi/Utenti sezione visibile solo a owner: SEZIONI OSCURABILI DA PROFILO OWNER: 1) whatsapp, booking, marketing 2) pacchetti
-- MARKETING: possibilità di caricare anche foto del messaggio whatsapp!
-
-CALENDAR: 
-- migliorare DRAG-and-DROP ! se posiziono con puntatore vicino a cella sotto, posizionare comunque in cella sotto
-- dropdown navigator appuntamenti che si sovrappongono, qndo apre dropdown clienti chiude sempre dropdown servizi
-- se creo doppio blocco per stesso cliente da navigator con due click distinti su mini-blocco e poi su cella calendar, invia memo whatsapp con SOLO UN appuntamento prenotato.......
-
-PROMPT AI PER PRENOTAZIONE:
-- collegamento con microfono
-- richieste appuntamenti in base a giorni/orari disponibili, trattamento, operatore, giorni apertura chiusura ecc -> AI deve POTER LEGGERE NEL DATABASE APPUNTAMENTI
-
-GENERALE: 
-- inserire più tooltip esplicativi (calendar, turni operatore, ecc) e completare Centro Assistenza (e tour)
-- creare icona! (dopo aver ricevuto il logo)
-
-WEB APP:
-- creare app per mobile (serve logo per creare icona!)
-
-COMMERCIALIZZAZIONE:
-- scegliere LOGO E creare brand booklet con stili, font, icone ecc
-- creare sito e sezioni per commercializzazione
+AGGIORNARE E TERMINARE CENTRO ASSISTENZA
+- screenshots
 
 
 
 
-SOLARIUM:
-- boxare l'app e mettere tutto su un solo server
-- invio whatsapp a cliente in automatico
+TEST FINALI
+- rileggere Centro Assistenza
+- provare modalità touch
+- provare modalità mobile
+- provare modalità pochi operatori (in particolare con 3 e 4)
+- provare prepagate (no-solarium)
+
+
+
+
 
 
 
@@ -40,6 +23,20 @@ SOLARIUM:
 
 UNIPILE_DSN=api15.unipile.com:14552
 UNIPILE_ACCESS_TOKEN=T+y/2c/b.0MQy6V+D5z86R+aCJtQFZ4Ht50m/fe8HXNALTSOO0ck=
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -70,6 +67,30 @@ Torna nel dettaglio della prepagata
 Verifica che il credito sia aumentato di 40€ (non 30€)
 
 CORRETTI, DA VERIFICARE
+- ATTENZIONE: indagare su questa casistica, cliente che ha prenotato online, io lo porto in cassa e in cassa CAMBIO LA BOZZA SCONTRINO (per es. aveva prenotato sopracciglia ma decide di fare sopracciglia skin's), succede che dopo la modifica e aver segnato il pagamento (provare sia in chiaro che in grigio) il blocco in Calendar rimane in stato 1 invece che andare in stato 2
+- IMPORTANTE: nel modal info cliente MOSTRARE FREQUENZA/FEDELTA' di ogni cliente secondo best practice attuali, valutare come precisamente
+- in modalità WEB APP se seleziono "cassa abilitata da web app" mostrando il tab "CASSA" non fa però popolare il campo DATA nel Date Navigator in calendar.html, indagare perché e correggere 
+- occhio NON E' PIU POSSIBILE FARE LA MULTI-SELEZIONE DEGLI PESUDOBLOCCHI da APPOINTMENT NAVIGATOR, va ripristinata? è possibile selezionarne uno alla volta, ma se voglio selezionarne 2 deve farmene creare 2 e poi gli altri
+- occhio quado vado su "modal info cliente" nella descrizione fedeltà, se un cliente è venuto nelle ultime 24 ore dice "ultima visita oggi", invece se è entro 24 ore ma nella giornata di ieri, deve scrivere IERI ! 
+- quando seleziono col cerchiolino dei servizi nei modal/navigator di calendar per creazione appuntamento, e poi torno nel campo di ricerca per cercare un altro servizio da selezionare che non vedo nel dropdown, al click su campo di ricerca IN QUESTO CASO NON DEVE CANCELLARE LE SELEZIONI DEI SERVIZI GIA' EFFETTUATE MA A CUI NON HA AVUTO SEGUITO IL CLICK SU "CREA", devo insomma poter aggiungere un altro servizio senza che si perda la selezione, implementa questa funzionalità secondo best practica
+- al click su whatsapp popup-button in Calendar, mostrare opzione per invio manuale o invio automatico in background (al momento va solo di invio manuale!), se si fa invio in background mostrare però un'anteprima di ciò che sarà inviato (magari editabile?) occhio però perché vanno ad essere messaggi Wapp in piu' e sono costosi, è un'opzione che si deve poter attivare da settings/whatsapp e che deve essere usata solo per tenant con computer/connessioni deboli che non supportino Wapp desktop
+- Pacchetti: dare opzione per inserire importo già scontato (senza impostare sconto quindi, ma scrivendo direttamente la cifra) nel form di creazione pacchetto
+- nel badge "info" quando cerco info operatrice, dà come ULTIMO APPUNTAMENTO il BLOCCO OFF più in là nel calendario, invece NON DEVE MOSTRARE I BLOCCHI OFF che vanno invece nascosti da questa query
+- controlla se il controllo generale data per data su corrispettivi per confronto cassa/dgfe sia impostato allo stesso modo di quello giornaliero su tasto "correggi", ho provato quello singolo e non ha funzionato mentre il check giorno per giorno ha corretto una data (c'erano 24euro di scontrino stornato) verifica bene perché quello del giorno singolo ha fallito
+- dobbiamo fare un Check in apertura per vedere se è stata fatta una chiusura fiscale la sera prima, se non è stata fatta quando cerchiamo di stampare il primo scontrino invece di mandare in stampa devi mostrare un modal che indica di eseguire una chiusura fiscale
+- Whatsapp: se si scollega l'account Whatsapp, NOTIFICA in base.html ! se il modulo WEB è attivo, allora Whatsapp IDEALMENTE DOVREBBE SEMPRE RIMANERE CONNESSO! così per gli account con modulo WEB attivo, se si disconnette Whatsapp va notificato subito sia su web app che su .exe, mostrando i contatti del/degli admin
+- WEB APP: rotella di progresso anche a click su selezione negozio nella seconda schermata del login in cui si seleziona il negozio da pulsante
+- nei risultati di info cliente in "info box" mostrare anche STORICO e PROX APPUNTAMENTI nello stesso formato del modal info cliente, con righe risultati cliccabili che fanno redirect a pagina vista calendario di quell'appuntamento
+- aggiungi nello STORICO anche le sottoscrizioni di nuovi pacchetti
+- header dell'info box deve avere lo stesso colore di sfondo del suo badge
+- quando si pre-compila il box "cerca un buco" dopo aver selezionato cliente e servizio in Appointment Navigator, quando si apre dev'essere pre-selezionato "prima possibile" in QUANDO
+- in storico cliente al click sul numero del mese nella tabella piu in alto, dobbiamo modificare il filtro della tabella in basso visualizzando i servizi solo di quel mese, rendendo così interattiva la tabella col totale per mese
+- in storico cliente il tooltip a mouseover su anno non va via quando si clicca un altro anno... controlla e correggi
+- Tools/Servizi inserire il tasto "Storico" anche per i servizi e le sotto-categorie! con possibilità di fare ricerche per filtri
+- quando viene rilevata mancanza di internet forza SOLO DA QUEL MOMENTO un refresh della pagina ogni 5 secondi (a volte il wifi da 5G si perde momentaneamente ma poi torna subito, dobbiamo fare in modo che la cosa sia quasi impercettibile, anzi magari manda in modalità offline solo dopo 3 tentativi di refresh, prima mostra una rotellina)
+- tasto "Salva APP su cellulare" deve essere visibile solo su schermi piccoli
+- fare in modo che "Svuota" rifaccia collassare il navigator appuntamenti a come è quando si carica la pagina da zero
+- se creo doppio blocco per stesso cliente da navigator con due click distinti su mini-blocco e poi su cella calendar, invia memo whatsapp con SOLO UN appuntamento prenotato
 - Aggiornamento App in BusinessInfo visibile solo nella versione boxed (start.py)
 - tooltip sui campi "Salone" e "Cliente Generico" nel container pseudoscontrini devono avere class "data-bs-toggle"
 - sezione prepagate, verificare e testare
@@ -273,20 +294,12 @@ start.py
    # Flask secret key (genera una nuova se necessario)
    SECRET_KEY=7jtGUeZejGItfvRMMgFFF0kFep71FA6hdgHU19iN1Q0
 
-git remote add origin https://github.com/AlexBudet/booking.git
-
 L'account Azure Communication Services è limitato a 10 messaggi di posta elettronica al minuto, 25 messaggi di posta elettronica in un'ora e 100 messaggi di posta elettronica al giorno. Se si verificano questi limiti e il volume di invio è superiore a questo, continuare con questa richiesta di supporto con il volume di posta desiderato per richiedere un aumento del limite.
----------------------------------------------------------
-Prompt per richieste ad AI (per esempio: trovami la prima disponibilità in pausa pranzo settimana prossima con Erika per un massaggio di un'ora -> va alla pagina e blinka le celle adatte)
 
+
+---------------------------------------------------------
 ALTRO:
 - Verificare funzionamento LOTTERIA degli scontrini -> dà errore, verificare route
-
-REPORT: creare una sezione REPORT con le stats e una sezione HOME con tiles interattivi (meteo, oroscopo, news estetica, andamento del mercato, video del giorno, console comandi piu usati)
-
-CALENDAR... controllare:
-- Molto codice globale → rischio collisioni e listener duplicati.
-- Backend privo di transazioni/timezone-safe su operazioni sensibili: verificare
 
 ( ... IN FUTURO UNDO e REDO )
 ( ... IN FUTURO CELLE DA 1/3 di QUARTER per APP di 20 MIN )
@@ -296,18 +309,10 @@ CALENDAR... controllare:
 - creare COLONNE WISHLIST da attivare in periodi di grande passaggio (automaticamente se colonne target si liberano parte un whatsapp a cliente)
 - dividere in tre celle ogni cella oraria di calendar per prendere appuntamenti ogni 5 minuti per alcuni operatori? (es. LETTINO SOLARIUM)
 
-
 WEB BOOKING
 - opzionale, offrire la possibilità di PAGARE ONLINE gli appuntamenti
-
-DASHBOARD
-- con news, sponsor (?), video, suggerimenti, oroscopo, meteo ecc ecc
 
 PROMO e PACCHETTI
 - raccolta punti (tot euro ogni tot euro spesi)
 
 - creare un software tastiera virtuale per RCH
-
-- creare query AI e query vocale ...?
-
-...Proporre prezzi IVA INCLUSA!

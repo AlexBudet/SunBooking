@@ -5750,3 +5750,89 @@ async function aggiungiPulsantiRicaricaSolarium() {
     if (!container.children.length) container.style.minHeight = '';
   }, 15000);
 })();
+
+
+/* ============================================================================
+   ETICHETTE DEI PULSANTI SERVIZIO CHE NON CI STANNO
+   ----------------------------------------------------------------------------
+   I tag dei servizi hanno lunghezze molto diverse ("Baf" e "Manicure con
+   Semipermanente" stanno nello stesso tasto) e la larghezza del tasto cambia
+   con la finestra: a tutto schermo sono 7 per riga, con l'agenda affiancata
+   scendono a 1/5 del pannello. Li' i nomi lunghi sbordavano di lato.
+
+   Andare a capo lo fa gia' il CSS. Qui si copre il caso che resta: la seconda
+   riga non basta e il testo verrebbe tagliato. Non e' esprimibile in CSS -
+   dipende da quanto e' lungo QUEL nome dentro QUEL tasto in questo momento -
+   quindi si misura e si mette .service-btn-fitta, che cala il corpo del ~12%.
+
+   La misura e' fatta con un Range sul contenuto del tasto e non con
+   scrollHeight: i tasti centrano il testo in verticale, quindi un'etichetta
+   troppo alta sborda di sopra E di sotto, e scrollHeight non vede la parte
+   sopra il bordo. Il Range restituisce l'ingombro vero del testo, comunque sia
+   allineato.
+   ============================================================================ */
+(function adattaEtichetteServizi() {
+  'use strict';
+
+  var container = document.getElementById('serviceButtonsContainer');
+  if (!container) return;
+
+  var CLASSE = 'service-btn-fitta';
+  var inCoda = false;
+  var ultimaLarghezza = 0;
+
+  function sbordaIlTesto(tasto) {
+    var range = document.createRange();
+    range.selectNodeContents(tasto);
+    var testo = range.getBoundingClientRect();
+    range.detach && range.detach();
+    // +1px di tolleranza: gli arrotondamenti sub-pixel darebbero falsi
+    // positivi su etichette che in realta' ci stanno per un pelo.
+    return testo.height > tasto.clientHeight + 1
+        || testo.width  > tasto.clientWidth + 1;
+  }
+
+  function misuraEAdatta() {
+    inCoda = false;
+    var tasti = container.querySelectorAll('.service-btn-custom');
+    if (!tasti.length) return;
+    // Due passate distinte: prima si toglie la classe a TUTTI, poi si misura.
+    // Alternandole, ogni misura arriverebbe dopo aver cambiato il corpo a un
+    // altro tasto e il browser rifarebbe il layout a ogni giro del ciclo.
+    for (var i = 0; i < tasti.length; i++) tasti[i].classList.remove(CLASSE);
+    for (var j = 0; j < tasti.length; j++) {
+      if (sbordaIlTesto(tasti[j])) tasti[j].classList.add(CLASSE);
+    }
+  }
+
+  function programma() {
+    if (inCoda) return;
+    inCoda = true;
+    window.requestAnimationFrame(misuraEAdatta);
+  }
+
+  // I pulsanti vengono ricreati da zero a ogni cambio filtro (Frequenti,
+  // Solarium, ricerca, schermata di una carta...): si osserva il contenitore
+  // invece di agganciarsi ai cinque punti del file che li disegnano.
+  new MutationObserver(programma).observe(container, { childList: true });
+
+  // Cambio di larghezza senza cambio di DOM: divisorio del pannello
+  // trascinato, pannello aperto/chiuso, finestra ridimensionata.
+  // Si reagisce SOLO alla larghezza: la classe che mettiamo cambia l'altezza
+  // del contenitore, e osservare anche quella innescherebbe un ciclo infinito
+  // (rimetti classe -> cambia altezza -> rimisura -> ...).
+  function seCambiaLarghezza() {
+    var largo = Math.round(container.getBoundingClientRect().width);
+    if (largo === ultimaLarghezza) return;
+    ultimaLarghezza = largo;
+    programma();
+  }
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(seCambiaLarghezza).observe(container);
+  } else {
+    window.addEventListener('resize', seCambiaLarghezza, { passive: true });
+  }
+
+  programma();
+})();

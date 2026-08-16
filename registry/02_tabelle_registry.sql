@@ -199,31 +199,38 @@ CREATE TABLE billing (
     saas_next_renewal    date,
     max_payment_days     integer NOT NULL DEFAULT 15,
     is_owner_db          boolean NOT NULL DEFAULT false,
-    fiscozen_contact_id  varchar(64),
-    revolut_account_ref  varchar(64),
+    einvoice_customer_id varchar(64),
+    payment_customer_ref varchar(64),
     updated_at           timestamptz NOT NULL DEFAULT now()
 );
 
+-- ATTENZIONE: i nomi delle colonne di invoice e payment ricalcano ESATTAMENTE
+-- le chiavi dei dict usati dalle rotte /owner-setup/billing/* in wsgi.py, e
+-- l'id resta la stringa uuid4().hex[:10] generata dal codice (non un serial).
+-- Devono restare allineati a appl/registry_models.py.
 CREATE TABLE invoice (
-    id          serial PRIMARY KEY,
-    tenant_id   integer NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
-    numero      varchar(50),
-    data        date NOT NULL,
-    amount      numeric(10,2) NOT NULL,
-    paid        boolean NOT NULL DEFAULT false,
-    note        text,
-    created_at  timestamptz NOT NULL DEFAULT now()
+    id            varchar(32) PRIMARY KEY,
+    tenant_id     integer NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    date          date,
+    number        varchar(50),
+    description   text,
+    amount        numeric(10,2) NOT NULL DEFAULT 0,
+    paid          boolean NOT NULL DEFAULT false,
+    einvoice_id   varchar(64),
+    einvoice_url  text,
+    created_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX invoice_tenant_idx ON invoice (tenant_id);
 
 CREATE TABLE payment (
-    id          serial PRIMARY KEY,
-    tenant_id   integer NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
-    data        date NOT NULL,
-    amount      numeric(10,2) NOT NULL,
-    metodo      varchar(40),
-    note        text,
-    created_at  timestamptz NOT NULL DEFAULT now()
+    id                   varchar(32) PRIMARY KEY,
+    tenant_id            integer NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    date                 date,
+    amount               numeric(10,2) NOT NULL DEFAULT 0,
+    method               varchar(40),
+    reference            varchar(120),
+    provider_payment_id  varchar(64),
+    created_at           timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX payment_tenant_idx ON payment (tenant_id);
 

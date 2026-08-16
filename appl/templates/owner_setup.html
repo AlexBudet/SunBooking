@@ -366,7 +366,9 @@
             <div class="module-cell">
               <label class="module-toggle">
                 <input type="checkbox" class="mod-check" data-mod="web"
-                       {% if t.module_web_enabled %}checked{% endif %}>
+                       {% if t.module_web_enabled %}checked{% endif %}
+                       {% if t.price_plan == 'standard' %}disabled
+                       title="Contratto STANDARD: i moduli aggiuntivi richiedono il PREMIUM"{% endif %}>
                 <span class="slider"></span>
               </label>
               <input type="date" class="date-input" data-mod="web-date"
@@ -380,7 +382,9 @@
             <div class="module-cell">
               <label class="module-toggle">
                 <input type="checkbox" class="mod-check" data-mod="pacchetti"
-                       {% if t.module_pacchetti_enabled %}checked{% endif %}>
+                       {% if t.module_pacchetti_enabled %}checked{% endif %}
+                       {% if t.price_plan == 'standard' %}disabled
+                       title="Contratto STANDARD: i moduli aggiuntivi richiedono il PREMIUM"{% endif %}>
                 <span class="slider"></span>
               </label>
               <input type="date" class="date-input" data-mod="pacchetti-date"
@@ -394,7 +398,9 @@
             <div class="module-cell">
               <label class="module-toggle">
                 <input type="checkbox" class="mod-check" data-mod="solarium"
-                       {% if t.module_solarium_enabled %}checked{% endif %}>
+                       {% if t.module_solarium_enabled %}checked{% endif %}
+                       {% if t.price_plan == 'standard' %}disabled
+                       title="Contratto STANDARD: i moduli aggiuntivi richiedono il PREMIUM"{% endif %}>
                 <span class="slider"></span>
               </label>
               <input type="date" class="date-input" data-mod="solarium-date"
@@ -475,18 +481,18 @@
           <div class="billing-section-title">Integrazioni API</div>
           <div class="billing-grid">
             <div class="billing-field">
-              <label>FiscoZen Contact ID</label>
-              <input type="text" id="b_fiscozen_contact_id" placeholder="ID cliente su FiscoZen">
-              <div class="api-hint">Sarà usato per sincronizzare fatture via API FiscoZen</div>
+              <label>ID cliente fatturazione</label>
+              <input type="text" id="b_einvoice_customer_id" placeholder="ID cliente presso il provider">
+              <div class="api-hint">Sarà usato per emettere le fatture elettroniche via API</div>
             </div>
             <div class="billing-field">
-              <label>Revolut Account Ref</label>
-              <input type="text" id="b_revolut_account_ref" placeholder="Riferimento conto Revolut">
-              <div class="api-hint">Sarà usato per confronto fattura/pagamento via API Revolut</div>
+              <label>Riferimento cliente pagamenti</label>
+              <input type="text" id="b_payment_customer_ref" placeholder="Riferimento presso il provider">
+              <div class="api-hint">Sarà usato per il confronto fattura/pagamento via API</div>
             </div>
           </div>
           <div class="api-placeholder">
-            🔗 <span>Sincronizzazione automatica con <strong>FiscoZen</strong> e <strong>Revolut</strong> — disponibile nella prossima versione</span>
+            🔗 <span>Sincronizzazione automatica con i provider di <strong>fatturazione</strong> e <strong>pagamenti</strong> — disponibile nella prossima versione</span>
             <button disabled>Sincronizza</button>
           </div>
 
@@ -519,8 +525,8 @@
             <button class="btn-add-small" onclick="addInvoice()">+ Aggiungi</button>
           </div>
           <div class="api-placeholder" style="margin-top:14px;">
-            🔗 <span><strong>FiscoZen</strong>: importazione automatica fatture emesse — prossima versione</span>
-            <button disabled>Importa da FiscoZen</button>
+            🔗 <span><strong>Fatturazione elettronica</strong>: emissione e importazione automatica — prossima versione</span>
+            <button disabled>Importa fatture</button>
           </div>
         </div>
 
@@ -545,7 +551,9 @@
             <input type="number" id="pay_amount" placeholder="€" min="0" step="0.01">
             <select id="pay_method">
               <option value="Bonifico">Bonifico</option>
-              <option value="Revolut">Revolut</option>
+              <option value="SEPA">Addebito SEPA</option>
+              <option value="Stripe">Stripe</option>
+              <option value="PayPal">PayPal</option>
               <option value="Contanti">Contanti</option>
               <option value="Carta">Carta</option>
               <option value="Altro">Altro</option>
@@ -554,8 +562,8 @@
             <button class="btn-add-small" onclick="addPayment()">+ Registra</button>
           </div>
           <div class="api-placeholder" style="margin-top:14px;">
-            🔗 <span><strong>Revolut</strong>: confronto automatico fattura/pagamento — prossima versione</span>
-            <button disabled>Sincronizza Revolut</button>
+            🔗 <span><strong>Pagamenti</strong>: confronto automatico fattura/incasso — prossima versione</span>
+            <button disabled>Sincronizza incassi</button>
           </div>
         </div>
 
@@ -576,6 +584,100 @@
 
   <!-- Sezione aggiungi nuovo cliente -->
   <button class="btn-show-add" onclick="toggleAddForm()">➕ Aggiungi nuovo cliente</button>
+  <button class="btn-show-add" onclick="toggleInviteForm()">✉️ Invita un cliente (contratto da firmare)</button>
+
+  <!-- Invito: crea la pratica nel registro e restituisce il link da mandare al
+       cliente. NON crea nessun database: il negozio nasce solo dopo la firma. -->
+  <div class="add-form-card" id="inviteForm">
+    <h3>Invita un cliente</h3>
+    <div class="hint" style="margin-bottom:14px;">
+      Genera un link personalizzato con cui il cliente compila i propri dati e firma
+      il contratto. <strong>Nessun database viene creato adesso</strong>: il negozio
+      viene attivato dopo la firma e il pagamento.
+    </div>
+    <div class="form-grid">
+      <div class="form-field">
+        <label for="inv_business_name">Nome negozio *</label>
+        <input id="inv_business_name" type="text" placeholder="Es. Estetica Rossi">
+      </div>
+      <div class="form-field">
+        <label for="inv_email">E-mail del cliente</label>
+        <input id="inv_email" type="email" placeholder="info@esempio.it">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-field">
+        <label for="inv_starter">Attivazione € (+IVA)</label>
+        <input id="inv_starter" type="number" step="0.01" value="599">
+      </div>
+      <div class="form-field">
+        <label>Canone mensile (+IVA)</label>
+        <div style="line-height:2;">
+          <label style="font-weight:400; display:block;">
+            <input type="radio" name="inv_plan" value="standard" checked onchange="aggiornaPiano()">
+            <strong>Standard</strong> — € 39/mese
+          </label>
+          <label style="font-weight:400; display:block;">
+            <input type="radio" name="inv_plan" value="premium" onchange="aggiornaPiano()">
+            <strong>Premium</strong> — € 59/mese
+          </label>
+          <label style="font-weight:400; display:block;">
+            <input type="radio" name="inv_plan" value="custom" onchange="aggiornaPiano()">
+            Prezzo concordato
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fuori listino: cifra + motivazione, entrambe obbligatorie. La stessa
+         regola e' applicata anche lato server. -->
+    <div id="inv_custom_box" style="display:none;">
+      <div class="form-grid">
+        <div class="form-field">
+          <label for="inv_canone">Canone concordato € (+IVA) *</label>
+          <input id="inv_canone" type="number" step="0.01" min="0" placeholder="Es. 45">
+        </div>
+      </div>
+      <div class="form-field">
+        <label for="inv_price_note">Motivazione del prezzo fuori listino *</label>
+        <textarea id="inv_price_note" rows="2"
+                  placeholder="Es. sconto primo cliente della zona; permuta con segnalazioni; prova gratuita estesa"></textarea>
+        <div class="hint">Obbligatoria. Fra due anni nessuno si ricorda perché quel
+          cliente paga una cifra diversa: qui resta scritto.</div>
+      </div>
+    </div>
+    <div class="form-field">
+      <label>Moduli inclusi</label>
+      <div id="inv_moduli">
+        <label style="font-weight:400;"><input type="checkbox" id="inv_mod_web" checked> Prenotazioni online</label>
+        &nbsp;&nbsp;
+        <label style="font-weight:400;"><input type="checkbox" id="inv_mod_pacchetti" checked> Pacchetti</label>
+        &nbsp;&nbsp;
+        <label style="font-weight:400;"><input type="checkbox" id="inv_mod_solarium"> Solarium</label>
+      </div>
+      <div class="hint" id="inv_moduli_hint">
+        Tosca Base è sempre incluso. Con il canone PREMIUM puoi attivare uno, alcuni o
+        tutti questi moduli: il prezzo non cambia. Al cliente compaiono in sola lettura.
+      </div>
+    </div>
+    <div class="add-status" id="inviteStatus"></div>
+
+    <div id="inviteResult" style="display:none; margin-top:14px;">
+      <label style="font-weight:600;">Link da inviare al cliente</label>
+      <textarea id="inviteLink" readonly rows="2"
+                style="width:100%; font-family:monospace; font-size:.9em;"></textarea>
+      <div class="hint" id="inviteExpiry"></div>
+      <div class="form-actions" style="margin-top:8px;">
+        <button class="btn-submit-add" onclick="copiaInvito()">📋 Copia link</button>
+        <button class="btn-cancel-add" onclick="apriWhatsAppInvito()">💬 Manda su WhatsApp</button>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn-submit-add" id="btnInvite" onclick="creaInvito()">Genera link</button>
+      <button class="btn-cancel-add" onclick="toggleInviteForm()">Chiudi</button>
+    </div>
+  </div>
 
   <div class="add-form-card" id="addTenantForm">
     <h3>Nuovo cliente</h3>
@@ -724,7 +826,7 @@
         // Contratto
         ['activation_date','contract_start_date','starter_expiry_date','starter_total',
          'saas_monthly_amount','saas_next_renewal','max_payment_days',
-         'fiscozen_contact_id','revolut_account_ref'].forEach(f => {
+         'einvoice_customer_id','payment_customer_ref'].forEach(f => {
           const el = document.getElementById('b_' + f);
           if (el) el.value = d[f] || '';
         });
@@ -830,7 +932,7 @@
     async function saveBillingContract() {
       const fields = ['activation_date','contract_start_date','starter_expiry_date','starter_total',
                       'saas_monthly_amount','saas_next_renewal','max_payment_days',
-                      'fiscozen_contact_id','revolut_account_ref'];
+                      'einvoice_customer_id','payment_customer_ref'];
       const data = {};
       fields.forEach(f => { data[f] = document.getElementById('b_' + f).value || null; });
       data.is_owner_db = document.getElementById('b_is_owner_db').checked;
@@ -913,6 +1015,124 @@
       const visible = form.style.display === 'block';
       form.style.display = visible ? 'none' : 'block';
       if (!visible) document.getElementById('new_business_name').focus();
+    }
+
+    // ─── INVITO CLIENTE ────────────────────────────────────────────────
+    // Crea la pratica nel registro centrale e restituisce il link da
+    // consegnare. Non crea nessun database: quello nasce dopo la firma.
+    function toggleInviteForm() {
+      const form = document.getElementById('inviteForm');
+      const visible = form.style.display === 'block';
+      form.style.display = visible ? 'none' : 'block';
+      if (!visible) document.getElementById('inv_business_name').focus();
+    }
+
+    function setInviteStatus(msg, type) {
+      const el = document.getElementById('inviteStatus');
+      el.textContent = msg;
+      el.className = 'add-status ' + (type || '');
+    }
+
+    function pianoScelto() {
+      return document.querySelector('input[name="inv_plan"]:checked').value;
+    }
+
+    function aggiornaPiano() {
+      const piano  = pianoScelto();
+      const custom = piano === 'custom';
+      document.getElementById('inv_custom_box').style.display = custom ? 'block' : 'none';
+      if (custom) document.getElementById('inv_canone').focus();
+
+      // STANDARD = solo Tosca Base. I moduli aggiuntivi appartengono al
+      // PREMIUM (e al prezzo concordato), quindi con Standard si spengono e si
+      // bloccano: cosi' non si genera un invito incoerente col contratto.
+      const soloBase = piano === 'standard';
+      document.querySelectorAll('#inv_moduli input[type=checkbox]').forEach(c => {
+        if (soloBase) c.checked = false;
+        c.disabled = soloBase;
+      });
+      document.getElementById('inv_moduli').style.opacity = soloBase ? '.5' : '1';
+      document.getElementById('inv_moduli_hint').textContent = soloBase
+        ? 'Il canone STANDARD comprende solo Tosca Base. Per attivare i moduli scegli PREMIUM.'
+        : 'Con il canone PREMIUM puoi attivare uno, alcuni o tutti questi moduli: il prezzo non cambia.';
+    }
+
+    document.addEventListener('DOMContentLoaded', aggiornaPiano);
+
+    async function creaInvito() {
+      const business_name = document.getElementById('inv_business_name').value.trim();
+      if (!business_name) { setInviteStatus('Nome negozio obbligatorio.', 'error'); return; }
+
+      const piano = pianoScelto();
+      const nota  = document.getElementById('inv_price_note').value.trim();
+      const cifra = document.getElementById('inv_canone').value;
+      if (piano === 'custom') {
+        if (!cifra) { setInviteStatus('Indica il canone concordato.', 'error'); return; }
+        if (!nota)  { setInviteStatus('Un canone fuori listino richiede una motivazione.', 'error'); return; }
+      }
+
+      const btn = document.getElementById('btnInvite');
+      btn.disabled = true;
+      setInviteStatus('Creazione invito…');
+
+      try {
+        const resp = await fetch('/owner-setup/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            business_name,
+            email: document.getElementById('inv_email').value.trim(),
+            starter_total: document.getElementById('inv_starter').value,
+            price_plan: piano,
+            price_note: nota,
+            saas_monthly_amount: cifra,
+            module_web: document.getElementById('inv_mod_web').checked,
+            module_pacchetti: document.getElementById('inv_mod_pacchetti').checked,
+            module_solarium: document.getElementById('inv_mod_solarium').checked
+          })
+        });
+        const data = await resp.json().catch(() => ({}));
+
+        if (!resp.ok || !data.ok) {
+          setInviteStatus(data.error || 'Creazione non riuscita.', 'error');
+          btn.disabled = false;
+          return;
+        }
+
+        document.getElementById('inviteLink').value = data.link;
+        document.getElementById('inviteExpiry').textContent =
+          'Il link scade il ' + data.scade_il + ' e vale una volta sola.';
+        document.getElementById('inviteResult').style.display = 'block';
+        setInviteStatus('Invito creato.', 'ok');
+      } catch (e) {
+        setInviteStatus('Nessuna risposta dal server.', 'error');
+      }
+      btn.disabled = false;
+    }
+
+    function copiaInvito() {
+      const ta = document.getElementById('inviteLink');
+      ta.select();
+      // navigator.clipboard non c'e' su http semplice: execCommand resta il
+      // ripiego che funziona ovunque.
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(ta.value).then(
+          () => setInviteStatus('Link copiato.', 'ok'),
+          () => { document.execCommand('copy'); setInviteStatus('Link copiato.', 'ok'); }
+        );
+      } else {
+        document.execCommand('copy');
+        setInviteStatus('Link copiato.', 'ok');
+      }
+    }
+
+    function apriWhatsAppInvito() {
+      const nome = document.getElementById('inv_business_name').value.trim();
+      const link = document.getElementById('inviteLink').value;
+      const testo =
+        `Ciao! Per attivare Tosca su ${nome} apri questo link e compila i dati: ${link}`;
+      window.open('https://wa.me/?text=' + encodeURIComponent(testo), '_blank');
     }
 
     function setAddStatus(msg, type) {

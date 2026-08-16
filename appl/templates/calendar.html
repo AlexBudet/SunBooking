@@ -677,7 +677,17 @@
 .calendar-fullwidth.asp-open.asp-max > #agendaSidePane { margin-left: 0; }
 
 body.asp-maximized .appointmentNavigator,
-body.asp-maximized .calendar-navigation { display: none !important; }
+body.asp-maximized .calendar-navigation,
+body.asp-maximized #aiBadgeColumn { display: none !important; }
+/* La colonna badge (Info, Cerca un buco, Monitor lampade) e' lo stesso caso:
+   e' fixed e ancorata al bordo destro dell'AGENDA tramite --agenda-right. Con
+   la tabella a display:none quel bordo non esiste piu', il valore resta quello
+   dell'ultima misura e i badge galleggiavano in mezzo allo schermo, sopra al
+   pannello. Sono comandi dell'agenda: senza agenda non hanno senso.
+   Serve !important perche' il JS del modal "Cerca un buco" rimette
+   display:flex inline alla chiusura (vedi hidden.bs.modal di cercaDispModal):
+   se si collassa l'agenda mentre quel modal e' aperto, senza !important i
+   badge tornerebbero visibili da soli. */
 
 /* Linguetta "AGENDA" verticale, visibile solo a pannello massimizzato */
 #aspAgendaTab[hidden] { display: none !important; }
@@ -825,10 +835,29 @@ body.asp-split .appointmentNavigator:not(.collapsed) {
   box-shadow: none !important;
   z-index: 1 !important;
 }
+/* Finestra agganciata ma non in primo piano: aperta, solo mascherata.
+   Serve !important perche' le finestre portano il proprio display inline. */
+#aspDock > .asp-docked-win.asp-win-off { display: none !important; }
+
 /* da agganciate non si ridimensionano a mano: ci pensa il pannello */
 #aspDock #aiChatResizeHandle,
 #aspDock #aiChatResizeHandleRight,
 #aspDock #solariumMonitorTabClose { display: none !important; }
+
+/* UNA SOLA INTESTAZIONE, UNA SOLA X.
+   Ogni finestra si porta dietro la propria barra del titolo con icona, nome e
+   "x" di chiusura. Nel pannello quella barra e' un doppione esatto di #aspTabs,
+   che mostra gia' icona e nome della finestra attiva: si vedevano due riquadri
+   incassati uno nell'altro e due "x" in alto a destra, e non era chiaro quale
+   servisse per uscire.
+   Si nasconde quella INTERNA e si tiene quella del pannello, perche' la sua "x"
+   e' l'unica che riporta davvero all'agenda: chiude il pannello e con esso le
+   finestre agganciate (vedi undockWindows). La "x" interna invece chiudeva solo
+   la finestra, lasciando il pannello aperto e vuoto.
+   NB: nel pannello resta fuori anche il pulsante "azzera" della chat, che vive
+   in questa barra; a tutto schermo c'e' ancora. */
+#aspDock #aiChatHeader,
+#aspDock > .modal.asp-docked-win .modal-header { display: none !important; }
 
 /* I due modal Bootstrap agganciati devono renderizzare DENTRO il pannello.
    Le istanze vengono ricreate con {backdrop:false, focus:false}, quindi non
@@ -910,13 +939,27 @@ body.asp-docked-modal-open {
   // Finestre gia' esistenti del calendario, agganciabili nel pannello.
   // "badge" = elemento il cui click le apre oggi; riusarlo evita di
   // duplicare prefill, reset di stato e tutto il resto.
+  // "chiudi" e' la chiusura VERA della finestra, quella che spegne anche il suo
+  // stato interno (timer, flag in localStorage, badge che torna visibile). Il
+  // pannello la chiama quando si chiude: senza, le finestre restavano APERTE e
+  // undockWindows si limitava a riportarle al loro posto originale, cioe' la
+  // chat che ricompariva in basso a destra e il monitor lampade che tornava a
+  // essere la barra in fondo allo schermo. Da cui "la X non chiude, sposta".
+  // I due modal "Cerca un buco" non ce l'hanno perche' li chiude gia'
+  // rebuildCdInstances(false), che deve anche ricrearne le istanze Bootstrap.
   var WINDOWS = {
     info:    { ids: ['aiChatModal'],                             badge: 'aiInfoBadgeBtn',
-               label: 'Info',           icon: 'bi bi-info-lg' },
+               label: 'Info',           icon: 'bi bi-info-lg',
+               chiudi: function () {
+                 if (typeof window.closeInfoChat === 'function') window.closeInfoChat();
+               } },
     cerca:   { ids: ['cercaDispModal', 'cercaDispResultsModal'], badge: 'aiSearchAvailBadgeBtn',
                label: 'Cerca un buco',  icon: 'bi bi-search' },
     lampade: { ids: ['solariumMonitorBar'],                      badge: 'solariumBadgeBtn',
-               label: 'Monitor lampade', icon: 'bi bi-brightness-high' }
+               label: 'Monitor lampade', icon: 'bi bi-brightness-high',
+               chiudi: function () {
+                 if (typeof window.solariumMonitorClose === 'function') window.solariumMonitorClose();
+               } }
   };
   var CD_MODALS = ['cercaDispModal', 'cercaDispResultsModal'];
 
@@ -1088,8 +1131,10 @@ body.asp-docked-modal-open {
       el.classList.add('asp-docked-win');
       dockEl.appendChild(el);
     });
+    // Niente da ricordare: allo sgancio la barra viene chiusa, quindi la sua
+    // linguetta resta nascosta comunque (vedi undockWindows).
     var solTab = $('solariumMonitorTab');
-    if (solTab) { solTab.dataset.aspPrevDisplay = solTab.style.display; solTab.style.display = 'none'; }
+    if (solTab) { solTab.style.display = 'none'; }
     rebuildCdInstances(true);
     docked = true;
   }
@@ -1097,12 +1142,32 @@ body.asp-docked-modal-open {
   function undockWindows() {
     if (!docked) return;
     rebuildCdInstances(false);   // chiude e ripristina PRIMA di spostare
+
+    // Chiudere il pannello vuol dire "ho finito, torno all'agenda": le finestre
+    // che erano aperte dentro vanno CHIUSE, non riportate al loro posto di
+    // sempre. Prima restavano aperte e ricomparivano galleggianti sull'agenda -
+    // il monitor lampade come barra in fondo, la chat in basso a destra - e
+    // sembrava che la X spostasse le finestre invece di chiuderle.
+    // Si chiama chiudi() senza controllare se la finestra e' aperta: una
+    // mascherata da .asp-win-off risulterebbe chiusa (ha display:none) e
+    // verrebbe saltata proprio nel caso che causava il problema. Le chiusure
+    // sono idempotenti, richiamarle su una finestra gia' chiusa non fa nulla.
+    Object.keys(WINDOWS).forEach(function (nome) {
+      try { if (WINDOWS[nome].chiudi) WINDOWS[nome].chiudi(); } catch (_) {}
+    });
+
     eachWindowEl(function (el) {
-      el.classList.remove('asp-docked-win');
+      // asp-win-off va tolta insieme all'aggancio: fuori dal dock e' la
+      // finestra stessa a decidere se mostrarsi, e una maschera dimenticata
+      // la renderebbe invisibile per sempre.
+      el.classList.remove('asp-docked-win', 'asp-win-off');
       document.body.appendChild(el);
     });
+    // La linguetta del monitor esiste solo mentre la barra e' aperta, e qui
+    // sopra l'abbiamo appena chiusa: resta nascosta. Sara' openBar() a
+    // rimetterla quando l'utente riaprira' il monitor dal suo badge.
     var solTab = $('solariumMonitorTab');
-    if (solTab) { solTab.style.display = solTab.dataset.aspPrevDisplay || ''; }
+    if (solTab) { solTab.style.display = 'none'; }
     document.body.classList.remove('asp-docked-modal-open');
     docked = false;
   }
@@ -1137,6 +1202,14 @@ body.asp-docked-modal-open {
     try { localStorage.setItem(LS_PAGE, JSON.stringify(currentPage)); } catch (_) {}
   }
 
+  // Maschera nel dock tutte le finestre che non appartengono alla scheda
+  // attiva. activeName null = nessuna (il pannello sta mostrando una pagina).
+  function applyDockVisibility(activeName) {
+    eachWindowEl(function (el, id, name) {
+      el.classList.toggle('asp-win-off', name !== activeName);
+    });
+  }
+
   function windowIsOpen(name) {
     var ids = WINDOWS[name].ids;
     for (var i = 0; i < ids.length; i++) {
@@ -1163,6 +1236,7 @@ body.asp-docked-modal-open {
     dockEl.style.display   = isPage ? 'none' : '';
 
     if (isPage) {
+      applyDockVisibility(null);   // nessuna finestra in primo piano
       setHeader(currentPage.label, currentPage.icon);
       // La data si aggiunge QUI e non in setPage: cosi' anche una pagina
       // ripristinata da localStorage (salvata magari ieri) riparte con il
@@ -1175,10 +1249,17 @@ body.asp-docked-modal-open {
     }
 
     setHeader(WINDOWS[name].label, WINDOWS[name].icon);
+    // Nel dock le finestre stanno TUTTE a inset:0, una sopra l'altra: se ne
+    // restano aperte due, si coprono a vicenda e si vede solo l'ultima del
+    // DOM. Qui si lascia visibile solo quella della scheda attiva. Non si
+    // tocca lo stato di apertura delle altre — restano aperte, mascherate —
+    // cosi' una ricerca in corso non si perde, come prima.
+    // NB: la maschera va tolta PRIMA di windowIsOpen(), che legge il display
+    // calcolato: altrimenti una finestra aperta ma mascherata risulterebbe
+    // chiusa e il click sintetico qui sotto la chiuderebbe davvero.
+    applyDockVisibility(name);
     // Finestra del calendario: se non e' gia' aperta la apro premendo il suo
-    // badge, cosi' non duplico prefill e reset di stato. Le finestre restano
-    // aperte anche passando ad altro (il dock viene solo nascosto), quindi
-    // una ricerca in corso non si perde.
+    // badge, cosi' non duplico prefill e reset di stato.
     if (!skipOpen && !windowIsOpen(name)) {
       var badge = $(WINDOWS[name].badge);
       if (badge) {
@@ -1211,9 +1292,26 @@ body.asp-docked-modal-open {
     });
     if (!name) return;
     if (!canFit()) return;            // niente modalita' affiancata: com'era
-    if (!isOpen()) open(true);        // apre il pannello e aggancia le finestre
-    // skipOpen: la finestra la apre il click reale, che sta per proseguire
-    activateTab(name, true);
+    // Il pannello si apre GIA' sulla scheda del badge premuto: se lo si
+    // aprisse "a scheda salvata" verrebbe fuori prima la finestra dell'ultima
+    // scheda usata. skipOpen ovunque: la finestra la apre il click reale,
+    // che sta per proseguire.
+    var prevTab = isOpen() ? currentTab : null;
+    if (!isOpen()) open(true, name, true);
+    activateTab(name, true);          // smaschera la finestra e aggiorna il titolo
+
+    // I badge sono interruttori: premendone uno mentre il pannello mostra
+    // un'altra scheda, la finestra richiesta e' gia' aperta (solo mascherata)
+    // e l'handler del badge la richiuderebbe subito dopo averla portata in
+    // primo piano — cioe' un click che apparentemente non fa niente. In quel
+    // caso il click ha gia' fatto il suo lavoro qui e si ferma.
+    // NB: il controllo va DOPO activateTab, che ha appena tolto la maschera:
+    // windowIsOpen legge il display calcolato e su una finestra mascherata
+    // risponderebbe "chiusa".
+    if (prevTab && prevTab !== name && windowIsOpen(name)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   }
 
   // ── Menu in alto come navigazione del pannello ────────────────
@@ -1288,7 +1386,9 @@ body.asp-docked-modal-open {
     if (!nav || !canFit()) { window.location.href = url; return; }
     var li = labelIconFor(nav);
     setPage(url, li.label, li.icon);
-    if (!isOpen()) open(true);
+    // Stesso motivo del click sui badge: aprendo Cassa o Report dal menu il
+    // pannello non deve prima far comparire la finestra dell'ultima scheda.
+    if (!isOpen()) open(true, 'page');
     activateTab('page');
   };
 
@@ -1311,13 +1411,26 @@ body.asp-docked-modal-open {
   }
 
   // ── Apertura / chiusura ───────────────────────────────────────
-  function open(savePref) {
+  // initialTab: scheda che il chiamante vuole gia' vedere. Senza, si
+  // ripristina l'ultima usata.
+  // skipOpenWindow: la finestra la sta aprendo il click reale sul badge.
+  //
+  // ATTENZIONE, qui c'era il bug del "monitor solarium che si apre da solo":
+  // open() ripristinava SEMPRE la scheda salvata e, non passando skipOpen ad
+  // activateTab, ne apriva anche la finestra con un click sintetico sul badge.
+  // Cliccando "i" a pannello chiuso, con l'ultima scheda su "lampade",
+  // succedeva questo: apri pannello -> click sintetico sul badge lampade ->
+  // monitor aperto; poi il click vero apriva il box Info SOTTO al monitor.
+  // Da cui "prima esce il monitor, chiudo, e sotto c'e' l'info".
+  function open(savePref, initialTab, skipOpenWindow) {
     if (!canFit()) return;
     container.classList.add('asp-open');
     dockWindows();
-    var saved = null;
-    try { saved = localStorage.getItem(LS_TAB); } catch (_) {}
-    activateTab(saved || (currentPage ? 'page' : 'info'));
+    var saved = initialTab || null;
+    if (!saved) {
+      try { saved = localStorage.getItem(LS_TAB); } catch (_) {}
+    }
+    activateTab(saved || (currentPage ? 'page' : 'info'), !!skipOpenWindow);
     if (savePref !== false) { try { localStorage.setItem(LS_OPEN, '1'); } catch (_) {} }
     // Ripristina l'eventuale stato "a tutto schermo" scelto in precedenza
     var savedMax = null;
@@ -1382,6 +1495,18 @@ body.asp-docked-modal-open {
     dividerEl = $('aspDivider');
     agendaTabEl = $('aspAgendaTab');
     if (!container || !pane || !framesEl || !dockEl || !toggleEl) return;
+
+    // Finestre non presenti in questo tenant escono dal registro: il badge
+    // e la barra del Monitor lampade sono dentro una condizione di template
+    // sul modulo solarium, quindi con il modulo spento non esistono affatto.
+    // Senza questa potatura una scheda "lampade" salvata in localStorage
+    // apriva il pannello vuoto con l'intestazione di una finestra che non
+    // c'e', e il click sintetico sul badge non trovava nulla da aprire.
+    // Va fatto qui e non dove WINDOWS e' dichiarato: i badge stanno piu' in
+    // basso nel documento e a quel punto non esistono ancora.
+    Object.keys(WINDOWS).forEach(function (n) {
+      if (!$(WINDOWS[n].badge)) delete WINDOWS[n];
+    });
 
     // Chiude il tooltip dell'elemento appena premuto: il comando fa sparire
     // il pulsante (barra e linguetta si alternano), ma il tooltip vive nel
@@ -4158,6 +4283,47 @@ document.addEventListener('DOMContentLoaded', function() {
   .solarium-lamp-item .solarium-lamp-status:empty { display: none; }
   .solarium-lamp-item.pink .solarium-lamp-status { color: #fff; }
   .solarium-lamp-item.blue .solarium-lamp-status { color: #fff; }
+  /* ── Monitor agganciato nel pannello laterale ─────────────────────────
+     Tutto quello che sta sopra descrive una BARRA ORIZZONTALE in fondo allo
+     schermo: riga di tasti, altezza fissa 88px, larghezza a sesti. Dentro il
+     pannello di destra lo spazio e' l'opposto - stretto e alto - e con quelle
+     regole ogni spia restava in riga, si stirava per tutta l'altezza del
+     pannello (align-items:stretch) e teneva il suo min-width di 230px: da qui
+     le spie "altissime e strette" che sbordavano di lato.
+     Qui il monitor diventa un ELENCO IN COLONNA: una spia per riga, larga
+     quanto il pannello, alta quanto il suo contenuto.
+     NB: della scatola esterna non si tocca nulla (posizione, dimensioni,
+     bordi, raggio) - ci pensa gia' #aspDock > .asp-docked-win con !important.
+     Qui si cambia solo come il contenuto si dispone dentro. */
+  #aspDock > #solariumMonitorBar {
+    flex-direction: column;
+    align-items: center;        /* in colonna, allinea in ORIZZONTALE */
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    overflow-x: hidden;
+    overflow-y: auto;           /* con molti macchinari si scorre */
+  }
+  #aspDock > #solariumMonitorBar .solarium-lamp-item {
+    /* Larghezza dal pannello, non piu' un sesto della barra. Il tetto evita
+       che a pannello massimizzato una singola spia diventi lunga un metro. */
+    width: 100%;
+    max-width: 520px;
+    min-width: 0;
+    flex: 0 0 auto;             /* altezza dal contenuto, niente stiramento */
+    margin: 0;                  /* la spaziatura la da' il gap del contenitore */
+    padding: 10px 14px;
+    justify-content: flex-start;
+    gap: 14px;
+    text-align: left;
+  }
+  /* In riga larga il testo sta meglio a sinistra accanto all'immagine, invece
+     che centrato come nella barra stretta. */
+  #aspDock > #solariumMonitorBar .solarium-lamp-text {
+    align-items: flex-start;
+    text-align: left;
+  }
+
   #solariumMonitorTab {
     display: none;
     align-items: center;
@@ -4351,6 +4517,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
   }
+
+  // Chiusura raggiungibile da fuori: la usa il pannello laterale quando viene
+  // chiuso, per non lasciare la barra del monitor a galleggiare sull'agenda.
+  // Deve passare da closeBar() e non da un bar.style.display='none' scritto a
+  // mano, altrimenti resterebbero accesi il polling ogni secondo e il flag in
+  // localStorage che riapre la barra a ogni caricamento della pagina.
+  window.solariumMonitorClose = closeBar;
 
   badge.addEventListener('click', function(e) {
     e.stopPropagation();

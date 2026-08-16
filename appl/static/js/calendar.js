@@ -18903,6 +18903,14 @@ if (a.date) {
   // Expose openInfoChat all'esterno per il badge "info" in calendar.html
   window.openInfoChat = openInfoChat;
 
+  // Chiusura DETERMINISTICA, non toggleChat(): serve al pannello laterale, che
+  // chiudendosi deve lasciare l'agenda pulita. Con un toggle, chiamarlo su una
+  // finestra gia' chiusa la riaprirebbe.
+  window.closeInfoChat = function () {
+    AI.isOpen = false;
+    if (elModal) elModal.style.display = 'none';
+  };
+
   // ──────────────────────────────────────────────────────────────
   // INIT
   // ──────────────────────────────────────────────────────────────

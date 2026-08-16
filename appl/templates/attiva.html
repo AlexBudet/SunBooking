@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attivazione Tosca</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
+<style>
+  body { background:#f4f2f5; color:#1f2430; }
+  .wrap { max-width:760px; margin:0 auto; padding:28px 16px 64px; }
+  .card-att { background:#fff; border:1px solid #e4e0e8; border-radius:14px;
+              box-shadow:0 4px 18px rgba(135,100,124,.10); padding:26px 28px; }
+  .brand { font-weight:800; letter-spacing:.02em; color:#be185d; font-size:1.6rem; }
+  .step { display:none; }
+  .step.is-active { display:block; }
+  .steps-bar { display:flex; gap:6px; margin:18px 0 26px; }
+  .steps-bar span { flex:1; height:5px; border-radius:3px; background:#e4e0e8; }
+  .steps-bar span.done { background:#be185d; }
+  .form-label { font-weight:600; font-size:.92rem; }
+  .req::after { content:" *"; color:#dc3545; }
+  .hint { font-size:.85rem; color:#6b7280; }
+  .riepilogo dt { font-weight:600; color:#4b5563; font-size:.86rem; }
+  .riepilogo dd { margin-bottom:.6rem; }
+  .locked { background:#f8f7f9; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+{% if errore %}
+  <div class="card-att text-center">
+    <div class="brand mb-3">TOSCA</div>
+    <div style="font-size:2.4rem;">🔒</div>
+    <h5 class="mt-2">Link non valido</h5>
+    <p class="text-muted mb-0">{{ errore }}</p>
+  </div>
+{% else %}
+
+  <div class="text-center mb-3">
+    <div class="brand">TOSCA</div>
+    <div class="text-muted">Attivazione del servizio</div>
+  </div>
+
+  <div class="card-att">
+    <div class="steps-bar" id="stepsBar">
+      <span class="done"></span><span></span><span></span><span></span><span></span>
+    </div>
+
+    <!-- ══ 1. Azienda ══ -->
+    <section class="step is-active" data-step="1">
+      <h5>Dati dell'azienda</h5>
+      <p class="hint mb-3">Servono per il contratto e per la fatturazione. Puoi
+        interrompere e riprendere: quello che scrivi viene salvato a ogni passaggio.</p>
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label req" for="legal_business_name">Ragione sociale</label>
+          <input class="form-control" id="legal_business_name" maxlength="150"
+                 value="{{ ctx.business_name or '' }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="trade_name">Insegna del negozio</label>
+          <input class="form-control" id="trade_name" maxlength="150">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label req" for="legal_form">Forma giuridica</label>
+          <select class="form-select" id="legal_form">
+            <option value="">Scegli…</option>
+            <option>Ditta individuale</option>
+            <option>S.n.c.</option>
+            <option>S.a.s.</option>
+            <option>S.r.l.</option>
+            <option>S.r.l.s.</option>
+            <option>S.p.a.</option>
+            <option>Altro</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label req" for="vat_number">Partita IVA</label>
+          <input class="form-control" id="vat_number" maxlength="20">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="fiscal_code">Codice fiscale</label>
+          <input class="form-control" id="fiscal_code" maxlength="16">
+          <div class="hint">Solo se diverso dalla partita IVA.</div>
+        </div>
+        <div class="col-md-7">
+          <label class="form-label req" for="pec">PEC</label>
+          <input class="form-control" id="pec" type="email" maxlength="120">
+        </div>
+        <div class="col-md-5">
+          <label class="form-label" for="sdi_code">Codice destinatario SDI</label>
+          <input class="form-control" id="sdi_code" maxlength="7">
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 2. Sedi ══ -->
+    <section class="step" data-step="2">
+      <h5>Sede legale e negozio</h5>
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label req" for="legal_address">Indirizzo sede legale</label>
+          <input class="form-control" id="legal_address" maxlength="200">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label req" for="legal_cap">CAP</label>
+          <input class="form-control" id="legal_cap" maxlength="10">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label req" for="legal_city">Città</label>
+          <input class="form-control" id="legal_city" maxlength="100">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label req" for="legal_province">Prov.</label>
+          <input class="form-control" id="legal_province" maxlength="2">
+        </div>
+        <div class="col-12">
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="op_same_as_legal" checked>
+            <label class="form-check-label" for="op_same_as_legal">
+              Il negozio è allo stesso indirizzo
+            </label>
+          </div>
+        </div>
+      </div>
+      <div id="sedeOperativa" class="row g-3 mt-1" style="display:none;">
+        <div class="col-12">
+          <label class="form-label" for="op_address">Indirizzo del negozio</label>
+          <input class="form-control" id="op_address" maxlength="200">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="op_cap">CAP</label>
+          <input class="form-control" id="op_cap" maxlength="10">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="op_city">Città</label>
+          <input class="form-control" id="op_city" maxlength="100">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="op_province">Prov.</label>
+          <input class="form-control" id="op_province" maxlength="2">
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 3. Contatti e firmatario ══ -->
+    <section class="step" data-step="3">
+      <h5>Contatti e chi firma</h5>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label req" for="signer_first_name">Nome di chi firma</label>
+          <input class="form-control" id="signer_first_name" maxlength="80">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label req" for="signer_last_name">Cognome</label>
+          <input class="form-control" id="signer_last_name" maxlength="80">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label req" for="signer_fiscal_code">Codice fiscale di chi firma</label>
+          <input class="form-control" id="signer_fiscal_code" maxlength="16">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label req" for="signer_role">Qualifica</label>
+          <select class="form-select" id="signer_role">
+            <option value="">Scegli…</option>
+            <option>Titolare</option>
+            <option>Legale rappresentante</option>
+            <option>Amministratore</option>
+            <option>Procuratore</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label req" for="signer_mobile">Cellulare di chi firma</label>
+          <input class="form-control" id="signer_mobile" maxlength="30" placeholder="+39 333 1234567">
+          <div class="hint">Ci arriverà il codice per la firma.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label req" for="email">E-mail del negozio</label>
+          <input class="form-control" id="email" type="email" maxlength="120">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="phone">Telefono del negozio</label>
+          <input class="form-control" id="phone" maxlength="30">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="website">Sito o pagina social</label>
+          <input class="form-control" id="website" maxlength="200">
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 4. Il negozio ══ -->
+    <section class="step" data-step="4">
+      <h5>Come lavora il negozio</h5>
+      <p class="hint mb-3">Serve a preparare l'agenda: potrai cambiare tutto dopo.</p>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label req" for="opening_time">Apertura</label>
+          <input class="form-control" id="opening_time" type="time" value="09:00">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label req" for="closing_time">Chiusura</label>
+          <input class="form-control" id="closing_time" type="time" value="19:00">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label req" for="operators_count">Quante persone lavorano</label>
+          <input class="form-control" id="operators_count" type="number" min="1" max="60">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Giorni di chiusura</label>
+          <div>
+            {% for g in ['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'] %}
+            <div class="form-check form-check-inline">
+              <input class="form-check-input chiusura" type="checkbox" value="{{ g }}" id="ch{{ loop.index }}">
+              <label class="form-check-label" for="ch{{ loop.index }}">{{ g }}</label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="printer_model">Registratore telematico</label>
+          <select class="form-select" id="printer_model">
+            <option value="">Non ne ho / non lo collego</option>
+            <option value="rch_print_rt">RCH Print!T 3.0 RT</option>
+            <option value="rch_print_f">RCH Print F</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="current_software">Gestionale usato finora</label>
+          <input class="form-control" id="current_software" maxlength="100">
+        </div>
+        <div class="col-12">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="has_data_to_migrate">
+            <label class="form-check-label" for="has_data_to_migrate">
+              Ho un archivio clienti da trasferire in Tosca
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ 5. Riepilogo ══ -->
+    <section class="step" data-step="5">
+      <h5>Riepilogo</h5>
+      <p class="hint mb-3">Controlla i dati. Il contratto e la firma arrivano al passo successivo.</p>
+
+      <div class="p-3 mb-3 rounded locked">
+        <div class="fw-semibold mb-2">Servizio sottoscritto</div>
+        <div>Tosca Base{% if ctx.modules.web %} + Prenotazioni online{% endif %}{% if ctx.modules.pacchetti %} + Pacchetti{% endif %}{% if ctx.modules.solarium %} + Solarium{% endif %}</div>
+        <div class="mt-2">
+          {% if ctx.starter_total is not none %}
+            Attivazione: <strong>€ {{ '%.2f'|format(ctx.starter_total) }}</strong> + IVA<br>
+          {% endif %}
+          {% if ctx.saas_monthly_amount is not none %}
+            Canone mensile: <strong>€ {{ '%.2f'|format(ctx.saas_monthly_amount) }}</strong> + IVA
+          {% endif %}
+        </div>
+      </div>
+
+      <dl class="riepilogo row" id="riepilogo"></dl>
+
+      <div class="alert alert-secondary mt-3 mb-0">
+        <i class="bi bi-hourglass-split"></i>
+        La firma del contratto sarà disponibile a breve. Per ora i dati sono salvati:
+        ti ricontatteremo per completare l'attivazione.
+      </div>
+    </section>
+
+    <div class="d-flex justify-content-between align-items-center mt-4">
+      <button class="btn btn-outline-secondary" id="btnPrev" style="visibility:hidden">Indietro</button>
+      <span class="hint" id="salvato"></span>
+      <button class="btn btn-primary" id="btnNext">Avanti</button>
+    </div>
+  </div>
+
+  <p class="text-center hint mt-3 mb-0">
+    I tuoi dati sono usati per la stipula del contratto. Titolare del trattamento:
+    Alessio Budetta — alessio.budetta@pec.it
+  </p>
+
+{% endif %}
+</div>
+
+{% if not errore %}
+<script>
+const TOKEN = {{ token|tojson }};
+const CAMPI = ['legal_business_name','trade_name','legal_form','vat_number','fiscal_code',
+  'pec','sdi_code','legal_address','legal_cap','legal_city','legal_province',
+  'op_address','op_cap','op_city','op_province','email','phone','website',
+  'signer_first_name','signer_last_name','signer_fiscal_code','signer_role',
+  'signer_mobile','operators_count','printer_model','current_software'];
+
+let step = 1;
+const TOT = 5;
+
+function raccogli() {
+  const out = {};
+  CAMPI.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.value !== '') out[id] = el.value;
+  });
+  out.op_same_as_legal   = document.getElementById('op_same_as_legal').checked;
+  out.has_data_to_migrate = document.getElementById('has_data_to_migrate').checked;
+  const ot = document.getElementById('opening_time').value;
+  const ct = document.getElementById('closing_time').value;
+  if (ot) out.opening_time = ot;
+  if (ct) out.closing_time = ct;
+  const giorni = [...document.querySelectorAll('.chiusura:checked')].map(c => c.value);
+  out.closing_days = JSON.stringify(giorni);
+  return out;
+}
+
+async function salva() {
+  const nota = document.getElementById('salvato');
+  nota.textContent = 'Salvataggio…';
+  try {
+    const r = await fetch(`/attiva/${encodeURIComponent(TOKEN)}/step`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(raccogli())
+    });
+    nota.textContent = r.ok ? 'Salvato ✓' : 'Salvataggio non riuscito';
+  } catch (e) {
+    nota.textContent = 'Nessuna connessione: riprova';
+  }
+  setTimeout(() => { nota.textContent = ''; }, 2500);
+}
+
+// Blocca l'avanzamento se manca un campo obbligatorio del passo corrente.
+function validaStep(n) {
+  const sec = document.querySelector(`.step[data-step="${n}"]`);
+  let ok = true;
+  sec.querySelectorAll('.req').forEach(lab => {
+    const el = document.getElementById(lab.getAttribute('for'));
+    if (!el) return;
+    const vuoto = !el.value || !el.value.trim();
+    el.classList.toggle('is-invalid', vuoto);
+    if (vuoto) ok = false;
+  });
+  return ok;
+}
+
+function mostra(n) {
+  document.querySelectorAll('.step').forEach(s =>
+    s.classList.toggle('is-active', +s.dataset.step === n));
+  document.querySelectorAll('#stepsBar span').forEach((b, i) =>
+    b.classList.toggle('done', i < n));
+  document.getElementById('btnPrev').style.visibility = n === 1 ? 'hidden' : 'visible';
+  document.getElementById('btnNext').textContent = n === TOT ? 'Ho finito' : 'Avanti';
+  if (n === TOT) riepiloga();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function riepiloga() {
+  const v = id => (document.getElementById(id)?.value || '—');
+  const righe = [
+    ['Ragione sociale', v('legal_business_name')],
+    ['Partita IVA',     v('vat_number')],
+    ['PEC',             v('pec')],
+    ['Sede legale',     `${v('legal_address')}, ${v('legal_cap')} ${v('legal_city')} (${v('legal_province')})`],
+    ['Firma',           `${v('signer_first_name')} ${v('signer_last_name')} — ${v('signer_role')}`],
+    ['Cellulare',       v('signer_mobile')],
+    ['Orario',          `${v('opening_time')} – ${v('closing_time')}`],
+    ['Persone',         v('operators_count')],
+  ];
+  document.getElementById('riepilogo').innerHTML = righe
+    .map(([k, val]) => `<dt class="col-sm-4">${k}</dt><dd class="col-sm-8">${val}</dd>`).join('');
+}
+
+document.getElementById('btnNext').addEventListener('click', async () => {
+  if (!validaStep(step)) return;
+  await salva();
+  if (step < TOT) { step++; mostra(step); }
+});
+document.getElementById('btnPrev').addEventListener('click', () => {
+  if (step > 1) { step--; mostra(step); }
+});
+document.getElementById('op_same_as_legal').addEventListener('change', function () {
+  document.getElementById('sedeOperativa').style.display = this.checked ? 'none' : '';
+});
+</script>
+{% endif %}
+</body>
+</html>

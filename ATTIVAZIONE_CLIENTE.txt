@@ -1,0 +1,177 @@
+================================================================================
+  ATTIVAZIONE CLIENTE - dettagli e cose da tenere a mente
+  Aggiornato: 11/08/2026
+================================================================================
+
+
+--------------------------------------------------------------------------------
+1. IL GIRO COMPLETO, IN ORDINE
+--------------------------------------------------------------------------------
+
+  1) Pannello owner  ->  "Invita un cliente (contratto da firmare)"
+     Compili: nome negozio, e-mail, attivazione EUR, canone EUR, moduli.
+     Premi "Genera link".
+     ==> NON viene creato nessun database. Nasce solo la pratica nel registro.
+
+  2) Mandi il link (pulsante WhatsApp o copia-incolla).
+     Il link scade dopo 14 giorni e vale UNA VOLTA SOLA.
+
+  3) Il cliente apre il link e compila 5 passi:
+     azienda -> sedi -> contatti e firmatario -> come lavora -> riepilogo.
+     Salva a ogni "Avanti": puo' interrompere e riprendere dallo stesso link.
+
+  4) [ANCORA DA FARE] Generazione PDF del contratto + firma con coupon InfoCert.
+
+  5) Incasso dell'attivazione.
+
+  6) Solo ADESSO si crea il negozio: provision_tenant().
+     Crea il database (da solo), le tabelle, i dati iniziali, scrive nel .env,
+     monta il negozio su /s/<idx> SENZA riavviare, e lo registra.
+
+
+--------------------------------------------------------------------------------
+2. LE COSE CHE MI HANNO CONFUSO OGGI (e la risposta breve)
+--------------------------------------------------------------------------------
+
+  "Devo creare un nuovo server PostgreSQL su Azure?"
+      NO. Il server e' uno solo: sunbooking.postgres.database.azure.com
+      I database sono cassetti dentro quel server. Si paga il SERVER, non i
+      database: un database in piu' costa ZERO.
+
+  "Ma allora ogni cliente serve un database creato a mano nel portale?"
+      NON PIU'. provision_tenant() lo crea da solo, connettendosi al database
+      di servizio "postgres" con le stesse credenziali delle altre URI.
+      Se un giorno fallisse (permessi), lo dice chiaramente e lo crei dal
+      portale come prima: Portale -> il server -> Impostazioni -> Database.
+
+  "Serve un utente dedicato per ogni database?"
+      NO. Si usa sempre l'utente Alessio. Il ruolo "tosca_registry_app" era una
+      mia complicazione inutile, e' stato eliminato.
+
+  "Il registry e' il 4 database, quindi il primo cliente e' /s/5?"
+      NO. Il registry NON e' un negozio: ha REGISTRY_DATABASE_URI, che non
+      entra nell'elenco dei tenant. Il primo cliente a pagamento e' idx 4,
+      indirizzo /s/4.
+
+  "Basta aggiungere la variabile al .env?"
+      In locale si'. In cloud NO: il .env non e' nel repo, quindi su Azure
+      contano le VARIABILI DI AMBIENTE della Web App.
+      Portale -> Web App -> Impostazioni -> Variabili di ambiente.
+      ATTENZIONE: salvarle RIAVVIA l'app.
+
+
+--------------------------------------------------------------------------------
+3. TRAPPOLE DA RICORDARE
+--------------------------------------------------------------------------------
+
+  [!] IL NOME DELLA VARIABILE DEL REGISTRO
+      Deve essere REGISTRY_DATABASE_URI.
+      Se la chiami SQLALCHEMY_DATABASE_URI4 il registro viene montato come se
+      fosse un negozio. Non farlo.
+
+  [!] LA PASSWORD NELLE URI
+      Mi ha gia' fregato una volta: avevo scritto una password vecchia e il
+      registro non si connetteva.
+      REGOLA: copia utente/password/host da una URI che gia' funziona e cambia
+      SOLO il nome del database in fondo.
+      Password senza  @  :  /  ?  #  &   -> altrimenti vanno percent-encoded.
+      >> LA STESSA CORREZIONE VA FATTA ANCHE NELLE APP SETTINGS DI AZURE <<
+
+  [!] GLI IMPORTI DELL'INVITO DEVONO COINCIDERE CON IL CONTRATTO
+      Nella prova ho messo canone 59, ma il contratto (Allegato C.6) dice 39.
+      Il PDF che verra' firmato e il record nel registro devono dire la stessa
+      cifra, altrimenti e' contestabile. Se cambio listino, cambio ENTRAMBI.
+
+  [!] I MIEI TRE DATABASE NON HANNO CONTRATTO
+      idx 1 suncity, 2 sunexp3, 3 sunbookingdb (prova) hanno is_owner_db = true:
+      niente contratto, niente link, mai fatturati, pallino sempre "owner".
+      I clienti creati dal form nascono con is_owner_db = false.
+
+  [!] IL LINK E' MONOUSO E SCADE
+      14 giorni (INVITE_TTL_DAYS). Se scade se ne genera un altro.
+      Token inesistente, scaduto o gia' usato danno tutti lo stesso messaggio:
+      e' voluto, non si deve capire quale dei tre casi sia.
+
+  [!] IL CLIENTE NON PUO' TOCCARE PREZZI E MODULI
+      Il form pubblico accetta solo i campi anagrafici. Importi, moduli e stato
+      del contratto li decido io all'invito e al cliente arrivano in sola
+      lettura. Anche manipolando la richiesta non puo' scontarsi il canone.
+
+
+--------------------------------------------------------------------------------
+4. SE QUALCOSA VA STORTO
+--------------------------------------------------------------------------------
+
+  Il registro non risponde (password, firewall, server giu'):
+      L'app PARTE LO STESSO e torna a usare owner_billing.json.
+      Nei log: "[registry] lettura fatturazione fallita, uso il JSON".
+      Lo stack trace completo esce UNA VOLTA SOLA, poi solo un warning.
+
+  Tornare indietro del tutto:
+      Togli REGISTRY_DATABASE_URI dalle App Settings di Azure e riavvia.
+      owner_billing.json e' ancora li', intatto: NON cancellarlo.
+
+  Controllare a mano cosa c'e' nel registro (query da VS Code):
+      SELECT t.idx, t.business_name, t.status, b.is_owner_db
+      FROM tenant t LEFT JOIN billing b ON b.tenant_id = t.id ORDER BY t.idx;
+
+      SELECT c.id, c.status, c.legal_business_name, c.vat_number, c.updated_at
+      FROM contract c ORDER BY c.updated_at DESC;
+
+      SELECT i.id, i.expires_at, i.opened_at, i.used_at, t.business_name
+      FROM onboarding_invite i JOIN tenant t ON t.id = i.tenant_id
+      ORDER BY i.created_at DESC;
+
+
+--------------------------------------------------------------------------------
+5. DOVE STANNO LE COSE
+--------------------------------------------------------------------------------
+
+  Database registro : tosca_registry  (stesso server degli altri)
+  Tabelle           : tenant, onboarding_invite, contract, contract_consent,
+                      contract_signature, billing, invoice, payment
+
+  Codice
+    appl/registry_models.py     modelli + sessione (engine SUO, separato da
+                                quello dei negozi: non si possono confondere)
+    wsgi.py                     provision_tenant(), ensure_database_exists(),
+                                /owner-setup/invite, /attiva/<token>
+    appl/templates/attiva.html  il form pubblico a 5 passi
+    appl/templates/owner_setup.html  il pulsante "Invita un cliente"
+
+  Documenti
+    contratto/CONTRATTO_TOSCA.html    contratto + allegati A, B, C
+    contratto/FORM_ATTIVAZIONE.html   progetto e stato dei lavori
+    registry/*.sql                    script di creazione del registro
+
+
+--------------------------------------------------------------------------------
+6. COSA MANCA ANCORA
+--------------------------------------------------------------------------------
+
+  [ ] Partita IVA -> poi utenza OpenAPI per la fatturazione elettronica
+      (la colonna billing.einvoice_customer_id e' gia' pronta)
+
+  [ ] Generazione del PDF del contratto compilato
+      Oggi il contratto esiste in Markdown e HTML, NON in PDF.
+      E' il prerequisito della firma.
+
+  [ ] Firma con coupon InfoCert
+      Da chiedere a InfoCert, e' UNA domanda sola:
+      "Un coupon di firma acquistato da me puo' essere speso dal destinatario
+       dentro il flusso 'Richiedi Firma' di Infocert Sign Cloud - quindi
+       firmando dal browser, senza installare nulla - e con quale livello di
+       firma?"
+      Se SI: ~3,30 EUR a contratto, nessun canone, nessuna installazione per
+      il cliente. Se NO: valutare Certyneo (chiedere da quale piano parte
+      l'API: le loro pagine dicono tre cose diverse, il ballo e' fra 0, 108 e
+      468 EUR l'anno).
+
+  [ ] Validazione del contratto da un avvocato PRIMA di farlo firmare.
+      In particolare: clausole ex artt. 1341-1342, DPA (Allegato B),
+      limitazione di responsabilita'.
+
+  [ ] Compilare nel contratto: partita IVA, REA, requisiti minimi CPU/RAM
+      (li rilevo da Gestione risorse), e i nomi dei fornitori nell'Allegato B.
+
+================================================================================

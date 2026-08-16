@@ -95,8 +95,8 @@ trasferisce al Cliente alcun diritto di proprietà, né alcun diritto di sfrutta
 sul Software. Il Cliente acquisisce esclusivamente il diritto di utilizzo del Servizio nei
 limiti qui previsti.
 
-2.3 Il Servizio è erogato in modalità SaaS: la banca dati è ospitata su infrastruttura del
-Licenziante o di suoi fornitori e vi si accede tramite rete Internet. Il Cliente può utilizzare
+2.3 Il Servizio è erogato tramite Internet: la banca dati è ospitata su infrastruttura del
+Licenziante o di suoi fornitori e vi si accede tramite collegamento Internet. Il Cliente può utilizzare
 il Servizio, a propria scelta e senza differenza di corrispettivo:
    a) mediante **applicazione installata** sulle proprie postazioni, fornita dal Licenziante e
       costantemente collegata alla banca dati in cloud;
@@ -119,10 +119,11 @@ L'estensione a ulteriori sedi richiede accordo scritto e comporta distinto corri
 3.1 Il Servizio comprende i moduli sottoscritti dal Cliente, come specificati nel modulo di
 attivazione e dettagliati nell'**Allegato A – Caratteristiche del servizio**:
 
-- **TOSCA BASE**: agenda, gestione operatori, anagrafica e storico clienti, cassa, gestione
-  incassi, report gestionali, report fiscali, pannelli di impostazione.
-- **TOSCA PREMIUM**: prenotazioni online, integrazione WhatsApp, strumenti solarium, gestione
-  pacchetti e prepagate, strumenti di marketing.
+- **TOSCA BASE** (canone STANDARD): agenda, gestione operatori, anagrafica e storico clienti,
+  cassa, gestione incassi, report gestionali, report fiscali, pannelli di impostazione.
+- **TOSCA PREMIUM** (canone PREMIUM): TOSCA BASE **più uno, alcuni o tutti** i seguenti moduli, a
+  scelta del Cliente e allo stesso corrispettivo: prenotazioni online, integrazione WhatsApp,
+  strumenti solarium, gestione pacchetti e prepagate, strumenti di marketing.
 
 3.2 L'Allegato A è documento tecnico soggetto ad aggiornamento nel tempo secondo quanto
 previsto all'art. 11. La versione vigente è resa disponibile al Cliente all'interno del
@@ -135,10 +136,10 @@ nell'Allegato A e, in particolare, quanto elencato agli artt. 9.3, 13, 14 e 15.
 
 4.1 L'attivazione ha inizio con la compilazione, da parte del Cliente, del **modulo dati online**
 messo a disposizione dal Licenziante. I dati ivi inseriti sono utilizzati per la creazione e la
-pre-configurazione dell'ambiente dedicato al Cliente (di seguito "istanza").
+pre-configurazione dell'**ambiente dedicato** al Cliente.
 
 4.2 A seguito della sottoscrizione del contratto e del ricevimento del pagamento di cui
-all'art. 7.1, il Licenziante procede alla creazione dell'istanza e della relativa banca dati
+all'art. 7.1, il Licenziante procede alla creazione dell'ambiente dedicato e della relativa banca dati
 dedicata, entro «numero» giorni lavorativi.
 
 4.3 **Migrazione dei dati.** Il Licenziante cura, tramite proprio incaricato, la migrazione dei
@@ -215,19 +216,30 @@ conformarvisi autonomamente.
 | Voce | Importo | Periodicità |
 |---|---|---|
 | Attivazione e Periodo Starter | **€ 599,00** + IVA | una tantum, anticipato |
-| Canone mensile, al termine del Periodo Starter | **€ 39,00** + IVA | mensile anticipato |
-| Modulo aggiuntivo (per ciascun modulo sottoscritto) | **€ 20,00** + IVA | mensile anticipato |
+| Canone mensile **STANDARD** — TOSCA BASE | **€ 39,00** + IVA | mensile anticipato |
+| Canone mensile **PREMIUM** — TOSCA BASE più i moduli scelti | **€ 59,00** + IVA | mensile anticipato |
+
+Il canone **PREMIUM** dà diritto a **uno, alcuni o tutti** i moduli di TOSCA PREMIUM
+(prenotazioni online, pacchetti e prepagate, strumenti solarium, strumenti marketing): il
+corrispettivo è il medesimo qualunque sia il numero di moduli attivati, e non è previsto alcun
+costo per singolo modulo. I moduli sottoscritti sono indicati nel modulo di attivazione.
+
+Il passaggio da STANDARD a PREMIUM può essere richiesto in qualsiasi momento e decorre dal mese
+successivo. Il passaggio inverso segue i termini di preavviso dell'art. 7.4.
 
 6.2 Gli importi si intendono al netto di IVA e di ogni altra imposta o onere di legge. Il
-corrispettivo di attivazione comprende l'intero Periodo Starter di cui all'art. 7 e non è
-frazionabile né rimborsabile in caso di recesso anticipato del Cliente.
+corrispettivo di attivazione comprende l'intero Periodo Starter di cui all'art. 7 e **non è
+riducibile né rimborsabile** in caso di recesso anticipato del Cliente. L'eventuale
+rateizzazione di cui all'art. 6.8 costituisce mera dilazione di pagamento e non incide
+sull'importo dovuto.
 
 6.3 **Fatturazione elettronica.** Le fatture sono emesse in formato elettronico e trasmesse al
 Sistema di Interscambio secondo il codice destinatario o la PEC comunicati dal Cliente.
 
-6.4 **Modalità di pagamento.** Il corrispettivo di attivazione è pagato mediante bonifico
-bancario prima dell'attivazione. Il canone mensile è addebitato mediante **mandato SEPA Direct
-Debit** rilasciato dal Cliente contestualmente alla sottoscrizione.
+6.4 **Modalità di pagamento.** Il corrispettivo di attivazione è pagato, **a scelta del
+Cliente**, in un'**unica soluzione** mediante bonifico bancario prima dell'attivazione, oppure in
+**sei rate mensili** secondo l'art. 6.8. Il canone mensile è addebitato mediante **mandato SEPA
+Direct Debit** rilasciato dal Cliente contestualmente alla sottoscrizione.
 
 6.5 **Data di addebito.** Il canone è **anticipato**: quello relativo a ciascun mese è
 addebitato il **penultimo giorno lavorativo del mese precedente**. A titolo di esempio, il
@@ -246,10 +258,27 @@ variazione dell'indice ISTAT FOI del periodo, il Cliente può recedere senza pen
 giorni dalla comunicazione, con effetto dalla data di decorrenza del nuovo canone. Resta salvo
 quanto previsto all'art. 16.4 per i costi dipendenti dal provider di messaggistica.
 
+6.8 **Rateizzazione del corrispettivo di attivazione.** In alternativa al pagamento in unica
+soluzione, il Cliente può corrispondere il corrispettivo di attivazione in **sei rate mensili**,
+secondo il piano indicato nell'Allegato C.6. La rateizzazione:
+
+   a) **non modifica l'importo dovuto** e non comporta interessi, spese o maggiorazioni di alcun
+      genere;
+   b) **non incide sulla fatturazione**: il Licenziante emette **un'unica fattura** per l'intero
+      corrispettivo di attivazione alla sottoscrizione del contratto, con addebito dell'IVA per
+      intero unitamente alla prima rata. Le rate successive costituiscono mero pagamento
+      dilazionato e **non danno luogo a ulteriori fatture**;
+   c) comporta l'addebito delle rate successive alla prima mediante il medesimo **mandato SEPA
+      Direct Debit** di cui all'art. 6.4, con periodicità mensile;
+   d) **decade** al ricorrere delle condizioni di cui all'art. 8.8: in tal caso opera la
+      **decadenza dal beneficio del termine** e l'intero importo residuo diviene immediatamente
+      esigibile.
+
 ### Art. 7 — Durata, rinnovo e recesso
 
 7.1 Il contratto ha efficacia **dalla data di ricezione del pagamento** relativo al
-corrispettivo di attivazione (di seguito "data di efficacia").
+corrispettivo di attivazione o, in caso di rateizzazione ai sensi dell'art. 6.8, **dalla data di
+ricezione della prima rata** (di seguito "data di efficacia").
 
 7.2 **Periodo Starter.** Il corrispettivo di attivazione comprende **6 (sei) mesi di servizio**
 decorrenti dalla data di efficacia. **In favore del Cliente**, il Periodo Starter è prorogato
@@ -322,6 +351,22 @@ integri.
 conservazione dei dati di cui all'art. 20.1.c può richiedere la riattivazione del Servizio senza
 corrispondere nuovamente il corrispettivo di attivazione.
 
+8.8 **Rate del corrispettivo di attivazione.** Il mancato pagamento delle rate di cui all'art.
+6.8 è soggetto alla **medesima disciplina** prevista dal presente articolo per i canoni mensili.
+In particolare:
+
+   a) il mancato pagamento di una singola rata **non comporta alcuna limitazione** del Servizio,
+      alle condizioni dell'art. 8.1;
+   b) la soglia di cui all'art. 8.3 si intende raggiunta quando risultino contemporaneamente
+      insolute **due rate**, anche non consecutive; **il pagamento anche di una sola di esse
+      riporta il Cliente sotto la soglia** e fa venir meno ogni effetto della presente clausola;
+   c) si applicano integralmente la procedura di diffida ad adempiere dell'art. 8.4, gli effetti
+      dell'art. 8.5, la garanzia di esportazione dei Dati dell'art. 8.6 e la facoltà di
+      riattivazione dell'art. 8.7;
+   d) decorso inutilmente il termine della diffida, il Licenziante può **disattivare il Servizio**
+      e opera la decadenza dal beneficio del termine di cui all'art. 6.8.d, con conseguente
+      **immediata esigibilità dell'intero importo residuo** del corrispettivo di attivazione.
+
 ### Art. 9 — Assistenza
 
 9.1 **Canali.** Le richieste di assistenza si aprono esclusivamente tramite: (a) la sezione
@@ -383,7 +428,7 @@ all'art. 23.
 ### Art. 11 — Aggiornamenti ed evoluzione del Servizio
 
 11.1 Gli aggiornamenti sono rilasciati in automatico dal Licenziante e resi effettivi
-sull'istanza del Cliente **su azione del Cliente stesso**, dall'apposita sezione del Servizio.
+sull'ambiente del Cliente **su azione del Cliente stesso**, dall'apposita sezione del Servizio.
 Il Licenziante può rendere obbligatori gli aggiornamenti necessari per ragioni di sicurezza o
 di adeguamento normativo, dandone comunicazione.
 
@@ -513,13 +558,15 @@ senza penali ai sensi dell'art. 11.3.
 
 ### Art. 17 — Backup e continuità
 
-17.1 Il Licenziante effettua **salvataggi periodici automatici** dei Dati del Cliente
-nell'ambito delle proprie misure di sicurezza. **Il Licenziante non assume obblighi in ordine
-alla frequenza dei salvataggi, al periodo di ritenzione, ai tempi di ripristino né alla quantità
-massima di dati recuperabili**, che restano rimessi alla sua organizzazione tecnica e possono
-variare nel tempo.
+17.1 Il Licenziante effettua **salvataggi automatici** dei Dati del Cliente nell'ambito delle
+proprie misure di sicurezza, con **frequenza non inferiore a quella giornaliera** e **periodo di
+ritenzione non inferiore a 7 (sette) giorni**. La configurazione in essere è indicata
+nell'**Allegato C.4**. Fermo il minimo che precede, **il Licenziante non assume obblighi in
+ordine ai tempi di ripristino né alla quantità massima di dati recuperabili** e può variare le
+modalità di salvataggio, nel rispetto del minimo medesimo, aggiornando l'Allegato C.4 ai sensi
+dell'art. 26.3.
 
-17.2 I backup hanno finalità di *disaster recovery* dell'infrastruttura e **non costituiscono
+17.2 I backup servono a ripristinare l'infrastruttura in caso di guasto grave e **non costituiscono
 servizio di archiviazione, di conservazione a norma o di ripristino puntuale su richiesta**. Il
 ripristino selettivo di dati cancellati o alterati per fatto del Cliente costituisce assistenza
 straordinaria ai sensi dell'art. 9.3, è eseguito compatibilmente con i salvataggi effettivamente
@@ -527,6 +574,15 @@ disponibili al momento della richiesta e **non è garantito nell'esito**.
 
 17.3 Il Licenziante non garantisce il recupero di dati la cui perdita sia imputabile al Cliente,
 ai suoi incaricati o a terzi che abbiano avuto accesso mediante le credenziali del Cliente.
+
+17.4 **Separazione dei dati.** I Dati del Cliente sono tenuti **separati** da quelli degli altri
+clienti del Licenziante, anche nei salvataggi. Il ripristino richiesto da un cliente non comporta
+in alcun caso accesso ai dati di altri clienti.
+
+17.5 **Mutamento dei fornitori.** Il Licenziante può mutare in qualsiasi momento i propri
+fornitori e le modalità tecniche di erogazione del Servizio, fermi il minimo di cui all'art. 17.1
+e i limiti dell'Allegato B. Tale mutamento **non costituisce modifica del Servizio** ai sensi
+dell'art. 11 e non attribuisce al Cliente diritto di recesso o indennizzo.
 
 ### Art. 18 — Proprietà intellettuale
 
@@ -729,8 +785,10 @@ aver letto, compreso e di **approvare specificamente** le seguenti clausole:
 
 - **art. 2.2 e 18** — proprietà esclusiva del Software e limiti dei diritti acquisiti dal Cliente;
 - **art. 5.2** — divieti d'uso a carico del Cliente;
-- **art. 6.2** — non frazionabilità e non rimborsabilità del corrispettivo di attivazione;
+- **art. 6.2** — non riducibilità e non rimborsabilità del corrispettivo di attivazione;
 - **art. 6.7** — facoltà del Licenziante di aggiornare i corrispettivi;
+- **art. 6.8.d e 8.8** — decadenza dal beneficio del termine in caso di rate insolute, immediata
+  esigibilità dell'intero residuo e facoltà di disattivazione del Servizio;
 - **art. 7.5** — facoltà di recesso del Licenziante;
 - **art. 7.6** — clausola risolutiva espressa;
 - **art. 8.3 e 8.4** — soglia di disattivazione per morosità e risoluzione previa diffida;
@@ -746,8 +804,9 @@ aver letto, compreso e di **approvare specificamente** le seguenti clausole:
   l'integrazione WhatsApp e per la dismissione del modulo;
 - **art. 16.4** — adeguamento del corrispettivo del modulo WhatsApp per aumento delle tariffe
   del provider;
-- **art. 17.1, 17.2 e 17.3** — assenza di obblighi su frequenza, ritenzione ed esito dei backup e
-  limiti del ripristino dati;
+- **art. 17.1, 17.2, 17.3 e 17.5** — limiti degli obblighi sui backup quanto a tempi di
+  ripristino e quantità di dati recuperabili, limiti del ripristino selettivo e facoltà di
+  mutamento dell'infrastruttura;
 - **art. 20.1 e 20.4** — effetti della cessazione, termine di conservazione e cancellazione dei dati;
 - **art. 23.1, 23.2, 23.3 e 23.5** — limitazione di responsabilità, esclusioni, massimale e
   termine per la contestazione;
@@ -767,8 +826,8 @@ Il legale rappresentante «nome cognome»
 Il presente contratto è sottoscritto con **firma elettronica** apposta tramite la procedura
 online resa disponibile dal Licenziante. Del processo di sottoscrizione è conservato un rapporto
 di audit contenente: identificativo univoco della pratica, dati anagrafici del firmatario,
-indirizzo IP e *user agent*, marca temporale, impronta crittografica (SHA-256) del documento
-sottoscritto, evidenza della verifica del codice OTP inviato all'utenza mobile del firmatario e
+indirizzo di collegamento e tipo di dispositivo usato, data e ora, impronta informatica del
+documento sottoscritto, evidenza della verifica del codice OTP inviato all'utenza mobile del firmatario e
 registrazione distinta delle due manifestazioni di consenso (contratto e clausole ex artt.
 1341-1342 c.c.).
 
@@ -863,14 +922,12 @@ utilizzabile offline** (art. 15.3).
 | Connessione Internet | 2 Mbit/s in download, 1 Mbit/s in upload | 10 Mbit/s |
 | Rete locale | Necessaria per il collegamento al registratore telematico | Cablata |
 
-**Accesso a servizi esterni.** Il Servizio carica alcune librerie da reti di distribuzione di
-contenuti pubbliche (`cdn.jsdelivr.net`, `cdnjs.cloudflare.com`). La rete del Cliente non deve
-bloccarne l'accesso: eventuali filtri, proxy o firewall che impediscano tali connessioni possono
-compromettere il funzionamento dell'interfaccia.
+**Accesso a Internet senza restrizioni.** Per funzionare, il Servizio deve poter raggiungere
+liberamente Internet. Reti con filtri o blocchi particolari possono impedirne il corretto
+funzionamento: in tal caso il Licenziante indica al Cliente le modifiche da apportare.
 
-**Consumo di banda.** A regime il Servizio impiega una quantità di banda molto contenuta,
-nell'ordine di pochi kbit/s per postazione. Il fabbisogno maggiore si concentra nel primo
-caricamento di ciascuna pagina, quando la cache del browser è vuota.
+**Consumo di connessione.** Il Servizio consuma pochissima connessione. Il consumo maggiore si ha
+alla prima apertura di ogni schermata.
 
 ---
 ---
@@ -966,7 +1023,7 @@ Il Licenziante adotta misure tecniche e organizzative adeguate, fra cui:
 - **cifratura delle comunicazioni** e cifratura dei dati a riposo;
 - **credenziali nominative** per utente, con password protette mediante funzioni di hashing, e
   profilazione degli accessi per ruolo;
-- **salvataggi automatici periodici**, con finalità di disaster recovery (art. 17);
+- **salvataggi automatici periodici**, per il ripristino in caso di guasto grave (art. 17);
 - accesso ai dati **limitato al Licenziante e ai suoi incaricati**, per le sole attività di
   assistenza.
 
@@ -1030,10 +1087,15 @@ Assistenza ordinaria compresa: **3 ore/mese**, non cumulabili.
 
 | Voce | Valore |
 |---|---|
-| Salvataggi | Automatici e periodici, effettuati dal Licenziante nell'ambito delle proprie misure di sicurezza |
-| Frequenza e ritenzione | Non oggetto di impegno contrattuale (art. 17.1) |
-| Finalità | Disaster recovery dell'infrastruttura |
+| Salvataggi | Automatici, **giornalieri** |
+| Ritenzione | **35 giorni** (minimo contrattuale garantito: 7 giorni, art. 17.1) |
+| Ripristino | A **qualsiasi istante** compreso nel periodo di ritenzione |
+| Finalità | Ripristino dell'infrastruttura in caso di guasto grave |
 | Ripristino selettivo | Assistenza straordinaria, compatibilmente con i salvataggi disponibili, senza garanzia di esito (art. 17.2) |
+| Conservazione oltre la ritenzione | **Non prevista.** Il Cliente vi provvede autonomamente ai sensi dell'art. 20.4 |
+
+I valori della presente tabella sono quelli in essere alla data di aggiornamento dell'Allegato e
+possono variare nel rispetto del minimo di cui all'art. 17.1.
 
 ## C.5 — Assistenza straordinaria
 
@@ -1044,6 +1106,22 @@ preventivo**, accettato per iscritto anche via e-mail prima dell'intervento.
 
 | Voce | Importo | Quando |
 |---|---|---|
-| Attivazione e Periodo Starter | € 599,00 + IVA | Bonifico, prima dell'attivazione |
-| Canone mensile | € 39,00 + IVA | SEPA, penultimo giorno lavorativo del mese precedente |
-| Modulo aggiuntivo (cadauno) | € 20,00 + IVA | SEPA, insieme al canone |
+| Attivazione e Periodo Starter | € 599,00 + IVA | Bonifico prima dell'attivazione, **oppure in 6 rate** (sotto) |
+| Canone **STANDARD** — solo TOSCA BASE | € 39,00 + IVA | SEPA, penultimo giorno lavorativo del mese precedente |
+| Canone **PREMIUM** — BASE + moduli a scelta | € 59,00 + IVA | SEPA, penultimo giorno lavorativo del mese precedente |
+
+**Pagamento rateale dell'attivazione (art. 6.8).** A scelta del Cliente, senza interessi né
+maggiorazioni:
+
+| Rata | Imponibile | IVA 22% | Totale da pagare |
+|---|---|---|---|
+| 1ª — alla sottoscrizione | € 99,00 | € 131,78 | **€ 230,78** |
+| 2ª → 6ª — mensili | € 100,00 ciascuna | — | **€ 100,00** ciascuna |
+| **Totale** | **€ 599,00** | **€ 131,78** | **€ 730,78** |
+
+La fattura è **una sola**, emessa alla sottoscrizione per l'intero corrispettivo: l'IVA è
+interamente assolta con la prima rata e le rate successive non danno luogo ad altre fatture.
+Dal settimo mese decorre il canone mensile di cui alla tabella precedente.
+
+Il PREMIUM comprende **uno, alcuni o tutti** i moduli elencati nell'Allegato A.2 allo stesso
+prezzo: non esiste un costo per singolo modulo.

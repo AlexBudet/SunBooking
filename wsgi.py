@@ -510,8 +510,8 @@ _BILLING_DEFAULTS = {
     'saas_next_renewal': None,
     'max_payment_days': 15,        # giorni entro cui il pagamento è "in attesa" (giallo)
     'is_owner_db': False,          # True = database dell'owner, mai fatturabile, sempre verde
-    'fiscozen_contact_id': None,   # placeholder per API FiscoZen
-    'revolut_account_ref': None,   # placeholder per API Revolut
+    'einvoice_customer_id': None,  # id cliente presso il provider di fatturazione (OpenAPI)
+    'payment_customer_ref': None,  # riferimento cliente presso il provider di pagamenti
     'invoices': [],
     'payments': [],
 }
@@ -525,6 +525,11 @@ _BILLING_DEFAULTS = {
 # Se REGISTRY_DATABASE_URI non e' configurata si continua a usare il file, che
 # resta anche come rete di sicurezza durante il passaggio.
 
+# Alzato al primo fallimento di lettura del registro: serve solo a non
+# ripetere lo stack trace completo a ogni richiesta.
+_REGISTRY_READ_FAILED = False
+
+
 def _registry_on():
     try:
         from appl.registry_models import registry_enabled
@@ -535,6 +540,30 @@ def _registry_on():
 
 def _iso(d):
     return d.isoformat() if d is not None else None
+
+
+def _piano_tenant(idx):
+    """Piano sottoscritto da un negozio: 'standard' | 'premium' | 'custom'.
+
+    None quando non c'e' un contratto — e' il caso dei tre database
+    dell'owner, che non ne hanno e restano liberi di attivare tutto.
+    In caso di registro irraggiungibile si torna None: meglio lasciare il
+    pannello com'e' che bloccare i moduli per un problema di connessione.
+    """
+    if not _registry_on():
+        return None
+    try:
+        from appl.registry_models import registry_session, Tenant, Contract
+        with registry_session() as s:
+            row = (s.query(Contract.price_plan)
+                    .join(Tenant, Tenant.id == Contract.tenant_id)
+                    .filter(Tenant.idx == idx)
+                    .order_by(Contract.id.desc())
+                    .first())
+            return row[0] if row else None
+    except Exception:
+        root_app.logger.warning("[registry] piano del tenant %s non leggibile", idx)
+        return None
 
 
 def _load_billing_json():
@@ -568,8 +597,8 @@ def _load_billing():
                     'saas_next_renewal':   _iso(b.saas_next_renewal),
                     'max_payment_days':    b.max_payment_days,
                     'is_owner_db':         bool(b.is_owner_db),
-                    'fiscozen_contact_id': b.fiscozen_contact_id,
-                    'revolut_account_ref': b.revolut_account_ref,
+                    'einvoice_customer_id': b.einvoice_customer_id,
+                    'payment_customer_ref': b.payment_customer_ref,
                     'invoices': [], 'payments': [],
                 })
                 for i in s.query(Invoice).filter_by(tenant_id=t.id).order_by(Invoice.date).all():
@@ -577,20 +606,31 @@ def _load_billing():
                         'id': i.id, 'date': _iso(i.date) or '', 'number': i.number or '',
                         'description': i.description or '',
                         'amount': float(i.amount or 0), 'paid': bool(i.paid),
-                        'fiscozen_id': i.fiscozen_id, 'fiscozen_url': i.fiscozen_url,
+                        'einvoice_id': i.einvoice_id, 'einvoice_url': i.einvoice_url,
                     })
                 for p in s.query(Payment).filter_by(tenant_id=t.id).order_by(Payment.date).all():
                     entry['payments'].append({
                         'id': p.id, 'date': _iso(p.date) or '',
                         'amount': float(p.amount or 0), 'method': p.method or '',
-                        'reference': p.reference or '', 'revolut_id': p.revolut_id,
+                        'reference': p.reference or '', 'provider_payment_id': p.provider_payment_id,
                     })
                 out[str(t.idx)] = entry
         return out
-    except Exception:
+    except Exception as e:
         # Un registro irraggiungibile non deve rendere inutilizzabile
         # owner-setup: si ripiega sul file e si annota l'errore.
-        root_app.logger.exception("[registry] lettura fatturazione fallita, uso il JSON")
+        # Lo stack trace completo UNA VOLTA SOLA: e' quasi sempre un problema
+        # di configurazione (password, host, firewall) e ripeterlo a ogni
+        # richiesta rende i log illeggibili proprio quando servono.
+        global _REGISTRY_READ_FAILED
+        if not _REGISTRY_READ_FAILED:
+            _REGISTRY_READ_FAILED = True
+            root_app.logger.exception(
+                "[registry] lettura fatturazione fallita, uso il JSON. "
+                "Questo messaggio non verra' ripetuto per intero.")
+        else:
+            root_app.logger.warning("[registry] non raggiungibile, uso il JSON (%s)",
+                                    type(e).__name__)
         return _load_billing_json()
 
 
@@ -638,8 +678,8 @@ def _save_billing(data):
             b.saas_next_renewal   = _d(entry.get('saas_next_renewal'))
             b.max_payment_days    = int(entry.get('max_payment_days') or 15)
             b.is_owner_db         = bool(entry.get('is_owner_db'))
-            b.fiscozen_contact_id = entry.get('fiscozen_contact_id')
-            b.revolut_account_ref = entry.get('revolut_account_ref')
+            b.einvoice_customer_id = entry.get('einvoice_customer_id')
+            b.payment_customer_ref = entry.get('payment_customer_ref')
 
             # Righe figlie riscritte per intero: e' la stessa semantica del
             # vecchio JSON (si salvava tutto il dizionario) e a questi volumi
@@ -652,8 +692,8 @@ def _save_billing(data):
                     description=inv.get('description') or None,
                     amount=round(float(inv.get('amount') or 0), 2),
                     paid=bool(inv.get('paid')),
-                    fiscozen_id=inv.get('fiscozen_id'),
-                    fiscozen_url=inv.get('fiscozen_url'),
+                    einvoice_id=inv.get('einvoice_id'),
+                    einvoice_url=inv.get('einvoice_url'),
                 ))
 
             s.query(Payment).filter_by(tenant_id=t.id).delete(synchronize_session=False)
@@ -663,7 +703,7 @@ def _save_billing(data):
                     amount=round(float(pay.get('amount') or 0), 2),
                     method=pay.get('method') or None,
                     reference=pay.get('reference') or None,
-                    revolut_id=pay.get('revolut_id'),
+                    provider_payment_id=pay.get('provider_payment_id'),
                 ))
 
 def _billing_entry(billing, idx):
@@ -863,6 +903,9 @@ def owner_setup():
         entry = billing_all.get(str(info['idx']), {})
         info['compliance'] = _compliance_status(entry)
         info['is_owner_db'] = bool(entry.get('is_owner_db', False))
+        # Serve al template per bloccare i moduli aggiuntivi sui contratti
+        # STANDARD. None = nessun contratto (database dell'owner): nessun blocco.
+        info['price_plan'] = _piano_tenant(info['idx'])
 
     return render_template('owner_setup.html', tenants=tenants)
 
@@ -877,6 +920,14 @@ def owner_setup_save(db_idx):
         return jsonify({'error': 'App non trovata'}), 404
 
     data = request.get_json(silent=True) or {}
+
+    # Chi ha sottoscritto lo STANDARD non puo' vedersi attivare i moduli
+    # aggiuntivi: quelli appartengono al PREMIUM. Il Premium invece puo'
+    # spegnerne uno o due quando vuole — il canone non cambia.
+    # Il controllo sta qui e non solo nel pannello: il pannello e' una comodita',
+    # questa e' la regola.
+    solo_base = _piano_tenant(db_idx) == 'standard'
+
     try:
         with child.app_context():
             from appl.models import OWNER
@@ -887,9 +938,9 @@ def owner_setup_save(db_idx):
                 owner_cfg = OWNER()
                 child_db.session.add(owner_cfg)
             owner_cfg.module_base_enabled = bool(data.get('module_base_enabled', True))
-            owner_cfg.module_web_enabled = bool(data.get('module_web_enabled', True))
-            owner_cfg.module_pacchetti_enabled = bool(data.get('module_pacchetti_enabled', True))
-            owner_cfg.module_solarium_enabled = bool(data.get('module_solarium_enabled', False))
+            owner_cfg.module_web_enabled = (not solo_base) and bool(data.get('module_web_enabled', True))
+            owner_cfg.module_pacchetti_enabled = (not solo_base) and bool(data.get('module_pacchetti_enabled', True))
+            owner_cfg.module_solarium_enabled = (not solo_base) and bool(data.get('module_solarium_enabled', False))
             for field in ('module_base_activated_on', 'module_web_activated_on',
                           'module_pacchetti_activated_on', 'module_solarium_activated_on'):
                 val = data.get(field)
@@ -921,26 +972,102 @@ def owner_setup_reveal_password(db_idx):
         return jsonify({'error': 'DB non trovato'}), 404
     return jsonify({'uri': pool.get(db_idx, '')})
 
-@root_app.route('/owner-setup/add-tenant', methods=['POST'])
-def owner_setup_add_tenant():
-    if not _require_owner_auth():
-        return jsonify({'error': 'Non autorizzato'}), 401
+def ensure_database_exists(uri):
+    """Crea il database indicato nella URI se non c'e' gia'.
 
-    data = request.get_json(silent=True) or {}
-    business_name = (data.get('business_name') or '').strip()
-    city = (data.get('city') or '').strip()
-    uri = (data.get('uri') or '').strip()
+    Ci si connette al database di servizio "postgres" sullo STESSO server e con
+    le STESSE credenziali della URI: sono quelle dell'amministratore, le stesse
+    che aprono gli altri negozi. Cosi' l'aggiunta di un cliente non richiede
+    piu' un passaggio manuale nel portale Azure.
 
+    CREATE DATABASE non puo' stare dentro una transazione: serve autocommit.
+
+    Ritorna (creato, messaggio). Non solleva: se il ruolo non ha il permesso
+    CREATEDB si torna indietro con un messaggio leggibile e il database si crea
+    a mano dal portale.
+    """
+    import psycopg2
+    from psycopg2 import sql as _sql
+
+    p = urlparse(uri)
+    db_name = (p.path or '/').strip('/').split('/')[-1]
+    if not db_name:
+        return False, "URI senza nome del database."
+
+    admin_dsn = {
+        'host': p.hostname,
+        'port': p.port or 5432,
+        'user': p.username,
+        'password': p.password,
+        'dbname': 'postgres',
+        'sslmode': 'require',
+        'connect_timeout': 15,
+    }
+
+    conn = None
+    try:
+        conn = psycopg2.connect(**admin_dsn)
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
+            if cur.fetchone():
+                return False, f"Il database '{db_name}' esiste gia'."
+            cur.execute(_sql.SQL("CREATE DATABASE {}").format(_sql.Identifier(db_name)))
+        return True, f"Database '{db_name}' creato."
+    except Exception as e:
+        return False, (
+            f"Non sono riuscito a creare il database '{db_name}': {e}. "
+            "Crealo dal portale Azure (Impostazioni -> Database) e riprova."
+        )
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def provision_tenant(uri, business_name, city='', modules=None,
+                     opening_time=None, closing_time=None, create_db=True):
+    """Crea un negozio completo e lo rende raggiungibile su /s/<idx>.
+
+    Un solo punto di verita' per la creazione di un tenant, chiamato da due
+    parti: la rotta del pannello owner (come oggi) e, in futuro, il form di
+    attivazione dopo la firma del contratto.
+
+    Passi: crea il database se manca, costruisce la child app, inizializza lo
+    schema, semina BusinessInfo/OWNER/utente owner, scrive nel .env, monta il
+    child senza riavvio e registra il negozio nel registro centrale.
+
+    Solleva RuntimeError con un messaggio gia' leggibile dall'utente.
+    """
+    from datetime import date as _date, time as _time
+
+    uri = (uri or '').strip()
+    business_name = (business_name or '').strip()
     if not business_name:
-        return jsonify({'error': 'Nome negozio obbligatorio'}), 400
+        raise RuntimeError("Nome negozio obbligatorio")
     if not uri or not uri.startswith('postgresql'):
-        return jsonify({'error': 'URI PostgreSQL non valida (deve iniziare con postgresql://)'}), 400
+        raise RuntimeError("URI PostgreSQL non valida (deve iniziare con postgresql://)")
     if uri in pool.values():
-        return jsonify({'error': 'Questa URI è già configurata'}), 400
+        raise RuntimeError("Questa URI e' gia' configurata")
 
+    # `pool` contiene SOLO le SQLALCHEMY_DATABASE_URI<N>, cioe' i negozi.
+    # Il registro centrale (tosca_registry) NON e' li' dentro: ha la sua
+    # REGISTRY_DATABASE_URI apposta, per non essere montato come tenant.
+    # Quindi con i tre database dell'owner (1 suncity, 2 sunexp3,
+    # 3 sunbookingdb) il PRIMO CLIENTE A PAGAMENTO prende idx 4 e vive su
+    # /s/4 — non /s/5, anche se sul server tosca_registry e' il quarto
+    # database in ordine di creazione.
     next_idx = max(pool.keys(), default=0) + 1
 
-    # 1. Crea child app e inizializza schema
+    # ── 0. Il database esiste? Altrimenti si crea ─────────────────────────
+    db_created = False
+    if create_db:
+        db_created, msg = ensure_database_exists(uri)
+        root_app.logger.info("[provision] %s", msg)
+
+    # ── 1. Child app ──────────────────────────────────────────────────────
     try:
         new_child = create_app(uri)
         new_child.secret_key = secret
@@ -965,36 +1092,39 @@ def owner_setup_add_tenant():
                 'is_cloud': True,
             }
     except Exception as e:
-        return jsonify({'error': f'Errore creazione app: {str(e)}'}), 500
+        raise RuntimeError(f"Errore creazione app: {e}")
 
+    # ── 2. Schema e dati iniziali ─────────────────────────────────────────
+    mods = modules or {}
     try:
         with new_child.app_context():
             db.create_all()
             from appl.models import BusinessInfo, OWNER
-            from datetime import date as _date, time as _time
 
             if not BusinessInfo.query.first():
-                bi = BusinessInfo(
+                # opening_time e closing_time sono NOT NULL senza default:
+                # il form li chiede, il pannello owner no e resta il 9-19.
+                db.session.add(BusinessInfo(
                     business_name=business_name,
                     city=city or None,
-                    opening_time=_time(9, 0),
-                    closing_time=_time(19, 0),
-                )
-                db.session.add(bi)
+                    opening_time=opening_time or _time(9, 0),
+                    closing_time=closing_time or _time(19, 0),
+                ))
 
             if not OWNER.query.first():
                 today = _date.today()
-                owner_cfg = OWNER(
-                    module_base_enabled=True,
-                    module_web_enabled=True,
-                    module_pacchetti_enabled=True,
-                    module_base_activated_on=today,
-                    module_web_activated_on=today,
-                    module_pacchetti_activated_on=today,
-                )
-                db.session.add(owner_cfg)
+                db.session.add(OWNER(
+                    module_base_enabled=bool(mods.get('base', True)),
+                    module_web_enabled=bool(mods.get('web', True)),
+                    module_pacchetti_enabled=bool(mods.get('pacchetti', True)),
+                    module_solarium_enabled=bool(mods.get('solarium', False)),
+                    module_base_activated_on=today if mods.get('base', True) else None,
+                    module_web_activated_on=today if mods.get('web', True) else None,
+                    module_pacchetti_activated_on=today if mods.get('pacchetti', True) else None,
+                    module_solarium_activated_on=today if mods.get('solarium', False) else None,
+                ))
 
-            # Copia l'utente owner (Alessio) da un database esistente
+            # Copia l'utente owner da un database esistente
             from appl.models import User, RuoloUtente
             if not User.query.first():
                 owner_source = None
@@ -1017,15 +1147,15 @@ def owner_setup_add_tenant():
 
             db.session.commit()
     except Exception as e:
-        return jsonify({'error': f'Errore inizializzazione DB: {str(e)}'}), 500
+        raise RuntimeError(f"Errore inizializzazione DB: {e}")
 
-    # 2. Scrivi nel .env
+    # ── 3. .env ───────────────────────────────────────────────────────────
     try:
         _write_env_var(f'SQLALCHEMY_DATABASE_URI{next_idx}', uri)
     except Exception as e:
-        return jsonify({'error': f'Errore scrittura .env: {str(e)}'}), 500
+        raise RuntimeError(f"Errore scrittura .env: {e}")
 
-    # 3. Monta il child nel dispatcher (senza riavvio)
+    # ── 4. Montaggio nel dispatcher, senza riavvio ────────────────────────
     creds = unipile_creds_for(next_idx)
     wrapped = with_request_env(new_child, creds)
     wrapped = with_db_cookie(wrapped, next_idx, secure=use_https)
@@ -1035,7 +1165,30 @@ def owner_setup_add_tenant():
     children[next_idx] = new_child
     mounts[f'/s/{next_idx}'] = wrapped
 
-    # 4. Prepara dati risposta
+    # ── 5. Registro centrale ──────────────────────────────────────────────
+    # Il negozio entra nel registro con is_owner_db = false: e' un cliente
+    # pagante. I tre database dell'owner (idx 1-3) restano gli unici esenti.
+    # Un fallimento qui non annulla il tenant, che a questo punto e' gia' vivo
+    # e funzionante: si logga e si va avanti.
+    try:
+        if _registry_on():
+            from appl.registry_models import registry_session, Tenant, Billing
+            from datetime import datetime as _dt
+            with registry_session() as s:
+                t = s.query(Tenant).filter_by(idx=next_idx).one_or_none()
+                if t is None:
+                    t = Tenant(idx=next_idx, business_name=business_name)
+                    s.add(t)
+                t.business_name = business_name
+                t.status = 'active'
+                t.provisioned_at = _dt.now()
+                s.flush()
+                if s.query(Billing).filter_by(tenant_id=t.id).one_or_none() is None:
+                    s.add(Billing(tenant_id=t.id, is_owner_db=False))
+    except Exception:
+        root_app.logger.exception(
+            "[provision] tenant %s creato ma non registrato nel registro", next_idx)
+
     try:
         _p = urlparse(uri)
         db_name = (_p.path or '/').strip('/').split('/')[-1] or '—'
@@ -1043,21 +1196,41 @@ def owner_setup_add_tenant():
     except Exception:
         db_name = db_user = '—'
 
-    from datetime import date as _d2
-    today_str = _d2.today().isoformat()
-
-    return jsonify({
+    today_str = _date.today().isoformat()
+    return {
         'ok': True,
         'idx': next_idx,
         'business_name': business_name,
         'localita': city,
         'db_name': db_name,
         'db_user': db_user,
+        'db_created': db_created,
         'uri_masked': _mask_uri(uri),
         'module_base_activated_on': today_str,
         'module_web_activated_on': today_str,
         'module_pacchetti_activated_on': today_str,
-    })
+    }
+
+
+@root_app.route('/owner-setup/add-tenant', methods=['POST'])
+def owner_setup_add_tenant():
+    if not _require_owner_auth():
+        return jsonify({'error': 'Non autorizzato'}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        result = provision_tenant(
+            uri=data.get('uri') or '',
+            business_name=data.get('business_name') or '',
+            city=(data.get('city') or '').strip(),
+        )
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        root_app.logger.exception("[provision] errore imprevisto")
+        return jsonify({'error': f'Errore imprevisto: {e}'}), 500
+
+    return jsonify(result)
 
 
 @root_app.route('/owner-setup/billing/<int:db_idx>', methods=['GET'])
@@ -1083,7 +1256,7 @@ def owner_billing_save(db_idx):
     data = request.get_json(silent=True) or {}
     for field in ('activation_date', 'contract_start_date', 'starter_expiry_date',
                   'starter_total', 'saas_monthly_amount', 'saas_next_renewal',
-                  'max_payment_days', 'is_owner_db', 'fiscozen_contact_id', 'revolut_account_ref'):
+                  'max_payment_days', 'is_owner_db', 'einvoice_customer_id', 'payment_customer_ref'):
         if field in data:
             entry[field] = data[field] or None
     _save_billing(billing)
@@ -1103,8 +1276,8 @@ def owner_billing_add_invoice(db_idx):
         'description': data.get('description', ''),
         'amount': round(float(data.get('amount', 0)), 2),
         'paid': bool(data.get('paid', False)),
-        'fiscozen_id': None,
-        'fiscozen_url': None,
+        'einvoice_id': None,
+        'einvoice_url': None,
     }
     entry['invoices'].append(inv)
     _save_billing(billing)
@@ -1146,7 +1319,7 @@ def owner_billing_add_payment(db_idx):
         'amount': round(float(data.get('amount', 0)), 2),
         'method': data.get('method', ''),
         'reference': data.get('reference', ''),
-        'revolut_id': None,
+        'provider_payment_id': None,
     }
     entry['payments'].append(pay)
     _save_billing(billing)
@@ -1161,6 +1334,232 @@ def owner_billing_delete_payment(db_idx, pay_id):
     entry['payments'] = [p for p in entry['payments'] if p['id'] != pay_id]
     _save_billing(billing)
     return jsonify({'ok': True, 'compliance': _compliance_status(entry)})
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  ATTIVAZIONE CLIENTE — invito dal pannello owner e form pubblico
+#
+#  Il link consegnato al cliente e' l'UNICA cosa che viaggia: il contratto non
+#  esce mai come file. Dentro il link c'e' un token monouso di cui in database
+#  resta solo lo SHA-256, cosi' chi legge il registro non puo' usarlo.
+#
+#  La rotta pubblica non apre nessuna sessione applicativa e non tocca i
+#  database dei negozi: parla solo con il registro.
+# ═══════════════════════════════════════════════════════════════════════════
+INVITE_TTL_DAYS = int(os.getenv('INVITE_TTL_DAYS', '14'))
+
+
+def _token_hash(token):
+    import hashlib
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
+def _invite_or_404(token):
+    """Ritorna (invite, contract, tenant) oppure None.
+
+    Un token inesistente, scaduto o gia' usato riceve lo stesso trattamento:
+    non si deve poter capire quale dei tre casi sia.
+    """
+    from datetime import datetime, timezone
+    from appl.registry_models import registry_session, OnboardingInvite, Contract, Tenant
+    with registry_session() as s:
+        inv = s.query(OnboardingInvite).filter_by(token_hash=_token_hash(token)).one_or_none()
+        if inv is None or inv.used_at is not None:
+            return None
+        if inv.expires_at and inv.expires_at < datetime.now(timezone.utc):
+            return None
+        tenant = s.query(Tenant).filter_by(id=inv.tenant_id).one_or_none()
+        contract = s.query(Contract).filter_by(tenant_id=inv.tenant_id).one_or_none()
+        if tenant is None or contract is None:
+            return None
+        if inv.opened_at is None:
+            inv.opened_at = datetime.now(timezone.utc)
+        return {
+            'invite_id': inv.id,
+            'tenant_id': tenant.id,
+            'contract_id': contract.id,
+            'business_name': tenant.business_name,
+            'starter_total': float(contract.starter_total) if contract.starter_total is not None else None,
+            'saas_monthly_amount': float(contract.saas_monthly_amount) if contract.saas_monthly_amount is not None else None,
+            'modules': {
+                'base': bool(contract.module_base),
+                'web': bool(contract.module_web),
+                'pacchetti': bool(contract.module_pacchetti),
+                'solarium': bool(contract.module_solarium),
+            },
+        }
+
+
+@root_app.route('/owner-setup/invite', methods=['POST'])
+def owner_setup_invite():
+    """Crea un invito e restituisce il link da consegnare al cliente.
+
+    Non crea nessun database: il negozio nasce solo dopo firma e incasso.
+    """
+    if not _require_owner_auth():
+        return jsonify({'error': 'Non autorizzato'}), 401
+    if not _registry_on():
+        return jsonify({'error': 'Registro centrale non configurato '
+                                 '(manca REGISTRY_DATABASE_URI).'}), 503
+
+    import secrets as _secrets
+    from datetime import datetime, timedelta, timezone
+    from appl.registry_models import registry_session, Tenant, Contract, OnboardingInvite
+
+    data = request.get_json(silent=True) or {}
+    business_name = (data.get('business_name') or '').strip()
+    if not business_name:
+        return jsonify({'error': 'Nome negozio obbligatorio'}), 400
+
+    def _num(v):
+        try:
+            return round(float(v), 2)
+        except (TypeError, ValueError):
+            return None
+
+    # ── Listino ───────────────────────────────────────────────────────────
+    # Due soli canoni a listino. Qualunque altra cifra e' un accordo fuori
+    # listino e DEVE avere una motivazione scritta: il controllo sta qui e non
+    # solo nel form, perche' un controllo che vive nel browser non e' un
+    # controllo.
+    LISTINO = {'standard': 39.00, 'premium': 59.00}
+
+    price_plan = (data.get('price_plan') or 'standard').strip().lower()
+    price_note = (data.get('price_note') or '').strip()
+
+    # Lo STANDARD comprende il solo Tosca Base: i moduli aggiuntivi
+    # appartengono al PREMIUM e al prezzo concordato.
+    solo_base = (price_plan == 'standard')
+
+    if price_plan in LISTINO:
+        canone = LISTINO[price_plan]
+        price_note = None
+    elif price_plan == 'custom':
+        canone = _num(data.get('saas_monthly_amount'))
+        if canone is None or canone < 0:
+            return jsonify({'error': 'Indica il canone mensile concordato.'}), 400
+        if not price_note:
+            return jsonify({'error': 'Un canone fuori listino richiede una motivazione.'}), 400
+        # Se la cifra concordata coincide con il listino, si normalizza: non ha
+        # senso avere una riga "custom" a 39 con una motivazione inventata.
+        for nome, importo in LISTINO.items():
+            if abs(canone - importo) < 0.005:
+                price_plan, price_note = nome, None
+                break
+    else:
+        return jsonify({'error': 'Piano non valido.'}), 400
+
+    token = _secrets.token_urlsafe(32)
+    try:
+        with registry_session() as s:
+            tenant = Tenant(business_name=business_name, status='invited')
+            s.add(tenant)
+            s.flush()
+
+            contract = Contract(
+                tenant_id=tenant.id,
+                status='draft',
+                contract_version=os.getenv('CONTRACT_VERSION', '1.0'),
+                legal_business_name=business_name,
+                email=(data.get('email') or '').strip() or None,
+                # Importi e moduli li decide l'owner adesso: al cliente
+                # arrivano in sola lettura, non e' lui a scegliersi il prezzo.
+                starter_total=_num(data.get('starter_total')),
+                saas_monthly_amount=canone,
+                price_plan=price_plan,
+                price_note=price_note,
+                module_base=True,
+                # I moduli appartengono al PREMIUM (e al prezzo concordato):
+                # con lo STANDARD si spengono qui, non solo nel browser.
+                module_web=(not solo_base) and bool(data.get('module_web')),
+                module_pacchetti=(not solo_base) and bool(data.get('module_pacchetti')),
+                module_solarium=(not solo_base) and bool(data.get('module_solarium')),
+            )
+            s.add(contract)
+
+            s.add(OnboardingInvite(
+                tenant_id=tenant.id,
+                token_hash=_token_hash(token),
+                email=(data.get('email') or '').strip() or None,
+                expires_at=datetime.now(timezone.utc) + timedelta(days=INVITE_TTL_DAYS),
+            ))
+            tenant_id = tenant.id
+    except Exception as e:
+        root_app.logger.exception("[invito] creazione fallita")
+        return jsonify({'error': f'Errore creazione invito: {e}'}), 500
+
+    link = request.url_root.rstrip('/') + url_for('attiva', token=token)
+    root_app.logger.info("[invito] creato per '%s' (tenant %s)", business_name, tenant_id)
+    return jsonify({
+        'ok': True,
+        'tenant_id': tenant_id,
+        'link': link,
+        'scade_il': (datetime.now(timezone.utc) + timedelta(days=INVITE_TTL_DAYS)).date().isoformat(),
+    })
+
+
+@root_app.route('/attiva/<token>', methods=['GET'])
+def attiva(token):
+    """Pagina pubblica di attivazione. Nessuna autenticazione: vale il token."""
+    if not _registry_on():
+        return render_template('attiva.html', errore='Servizio non disponibile.'), 503
+    ctx = _invite_or_404(token)
+    if ctx is None:
+        # Stesso messaggio per token inesistente, scaduto o gia' usato.
+        return render_template('attiva.html', errore=
+            'Questo link non e\' piu\' valido. Contatta il tuo referente Tosca '
+            'per riceverne uno nuovo.'), 404
+    return render_template('attiva.html', token=token, ctx=ctx)
+
+
+@root_app.route('/attiva/<token>/step', methods=['POST'])
+def attiva_step(token):
+    """Salvataggio progressivo del wizard.
+
+    Accetta solo i campi previsti: un client che ne inviasse altri (importi,
+    moduli, stato) non puo' toccarli.
+    """
+    if not _registry_on():
+        return jsonify({'error': 'Servizio non disponibile'}), 503
+    ctx = _invite_or_404(token)
+    if ctx is None:
+        return jsonify({'error': 'Link non piu\' valido'}), 404
+
+    CAMPI = {
+        'legal_business_name', 'trade_name', 'legal_form', 'vat_number',
+        'fiscal_code', 'rea_number', 'rea_province', 'pec', 'sdi_code',
+        'legal_address', 'legal_cap', 'legal_city', 'legal_province',
+        'op_same_as_legal', 'op_address', 'op_cap', 'op_city', 'op_province',
+        'email', 'phone', 'mobile', 'website',
+        'signer_first_name', 'signer_last_name', 'signer_fiscal_code',
+        'signer_role', 'signer_mobile', 'signer_email',
+        'closing_days', 'operators_count', 'printer_model',
+        'current_software', 'has_data_to_migrate', 'vat_percentage',
+    }
+    ORARI = {'opening_time', 'closing_time'}
+
+    data = request.get_json(silent=True) or {}
+    from datetime import datetime as _dt
+    from appl.registry_models import registry_session, Contract
+
+    try:
+        with registry_session() as s:
+            c = s.query(Contract).filter_by(id=ctx['contract_id']).one()
+            for k, v in data.items():
+                if k in CAMPI:
+                    if isinstance(v, str):
+                        v = v.strip() or None
+                    setattr(c, k, v)
+                elif k in ORARI and v:
+                    try:
+                        setattr(c, k, _dt.strptime(str(v), '%H:%M').time())
+                    except ValueError:
+                        pass
+    except Exception as e:
+        root_app.logger.exception("[attiva] salvataggio step fallito")
+        return jsonify({'error': f'Errore salvataggio: {e}'}), 500
+
+    return jsonify({'ok': True})
 
 
 @root_app.route('/owner-logout')

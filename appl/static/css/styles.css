@@ -2292,6 +2292,49 @@ body.pseudo-active .appointment-block.active-popup .btn-popup.whatsapp-btn {
     50% { opacity: 0.5; }
 }
 /* ********STILI DI CASSA.HTML********* */
+
+/* ============================================================================
+   RILIEVO — linguaggio grafico condiviso con i blocchi appuntamento in agenda
+   ============================================================================
+   In agenda un blocco e' un oggetto fisico: luce sul bordo alto, ombra sul
+   bordo basso, uno spessore secco sotto (0 2px 0) e un'ombra portata morbida,
+   piu' una patina lucida data da un background-IMAGE. In cassa quella grammatica
+   c'era solo sui tasti servizio, mentre barra filtri, colonna azioni e pulsanti
+   di pagamento erano neumorfismo piatto o Bootstrap crudo: da qui la
+   discrepanza che si nota mettendo le due schermate una accanto all'altra.
+   Queste variabili sono il vocabolario unico; ogni pulsante ridefinisce solo
+   --rl-ombra per tingere spessore e ombra del proprio colore semantico.
+
+   IMPORTANTE: la patina e' sempre e solo background-IMAGE, mai background.
+   Cosi' si compone con qualunque background-COLOR (categorie servizio, stati
+   "attivo", colori Bootstrap) senza sostituirlo — identico al trucco usato in
+   .appointment-block. */
+:root {
+    --rl-ombra: 135 100 124;   /* prugna: la stessa ombra dei blocchi agenda */
+    --rl-radius: 12px;         /* stesso raggio di .appointment-block */
+
+    /* Patina per superfici CHIARE (bianco/pastello): la luce in alto deve
+       leggersi su uno sfondo gia' luminoso, quindi e' piu' marcata. */
+    --rl-patina-chiara: linear-gradient(180deg,
+        rgb(255 255 255 / 0.55) 0%,
+        rgb(255 255 255 / 0.12) 48%,
+        rgb(0 0 0 / 0.05) 100%);
+
+    /* Patina per superfici PIENE/SATURE (verde CONFERMA, blu, grigio azioni):
+       sono gli stessi valori di .appointment-block. */
+    --rl-patina-piena: linear-gradient(180deg,
+        rgb(255 255 255 / 0.20) 0%,
+        rgb(255 255 255 / 0.04) 45%,
+        rgb(0 0 0 / 0.10) 100%);
+}
+
+/* Barra filtri (Frequenti / Ultimi / Solarium / Estetica / Prodotti /
+   + TESSERA / RICARICHE / chiudi).
+   SCELTA DELIBERATA: questi restano al cuscino neumorfico originale e NON
+   seguono il rilievo del resto della pagina. Erano stati convertiti insieme a
+   tutto il resto e sono stati riportati indietro apposta: fanno coppia con i
+   pulsanti .btn-neumorphic del Report, che sono uguali. Se un domani si
+   uniformano, vanno rifatti tutti e due insieme. */
 .service-bar-btn {
   min-width: 120px;
   min-height: 34px;
@@ -2301,7 +2344,7 @@ body.pseudo-active .appointment-block.active-popup .btn-popup.whatsapp-btn {
     box-shadow:
     0 -4px 12px 0 #fff,                /* ombra bianca sopra */
     4px 4px 12px #e0e0e0,              /* ombra scura sotto */
-    -4px -4px 12px #ffffff;  
+    -4px -4px 12px #ffffff;
   background: #f7f9f9;
   border: none;
   margin: 0;
@@ -2333,25 +2376,38 @@ body.pseudo-active .appointment-block.active-popup .btn-popup.whatsapp-btn {
     max-height: 90px;
     margin: 0.08em 0.08em 0.08em 0;
     padding: 16px 18px;
-    border-radius: 8px;
+    border-radius: var(--rl-radius);
     font-size: 1.15em;
     font-weight: bold;
     cursor: pointer;
     /* Rilievo 3D: lo "spessore" del tasto e' un'ombra secca sotto, l'ombra
-       morbida e' la luce ambiente. Niente gradiente di sfondo, altrimenti
-       verrebbe sovrascritto dai background !important delle categorie
-       (solarium / estetica / prodotti). */
+       morbida e' la luce ambiente. La patina lucida arriva come background-
+       IMAGE (mai background), cosi' si compone con i background-COLOR delle
+       categorie (solarium / estetica / prodotti) invece di essere cancellata. */
     transition: transform .08s ease, box-shadow .12s ease,
-                background 0.15s, color 0.15s;
+                background-color 0.15s, color 0.15s;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.95),   /* luce sul bordo alto */
-      inset 0 -2px 0 rgba(0, 0, 0, 0.04),        /* ombra sul bordo basso */
-      0 2px 0 rgba(135, 100, 124, 0.14),         /* spessore del tasto */
-      0 3px 8px rgba(135, 100, 124, 0.11);       /* ombra portata */
-    background: #f7f7f7;
+      inset 0 1px 0 rgb(255 255 255 / 0.95),     /* luce sul bordo alto */
+      inset 0 -2px 0 rgb(0 0 0 / 0.04),          /* ombra sul bordo basso */
+      0 2px 0 rgb(var(--rl-ombra) / 0.16),       /* spessore del tasto */
+      0 3px 8px rgb(var(--rl-ombra) / 0.13);     /* ombra portata */
+    background-color: #faf7f4;   /* bianco appena caldo, non grigio neutro */
+    background-image: var(--rl-patina-chiara);
     outline: none;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    /* L'etichetta VA A CAPO dentro al tasto invece di uscirne. Prima era
+       white-space:nowrap con text-overflow:ellipsis, ma i puntini non sono mai
+       comparsi: l'ellissi funziona solo su un box che nasconde l'eccedenza, e
+       qui non c'era overflow:hidden. Risultato, con il pannello laterale
+       aperto (tasti a 1/5 di larghezza) i tag piu' lunghi sbordavano di lato
+       sopra al tasto vicino.
+       overflow-wrap serve per i nomi tutti attaccati tipo
+       "Semipermanente": senza, una parola sola piu' larga del tasto uscirebbe
+       comunque, perche' non ha spazi dove spezzarsi. */
+    white-space: normal;
+    overflow: hidden;
+    overflow-wrap: break-word;
+    text-align: center;
+    line-height: 1.12;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2359,15 +2415,26 @@ body.pseudo-active .appointment-block.active-popup .btn-popup.whatsapp-btn {
     transform: translateY(0);
 }
 
+/* Etichetta che non ci sta comunque, nemmeno andando a capo: la classe la
+   mette cassa.js dopo aver MISURATO il tasto (vedi adattaEtichetteServizi).
+   Non e' una regola che si puo' scrivere in CSS e basta: dipende da quanto e'
+   lungo il singolo nome e da quanto e' largo il pannello in quel momento.
+   Il calo di corpo e' voluto piccolo, ~12%: deve dare l'aria che serve per la
+   seconda riga senza che il tasto stoni accanto agli altri. */
+#serviceButtonsContainer .service-btn-custom.service-btn-fitta {
+    font-size: 1em;
+    line-height: 1.08;
+}
+
 /* Sollevato: il tasto "viene incontro" */
 .service-btn-custom:hover {
-    background: #ecece0;
+    background-color: #ecece0;
     transform: translateY(-1px);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.95),
-      inset 0 -2px 0 rgba(0, 0, 0, 0.04),
-      0 3px 0 rgba(135, 100, 124, 0.16),
-      0 6px 13px rgba(135, 100, 124, 0.14);
+      inset 0 1px 0 rgb(255 255 255 / 0.95),
+      inset 0 -2px 0 rgb(0 0 0 / 0.04),
+      0 3px 0 rgb(var(--rl-ombra) / 0.20),
+      0 6px 13px rgb(var(--rl-ombra) / 0.17);
 }
 
 /* Premuto: scende fino a "schiacciare" lo spessore. Solo :active, non
@@ -2375,18 +2442,18 @@ body.pseudo-active .appointment-block.active-popup .btn-popup.whatsapp-btn {
 .service-btn-custom:active {
     transform: translateY(2px);
     box-shadow:
-      inset 0 2px 4px rgba(0, 0, 0, 0.12),
-      0 0 0 rgba(135, 100, 124, 0.14),
-      0 1px 2px rgba(135, 100, 124, 0.12);
-    background: #ededed;
+      inset 0 2px 4px rgb(0 0 0 / 0.12),
+      0 0 0 rgb(var(--rl-ombra) / 0.16),
+      0 1px 2px rgb(var(--rl-ombra) / 0.12);
+    background-color: #ededed;
 }
 
 /* Accessibilita': anello di focus solo da tastiera, senza falso "premuto" */
 .service-btn-custom:focus-visible {
     box-shadow:
-      0 0 0 3px rgba(184, 128, 157, 0.55),
-      0 2px 0 rgba(135, 100, 124, 0.14),
-      0 3px 8px rgba(135, 100, 124, 0.11);
+      0 0 0 3px rgb(184 128 157 / 0.55),
+      0 2px 0 rgb(var(--rl-ombra) / 0.16),
+      0 3px 8px rgb(var(--rl-ombra) / 0.13);
 }
 
 /* Cassa aperta nel pannello laterale dell'agenda: al massimo 5 pulsanti per
@@ -2413,6 +2480,16 @@ html.cassa-embedded #serviceButtonsContainer .service-btn-custom {
     margin: 0;
     padding: 12px 10px;
     font-size: 1.02em;
+    /* Qui i tasti sono stretti ed e' normale che qualche nome vada a capo:
+       l'altezza la detta il contenuto invece di essere fissa a 7.5vh, cosi' la
+       seconda riga ci sta. I tasti della stessa riga restano comunque alti
+       uguali, perche' #serviceButtonsContainer e' un flex e li stira (cosa che
+       con l'altezza fissa non poteva fare). */
+    height: auto;
+}
+
+html.cassa-embedded #serviceButtonsContainer .service-btn-custom.service-btn-fitta {
+    font-size: 0.9em;
 }
 
 /* Pannello allargato a tutto schermo (agenda collassata): c'e' di nuovo
@@ -2452,26 +2529,32 @@ html.cassa-embedded.pane-maximized #serviceButtonsContainer .service-btn-custom 
     transition-delay: 1s; /* nessun ritardo */
   }
 
+/* Categorie: SOLO background-color, mai la scorciatoia background — quella
+   azzererebbe la patina lucida ereditata da .service-btn-custom e i tasti
+   colorati tornerebbero piatti mentre i grigi restano in rilievo.
+   --rl-ombra tinge spessore e ombra portata del colore della categoria. */
 .service-btn-solarium {
-    background: #fff4f4 !important;   /* rosa chiaro */
+    --rl-ombra: 190 70 90;
+    background-color: #fff4f4 !important;   /* rosa chiaro */
     color: #4d0c2c !important;
     border: 1px solid #ff8a8a !important; /* rosa */
 }
 
 .service-btn-solarium:hover, .btn.service-btn-solarium:hover {
-    background: #ffd2d2 !important;
+    background-color: #ffd2d2 !important;
     color: #842626 !important;
     border: 1px solid #ff4f4f !important; /* rosa più acceso */
 }
 
 .service-btn-estetica {
-    background: #f0f7ff !important;   /* grigio */
+    --rl-ombra: 60 100 170;
+    background-color: #f0f7ff !important;   /* grigio */
     color: #071536 !important;
     border: 1px solid #6198ea !important; /* blu */
 }
 
 .service-btn-estetica:hover {
-    background: #c7e1ff !important;   /* grigio */
+    background-color: #c7e1ff !important;   /* grigio */
     color: #314b87 !important;
     border: 1px solid #1a5bb8 !important; /* blu più scuro */
 }
@@ -2558,30 +2641,96 @@ button.service-btn-prodotti,
     min-width: 0;
   }
 
+/* Colonna azioni in alto a destra (Registro Scontrini, DGFE, Chiusura,
+   Annulla Scontrino), pulsanti periodo in solarium_stats.
+   Erano cuscini neumorfici piatti con testo bianco su #bcb7b7: contrasto ~2:1,
+   praticamente illeggibili. Ora seguono il rilievo del resto della pagina, con
+   un bianco appena caldo e testo scuro.
+   NB: la barra filtri qui sotto (.service-bar-btn) NON e' allineata a questi
+   ed e' voluto — e' rimasta al cuscino neumorfico originale insieme ai
+   pulsanti del Report. Non "correggere" la differenza senza chiederlo. */
   .neumorphic-btn {
-  background: #bcb7b7;
-  border: none;
-  border-radius: 16px;
+  background-color: #faf7f4;
+  background-image: var(--rl-patina-chiara);
+  border: 1px solid rgb(var(--rl-ombra) / 0.16);
+  border-radius: var(--rl-radius);
   box-shadow:
-    4px 4px 12px #e0e0e0,
-    -4px -4px 12px #ffffff,
-    0 -4px 12px 0 #fff;
-  color: #fffff8 !important;
+    inset 0 1px 0 rgb(255 255 255 / 0.95),   /* luce sul bordo alto */
+    inset 0 -2px 0 rgb(0 0 0 / 0.05),        /* ombra sul bordo basso */
+    0 2px 0 rgb(var(--rl-ombra) / 0.16),     /* spessore del tasto */
+    0 3px 8px rgb(var(--rl-ombra) / 0.13);   /* ombra portata */
+  color: #212529 !important;
   font-weight: bold;
   font-size: 1.08em;
   padding: 10px 12px;
   margin: 0;
-  transition: box-shadow 0.15s, background 0.15s, color 0.15s;
+  transform: translateY(0);
+  transition: transform .08s ease, box-shadow .12s ease,
+              background-color 0.15s, border-color 0.15s, color 0.15s;
   display: inline-block;
 }
 
+/* Sollevato: il tasto "viene incontro" */
 .neumorphic-btn:hover, .neumorphic-btn:focus {
-  background: #ededed;
-  color: #222 !important;
+  background-color: #ffffff;
+  border-color: rgb(var(--rl-ombra) / 0.28);
+  color: #212529 !important;
+  transform: translateY(-1px);
   box-shadow:
-    2px 2px 8px #e0e0e0,
-    -2px -2px 8px #ffffff,
-    0 -2px 8px 0 #fff;
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    inset 0 -2px 0 rgb(0 0 0 / 0.05),
+    0 3px 0 rgb(var(--rl-ombra) / 0.20),
+    0 6px 13px rgb(var(--rl-ombra) / 0.17);
+}
+
+/* Premuto: lo spessore si schiaccia, come per i tasti servizio */
+.neumorphic-btn:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 2px 4px rgb(0 0 0 / 0.12),
+    0 1px 2px rgb(var(--rl-ombra) / 0.12);
+}
+
+.neumorphic-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgb(184 128 157 / 0.55),
+    0 2px 0 rgb(var(--rl-ombra) / 0.16),
+    0 3px 8px rgb(var(--rl-ombra) / 0.13);
+}
+
+/* Console RCH: unico tasto "tecnico" della colonna e unico riservato ad
+   admin/owner, quindi l'unico che si stacca — cappuccino con sottotono
+   rosato, in famiglia con i prugna e i rosa della pagina, mentre i vicini
+   restano bianchi. Spessore e ombra virano sul caldo insieme al fondo:
+   un'ombra prugna sotto un tasto cappuccino lo faceva sembrare sporco.
+   Il colore sta qui e non inline in cassa.html perche' la scorciatoia
+   "background:" cancellava la patina lucida. */
+#btnConsoleRCH {
+  --rl-ombra: 148 112 96;
+  background-color: #e0cdc4;
+  border-color: rgb(var(--rl-ombra) / 0.30);
+  color: #4c3d3a !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.90),
+    inset 0 -2px 0 rgb(0 0 0 / 0.05),
+    0 2px 0 rgb(var(--rl-ombra) / 0.26),
+    0 3px 9px rgb(var(--rl-ombra) / 0.22);
+}
+#btnConsoleRCH:hover, #btnConsoleRCH:focus {
+  background-color: #efe0d8;
+  border-color: rgb(var(--rl-ombra) / 0.38);
+  color: #3f322e !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    inset 0 -2px 0 rgb(0 0 0 / 0.05),
+    0 3px 0 rgb(var(--rl-ombra) / 0.30),
+    0 6px 14px rgb(var(--rl-ombra) / 0.26);
+}
+#btnConsoleRCH:active {
+  box-shadow:
+    inset 0 2px 4px rgb(0 0 0 / 0.14),
+    0 1px 2px rgb(var(--rl-ombra) / 0.22);
 }
 
 .card.neumorphic-card {
@@ -2591,6 +2740,236 @@ button.service-btn-prodotti,
     4px 4px 12px #d1d9e6;     /* ombra scura in basso a destra */
   background: #ffffff;
   border-radius: 12px;
+}
+
+/* ============================================================================
+   PULSANTI D'AZIONE DELLA CASSA — stesso rilievo dei blocchi agenda
+   ============================================================================
+   Cash / POS / Bank / Dividi, CONFERMA / SVUOTA, LOTTERIA, Salva / Reset,
+   "Associa n° tessera" e il toggle operatori erano pulsanti Bootstrap nudi:
+   piatti, in mezzo a tasti servizio in rilievo. Qui prendono lo stesso
+   spessore, la stessa patina e la stessa alzata all'hover.
+
+   I colori NON cambiano: si continuano a leggere il verde dell'incasso, il
+   blu del POS, il rosso dello svuota. Cambia solo il modo in cui il colore
+   e' acceso, tramite le variabili --bs-btn-* di Bootstrap 5.3 (cosi' gli
+   stati hover/active nativi continuano a funzionare da soli) e --rl-ombra,
+   che tinge spessore e ombra portata del colore del pulsante.
+
+   Si selezionano per CLASSE dentro .bozza-editor, non per id: le bozze
+   scorporate sono cloni della card a cui cassa.js toglie tutti gli id
+   (cloneEditor: clone.querySelectorAll('[id]') -> removeAttribute). Con i
+   soli id, i pulsanti delle bozze divise sarebbero rimasti piatti mentre
+   quelli della bozza originale erano in rilievo — cioe' di nuovo la
+   discrepanza che stiamo togliendo. */
+.bozza-editor .btn-outline-success,     /* Cash */
+.bozza-editor .btn-outline-primary,     /* POS, Salva modifiche, Associa tessera */
+.bozza-editor .btn-outline-info,        /* Bank */
+.bozza-editor .btn-outline-dark,        /* Dividi */
+.bozza-editor .btn-outline-warning,     /* Reset modifiche */
+.bozza-editor .btn-outline-secondary,   /* toggle operatore per riga */
+.bozza-conferma,
+.bozza-svuota,
+#btnLotteria {
+  border-radius: var(--rl-radius);
+  background-image: var(--rl-patina-chiara);
+  transform: translateY(0);
+  transition: transform .08s ease, box-shadow .12s ease,
+              background-color .15s, color .15s, border-color .15s;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.85),
+    inset 0 -2px 0 rgb(0 0 0 / 0.05),
+    0 2px 0 rgb(var(--rl-ombra) / 0.24),
+    0 3px 8px rgb(var(--rl-ombra) / 0.20);
+}
+
+.bozza-editor .btn-outline-success:hover,
+.bozza-editor .btn-outline-primary:hover,
+.bozza-editor .btn-outline-info:hover,
+.bozza-editor .btn-outline-dark:hover,
+.bozza-editor .btn-outline-warning:hover,
+.bozza-editor .btn-outline-secondary:hover,
+.bozza-conferma:hover,
+.bozza-svuota:hover,
+#btnLotteria:hover {
+  /* All'hover Bootstrap riempie il tasto di colore pieno: la patina chiara
+     lo sbiancherebbe, quindi si passa a quella dei blocchi agenda. */
+  background-image: var(--rl-patina-piena);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    inset 0 -2px 0 rgb(0 0 0 / 0.08),
+    0 3px 0 rgb(var(--rl-ombra) / 0.30),
+    0 6px 14px rgb(var(--rl-ombra) / 0.26);
+}
+
+/* Premuto: lo spessore si schiaccia, come nei tasti servizio */
+.bozza-editor .btn-outline-success:active,
+.bozza-editor .btn-outline-primary:active,
+.bozza-editor .btn-outline-info:active,
+.bozza-editor .btn-outline-dark:active,
+.bozza-editor .btn-outline-warning:active,
+.bozza-editor .btn-outline-secondary:active,
+.bozza-conferma:active,
+.bozza-svuota:active,
+#btnLotteria:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 2px 4px rgb(0 0 0 / 0.16),
+    0 1px 2px rgb(var(--rl-ombra) / 0.20);
+}
+
+/* Anello di fuoco da tastiera: Bootstrap qui sostituirebbe l'intera box-shadow
+   appiattendo il tasto, quindi lo ridichiariamo tenendo anche lo spessore. */
+.bozza-editor .btn-outline-success:focus-visible,
+.bozza-editor .btn-outline-primary:focus-visible,
+.bozza-editor .btn-outline-info:focus-visible,
+.bozza-editor .btn-outline-dark:focus-visible,
+.bozza-editor .btn-outline-warning:focus-visible,
+.bozza-editor .btn-outline-secondary:focus-visible,
+.bozza-conferma:focus-visible,
+.bozza-svuota:focus-visible,
+#btnLotteria:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgb(184 128 157 / 0.55),
+    0 2px 0 rgb(var(--rl-ombra) / 0.24),
+    0 3px 8px rgb(var(--rl-ombra) / 0.20);
+}
+
+/* Metodi di pagamento: da contorni vuoti a tasti in tinta tenue. Il colore
+   pieno resta per l'hover (ci pensa Bootstrap con --bs-btn-hover-*). */
+.bozza-editor .btn-outline-success {          /* Cash */
+  --rl-ombra: 25 135 84;
+  --bs-btn-bg: #f1faf5;
+  --bs-btn-border-color: rgb(25 135 84 / 0.55);
+}
+.bozza-editor .btn-outline-primary {          /* POS, Salva modifiche, Associa tessera */
+  --rl-ombra: 13 110 253;
+  --bs-btn-bg: #f0f6ff;
+  --bs-btn-border-color: rgb(13 110 253 / 0.50);
+}
+.bozza-editor .btn-outline-info {             /* Bank */
+  --rl-ombra: 11 127 150;
+  --bs-btn-bg: #eefbfe;
+  --bs-btn-border-color: rgb(11 127 150 / 0.45);
+  /* il ciano di Bootstrap (#0dcaf0) su bianco e' quasi illeggibile: stesso
+     colore, versione scura, per il solo testo a riposo */
+  --bs-btn-color: #0b7f96;
+}
+.bozza-editor .btn-outline-dark {             /* Dividi */
+  --rl-ombra: 33 37 41;
+  --bs-btn-bg: #f5f5f7;
+  --bs-btn-border-color: rgb(33 37 41 / 0.40);
+}
+.bozza-editor .btn-outline-warning {          /* Reset modifiche */
+  --rl-ombra: 176 122 12;
+  --bs-btn-bg: #fffaf0;
+  --bs-btn-color: #94690a;
+  --bs-btn-border-color: rgb(176 122 12 / 0.50);
+}
+
+/* Toggle "operatore per riga": piccolo, quindi raggio piu' stretto.
+   Lo stato .active (blu pieno) e' definito in cassa.html e resta valido. */
+.bozza-editor .btn-outline-secondary {
+  --rl-ombra: 108 117 125;
+  --bs-btn-bg: #f7f7f8;
+  border-radius: 8px;
+}
+
+/* CONFERMA: e' l'azione principale della pagina, quindi tinta piena e patina
+   "da blocco agenda" invece di quella chiara. */
+.bozza-conferma {
+  --rl-ombra: 20 108 67;
+  background-image: var(--rl-patina-piena);
+  border-color: rgb(255 255 255 / 0.22);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.bozza-svuota {                               /* SVUOTA / ELIMINA */
+  --rl-ombra: 176 42 55;
+  --bs-btn-bg: #fff5f6;
+  --bs-btn-border-color: rgb(176 42 55 / 0.45);
+}
+
+#btnLotteria {
+  --rl-ombra: 11 84 190;
+  background-image: var(--rl-patina-piena);
+  border-color: rgb(255 255 255 / 0.22);
+  font-weight: 700;
+}
+
+/* Il "+" per il nuovo cliente: minuscolo ma sempre sotto gli occhi. Stessa
+   grammatica, in scala. Condiviso con l'agenda, dove ora combacia con i
+   blocchi appuntamento. */
+.btn-add-client-square {
+  --rl-ombra: 25 110 55;
+  border-radius: 8px !important;
+  transform: translateY(0);
+  transition: transform .08s ease, box-shadow .12s ease, background-color .15s;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.40),
+    inset 0 -2px 0 rgb(0 0 0 / 0.12),
+    0 2px 0 rgb(var(--rl-ombra) / 0.40),
+    0 3px 7px rgb(var(--rl-ombra) / 0.30);
+}
+.btn-add-client-square:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    inset 0 -2px 0 rgb(0 0 0 / 0.12),
+    0 3px 0 rgb(var(--rl-ombra) / 0.44),
+    0 5px 11px rgb(var(--rl-ombra) / 0.34);
+}
+.btn-add-client-square:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 2px 5px rgb(0 0 0 / 0.30),
+    0 1px 2px rgb(var(--rl-ombra) / 0.26);
+}
+/* Ne esistono due varianti: verde pieno (cassa, barra agenda) e contornata
+   (agenda, pacchetti). La patina va scelta di conseguenza, altrimenti quella
+   "piena" sporcherebbe di grigio il fondo bianco della contornata. */
+.btn-add-client-square:not(.btn-outline-success) { background-image: var(--rl-patina-piena); }
+.btn-add-client-square.btn-outline-success       { background-image: var(--rl-patina-chiara); }
+
+/* Tasto STAMPA (il quadrone con l'icona stampante): era l'ultimo cuscino
+   neumorfico rimasto. Il selettore parte da div perche' le regole originali
+   stanno in un <style> dentro cassa.html, quindi piu' avanti nel documento:
+   a parita' di specificita' vincerebbero loro. Il giallo dello stato .attivo
+   e' un background-COLOR e continua a comporsi con la patina. */
+div#btnStampaScontrino.neumorphic-btn-stampa {
+  background-image: var(--rl-patina-chiara);
+  border: 1px solid rgb(var(--rl-ombra) / 0.16);
+  border-radius: 16px;
+  transform: translateY(0);
+  transition: transform .08s ease, box-shadow .12s ease, background-color .15s;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    inset 0 -2px 0 rgb(0 0 0 / 0.05),
+    0 3px 0 rgb(var(--rl-ombra) / 0.18),
+    0 5px 14px rgb(var(--rl-ombra) / 0.16);
+}
+div#btnStampaScontrino.neumorphic-btn-stampa:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    inset 0 -2px 0 rgb(0 0 0 / 0.05),
+    0 4px 0 rgb(var(--rl-ombra) / 0.22),
+    0 9px 20px rgb(var(--rl-ombra) / 0.22);
+}
+div#btnStampaScontrino.neumorphic-btn-stampa:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 2px 6px rgb(0 0 0 / 0.16),
+    0 1px 2px rgb(var(--rl-ombra) / 0.18);
+}
+/* Pronto per la stampa: il giallo si accende e lo spessore diventa ambra,
+   cosi' lo stato attivo si vede anche con la coda dell'occhio. */
+div#btnStampaScontrino.neumorphic-btn-stampa.attivo {
+  --rl-ombra: 190 145 10;
+  border-color: rgb(190 145 10 / 0.45);
 }
 
 /* ---- Modalità offline: sola lettura ---- */

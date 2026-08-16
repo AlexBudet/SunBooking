@@ -81,6 +81,19 @@ html.in-side-pane .page-wide-90 { margin-top: 12px !important; }
 html.in-side-pane main > br { display: none !important; }
 html.in-side-pane .pane-top-spacer { display: none !important; }
 
+/* AVVISI GLOBALI: uno solo per finestra, quello del documento principale.
+   La pagina nel pannello e' un secondo documento che carica di nuovo questo
+   base.html, quindi si porta dietro la propria copia di ogni elemento fixed:
+   il badge "WhatsApp disconnesso" comparirebbe DUE VOLTE (uno in basso a
+   sinistra della finestra, uno in basso a sinistra del pannello), e ad agenda
+   collassata, col pannello a tutto schermo, i due finiscono quasi sovrapposti.
+   Stessa cosa per l'indicatore di riconnessione.
+   Il polling che li accende viene proprio saltato nel pannello (piu' sotto):
+   queste regole sono la rete di sicurezza se un domani qualcun altro li
+   mostrasse per altra via. */
+html.in-side-pane #waDisconnectedBadge,
+html.in-side-pane #reconnectingIndicator { display: none !important; }
+
 #quarterResetIcon:hover,
 .d-flex.align-items-center > button:hover {
   color: lightseagreen !important;
@@ -377,6 +390,10 @@ html.in-side-pane .pane-top-spacer { display: none !important; }
   // senza modulo WEB la logica e' completamente skippata.
   (function() {
     if (!window.moduleWebEnabled) return;
+    // Nel pannello laterale questo documento e' una COPIA: badge e polling
+    // esistono gia' nella finestra principale. Senza questa uscita si vedeva
+    // il badge due volte e /api/whatsapp/status veniva chiamato il doppio.
+    if (document.documentElement.classList.contains('in-side-pane')) return;
 
     var POLL_MS         = 2 * 60 * 1000;  // 2 minuti
     var INITIAL_DELAY_MS = 4 * 1000;       // primo check dopo 4s dal load
@@ -507,6 +524,14 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   }
+
+  // Guardiano della connessione: SOLO nella finestra principale. Nel pannello
+  // laterale questo documento e' una copia, e girava un secondo guardiano
+  // completo: due sonde su /calendar/api/next_appointments ogni 20s, due
+  // prefetch, e in caso di rete ballerina due "Connessione instabile" e due
+  // modal "Connessione assente", uno dentro il pannello. Il modal del
+  // documento principale copre gia' tutta la finestra, pannello compreso.
+  if (document.documentElement.classList.contains('in-side-pane')) return;
 
   // Logica modal offline
   const offlineModalEl = document.getElementById('offlineModal');

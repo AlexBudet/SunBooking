@@ -561,19 +561,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div class="tile-neumorphic tile-large" id="tile-no-show">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
-  <div class="tile-title d-flex align-items-center justify-content-between flex-wrap" style="padding-right:15px; gap:6px;">
+  <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
     <span data-bs-toggle="tooltip" data-bs-placement="bottom"
           title="Chi aveva un appuntamento e non si è presentato. Passa il mouse su una riga per telefono e dettagli">NO-SHOW</span>
-    <div class="d-flex align-items-center" style="gap:4px;">
-      <input type="text" class="form-control form-control-sm no-show-data" id="noShowDal"
-             placeholder="dal" autocomplete="off" style="width:92px;">
-      <input type="text" class="form-control form-control-sm no-show-data" id="noShowAl"
-             placeholder="al" autocomplete="off" style="width:92px;">
-      <button type="button" class="btn btn-outline-secondary btn-sm" id="noShowRecenti"
-              data-bs-toggle="tooltip" title="Torna agli ultimi 10">
-        <i class="bi bi-arrow-counterclockwise"></i>
-      </button>
-    </div>
+  </div>
+  <!-- I due campi data stavano DENTRO l'header: erano l'unico tile a farlo e
+       gli sballavano l'altezza rispetto a tutti gli altri. Qui nel corpo hanno
+       anche lo spazio per la misura piena, senza comprimersi. Gli id non sono
+       cambiati, il JS li prende con getElementById e non si accorge di nulla. -->
+  <div class="no-show-filtri d-flex align-items-center" style="gap:4px; margin-bottom:8px;">
+    <input type="text" class="form-control form-control-sm no-show-data" id="noShowDal"
+           placeholder="dal" autocomplete="off">
+    <input type="text" class="form-control form-control-sm no-show-data" id="noShowAl"
+           placeholder="al" autocomplete="off">
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="noShowRecenti"
+            data-bs-toggle="tooltip" title="Torna agli ultimi 10">
+      <i class="bi bi-arrow-counterclockwise"></i>
+    </button>
   </div>
   <div class="stat-voce mb-1" id="no-show-periodo">ultimi 10 in ordine di tempo</div>
   <div class="tile-lista-scroll" id="no-show-list">
@@ -1216,11 +1220,27 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 }
 
+/* Header dei tile: TUTTI ALTI UGUALE.
+   Prima l'altezza la decideva il contenuto, quindi i tile con un comando nel
+   titolo (le frecce di aggiornamento di news e oroscopo, i gruppi 10gg/30gg/
+   1 anno delle heatmap, ...) avevano la fascia piu' alta di quelli col solo
+   testo, e l'allineamento delle card saltava. Ora l'altezza e' fissa e i
+   comandi si adattano a lei, non viceversa.
+   Se aggiungi un comando in un header, NON dargli dimensioni proprie: eredita
+   quelle compatte dalla regola .tile-title .btn qui sotto. Se non ci sta,
+   probabilmente va nel corpo del tile — vedi i campi data del NO-SHOW, che
+   stavano qui e sono stati spostati sotto al titolo. */
 .tile-title {
   background: linear-gradient(#ffffff 0%, #eef1f6 100%);
   color: rgb(52, 52, 52);
   border-bottom: 1px solid #e6eaf0;   /* stacca il titolo dal contenuto */
   width: 100%;
+  box-sizing: border-box;
+  min-height: 36px;                   /* l'altezza unica di tutti gli header */
+  display: flex;                      /* centra in verticale anche i titoli
+                                         di solo testo, che prima erano block */
+  align-items: center;
+  gap: 4px;
   margin-top: 0px !important;
   margin-bottom: 10px;
   padding-top: 8px !important;
@@ -1233,6 +1253,48 @@ document.addEventListener('DOMContentLoaded', function() {
   text-align: left;
 }
 
+/* Comandi dentro un header: compatti quanto basta a stare nei 36px senza
+   spingere. Si passa dalle variabili --bs-btn-* cosi' la regola vale sia per
+   i pulsanti singoli sia per quelli dentro un .btn-group-sm, che altrimenti
+   riporterebbero le misure di Bootstrap. */
+.tile-title .btn {
+  --bs-btn-padding-y: 1px;
+  --bs-btn-padding-x: 7px;
+  --bs-btn-font-size: 0.7rem;
+  line-height: 1.35;
+}
+.tile-title .btn i {
+  font-size: 0.78rem;
+  line-height: 1;
+  vertical-align: -1px;
+}
+
+/* Filtro date del tile NO-SHOW: i due campi stanno SEMPRE sulla stessa riga.
+   La larghezza va messa in CSS e non nello style inline dell'input, perche'
+   quello che si vede a schermo NON e' quell'input: flatpickr e' configurato
+   con altInput, quindi nasconde l'originale e mostra un secondo campo creato
+   da lui, a cui copia solo le CLASSI (e il placeholder), non lo style. Con la
+   sola regola inline il campo visibile restava un form-control al 100% e i due
+   campi andavano a capo.
+   80px bastano per "31/12/2026" perche' qui il corpo del testo e' ridotto;
+   se si tocca il font vanno ricontrollati insieme. */
+.no-show-filtri { flex-wrap: nowrap; }
+.no-show-filtri .no-show-data {
+  flex: 0 0 auto;
+  width: 80px;
+  font-size: 0.78rem;
+  padding-left: 6px;
+  padding-right: 6px;
+  text-align: center;
+}
+
+/* Pulsanti sezione del report (Corrispettivi, Incasso per categoria, ...) e
+   ingranaggio dei settaggi.
+   SCELTA DELIBERATA: restano al cuscino neumorfico originale e NON seguono il
+   rilievo introdotto nel resto del progetto. Erano stati convertiti e sono
+   stati riportati indietro apposta: fanno coppia con .service-bar-btn della
+   cassa (styles.css), che e' uguale. Se un domani si uniformano, vanno rifatti
+   tutti e due insieme. */
 .btn-neumorphic {
   min-width: 120px;
   min-height: 34px;
@@ -1242,7 +1304,7 @@ document.addEventListener('DOMContentLoaded', function() {
     box-shadow:
     0 -4px 12px 0 #fff,                /* ombra bianca sopra */
     4px 4px 12px #e0e0e0,              /* ombra scura sotto */
-    -4px -4px 12px #ffffff;  
+    -4px -4px 12px #ffffff;
   background: #f7f9f9;
   border: none;
   margin: 0;
@@ -1252,20 +1314,11 @@ document.addEventListener('DOMContentLoaded', function() {
   justify-content: center;
 }
 
-  .service-bar-btn:hover {
-    background: #ffffff
-}
-
 .btn-neumorphic:hover {
   background: white;
   box-shadow:
     2px 2px 6px #d1d9e6,
     -2px -2px 6px #ffffff;
-}
-
-.service-bar-btn:focus {
-    background: #717980;
-    color: white;
 }
 
 .btn-neumorphic:focus {
@@ -1276,7 +1329,7 @@ document.addEventListener('DOMContentLoaded', function() {
     -2px -2px 6px #ffffff;
 }
 
-/* AGGIUNGI: lo stato selezionato non dipende dal focus */
+/* Lo stato selezionato non dipende dal focus */
 .btn-neumorphic.active,
 .btn-neumorphic.btn-selected {
   background: #717980;
@@ -1286,7 +1339,7 @@ document.addEventListener('DOMContentLoaded', function() {
     -2px -2px 6px #ffffff;
 }
 
-/* opzionale: mantieni anche al passaggio mouse sul selezionato */
+/* Mantiene il selezionato anche al passaggio del mouse */
 .btn-neumorphic.active:hover,
 .btn-neumorphic.btn-selected:hover {
   background: #717980;

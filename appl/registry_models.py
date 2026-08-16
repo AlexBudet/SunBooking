@@ -224,6 +224,12 @@ class Contract(Base):
     # sola lettura al cliente: non e' il cliente a scegliersi il prezzo
     starter_total       = Column(Numeric(10, 2))
     saas_monthly_amount = Column(Numeric(10, 2))
+    # Listino: 'standard' (39/mese) | 'premium' (59/mese) | 'custom'.
+    # Su 'custom' la motivazione e' OBBLIGATORIA e imposta lato server: un
+    # prezzo fuori listino senza una ragione scritta, fra due anni, non se lo
+    # ricorda nessuno — e in caso di contestazione non e' difendibile.
+    price_plan          = Column(String(20))
+    price_note          = Column(Text)
 
     # SEPA: mai l'IBAN completo in chiaro, solo il riferimento del mandato
     sepa_mandate_ref = Column(String(64))
@@ -319,8 +325,12 @@ class Billing(Base):
     max_payment_days    = Column(Integer, nullable=False, default=15, server_default='15')
     is_owner_db         = Column(Boolean, nullable=False, default=False,
                                  server_default='false')
-    fiscozen_contact_id = Column(String(64))
-    revolut_account_ref = Column(String(64))
+    # Riferimenti presso i fornitori esterni. I nomi sono volutamente NEUTRI:
+    # il fornitore di fatturazione elettronica (oggi OpenAPI) e quello dei
+    # pagamenti (Stripe/PayPal) possono cambiare senza rinominare le colonne.
+    # Non si usa "openapi_*" anche perche' collide con lo standard OpenAPI.
+    einvoice_customer_id = Column(String(64))
+    payment_customer_ref = Column(String(64))
     updated_at          = Column(DateTime(timezone=True), nullable=False,
                                  server_default=func.now(), onupdate=func.now())
 
@@ -342,8 +352,8 @@ class Invoice(Base):
     description  = Column(Text)
     amount       = Column(Numeric(10, 2), nullable=False, default=0, server_default='0')
     paid         = Column(Boolean, nullable=False, default=False, server_default='false')
-    fiscozen_id  = Column(String(64))
-    fiscozen_url = Column(Text)
+    einvoice_id  = Column(String(64))   # id della fattura presso il provider
+    einvoice_url = Column(Text)         # link al PDF/XML presso il provider
     created_at   = Column(DateTime(timezone=True), nullable=False,
                           server_default=func.now())
 
@@ -358,6 +368,6 @@ class Payment(Base):
     amount     = Column(Numeric(10, 2), nullable=False, default=0, server_default='0')
     method     = Column(String(40))
     reference  = Column(String(120))
-    revolut_id = Column(String(64))
+    provider_payment_id = Column(String(64))   # id dell'incasso presso il provider
     created_at = Column(DateTime(timezone=True), nullable=False,
                         server_default=func.now())
