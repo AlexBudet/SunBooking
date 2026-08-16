@@ -1106,8 +1106,56 @@ if (typeof window.applyHighlightToCell !== 'function') {
 }
 
     // ============================================
-    //   FUNZIONE PER IL MODAL DI AGGIUNTA CLIENTE 
+    //   FUNZIONE PER IL MODAL DI AGGIUNTA CLIENTE
     // ============================================
+
+// Interpreta quello che l'utente ha gia' scritto nel campo di ricerca cliente
+// (Navigator o modal Nuovo Appuntamento) per pre-compilare il modal di aggiunta.
+// I token numerici finiscono nel cellulare, quelli alfabetici in nome/cognome.
+// Da due parole in su: la prima va in Nome, il resto in Cognome (stesso ordine
+// con cui l'app mostra i clienti ovunque), e se l'utente ha scritto al
+// contrario gli basta correggere i due campi, che sono in vista.
+// Una parola sola non viene mai pre-compilata: vedi sotto.
+function parseClientSearchQuery(raw) {
+  const out = { nome: '', cognome: '', cellulare: '' };
+  const q = String(raw || '').trim();
+  if (!q) return out;
+
+  const phoneChunks = [];
+  const nameTokens = [];
+  q.split(/\s+/).filter(Boolean).forEach(token => {
+    if (/^[+\d][\d.\-\/]*$/.test(token)) phoneChunks.push(token);
+    else nameTokens.push(token);
+  });
+
+  let phone = phoneChunks.join('').replace(/[.\-\/]/g, '');
+  if (phone.startsWith('+39')) phone = phone.slice(3);
+  else if (phone.startsWith('0039')) phone = phone.slice(4);
+  if (/^\d{3,}$/.test(phone)) out.cellulare = phone;
+
+  // Con una parola sola non si pre-compila niente: non c'e' modo di sapere se
+  // e' un nome o un cognome (la ricerca cerca il termine in entrambi i campi),
+  // e un valore messo nella casella sbagliata e' peggio della casella vuota.
+  if (nameTokens.length > 1) {
+    out.nome = capitalizeName(nameTokens[0]);
+    out.cognome = capitalizeName(nameTokens.slice(1).join(' '));
+  }
+  return out;
+}
+window.parseClientSearchQuery = parseClientSearchQuery;
+
+// true quando il testo nel campo di ricerca e' il nome di un cliente gia'
+// scelto (e non riscritto dopo): in quel caso il modal "Aggiungi cliente" non
+// va pre-compilato, si creerebbe un doppione di chi e' gia' in agenda.
+function isSelectedClientText(currentText, selectedId, selectedName) {
+  if (!selectedId) return false;
+  const norm = s => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const cur = norm(currentText);
+  if (!cur) return true;
+  const sel = norm(selectedName);
+  return sel ? cur === sel : true;
+}
+
 // funzione openAddClientModal
 function openAddClientModal(callerId) {
     if (!window.bootstrap || !window.bootstrap.Modal) {
@@ -1162,10 +1210,20 @@ function openAddClientModal(callerId) {
     
     modalElement.dataset.caller = callerId;
 
+    // Testo digitato nel campo di ricerca, letto PRIMA che venga svuotato qui
+    // sotto: serve a pre-compilare il form. Se un cliente e' gia' selezionato
+    // il campo contiene il suo nome, quindi non si pre-compila nulla (si
+    // creerebbe un doppione).
+    let prefill = null;
+
     try {
       if (callerId === 'CreateAppointmentModal') {
         const input = document.getElementById('clientSearchInput');
         const results = document.getElementById('clientResults');
+        const hidden = document.getElementById('client_id');
+        if (input && !isSelectedClientText(input.value, hidden && hidden.value, hidden && hidden.dataset.clientName)) {
+          prefill = parseClientSearchQuery(input.value);
+        }
         if (input) {
           input.value = '';
           input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1178,6 +1236,9 @@ function openAddClientModal(callerId) {
       } else if (callerId === 'navigator' || callerId === 'appointmentNavigator') {
         const inputNav = document.getElementById('clientSearchInputNav');
         const resultsNav = document.getElementById('clientResultsNav');
+        if (inputNav && !isSelectedClientText(inputNav.value, window.selectedClientIdNav, window.selectedClientNameNav)) {
+          prefill = parseClientSearchQuery(inputNav.value);
+        }
         if (inputNav) {
           inputNav.value = '';
           inputNav.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1216,7 +1277,26 @@ function openAddClientModal(callerId) {
       
       const newForm = addClientForm.cloneNode(true);
       addClientForm.parentNode.replaceChild(newForm, addClientForm);
-      
+
+      // Pre-compilazione dal campo di ricerca (Navigator / Nuovo Appuntamento):
+      // si applica sul form gia' clonato, altrimenti la reset()/clone la perde.
+      if (prefill && (prefill.nome || prefill.cognome || prefill.cellulare)) {
+        const fNome = newForm.querySelector('#cliente_nome');
+        const fCognome = newForm.querySelector('#cliente_cognome');
+        const fCell = newForm.querySelector('#cliente_cellulare');
+        if (fNome && prefill.nome) fNome.value = prefill.nome;
+        if (fCognome && prefill.cognome) fCognome.value = prefill.cognome;
+        if (fCell && prefill.cellulare) fCell.value = prefill.cellulare;
+
+        // Il cursore va sul primo campo rimasto vuoto, cosi' si continua a
+        // scrivere da li' invece di dover cliccare.
+        modalElement.addEventListener('shown.bs.modal', function focusFirstEmpty() {
+          modalElement.removeEventListener('shown.bs.modal', focusFirstEmpty);
+          const target = [fNome, fCognome, fCell].find(el => el && !el.value);
+          if (target) target.focus();
+        });
+      }
+
       newForm.addEventListener('submit', function(event) {
         event.preventDefault();
         const formData = new FormData(newForm);
@@ -2824,6 +2904,9 @@ function selectClient(clientId, fullName, clientNote, clientPhone) {
   if (input) input.value = capitalizeName(fullName);
   if (hidden) {
     hidden.value = clientId;
+    // Nome mostrato nel campo di ricerca: serve a openAddClientModal per capire
+    // se il testo nel campo e' un cliente gia' scelto o una ricerca a vuoto.
+    hidden.dataset.clientName = capitalizeName(fullName) || '';
     // Memorizza nota/cellulare per propagare i corsivi + i bottoni WhatsApp ai blocchi
     if (clientNote !== undefined) hidden.dataset.clientNote = String(clientNote || '');
     if (clientPhone !== undefined) hidden.dataset.clientPhone = String(clientPhone || '');

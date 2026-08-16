@@ -21,7 +21,7 @@ HELP_TOPICS = {
 <span class="help-strong-dark help-subtitle-pill">▸ Click su cella vuota (metodo rapido)</span>
 1️⃣ fai <span class="help-strong-dark">click su una cella vuota</span>
 2️⃣ si apre il modal <span class="help-strong-dark">Crea Appuntamento</span>
-3️⃣ nel campo cliente scrivi almeno 3 caratteri e seleziona il nominativo (oppure crea un nuovo cliente al volo con il tasto <span class="help-calendar-btn plus">+</span>)
+3️⃣ nel campo cliente scrivi almeno 3 caratteri e seleziona il nominativo (oppure crea un nuovo cliente al volo con il tasto <span class="help-calendar-btn plus">+</span>: quello che hai già digitato — cellulare, oppure nome e cognome — viene riportato nel modal)
 4️⃣ nel campo servizio scrivi almeno 3 caratteri e scegli il trattamento
 5️⃣ per ogni servizio che cliccherai dai risultati della ricerca, saranno creati dei <span class="help-strong-dark">mini-blocchi</span> visibili nella parte in basso del Navigator.
 6️⃣ conferma la creazione
@@ -378,6 +378,22 @@ Il modo più veloce per aggiungere un nuovo cliente è usare il tasto <span clas
 
 Da lì, basta scrivere **NOME, COGNOME e CELLULARE**: il cliente viene subito aggiunto alla rubrica.
 
+<span class="help-strong-dark help-subtitle-pill">▸ IL MODAL SI PRE-COMPILA DA SOLO</span>
+
+Il caso tipico: cerchi una persona, la ricerca risponde <span class="help-strong-dark">Nessun risultato</span> perché non è ancora in rubrica, e clicchi <span class="help-calendar-btn plus">+</span>. Quello che avevi già scritto nel campo di ricerca <span class="help-strong-dark">viene riportato nel modal</span>, così non lo ridigiti:
+
+• <span class="help-strong-dark">Numero di cellulare</span> → finisce nel campo Cellulare già ripulito: spazi, trattini e prefisso <span class="help-strong-dark">+39</span> / <span class="help-strong-dark">0039</span> vengono tolti (scrivi <span class="help-strong-dark">+39 333 123 4567</span>, nel modal trovi <span class="help-strong-dark">3331234567</span>)
+• <span class="help-strong-dark">Due parole</span> → la prima va in <span class="help-strong-dark">Nome</span>, la seconda in <span class="help-strong-dark">Cognome</span> (<span class="help-strong-dark">maria rossi</span> → Nome <i>Maria</i>, Cognome <i>Rossi</i>). Se le avevi scritte al contrario correggi i due campi, sono uno sopra l'altro
+• <span class="help-strong-dark">Una parola sola</span> → <span class="help-strong-dark">nessun campo viene compilato</span>. La ricerca cerca il termine sia nei nomi che nei cognomi, quindi da "Rossi" il gestionale non può sapere in quale delle due caselle metterlo: preferisce lasciartele vuote piuttosto che riempirne una sbagliata
+• <span class="help-strong-dark">Tutto insieme</span> → puoi anche scrivere <span class="help-strong-dark">maria rossi 3331234567</span>: compila tutti e tre i campi in un colpo solo
+
+Il cursore si posiziona da solo sul <span class="help-strong-dark">primo campo rimasto vuoto</span>, così continui a scrivere senza cliccare.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Nota:</span>
+<span class="help-hint-text">Se nel campo di ricerca c'è un cliente <span class="help-strong-dark">già selezionato</span> (il nome comparso dopo averlo scelto dalla lista), il modal si apre vuoto: è voluto, serve a non creare un doppione di chi è già in rubrica.</span>
+</div>
+
 Se il cellulare è già presente per un altro cliente, compare un messaggio di avviso (non è ammesso lo stesso numero di cellulare per più clienti).
 
 Il **SESSO** viene capito automaticamente dal nome (ma puoi correggerlo nelle impostazioni).
@@ -407,6 +423,10 @@ Per il dettaglio completo (campi modificabili e tabelle), vedi <span class="help
     "content":"""Il modo più veloce per aggiungere un nuovo cliente è usare il **TASTO +** accanto al campo di ricerca cliente nella finestra di creazione appuntamento o nel Navigator Appuntamenti in Agenda!
 
 Da lì, basta scrivere **NOME, COGNOME e CELLULARE**: il cliente viene subito aggiunto alla tua rubrica clienti!
+
+<span class="help-strong-dark help-subtitle-pill">▸ QUELLO CHE HAI CERCATO È GIÀ SCRITTO</span>
+
+Se apri il modal dopo una ricerca a vuoto, i campi arrivano <span class="help-strong-dark">già compilati</span> con quello che avevi digitato nel campo di ricerca: il <span class="help-strong-dark">cellulare</span> (ripulito da spazi, trattini e prefisso +39/0039) e, se avevi scritto <span class="help-strong-dark">due parole</span>, <span class="help-strong-dark">Nome</span> e <span class="help-strong-dark">Cognome</span> nell'ordine in cui le hai scritte. Con <span class="help-strong-dark">una parola sola</span> non viene compilato nulla, perché non è possibile sapere se è un nome o un cognome. Il dettaglio completo è in <span class="help-strong-dark">[[RICERCA CLIENTE IN AGENDA|client_search]]</span>.
 
 Se il cellulare è già presente per un altro cliente, vieni avvisato con un messaggio (non è ammesso lo stesso numero di cellulare per più clienti!).
 
