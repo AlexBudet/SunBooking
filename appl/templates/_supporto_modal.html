@@ -1,0 +1,165 @@
+{# ========== MODAL: Contatta il supporto (condiviso) ==========
+   Nasce nel Centro Assistenza e da li' e' stato estratto perche' serviva
+   identico anche in Marketing: era il vecchio link mailto:, che su una
+   postazione senza client di posta configurato non apriva niente e sembrava
+   un pulsante rotto. Il messaggio parte su WhatsApp dall'account del negozio
+   verso il numero del supporto, via Unipile.
+
+   Il nome del negozio NON viaggia da qui: lo rilegge il server da BusinessInfo,
+   e' l'unico modo per sapere con certezza da quale tenant arriva la richiesta.
+
+   Uso: {% include '_supporto_modal.html' %} una sola volta per pagina, poi
+   onclick="openSupportModal()" oppure openSupportModal('Oggetto gia' scritto')
+   per precompilare l'oggetto. #}
+<div class="modal fade" id="supportModal" tabindex="-1" aria-labelledby="supportModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="supportModalLabel">✉️ Contatta il supporto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+
+        <div id="supportForm">
+          <p class="text-muted" style="font-size:0.92rem;">
+            Descrivi il problema o la domanda: la richiesta ci arriva su WhatsApp insieme al nome
+            del tuo centro, così sappiamo subito chi ci ha scritto.
+          </p>
+
+          <div class="mb-3">
+            <label for="supportOggetto" class="form-label">Oggetto</label>
+            <input type="text" class="form-control" id="supportOggetto" maxlength="120"
+                   placeholder="Es. La stampante fiscale non risponde">
+          </div>
+
+          <div class="mb-3">
+            <label for="supportMessaggio" class="form-label">Messaggio <span class="text-danger">*</span></label>
+            <textarea class="form-control" id="supportMessaggio" rows="6" maxlength="5000"
+                      placeholder="Racconta cosa succede, e in quale schermata."></textarea>
+            <div class="form-text"><span id="supportCount">0</span>/5000</div>
+          </div>
+
+          <div class="mb-2">
+            <label for="supportRispondiA" class="form-label">Come ricontattarti</label>
+            <input type="text" class="form-control" id="supportRispondiA"
+                   placeholder="Numero di telefono o e-mail">
+            <div class="form-text">Se lo lasci vuoto usiamo i recapiti del centro.</div>
+          </div>
+
+          <div id="supportAlert" class="alert d-none mt-3" role="alert"></div>
+        </div>
+
+        <div id="supportSuccess" class="text-center py-4 d-none">
+          <div style="font-size:2.5rem;">✅</div>
+          <h5 class="mt-2">Richiesta inviata</h5>
+          <p class="text-muted mb-0">Ti risponderemo appena possibile all'indirizzo indicato.</p>
+        </div>
+
+      </div>
+      <div class="modal-footer" id="supportFooter">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" id="supportSendBtn" onclick="sendSupportRequest()">
+          Invia richiesta
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== CONTATTA IL SUPPORTO =====================
+const SUPPORT_URL   = "{{ url_for('settings.api_help_contatta_supporto') }}";
+const SUPPORT_EMAIL = "info@tosca-crm.it";
+
+// oggettoPredefinito: usato dalle pagine che chiamano il supporto da un punto
+// preciso (es. Marketing), cosi' l'utente non deve scrivere di cosa si tratta.
+function openSupportModal(oggettoPredefinito) {
+    // Riporta il modal allo stato iniziale: riaprendolo dopo un invio
+    // riuscito, altrimenti si rivedrebbe la schermata di conferma.
+    document.getElementById('supportForm').classList.remove('d-none');
+    document.getElementById('supportSuccess').classList.add('d-none');
+    document.getElementById('supportFooter').classList.remove('d-none');
+    supportAlert(null);
+    const btn = document.getElementById('supportSendBtn');
+    btn.disabled = false;
+    btn.textContent = 'Invia richiesta';
+    if (oggettoPredefinito) {
+        document.getElementById('supportOggetto').value = oggettoPredefinito;
+    }
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('supportModal')).show();
+}
+
+function supportAlert(msg, tipo) {
+    const el = document.getElementById('supportAlert');
+    if (!msg) { el.className = 'alert d-none mt-3'; el.textContent = ''; return; }
+    el.className = 'alert alert-' + (tipo || 'danger') + ' mt-3';
+    el.innerHTML = msg;
+}
+
+// Se il server non riesce a spedire, non lasciamo l'utente a mani vuote:
+// gli apriamo il client di posta con tutto gia' scritto dentro.
+function supportMailtoFallback(oggetto, messaggio) {
+    const sub  = encodeURIComponent('[TOSCA] ' + (oggetto || 'Richiesta di assistenza'));
+    const body = encodeURIComponent(messaggio);
+    return '<a href="mailto:' + SUPPORT_EMAIL + '?subject=' + sub + '&body=' + body + '">'
+         + 'apri il programma di posta con il messaggio gia\' pronto</a>';
+}
+
+async function sendSupportRequest() {
+    const oggetto   = document.getElementById('supportOggetto').value.trim();
+    const messaggio = document.getElementById('supportMessaggio').value.trim();
+    const rispondiA = document.getElementById('supportRispondiA').value.trim();
+
+    if (!messaggio) {
+        supportAlert('Scrivi il messaggio prima di inviare.');
+        document.getElementById('supportMessaggio').focus();
+        return;
+    }
+
+    const btn = document.getElementById('supportSendBtn');
+    btn.disabled = true;
+    btn.textContent = 'Invio in corso...';
+    supportAlert(null);
+
+    try {
+        const resp = await fetch(SUPPORT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ oggetto, messaggio, rispondi_a: rispondiA })
+        });
+        const data = await resp.json().catch(() => ({}));
+
+        if (resp.ok && data.success) {
+            document.getElementById('supportForm').classList.add('d-none');
+            document.getElementById('supportSuccess').classList.remove('d-none');
+            document.getElementById('supportFooter').classList.add('d-none');
+            document.getElementById('supportOggetto').value = '';
+            document.getElementById('supportMessaggio').value = '';
+            document.getElementById('supportCount').textContent = '0';
+            return;
+        }
+
+        let msg = data.error || 'Invio non riuscito.';
+        if (data.fallback) {
+            msg += ' In alternativa puoi ' + supportMailtoFallback(oggetto, messaggio) + '.';
+        }
+        supportAlert(msg);
+    } catch (e) {
+        supportAlert('Nessuna connessione al server. Puoi '
+                     + supportMailtoFallback(oggetto, messaggio) + '.');
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Invia richiesta';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const ta = document.getElementById('supportMessaggio');
+    if (ta) {
+        ta.addEventListener('input', function() {
+            document.getElementById('supportCount').textContent = this.value.length;
+        });
+    }
+});
+</script>

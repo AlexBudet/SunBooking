@@ -439,11 +439,15 @@
                         Contatta il team Tosca per ricevere una consulenza gratuita e scoprire come integrare
                         le immagini nel tuo marketing digitale.
                     </p>
-                    <a href="mailto:alessio.budetta@gmail.com?subject=Richiesta integrazione immagini marketing&body=Ciao, vorrei informazioni su come integrare immagini nelle campagne WhatsApp marketing e nel portale prenotazioni."
+                    {# Era un mailto: verso l'indirizzo personale dell'owner. Ora usa lo
+                       stesso modal del Centro Assistenza: la richiesta parte su WhatsApp
+                       dall'account del negozio, con l'oggetto gia' compilato. #}
+                    <button type="button"
+                       onclick="openSupportModal('Richiesta integrazione immagini marketing')"
                        class="btn btn-lg w-100 fw-semibold mb-2"
                        style="background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border: none;">
                         <i class="bi bi-envelope me-2"></i>Richiedi supporto a Tosca
-                    </a>
+                    </button>
                     <small class="text-muted">
                         <i class="bi bi-shield-check me-1 text-success"></i>Risposta entro 24h lavorative
                     </small>
@@ -455,6 +459,11 @@
 
 </div>
 <br><br>
+
+{# Modal "Contatta il supporto": lo stesso del Centro Assistenza, aperto dal
+   pulsante della SEZIONE 4 (Immagini Marketing). #}
+{% include '_supporto_modal.html' %}
+
 <!-- CSS aggiuntivo -->
 <style>
 /* Override locale: nei card-header i titoli devono restare bianchi e senza ombra */
