@@ -2055,6 +2055,37 @@ def api_prossimo_numero_tessera():
     return jsonify({'numero': str(prossimo).zfill(larghezza)})
 
 
+def _ordine_numero_tessera(numero):
+    """Criteri di ORDINAMENTO per una ricerca sul numero di tessera.
+
+    Usato sia dalla Cassa (/api/cerca-per-tessera) sia dal tab "Ricaricabili
+    Solarium" di Pacchetti (/api/prepagate-solarium?tessera=): la stessa
+    ricerca deve dare lo stesso ordine nei due posti.
+
+    Priorita':
+      0. corrispondenza ESATTA, stesse identiche cifre: cercando "15" viene
+         prima "15", non "151" o "152";
+      1. esatta a meno degli zeri iniziali: dove le tessere sono zero-riempite
+         a tre cifre, "015" e "15" sono la stessa carta;
+      2. tessere che INIZIANO per il numero digitato ("150", "151", "152");
+      3. tessere che lo contengono soltanto dentro o in coda ("115", "215").
+    A parita' di gruppo: prima le piu' corte, poi in ordine di numero.
+
+    NB: l'ORDER BY va sempre messo, e messo qui. Con un LIMIT e senza ordine
+    esplicito il database e' libero di restituire N righe QUALSIASI, diverse
+    fra un'esecuzione e l'altra: cercando "444" poteva capitare che la 444 non
+    comparisse affatto e ricomparisse ripetendo la stessa ricerca.
+    """
+    nudo = numero.lstrip('0') or '0'
+    priorita = case(
+        (Pacchetto.numero_tessera == numero, 0),
+        (func.ltrim(Pacchetto.numero_tessera, '0') == nudo, 1),
+        (Pacchetto.numero_tessera.ilike(f'{numero}%'), 2),
+        else_=3,
+    )
+    return (priorita, func.length(Pacchetto.numero_tessera), Pacchetto.numero_tessera)
+
+
 @pacchetti_bp.route('/api/cerca-per-tessera', methods=['GET'])
 def api_cerca_per_tessera():
     """Cerca carte prepagate per numero di tessera (match parziale), per la ricerca
@@ -2063,23 +2094,7 @@ def api_cerca_per_tessera():
     if len(numero) < 1:
         return jsonify([])
 
-    # ORDINE ESPLICITO, obbligatorio: con LIMIT e senza ORDER BY il database
-    # e' libero di restituire otto righe QUALSIASI, e di cambiarle fra
-    # un'esecuzione e l'altra. Cercando "444" poteva capitare che la tessera
-    # 444 non comparisse affatto, mentre ripetendo la stessa ricerca compariva.
-    #
-    # Priorita': corrispondenza esatta, poi esatta a meno degli zeri iniziali
-    # (le tessere sono zero-riempite a 3 cifre: "044" e "44" sono la stessa),
-    # poi quelle che iniziano per il numero digitato, infine quelle che lo
-    # contengono. A parita', prima le piu' corte: "444" prima di "4440".
-    nudo = numero.lstrip('0') or '0'
-    priorita = case(
-        (Pacchetto.numero_tessera == numero, 0),
-        (func.ltrim(Pacchetto.numero_tessera, '0') == nudo, 1),
-        (Pacchetto.numero_tessera.ilike(f'{numero}%'), 2),
-        else_=3,
-    )
-
+    # Ordine e priorita': vedi _ordine_numero_tessera (esatta prima di tutto).
     prepagate = (Pacchetto.query
                  .join(Client)
                  .filter(
@@ -2087,9 +2102,7 @@ def api_cerca_per_tessera():
                      Pacchetto.numero_tessera.ilike(f'%{numero}%'),
                      Pacchetto.status != PacchettoStatus.Eliminato
                  )
-                 .order_by(priorita,
-                           func.length(Pacchetto.numero_tessera),
-                           Pacchetto.numero_tessera)
+                 .order_by(*_ordine_numero_tessera(numero))
                  .limit(8)
                  .all())
 
@@ -2246,8 +2259,10 @@ def api_prepagate_solarium():
 
     # --- ricerca per tessera: filtra a ogni cifra digitata ---
     if tessera:
+        # Ordinando per stringa, cercando "15" arrivavano prima "115" e "150":
+        # la corrispondenza esatta va in cima (vedi _ordine_numero_tessera).
         righe = (base.filter(Pacchetto.numero_tessera.ilike(f'%{tessera}%'))
-                     .order_by(Pacchetto.numero_tessera).limit(40).all())
+                     .order_by(*_ordine_numero_tessera(tessera)).limit(40).all())
         out = [serializza(p) for p in righe
                if _e_ricaricabile_solarium(p.vincoli_utilizzo, ids_solarium)]
         return jsonify(out[:20])

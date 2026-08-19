@@ -895,16 +895,25 @@ td {
     padding: 8px;
   }
 
+/* Fascia CHIUSA (fuori orario, giorno di chiusura, operatrice a riposo).
+   Stesso rosa-antico di prima, ma tratteggio finissimo al posto della zebra
+   da 4px: da vicino resta una texture, a colpo d'occhio e' una campitura
+   uniforme.
+   Il passo e' legato a --quarter-px (0.11785 = sen 45 / 6) apposta perche' il
+   disegno si ricomponga ESATTAMENTE da una cella alla successiva: col passo
+   fisso ogni cella ripartiva da capo e la fascia sembrava spezzata riga per
+   riga. Vale a qualsiasi altezza del quarto d'ora (30-90px).
+   Niente bordo dedicato: la cella chiusa usa la stessa griglia di quelle
+   libere, cosi' la fascia e' un blocco pieno e non una scacchiera di riquadri. */
 .calendar-closed {
-    background-color: #f0eced;
+    background-color: #f2eef1;
     background-image: repeating-linear-gradient(
         135deg,
-        rgba(135, 100, 124, 0.15) 0px,
-        rgba(135, 100, 124, 0.15) 4px,
-        transparent 4px,
-        transparent 8px
+        rgba(135, 100, 124, 0.11) 0px,
+        rgba(135, 100, 124, 0.11) 1px,
+        transparent 1px,
+        transparent calc(var(--quarter-px, 60px) * 0.11785)
     );
-    border: 1px solid rgba(135, 100, 124, 0.2);
     box-sizing: border-box;
 }
 
@@ -1891,11 +1900,15 @@ body.quarter-55 .appointment-block:not(.note-off):not(.off)[data-note]:not([data
     text-align: left !important;
 }
 
+/* Colonna delle ore dentro la fascia chiusa: stessa tinta delle celle, ma
+   piena (il tratteggio sotto i numeri li renderebbe meno leggibili) e con
+   l'orario sbiadito. Prima era grigia #f5f5f5 con bordo #ddd: nel giorno di
+   chiusura meta' tabella era rosa e meta' grigia, con due griglie diverse. */
 .calendar-table td.hour-cell.calendar-closed,
 .calendar-table td.quarter-cell.calendar-closed {
-    background-color: #f5f5f5 !important;
-    color: inherit !important;
-    border: 1px solid #ddd !important;
+    background-color: #f2eef1 !important;
+    color: #b09eaa !important;
+    border: 1px solid rgba(135, 100, 124, 0.12) !important;
     opacity: 1 !important;
     background-image: none !important;
     pointer-events: none;
