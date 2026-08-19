@@ -114,8 +114,24 @@ def create_app(db_uri: str | None = None):
         # Con 15+10 per tenant si superavano i ~50 slot di Azure e il server
         # rispondeva "remaining connection slots are reserved...", facendo
         # fallire richieste a caso (compresa la stampa in cassa).
-        "pool_size": 3,                 # Numero di connessioni persistenti
-        "max_overflow": 2,              # Connessioni extra temporanee
+        #
+        # 2+1 = 3 connessioni per negozio. Su un B1ms (~35 slot) significa una
+        # decina di negozi per server, contro i 6 che si avevano con 3+2.
+        #
+        # Perche' 3 bastano anche con piu' persone collegate: una connessione
+        # NON e' un utente. Viene presa in prestito per la durata della singola
+        # query (10-50 ms) e subito restituita. Chi tiene l'Agenda aperta senza
+        # cliccare non ne occupa nessuna. Tre connessioni reggono ~60 query al
+        # secondo per negozio; un salone con tre postazioni ne genera una o due.
+        # E a pool pieno la richiesta non fallisce: aspetta in coda fino a
+        # pool_timeout.
+        #
+        # Dove si sente davvero: le query LENTE (un report da 3 secondi tiene
+        # una connessione per 3 secondi). Se capitera' di vedere attese sui
+        # report, la risposta NON e' rialzare questo numero — sono i 35 slot
+        # del B1ms il vincolo — ma passare a B2s o al pooler PgBouncer.
+        "pool_size": 2,                 # Numero di connessioni persistenti
+        "max_overflow": 1,              # Connessioni extra temporanee
         "pool_timeout": 10,             # Timeout breve per ottenere una connessione (secondi)
         "pool_recycle": 360,           # Ricicla connessioni ogni 30 minuti (evita idle drop Azure)
         "pool_pre_ping": True,          # Testa la connessione prima di usarla
@@ -483,5 +499,40 @@ def create_app(db_uri: str | None = None):
         except Exception as e:
             # Non trapelo stacktrace lato client, basta l'esito
             return {"ok": False, "db": "down"}, 503
+
+    # ── Esaurimento connessioni al database ───────────────────────────────
+    # Registrato qui, una volta per app, invece che nelle singole rotte:
+    # il problema puo' presentarsi ovunque e non deve dipendere da chi si e'
+    # ricordato di intercettarlo.
+    #
+    # Due errori distinti, stesso sintomo per il negozio:
+    #   TimeoutError     -> il pool dell'app e' pieno (attesa oltre pool_timeout)
+    #   OperationalError -> gli slot del SERVER sono finiti ("remaining
+    #                       connection slots are reserved...")
+    # Il secondo arriva anche per altre cause (server irraggiungibile), quindi
+    # si distingue leggendo il testo.
+    from sqlalchemy.exc import TimeoutError as _SATimeout, OperationalError as _SAOperational
+
+    def _avvisa_connessioni(origine, err):
+        try:
+            from appl.services.error_log import log_connessioni_esaurite
+            db.session.rollback()      # la sessione e' sporca: senza, l'insert fallirebbe
+            log_connessioni_esaurite(origine, str(err)[:300])
+        except Exception:
+            app.logger.exception("[connessioni] impossibile registrare l'avviso")
+
+    @app.errorhandler(_SATimeout)
+    def _pool_pieno(err):
+        _avvisa_connessioni('pool applicativo pieno', err)
+        return {"ok": False, "errore": "Servizio momentaneamente occupato, riprova."}, 503
+
+    @app.errorhandler(_SAOperational)
+    def _db_non_disponibile(err):
+        testo = str(err).lower()
+        if 'remaining connection slots' in testo or 'too many clients' in testo:
+            _avvisa_connessioni('slot del server esauriti', err)
+        else:
+            app.logger.exception("[db] errore operativo")
+        return {"ok": False, "errore": "Database momentaneamente non raggiungibile."}, 503
 
     return app

@@ -3,7 +3,7 @@ import json
 from flask import Blueprint, render_template, request, jsonify, session
 from appl import db
 from appl.models import Pacchetto, PacchettoSeduta, PacchettoRata, PacchettoScontoRegola, PacchettoPagamentoRegola, Client, PromoPacchetto, Service, Operator, PacchettoStatus, ScontoTipo, SedutaStatus, Appointment, AppointmentStatus, BusinessInfo, PacchettoTipo, MovimentoPrepagata, Subcategory, User, PrepagataRicaricaRegola, ServiceCategory
-from sqlalchemy import func, or_, and_
+from sqlalchemy import func, or_, and_, case
 from datetime import datetime, timedelta
 from sqlalchemy.orm import joinedload, selectinload
 from decimal import Decimal, ROUND_HALF_UP, ROUND_DOWN, ROUND_CEILING
@@ -760,6 +760,26 @@ def api_update_pacchetto(id):
                 pass
     if 'costo_totale_scontato' in data:
         pacchetto.costo_totale_scontato = data['costo_totale_scontato']
+
+    # Cambio intestatario. NON si tocca l'anagrafica del cliente: si sposta la
+    # carta da un cliente all'altro, esattamente come in Agenda si assegna un
+    # appuntamento. Prima non esisteva, e l'unico modo era riscrivere i campi
+    # del cliente collegato — cioe' rinominare una persona vera.
+    if 'client_id' in data:
+        try:
+            nuovo_client_id = int(data['client_id'])
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Cliente non valido'}), 400
+        nuovo_cliente = Client.query.get(nuovo_client_id)
+        if not nuovo_cliente or nuovo_cliente.is_deleted:
+            return jsonify({'error': 'Cliente non trovato'}), 404
+        if nuovo_client_id != pacchetto.client_id:
+            precedente = Client.query.get(pacchetto.client_id)
+            nome_prec = (f"{precedente.cliente_nome} {precedente.cliente_cognome}".strip()
+                         if precedente else '(sconosciuto)')
+            nome_nuovo = f"{nuovo_cliente.cliente_nome} {nuovo_cliente.cliente_cognome}".strip()
+            pacchetto.client_id = nuovo_client_id
+            aggiungi_history(pacchetto, f"Intestatario cambiato da {nome_prec} a {nome_nuovo}")
 
     if 'numero_tessera' in data:
         nuovo_numero = (data.get('numero_tessera') or '').strip() or None
@@ -2043,6 +2063,23 @@ def api_cerca_per_tessera():
     if len(numero) < 1:
         return jsonify([])
 
+    # ORDINE ESPLICITO, obbligatorio: con LIMIT e senza ORDER BY il database
+    # e' libero di restituire otto righe QUALSIASI, e di cambiarle fra
+    # un'esecuzione e l'altra. Cercando "444" poteva capitare che la tessera
+    # 444 non comparisse affatto, mentre ripetendo la stessa ricerca compariva.
+    #
+    # Priorita': corrispondenza esatta, poi esatta a meno degli zeri iniziali
+    # (le tessere sono zero-riempite a 3 cifre: "044" e "44" sono la stessa),
+    # poi quelle che iniziano per il numero digitato, infine quelle che lo
+    # contengono. A parita', prima le piu' corte: "444" prima di "4440".
+    nudo = numero.lstrip('0') or '0'
+    priorita = case(
+        (Pacchetto.numero_tessera == numero, 0),
+        (func.ltrim(Pacchetto.numero_tessera, '0') == nudo, 1),
+        (Pacchetto.numero_tessera.ilike(f'{numero}%'), 2),
+        else_=3,
+    )
+
     prepagate = (Pacchetto.query
                  .join(Client)
                  .filter(
@@ -2050,6 +2087,9 @@ def api_cerca_per_tessera():
                      Pacchetto.numero_tessera.ilike(f'%{numero}%'),
                      Pacchetto.status != PacchettoStatus.Eliminato
                  )
+                 .order_by(priorita,
+                           func.length(Pacchetto.numero_tessera),
+                           Pacchetto.numero_tessera)
                  .limit(8)
                  .all())
 
@@ -2216,15 +2256,28 @@ def api_prepagate_solarium():
     if q:
         if len(q) < 3:
             return jsonify([])
-        like = f'%{q}%'
-        righe = (base.filter(or_(Client.cliente_nome.ilike(like),
-                                 Client.cliente_cognome.ilike(like),
-                                 Client.cliente_cellulare.ilike(like)))
-                     .order_by(Client.cliente_cognome, Client.cliente_nome)
-                     .limit(40).all())
+        # Ricerca per PAROLE, non per stringa intera: cercando "Anna Pretti"
+        # il confronto era %Anna Pretti% contro cliente_nome ("Anna") e contro
+        # cliente_cognome ("Pretti"), e non corrispondeva mai nessuno dei due.
+        # Ogni parola deve trovarsi in almeno uno fra nome, cognome e
+        # cellulare; l'ordine in cui si scrivono non conta.
+        condizioni = [
+            or_(Client.cliente_nome.ilike(f'%{parola}%'),
+                Client.cliente_cognome.ilike(f'%{parola}%'),
+                Client.cliente_cellulare.ilike(f'%{parola}%'))
+            for parola in q.split()
+        ]
+        # Il filtro "e' ricaricabile Solarium" vive nei vincoli, che sono JSON:
+        # si applica in Python, DOPO la query. Percio' il tetto SQL va tenuto
+        # largo, altrimenti le carte giuste possono restare fuori prima ancora
+        # di essere esaminate.
+        righe = (base.filter(and_(*condizioni))
+                     .order_by(Client.cliente_cognome, Client.cliente_nome,
+                               Pacchetto.numero_tessera)
+                     .limit(200).all())
         out = [serializza(p) for p in righe
                if _e_ricaricabile_solarium(p.vincoli_utilizzo, ids_solarium)]
-        return jsonify(out[:5])
+        return jsonify(out[:20])
 
     # --- default: gli ultimi movimentati, 5 per tipo ---
     risultato, visti = [], set()

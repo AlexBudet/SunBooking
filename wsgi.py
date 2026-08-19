@@ -542,6 +542,71 @@ def _iso(d):
     return d.isoformat() if d is not None else None
 
 
+def _tenant_da_cancellare():
+    """Negozi cessati per cui e' scaduto il periodo di conservazione.
+
+    L'art. 20.1.c del contratto concede 30 giorni dalla cessazione perche' il
+    Cliente esporti i suoi dati; scaduti quelli, i dati vanno cancellati.
+    La cancellazione e' MANUALE: qui si produce solo il promemoria, perche'
+    una cancellazione automatica di un intero database e' esattamente il tipo
+    di automatismo che non si vuole.
+    """
+    from datetime import datetime, timedelta, timezone
+    if not _registry_on():
+        return []
+    try:
+        from appl.registry_models import registry_session, Tenant
+        limite = datetime.now(timezone.utc) - timedelta(days=GIORNI_CONSERVAZIONE)
+        out = []
+        with registry_session() as s:
+            righe = (s.query(Tenant)
+                      .filter(Tenant.terminated_at.isnot(None),
+                              Tenant.purged_at.is_(None),
+                              Tenant.terminated_at <= limite)
+                      .order_by(Tenant.terminated_at)
+                      .all())
+            for t in righe:
+                giorni = (datetime.now(timezone.utc) - t.terminated_at).days
+                out.append({
+                    'id': t.id,
+                    'idx': t.idx,
+                    'business_name': t.business_name,
+                    'cessato_il': t.terminated_at.date().isoformat(),
+                    'giorni': giorni,
+                })
+        return out
+    except Exception:
+        root_app.logger.warning("[registry] elenco cancellazioni non leggibile")
+        return []
+
+
+@root_app.route('/owner-setup/purged/<int:tenant_id>', methods=['POST'])
+def owner_setup_purged(tenant_id):
+    """Segna che la cancellazione dei dati e' stata eseguita.
+
+    Non cancella niente: registra soltanto la data. Serve a far sparire
+    l'avviso e, soprattutto, a poter dimostrare QUANDO si e' adempiuto.
+    """
+    if not _require_owner_auth():
+        return jsonify({'error': 'Non autorizzato'}), 401
+    if not _registry_on():
+        return jsonify({'error': 'Registro non disponibile'}), 503
+    from datetime import datetime, timezone
+    try:
+        from appl.registry_models import registry_session, Tenant
+        with registry_session() as s:
+            t = s.query(Tenant).filter_by(id=tenant_id).one_or_none()
+            if t is None:
+                return jsonify({'error': 'Negozio non trovato'}), 404
+            t.purged_at = datetime.now(timezone.utc)
+            nome = t.business_name
+        root_app.logger.info("[gdpr] dati di '%s' segnati come cancellati", nome)
+        return jsonify({'ok': True})
+    except Exception as e:
+        root_app.logger.exception("[gdpr] impossibile segnare la cancellazione")
+        return jsonify({'error': str(e)}), 500
+
+
 def _piano_tenant(idx):
     """Piano sottoscritto da un negozio: 'standard' | 'premium' | 'custom'.
 
@@ -907,7 +972,9 @@ def owner_setup():
         # STANDARD. None = nessun contratto (database dell'owner): nessun blocco.
         info['price_plan'] = _piano_tenant(info['idx'])
 
-    return render_template('owner_setup.html', tenants=tenants)
+    return render_template('owner_setup.html', tenants=tenants,
+                           da_cancellare=_tenant_da_cancellare(),
+                           giorni_conservazione=GIORNI_CONSERVAZIONE)
 
 @root_app.route('/owner-setup/save/<int:db_idx>', methods=['POST'])
 def owner_setup_save(db_idx):
@@ -1347,6 +1414,10 @@ def owner_billing_delete_payment(db_idx, pay_id):
 #  database dei negozi: parla solo con il registro.
 # ═══════════════════════════════════════════════════════════════════════════
 INVITE_TTL_DAYS = int(os.getenv('INVITE_TTL_DAYS', '14'))
+
+# Giorni di conservazione dei dati dopo la cessazione, art. 20.1.c del
+# contratto. Se cambia il contratto, cambia qui.
+GIORNI_CONSERVAZIONE = int(os.getenv('GIORNI_CONSERVAZIONE', '30'))
 
 
 def _token_hash(token):

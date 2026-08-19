@@ -422,6 +422,67 @@
   </div>
 
   <!-- ===== BILLING MODAL ===== -->
+  <!-- Riepilogo di com'e' protetto il dato. Serve a non dover ricostruire
+       tutto da capo fra sei mesi: qui c'e' cosa esiste, cosa copre e cosa no. -->
+  <div class="modal-overlay" id="backupModal" onclick="if(event.target===this)closeBackupInfo()">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>🛟 Come sono protetti i dati</h2>
+        <button class="modal-close" onclick="closeBackupInfo()">×</button>
+      </div>
+      <div class="modal-body" style="line-height:1.6;">
+
+        <p style="margin-top:0;">Tre livelli, dal più usato al più raro.</p>
+
+        <h3 style="font-size:1em; margin:18px 0 6px;">1 · Ripristino a qualsiasi istante — ultimi 35 giorni</h3>
+        <p style="margin:0 0 4px;">
+          Azure salva il database di continuo e permette di tornare a <strong>qualunque
+          momento</strong> degli ultimi 35 giorni. È la rete che si usa quasi sempre:
+          cancellazione per errore, dato sbagliato, guasto.
+        </p>
+        <p style="margin:0; color:#8a6d3b;">
+          ⚠️ Ripristina <strong>l'intero server</strong>, non un singolo negozio.
+          Per recuperare un solo cliente è meglio il livello 2.
+        </p>
+
+        <h3 style="font-size:1em; margin:18px 0 6px;">2 · Copia settimanale — tenuta 12 mesi</h3>
+        <p style="margin:0 0 4px;">
+          Ogni domenica viene salvata una copia <strong>separata per ogni negozio</strong>,
+          conservata un anno nel vault <code>Tosca-backup</code>. Serve per andare più
+          indietro dei 35 giorni, e per <strong>recuperare un singolo cliente</strong>
+          senza toccare gli altri.
+        </p>
+        <p style="margin:0;">
+          Le copie stanno su <strong>tre datacenter separati</strong> di Italy North e
+          <strong>fuori dalla sottoscrizione Azure</strong>, quindi resistono anche alla
+          cancellazione accidentale delle risorse.
+        </p>
+
+        <h3 style="font-size:1em; margin:18px 0 6px;">3 · Copia fuori da Azure — non attiva</h3>
+        <p style="margin:0;">
+          Valutata e <strong>scartata</strong> il 17/08/2026. Coprirebbe solo la
+          distruzione definitiva di tutte e tre le zone di Italy North. Da rivalutare
+          quando ci saranno clienti paganti.
+        </p>
+
+        <div style="background:#f6f4f7; border-radius:8px; padding:12px 16px; margin-top:20px;">
+          <strong>Cosa NON è coperto</strong>
+          <ul style="margin:6px 0 0; padding-left:20px;">
+            <li>La perdita definitiva dell'intera regione Italy North</li>
+            <li>Dati più vecchi di 12 mesi</li>
+          </ul>
+        </div>
+
+        <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:12px 16px; margin-top:14px;">
+          <strong>Da fare almeno una volta</strong><br>
+          Provare un ripristino per davvero e cronometrarlo. Un backup mai ripristinato
+          è una speranza, non un backup. Procedura completa in <code>RIPRISTINO.md</code>.
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="billingModal" onclick="if(event.target===this)closeBilling()">
     <div class="modal-card">
       <div class="modal-header">
@@ -583,8 +644,41 @@
   </div><!-- /modal-overlay -->
 
   <!-- Sezione aggiungi nuovo cliente -->
+  {% if da_cancellare %}
+  <!-- Promemoria GDPR: art. 20.1.c del contratto, 30 giorni dalla cessazione
+       per l'export, poi i dati vanno cancellati. La cancellazione e' manuale:
+       qui c'e' solo l'avviso e il pulsante per registrare che e' stata fatta. -->
+  <div style="background:#fff3cd; border:1px solid #ffc107; border-left:5px solid #ffc107;
+              border-radius:8px; padding:16px 20px; margin-bottom:22px;">
+    <div style="font-weight:700; color:#856404; margin-bottom:8px;">
+      ⏳ Dati da cancellare — periodo di conservazione scaduto
+    </div>
+    <div style="font-size:0.9em; color:#6b5200; margin-bottom:12px;">
+      Il contratto (art. 20.1.c) concede {{ giorni_conservazione }} giorni dalla cessazione perché il cliente
+      esporti i suoi dati. Per questi negozi il termine è passato: vanno cancellati
+      il database e i dati residui, poi segna qui che l'hai fatto.
+    </div>
+    {% for d in da_cancellare %}
+    <div style="display:flex; align-items:center; gap:12px; padding:8px 0;
+                border-top:1px solid rgba(133,100,4,.18);">
+      <div style="flex:1;">
+        <strong>{{ d.business_name }}</strong>
+        {% if d.idx %}<span style="font-family:monospace; font-size:.85em;">/s/{{ d.idx }}</span>{% endif %}
+        <div style="font-size:.85em; color:#6b5200;">
+          cessato il {{ d.cessato_il }} — {{ d.giorni }} giorni fa
+        </div>
+      </div>
+      <button class="save-row-btn" onclick="segnaCancellato({{ d.id }}, this)">
+        Ho cancellato i dati
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <button class="btn-show-add" onclick="toggleAddForm()">➕ Aggiungi nuovo cliente</button>
   <button class="btn-show-add" onclick="toggleInviteForm()">✉️ Invita un cliente (contratto da firmare)</button>
+  <button class="btn-show-add" onclick="openBackupInfo()">🛟 Info backup</button>
 
   <!-- Invito: crea la pratica nel registro e restituisce il link da mandare al
        cliente. NON crea nessun database: il negozio nasce solo dopo la firma. -->
@@ -1008,6 +1102,54 @@
         await fetch(`/owner-setup/billing/${_billingIdx}/payment/${payId}`, { method: 'DELETE' });
         await refreshBilling();
       } catch(e) { showToast('Errore di rete', true); }
+    }
+
+    // ─── INFO BACKUP ───────────────────────────────────────────────────
+    function openBackupInfo() {
+      document.getElementById('backupModal').classList.add('open');
+    }
+    function closeBackupInfo() {
+      document.getElementById('backupModal').classList.remove('open');
+    }
+
+    // ─── CANCELLAZIONE DATI DOPO LA CESSAZIONE ─────────────────────────
+    // Non cancella nulla: registra nel registro CHE e QUANDO hai cancellato
+    // i dati a mano. Serve a togliere l'avviso e a poter dimostrare di aver
+    // adempiuto all'art. 20.1.c del contratto.
+    async function segnaCancellato(tenantId, btn) {
+      if (!confirm('Confermi di aver cancellato i dati di questo negozio?\n\n' +
+                   'Questa operazione NON cancella nulla: registra solo la data ' +
+                   'in cui hai eseguito la cancellazione.')) return;
+
+      const testoOriginale = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Registro…';
+
+      try {
+        const resp = await fetch('/owner-setup/purged/' + tenantId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin'
+        });
+        const data = await resp.json().catch(() => ({}));
+
+        if (resp.ok && data.ok) {
+          // Toglie la riga; se era l'ultima, sparisce tutto il riquadro.
+          const riga = btn.closest('div[style*="border-top"]') || btn.parentElement;
+          const box = btn.closest('div[style*="fff3cd"]');
+          riga.remove();
+          if (box && !box.querySelector('button')) box.remove();
+          showToast('Cancellazione registrata.');
+        } else {
+          alert(data.error || 'Non è stato possibile registrare la cancellazione.');
+          btn.disabled = false;
+          btn.textContent = testoOriginale;
+        }
+      } catch (e) {
+        alert('Nessuna risposta dal server.');
+        btn.disabled = false;
+        btn.textContent = testoOriginale;
+      }
     }
 
     function toggleAddForm() {

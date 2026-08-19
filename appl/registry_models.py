@@ -113,6 +113,13 @@ class Tenant(Base):
     created_at     = Column(DateTime(timezone=True), nullable=False,
                             server_default=func.now())
     provisioned_at = Column(DateTime(timezone=True))
+    # Data di cessazione del rapporto. Fa partire i 30 giorni dell'art. 20.1.c,
+    # scaduti i quali i dati vanno cancellati: il pannello owner lo ricorda,
+    # la cancellazione e' manuale.
+    terminated_at  = Column(DateTime(timezone=True))
+    # Valorizzata quando la cancellazione e' stata eseguita davvero: serve a
+    # far sparire l'avviso e a poter dimostrare QUANDO si e' cancellato.
+    purged_at      = Column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint(

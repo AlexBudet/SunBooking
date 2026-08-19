@@ -1032,6 +1032,36 @@ if (typeof window.applyHighlightToCell !== 'function') {
     __lastMouseY = e.clientY;
   }, { passive: true });
 
+  // Una cella attraversata da un blocco appuntamento NON va evidenziata.
+  //
+  // Il rosa dell'highlight sta a z-index 19000 e i blocchi a 1: quella
+  // differenza serve a far ricevere il mouse alla cella anche dove un blocco
+  // lungo sconfina (abbassarla fa sfarfallare l'hover). Il rovescio e' che il
+  // rosa dipinge SOPRA il blocco: si vede quando due appuntamenti partono
+  // nella stessa cella, uno corto e uno lungo, e si passa sui quarti liberi
+  // accanto a quello lungo.
+  //
+  // Invece di litigare con lo z-index si toglie la causa: dove c'e' un blocco
+  // non si evidenzia. Confronto geometrico e non sugli orari perche' regge
+  // anche i blocchi affiancati e quelli ridimensionati al volo.
+  function __cellaAttraversataDaBlocco(cell) {
+    const op = cell.getAttribute('data-operator-id');
+    if (!op) return false;
+    const r = cell.getBoundingClientRect();
+    if (!r.height) return false;
+    const blocchi = document.querySelectorAll(
+      '.appointment-block[data-operator-id="' + op + '"]');
+    for (let i = 0; i < blocchi.length; i++) {
+      const b = blocchi[i];
+      if (b.offsetParent === null) continue;           // nascosto
+      const rb = b.getBoundingClientRect();
+      if (!rb.height) continue;
+      // 1px di tolleranza: i bordi combacianti non contano come sovrapposizione
+      if (rb.bottom > r.top + 1 && rb.top < r.bottom - 1) return true;
+    }
+    return false;
+  }
+
   function applyHighlightToCell(cell) {
     if (!cell) return;
     if (cell.classList.contains('calendar-closed')) return;
@@ -1061,13 +1091,13 @@ if (typeof window.applyHighlightToCell !== 'function') {
         const h = parseInt(c.getAttribute('data-hour'), 10) || 0;
         const m = parseInt(c.getAttribute('data-minute'), 10) || 0;
         const cellTime = h * 60 + m;
-        if (cellTime >= startTime && cellTime < endTime) {
+        if (cellTime >= startTime && cellTime < endTime && !__cellaAttraversataDaBlocco(c)) {
           c.classList.add('highlight');
         }
       });
     } else {
       // comportamento standard: evidenzia solo la cella
-      cell.classList.add('highlight');
+      if (!__cellaAttraversataDaBlocco(cell)) cell.classList.add('highlight');
     }
 
     // Highlight laterale della riga (sempre)
@@ -2682,13 +2712,23 @@ function attachClientPhoneAutoFormat(inputEl, searchFn) {
 }
 window.attachClientPhoneAutoFormat = attachClientPhoneAutoFormat;
 
-// Nasconde il pulsante "+ Aggiungi cliente" accanto al campo di ricerca mentre la
-// dropdown mostra risultati con il proprio tasto "i", per non fare confusione tra i due.
+// Il pulsante "+ Aggiungi cliente" resta SEMPRE visibile, anche quando la
+// dropdown mostra dei risultati.
+//
+// Prima veniva nascosto per non confonderlo con il tasto "i" delle righe di
+// risultato. Ma il caso in cui serve di piu' e' proprio quello: si scrive un
+// nome, compaiono omonimi o clienti simili, e ci si accorge che quello giusto
+// NON c'e' e va creato. Nascondere il "+" costringeva a cancellare il testo
+// per farlo ricomparire.
+//
+// La funzione resta, e resta chiamata da tutti i punti di prima: cosi' non si
+// tocca la logica di ricerca. Semplicemente non nasconde piu' niente, e una
+// eventuale chiamata con visible=false non ha effetto.
 function setAddClientBtnVisible(resultsContainer, visible) {
   if (!resultsContainer) return;
   const scope = resultsContainer.closest('.modal, #appointmentNavigator');
   const btn = scope && scope.querySelector('.btn-add-client-square');
-  if (btn) btn.style.visibility = visible ? '' : 'hidden';
+  if (btn) btn.style.visibility = '';
 }
 window.setAddClientBtnVisible = setAddClientBtnVisible;
 

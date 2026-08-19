@@ -590,9 +590,42 @@ display: none;
         <h5 class="modal-title" id="clientInfoModalLabel">Dati Cliente</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
       </div>
-      <div class="modal-body" id="clientInfoModalBody">
-        <!-- Qui verranno caricati i dati dinamicamente via JS -->
-        <div class="text-center text-muted">Caricamento...</div>
+      <div class="modal-body">
+
+        <!-- ========== CAMBIO INTESTATARIO ==========
+             Stesso meccanismo dell'Agenda: si CERCA un cliente esistente e lo
+             si seleziona, oppure lo si crea al volo con "+". Modificare i
+             campi qui sotto cambia l'anagrafica di quella persona: se la carta
+             e' semplicemente intestata a qualcun altro, va SPOSTATA, non
+             riscritta. -->
+        <div class="border rounded p-3 mb-3" style="background:#faf8fb;">
+          <label class="form-label fw-semibold mb-1">Intestatario della carta</label>
+          <div class="d-flex gap-2 align-items-start">
+            <div class="flex-grow-1 position-relative">
+              <input type="text" class="form-control" id="cambiaIntestatarioInput"
+                     autocomplete="off"
+                     placeholder="Cerca per nome, cognome o cellulare (min. 2 caratteri)">
+              <div id="cambiaIntestatarioDropdown"
+                   style="display:none; position:absolute; z-index:1080; width:100%;
+                          max-height:220px; overflow-y:auto; background:#fff;
+                          border:1px solid #ccc; border-radius:6px;
+                          box-shadow:0 4px 12px rgba(0,0,0,.15);"></div>
+            </div>
+            <button type="button" class="btn btn-success" id="btnNuovoIntestatario"
+                    data-bs-toggle="tooltip" title="Crea un nuovo cliente e assegnagli la carta">+</button>
+            <button type="button" class="btn btn-primary" id="btnConfermaIntestatario" disabled>
+              Assegna
+            </button>
+          </div>
+          <div class="form-text" id="cambiaIntestatarioStato">
+            Attuale: <strong>{{ pacchetto.client_nome }}</strong>
+          </div>
+        </div>
+
+        <div id="clientInfoModalBody">
+          <!-- Qui verranno caricati i dati dinamicamente via JS -->
+          <div class="text-center text-muted">Caricamento...</div>
+        </div>
       </div>
     </div>
   </div>
@@ -1242,6 +1275,10 @@ display: none;
 
 {% endblock %}
 {% block scripts %}
+<!-- Pannello di anteprima/conferma WhatsApp, lo stesso usato da Agenda e Cassa:
+     mostra il testo in una textarea MODIFICABILE e invia solo al click su
+     "Invia". Serve al pulsante WhatsApp delle ricaricabili Solarium. -->
+<script src="{{ url_for('static', filename='js/whatsapp-panel.js') }}"></script>
 <script>
 /* Script pulito e con struttura sicura per pacchetto_detail */
 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -4118,8 +4155,63 @@ document.getElementById('btnStampa').addEventListener('click', function(e) {
 });
 
 // Event listener per il pulsante WhatsApp
+// ═══════════════════════════════════════════════════════════════════════
+//  RICARICABILI SOLARIUM: invio in background, stesso testo della Cassa
+//
+//  Per le sole ricaricabili Solarium il messaggio non passa da wa.me: parte
+//  da Unipile in background, con lo STESSO testo che la Cassa manda quando
+//  si scala una seduta. Cosi' il cliente riceve messaggi identici, che
+//  arrivino dalla Cassa o da qui.
+//
+//  Il testo replica quello di proponiWhatsappPrepagata() in cassa.js. Qui non
+//  c'e' nessun movimento in corso — non si sta scalando ne' ricaricando — per
+//  cui resta la sola parte del credito residuo.
+// ═══════════════════════════════════════════════════════════════════════
+const E_RICARICABILE_SOLARIUM = {{ 'true' if pacchetto.e_ricaricabile_solarium else 'false' }};
+
+async function inviaWhatsappSolariumInBackground(btn) {
+  const numero = "{{ pacchetto.client_cellulare|escapejs if pacchetto.client_cellulare else '' }}".trim();
+  if (!numero) {
+    alert('Questo cliente non ha un numero di cellulare in anagrafica.');
+    return;
+  }
+
+  const nome = "{{ pacchetto.client_nome|escapejs }}".trim() || 'Cliente';
+  const tessera = "{{ pacchetto.numero_tessera|escapejs if pacchetto.numero_tessera else '' }}".trim();
+  const residuo = Number({{ pacchetto.credito_residuo or 0 }});
+  const sito = (window.BUSINESS_WEBSITE || '').trim();
+
+  // Stesse convenzioni della Cassa: grassetto con *asterischi*, due decimali,
+  // numero tessera fra parentesi se presente.
+  const rigaTessera = tessera ? ` (n. *${tessera}*)` : '';
+  const codaSito = sito ? ` - ${sito}` : '';
+  const testo = `Ciao *${nome}*, sulla tua Fidelity Card${rigaTessera}`
+    + ` disponi attualmente di un credito solarium di € *${residuo.toFixed(2)}*${codaSito}`;
+
+  // Stesso pannello della Cassa: anteprima EDITABILE, invio solo al click su
+  // "Invia". Non si usa un confirm(): il testo dev'essere modificabile prima
+  // di partire, esattamente come quando si scala una seduta dalla Cassa.
+  if (typeof window.showWhatsappAutoSendPanel !== 'function') {
+    alert('Pannello di invio non disponibile. Ricarica la pagina.');
+    return;
+  }
+  window.showWhatsappAutoSendPanel({
+    numero: numero,
+    testo: testo,
+    nome: nome,
+    clientId: {{ pacchetto.client_id }}
+  });
+}
+
 document.getElementById('btnWhatsapp').addEventListener('click', async function(e) {
   e.preventDefault();
+
+  // Ricaricabili Solarium: percorso dedicato, invio diretto senza wa.me.
+  if (E_RICARICABILE_SOLARIUM) {
+    await inviaWhatsappSolariumInBackground(this);
+    return;
+  }
+
   
   // Recupera dati dal pacchetto
   const clienteNome = "{{ pacchetto.client_nome|escapejs }}";
@@ -4563,5 +4655,159 @@ async function eliminaConsenso() {
     alert('❌ Errore di connessione');
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+//  CAMBIO INTESTATARIO DELLA CARTA
+//
+//  Stesso meccanismo dell'Agenda: si cerca un cliente esistente e lo si
+//  seleziona, oppure lo si crea al volo con "+".
+//
+//  Perche' esiste: prima l'unico modo per "cambiare intestatario" era
+//  riscrivere nome, cognome e cellulare nei campi qui sotto — che pero'
+//  modificano l'ANAGRAFICA di quella persona. Su una carta gia' intestata
+//  significava rinominare un cliente vero, e perdere il collegamento con i
+//  suoi appuntamenti e i suoi pacchetti. Qui invece si SPOSTA la carta.
+// ═══════════════════════════════════════════════════════════════════════
+(function () {
+  const input    = document.getElementById('cambiaIntestatarioInput');
+  if (!input) return;
+  const dropdown = document.getElementById('cambiaIntestatarioDropdown');
+  const btnNuovo = document.getElementById('btnNuovoIntestatario');
+  const btnOk    = document.getElementById('btnConfermaIntestatario');
+  const stato    = document.getElementById('cambiaIntestatarioStato');
+  const pacchettoId = {{ pacchetto.id }};
+
+  let selezionato = null;   // {id, nome, cognome, cellulare}
+  let timer = null;
+
+  function messaggio(testo, classe) {
+    stato.className = 'form-text ' + (classe || '');
+    stato.innerHTML = testo;
+  }
+
+  function chiudiDropdown() { dropdown.style.display = 'none'; }
+
+  function selezionaCliente(c) {
+    selezionato = c;
+    input.value = `${c.nome} ${c.cognome}`.trim();
+    btnOk.disabled = false;
+    chiudiDropdown();
+    messaggio(`Verrà assegnata a <strong>${input.value}</strong>. Premi Assegna per confermare.`,
+              'text-primary');
+  }
+
+  input.addEventListener('input', function () {
+    selezionato = null;
+    btnOk.disabled = true;
+    const q = this.value.trim();
+    clearTimeout(timer);
+    if (q.length < 2) { chiudiDropdown(); return; }
+    // Piccolo ritardo: senza, si parte una richiesta per ogni tasto premuto.
+    timer = setTimeout(() => {
+      fetch('/pacchetti/api/clienti?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(lista => {
+          dropdown.innerHTML = '';
+          if (!lista.length) {
+            dropdown.innerHTML =
+              '<div class="p-2 text-muted small">Nessun cliente trovato. Usa <strong>+</strong> per crearlo.</div>';
+            dropdown.style.display = 'block';
+            return;
+          }
+          lista.forEach(c => {
+            const a = document.createElement('a');
+            a.href = '#';
+            a.className = 'dropdown-item px-2 py-1';
+            a.textContent = `${c.nome} ${c.cognome}` + (c.cellulare ? ` (${c.cellulare})` : '');
+            a.addEventListener('click', e => { e.preventDefault(); selezionaCliente(c); });
+            dropdown.appendChild(a);
+          });
+          dropdown.style.display = 'block';
+        })
+        .catch(() => chiudiDropdown());
+    }, 250);
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target)) chiudiDropdown();
+  });
+
+  // "+" — crea il cliente e lo seleziona, senza uscire dal modal.
+  btnNuovo.addEventListener('click', async function () {
+    const digitato = input.value.trim();
+    const parti = digitato.split(/\s+/);
+    const nome = prompt('Nome del nuovo cliente:', parti[0] || '');
+    if (nome === null || !nome.trim()) return;
+    const cognome = prompt('Cognome:', parti.slice(1).join(' ') || '');
+    if (cognome === null) return;
+    // Obbligatorio: /calendar/add-client rifiuta la creazione senza cellulare.
+    const cellulare = prompt('Cellulare (obbligatorio):', '');
+    if (cellulare === null) return;
+    if (!cellulare.trim()) {
+      messaggio('Il cellulare è obbligatorio per creare un cliente.', 'text-danger');
+      return;
+    }
+
+    btnNuovo.disabled = true;
+    try {
+      const r = await fetch('/calendar/add-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({
+          cliente_nome: nome.trim(),
+          cliente_cognome: cognome.trim(),
+          cliente_cellulare: (cellulare || '').trim()
+        })
+      });
+      const d = await r.json();
+      // La rotta risponde con "cliente_id"; gli altri nomi sono difese
+      // nel caso la risposta cambi.
+      const nuovoId = d.cliente_id || d.client_id || d.id;
+      if (!r.ok || !nuovoId) {
+        messaggio(d.error || 'Non è stato possibile creare il cliente.', 'text-danger');
+      } else {
+        selezionaCliente({ id: nuovoId, nome: nome.trim(),
+                           cognome: cognome.trim(), cellulare: (cellulare || '').trim() });
+      }
+    } catch (e) {
+      messaggio('Nessuna risposta dal server.', 'text-danger');
+    }
+    btnNuovo.disabled = false;
+  });
+
+  // Assegna: sposta la carta, non tocca nessuna anagrafica.
+  btnOk.addEventListener('click', async function () {
+    if (!selezionato) return;
+    const nomeCompleto = `${selezionato.nome} ${selezionato.cognome}`.trim();
+    if (!confirm(`Assegnare questa carta a ${nomeCompleto}?
+
+` +
+                 `I dati anagrafici dei clienti non vengono modificati: ` +
+                 `la carta viene semplicemente spostata.`)) return;
+
+    btnOk.disabled = true;
+    btnOk.textContent = 'Assegno…';
+    try {
+      const r = await fetch(`/pacchetti/api/pacchetti/${pacchettoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ client_id: selezionato.id })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && !d.error) {
+        messaggio('Carta assegnata. Ricarico la pagina…', 'text-success');
+        setTimeout(() => window.location.reload(), 800);
+      } else {
+        messaggio(d.error || 'Assegnazione non riuscita.', 'text-danger');
+        btnOk.disabled = false;
+        btnOk.textContent = 'Assegna';
+      }
+    } catch (e) {
+      messaggio('Nessuna risposta dal server.', 'text-danger');
+      btnOk.disabled = false;
+      btnOk.textContent = 'Assegna';
+    }
+  });
+})();
 </script>
 {% endblock %}
