@@ -49,8 +49,10 @@ def registry_enabled():
 def get_engine():
     """Engine del registro, creato al primo uso.
 
-    Pool volutamente minuscolo: il PostgreSQL B1ms regge ~35 connessioni e
-    ogni tenant ne tiene gia' 3+2. Il registro fa poche richieste, brevi.
+    Pool volutamente minuscolo: il PostgreSQL B1ms regge ~35 connessioni
+    utente (40 usabili sulle 50 dichiarate) e ogni tenant ne tiene gia' 2+1
+    per processo, cioe' ~4 a regime fra exe del salone e cloud. Il registro
+    fa poche richieste, brevi, e le fa solo il processo cloud.
     """
     global _engine, _Session
     if _engine is None:

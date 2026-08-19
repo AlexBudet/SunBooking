@@ -3340,6 +3340,36 @@ body.touch-ui .appointment-block.active-popup .client-info-link {
   max-width: 100%;
 }
 
+/* TOUCH-UI: nome cliente accanto a un badge (pacchetto / prepagata).
+   La riga del nome e' larga l'80% del blocco e taglia con l'ellissi: la
+   targhetta del nome, essendo un inline-block, non puo' essere troncata a
+   meta' dal text-overflow, cosi' il browser la sostituiva INTERAMENTE con i
+   puntini e al click il nome spariva dal blocco (badge + "..." e basta).
+   Solo a blocco attivo la riga diventa una flex row: i badge restano alla
+   loro dimensione e la targhetta si restringe troncando il testo AL SUO
+   INTERNO. Fuori da touch-ui e a blocco non attivo nulla cambia. */
+body.touch-ui .appointment-block.active-popup .client-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  text-overflow: clip;   /* l'ellissi ora la mette la targhetta */
+}
+
+body.touch-ui .appointment-block.active-popup .client-name > .pacchetto-badge,
+body.touch-ui .appointment-block.active-popup .client-name > .prepagata-badge {
+  flex: 0 0 auto;              /* il badge non si schiaccia */
+  margin-right: 0 !important;  /* lo spazio lo da' il gap */
+}
+
+body.touch-ui .appointment-block.active-popup .client-info-link {
+  flex: 0 1 auto;
+  min-width: 0;                /* senza questo il flex item non si restringe */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 body.touch-ui .appointment-block.status-2 .popup-buttons .btn-popup.copia {
   width: 100% !important;   /* 1/6 perché occupa 1 colonna della griglia */
   margin-left: 0 !important;
