@@ -3233,6 +3233,26 @@ body.touch-ui .appointment-block:hover:not(.disable-popup):not(.active-popup) .p
 body.touch-ui .appointment-block:hover:not(.disable-popup):not(.active-popup) .popup-buttons-bottom {
   display: none !important;
 }
+
+/* TOUCH-UI: la barra SUPERIORE restava visibile dopo il secondo click.
+   La regola generica piu' in alto nel file
+   (.appointment-block:hover:not(.disable-popup):not(.cut-mode-active):not(.note-off):not(.off) .popup-buttons)
+   rivela la barra su hover con !important e ha specificita' maggiore (7 classi)
+   di quella touch qui sopra (6 classi + body): al secondo click il blocco perde
+   .active-popup ma resta sotto il dito/puntatore, quindi la barra superiore
+   tornava a display:grid/visible mentre quella inferiore - che a riposo e'
+   anche visibility:hidden - spariva correttamente.
+   Qui la barra superiore viene rimessa a riposo con la stessa forza e con
+   specificita' superiore, SOLO in touch-ui e SOLO su blocchi non attivi.
+   Le esclusioni ricalcano quelle della regola generica, cosi' cut-mode,
+   note-off e off restano gestiti dalla loro logica di sempre. */
+body.touch-ui .appointment-block:hover:not(.disable-popup):not(.active-popup):not(.cut-mode-active):not(.note-off):not(.off) .popup-buttons,
+body.touch-ui .appointment-block:not(.disable-popup):not(.active-popup):not(.cut-mode-active):not(.note-off):not(.off) .popup-buttons:hover {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
 body.touch-ui .appointment-block.active-popup .popup-buttons {
   display: flex !important; /* coerente con la barra superiore esistente */
 }
