@@ -1,5 +1,20 @@
 {% extends "base.html" %}
 {% block content %}
+<script>
+  /* MODALITA' TOUCH: stessa preferenza di Agenda e Cassa (localStorage
+     sun_touch_ui). Serve qui perche' i comandi negli header dei riquadri sono
+     minuscoli (17x17 la "x", 45x19 i periodi delle heatmap): su tablet il dito
+     li manca o becca quello accanto. La classe si scrive sul body SUBITO,
+     senza aspettare DOMContentLoaded, perche' piu' in basso il drag-and-drop
+     dei riquadri la legge al momento di creare Sortable. */
+  (function () {
+    try {
+      if (localStorage.getItem('sun_touch_ui') === '1' && document.body) {
+        document.body.classList.add('touch-ui');
+      }
+    } catch (e) {}
+  })();
+</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/it.js"></script>
@@ -1871,6 +1886,46 @@ document.addEventListener('DOMContentLoaded', function() {
     #next-appointments-tile #btnViewAgenda {
       display: none !important;
   }
+}
+
+/* ===========================================================================
+   MODALITA' TOUCH: comandi degli header grandi abbastanza da centrarli col dito
+   ---------------------------------------------------------------------------
+   Misurato sulla pagina vera: 25 comandi su 28 negli header stanno sotto i
+   30px di altezza (la "x" di chiusura e' 17x17, i periodi delle heatmap
+   45x19 e per giunta attaccati fra loro dentro il btn-group). Col mouse si
+   centrano, col dito no: il tap cade a vuoto o prende il pulsante accanto.
+   Qui i comandi raddoppiano di altezza e l'header cresce quel tanto che
+   basta a contenerli, restando uguale per TUTTI i riquadri (l'allineamento
+   delle card dipende da quello - vedi la nota su .tile-title piu' sopra).
+   Vale solo con la modalita' touch accesa: senza la classe .touch-ui la
+   pagina resta identica a prima, mouse compreso.
+   =========================================================================== */
+body.touch-ui .tile-title {
+  min-height: 46px;
+  padding-top: 4px !important;      /* i pulsanti sono gia' alti: qui basta poco */
+  padding-bottom: 4px !important;
+  padding-left: 48px !important;    /* la "x" ingrandita non tocca il titolo */
+}
+
+body.touch-ui .tile-title .btn {
+  --bs-btn-padding-y: 7px;
+  --bs-btn-padding-x: 12px;
+  --bs-btn-font-size: 0.78rem;
+  min-height: 36px;
+}
+
+body.touch-ui .tile-title .btn i {
+  font-size: 0.95rem;
+}
+
+/* La "x" di chiusura: e' fuori dal flusso (top/left inline sul tag), quindi
+   si tocca solo la dimensione e la si ricentra sul nuovo header. */
+body.touch-ui .btn-close-tile {
+  width: 30px;
+  height: 30px;
+  background-size: 13px;
+  top: 8px !important;
 }
 </style>
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
@@ -3846,12 +3901,29 @@ document.addEventListener('DOMContentLoaded', function() {
   let sortableInstance = null;
   function enableDrag() {
     if (sortableInstance) return;
-    sortableInstance = Sortable.create(grid, {
+    /* In modalita' touch il riordino dei riquadri parte solo dopo una
+       pressione un po' piu' lunga e non lo fanno partire i comandi
+       dell'header: cosi' il dito che scivola di un paio di pixel mentre
+       preme "30 gg" preme davvero il pulsante invece di trascinare il
+       riquadro. preventOnFilter:false lascia passare il click sui comandi
+       filtrati. Col mouse (delayOnTouchOnly) non cambia nulla, e senza la
+       modalita' touch Sortable resta configurato esattamente come prima. */
+    const opzioniTouch = document.body.classList.contains('touch-ui')
+      ? {
+          delay: 200,
+          delayOnTouchOnly: true,
+          touchStartThreshold: 6,
+          filter: '.btn, button, a, input, select, label',
+          preventOnFilter: false
+        }
+      : {};
+
+    sortableInstance = Sortable.create(grid, Object.assign({
       animation: 200,
       ghostClass: 'tile-ghost',
       chosenClass: 'tile-chosen',
       onEnd: salvaOrdine
-    });
+    }, opzioniTouch));
     grid.classList.add('tiles-draggable');
   }
   function disableDrag() {
