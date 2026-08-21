@@ -5936,27 +5936,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const clientCognome = decodeHtml(block.getAttribute('data-client-cognome') || '');
     const clientName = rawName || `${clientNome} ${clientCognome}`.trim();
 
-    const cell = block.closest('.selectable-cell');
-    let blocksInCell = [];
-    if (cell) {
-      blocksInCell = Array.from(cell.querySelectorAll('.appointment-block'))
-        .filter(b => {
-          const bClientId = b.getAttribute('data-client-id');
-          const bNome = b.getAttribute('data-client-nome');
-          const bCognome = b.getAttribute('data-client-cognome');
-          const bClientName = `${bNome || ''} ${bCognome || ''}`.trim();
-          return (
-            (bClientId && bClientId === clientId) ||
-            (bClientName && bClientName === clientName)
-          );
-        });
-    }
-
-    const contiguousBlocks = getRelevantBlocks(block);
-    const allBlocks = Array.from(new Set([...blocksInCell, ...contiguousBlocks]));
-
-    const servizi = allBlocks
-      .filter(b => b.getAttribute('data-status') !== '2')
+    // L'insieme dei blocchi e' calcolato da getBlocchiDaPortareInCassa, la
+    // stessa funzione che alimenta l'anteprima del totale nel tooltip: una
+    // definizione sola, cosi' la cifra mostrata a mouseover e cio' che
+    // finisce davvero in cassa non possono divergere.
+    const servizi = getBlocchiDaPortareInCassa(block)
       .map(b => ({
         id: b.getAttribute('data-service-id'),
         appointment_id: b.getAttribute('data-appointment-id')
@@ -19323,4 +19307,394 @@ document.head.appendChild(aiStyleOverride);
 
   });
 
+})();
+/* ===========================================================================
+   ANTEPRIMA DEL TOTALE SUL BOTTONE "PORTA IN CASSA"  (solo modalita' default)
+   ---------------------------------------------------------------------------
+   Serve al banco: il cliente ha appena prenotato e chiede "quanto vengo a
+   pagare?". Invece di aprire la cassa per poi tornare indietro, basta tenere
+   il mouse sull'icona euro: dopo 1,3 secondi il tooltip si allunga con l'elenco
+   dei servizi e il totale.
+
+   L'attesa non e' un vezzo: chi passa sul bottone per cliccarlo non deve
+   vedersi crescere il tooltip sotto il cursore. Serve a distinguere il
+   passaggio ("sto andando a cliccare") dalla domanda ("quanto fa?"), e sta
+   in ATTESA_MS: 1,3 secondi, misurati sull'uso al banco.
+
+   L'insieme dei blocchi e' quello di getBlocchiDaPortareInCassa, identico a
+   quello che il click porta davvero in cassa: blocchi contigui dello stesso
+   cliente compresi, blocchi gia' pagati (stato 2) esclusi.
+   =========================================================================== */
+
+/* Blocchi che il pulsante "Porta in cassa" portera' in cassa partendo da
+   questo blocco. Usata sia dal click sia dall'anteprima nel tooltip: e'
+   l'unico punto in cui l'insieme viene deciso.
+     - blocchi dello stesso cliente nella STESSA cella (servizi sovrapposti);
+     - blocchi CONTIGUI dello stesso cliente (getRelevantBlocks, che gia'
+       esclude i pagati e i placeholder delle prenotazioni web);
+     - fuori i gia' pagati (stato 2): quelli non si pagano una seconda volta. */
+function getBlocchiDaPortareInCassa(block) {
+  if (!block) return [];
+
+  const decodeHtml = (s) => { const t = document.createElement('textarea'); t.innerHTML = String(s || ''); return t.value; };
+
+  const clientId = block.getAttribute('data-client-id');
+  const nameEl = block.querySelector('.appointment-content .client-name');
+  const rawName = nameEl ? nameEl.textContent.trim() : '';
+  const clientNome = decodeHtml(block.getAttribute('data-client-nome') || '');
+  const clientCognome = decodeHtml(block.getAttribute('data-client-cognome') || '');
+  const clientName = rawName || `${clientNome} ${clientCognome}`.trim();
+
+  const cell = block.closest('.selectable-cell');
+  let blocksInCell = [];
+  if (cell) {
+    blocksInCell = Array.from(cell.querySelectorAll('.appointment-block'))
+      .filter(b => {
+        const bClientId = b.getAttribute('data-client-id');
+        const bNome = b.getAttribute('data-client-nome');
+        const bCognome = b.getAttribute('data-client-cognome');
+        const bClientName = `${bNome || ''} ${bCognome || ''}`.trim();
+        return (
+          (bClientId && bClientId === clientId) ||
+          (bClientName && bClientName === clientName)
+        );
+      });
+  }
+
+  const contiguousBlocks = getRelevantBlocks(block);
+  const allBlocks = Array.from(new Set([...blocksInCell, ...contiguousBlocks]));
+
+  return allBlocks.filter(b => b.getAttribute('data-status') !== '2');
+}
+window.getBlocchiDaPortareInCassa = getBlocchiDaPortareInCassa;
+
+(function anteprimaTotaleCassa() {
+  'use strict';
+
+  const ATTESA_MS = 1300;   // quanto il mouse deve restare sul bottone
+
+  /* --- listino: una sola fetch per pagina ---------------------------------
+     /api/services e' gia' servita con cache 5 minuti lato server ed e' la
+     stessa che alimenta il pre-riempimento di "Cerca un buco". I blocchi in
+     agenda portano data-service-id ma NON prezzo, categoria e sottocategoria,
+     quindi il listino va chiesto una volta e tenuto in una mappa. */
+  const listino = new Map();          // id (stringa) -> {id, prezzo, categoria, sottocategoria_id}
+  let listinoPromise = null;
+
+  function baseCalendario() {
+    const m = window.location.pathname.match(/^(\/[^/]+\/calendar)/);
+    return m ? m[1] : '/calendar';
+  }
+
+  // Radice dell'app, per raggiungere blueprint diversi da calendar.
+  function baseApp() {
+    return baseCalendario().replace(/\/calendar$/, '');
+  }
+
+  function caricaListino() {
+    if (listinoPromise) return listinoPromise;
+    listinoPromise = fetch(baseCalendario() + '/api/services', { credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : []))
+      .then(righe => {
+        (Array.isArray(righe) ? righe : []).forEach(s => {
+          if (!s || s.id == null) return;
+          listino.set(String(s.id), {
+            id: String(s.id),
+            prezzo: Number(s.price) || 0,
+            categoria: s.categoria || '',
+            sottocategoria_id: s.sottocategoria_id
+          });
+        });
+        return listino;
+      })
+      .catch(() => listino);   // rete giu': resta il tooltip semplice
+    return listinoPromise;
+  }
+
+  /* --- tessere prepagate del cliente --------------------------------------
+     Una fetch per cliente, tenuta in cache per la durata della pagina: al
+     banco si passa piu' volte sullo stesso blocco. Il credito puo' cambiare
+     nel frattempo (uno scontrino emesso da un'altra postazione), ma qui si
+     sta facendo un preventivo a voce, non una cassa. */
+  const carteCache = new Map();       // client_id -> Promise<array>
+
+  function caricaCarte(clientId) {
+    const key = String(clientId || '');
+    if (!key) return Promise.resolve([]);
+    if (carteCache.has(key)) return carteCache.get(key);
+    const p = fetch(baseApp() + '/pacchetti/api/prepagate-cliente/' + encodeURIComponent(key),
+                    { credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : []))
+      .then(righe => (Array.isArray(righe) ? righe : []))
+      .catch(() => []);
+    carteCache.set(key, p);
+    return p;
+  }
+
+  /* Vincoli d'uso della tessera: quali servizi quella carta puo' pagare.
+     COPIA FEDELE di servizioAmmessoDaVincoli in cassa.js (cerca "Unico punto
+     in cui si interpretano i vincoli"): quella resta la versione buona, che
+     decide davvero i pagamenti. Questa serve solo a comporre un preventivo
+     informativo e non scrive niente da nessuna parte. Se un giorno cambiano i
+     tipi di vincolo, vanno allineate tutt'e due. */
+  function servizioAmmessoDaVincoli(vincoli, servizio) {
+    if (!vincoli || !vincoli.tipo || vincoli.tipo === 'tutti') return true;
+    if (vincoli.tipo === 'categoria') return servizio.categoria === vincoli.categoria;
+    if (vincoli.tipo === 'sottocategoria') {
+      return String(servizio.sottocategoria_id) === String(vincoli.sottocategoria_id);
+    }
+    if (vincoli.tipo === 'servizi') {
+      return (vincoli.servizi_ids || []).map(String).includes(String(servizio.id));
+    }
+    return false;
+  }
+
+  /* La carta da usare per il preventivo: la PRIMA con credito che copra
+     almeno uno dei servizi in elenco. Scelta voluta e non raffinata: in cassa
+     la tessera la sceglie l'operatore, qui si mostra l'ipotesi piu' probabile.
+     Il caso "piu' carte che potrebbero coprire lo stesso servizio" e' una
+     decisione ancora aperta. */
+  function scegliCarta(carte, blocchi) {
+    for (const c of (carte || [])) {
+      if (Number(c.credito_residuo || 0) <= 0) continue;
+      const vincoli = c.vincoli_utilizzo || null;
+      const utile = blocchi.some(b => {
+        if (b.getAttribute('data-pacchetto-seduta-id')) return false;
+        const sv = listino.get(String(b.getAttribute('data-service-id') || ''));
+        return !!sv && servizioAmmessoDaVincoli(vincoli, sv);
+      });
+      if (utile) return c;
+    }
+    return null;
+  }
+
+  /* --- formattazione ----------------------------------------------------- */
+
+  function cent(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+
+  function euro(n) {
+    return Number(n || 0).toLocaleString('it-IT', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    }) + ' €';
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* Etichetta della riga: il TAG e' quello che l'operatrice legge sul blocco
+     ("sop", "baf", "ing sg"), il nome esteso e' il ripiego. */
+  function etichetta(b) {
+    return (b.getAttribute('data-service-tag') || '').trim()
+        || (b.getAttribute('data-service-name') || '').trim()
+        || 'servizio';
+  }
+
+  /* --- calcolo del preventivo --------------------------------------------
+     Il credito si consuma in ordine di elenco (cioe' in ordine di orario) e
+     si ferma quando finisce: l'ultima voce coperta solo in parte resta con la
+     differenza da pagare, esattamente come lo split che la Cassa propone
+     quando il saldo non basta per l'intera voce. */
+  function calcolaPreventivo(blocchi, carta) {
+    let credito = carta ? cent(carta.credito_residuo) : 0;
+    const vincoli = carta ? (carta.vincoli_utilizzo || null) : null;
+
+    const voci = blocchi.map(b => {
+      const nome = etichetta(b);
+
+      // Seduta di un pacchetto: pagata all'acquisto, si elenca ma non si somma.
+      if (b.getAttribute('data-pacchetto-seduta-id')) return { nome, tipo: 'pacchetto' };
+
+      const sv = listino.get(String(b.getAttribute('data-service-id') || ''));
+      if (!sv) return { nome, tipo: 'ignoto' };
+
+      const prezzo = cent(sv.prezzo);
+      let quotaCarta = 0;
+      if (carta && credito > 0 && servizioAmmessoDaVincoli(vincoli, sv)) {
+        quotaCarta = cent(Math.min(credito, prezzo));
+        credito = cent(credito - quotaCarta);
+      }
+      return { nome, tipo: 'servizio', prezzo, quotaCarta, daPagare: cent(prezzo - quotaCarta) };
+    });
+
+    const servizi = voci.filter(v => v.tipo === 'servizio');
+    const totale = cent(servizi.reduce((s, v) => s + v.prezzo, 0));
+    const quotaTotaleCarta = cent(servizi.reduce((s, v) => s + v.quotaCarta, 0));
+
+    return {
+      voci,
+      totale,
+      quotaCarta: quotaTotaleCarta,
+      daPagare: cent(totale - quotaTotaleCarta),
+      mancanti: voci.filter(v => v.tipo === 'ignoto').length,
+      carta: quotaTotaleCarta > 0 ? carta : null
+    };
+  }
+
+  /* --- costruzione del dettaglio -----------------------------------------
+     Dove la tessera interviene, prezzo di listino e prezzo scalato si
+     alternano nello stesso posto (due <b> sovrapposti in griglia, accesi a
+     turno da una animazione CSS): la colonna e' larga quanto il piu' largo
+     dei due, quindi niente sussulti di layout. Stessa cosa sulla riga finale,
+     che alterna "TOT" e "DA PAGARE". */
+  function riga(nome, destraHtml, classe) {
+    return '<div class="tt-cassa-riga' + (classe ? ' ' + classe : '') + '">'
+         + '<span>' + esc(nome) + '</span>' + destraHtml + '</div>';
+  }
+
+  function alterna(htmlA, htmlB, classe) {
+    return '<span class="tt-alt' + (classe ? ' ' + classe : '') + '">'
+         + '<b class="tt-alt-a">' + htmlA + '</b>'
+         + '<b class="tt-alt-b">' + htmlB + '</b></span>';
+  }
+
+  function costruisciDettaglio(prev) {
+    if (!prev || !prev.voci.length) return null;
+
+    const righe = prev.voci.map(v => {
+      if (v.tipo === 'pacchetto') return riga(v.nome, '<em>pacchetto</em>');
+      if (v.tipo === 'ignoto')    return riga(v.nome, '<em>n.d.</em>');
+      if (v.quotaCarta > 0) {
+        return riga(v.nome, alterna(
+          euro(v.prezzo),
+          euro(v.daPagare) + '<i class="tt-badge">tessera</i>'
+        ));
+      }
+      return riga(v.nome, '<b>' + euro(v.prezzo) + '</b>');
+    });
+
+    const etichettaTot = 'TOT' + (prev.mancanti ? ' (parziale)' : '');
+
+    if (prev.carta) {
+      righe.push(
+        '<div class="tt-cassa-tot">'
+        + alterna(esc(etichettaTot), 'DA PAGARE', 'tt-alt-etichetta')
+        + alterna(euro(prev.totale), euro(prev.daPagare))
+        + '</div>'
+      );
+      // Riga ferma: dice SU COSA si basa il calcolo. Non lampeggia apposta,
+      // e' il riferimento che resta leggibile mentre i numeri si alternano.
+      righe.push(
+        '<div class="tt-cassa-carta"><span>'
+        + esc(prev.carta.nome || 'Tessera')
+        + '</span><span>−' + euro(prev.quotaCarta) + '</span></div>'
+      );
+    } else {
+      righe.push('<div class="tt-cassa-tot"><span>' + esc(etichettaTot)
+               + '</span><b>' + euro(prev.totale) + '</b></div>');
+    }
+
+    return '<div class="tt-cassa">' + righe.join('') + '</div>';
+  }
+
+  /* --- gestione del tooltip ---------------------------------------------- */
+
+  // Ogni passaggio del mouse ha il suo numero: se il mouse esce mentre il
+  // listino e' ancora in volo, la risposta che arriva dopo viene scartata
+  // invece di far ricomparire il dettaglio su un bottone non piu' puntato.
+  let passaggio = 0;
+  let timer = null;
+
+  function annulla() {
+    // Basta invalidare il passaggio e fermare il timer: il contenuto NON va
+    // ripulito a mano perche' Bootstrap, quando il tooltip si chiude, butta
+    // via l'elemento e al passaggio dopo lo ricostruisce dal solo title.
+    passaggio++;
+    if (timer) { clearTimeout(timer); timer = null; }
+  }
+
+  /* Il dettaglio viene scritto DIRETTAMENTE nel tooltip gia' a schermo.
+     La strada apparentemente giusta - tooltip.setContent() - non va usata:
+     dentro setContent Bootstrap richiama show(), e li' trova _isHovered a
+     false (il flag viene azzerato alla fine della prima apertura), quindi
+     chiama _leave() e chiude il tooltip. Risultato: il dettaglio lampeggiava
+     e spariva. Verificato in prova headless prima di questa correzione.
+     Scrivendo nell'elemento e chiamando update() per riposizionare il popper
+     non si tocca la macchina a stati di Bootstrap. */
+  function mostraDettaglio(btn, mio) {
+    const block = btn.closest('.appointment-block');
+    if (!block) return;
+
+    const blocchi = getBlocchiDaPortareInCassa(block);
+    if (!blocchi.length) return;   // tutto gia' pagato: resta il tooltip semplice
+
+    // Le tessere si chiedono solo se il modulo Pacchetti e' attivo per questo
+    // negozio: dove non lo e', l'endpoint non avrebbe senso e il preventivo
+    // resta il solo totale di listino, come prima.
+    const clientId = block.getAttribute('data-client-id');
+    const conPrepagate = (typeof isPacchettiModuleEnabled === 'function')
+      ? isPacchettiModuleEnabled() : false;
+
+    Promise.all([
+      caricaListino(),
+      (conPrepagate && clientId) ? caricaCarte(clientId) : Promise.resolve([])
+    ]).then(function (esiti) {
+      if (mio !== passaggio) return;   // mouse gia' uscito
+      if (!btn.isConnected) return;    // blocco ridisegnato nel frattempo
+
+      const carta = scegliCarta(esiti[1], blocchi);
+      const dettaglio = costruisciDettaglio(calcolaPreventivo(blocchi, carta));
+      if (!dettaglio) return;
+
+      try {
+        // Il tooltip visibile e' quello puntato da aria-describedby.
+        const tipEl = document.getElementById(btn.getAttribute('aria-describedby') || '');
+        const inner = tipEl && tipEl.querySelector('.tooltip-inner');
+        if (!inner) return;                       // tooltip non a schermo: si lascia stare
+        if (inner.querySelector('.tt-cassa')) return;   // gia' scritto
+        inner.insertAdjacentHTML('beforeend', dettaglio);
+        const tt = bootstrap.Tooltip.getInstance(btn);
+        if (tt) tt.update();                      // il riquadro e' cresciuto: riposiziona
+      } catch (_) {}
+    });
+  }
+
+  function inTouch() {
+    try {
+      return localStorage.getItem('sun_touch_ui') === '1'
+          || document.body.classList.contains('touch-ui');
+    } catch (_) { return document.body.classList.contains('touch-ui'); }
+  }
+
+  // mouseenter/mouseleave non risalgono: delega in fase di CATTURA, come gli
+  // altri listener sui blocchi (i blocchi nascono e muoiono a ogni refresh,
+  // un listener attaccato al singolo bottone non sopravviverebbe).
+  document.addEventListener('mouseenter', function (e) {
+    const btn = e.target && e.target.closest && e.target.closest('.btn-popup.pagamento');
+    if (!btn) return;
+    // Solo l'evento del BOTTONE, non quello dell'icona che ha dentro:
+    // altrimenti passando dall'icona al bordo del bottone il conto dei 2
+    // secondi ripartirebbe da capo di continuo.
+    if (e.target !== btn) return;
+    if (inTouch()) return;
+    // "VAI AL PACCHETTO" non porta in cassa: niente preventivo.
+    if (btn.classList.contains('vai-pacchetto')) return;
+    if (!window.bootstrap || !bootstrap.Tooltip) return;
+
+    passaggio++;
+    const mio = passaggio;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(function () {
+      if (mio !== passaggio) return;
+      mostraDettaglio(btn, mio);
+    }, ATTESA_MS);
+  }, true);
+
+  document.addEventListener('mouseleave', function (e) {
+    const btn = e.target && e.target.closest && e.target.closest('.btn-popup.pagamento');
+    if (!btn) return;
+    // Come sopra: l'icona interna che "perde" il mouse verso il bottone non
+    // e' un'uscita. Il mouseleave del bottone invece scatta solo quando si
+    // esce davvero, figli compresi.
+    if (e.target !== btn) return;
+    annulla();
+  }, true);
+
+  // Click: si va in cassa, il tooltip deve tornare corto per la prossima volta.
+  document.addEventListener('click', function (e) {
+    const btn = e.target && e.target.closest && e.target.closest('.btn-popup.pagamento');
+    if (btn) annulla();
+  }, true);
 })();

@@ -1218,6 +1218,13 @@ def list_services_api():
             "durata": s.servizio_durata,
             "price": s.servizio_prezzo,
             "tag": s.servizio_tag,
+            # Categoria e sottocategoria servono all'anteprima del totale nel
+            # tooltip "Porta in cassa" dell'Agenda, per capire quali servizi
+            # rientrano nei vincoli d'uso di una tessera prepagata. Stessa
+            # forma di /cassa/api/services (categoria come .value), cosi' il
+            # confronto coi vincoli e' identico a quello della Cassa.
+            "categoria": s.servizio_categoria.value if s.servizio_categoria else "",
+            "sottocategoria_id": s.servizio_sottocategoria_id,
         }
         for s in services
     ])

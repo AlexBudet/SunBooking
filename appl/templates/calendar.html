@@ -2538,68 +2538,107 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
 
-    // Ricostruisci contenuto DOM in modo sicuro
-    popup.innerHTML = '';
-
-    // Meta
-    const meta = document.createElement('div');
-    meta.style.cssText = "font-size:10px; color:#fff; margin-bottom:3px; text-transform:uppercase;";
-    meta.textContent = 'creato: ' + (createdAtStr || '');
-    if (lastEditStr) {
-      const br = document.createElement('br'); meta.appendChild(br);
-      meta.appendChild(document.createTextNode('last edit: ' + lastEditStr));
+    // Orario dell'appuntamento: inizio dai data-* del blocco, fine = inizio +
+    // durata. Il conto si fa tutto in minuti e si riporta in ore alla fine,
+    // cosi' un blocco che scavalca l'ora non produce un "9:75".
+    let orarioStr = '';
+    const oraBlocco = parseInt(block.getAttribute('data-hour'), 10);
+    const minBlocco = parseInt(block.getAttribute('data-minute'), 10);
+    const durataBlocco = parseInt(block.getAttribute('data-duration'), 10) || 0;
+    if (Number.isFinite(oraBlocco) && Number.isFinite(minBlocco)) {
+      const due = (n) => String(Math.floor(n)).padStart(2, '0');
+      const hhmm = (tot) => due((tot % 1440) / 60) + ':' + due(tot % 60);
+      const inizioMin = oraBlocco * 60 + minBlocco;
+      orarioStr = hhmm(inizioMin);
+      if (durataBlocco > 0) {
+        orarioStr += ' – ' + hhmm(inizioMin + durataBlocco) + ' · ' + durataBlocco + ' min';
+      }
     }
-    popup.appendChild(meta);
 
-    // Nome
-    const strong = document.createElement('strong');
-    strong.className = 'all-uppercase';
-    strong.style.color = '#fff';
+    // Fascia superiore, orario e gerarchia del contenuto: vedi il commento
+    // sopra la funzione. Il DOM si ricostruisce a ogni apertura.
+    popup.innerHTML = '';
+    popup.classList.add('ci-pop');
+
+    // 1) PALLINO COL COLORE DEL BLOCCO, in alto a destra
+    // Lega il riquadro all'appuntamento da cui esce restando fuori dalla
+    // lettura: prima era una fascia a tutta larghezza, e una barra colorata
+    // larga quanto il popup rubava l'occhio al nome del cliente.
+    // Il colore identifica il cliente nella giornata, quindi si riprende
+    // data-colore cosi' com'e', senza reinventare niente.
+    const colore = block.getAttribute('data-colore') || '#87647c';
+    const pallino = document.createElement('span');
+    pallino.className = 'ci-pallino';
+    pallino.style.background = colore;
+    popup.appendChild(pallino);
+
+    // 2) NOME CLIENTE: e' il titolo, sta in cima
+    const strong = document.createElement('div');
+    strong.className = 'ci-nome all-uppercase';
     strong.textContent = `${nomeD} ${cognomeD}`.trim();
     popup.appendChild(strong);
 
-    // NOTA CLIENTE (subito sotto il nome)
+    // 3) ORARIO E DURATA: e' la domanda che ci si fa guardando un blocco, e
+    // prima il tooltip non la copriva. Fine = inizio + durata, calcolata in
+    // minuti per non sbagliare il cambio d'ora.
+    if (orarioStr) {
+      const orario = document.createElement('div');
+      orario.className = 'ci-orario';
+      orario.textContent = orarioStr;
+      popup.appendChild(orario);
+    }
+
+    // NOTA CLIENTE (subito sotto l'intestazione)
     if (notaClienteD) {
       const ncLabel = document.createElement('div');
-      ncLabel.style.cssText = "margin-top:4px; color:#ccc; font-size:11px; text-transform:uppercase;";
+      ncLabel.className = 'ci-label-nota';
       ncLabel.textContent = 'NOTA CLIENTE';
       popup.appendChild(ncLabel);
 
       const nc = document.createElement('div');
-      // Aggiunto margin auto per centrare il blocco che ha max-width
-      nc.style.cssText = "margin-top:1px; color:#ffff99; max-width:260px; word-break:break-word; margin-left:auto; margin-right:auto;";
+      nc.className = 'ci-nota';
       nc.textContent = notaClienteD;
       popup.appendChild(nc);
     }
 
     // Servizio
     const serv = document.createElement('div');
-    serv.className = 'all-uppercase';
-    serv.style.color = '#ffa5c6';
-    serv.style.marginTop = '6px';
+    serv.className = 'ci-servizio all-uppercase';
     serv.textContent = servizioD || '';
     popup.appendChild(serv);
 
     // Cellulare
-    const cellSpan = document.createElement('div');
-    cellSpan.style.color = '#fff';
-    const h5 = document.createElement('h5');
-    h5.style.margin = '6px 0 0 0';
-    h5.textContent = cellulare || '';
-    cellSpan.appendChild(h5);
-    popup.appendChild(cellSpan);
+    if (cellulare) {
+      const cellSpan = document.createElement('div');
+      cellSpan.className = 'ci-cellulare';
+      cellSpan.textContent = cellulare;
+      popup.appendChild(cellSpan);
+    }
 
-    // NOTA APPUNTAMENTO (più in fondo)
+    // NOTA APPUNTAMENTO (piu' in fondo)
     if (notaAppD) {
       const naLabel = document.createElement('div');
-      naLabel.style.cssText = "margin-top:8px; color:#ccc; font-size:11px; text-transform:uppercase;";
+      naLabel.className = 'ci-label-nota';
       naLabel.textContent = 'NOTA APPUNTAMENTO';
       popup.appendChild(naLabel);
 
       const na = document.createElement('div');
-      na.style.cssText = "margin-top:1px; color:#ffff99; max-width:260px; word-break:break-word; margin-left:auto; margin-right:auto;";
+      na.className = 'ci-nota';
       na.textContent = notaAppD;
       popup.appendChild(na);
+    }
+
+    // 2b) META IN FONDO: "creato" e "ultima modifica" servono di rado, prima
+    // erano la primissima riga e rubavano il posto al nome del cliente.
+    if (createdAtStr || lastEditStr) {
+      const meta = document.createElement('div');
+      meta.className = 'ci-meta';
+      if (createdAtStr) meta.appendChild(document.createTextNode('creato: ' + createdAtStr));
+      if (lastEditStr) {
+        if (createdAtStr) meta.appendChild(document.createElement('br'));
+        meta.appendChild(document.createTextNode('ultima modifica: ' + lastEditStr));
+      }
+      popup.appendChild(meta);
     }
 
     // Posizionamento
@@ -2619,6 +2658,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Azzera offset residui definiti inline nel markup (#clientInfoPopup ha margin-top:-25px)
     popup.style.marginTop = '0';
     popup.style.transform = 'none';
+    // A bandiera, non centrato: con righe di lunghezza diversa il testo
+    // centrato non forma nessuna colonna da seguire con l'occhio. Va scritto
+    // inline perche' il markup del popup porta text-align:center inline.
+    popup.style.textAlign = 'left';
     popup.style.display = 'block';
 
     const pw = popup.offsetWidth || 220;
