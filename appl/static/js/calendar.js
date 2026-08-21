@@ -6903,30 +6903,40 @@ function removePseudoBlock(index) {
   }
 }
 
-function selectClientNav(clientId, fullName) {
-  window.selectedClientIdNav = clientId;
-  window.selectedClientNameNav = fullName;
-  
-  // chiudi dropdown
+/* Icona "i" accanto al campo cliente del Navigator.
+   UN SOLO punto di creazione, usato sia quando si sceglie il cliente
+   (selectClientNav) sia quando il Navigator viene ripristinato dopo un
+   refresh del calendario o un cambio giorno (restoreNavigatorState).
+   Prima i due percorsi erano copie divergenti: quello del ripristino
+   ricreava l'icona SENZA il listener che la toglie appena si digita, e con
+   l'id del cliente chiuso dentro la closure. Risultato: preso un
+   appuntamento e cercato un altro cliente senza svuotare il Navigator,
+   restava appesa in alto una "i" che apriva la scheda del cliente
+   PRECEDENTE.
+   Due difese, non una: l'icona sparisce alla prima digitazione, e comunque
+   al click legge l'id del cliente selezionato in quel momento (il
+   data-attribute e' solo un ripiego), quindi non puo' piu' puntare a un
+   cliente diverso da quello che il Navigator sta mostrando. */
+function renderNavClientInfoIcon(clientId) {
   const input = document.getElementById('clientSearchInputNav');
-  const resultsContainer = document.getElementById('clientResultsNav');
-  input.value = capitalizeName((fullName || '').toString().replace(/\s+/g,' ').trim());
-  resultsContainer.style.display = 'none';
-  
-  // Aggiungi icona info accanto al campo Navigator (STESSO STILE DEL DROPDOWN)
+  if (!input) return null;
   const container = input.parentElement;
-  
-  // Rimuovi eventuali icone precedenti
-  const oldIcon = container.querySelector('.client-info-btn-nav');
-  if (oldIcon) oldIcon.remove();
-  
-  // Crea nuova icona
+  if (!container) return null;
+
+  // TUTTE le icone residue, non solo la prima: se per qualsiasi motivo ne
+  // fossero rimaste due, querySelector ne avrebbe tolta una sola.
+  container.querySelectorAll('.client-info-btn-nav').forEach(function (el) { el.remove(); });
+
+  const id = (clientId === 0 || clientId) ? String(clientId) : '';
+  if (!id) return null;
+
   const infoBtn = document.createElement('button');
   infoBtn.type = 'button';
   infoBtn.className = 'client-info-btn client-info-btn-nav';
   applyBsTooltip(infoBtn, 'Info cliente');
   infoBtn.setAttribute('aria-label', 'Info cliente');
   infoBtn.innerText = 'i';
+  infoBtn.dataset.clientId = id;
   infoBtn.style.position = 'absolute';
   infoBtn.style.right = '48px';  // AUMENTATO per Navigator
   infoBtn.style.top = '50%';
@@ -6934,28 +6944,49 @@ function selectClientNav(clientId, fullName) {
   infoBtn.style.zIndex = '10';
   container.style.position = 'relative';
   container.appendChild(infoBtn);
-  
-  // Aggiungi listener per aprire il modal info cliente
-  infoBtn.onclick = function(e) {
+
+  infoBtn.onclick = function (e) {
     e.preventDefault();
     e.stopPropagation();
-    if (typeof showClientInfoModal === 'function') {
-      showClientInfoModal(clientId);
-    }
+    const idCorrente = (window.selectedClientIdNav !== null && window.selectedClientIdNav !== undefined && window.selectedClientIdNav !== '')
+      ? String(window.selectedClientIdNav)
+      : (this.dataset.clientId || '');
+    if (!idCorrente) return;
+    if (typeof showClientInfoModal === 'function') showClientInfoModal(idCorrente);
   };
-  
-  // NUOVO: Aggiungi listener sull'input per rimuovere l'icona quando l'utente modifica il campo
-  const removeIconHandler = function() {
-    const icon = container.querySelector('.client-info-btn-nav');
-    if (icon) {
-      icon.remove();
-    }
-    // Rimuovi anche l'handler dopo la prima modifica
-    input.removeEventListener('input', removeIconHandler);
-  };
-  input.addEventListener('input', removeIconHandler);
+
+  // Appena si torna a digitare nel campo, l'icona non ha piu' un cliente a
+  // cui riferirsi: sparisce. { once: true } evita che i listener si accumulino
+  // a ogni ripristino del Navigator.
+  input.addEventListener('input', function () {
+    container.querySelectorAll('.client-info-btn-nav').forEach(function (el) { el.remove(); });
+  }, { once: true });
+
+  return infoBtn;
+}
+window.renderNavClientInfoIcon = renderNavClientInfoIcon;
+
+function selectClientNav(clientId, fullName) {
+  window.selectedClientIdNav = clientId;
+  window.selectedClientNameNav = fullName;
+
+  // chiudi dropdown
+  const input = document.getElementById('clientSearchInputNav');
+  const resultsContainer = document.getElementById('clientResultsNav');
+  input.value = capitalizeName((fullName || '').toString().replace(/\s+/g,' ').trim());
+  resultsContainer.style.display = 'none';
+
+  // Icona info accanto al campo Navigator (stessa funzione usata dal ripristino)
+  renderNavClientInfoIcon(clientId);
 
   saveNavigatorState();
+
+  // Cliente scelto: da qui in poi la ricerca servizio dev'essere disponibile.
+  // Questa e' la funzione canonica di "cliente selezionato" ed e' anche quella
+  // che apre la dropdown: senza questa riga la lista si apriva sopra un campo
+  // rimasto a display:none (es. dopo un auto-collapse a campi vuoti, con il
+  // focus mai uscito dal campo cliente e quindi nessun click a riespandere).
+  ensureServiceFieldVisible();
 
   // Se esiste una logica di caricamento servizi, continua:
   loadLastServicesForClient(clientId);
@@ -7385,6 +7416,25 @@ function handleClientSearchNav(query) {
   });
 }
 
+/* Il campo "Cerca servizio" e la sua dropdown sono un'unita' sola: non puo'
+   esistere una lista di servizi aperta senza, sopra, il campo per cercarne
+   altri. Con un cliente selezionato la ricerca servizio dev'essere SEMPRE
+   possibile, anche a dropdown gia' aperta sui 10 piu' frequenti.
+
+   Prima la visibilita' del campo era scritta a mano in una decina di punti
+   sparsi, e i due che lo nascondono (l'init a DOMContentLoaded e
+   collapseAppointmentNavigator) potevano vincere sull'ultimo che lo mostrava:
+   bastava che il cliente venisse scelto senza un click vero sul campo
+   "Cerca Cliente..." (unico punto che chiama expandAppointmentNavigator) e
+   restava la dropdown servizi aperta con il campo di ricerca sparito.
+   Qui c'e' l'UNICO accensore, chiamato dove la dropdown nasce: cosi'
+   l'invariante vale per costruzione, per ogni chiamante presente e futuro. */
+function ensureServiceFieldVisible() {
+  const el = document.getElementById('serviceInputNav');
+  if (el && el.style.display === 'none') el.style.display = 'block';
+}
+window.ensureServiceFieldVisible = ensureServiceFieldVisible;
+
 // Counter condiviso con showServicesDropdownNav: ogni nuova fetch (search o
 // frequent) prende un seq. Dopo l'await async, se seq < __navServiceFetchSeq
 // significa che e' arrivata una richiesta piu' recente e questo render va
@@ -7394,6 +7444,8 @@ window.__navServiceFetchSeq = window.__navServiceFetchSeq || 0;
 
 function handleServiceSearchNav(query) {
   const resultsContainer = document.getElementById('serviceResultsNav');
+  // Si sta cercando un servizio: il campo deve esserci, sempre.
+  ensureServiceFieldVisible();
 
   if (query.length < 3) {
     // Mantieni i risultati esistenti visibili se già presenti (stessa logica attuale)
@@ -7663,6 +7715,8 @@ async function fetchClientLastDate(clientId) {
 async function showServicesDropdownNav(services) {
   const resultsContainer = document.getElementById('serviceResultsNav');
   if (!resultsContainer) return;
+  // Sta per aprirsi la lista servizi: senza il campo sopra sarebbe monca.
+  ensureServiceFieldVisible();
 
   // Token di sequenza condiviso con handleServiceSearchNav: se un'altra
   // chiamata piu' recente arriva mentre questa e' in attesa (await pacchetti),
@@ -12212,47 +12266,23 @@ function restoreNavigatorState() {
     // Ripristina i campi input visivi: preferisci nome selezionato, altrimenti il valore digitato
     const clientInput = document.getElementById('clientSearchInputNav');
     if (clientInput) {
-      // PULIZIA: Rimuovi eventuali icone info residue PRIMA di ripristinare il valore
-      const container = clientInput.parentElement;
-      if (container) {
-        const oldIcon = container.querySelector('.client-info-btn-nav');
-        if (oldIcon) oldIcon.remove();
-      }
-      
-    if (window.selectedClientIdNav) {
+      // PULIZIA: via ogni icona info residua PRIMA di ripristinare il valore
+      // (renderNavClientInfoIcon le rimuove tutte, anche chiamata senza id).
+      renderNavClientInfoIcon(null);
+
+      if (window.selectedClientIdNav) {
         const fullName = (window.selectedClientNameNav || '').replace(/\s+/g,' ').trim();
         const nameOnly = fullName.split(' - ')[0] || fullName;
         clientInput.value = nameOnly.trim();
-        
-        // Se c'è un cliente selezionato, ricrea l'icona info correttamente
-        if (container) {
-          const infoBtn = document.createElement('button');
-          infoBtn.type = 'button';
-          infoBtn.className = 'client-info-btn client-info-btn-nav';
-          applyBsTooltip(infoBtn, 'Info cliente');
-          infoBtn.setAttribute('aria-label', 'Info cliente');
-          infoBtn.innerText = 'i';
-          infoBtn.style.position = 'absolute';
-          infoBtn.style.right = '48px';
-          infoBtn.style.top = '50%';
-          infoBtn.style.transform = 'translateY(-50%)';
-          infoBtn.style.zIndex = '10';
-          container.style.position = 'relative';
-          container.appendChild(infoBtn);
-          
-          infoBtn.onclick = function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (typeof showClientInfoModal === 'function') {
-              showClientInfoModal(rawSelId);
-            }
-          };
-        }
+
+        // Stessa icona di selectClientNav: con il listener che la toglie alla
+        // prima digitazione e l'id letto al click, non congelato qui dentro.
+        renderNavClientInfoIcon(window.selectedClientIdNav);
       } else {
         clientInput.value = clientSearchValue || '';
       }
     }
-    
+
     const serviceInput = document.getElementById('serviceInputNav');
     if (serviceInput) serviceInput.value = serviceSearchValue || '';
 

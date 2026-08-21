@@ -3213,6 +3213,20 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch(e) {}
   })();
 </script>
+{# === SGANCIO ALTO CONTRASTO (2 di 4) ================================
+   Runtime della modalita' scura ad alto contrasto: SOSPESO e sganciato, cosi'
+   l'Agenda non scarica ne' interpreta nulla. Istruzioni in business_info.html.
+   Per riattivarlo: togliere il commento Jinja che segue.
+
+   Serve un runtime e non basta il CSS perche' i colori dei blocchi
+   appuntamento sono scritti INLINE dall'agenda (data-colore del cliente):
+   nessun foglio di stile puo' prevederli. Lo script li scurisce fino al
+   contrasto 7:1 tenendo la tinta. Va DOPO calendar.js, perche' osserva i
+   blocchi che quello crea.
+   =================================================================== #}
+{#
+<script src="{{ url_for('static', filename='js/tosca-dark-a11y.js') }}"></script>
+#}
 <script src="{{ url_for('static', filename='js/touch-ui.js') }}"></script>
 <script src="{{ url_for('static', filename='js/mobile-agenda.js') }}"></script>
 <script>

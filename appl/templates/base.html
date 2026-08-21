@@ -186,6 +186,35 @@ html.in-side-pane #reconnectingIndicator { display: none !important; }
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-datepicker@1.10.0/dist/css/bootstrap-datepicker.min.css">
         <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+        {# === SGANCIO ALTO CONTRASTO (1 di 4) ==========================
+           Modalita' scura ad alto contrasto (ipovedenti): SOSPESA e sganciata
+           dal codice in uso. Istruzioni complete in business_info.html.
+           Per riattivarla: togliere il commento Jinja che segue.
+
+           Perche' lo script sta nel <head> e non altrove: cosi' la classe
+           sull'elemento <html> esiste gia' al primo paint (niente lampo
+           bianco, che per chi ha ipovisione e' fastidioso quanto un flash) e
+           il foglio scuro viene chiesto insieme agli altri invece che a
+           pagina gia' composta. La preferenza e' DI QUESTA postazione
+           (localStorage), non del negozio: e' la vista di chi sta davanti
+           allo schermo.
+           ============================================================== #}
+        {#
+        <script>
+          (function () {
+            try {
+              if (localStorage.getItem('sun_dark_a11y') === '1') {
+                document.documentElement.classList.add('tosca-dark');
+                var l = document.createElement('link');
+                l.rel = 'stylesheet';
+                l.href = "{{ url_for('static', filename='css/tosca-dark-a11y.css') }}";
+                document.head.appendChild(l);
+              }
+            } catch (e) {}
+          })();
+        </script>
+        #}
         <meta name="csrf-token" content="{{ csrf_token() }}">
     </head>    
 <body>

@@ -253,6 +253,44 @@
   <input type="checkbox" id="touchUiEnabled">
   <small style="margin-left:8px; color:#666;">Abilita interfaccia touch per i blocchi agenda (su questo computer)</small>
 </div>
+{# ===================================================================
+   MODALITA' SCURA AD ALTO CONTRASTO (ipovedenti) - SOSPESA E SGANCIATA
+   -------------------------------------------------------------------
+   Il lavoro e' completo e funzionante, ma restano da rifinire alcuni
+   dettagli - in particolare i dropdown dentro i modali - quindi la funzione
+   e' stata SGANCIATA dal codice in uso: nessuno script nel <head>, nessun
+   file caricato, nessun byte in piu' sull'Agenda, nessuna riga che legga o
+   scriva la preferenza. Restano su disco, pronti e completi:
+       appl/static/css/tosca-dark-a11y.css
+       appl/static/js/tosca-dark-a11y.js
+
+   PER RIATTIVARLA basta togliere QUATTRO commenti Jinja, tutti marcati
+   "SGANCIO ALTO CONTRASTO":
+     1) appl/templates/base.html      -> lo script nel <head> che accende la
+                                         classe tosca-dark e carica il CSS
+     2) appl/templates/calendar.html  -> il <script src> del runtime (va DOPO
+                                         calendar.js)
+     3) questo file, il <div> dell'interruttore qui sotto
+     4) questo file, il blocco <script> che legge/scrive la preferenza
+   Nient'altro: CSS e runtime sono gia' a posto.
+
+   NB: sganciata cosi', nessuno legge piu' 'sun_dark_a11y' nel localStorage.
+   Una postazione che aveva provato la modalita' non rischia di ritrovarsi il
+   tema scuro acceso senza avere l'interruttore per spegnerlo - ed e' per
+   questo che qui sotto non serve piu' alcuna riga di "spegnimento forzato".
+   =================================================================== #}
+{# --- SGANCIO ALTO CONTRASTO (3 di 4): l'interruttore ---
+<br>
+<div style="display: flex; gap: 8px; align-items: center;">
+  <label for="darkA11yEnabled">Modalit&agrave; scura ad alto contrasto:</label>
+  <input type="checkbox" id="darkA11yEnabled">
+  <small style="margin-left:8px; color:#666;">
+    Pensata per <strong>ipovedenti</strong>: fondo scuro, testo chiaro e contrasto
+    minimo 7:1 (WCAG 2.2 AAA). In agenda tutti i blocchi vengono scuriti e i colori
+    troppo chiari non sono pi&ugrave; impostabili (su questo computer)
+  </small>
+</div>
+#}
 <br>
 <!-- Zoom Navigator disabilitato permanentemente (non più usato)
 <div class="desktop-only-setting" style="display: flex; gap: 8px; align-items: center;">
@@ -643,6 +681,25 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       }
       
+      {# === SGANCIO ALTO CONTRASTO (4 di 4) ==========================
+         Lettura/scrittura della preferenza: SOSPESA. Per riattivarla,
+         togliere il commento Jinja che segue.
+         Preferenza di POSTAZIONE, come il touch: chi ha bisogno del tema ad
+         alto contrasto lo vuole sul proprio schermo, non imposto a tutto il
+         negozio. Il reload serve perche' la classe tosca-dark viene messa
+         nel <head>, prima del primo paint.
+         ============================================================== #}
+      {#
+      const darkEl = document.getElementById('darkA11yEnabled');
+      if (darkEl) {
+        darkEl.checked = localStorage.getItem('sun_dark_a11y') === '1';
+        darkEl.addEventListener('change', () => {
+          localStorage.setItem('sun_dark_a11y', darkEl.checked ? '1' : '0');
+          window.location.reload();
+        });
+      }
+      #}
+
       // Zoom Navigator disabilitato permanentemente: forza OFF e mantiene codice legacy commentato
       localStorage.setItem('sun_zoom_navigator', '0');
       // const zoomKey = 'sun_zoom_navigator';

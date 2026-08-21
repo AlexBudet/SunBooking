@@ -1,0 +1,623 @@
+/* ===========================================================================
+   TOSCA — MODALITA' SCURA AD ALTO CONTRASTO (per ipovedenti)
+   ---------------------------------------------------------------------------
+   Foglio SEPARATO: si carica solo quando l'impostazione e' accesa (Info
+   Azienda -> "Modalita' scura ad alto contrasto"). Tutto e' agganciato a
+   html.tosca-dark, quindi senza quella classe questo file non cambia
+   nulla, nemmeno se venisse caricato per sbaglio.
+
+   Riferimenti normativi seguiti (WCAG 2.2, richiamata da EN 301 549 e quindi
+   dall'European Accessibility Act):
+     1.4.3 / 1.4.6  contrasto testo: qui si punta al livello AAA 7:1
+                    (14:1 e oltre per il testo normale su fondo pagina).
+     1.4.11         contrasto degli elementi non testuali (bordi, icone,
+                    stati): almeno 3:1 contro cio' che li circonda.
+     1.4.1          il colore non e' mai l'unica informazione: gli stati
+                    portano anche bordo, spessore o testo.
+     1.4.8          niente testo giustificato, interlinea generosa,
+                    superfici piatte al posto di gradienti tenui.
+     1.4.12         spaziature del testo non compresse.
+     2.4.7 / 2.4.11 focus sempre visibile e mai coperto: contorno giallo
+                    spesso con scostamento.
+     2.5.8          bersagli di almeno 24x24 px.
+
+   Scelte di merito, non arbitrarie:
+   - Niente #000 puro e niente #FFF puro. Il bianco pieno su nero pieno
+     produce "halation" (l'alone che sfarfalla) ed e' proprio cio' che
+     affatica di piu' chi ha ipovisione: fondo #101214, testo #F2F5F7.
+   - Superfici piatte: i gradienti e i tratteggi tenui dell'agenda chiara
+     spariscono, perche' abbassano il contrasto effettivo del testo che ci
+     sta sopra.
+   - I colori dei blocchi appuntamento NON vengono decisi qui: restano
+     quelli del cliente, ma tosca-dark-a11y.js li scurisce fino a garantire
+     7:1 col testo chiaro. Qui c'e' solo la rete di sicurezza (testo chiaro
+     e bordo) valida anche prima che il JS intervenga.
+   =========================================================================== */
+
+html.tosca-dark {
+  /* superfici */
+  --a11y-bg: #101214;          /* fondo pagina */
+  --a11y-surface: #191D21;     /* celle, pannelli */
+  --a11y-surface-2: #23282D;   /* rilievi, intestazioni */
+  --a11y-surface-3: #2E343A;   /* controlli */
+  --a11y-closed: #0B0D0F;      /* fasce chiuse: piu' scuro del fondo */
+
+  /* testo */
+  --a11y-text: #F2F5F7;        /* 16:1 su --a11y-bg */
+  --a11y-text-dim: #CBD3DA;    /* 10:1 su --a11y-bg: usabile come testo */
+
+  /* linee e bordi (>= 3:1 sulle superfici) */
+  --a11y-line: #5A646E;
+  --a11y-line-strong: #8A96A2;
+
+  /* accenti */
+  --a11y-accent: #F5A9D0;      /* il rosa Tosca, portato in gamma chiara */
+  --a11y-accent-2: #8FC7FF;    /* azzurro (solarium, link) */
+  --a11y-ok: #7EE197;
+  --a11y-warn: #FFC96B;
+  --a11y-danger: #FF9A8F;
+  --a11y-focus: #FFD400;       /* contorno di focus */
+
+  color-scheme: dark;
+}
+
+/* =========================== BASE ======================================== */
+
+html.tosca-dark,
+html.tosca-dark body {
+  background-color: var(--a11y-bg) !important;
+  color: var(--a11y-text) !important;
+}
+
+/* Il testo piccolo su fondo scuro appare piu' sottile di quanto sia: mezzo
+   grado di peso in piu' lo riporta alla resa del tema chiaro. */
+html.tosca-dark body {
+  -webkit-font-smoothing: antialiased;
+}
+
+html.tosca-dark p,
+html.tosca-dark li,
+html.tosca-dark label,
+html.tosca-dark td,
+html.tosca-dark th,
+html.tosca-dark span,
+html.tosca-dark div,
+html.tosca-dark small,
+html.tosca-dark strong,
+html.tosca-dark h1, html.tosca-dark h2, html.tosca-dark h3,
+html.tosca-dark h4, html.tosca-dark h5, html.tosca-dark h6 {
+  color: var(--a11y-text);
+}
+
+html.tosca-dark small,
+html.tosca-dark .text-muted {
+  color: var(--a11y-text-dim) !important;   /* mai grigio slavato */
+}
+
+/* 1.4.12: le spaziature non vanno compresse. Esclusi i blocchi agenda, che
+   hanno un'altezza fissa legata alla durata dell'appuntamento. */
+html.tosca-dark p,
+html.tosca-dark li,
+html.tosca-dark label {
+  line-height: 1.5;
+}
+
+html.tosca-dark a {
+  color: var(--a11y-accent-2);
+  text-underline-offset: 2px;
+}
+html.tosca-dark a:hover {
+  color: #C9E2FF;
+}
+
+/* 2.4.7 + 2.4.11: focus sempre evidente, mai solo un alone tenue. */
+html.tosca-dark :focus-visible {
+  outline: 3px solid var(--a11y-focus) !important;
+  outline-offset: 2px !important;
+  border-radius: 3px;
+}
+
+/* 2.5.8: nessun comando sotto i 24px di lato. */
+html.tosca-dark button,
+html.tosca-dark .btn,
+html.tosca-dark input[type="checkbox"],
+html.tosca-dark input[type="radio"] {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* =========================== INTESTAZIONE E MENU ========================= */
+
+html.tosca-dark header {
+  background-color: var(--a11y-surface) !important;
+  border-bottom: 2px solid var(--a11y-line);
+}
+
+html.tosca-dark .navbar,
+html.tosca-dark .navbar.bg-light,
+html.tosca-dark footer,
+html.tosca-dark footer.bg-light {
+  background-color: var(--a11y-surface) !important;
+  border-color: var(--a11y-line) !important;
+}
+
+html.tosca-dark .navbar .nav-link,
+html.tosca-dark .navbar .navbar-brand,
+html.tosca-dark .navbar-light .navbar-nav .nav-link {
+  color: var(--a11y-text) !important;
+  font-weight: 600;
+}
+
+html.tosca-dark .navbar .nav-link:hover,
+html.tosca-dark .navbar-light .navbar-nav .nav-link:hover {
+  color: var(--a11y-accent) !important;
+  text-decoration: underline;
+}
+
+/* La voce attiva non si distingue solo per colore (1.4.1): ha anche il
+   sottolineato spesso. */
+html.tosca-dark .navbar .nav-link.active,
+html.tosca-dark .navbar-light .navbar-nav .nav-link.active {
+  color: var(--a11y-accent) !important;
+  border-bottom: 3px solid var(--a11y-accent);
+}
+
+html.tosca-dark .dropdown-menu {
+  background-color: var(--a11y-surface-2) !important;
+  border: 1px solid var(--a11y-line) !important;
+}
+html.tosca-dark .dropdown-item {
+  color: var(--a11y-text) !important;
+}
+html.tosca-dark .dropdown-item:hover,
+html.tosca-dark .dropdown-item:focus {
+  background-color: var(--a11y-surface-3) !important;
+  color: var(--a11y-text) !important;
+}
+
+/* =========================== NAVIGAZIONE DATA ============================ */
+
+html.tosca-dark .calendar-navigation,
+html.tosca-dark .sticky-nav {
+  background: var(--a11y-surface) !important;
+  border: 1px solid var(--a11y-line) !important;
+  box-shadow: none !important;
+}
+
+html.tosca-dark .calendar-navigation .arrow-nav,
+html.tosca-dark .arrow-nav {
+  color: var(--a11y-accent) !important;
+  font-weight: 700;
+}
+html.tosca-dark .arrow-nav:hover {
+  color: var(--a11y-text) !important;
+  background: var(--a11y-surface-3) !important;
+}
+
+/* "Vai a OGGI": nel tema chiaro e' viola su rosa pallido, cioe' 3,3:1 su
+   fondo scuro. Diventa un pulsante pieno chiaro con testo scuro. */
+html.tosca-dark .calendar-navigation .btn-today,
+html.tosca-dark .btn-today {
+  background: var(--a11y-accent) !important;
+  color: #101214 !important;
+  font-weight: 700 !important;
+  border: 1px solid var(--a11y-accent) !important;
+  box-shadow: none !important;
+}
+html.tosca-dark .calendar-navigation .btn-today:hover,
+html.tosca-dark .btn-today:hover {
+  background: var(--a11y-text) !important;
+  color: #101214 !important;
+}
+
+html.tosca-dark .calendar-date-input,
+html.tosca-dark #dayOfWeek {
+  background: var(--a11y-surface-2) !important;
+  color: var(--a11y-text) !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+  font-weight: 700;
+}
+
+/* =========================== TABELLA AGENDA ============================== */
+
+html.tosca-dark .calendar-table {
+  background: var(--a11y-bg) !important;
+}
+
+html.tosca-dark .calendar-table th,
+html.tosca-dark .calendar-table td {
+  border-color: var(--a11y-line) !important;
+}
+
+html.tosca-dark .calendar-table thead th {
+  background: var(--a11y-surface-2) !important;
+  border-bottom: 2px solid var(--a11y-line-strong) !important;
+}
+
+/* Nomi delle operatrici: erano rosa scuro con ombra, illeggibile su fondo
+   scuro. Qui diventano chiari, senza ombra (l'ombra sfuoca i bordi delle
+   lettere, che e' il primo problema di chi legge con ingrandimento). */
+html.tosca-dark .calendar-table thead th a {
+  color: var(--a11y-accent) !important;
+  text-shadow: none !important;
+}
+html.tosca-dark .calendar-table thead th a:hover {
+  background: var(--a11y-surface-3) !important;
+  color: var(--a11y-text) !important;
+}
+html.tosca-dark .calendar-table thead th a.solarium {
+  color: var(--a11y-accent-2) !important;
+}
+
+/* Colonna delle ore: superficie piatta, niente gradiente. */
+html.tosca-dark .hour-cell {
+  background: var(--a11y-surface-2) !important;
+  color: var(--a11y-text) !important;
+  font-weight: 700;
+  border-bottom: 1px solid var(--a11y-line) !important;
+}
+
+html.tosca-dark .quarter-cell {
+  background: var(--a11y-surface) !important;
+  color: var(--a11y-text-dim) !important;
+  border-top: 1px dashed var(--a11y-line) !important;
+}
+
+/* Celle prenotabili: due tonalita' vicine ma separate da bordi netti, cosi'
+   la griglia resta leggibile anche a forte ingrandimento. */
+html.tosca-dark .hour-cell ~ td:not(.calendar-closed):not(.highlight):not(.cut-source),
+html.tosca-dark .quarter-cell ~ td:not(.calendar-closed) {
+  background: var(--a11y-surface) !important;
+}
+
+html.tosca-dark .selectable-cell {
+  border-color: var(--a11y-line) !important;
+}
+
+/* Passaggio del mouse e cella puntata: si vedono per LUMINOSITA', non per
+   una tinta pastello che su fondo scuro sparirebbe. */
+html.tosca-dark .selectable-cell:not(.calendar-closed):hover,
+html.tosca-dark .hour-cell ~ td.selectable-cell:not(.calendar-closed):hover {
+  background-color: #34506B !important;
+  background-image: none !important;
+}
+
+html.tosca-dark .selectable-cell.highlight.selectable-cell.highlight,
+html.tosca-dark .hour-cell ~ td.selectable-cell.highlight {
+  background-color: #3D5F80 !important;
+  background-image: none !important;
+  outline: 2px solid var(--a11y-accent-2);
+  outline-offset: -2px;
+}
+
+/* Fascia chiusa: piu' SCURA del resto e con tratteggio ad alto contrasto,
+   cosi' "chiuso" si riconosce anche senza distinguere le tinte. */
+html.tosca-dark .calendar-table td.hour-cell.calendar-closed,
+html.tosca-dark .calendar-table td.quarter-cell.calendar-closed,
+html.tosca-dark .calendar-closed {
+  background-color: var(--a11y-closed) !important;
+  background-image: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.13) 0,
+      rgba(255, 255, 255, 0.13) 2px,
+      transparent 2px,
+      transparent 9px) !important;
+  color: var(--a11y-text-dim) !important;
+}
+
+/* Cella di origine del "taglia": bordo, non solo velo di colore. */
+html.tosca-dark .selectable-cell.cut-source {
+  background-color: #3A2430 !important;
+  outline: 2px dashed var(--a11y-accent) !important;
+  outline-offset: -2px;
+}
+
+/* Riga dell'ora corrente: deve restare la cosa piu' evidente della pagina. */
+html.tosca-dark #currentTimeIndicator {
+  background: var(--a11y-focus) !important;
+  height: 3px !important;
+}
+
+/* =========================== BLOCCHI APPUNTAMENTO ======================== */
+
+/* Il colore di fondo dei blocchi arriva inline (data-colore del cliente) e
+   lo scurisce tosca-dark-a11y.js fino a 7:1. Qui si fissa tutto il resto:
+   testo chiaro, bordo di separazione, niente ombre morbide. */
+html.tosca-dark .appointment-block {
+  color: var(--a11y-text) !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  /* Sopra il colore del blocco c'e' un velo bianco al 20% (il gradiente che
+     da' l'effetto lucido). Proprio dove sta il nome cliente quel velo
+     schiarisce il fondo e mangia il contrasto appena calcolato: nel tema ad
+     alto contrasto il colore del blocco deve essere quello e basta. */
+  background-image: none !important;
+}
+
+html.tosca-dark .appointment-block .appointment-content,
+html.tosca-dark .appointment-block .appointment-content p,
+html.tosca-dark .appointment-block .client-name,
+html.tosca-dark .appointment-block .client-info-link,
+html.tosca-dark .appointment-block .off-title,
+html.tosca-dark .appointment-block strong {
+  color: var(--a11y-text) !important;
+}
+
+/* Il nome cliente e il servizio sono l'informazione principale del blocco:
+   peso pieno, mai corsivo sottile. */
+html.tosca-dark .appointment-block .client-info-link {
+  font-weight: 700 !important;
+  font-style: normal !important;
+}
+html.tosca-dark .appointment-block .appointment-content p strong {
+  font-weight: 700 !important;
+}
+
+/* Blocco PAGATO (stato 2): nel tema chiaro e' grigio chiaro con testo grigio,
+   qui diventa una superficie scura con testo pieno. Il pallinato resta come
+   secondo indizio oltre al colore. */
+html.tosca-dark .appointment-block.status-2 {
+  background-color: #2B3036 !important;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.28) 1.5px, transparent 2.5px) !important;
+  color: var(--a11y-text) !important;
+  border-color: var(--a11y-line-strong) !important;
+}
+html.tosca-dark .appointment-block.status-2 .appointment-content,
+html.tosca-dark .appointment-block.status-2 .client-info-link,
+html.tosca-dark .appointment-block.status-2 .client-name,
+html.tosca-dark .appointment-block.status-2 p {
+  color: var(--a11y-text) !important;
+}
+
+/* Blocchi OFF / nota: superficie neutra distinta, con bordo tratteggiato. */
+html.tosca-dark .appointment-block.note-off,
+html.tosca-dark .appointment-block.off {
+  background-color: #24282C !important;
+  border: 2px dashed var(--a11y-line-strong) !important;
+  color: var(--a11y-text) !important;
+}
+
+/* Blocco selezionato / in movimento: contorno spesso, non solo opacita'. */
+html.tosca-dark .appointment-block.moving-paid,
+html.tosca-dark .appointment-block.dragging {
+  outline: 3px solid var(--a11y-focus) !important;
+  outline-offset: -3px;
+  opacity: 1 !important;
+}
+
+/* Badge dentro il blocco (pacchetto, prepagata, TODAY, VIP). */
+html.tosca-dark .appointment-block .pacchetto-badge {
+  color: var(--a11y-warn) !important;
+  opacity: 1 !important;
+}
+html.tosca-dark .appointment-block .prepagata-badge {
+  color: var(--a11y-accent-2) !important;
+  opacity: 1 !important;
+}
+html.tosca-dark .client-today-badge {
+  background: var(--a11y-warn) !important;
+  color: #101214 !important;
+  font-weight: 700 !important;
+}
+
+/* Spia "cliente in istituto". */
+html.tosca-dark .appointment-block .my-spia {
+  border: 2px solid var(--a11y-text) !important;
+}
+
+/* =========================== BARRE DEI PULSANTI ========================== */
+
+html.tosca-dark .appointment-block .popup-buttons .btn-popup,
+html.tosca-dark .appointment-block .popup-buttons-bottom .btn-popup {
+  background: var(--a11y-surface-3) !important;
+  color: var(--a11y-text) !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+  box-shadow: none !important;
+}
+
+html.tosca-dark .appointment-block .popup-buttons .btn-popup:hover,
+html.tosca-dark .appointment-block .popup-buttons-bottom .btn-popup:hover {
+  background: var(--a11y-accent) !important;
+  color: #101214 !important;
+}
+
+html.tosca-dark .btn-popup.delete-appointment-block:hover {
+  background: var(--a11y-danger) !important;
+  color: #101214 !important;
+}
+
+/* =========================== NAVIGATOR APPUNTAMENTI ====================== */
+
+html.tosca-dark .appointmentNavigator {
+  background: var(--a11y-surface) !important;
+  border: 2px solid var(--a11y-line-strong) !important;
+  box-shadow: none !important;
+  color: var(--a11y-text) !important;
+}
+
+html.tosca-dark .appointmentNavigator input,
+html.tosca-dark .appointmentNavigator .form-control {
+  background: var(--a11y-surface-2) !important;
+  color: var(--a11y-text) !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+}
+html.tosca-dark .appointmentNavigator input::placeholder {
+  color: var(--a11y-text-dim) !important;   /* leggibile, non un grigio finto */
+  opacity: 1;
+}
+
+html.tosca-dark .results-dropdown,
+html.tosca-dark #clientResultsNav,
+html.tosca-dark #serviceResultsNav {
+  background: var(--a11y-surface-2) !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+}
+html.tosca-dark .results-dropdown .dropdown-item {
+  color: var(--a11y-text) !important;
+  border-bottom: 1px solid var(--a11y-line) !important;
+}
+html.tosca-dark .results-dropdown .dropdown-item:hover {
+  background: var(--a11y-surface-3) !important;
+}
+
+html.tosca-dark .client-info-btn,
+html.tosca-dark .btn-add-client-square {
+  background: var(--a11y-surface-3) !important;
+  color: var(--a11y-text) !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+  font-weight: 700 !important;
+}
+
+html.tosca-dark .clear-navigator-btn,
+html.tosca-dark .navigator-toggle-btn {
+  background: var(--a11y-surface-3) !important;
+  color: var(--a11y-text) !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+}
+
+html.tosca-dark #navigatorHint {
+  color: var(--a11y-warn) !important;
+  font-weight: 700;
+}
+
+html.tosca-dark #selectedServicesList {
+  border: 1px dashed var(--a11y-line-strong) !important;
+  color: var(--a11y-text) !important;
+}
+
+/* Le frecce giorno precedente/successivo hanno un fondo bianco pieno: qui
+   diventano pastiglie scure con la freccia chiara. */
+html.tosca-dark .calendar-navigation .arrow-nav,
+html.tosca-dark .arrow-nav {
+  background: var(--a11y-surface-3) !important;
+  background-image: none !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+  border-radius: 8px;
+}
+
+/* Pastiglia della ricerca disponibilita' ("trova un buco"). */
+html.tosca-dark #aiSearchAvailBadgeBtn,
+html.tosca-dark #aiBadgeColumn > div {
+  background: var(--a11y-surface-3) !important;
+  background-image: none !important;
+  color: var(--a11y-text) !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+  box-shadow: none !important;
+}
+
+/* Anteprima del blocco che si sta creando (dentro il modal appuntamento):
+   era una striscia bianca con sopra testo chiaro, cioe' testo invisibile. */
+html.tosca-dark .pseudo-block-container,
+html.tosca-dark .pseudo-block-container * {
+  background: var(--a11y-surface-2) !important;
+  background-image: none !important;
+  color: var(--a11y-text) !important;
+}
+html.tosca-dark .pseudo-block-container {
+  border: 1px solid var(--a11y-line-strong) !important;
+}
+
+/* =========================== MODALI, TOOLTIP, POPUP ====================== */
+
+html.tosca-dark .modal-content {
+  background: var(--a11y-surface) !important;
+  color: var(--a11y-text) !important;
+  border: 2px solid var(--a11y-line-strong) !important;
+}
+/* Attenzione: gli header dei modali di Tosca sono GRADIENTI rosa chiari
+   (background-image). Impostare solo background-color non li spegne - il
+   gradiente resta sopra - e il titolo bianco finisce su rosa pallido, circa
+   1,3:1. Serve annullare esplicitamente l'immagine di sfondo. */
+html.tosca-dark .modal-header,
+html.tosca-dark .modal-footer {
+  background: var(--a11y-surface-2) !important;
+  background-image: none !important;
+  border-color: var(--a11y-line) !important;
+}
+html.tosca-dark .modal-header *,
+html.tosca-dark .modal-header .modal-title {
+  color: var(--a11y-text) !important;
+}
+html.tosca-dark .modal-title {
+  color: var(--a11y-text) !important;
+  font-weight: 700;
+}
+html.tosca-dark .modal-backdrop.show {
+  opacity: 0.8 !important;   /* separa meglio il modal dallo sfondo */
+}
+
+html.tosca-dark .modal input,
+html.tosca-dark .modal select,
+html.tosca-dark .modal textarea,
+html.tosca-dark input.form-control,
+html.tosca-dark select.form-select,
+html.tosca-dark textarea.form-control {
+  background: var(--a11y-surface-2) !important;
+  color: var(--a11y-text) !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+}
+
+html.tosca-dark .btn-close,
+html.tosca-dark .btn-close-tile {
+  filter: invert(1) grayscale(100%) brightness(200%);
+  opacity: 1 !important;
+}
+
+/* I tooltip sono gia' scuri nel tema chiaro: qui servono solo bordo e testo
+   pieno, per staccarli dal fondo altrettanto scuro. */
+html.tosca-dark .tooltip-inner {
+  background: #23282D !important;
+  color: var(--a11y-text) !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+  font-size: 0.95rem !important;
+}
+
+html.tosca-dark #clientInfoPopup,
+html.tosca-dark #clientHistoryPopup {
+  background: var(--a11y-surface-2) !important;
+  color: var(--a11y-text) !important;
+  border: 1px solid var(--a11y-line-strong) !important;
+}
+
+/* Pulsanti Bootstrap: le tinte piene di Bootstrap su fondo scuro perdono
+   contrasto, quindi testo scuro su fondo chiaro dell'accento. */
+html.tosca-dark .btn-primary {
+  background: var(--a11y-accent-2) !important;
+  border-color: var(--a11y-accent-2) !important;
+  color: #101214 !important;
+  font-weight: 700 !important;
+}
+html.tosca-dark .btn-success {
+  background: var(--a11y-ok) !important;
+  border-color: var(--a11y-ok) !important;
+  color: #101214 !important;
+  font-weight: 700 !important;
+}
+html.tosca-dark .btn-danger {
+  background: var(--a11y-danger) !important;
+  border-color: var(--a11y-danger) !important;
+  color: #101214 !important;
+  font-weight: 700 !important;
+}
+html.tosca-dark .btn-secondary,
+html.tosca-dark .btn-light,
+html.tosca-dark .btn-outline-secondary {
+  background: var(--a11y-surface-3) !important;
+  border-color: var(--a11y-line-strong) !important;
+  color: var(--a11y-text) !important;
+}
+
+/* =========================== MOVIMENTO =================================== */
+
+/* Chi usa l'ingrandimento segue il puntatore: le animazioni lunghe fanno
+   perdere il punto. Qui restano solo transizioni brevissime. */
+@media (prefers-reduced-motion: reduce) {
+  html.tosca-dark *,
+  html.tosca-dark *::before,
+  html.tosca-dark *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
