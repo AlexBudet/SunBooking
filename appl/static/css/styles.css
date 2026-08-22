@@ -138,7 +138,7 @@ display: none
 }
 
 /* Anteprima del totale dentro il tooltip di "Porta in cassa".
-   La costruisce anteprimaTotaleCassa() in calendar.js dopo 1,3 secondi di
+   La costruisce anteprimaTotaleCassa() in calendar.js dopo 0,3 secondi di
    mouseover sull'icona euro: sopra resta la scritta di sempre, sotto -
    staccato da un filo di separazione - l'elenco dei servizi e il totale.
    Le cifre sono in tabular-nums cosi' le colonne restano allineate. */

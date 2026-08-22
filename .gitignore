@@ -70,3 +70,18 @@ owner_billing.json
 waitress-serve
 sviluppo/
 per chiudere eventuali scontrini aperti che bloccano RCH
+
+# ============================================================
+# DATI: mai nel repository.
+# Il 21/08/2026 suncity.db, sunexpress.db,
+# clienti_importazione_con_tessera.csv e import_suncity_passo2.sql
+# erano finiti su GitHub con dentro nome, cognome e cellulare di
+# clienti veri. Sono stati tolti da tutta la storia con git filter-repo.
+# Queste righe servono perche' non ci tornino.
+# ============================================================
+*.db
+*.sqlite
+*.sqlite3
+*.csv
+import_*.log
+import_*_passo*.sql

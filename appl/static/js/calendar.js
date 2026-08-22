@@ -19313,13 +19313,13 @@ document.head.appendChild(aiStyleOverride);
    ---------------------------------------------------------------------------
    Serve al banco: il cliente ha appena prenotato e chiede "quanto vengo a
    pagare?". Invece di aprire la cassa per poi tornare indietro, basta tenere
-   il mouse sull'icona euro: dopo 1,3 secondi il tooltip si allunga con l'elenco
+   il mouse sull'icona euro: dopo un attimo il tooltip si allunga con l'elenco
    dei servizi e il totale.
 
-   L'attesa non e' un vezzo: chi passa sul bottone per cliccarlo non deve
-   vedersi crescere il tooltip sotto il cursore. Serve a distinguere il
-   passaggio ("sto andando a cliccare") dalla domanda ("quanto fa?"), e sta
-   in ATTESA_MS: 1,3 secondi, misurati sull'uso al banco.
+   L'attesa e' in ATTESA_MS ed e' volutamente minima: 0,3 secondi, quanto
+   basta perche' il tooltip non si allunghi mentre il mouse scorre lungo la
+   barra dei bottoni per andare altrove. Di fatto il preventivo compare
+   subito dopo la scritta "Porta in cassa".
 
    L'insieme dei blocchi e' quello di getBlocchiDaPortareInCassa, identico a
    quello che il click porta davvero in cassa: blocchi contigui dello stesso
@@ -19371,7 +19371,7 @@ window.getBlocchiDaPortareInCassa = getBlocchiDaPortareInCassa;
 (function anteprimaTotaleCassa() {
   'use strict';
 
-  const ATTESA_MS = 1300;   // quanto il mouse deve restare sul bottone
+  const ATTESA_MS = 300;    // quanto il mouse deve restare sul bottone
 
   /* --- listino: una sola fetch per pagina ---------------------------------
      /api/services e' gia' servita con cache 5 minuti lato server ed e' la
