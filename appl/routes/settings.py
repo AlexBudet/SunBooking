@@ -2313,10 +2313,24 @@ def delete_user(user_id):
         return redirect(url_for('settings.settings_landing'))
     current_user = db.session.get(User, session['user_id'])
     user = db.session.get(User, user_id)
+    if not current_user or not user:
+        flash('Utente non trovato.', 'danger')
+        return redirect(url_for('settings.manage_users'))
+
+    # Nessuno cancella se stesso: era gia' l'intenzione dichiarata nel commento
+    # qui sotto, ma il controllo non c'era e un owner poteva chiudersi fuori
+    # dal proprio pannello.
+    if current_user.id == user.id:
+        flash('Non puoi eliminare il tuo stesso account.', 'danger')
+        return redirect(url_for('settings.manage_users'))
+
     if current_user.ruolo.value == 'owner':
-        pass  # può eliminare chiunque tranne se stesso
+        pass  # può eliminare chiunque tranne se stesso (controllato sopra)
     elif current_user.ruolo.value == 'admin':
-        if user.ruolo == 'owner' or user.ruolo == 'admin':
+        # ATTENZIONE: serve .value. RuoloUtente e' un Enum puro, quindi
+        # "user.ruolo == 'owner'" e' SEMPRE falso e questa guardia non
+        # scattava mai: un admin poteva cancellare l'owner e gli altri admin.
+        if user.ruolo.value in ('owner', 'admin'):
             flash('Non puoi eliminare questo utente!', 'danger')
             return redirect(url_for('settings.manage_users'))
     else:

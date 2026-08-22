@@ -2480,6 +2480,24 @@ document.addEventListener('DOMContentLoaded', function() {
   if (!popup) return;
 
   // Helper: costruisce e mostra il tooltip piccolo a partire da un .appointment-block
+  // Fedelta' del cliente (VIP / a rischio) per i badge del tooltip.
+  // Una fetch per cliente, tenuta in cache per la durata della pagina: al
+  // banco si passa piu' volte sugli stessi blocchi. Il contatore serve a
+  // scartare una risposta che arriva quando il mouse e' gia' altrove.
+  let _ciApertura = 0;
+  const _fedeltaCache = new Map();
+
+  function caricaFedelta(clientId) {
+    const k = String(clientId || '');
+    if (!k) return Promise.resolve(null);
+    if (_fedeltaCache.has(k)) return _fedeltaCache.get(k);
+    const p = fetch('/calendar/api/client-loyalty/' + encodeURIComponent(k), { credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : null))
+      .catch(() => null);
+    _fedeltaCache.set(k, p);
+    return p;
+  }
+
   function showClientInfoForBlock(block) {
     if (!block) return;
     // Estrai valori dal blocco o dal link interno (fallback)
@@ -2588,18 +2606,71 @@ document.addEventListener('DOMContentLoaded', function() {
       popup.appendChild(orario);
     }
 
-    // NOTA CLIENTE (subito sotto l'intestazione)
-    if (notaClienteD) {
-      const ncLabel = document.createElement('div');
-      ncLabel.className = 'ci-label-nota';
-      ncLabel.textContent = 'NOTA CLIENTE';
-      popup.appendChild(ncLabel);
+    // 3b) BADGE DI STATO
+    // Riga di etichette brevi sotto l'orario. Quelle che si leggono dal blocco
+    // (pagato, prenotazione web, seduta n/N di un pacchetto) non costano
+    // niente: il dato e' gia' nei data-* che l'agenda scrive.
+    const badgeRiga = document.createElement('div');
+    badgeRiga.className = 'ci-badge-riga';
 
-      const nc = document.createElement('div');
-      nc.className = 'ci-nota';
-      nc.textContent = notaClienteD;
-      popup.appendChild(nc);
+    function aggiungiBadge(testo, tipo) {
+      const b = document.createElement('span');
+      b.className = 'ci-badge' + (tipo ? ' ci-badge-' + tipo : '');
+      b.textContent = testo;
+      badgeRiga.appendChild(b);
+      return b;
     }
+
+    if (block.getAttribute('data-status') === '2') aggiungiBadge('PAGATO', 'pagato');
+    if ((block.getAttribute('data-source') || '').toLowerCase() === 'web') aggiungiBadge('DA WEB', 'web');
+
+    const sedNum = block.getAttribute('data-pacchetto-seduta-progressivo');
+    const sedTot = block.getAttribute('data-pacchetto-sedute-totali');
+    if (sedNum && sedTot) {
+      aggiungiBadge('SEDUTA ' + sedNum + '/' + sedTot, 'pacchetto');
+    } else if (block.getAttribute('data-pacchetto-seduta-id')) {
+      aggiungiBadge('PACCHETTO', 'pacchetto');
+    }
+
+    popup.appendChild(badgeRiga);
+
+    // VIP / a rischio: non stanno sul blocco, li calcola il server dalla
+    // frequenza di visita. Si chiedono al passaggio del mouse e si tengono in
+    // cache per cliente: l'endpoint /api/client-loyalty esiste gia' e fa una
+    // sola query raggruppata, quindi l'API degli appuntamenti resta intoccata.
+    const cid = block.getAttribute('data-client-id');
+    if (cid) {
+      const miaApertura = ++_ciApertura;
+      caricaFedelta(cid).then(function (dati) {
+        if (!dati) return;
+        if (miaApertura !== _ciApertura) return;        // tooltip gia' cambiato
+        if (!badgeRiga.isConnected) return;             // popup ricostruito
+        if (dati.is_vip) aggiungiBadge('VIP', 'vip');
+        else if (dati.a_rischio) aggiungiBadge('A RISCHIO', 'rischio');
+      });
+    }
+
+    // 4) NOTE IN UN RIQUADRO: titolo giallo, contenuto bianco.
+    // Il pannello raccoglie etichetta e testo in un blocco solo, cosi' si
+    // capisce a colpo d'occhio dove finisce una nota e comincia il resto.
+    function nota(titolo, testo) {
+      const box = document.createElement('div');
+      box.className = 'ci-nota-box';
+
+      const lab = document.createElement('div');
+      lab.className = 'ci-label-nota';
+      lab.textContent = titolo;
+      box.appendChild(lab);
+
+      const txt = document.createElement('div');
+      txt.className = 'ci-nota';
+      txt.textContent = testo;
+      box.appendChild(txt);
+
+      popup.appendChild(box);
+    }
+
+    if (notaClienteD) nota('NOTA CLIENTE', notaClienteD);
 
     // Servizio
     const serv = document.createElement('div');
@@ -2615,18 +2686,7 @@ document.addEventListener('DOMContentLoaded', function() {
       popup.appendChild(cellSpan);
     }
 
-    // NOTA APPUNTAMENTO (piu' in fondo)
-    if (notaAppD) {
-      const naLabel = document.createElement('div');
-      naLabel.className = 'ci-label-nota';
-      naLabel.textContent = 'NOTA APPUNTAMENTO';
-      popup.appendChild(naLabel);
-
-      const na = document.createElement('div');
-      na.className = 'ci-nota';
-      na.textContent = notaAppD;
-      popup.appendChild(na);
-    }
+    if (notaAppD) nota('NOTA APPUNTAMENTO', notaAppD);
 
     // 2b) META IN FONDO: "creato" e "ultima modifica" servono di rado, prima
     // erano la primissima riga e rubavano il posto al nome del cliente.

@@ -336,18 +336,28 @@ display: none
 }
 
 .ci-label-nota {
-    margin-top: 9px;
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.08em;
-    color: #bcaab5;
+    color: #ffe9a8;   /* titolo giallo */
 }
 
 .ci-nota {
-    margin-top: 2px;
-    max-width: 260px;
+    margin-top: 3px;
     word-break: break-word;
-    color: #ffe9a8;
+    color: #fff;      /* contenuto bianco */
+}
+
+/* Le note stanno in un riquadro: titolo e testo restano legati fra loro e
+   staccati dal resto del tooltip. La barra gialla a sinistra richiama il
+   colore del titolo. */
+.ci-nota-box {
+    margin-top: 9px;
+    padding: 6px 9px;
+    max-width: 260px;
+    border-left: 3px solid rgba(255, 233, 168, 0.55);
+    border-radius: 0 7px 7px 0;
+    background: rgba(255, 233, 168, 0.09);
 }
 
 .ci-meta {
@@ -360,6 +370,41 @@ display: none
     text-transform: uppercase;
     color: #a99aa3;
 }
+
+/* --- Badge di stato del tooltip info appuntamento ------------------------
+   Riga di etichette brevi sotto l'orario: PAGATO, DA WEB, SEDUTA n/N si
+   leggono dai data-* del blocco; VIP e A RISCHIO arrivano da
+   /calendar/api/client-loyalty e compaiono un istante dopo, quindi la riga
+   nasce vuota e non deve occupare spazio finche' resta tale. */
+.ci-badge-riga {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding-right: 22px;   /* lascia libero l'angolo del pallino colorato */
+}
+
+.ci-badge-riga:not(:empty) {
+    margin-top: 7px;
+}
+
+.ci-badge {
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: 1.5;
+    white-space: nowrap;
+    /* neutro di partenza: le varianti qui sotto lo ridipingono */
+    background: rgba(255, 255, 255, 0.10);
+    color: #ded2d9;
+}
+
+.ci-badge-vip       { background: rgba(255, 201, 107, 0.20); color: #ffc96b; }
+.ci-badge-rischio   { background: rgba(255, 138, 138, 0.18); color: #ff9d9d; }
+.ci-badge-pagato    { background: rgba(255, 255, 255, 0.12); color: #cfc6cc; }
+.ci-badge-web       { background: rgba(130, 190, 255, 0.18); color: #9ccbff; }
+.ci-badge-pacchetto { background: rgba(167, 233, 190, 0.18); color: #a7e9be; }
 
 .modal-backdrop {
     z-index: 24500; /* Sfondo del modal */
