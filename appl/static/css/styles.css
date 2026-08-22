@@ -3745,12 +3745,25 @@ body.touch-ui .appointment-block.off .my-spia {
   pointer-events: none !important;
 }
 
-/* Touch-UI: allinea i popup info cliente al livello dei popup-buttons */
+/* Touch-UI: lo storico cliente resta al livello dei popup-buttons */
 body.touch-ui #clientHistoryPopup,
-body.touch-ui #clientInfoPopup,
-body.touch-ui #clientHistoryPopup.tooltip,
-body.touch-ui #clientInfoPopup.tooltip {
+body.touch-ui #clientHistoryPopup.tooltip {
   z-index: 2000 !important; /* stesso livello dei .popup-buttons */
+}
+
+/* Touch-UI: il popup INFO APPUNTAMENTO invece va portato in alto come in
+   modalita' default. A 2000 finiva sotto alla colonna badge (99990) e alla
+   barra del monitor lampade (99997): toccando il nome di un cliente il
+   riquadro spariva dietro a quei comandi.
+   Stesso valore che gli scrive il JS in modalita' default, cosi' le due
+   modalita' non divergono.
+   NB: il popup vive in fondo al <body> (ce lo sposta showClientInfoForBlock),
+   quindi anche prima, a parita' di 2000, veniva disegnato sopra ai
+   popup-buttons per ordine nel DOM: alzarlo non cambia il rapporto con
+   quelli, cambia solo il rapporto con i comandi fissi dell'agenda. */
+body.touch-ui #clientInfoPopup,
+body.touch-ui #clientInfoPopup.tooltip {
+  z-index: 99998 !important;
 }
 
 /* Touch-UI: rimuovi qualsiasi ombra/loutline dal nome cliente quando cliccato */

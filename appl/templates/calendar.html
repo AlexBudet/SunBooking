@@ -785,14 +785,15 @@ body.asp-split .calendar-navigation {
    la barra cambia dimensione ("Vai a OGGI" compare solo se non sei su oggi,
    l'icona web solo col modulo attivo), quindi --nav-cover-w viene misurata
    in JS. Il fallback 27vw e' la larghezza storica. */
-/* Il popup info cliente (mouseover sul nome nel blocco) nasce con z-index
-   9999 inline, quindi in modalita' affiancata finirebbe SOTTO al pannello
-   (21000). Qui viene portato sopra. Serve !important perche' deve battere
-   sia lo stile inline sia la regola di touch-ui, che lo fissa a 2000.
-   Resta comunque sotto al navigator (23001) e alla colonna badge (99990).
+/* Il popup info cliente in modalita' affiancata deve stare sopra al pannello
+   di destra (21000). Prima qui c'era 21500, che bastava per il pannello ma lo
+   lasciava SOTTO alla colonna badge (99990) e alla barra solarium (99997):
+   passando sul nome di un cliente il tooltip finiva dietro a quei comandi.
+   Allineato a 99998, lo stesso valore che gli scrive il JS.
+   Serve !important per battere lo stile inline del markup.
    NB: #clientHistoryPopup non serve, e' gia' a 99999. */
 body.asp-split #clientInfoPopup {
-  z-index: 21500 !important;
+  z-index: 99998 !important;
 }
 
 body.asp-split .appointmentNavigator:not(.collapsed) {
@@ -2711,7 +2712,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     popup.style.position = 'absolute';
-    popup.style.zIndex = '20000';
+    // Deve stare SOPRA a tutto quello che galleggia sull'agenda: colonna badge
+    // Info / Cerca un buco / Monitor lampade (99990), badge Solarium (dentro
+    // quella colonna), barra e linguetta del monitor lampade (99997).
+    // Sotto restano solo #clientHistoryPopup (99999) e la chat AI.
+    popup.style.zIndex = '99998';
     popup.style.width = 'auto';
     popup.style.maxWidth = '320px';
     popup.style.minWidth = '180px';
