@@ -11,6 +11,7 @@ import sys
 from flask_migrate import Migrate
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_compress import Compress
 
 migrate = Migrate()
 
@@ -72,6 +73,26 @@ def create_app(db_uri: str | None = None):
     app.config['REMEMBER_COOKIE_SECURE'] = use_https
     app.config['WTF_CSRF_SSL_STRICT'] = use_https
     app.config['PREFERRED_URL_SCHEME'] = 'https' if use_https else 'http'
+
+    # Compressione delle risposte (gzip/brotli, scelta in base a quello che
+    # il browser dichiara di accettare). Riguarda solo il trasporto: il
+    # browser decomprime da solo e a schermo non cambia nulla.
+    # Misurato il 22/08/2026 sui file veri: calendar.js 821K -> 188K,
+    # calendar.html 323K -> 82K, cassa.js 251K -> 66K, styles.css 165K -> 39K.
+    # In tutto il primo caricamento dell'Agenda passa da ~1,25 MB a ~300 KB,
+    # che su una linea lenta e in traffico in uscita da Azure si sente.
+    # Va inizializzata PER OGNI app creata da questa factory, non una volta
+    # sola a livello di modulo: i tenant sono app distinte.
+    #
+    # La riga qui sotto NON e' facoltativa. I file statici (calendar.js,
+    # styles.css) vengono serviti in streaming, e per lo streaming
+    # Flask-Compress usa una lista di algoritmi separata da cui gzip e'
+    # ESCLUSO di default: un client che dichiara solo "gzip" si ritroverebbe
+    # calendar.js non compresso, cioe' proprio il file che pesa di piu'.
+    # Verificato in prova isolata il 22/08/2026: senza questa riga, con
+    # Accept-Encoding: gzip il file esce a 840 KB; con la riga, 192 KB.
+    app.config['COMPRESS_ALGORITHM_STREAMING'] = ['zstd', 'br', 'gzip', 'deflate']
+    Compress(app)
 
     # Inizializza estensione CSRF
     csrf.init_app(app)

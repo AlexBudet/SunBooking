@@ -19553,6 +19553,17 @@ window.getBlocchiDaPortareInCassa = getBlocchiDaPortareInCassa;
   function costruisciDettaglio(prev) {
     if (!prev || !prev.voci.length) return null;
 
+    // Listino non arrivato (rete giu', endpoint in errore): senza NEMMENO un
+    // prezzo noto il riquadro direbbe "TOT 0,00 EUR", che al banco si legge
+    // come "non deve pagare niente". Meglio nessun preventivo che uno falso,
+    // quindi si esce e resta il tooltip semplice.
+    // Attenzione: il caso in cui va tutto a pacchetto (nessun prezzo da
+    // sommare ma nessuna voce sconosciuta) NON rientra qui: li' lo zero e'
+    // corretto ed e' proprio l'informazione utile.
+    const conPrezzo   = prev.voci.some(v => v.tipo === 'servizio');
+    const senzaPrezzo = prev.voci.some(v => v.tipo === 'ignoto');
+    if (senzaPrezzo && !conPrezzo) return null;
+
     const righe = prev.voci.map(v => {
       if (v.tipo === 'pacchetto') return riga(v.nome, '<em>pacchetto</em>');
       if (v.tipo === 'ignoto')    return riga(v.nome, '<em>n.d.</em>');
