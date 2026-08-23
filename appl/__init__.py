@@ -482,21 +482,23 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
     # ---- ROUTE LOGOUT registrata nella app factory (minima, per WSGI) ----
     @app.route('/logout')
     def logout():
-        came_from_root = session.get('from_root_landing', False)
         session.clear()
-        if came_from_root:
-            # Chi e' entrato dalla landing root esce DAVVERO: /landing-logout
-            # azzera anche root_user e l'elenco dei negozi autorizzati.
-            #
-            # Prima si tornava a /landing-web lasciando viva la sessione root,
-            # per comodita' di chi ha piu' negozi. Due problemi:
-            #  - l'elenco restava quello del vecchio utente e non c'era modo di
-            #    digitare altre credenziali se non accorgendosi del link "Esci":
-            #    di fatto non si riusciva piu' a entrare in un altro negozio;
-            #  - su un computer condiviso in negozio, "Esci" dall'agenda
-            #    lasciava il successivo libero di rientrare senza password.
-            # Un logout che non chiude la sessione non e' un logout.
+        # Su un'installazione multi-negozio si torna SEMPRE alla landing
+        # iniziale, mai a quella del singolo negozio.
+        #
+        # Prima si guardava il flag from_root_landing, che pero' viene messo
+        # solo da chi entra con l'auto-login dalla landing root. Chi si era
+        # autenticato direttamente sul form del negozio - per esempio dopo
+        # essere stato espulso per aver cambiato l'indirizzo a mano - usciva e
+        # si ritrovava sul form di QUEL negozio, restando agganciato li'.
+        #
+        # current_app e non app: dentro le funzioni annidate "app" e' la
+        # variabile globale del modulo, cioe' l'ultimo tenant creato.
+        if current_app.config.get('TENANT_IDX') is not None:
             return redirect('/landing-logout')
+
+        # Installazione a negozio singolo (start.py, main.py): la landing root
+        # non esiste, quindi si torna a quella locale come sempre.
         return redirect(url_for('landing'))
 
     # ---- AUTO-LOGIN: consume token monouso emesso dalla landing root ----
@@ -511,6 +513,8 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
         except Exception:
             result = None
         if not result:
+            current_app.logger.warning('[AUTOLOGIN] token non valido o gia usato (tenant %s)',
+                                       current_app.config.get('TENANT_IDX'))
             return None
         idx_token, user_id_token = result
         # Il token vale SOLO sul negozio per cui e' stato emesso. Senza questo
@@ -518,7 +522,14 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
         # esisteva un utente con lo stesso id, apriva la sessione di un'altra
         # azienda. Il controllo sull'esistenza dell'utente non basta: gli id
         # partono da 1 su ogni database, quindi si sovrappongono quasi sempre.
-        if str(idx_token) != str(app.config.get('TENANT_IDX')):
+        # current_app, NON app: create_app dichiara "global app", quindi qui
+        # dentro il nome "app" e' la variabile globale del modulo, che dopo il
+        # ciclo di wsgi.py punta all'ULTIMA app creata - non a quella che sta
+        # servendo la richiesta. Con tre negozi montati, leggere app.config
+        # significava leggere sempre la configurazione del terzo.
+        if str(idx_token) != str(current_app.config.get('TENANT_IDX')):
+            current_app.logger.warning('[AUTOLOGIN] token per tenant %r speso su tenant %r: rifiutato',
+                                       idx_token, current_app.config.get('TENANT_IDX'))
             return None
         # Verifica che l'utente esista in questo DB (sicurezza extra)
         try:
@@ -527,6 +538,8 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
         except Exception:
             user = None
         if not user:
+            current_app.logger.warning('[AUTOLOGIN] utente id=%r inesistente nel DB del tenant %s',
+                                       user_id_token, current_app.config.get('TENANT_IDX'))
             return None
         # Preserva la sessione root (selezione negozi) attraverso il clear,
         # così dopo il logout dal child l'utente torna alla scelta negozi senza re-login.
@@ -537,6 +550,8 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
             session['root_user'] = preserved_root_user
         if preserved_root_allowed is not None:
             session['root_allowed'] = preserved_root_allowed
+        current_app.logger.info('[AUTOLOGIN] OK: utente %r dentro al tenant %s',
+                                user_id_token, current_app.config.get('TENANT_IDX'))
         session['user_id'] = user_id_token
         marca_sessione_tenant()
         session['from_root_landing'] = True
@@ -568,9 +583,12 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
         # Svuotare la cache del browser non serviva: i cookie non sono cache.
         # /landing-logout sta sulla root app, azzera quella scelta e riporta al
         # form di accesso pulito.
-        idx_app = app.config.get('TENANT_IDX')
+        # current_app e non app: vedi la nota in consume_autologin_token.
+        idx_app = current_app.config.get('TENANT_IDX')
         if idx_app is not None and 'user_id' in session:
             if str(session.get('tenant_idx')) != str(idx_app):
+                current_app.logger.warning('[SESSIONE] marchio %r su tenant %r: espulsione',
+                                           session.get('tenant_idx'), idx_app)
                 session.clear()
                 return redirect('/landing-logout')
 
