@@ -913,18 +913,20 @@ utilizzabile offline** (art. 15.3).
 
 | Voce | Requisito minimo | Consigliato |
 |---|---|---|
-| Sistema operativo | Windows 10 a 64 bit | Windows 11 a 64 bit |
-| Processore | «da definire» | «da definire» |
-| Memoria RAM | «da definire» | «da definire» |
-| Spazio libero su disco | 1 GB | 2 GB |
-| Risoluzione schermo | 1366 × 768 | 1920 × 1080 |
-| Browser (per la web app) | Chrome 105, Edge 105, Firefox 121, Safari 15.4 | ultima versione disponibile |
+| Dispositivo | Computer, tablet o smartphone con browser aggiornato | Schermo ampio, per vedere l'agenda per intero |
+| Browser | Chrome 105, Edge 105, Firefox 121, Safari 15.4 | ultima versione disponibile |
 | Connessione Internet | 2 Mbit/s in download, 1 Mbit/s in upload | 10 Mbit/s |
 | Rete locale | Necessaria per il collegamento al registratore telematico | Cablata |
 
 **Accesso a Internet senza restrizioni.** Per funzionare, il Servizio deve poter raggiungere
 liberamente Internet. Reti con filtri o blocchi particolari possono impedirne il corretto
 funzionamento: in tal caso il Licenziante indica al Cliente le modifiche da apportare.
+
+**In parole semplici.** Va bene un normale computer da ufficio o un palmare, anche con gia' molti
+anni di utilizzo, cosi' come un tablet o uno smartphone. Non serve una macchina potente e non
+serve un sistema operativo particolare: il Servizio si apre nel browser, come un qualsiasi sito, e
+il lavoro pesante avviene sui server del Licenziante. Se il dispositivo naviga su Internet senza
+rallentamenti, apre anche Tosca.
 
 **Consumo di connessione.** Il Servizio consuma pochissima connessione. Il consumo maggiore si ha
 alla prima apertura di ogni schermata.

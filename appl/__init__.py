@@ -485,8 +485,18 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
         came_from_root = session.get('from_root_landing', False)
         session.clear()
         if came_from_root:
-            # Torna alla selezione negozi root (la sessione root resta valida)
-            return redirect('/landing-web')
+            # Chi e' entrato dalla landing root esce DAVVERO: /landing-logout
+            # azzera anche root_user e l'elenco dei negozi autorizzati.
+            #
+            # Prima si tornava a /landing-web lasciando viva la sessione root,
+            # per comodita' di chi ha piu' negozi. Due problemi:
+            #  - l'elenco restava quello del vecchio utente e non c'era modo di
+            #    digitare altre credenziali se non accorgendosi del link "Esci":
+            #    di fatto non si riusciva piu' a entrare in un altro negozio;
+            #  - su un computer condiviso in negozio, "Esci" dall'agenda
+            #    lasciava il successivo libero di rientrare senza password.
+            # Un logout che non chiude la sessione non e' un logout.
+            return redirect('/landing-logout')
         return redirect(url_for('landing'))
 
     # ---- AUTO-LOGIN: consume token monouso emesso dalla landing root ----
@@ -549,10 +559,20 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
         # Una sessione aperta su un altro negozio non vale qui. Non dovrebbe
         # nemmeno arrivarci (cookie con nome e percorso diversi), ma se ci
         # arriva la si butta via invece di fidarsi dell'user_id che contiene.
+        #
+        # E si chiude TUTTO, non meta'. Ripulire il solo cookie del negozio
+        # lasciava viva la sessione della landing root (cookie 'session',
+        # percorso '/', con dentro root_user e l'elenco dei negozi
+        # autorizzati): l'utente restava agganciato alla scelta precedente e
+        # per entrare altrove doveva accorgersi da solo del link "Esci".
+        # Svuotare la cache del browser non serviva: i cookie non sono cache.
+        # /landing-logout sta sulla root app, azzera quella scelta e riporta al
+        # form di accesso pulito.
         idx_app = app.config.get('TENANT_IDX')
         if idx_app is not None and 'user_id' in session:
             if str(session.get('tenant_idx')) != str(idx_app):
                 session.clear()
+                return redirect('/landing-logout')
 
         if (ep not in allowed_endpoints) and ('user_id' not in session):
             # Se è una richiesta AJAX/fetch, restituisci 401 JSON
