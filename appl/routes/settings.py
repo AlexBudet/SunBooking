@@ -2189,6 +2189,9 @@ def settings_landing():
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password, password):
             session['user_id'] = user.id
+            # Marchia la sessione col negozio su cui e' stata aperta: vale solo qui.
+            from appl import marca_sessione_tenant
+            marca_sessione_tenant()
             return redirect(url_for('settings.manage_users'))
         else:
             flash('Credenziali errate', 'danger')

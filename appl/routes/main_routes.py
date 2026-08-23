@@ -67,6 +67,9 @@ def landing():
             session.clear()
             session.permanent = True
             session['user_id'] = user.id
+            # Marchia la sessione col negozio su cui e' stata aperta: vale solo qui.
+            from appl import marca_sessione_tenant
+            marca_sessione_tenant()
             try:
                 from flask_wtf.csrf import generate_csrf
                 generate_csrf()

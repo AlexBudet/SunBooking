@@ -85,3 +85,8 @@ per chiudere eventuali scontrini aperti che bloccano RCH
 *.csv
 import_*.log
 import_*_passo*.sql
+
+# Registro dei trattamenti (art. 30 GDPR): documento INTERNO, si esibisce solo
+# all'Autorita' di controllo. Il repository e' pubblico, quindi non ci va.
+# Se un domani il repo tornasse privato, questa riga si puo' togliere.
+contratto/REGISTRO_TRATTAMENTI.md

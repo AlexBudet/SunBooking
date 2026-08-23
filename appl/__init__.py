@@ -21,6 +21,28 @@ csrf = CSRFProtect()
 app = None  # riferimento globale all'app
 ph = PasswordHasher()
 
+def chiave_per_tenant(master, idx):
+    """Chiave di firma dei cookie DIVERSA per ogni negozio, derivata da quella
+    madre. E' deterministica - sopravvive ai riavvii, quindi non butta fuori
+    nessuno - ma non e' riutilizzabile fra tenant: un cookie di sessione
+    firmato per /s/1 non supera la verifica di firma su /s/2."""
+    import hmac, hashlib
+    if isinstance(master, str):
+        master = master.encode('utf-8')
+    return hmac.new(master, b'tosca-tenant-' + str(idx).encode('ascii'),
+                    hashlib.sha256).digest()
+
+
+def marca_sessione_tenant():
+    """Da chiamare SUBITO dopo aver messo user_id in sessione: registra su
+    quale negozio quella sessione e' stata aperta. require_login lo confronta
+    a ogni richiesta. Terzo livello di difesa dopo cookie separato e chiave
+    separata: da solo non basterebbe, ma se gli altri due venissero
+    disattivati per errore questo continua a reggere."""
+    from flask import current_app, session
+    session['tenant_idx'] = current_app.config.get('TENANT_IDX')
+
+
 def get_base_path():
     """Restituisce il path base corretto sia per exe che per script."""
     if getattr(sys, 'frozen', False):
@@ -30,7 +52,7 @@ def get_base_path():
         # Eseguito come script Python
         return os.path.dirname(os.path.abspath(__file__))
 
-def create_app(db_uri: str | None = None):
+def create_app(db_uri: str | None = None, tenant_idx=None):
     """
     Restituisce una nuova istanza Flask.
     - Usa SOLO PostgreSQL (es. Azure). Se la variabile non è impostata o non è PostgreSQL, solleva errore.
@@ -54,6 +76,31 @@ def create_app(db_uri: str | None = None):
                 static_folder=static_folder)
     
     app.secret_key = os.getenv('SECRET_KEY') or os.urandom(24)
+
+    # === ISOLAMENTO FRA NEGOZI =========================================
+    # Con piu' tenant montati sullo stesso processo (wsgi.py: /s/1, /s/2, ...)
+    # tutti i child condividevano nome del cookie, percorso e chiave di firma,
+    # e la sessione conteneva solo user_id. Risultato: un cookie ottenuto su
+    # /s/1 veniva accettato da /s/2, che risolveva quell'user_id sul PROPRIO
+    # database - entrando come un utente di un'altra azienda.
+    #
+    # Tre barriere indipendenti, in ordine di quando intervengono:
+    #   1. nome del cookie diverso -> l'app 2 non legge nemmeno il cookie dell'app 1
+    #   2. percorso del cookie /s/<idx> -> il browser non lo manda proprio agli altri
+    #   3. chiave di firma diversa -> un cookie copiato a mano non supera la verifica
+    # Piu' il marchio in sessione (marca_sessione_tenant) controllato da
+    # require_login. Ne basterebbe una: ci sono tutte perche' e' un confine
+    # fra aziende diverse.
+    #
+    # tenant_idx None = installazione a negozio singolo (start.py, main.py):
+    # li' non c'e' niente da isolare e tutto resta com'era.
+    app.config['TENANT_IDX'] = tenant_idx
+    if tenant_idx is not None:
+        app.config['SESSION_COOKIE_NAME'] = 'sess_s%s' % tenant_idx
+        app.config['SESSION_COOKIE_PATH'] = '/s/%s' % tenant_idx
+        _master = os.getenv('SECRET_KEY')
+        if _master:
+            app.secret_key = chiave_per_tenant(_master, tenant_idx)
 
     import json
     def escapejs_filter(value):
@@ -403,6 +450,7 @@ def create_app(db_uri: str | None = None):
                     reset_login_attempts(username)
                     session.clear()
                     session['user_id'] = user.id
+                    marca_sessione_tenant()
                     # rigenera CSRF token se possibile
                     try:
                         from flask_wtf.csrf import generate_csrf
@@ -455,6 +503,13 @@ def create_app(db_uri: str | None = None):
         if not result:
             return None
         idx_token, user_id_token = result
+        # Il token vale SOLO sul negozio per cui e' stato emesso. Senza questo
+        # controllo un token per /s/1 poteva essere speso su /s/2 e, se li'
+        # esisteva un utente con lo stesso id, apriva la sessione di un'altra
+        # azienda. Il controllo sull'esistenza dell'utente non basta: gli id
+        # partono da 1 su ogni database, quindi si sovrappongono quasi sempre.
+        if str(idx_token) != str(app.config.get('TENANT_IDX')):
+            return None
         # Verifica che l'utente esista in questo DB (sicurezza extra)
         try:
             from appl.models import User as _U
@@ -473,6 +528,7 @@ def create_app(db_uri: str | None = None):
         if preserved_root_allowed is not None:
             session['root_allowed'] = preserved_root_allowed
         session['user_id'] = user_id_token
+        marca_sessione_tenant()
         session['from_root_landing'] = True
         # Redirect alla stessa URL ripulita dal parametro.
         # IMPORTANTE: includere request.script_root (SCRIPT_NAME del mount, es. "/s/1")
@@ -489,6 +545,15 @@ def create_app(db_uri: str | None = None):
     def require_login():
         allowed_endpoints = {'landing', 'healthz', 'static', 'ping'}
         ep = request.endpoint or ''
+
+        # Una sessione aperta su un altro negozio non vale qui. Non dovrebbe
+        # nemmeno arrivarci (cookie con nome e percorso diversi), ma se ci
+        # arriva la si butta via invece di fidarsi dell'user_id che contiene.
+        idx_app = app.config.get('TENANT_IDX')
+        if idx_app is not None and 'user_id' in session:
+            if str(session.get('tenant_idx')) != str(idx_app):
+                session.clear()
+
         if (ep not in allowed_endpoints) and ('user_id' not in session):
             # Se è una richiesta AJAX/fetch, restituisci 401 JSON
             is_ajax = (

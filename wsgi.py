@@ -234,8 +234,14 @@ def root():
 mounts = {}
 children = {}
 for idx, uri in pool.items():
-    child = create_app(uri)
-    child.secret_key = secret
+    # tenant_idx: da qui il child ricava nome del cookie, percorso e chiave di
+    # firma tutti suoi. Senza, i negozi condividerebbero la sessione.
+    child = create_app(uri, tenant_idx=idx)
+    # NB: la chiave la imposta create_app derivandola per tenant. Riassegnare
+    # qui "secret" a tutti rimetterebbe la chiave in comune e riaprirebbe il
+    # buco: si tocca solo se manca SECRET_KEY nell'ambiente.
+    if not os.getenv('SECRET_KEY'):
+        child.secret_key = secret
     # Marchiamo i child come "cloud": serve al context processor per decidere
     # se nascondere la sezione Cassa quando l'owner del tenant non l'ha
     # esplicitamente abilitata da Tools/Info Azienda.
@@ -1136,8 +1142,9 @@ def provision_tenant(uri, business_name, city='', modules=None,
 
     # ── 1. Child app ──────────────────────────────────────────────────────
     try:
-        new_child = create_app(uri)
-        new_child.secret_key = secret
+        new_child = create_app(uri, tenant_idx=next_idx)
+        if not os.getenv('SECRET_KEY'):
+            new_child.secret_key = secret
         new_child.config['IS_CLOUD'] = True
 
         @new_child.context_processor
