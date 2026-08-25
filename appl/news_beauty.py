@@ -220,6 +220,16 @@ def _scan_dovuto(ultimo, adesso=None):
 # ---------------------------------------------------------------------------
 MESI_FINESTRA = 3   # ampiezza della finestra temporale della ricerca
 
+# Tetto di eta' oltre il quale una notizia NON entra in pagina, per quanto il
+# modello la giudichi interessante. Il prompt chiedeva gia' notizie recenti, ma
+# era solo un suggerimento e nessuno lo verificava: il 25/08/2026 e' finita in
+# pagina una notizia di marzo, cinque mesi prima, su limiti a sostanze negli
+# smalti. Il controllo va fatto sui dati che tornano, non chiesto per favore.
+# La ricerca web di Claude non offre filtri di data (i parametri del tool sono
+# max_uses, allowed_domains/blocked_domains e user_location), quindi lo screening
+# per forza di cose avviene qui.
+GIORNI_FRESCHEZZA = _intero_env('NEWS_GIORNI_MAX', MESI_FINESTRA * 30, 15, 365)
+
 PROMPT_SISTEMA = (
     "Selezioni notizie per la titolare di un centro estetico in Italia. "
     "Le leggera' in due minuti fra un cliente e l'altro, quindi ti servono "
@@ -228,16 +238,29 @@ PROMPT_SISTEMA = (
     "inizieranno a chiedere, andamento del mercato dei centri estetici. "
     "Il settore italiano dell'estetica produce poche notizie al giorno ma non "
     "sta mai fermo per mesi: se la prima ricerca non rende, cambia angolazione "
-    "e riprova, non concludere che non c'e' niente. "
+    "e riprova prima di arrenderti. Insistere pero' non significa ripiegare sul "
+    "vecchio: una notizia di mesi fa non diventa attuale perche' non ne hai "
+    "trovate altre, e presentarla come nuova e' l'errore peggiore che puoi fare "
+    "qui. Meglio tornare con una notizia sola, o con nessuna. "
     "Scarta pubblicita' mascherate da notizia, schede prodotto e gossip."
 )
 
 
 def _prompt_utente():
-    oggi = date.today().strftime('%d/%m/%Y')
+    oggi = date.today()
+    limite = oggi - timedelta(days=GIORNI_FRESCHEZZA)
     return (
-        f"Oggi e' il {oggi}. Cerca sul web notizie italiane degli ultimi "
-        f"{MESI_FINESTRA} mesi utili a chi gestisce un centro estetico.\n\n"
+        f"Oggi e' il {oggi.strftime('%d/%m/%Y')}. Cerca sul web notizie italiane "
+        f"utili a chi gestisce un centro estetico.\n\n"
+
+        f"VINCOLO DI DATA, non negoziabile: ogni notizia deve essere stata "
+        f"pubblicata dal {limite.strftime('%d/%m/%Y')} in poi. Una notizia "
+        f"anteriore a quella data viene scartata a prescindere da quanto sia "
+        f"interessante, e cosi' una notizia di cui non riesci a stabilire la data "
+        f"di pubblicazione: nel dubbio cercane un'altra. Preferisci sempre la "
+        f"notizia piu' recente fra due che dicono la stessa cosa, e se una "
+        f"ricerca restituisce solo materiale vecchio cambia angolazione invece "
+        f"di ripiegare su quello.\n\n"
 
         f"Angolazioni da coprire (usa ricerche diverse, non ripetere la stessa "
         f"query con parole simili):\n"
@@ -258,11 +281,12 @@ def _prompt_utente():
         f"regionali), stampa economica e quotidiani quando trattano il settore. "
         f"Evita e-commerce e pagine di vendita.\n\n"
 
-        f"Scegli da 2 a {MAX_NOTIZIE} notizie, le piu' significative fra quelle "
-        f"trovate, dando la precedenza alle piu' recenti. Non serve che siano "
-        f"eccezionali: devono essere utili. Una sola notizia utile vale piu' di "
-        f"nessuna. Restituisci un array vuoto solo se le ricerche non hanno "
-        f"prodotto davvero nulla di attinente al settore.\n\n"
+        f"Scegli da 2 a {MAX_NOTIZIE} notizie fra quelle che rispettano il "
+        f"vincolo di data, dalla piu' recente alla piu' vecchia. Non serve che "
+        f"siano eccezionali: devono essere utili e attuali. Una sola notizia "
+        f"recente vale piu' di tre vecchie. Restituisci un array vuoto se le "
+        f"ricerche non hanno prodotto nulla di abbastanza recente: e' un esito "
+        f"previsto e preferibile a riempire con notizie superate.\n\n"
 
         f"Rispondi con un array JSON e nient'altro, senza testo prima o dopo. "
         f"Ogni elemento:\n"
@@ -271,7 +295,8 @@ def _prompt_utente():
         f'  "categoria": una fra "normativa", "estetica", "solarium", "mercato"\n'
         f'  "fonte": nome della testata o dell\'ente\n'
         f'  "url": link diretto alla notizia\n'
-        f'  "data": data della notizia in formato AAAA-MM-GG (vuoto se non la trovi)'
+        f'  "data": data di pubblicazione in formato AAAA-MM-GG, OBBLIGATORIA: '
+        f'un elemento senza data valida viene scartato'
     )
 
 
@@ -423,11 +448,30 @@ def _estrai_json(testo):
     return dati if isinstance(dati, list) else []
 
 
-def _normalizza(dati):
-    """Ripulisce e valida gli elementi restituiti dal modello."""
+def _normalizza(dati, oggi=None):
+    """Ripulisce, valida e SCREMA gli elementi restituiti dal modello.
+
+    Restituisce (notizie, scartate): due regole che il solo prompt non garantiva.
+
+    1. La data e' obbligatoria e deve rientrare nella finestra di freschezza.
+       Senza data non si puo' dimostrare che la notizia sia recente; con una data
+       vecchia non lo e'. Il modello, lasciato libero, ha gia' proposto come
+       attuale una notizia di cinque mesi prima.
+    2. Le notizie escono ordinate dalla piu' recente alla piu' vecchia, cosi' il
+       campo `ordine` con cui la pagina le dispone segue la freschezza.
+
+    Se non sopravvive nulla si torna una lista vuota: chi chiama NON salva, e in
+    pagina restano le notizie dell'ultima ricerca andata a buon fine.
+    """
+    oggi = oggi or date.today()
+    limite = oggi - timedelta(days=GIORNI_FRESCHEZZA)
     categorie = {'normativa', 'estetica', 'solarium', 'mercato', 'beauty'}
     puliti = []
-    for elem in dati[:MAX_NOTIZIE]:
+    scartate = 0
+    # Si esamina TUTTO quello che e' arrivato e si taglia a MAX_NOTIZIE solo alla
+    # fine: tagliando prima, tre notizie vecchie in testa all'array avrebbero
+    # coperto quelle recenti che seguivano.
+    for elem in dati:
         if not isinstance(elem, dict):
             continue
         titolo = (elem.get('titolo') or '').strip()
@@ -446,6 +490,11 @@ def _normalizza(dati):
                 data_notizia = datetime.strptime(raw_data[:10], '%Y-%m-%d').date()
             except ValueError:
                 data_notizia = None
+        # Il filtro di freschezza: qui si decide, non nel prompt.
+        # Una data nel futuro e' un errore del modello, non una primizia.
+        if data_notizia is None or data_notizia < limite or data_notizia > oggi:
+            scartate += 1
+            continue
         puliti.append({
             'titolo': titolo[:300],
             'sintesi': (elem.get('sintesi') or '').strip()[:1000],
@@ -454,7 +503,8 @@ def _normalizza(dati):
             'url': url[:1000],
             'data_notizia': data_notizia,
         })
-    return puliti
+    puliti.sort(key=lambda n: n['data_notizia'], reverse=True)
+    return puliti[:MAX_NOTIZIE], scartate
 
 
 def _salva(app, notizie, batch):
@@ -564,15 +614,26 @@ def esegui_scan(force=False):
                 _registra_errore('Scan notizie beauty fallito', exc)
             return {'ok': False, 'errore': _ultimo_errore}
 
-        notizie = _normalizza(_estrai_json(testo))
+        notizie, scartate = _normalizza(_estrai_json(testo))
         if not notizie:
-            _ultimo_errore = 'Nessuna notizia utile trovata'
-            return {'ok': False, 'errore': _ultimo_errore}
+            # Niente di abbastanza recente: NON si salva, cosi' in pagina restano
+            # le notizie dell'ultima ricerca riuscita. Meglio una notizia della
+            # settimana scorsa che una di cinque mesi fa spacciata per attuale.
+            if scartate:
+                _ultimo_errore = (
+                    f"Nessuna notizia degli ultimi {GIORNI_FRESCHEZZA} giorni "
+                    f"({scartate} trovate ma troppo vecchie o senza data): "
+                    f"restano in pagina quelle della ricerca precedente."
+                )
+            else:
+                _ultimo_errore = 'Nessuna notizia utile trovata'
+            return {'ok': False, 'scartate': scartate, 'errore': _ultimo_errore}
 
         batch = datetime.now().strftime('%Y%m%dT%H%M')
         salvati = sum(1 for _e, app in list(_apps) if _salva(app, notizie, batch))
         _ultimo_errore = None
-        return {'ok': salvati > 0, 'notizie': len(notizie), 'tenant': salvati, 'batch': batch}
+        return {'ok': salvati > 0, 'notizie': len(notizie), 'scartate': scartate,
+                'tenant': salvati, 'batch': batch}
     finally:
         _scan_in_corso.release()
 
