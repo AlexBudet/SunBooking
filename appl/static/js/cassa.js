@@ -172,7 +172,12 @@ window.showChiusuraMancanteModal = function showChiusuraMancanteModal(data) {
     btnChiusura.disabled = true;
     btnAnnulla.disabled = true;
     msg.style.color = '';
-    msg.textContent = 'Chiusura fiscale in corso...';
+    // La stampa parte subito, ma l'esito viene verificato sul contatore Z della
+    // stampante: finche' stampa non risponde, quindi l'attesa puo' arrivare a
+    // un paio di minuti. Va detto, o l'operatore crede che sia bloccato.
+    msg.textContent = "Chiusura fiscale in corso... La stampa parte subito, l'esito "
+      + "viene verificato sulla stampante: puo' richiedere fino a 2 minuti. "
+      + "Non chiudere questa finestra.";
     try {
       const r = await fetch('/cassa/chiusura-giornaliera', {
         method: 'POST',

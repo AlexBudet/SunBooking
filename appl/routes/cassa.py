@@ -703,6 +703,52 @@ def _read_printer_lastz(ip, printer_model):
     return None
 
 
+def _wait_for_z_advance(ip, printer_model, z_before, budget_s=180, sleep_s=10):
+    """Chiede ALLA STAMPANTE se la chiusura Z e' stata davvero eseguita.
+
+    Serve perche' la RCH Print F, mentre stampa la Z, chiude il socket senza
+    rispondere (ConnectionResetError 10054 nei log): il CRM vede un errore di rete
+    su una chiusura in realta' perfettamente riuscita, l'operatore riprova e il
+    negozio si ritrova due Z. L'unico esito attendibile e' l'avanzamento del
+    contatore lastZ (=C453), leggibile solo quando la stampante ha finito di
+    stampare Z + esito trasmissione AdE e torna a rispondere (~2 minuti).
+
+    Ritorna il nuovo lastZ se e' avanzato rispetto a `z_before`, altrimenti None.
+    Se `z_before` e' None (lettura pre-chiusura non riuscita) manca il termine di
+    paragone: ritorna None senza attendere e la chiusura resta data per fallita,
+    come si comportava il codice prima di questa verifica.
+    """
+    if z_before is None:
+        try:
+            current_app.logger.warning(
+                "verifica Z: lastZ pre-chiusura non letto, impossibile stabilire "
+                "se la chiusura e' avvenuta."
+            )
+        except Exception:
+            pass
+        return None
+
+    deadline = pytime.monotonic() + budget_s
+    tentativo = 0
+    while pytime.monotonic() < deadline:
+        tentativo += 1
+        pytime.sleep(sleep_s)
+        z_now = _read_printer_lastz(ip, printer_model)
+        try:
+            current_app.logger.info(
+                "verifica Z, tentativo %d: lastZ prima=%s adesso=%s",
+                tentativo, z_before, z_now
+            )
+        except Exception:
+            pass
+        # Finche' la stampante non risponde sta ancora stampando: si insiste. Alla
+        # prima risposta valida la questione e' decisa, in un senso o nell'altro,
+        # senza aspettare la fine del budget.
+        if z_now is not None:
+            return z_now if z_now > z_before else None
+    return None
+
+
 def _is_weekly_closing_day(day):
     """True se `day` cade in un giorno di chiusura SETTIMANALE configurato
     (BusinessInfo.closing_days, nomi in inglese es. 'Sunday'). Solo lettura DB.
@@ -2706,60 +2752,75 @@ def chiusura_giornaliera():
 <cmd>=C1</cmd>
 </Service>"""
 
+    # Contatore Z PRIMA di inviare il comando: e' l'unico riferimento che permette,
+    # dopo, di sapere se la chiusura e' stata davvero eseguita anche quando la
+    # stampante non risponde (vedi _wait_for_z_advance).
+    z_before = _read_printer_lastz(ip, printer_model)
+    current_app.logger.info("Chiusura giornaliera: lastZ prima dell'invio = %s", z_before)
+
+    def _chiusura_ok(motivo):
+        """Ramo di successo: riconciliazione DGFE + registrazione della Z in DB."""
+        current_app.logger.info("Chiusura giornaliera riuscita (%s)", motivo)
+        recon = _run_post_z_reconciliation()
+        _record_fiscal_closure(ip, printer_model, (recon or {}).get("dgfe_total"))
+        return jsonify({"status": "ok", "code": 200, "message": "Chiusura giornaliera completata",
+                        "reconciliation": recon}), 200
+
+    def _chiusura_ko(motivo):
+        """Ramo di errore: la Z NON risulta eseguita. Lo sblocco (=C1) ha senso solo
+        qui: mandarlo mentre la Z e' in corso la interromperebbe a meta'."""
+        try:
+            unlock = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C1</cmd></Service>'
+            requests.post(url, data=unlock.encode("UTF-8"), headers=headers, timeout=8,
+                          **rch_kwargs)
+        except Exception:
+            pass
+        current_app.logger.error("Chiusura giornaliera NON eseguita (%s)", motivo)
+        return jsonify({"error": "Errore di comunicazione con la stampante fiscale."}), 502
+
     try:
-        resp = requests.post(url, data=xml_payload.encode("UTF-8"), headers=headers, timeout=45,
+        resp = requests.post(url, data=xml_payload.encode("UTF-8"), headers=headers, timeout=60,
                              **rch_kwargs)
         body = resp.text or ""
         masked = re.sub(r'([A-Za-z0-9_\-]{8,})', '[REDACTED]', body)
         current_app.logger.debug("Chiusura giornaliera raw (masked): %s", masked[:4000])
 
-        # Estrai eventuali codici di esito dal body (diverse forme che la RCH può usare)
+        # Codici di esito: SOLO errCode/errorCode (piu' l'eventuale "Risultato: n" in
+        # chiaro). <result> NON e' un codice di errore ma il numero documento, ed e'
+        # letto proprio come tale altrove (_read_progressivo): trattarlo come esito
+        # significava bocciare una chiusura riuscita usando il numero del suo documento.
         codes = set()
         codes.update(int(m) for m in re.findall(r'<(?:errCode|errorCode)>(\d+)</(?:errCode|errorCode)>', body))
-        codes.update(int(m) for m in re.findall(r'<result[^>]*>(\d+)</result>', body))
         codes.update(int(m) for m in re.findall(r'Risultat[oi]\s*:\s*(\d+)', body, flags=re.IGNORECASE))
-
-        # Se non troviamo nulla ma la risposta è 200, assumiamo OK
-        if not codes and resp.status_code == 200:
-            recon = _run_post_z_reconciliation()
-            # Registra la Z nel registro chiusure in DB (storico persistente).
-            _record_fiscal_closure(ip, printer_model, (recon or {}).get("dgfe_total"))
-            return jsonify({"status": "ok", "code": 200, "message": "Chiusura giornaliera completata",
-                            "reconciliation": recon}), 200
 
         # Considera 0 e 410 come non fatali (410 = nessuna richiesta codici pendente)
         non_fatali = {0, 200, 410}
         fatali = {c for c in codes if c not in non_fatali}
 
+        # Nessun codice fatale: esito ok anche se l'HTTP code non e' 200.
         if not fatali:
-            # Anche se l'HTTP code non è 200, l'esito è ok: non propagare l'errore al client
-            recon = _run_post_z_reconciliation()
-            # Registra la Z nel registro chiusure in DB (storico persistente).
-            _record_fiscal_closure(ip, printer_model, (recon or {}).get("dgfe_total"))
-            return jsonify({"status": "ok", "code": 200, "message": "Chiusura giornaliera completata",
-                            "reconciliation": recon}), 200
+            return _chiusura_ok("risposta senza codici fatali")
 
-        # Errori reali: prova best-effort di sblocco (=C1) e segnala errore
-        try:
-            unlock = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C1</cmd></Service>'
-            requests.post(url, data=unlock.encode("UTF-8"), headers=headers, timeout=8,
-                          **rch_kwargs)
-        except Exception:
-            pass
-        current_app.logger.error("Chiusura giornaliera: codici fatali rilevati: %s", sorted(fatali))
-        return jsonify({"error": "Errore di comunicazione con la stampante fiscale."}), 502
+        # Codici fatali: prima di dichiarare fallita la chiusura chiediamo alla
+        # stampante se la Z e' comunque avanzata.
+        z_after = _wait_for_z_advance(ip, printer_model, z_before)
+        if z_after is not None:
+            return _chiusura_ok("codici %s ma lastZ %s -> %s" % (sorted(fatali), z_before, z_after))
+        return _chiusura_ko("codici fatali %s, lastZ fermo a %s" % (sorted(fatali), z_before))
 
     except Exception as e:
-        current_app.logger.error("Errore durante la chiusura giornaliera (network): %s", str(e))
-        # Best-effort di sblocco
-        try:
-            unlock = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C1</cmd></Service>'
-            requests.post(url, data=unlock.encode("UTF-8"), headers=headers, timeout=8,
-                          **rch_kwargs)
-        except Exception:
-            pass
-        return jsonify({"error": "Errore di comunicazione con la stampante fiscale."}), 502
- 
+        # La RCH Print F, mentre stampa la Z, chiude il socket senza rispondere
+        # (ConnectionResetError 10054): un errore di rete qui NON significa che la
+        # chiusura non sia stata fatta. Lo si verifica sul contatore Z.
+        current_app.logger.warning(
+            "Chiusura giornaliera: nessuna risposta dalla stampante (%s). "
+            "Verifico sul contatore Z se e' stata comunque eseguita.", str(e))
+        z_after = _wait_for_z_advance(ip, printer_model, z_before)
+        if z_after is not None:
+            return _chiusura_ok("nessuna risposta ma lastZ %s -> %s" % (z_before, z_after))
+        return _chiusura_ko("nessuna risposta e lastZ fermo a %s (%s)" % (z_before, e))
+
+
 @cassa_bp.route('/cassa/api/dgfe', methods=['POST'])
 def api_dgfe():
     data = request.get_json(force=True) or {}

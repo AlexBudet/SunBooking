@@ -513,8 +513,6 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
         except Exception:
             result = None
         if not result:
-            current_app.logger.warning('[AUTOLOGIN] token non valido o gia usato (tenant %s)',
-                                       current_app.config.get('TENANT_IDX'))
             return None
         idx_token, user_id_token = result
         # Il token vale SOLO sul negozio per cui e' stato emesso. Senza questo
@@ -550,8 +548,6 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
             session['root_user'] = preserved_root_user
         if preserved_root_allowed is not None:
             session['root_allowed'] = preserved_root_allowed
-        current_app.logger.info('[AUTOLOGIN] OK: utente %r dentro al tenant %s',
-                                user_id_token, current_app.config.get('TENANT_IDX'))
         session['user_id'] = user_id_token
         marca_sessione_tenant()
         session['from_root_landing'] = True
