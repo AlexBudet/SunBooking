@@ -227,11 +227,17 @@ costo per singolo modulo. I moduli sottoscritti sono indicati nel modulo di atti
 Il passaggio da STANDARD a PREMIUM può essere richiesto in qualsiasi momento e decorre dal mese
 successivo. Il passaggio inverso segue i termini di preavviso dell'art. 7.4.
 
-6.2 Gli importi si intendono al netto di IVA e di ogni altra imposta o onere di legge. Il
-corrispettivo di attivazione comprende l'intero Periodo Starter di cui all'art. 7 e **non è
-riducibile né rimborsabile** in caso di recesso anticipato del Cliente. L'eventuale
-rateizzazione di cui all'art. 6.8 costituisce mera dilazione di pagamento e non incide
-sull'importo dovuto.
+6.2 Gli importi si intendono al netto di IVA e di ogni altra imposta o onere di legge.
+
+**Natura del corrispettivo di attivazione.** Il corrispettivo di attivazione remunera le
+attività di creazione dell'ambiente dedicato, configurazione, migrazione dei dati e formazione
+iniziale di cui all'art. 4, che il Licenziante esegue integralmente all'inizio del rapporto, e
+**comprende in via accessoria**, senza ulteriore corrispettivo, il Periodo Starter di cui
+all'art. 7. Esso è pertanto **integralmente dovuto** una volta eseguite tali attività ed è
+**non riducibile né rimborsabile** in caso di recesso anticipato del Cliente, di disattivazione
+del Servizio per fatto del Cliente ai sensi dell'art. 8 o di risoluzione a lui imputabile.
+L'eventuale rateizzazione di cui all'art. 6.8 costituisce **mera dilazione di pagamento**: non
+muta la natura né l'ammontare del corrispettivo e non incide sull'importo dovuto.
 
 6.3 **Fatturazione elettronica.** Le fatture sono emesse in formato elettronico e trasmesse al
 Sistema di Interscambio secondo il codice destinatario o la PEC comunicati dal Cliente.
@@ -240,6 +246,15 @@ Sistema di Interscambio secondo il codice destinatario o la PEC comunicati dal C
 Cliente**, in un'**unica soluzione** mediante bonifico bancario prima dell'attivazione, oppure in
 **sei rate mensili** secondo l'art. 6.8. Il canone mensile è addebitato mediante **mandato SEPA
 Direct Debit** rilasciato dal Cliente contestualmente alla sottoscrizione.
+
+**Le due modalità sono economicamente equivalenti.** Il pagamento in unica soluzione **non dà
+diritto ad alcuno sconto, abbuono o vantaggio** di sorta, così come la rateizzazione non comporta
+interessi, spese o maggiorazioni: in entrambi i casi il Cliente corrisponde il medesimo importo
+complessivo di € 599,00 + IVA. La scelta fra le due modalità è quindi **libera e priva di
+conseguenze economiche**, e può essere effettuata dal Cliente in sede di sottoscrizione senza che
+il Licenziante possa condizionarla o riservare all'una o all'altra un trattamento differente. Le
+prestazioni, i tempi di attivazione e la durata del Periodo Starter sono i medesimi in entrambi i
+casi.
 
 6.5 **Data di addebito.** Il canone è **anticipato**: quello relativo a ciascun mese è
 addebitato il **penultimo giorno lavorativo del mese precedente**. A titolo di esempio, il
@@ -289,6 +304,12 @@ in funzione del giorno di attivazione.
 > *Esempio.* Data di efficacia 10 gennaio: i sei mesi si compiono il 10 luglio e il Periodo
 > Starter è prorogato al 31 luglio. Il primo canone mensile è quello di agosto, addebitato il
 > penultimo giorno lavorativo di luglio.
+
+**Decorrenza continuativa.** Il Periodo Starter decorre in modo continuativo dalla data di
+efficacia e **non è sospeso né prorogato** dall'eventuale disattivazione del Servizio disposta
+ai sensi dell'art. 8 per mancato pagamento: i giorni di disattivazione restano compresi nel
+Periodo Starter e non danno luogo a proroga, credito o rimborso. Resta ferma, in favore del
+Cliente, la proroga di fine mese di cui al presente articolo.
 
 7.3 Decorso il Periodo Starter, il contratto prosegue **a tempo indeterminato** con
 corresponsione del canone mensile di cui all'art. 6.1, secondo la periodicità dell'art. 6.5.
@@ -351,6 +372,10 @@ integri.
 conservazione dei dati di cui all'art. 20.1.c può richiedere la riattivazione del Servizio senza
 corrispondere nuovamente il corrispettivo di attivazione.
 
+La riattivazione è eseguita entro **1 (un) giorno lavorativo** dalla ricezione del pagamento e
+ripristina il Servizio con i Dati del Cliente integri. Essa **non proroga** il Periodo Starter
+né sposta le scadenze contrattuali: il rapporto riprende con le scadenze originarie.
+
 8.8 **Rate del corrispettivo di attivazione.** Il mancato pagamento delle rate di cui all'art.
 6.8 è soggetto alla **medesima disciplina** prevista dal presente articolo per i canoni mensili.
 In particolare:
@@ -360,12 +385,37 @@ In particolare:
    b) la soglia di cui all'art. 8.3 si intende raggiunta quando risultino contemporaneamente
       insolute **due rate**, anche non consecutive; **il pagamento anche di una sola di esse
       riporta il Cliente sotto la soglia** e fa venir meno ogni effetto della presente clausola;
-   c) si applicano integralmente la procedura di diffida ad adempiere dell'art. 8.4, gli effetti
-      dell'art. 8.5, la garanzia di esportazione dei Dati dell'art. 8.6 e la facoltà di
-      riattivazione dell'art. 8.7;
+   c) si applicano la procedura di diffida ad adempiere dell'art. 8.4 — fermo restando che, per
+      le rate, l'effetto della diffida rimasta senza esito è quello indicato alla lettera d) —,
+      gli effetti dell'art. 8.5, la garanzia di esportazione dei Dati dell'art. 8.6 e la facoltà
+      di riattivazione dell'art. 8.7;
    d) decorso inutilmente il termine della diffida, il Licenziante può **disattivare il Servizio**
       e opera la decadenza dal beneficio del termine di cui all'art. 6.8.d, con conseguente
-      **immediata esigibilità dell'intero importo residuo** del corrispettivo di attivazione.
+      **immediata esigibilità dell'intero importo residuo** del corrispettivo di attivazione. La
+      disattivazione costituisce **sospensione dell'esecuzione ai sensi dell'art. 1460 c.c.** e
+      **non** comporta di per sé la risoluzione del contratto, che resta facoltà distinta e
+      ulteriore del Licenziante ai sensi dell'art. 7.6;
+   e) **il residuo resta dovuto anche a Servizio disattivato.** Poiché il corrispettivo di
+      attivazione remunera attività già integralmente eseguite dal Licenziante ai sensi
+      dell'art. 6.2, la disattivazione non estingue né riduce l'obbligazione del Cliente di
+      corrispondere l'intero importo residuo, che il Licenziante può richiedere e recuperare
+      nelle sedi competenti;
+   f) **riattivazione nel corso della rateizzazione.** Il pagamento di quanto scaduto comporta,
+      ai sensi dell'art. 8.7, la riattivazione del Servizio; in tal caso il Licenziante rinuncia
+      agli effetti della decadenza dal beneficio del termine e il piano rateale prosegue alle
+      scadenze originarie. Il Servizio è riattivato **fino al termine del Periodo Starter già in
+      corso**, che non è prorogato ai sensi dell'art. 7.2: **il periodo di disattivazione non è
+      recuperato**. La prosecuzione del Servizio oltre tale termine resta subordinata al regolare
+      pagamento delle rate residue e dei canoni alle rispettive scadenze;
+   g) le facoltà di cui alle lettere d), e) ed f) possono essere esercitate **più volte** nel
+      corso del piano rateale.
+
+> *Esempio.* Cliente che abbia corrisposto la 1ª rata (€ 230,78) e la 2ª (€ 100,00) e ometta le
+> successive: quando risultano insolute due rate, e solo decorso inutilmente il termine della
+> diffida, il Servizio è disattivato e diviene immediatamente esigibile il residuo di
+> **€ 400,00**. Se il Cliente paga quanto scaduto, il Servizio è riattivato fino alla scadenza
+> originaria del Periodo Starter — senza recupero dei giorni di disattivazione — e le rate
+> residue tornano dovute alle scadenze del piano.
 
 ### Art. 9 — Assistenza
 
@@ -788,7 +838,10 @@ aver letto, compreso e di **approvare specificamente** le seguenti clausole:
 - **art. 6.2** — non riducibilità e non rimborsabilità del corrispettivo di attivazione;
 - **art. 6.7** — facoltà del Licenziante di aggiornare i corrispettivi;
 - **art. 6.8.d e 8.8** — decadenza dal beneficio del termine in caso di rate insolute, immediata
-  esigibilità dell'intero residuo e facoltà di disattivazione del Servizio;
+  esigibilità dell'intero residuo, facoltà di disattivazione del Servizio e **permanenza
+  dell'obbligo di pagamento del residuo anche a Servizio disattivato**;
+- **art. 7.2 e 8.8.f** — mancata sospensione e mancata proroga del Periodo Starter in caso di
+  disattivazione per morosità, con perdita dei giorni di disattivazione;
 - **art. 7.5** — facoltà di recesso del Licenziante;
 - **art. 7.6** — clausola risolutiva espressa;
 - **art. 8.3 e 8.4** — soglia di disattivazione per morosità e risoluzione previa diffida;
@@ -1112,6 +1165,10 @@ preventivo**, accettato per iscritto anche via e-mail prima dell'intervento.
 | Canone **STANDARD** — solo TOSCA BASE | € 39,00 + IVA | SEPA, penultimo giorno lavorativo del mese precedente |
 | Canone **PREMIUM** — BASE + moduli a scelta | € 59,00 + IVA | SEPA, penultimo giorno lavorativo del mese precedente |
 
+**Le due modalità costano esattamente uguale (art. 6.4).** Pagare tutto subito non dà sconti;
+rateizzare non costa nulla in più. In entrambi i casi il totale è € 599,00 + IVA = € 730,78, e il
+servizio erogato è il medesimo.
+
 **Pagamento rateale dell'attivazione (art. 6.8).** A scelta del Cliente, senza interessi né
 maggiorazioni:
 
@@ -1124,6 +1181,13 @@ maggiorazioni:
 La fattura è **una sola**, emessa alla sottoscrizione per l'intero corrispettivo: l'IVA è
 interamente assolta con la prima rata e le rate successive non danno luogo ad altre fatture.
 Dal settimo mese decorre il canone mensile di cui alla tabella precedente.
+
+**Se le rate si interrompono.** Il mancato pagamento di **una** rata non comporta alcuna
+limitazione del Servizio. Quando risultano insolute **due** rate, e solo dopo diffida con
+termine non inferiore a 15 giorni, il Servizio può essere disattivato e l'intero residuo diviene
+immediatamente esigibile: esso **resta dovuto anche a Servizio disattivato**, perché remunera
+l'attivazione già eseguita. Pagando quanto scaduto il Servizio è riattivato fino alla scadenza
+**originaria** del Periodo Starter, che non viene prorogata (artt. 6.8, 7.2 e 8.8).
 
 Il PREMIUM comprende **uno, alcuni o tutti** i moduli elencati nell'Allegato A.2 allo stesso
 prezzo: non esiste un costo per singolo modulo.

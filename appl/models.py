@@ -8,7 +8,32 @@ from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import validates
 from appl import db
 from datetime import timedelta, datetime
+from pytz import timezone as pytz_timezone
 from werkzeug.security import generate_password_hash
+
+# pytz e non zoneinfo: su Windows zoneinfo ha bisogno del pacchetto `tzdata`, che
+# nel progetto arriva solo di rimbalzo come dipendenza di pandas. pytz porta con
+# se' il proprio database dei fusi, e' in requirements.txt ed e' gia' il modo in
+# cui calendar.py e report.py trattano l'ora italiana.
+_TZ_ITALIA = pytz_timezone("Europe/Rome")
+
+
+def ora_italiana():
+    """Adesso in ora italiana, come datetime naive (gestisce da se' solare/legale).
+
+    Le colonne DateTime SENZA fuso di questo modello contengono ora locale italiana:
+    e' la convenzione seguita nel resto dell'app (Receipt.created_at,
+    FiscalClosure.closed_at, i movimenti importati dal vecchio gestionale).
+
+    Perche' non le due alternative ovvie:
+      - `server_default=func.now()` fa scrivere l'orario al database, e il Postgres
+        su Azure e' impostato su UTC: e' esattamente il motivo per cui i movimenti
+        delle prepagate comparivano DUE ORE INDIETRO nel tab Ricaricabili Solarium;
+      - `datetime.now()` dipende da dove gira il processo: sul PC del negozio da'
+        l'ora italiana, sulla web app Azure da' UTC, e lo stesso database
+        finirebbe con due convenzioni diverse a seconda di chi ha scritto la riga.
+    """
+    return datetime.now(_TZ_ITALIA).replace(tzinfo=None)
 
 service_operator = db.Table(
     'service_operator',
@@ -671,7 +696,10 @@ class MovimentoPrepagata(db.Model):
     __tablename__ = 'movimenti_prepagata'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     pacchetto_id = db.Column(db.Integer, db.ForeignKey('pacchetti.id'), nullable=False)
-    data_movimento = db.Column(db.DateTime, server_default=func.now(), nullable=False)
+    # default Python (ora italiana), non server_default: l'orario lo decide l'app,
+    # non il fuso del server di database. Vedi ora_italiana().
+    data_movimento = db.Column(db.DateTime, default=ora_italiana,
+                               server_default=func.now(), nullable=False)
     tipo_movimento = db.Column(db.String(20), nullable=False)  # 'ricarica' o 'utilizzo'
     importo = db.Column(db.Numeric(10, 2), nullable=False)
     saldo_dopo = db.Column(db.Numeric(10, 2), nullable=False)

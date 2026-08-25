@@ -1006,6 +1006,22 @@ def pacchetto_detail(id):
     #   relativo tra loro è garantito dalla procedura di booking (ordine cronologico).
     # - Le sedute senza appuntamento possono stare ovunque (prima o dopo quelle con appuntamento).
     sedute_ordinate = sorted(pacchetto.sedute, key=lambda s: (s.ordine or 0, s.id))
+
+    # Le sedute GIA' DATATE si dispongono da sole in ordine cronologico: se un
+    # appuntamento viene spostato in Agenda, la sua riga lo segue senza che nessuno
+    # debba trascinarla a mano. Si riordinano SOLO fra loro, occupando le stesse
+    # posizioni che gia' occupano: le sedute non ancora pianificate restano dove
+    # sono, governate dal drag&drop e dal campo `ordine`, com'e' sempre stato.
+    # Di conseguenza la colonna N* (numero progressivo per tipo di trattamento,
+    # calcolata da populateNStar sull'ordine delle righe) torna in sequenza: la
+    # 1ª, 2ª, 3ª seduta di un trattamento sono quelle cronologicamente in ordine.
+    posizioni_datate = [i for i, s in enumerate(sedute_ordinate) if s.data_trattamento]
+    if len(posizioni_datate) > 1:
+        datate = sorted((sedute_ordinate[i] for i in posizioni_datate),
+                        key=lambda s: (s.data_trattamento, s.id))
+        for posizione, seduta in zip(posizioni_datate, datate):
+            sedute_ordinate[posizione] = seduta
+
     sedute = []
     for s in sedute_ordinate:
         appt = appointments_linked.get(s.id)

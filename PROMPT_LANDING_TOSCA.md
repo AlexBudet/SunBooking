@@ -24,7 +24,9 @@ Frasi brevi, verbi concreti, zero anglicismi non necessari.
 
 - Nomi di tecnologie, fornitori, server, database, linguaggi, servizi cloud
 - Numeri di versione, requisiti hardware, dettagli su prestazioni o architettura
-- Qualunque riferimento fiscale o contabile: IVA, regimi, fatturazione elettronica, bolli
+- Qualunque riferimento fiscale o contabile: regimi, fatturazione elettronica, bolli.
+  Unica eccezione, obbligatoria per correttezza verso chi legge: il «+ IVA» accanto ai
+  prezzi e l'importo reale della prima rata (vedi «Quanto costa»)
 - Clausole, articoli di contratto, condizioni legali
 - Promesse su tempi di intervento o percentuali di disponibilità del servizio
 
@@ -70,6 +72,28 @@ Due modi, **inclusi nello stesso prezzo**, usabili insieme:
 
 **L'attivazione si può pagare in 6 rate mensili senza interessi**, oppure tutta subito.
 Presentalo come una comodità, non come un finanziamento.
+
+| Rata | Importo da pagare |
+|---|---|
+| 1ª — alla firma | **€ 230,78** — sono € 99 più l'IVA dell'intero importo |
+| dalla 2ª alla 6ª — una al mese | **€ 100** ciascuna |
+
+Le rate sono **sei in tutto**, per un totale di € 730,78: esattamente quanto si pagherebbe
+versando i € 599 + IVA in un'unica soluzione. Non c'è alcun costo aggiuntivo.
+
+**Dillo esplicitamente: pagare tutto subito non dà sconti.** Le due strade costano uguale, quindi
+rateizzare non fa perdere niente a nessuno — è solo una comodità di cassa per chi preferisce non
+uscire con € 730 in una volta. Chi legge deve capire che non sta rinunciando a uno sconto
+scegliendo le rate, altrimenti sceglie l'unica soluzione per timore e non per convenienza.
+
+⚠️ **La prima rata va scritta per intero.** È più alta delle altre perché comprende l'IVA di
+tutto l'importo: non scrivere «da € 100 al mese» né arrotondare, e non rimandare la cifra a
+una nota in fondo. Chi legge deve sapere prima di chiamare quanto tira fuori alla firma.
+
+Chiudi il punto con una riga sulla regolarità dei pagamenti, in tono normale e non
+minaccioso — per esempio: *«Se le rate si interrompono il servizio può essere sospeso, e
+riprende appena la posizione è regolarizzata.»* Nient'altro: le condizioni complete stanno
+nel contratto, e la pagina non è la sede per riassumerle.
 
 **TOSCA PREMIUM comprende uno, alcuni o tutti** i moduli aggiuntivi (prenotazioni online,
 pacchetti e prepagate, strumenti solarium, strumenti marketing) **allo stesso prezzo**:
