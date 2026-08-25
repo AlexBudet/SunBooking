@@ -2949,30 +2949,47 @@ row.className = 'd-flex align-items-center scontrino-row';
 }
 
 // Cambia metodo pagamento globale.
-// Le righe gia' impostate su PREPAGATA non vengono toccate: il loro importo e'
-// destinato a essere scalato dalla tessera, e cambiarlo con un gesto pensato per
-// "tutto il resto" significherebbe farsi pagare due volte lo stesso servizio
-// senza accorgersene. Per riportarle a un metodo normale vanno eliminate e
-// riaggiunte fuori dalla schermata della carta.
+// Le righe gia' impostate su PREPAGATA (intera voce a carico della tessera) non
+// vengono toccate: il loro importo e' destinato a essere scalato dalla carta, e
+// cambiarlo con un gesto pensato per "tutto il resto" significherebbe farsi
+// pagare due volte lo stesso servizio senza accorgersene. Per riportarle a un
+// metodo normale vanno eliminate e riaggiunte fuori dalla schermata della carta.
+// Le righe da RESET CREDITO invece seguono il pulsante, ma solo nella parte da
+// incassare: la quota gia' coperta dal credito resta ferma dov'e'.
 function aggiornaMetodoPagamentoGlobale(tipo) {
   document.querySelectorAll('#scontrinoRowsContainer .scontrino-row').forEach(row => {
     const selectRiga = row.querySelector('select[name="metodo_pagamento[]"]') || row.querySelector('select');
     if (selectRiga && selectRiga.value === 'prepagata') return;
 
-    // Anche le righe in MISTO che contengono una quota prepagata restano ferme.
-    // Il controllo sopra guarda solo il metodo della select, e una riga da reset
-    // credito ha "misto": passava il filtro e finiva nella riga qui sotto, che
-    // azzera lo split - cancellando anche la parte gia' scalata dalla tessera.
-    // Per cambiare il metodo della sola parte non coperta dal credito si usa il
-    // comando "misto" della riga, che e' fatto apposta.
     const pagamentiRiga = getRowPagamenti(row);
-    const haQuotaPrepagata = Array.isArray(pagamentiRiga) && pagamentiRiga.some(
-      p => p && p.metodo === 'prepagata' && (parseFloat(p.importo) || 0) > 0
-    );
-    if (haQuotaPrepagata) return;
+    const quotaPrepagata = Array.isArray(pagamentiRiga)
+      ? pagamentiRiga.filter(p => p && p.metodo === 'prepagata')
+                     .reduce((t, p) => t + (parseFloat(p.importo) || 0), 0)
+      : 0;
 
-    // Applicare un metodo globale annulla eventuali split pagamento sulla riga
-    if (pagamentiRiga) setRowPagamenti(row, null);
+    if (quotaPrepagata > 0) {
+      // RESET CREDITO: la quota della tessera e' intoccabile - e' credito gia'
+      // impegnato, riscriverlo vorrebbe dire farsi pagare due volte la stessa
+      // voce - ma la DIFFERENZA da incassare segue il metodo globale, che e'
+      // esattamente il gesto "tutto il resto in contanti". Prima il pulsante
+      // saltava del tutto queste righe: restava il metodo pre-caricato (di norma
+      // POS) e andava cambiato a mano dal comando "misto" della riga.
+      if (!['cash', 'pos', 'bank'].includes(tipo)) return;
+      const resto = Math.round(pagamentiRiga
+        .filter(p => p && p.metodo !== 'prepagata')
+        .reduce((t, p) => t + (parseFloat(p.importo) || 0), 0) * 100) / 100;
+      if (resto <= 0) return;
+      // Se la differenza era a sua volta divisa fra piu' metodi si riaccorpa tutta
+      // sul metodo scelto: il pulsante in fondo vale per TUTTE le voci.
+      setRowPagamenti(row, [
+        { metodo: 'prepagata', importo: Math.round(quotaPrepagata * 100) / 100 },
+        { metodo: tipo, importo: resto }
+      ]);
+      row.dataset.vecchioMetodo = tipo;
+    } else if (pagamentiRiga) {
+      // Applicare un metodo globale annulla eventuali split pagamento sulla riga
+      setRowPagamenti(row, null);
+    }
     const select = row.querySelector('select');
     const icon = row.querySelector('i');
     // Aggiorna il metodo di pagamento
