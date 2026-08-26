@@ -6,7 +6,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from datetime import date, time as dtime
 from datetime import datetime, timedelta, time, timezone
 from decimal import Decimal
-from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo, Pacchetto, PacchettoTipo, PacchettoStatus, Receipt, SolariumSession
+from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo, Pacchetto, PacchettoTipo, PacchettoStatus, Receipt, SolariumSession, service_operator
 from appl import app
 from appl.services.error_log import log_crm_error
 import random
@@ -709,6 +709,17 @@ def create_appointment():
             duration = None
         note = _norm_note(data.get('note'))
 
+        # Spostamenti decisi nell'avviso abilitazioni: {service_id: operator_id}.
+        # Servono al gruppo MISTO, dove i blocchi restano contigui nell'ora ma
+        # non tutti sulla stessa colonna (es. tre cerette dall'estetista e la
+        # lampada sulla sua). Gli orari non cambiano: cambia solo la colonna.
+        spostamenti = {}
+        for chiave, valore in (data.get('spostamenti') or {}).items():
+            sid_s = _norm_id(chiave)
+            op_s = _norm_id(valore)
+            if sid_s and op_s:
+                spostamenti[sid_s] = op_s
+
         # Colori
         colore = (data.get('colore') or '').strip() or random_color()
         colore_font = compute_font_color(colore)
@@ -797,7 +808,7 @@ def create_appointment():
 
                 new_appt = Appointment(
                     client_id=pb_client_id,
-                    operator_id=operator_id,
+                    operator_id=spostamenti.get(pb_service_id, operator_id),
                     service_id=pb_service_id,
                     start_time=current_start,
                     _duration=int(pb_duration),
@@ -912,7 +923,7 @@ def create_appointment():
 
         new_appt = Appointment(
             client_id=client_id,
-            operator_id=operator_id,
+            operator_id=spostamenti.get(service_id, operator_id),
             service_id=service_id,
             start_time=start_time,
             _duration=int(duration),
@@ -1770,6 +1781,85 @@ def update_color(appt_id):
         "colore_font": new_font_color
     }), 200
 
+def _servizi_per_colonna(voci, operator_id):
+    """Mette in cima i servizi che quella colonna operatore esegue.
+
+    `voci` e' la lista gia' costruita dalle due query storiche (servizi del
+    cliente / piu' usati del negozio), nel loro ordine di rilevanza. Qui si
+    aggiunge il criterio che viene PRIMA di quelli:
+
+      gruppo 0 - servizi associati proprio a quella colonna (service_operator)
+      gruppo 1 - servizi senza alcun operatore associato: nessun vincolo,
+                 li puo' fare chiunque
+      gruppo 2 - servizi che quella colonna NON esegue
+
+    Dentro ogni gruppo resta l'ordine di rilevanza di partenza. I servizi del
+    gruppo 0 che le query storiche non avevano restituito vengono AGGIUNTI: e'
+    il caso della colonna Prestige, dove il cliente non ha mai fatto la lampada
+    e quindi nello storico non compare, ma sulla sua colonna deve stare in cima.
+
+    Ogni voce esce con 'abilitato': False solo per il gruppo 2 (che resta
+    selezionabile - in agenda c'e' l'avviso, non un blocco).
+    """
+    if not operator_id:
+        for voce in voci:
+            voce['abilitato'] = True
+        return voci
+
+    vincolati = {
+        riga[0] for riga in db.session.query(service_operator.c.service_id).distinct().all()
+    }
+    suoi = {
+        riga[0] for riga in db.session.query(service_operator.c.service_id)
+                                      .filter(service_operator.c.operator_id == operator_id).all()
+    }
+
+    presenti = {v['id'] for v in voci}
+    mancanti = []
+    if suoi - presenti:
+        mancanti = (Service.query
+                    .filter(Service.id.in_(list(suoi - presenti)),
+                            Service.is_deleted == False,
+                            Service.is_visible_in_calendar == True,
+                            func.lower(Service.servizio_nome) != "dummy")
+                    .all())
+
+    rilevanza = {v['id']: i for i, v in enumerate(voci)}
+    tutte = list(voci) + [{
+        "id": sv.id,
+        "name": sv.servizio_nome,
+        "duration": sv.servizio_durata,
+        "price": sv.servizio_prezzo,
+        "tag": sv.servizio_tag,
+        "last_date": None,
+    } for sv in mancanti]
+
+    def gruppo(voce):
+        if voce['id'] in suoi:
+            return 0
+        if voce['id'] not in vincolati:
+            return 1
+        return 2
+
+    for voce in tutte:
+        voce['abilitato'] = gruppo(voce) != 2
+
+    tutte.sort(key=lambda v: (
+        gruppo(v),
+        rilevanza.get(v['id'], 10**6),
+        (v.get('name') or '').lower(),
+    ))
+    return tutte
+
+
+def _operator_id_richiesto():
+    """operator_id passato dalla colonna dell'agenda (0/assente = nessuna)."""
+    try:
+        return int(request.args.get('operator_id') or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 @calendar_bp.route('/api/top-frequent-or-latest-services', methods=['GET'])
 def top_frequent_or_latest_services():
     # Query ottimizzata: combina frequenti e ultimi in una sola chiamata
@@ -1794,7 +1884,7 @@ def top_frequent_or_latest_services():
             "price": s.servizio_prezzo,
             "tag": s.servizio_tag
         } for s in frequent_services]
-        return jsonify(services_data)
+        return jsonify(_servizi_per_colonna(services_data, _operator_id_richiesto()))
 
     # Fallback ottimizzato: usa order_by una volta
     latest_services = Service.query.filter(
@@ -1810,7 +1900,7 @@ def top_frequent_or_latest_services():
         "tag": s.servizio_tag
     } for s in latest_services]
 
-    return jsonify(services_data)
+    return jsonify(_servizi_per_colonna(services_data, _operator_id_richiesto()))
 
 @calendar_bp.route('/api/last-services-for-client/<int:client_id>', methods=['GET'])
 def last_services_for_client(client_id):
@@ -1884,7 +1974,7 @@ def last_services_for_client(client_id):
         "last_date": last_date.isoformat() if last_date else None
     } for s, last_date in services]
     app.logger.info(f"[DEBUG] Restituiti {len(services_data)} servizi (cliente + globali) per client_id={client_id}")
-    return jsonify(services_data)
+    return jsonify(_servizi_per_colonna(services_data, _operator_id_richiesto()))
 
 @calendar_bp.route('/update_layout/<int:appt_id>', methods=['POST'])
 def update_layout(appt_id):
@@ -3486,6 +3576,289 @@ def operator_availability():
 # INFO ENDPOINTS — pannello "info" (badge 2 in calendar)
 # Risposte statiche, niente AI.
 # ═══════════════════════════════════════════════════════════════
+
+# ===================== ABILITAZIONI OPERATORE -> SERVIZI =====================
+# Fonte unica: la tabella service_operator, cioe' "Operatori selezionabili per
+# servizio" in Impostazioni > Operatori. La stessa lista che usano le
+# prenotazioni online e "trova un buco": si configura in un posto solo.
+#
+# Servizio SENZA nessun operatore associato = nessun vincolo. E' il significato
+# che quella lista ha sempre avuto, e senza di esso ogni servizio non ancora
+# configurato darebbe avvisi su tutte le colonne.
+#
+# L'abilitazione non blocca niente: qualunque servizio si puo' mettere su
+# qualunque colonna, ma l'avviso propone di spostarlo su chi lo esegue davvero.
+
+def _abilitati_per_servizio(service_ids):
+    """{service_id: set(operator_id)} - insieme vuoto significa nessun vincolo."""
+    mappa = {}
+    for sid in service_ids:
+        svc = db.session.get(Service, sid)
+        if not svc:
+            continue
+        mappa[sid] = {op.id for op in svc.operators}
+    return mappa
+
+
+def _naive(dt_value):
+    """Datetime senza fuso.
+
+    Appointment.start_time e' una colonna DateTime senza fuso, ma a seconda di
+    come la riga e' stata scritta puo' tornare con tzinfo valorizzato: confrontarla
+    con un datetime costruito qui (naive) fa esplodere il confronto. Stessa
+    normalizzazione che fa gia' "trova un buco" con la sua _to_naive.
+    """
+    if dt_value is not None and getattr(dt_value, 'tzinfo', None) is not None:
+        return dt_value.replace(tzinfo=None)
+    return dt_value
+
+
+def _operatore_libero(op_id, start_dt, end_dt, shifts_by_op, appts_by_op, biz_open, biz_close):
+    """True se l'operatore e' in turno su [start, end] e non ha nulla che si sovrappone."""
+    shifts = shifts_by_op.get(op_id) or []
+    if shifts:
+        in_turno = any(ini <= start_dt.time() and end_dt.time() <= fine for ini, fine in shifts)
+    else:
+        # Nessun turno configurato quel giorno: si ripiega sugli orari del negozio,
+        # come gia' fa "trova un buco". Senza questo ripiego, in un negozio che non
+        # usa i turni nessun operatore risulterebbe mai disponibile e il pulsante
+        # "sposta all'operatore abilitato" sarebbe sempre spento.
+        in_turno = (biz_open <= start_dt.time() and end_dt.time() <= biz_close)
+    if not in_turno:
+        return False
+    for a_start, a_end in appts_by_op.get(op_id, []):
+        if a_start < end_dt and start_dt < a_end:
+            return False
+    return True
+
+
+@calendar_bp.route('/api/servizi-colonna/<int:operator_id>', methods=['GET'])
+def servizi_colonna(operator_id):
+    """Cosa sa fare la colonna su cui si sta creando l'appuntamento.
+
+    Serve alla tendina del modal "Nuovo appuntamento", che di suo mostra i
+    SUGGERIMENTI (storico del cliente, o i piu' usati del negozio): su una
+    colonna solarium le lampade li' dentro spesso non ci sono proprio, e
+    riordinare una lista che non le contiene non le fa comparire. Il modal
+    accoda quindi l'elenco completo dei servizi eseguibili da quella colonna.
+
+    - abilitati:     servizi che quella colonna esegue, compresi quelli senza
+                     alcun operatore associato (che non vincolano nessuno)
+    - non_abilitati: solo gli id, per mandare in fondo i suggerimenti che quella
+                     colonna non esegue. Restano selezionabili: c'e' l'avviso,
+                     non un blocco.
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+
+    # Servizi con almeno un operatore associato: solo loro possono escludere qualcuno.
+    vincolati = {
+        riga[0] for riga in db.session.query(service_operator.c.service_id).distinct().all()
+    }
+    suoi = {
+        riga[0] for riga in db.session.query(service_operator.c.service_id)
+                                      .filter(service_operator.c.operator_id == operator_id).all()
+    }
+
+    servizi = (Service.query
+               .filter(Service.is_deleted == False,
+                       Service.is_visible_in_calendar == True,
+                       func.lower(Service.servizio_nome) != "dummy")
+               .all())
+
+    abilitati = []
+    non_abilitati = []
+    for sv in servizi:
+        if sv.id in vincolati and sv.id not in suoi:
+            non_abilitati.append(sv.id)
+            continue
+        abilitati.append({
+            'id': sv.id,
+            'name': sv.servizio_nome,
+            'duration': sv.servizio_durata,
+            'price': sv.servizio_prezzo,
+            'tag': sv.servizio_tag,
+            # True = associato PROPRIO a questa colonna; False = servizio senza
+            # nessun operatore associato, quindi eseguibile ovunque. I primi
+            # vengono prima: sulla colonna Prestige in cima ci va il Prestige,
+            # non un servizio che semplicemente non e' vincolato a nessuno.
+            'proprio': sv.id in suoi,
+        })
+    abilitati.sort(key=lambda x: (not x['proprio'], (x['name'] or '').lower()))
+
+    return jsonify({'abilitati': abilitati, 'non_abilitati': sorted(non_abilitati)})
+
+
+@calendar_bp.route('/api/check-abilitazioni', methods=['POST'])
+def check_abilitazioni():
+    """Dice se l'operatore della colonna puo' eseguire i servizi che si stanno piazzando.
+
+    Payload: {operator_id, date: 'YYYY-MM-DD',
+              blocchi: [{service_id, start_time: 'HH:MM', duration}],
+              ignora_appointment_ids: [...]}
+    Risposta: {ok, operatore, violazioni: [{service_id, servizio}],
+               alternative: [{id, nome}]}
+
+    Le alternative sono gli operatori abilitati a TUTTI i servizi del gruppo
+    (non solo a quelli in violazione: spostando li' non deve nascere un warning
+    nuovo) e liberi per l'intera durata del gruppo.
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        operator_id = int(data.get('operator_id') or 0)
+    except (TypeError, ValueError):
+        operator_id = 0
+    blocchi_req = data.get('blocchi') or []
+    # Appuntamenti che si stanno spostando: non devono contare come "occupato",
+    # altrimenti la colonna di partenza - spesso l'alternativa piu' sensata -
+    # risulterebbe occupata da se stessa.
+    ignora_appts = {str(x) for x in (data.get('ignora_appointment_ids') or []) if x}
+
+    if not operator_id or not isinstance(blocchi_req, list) or not blocchi_req:
+        return jsonify({'ok': True, 'violazioni': [], 'alternative': []})
+
+    try:
+        giorno = datetime.strptime((data.get('date') or '').strip(), '%Y-%m-%d').date()
+    except (TypeError, ValueError):
+        giorno = datetime.today().date()
+
+    operator = db.session.get(Operator, operator_id)
+    if not operator:
+        return jsonify({'ok': True, 'violazioni': [], 'alternative': []})
+
+    # --- servizi richiesti, intervallo del gruppo e intervalli di ogni servizio ---
+    servizi = {}
+    intervalli = {}   # {service_id: [(inizio, fine), ...]} - un servizio puo' ripetersi
+    inizio_gruppo = None
+    fine_gruppo = None
+    for blk in blocchi_req:
+        if not isinstance(blk, dict):
+            continue
+        try:
+            sid = int(blk.get('service_id') or 0)
+        except (TypeError, ValueError):
+            sid = 0
+        if not sid:
+            continue  # blocco OFF o senza servizio: niente da controllare
+        if sid not in servizi:
+            svc = db.session.get(Service, sid)
+            if not svc:
+                continue
+            servizi[sid] = svc
+        try:
+            durata = int(blk.get('duration') or servizi[sid].servizio_durata or 0)
+        except (TypeError, ValueError):
+            durata = int(servizi[sid].servizio_durata or 0)
+        try:
+            ora = datetime.strptime((blk.get('start_time') or '').strip(), '%H:%M').time()
+        except (TypeError, ValueError):
+            ora = None
+        if ora is not None and durata > 0:
+            ini = datetime.combine(giorno, ora)
+            fine = ini + timedelta(minutes=durata)
+            intervalli.setdefault(sid, []).append((ini, fine))
+            inizio_gruppo = ini if inizio_gruppo is None else min(inizio_gruppo, ini)
+            fine_gruppo = fine if fine_gruppo is None else max(fine_gruppo, fine)
+
+    if not servizi:
+        return jsonify({'ok': True, 'violazioni': [], 'alternative': []})
+
+    service_ids = list(servizi.keys())
+    abilitati = _abilitati_per_servizio(service_ids)
+    violazioni = [
+        {'service_id': sid, 'servizio': servizi[sid].servizio_nome or ''}
+        for sid in service_ids
+        if abilitati.get(sid) and operator_id not in abilitati[sid]
+    ]
+
+    # SOLO il nome: in Agenda il cognome delle operatrici non si mostra mai
+    # (le colonne stesse portano il solo nome). Vale per l'operatore della
+    # colonna e per le alternative proposte qui sotto.
+    nome_operatore = (operator.user_nome or '').strip() or 'Questo operatore'
+    if not violazioni:
+        return jsonify({'ok': True, 'operatore': nome_operatore,
+                        'violazioni': [], 'alternative': []})
+
+    # --- chi altro c'e' in agenda, con turni e impegni del giorno ---
+    altri = (db.session.query(Operator)
+             .filter(Operator.id != operator_id,
+                     Operator.is_deleted == False,
+                     Operator.is_visible == True)
+             .order_by(Operator.order).all())
+
+    shifts_by_op = {}
+    appts_by_op = {}
+    biz_open = dtime(9, 0)
+    biz_close = dtime(19, 0)
+    if altri:
+        altri_ids = [op.id for op in altri]
+        for sh in (db.session.query(OperatorShift)
+                   .filter(OperatorShift.shift_date == giorno,
+                           OperatorShift.operator_id.in_(altri_ids)).all()):
+            shifts_by_op.setdefault(sh.operator_id, []).append(
+                (sh.shift_start_time, sh.shift_end_time))
+
+        for appt in (db.session.query(Appointment)
+                     .filter(Appointment.operator_id.in_(altri_ids),
+                             Appointment.is_cancelled_by_client == False,
+                             Appointment.start_time >= datetime.combine(giorno, time.min),
+                             Appointment.start_time < datetime.combine(giorno + timedelta(days=1), time.min))
+                     .all()):
+            if str(appt.id) in ignora_appts:
+                continue
+            inizio_appt = _naive(appt.start_time)
+            appts_by_op.setdefault(appt.operator_id, []).append(
+                (inizio_appt, inizio_appt + timedelta(minutes=int(appt.duration or 0))))
+
+        biz = BusinessInfo.query.first()
+        if biz:
+            biz_open = biz.active_opening_time or biz.opening_time or biz_open
+            biz_close = biz.active_closing_time or biz.closing_time or biz_close
+
+    def _nome(op):
+        return (op.user_nome or '').strip()
+
+    # Alternative PER SINGOLO SERVIZIO: in un gruppo misto (tre cerette + una
+    # lampada su una colonna estetista) l'unica risposta sensata e' spostare la
+    # lampada sulla sua colonna, non cercare qualcuno che sappia fare tutto -
+    # che non esiste, e lasciava il pulsante spento.
+    for violazione in violazioni:
+        sid = violazione['service_id']
+        finestre = intervalli.get(sid) or []
+        proposte = []
+        for op in altri:
+            if abilitati.get(sid) and op.id not in abilitati[sid]:
+                continue
+            if finestre and not all(
+                _operatore_libero(op.id, ini, fine, shifts_by_op, appts_by_op, biz_open, biz_close)
+                for ini, fine in finestre
+            ):
+                continue
+            proposte.append({'id': op.id, 'nome': _nome(op)})
+        violazione['alternative'] = proposte
+
+    # Alternativa per il gruppo INTERO: ha senso quando i blocchi si spostano
+    # tutti insieme (un trascinamento, uno spostamento di pagati), e serve al
+    # pulsante "sposta tutto".
+    alternative = []
+    if inizio_gruppo and fine_gruppo:
+        for op in altri:
+            if not all((not abilitati.get(sid)) or op.id in abilitati[sid] for sid in service_ids):
+                continue
+            if _operatore_libero(op.id, inizio_gruppo, fine_gruppo,
+                                 shifts_by_op, appts_by_op, biz_open, biz_close):
+                alternative.append({'id': op.id, 'nome': _nome(op)})
+
+    return jsonify({
+        'ok': False,
+        'operatore': nome_operatore,
+        'violazioni': violazioni,
+        'alternative': alternative,
+    })
+
 
 @calendar_bp.route('/api/info/static', methods=['GET'])
 def api_info_static():

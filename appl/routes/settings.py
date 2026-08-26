@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 import os, ipaddress, requests
 from sqlalchemy.sql import func, or_
 from .. import db
-from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession, PrepagataRicaricaRegola
+from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession, PrepagataRicaricaRegola, service_operator
 from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
 from .calendar import _compute_client_loyalty, LOYALTY_DEFAULT
 
@@ -549,6 +549,21 @@ def add_operator():
             user_tipo=user_tipo
         )
         db.session.add(new_operator)
+        db.session.flush()  # serve l'id per le associazioni qui sotto
+
+        # Un operatore nuovo nasce abilitato a TUTTO: le esclusioni si tolgono
+        # poi una per una dalle sue abilitazioni. Senza queste righe non
+        # risulterebbe fra gli operatori di nessun servizio gia' configurato, e
+        # in agenda darebbe un avviso su qualunque appuntamento.
+        # Solo i servizi dell'agenda: a un prodotto o a una voce di credito non
+        # si associa nessun operatore, non li esegue nessuno.
+        for servizio in (db.session.query(Service)
+                         .filter(Service.is_deleted == False,
+                                 Service.is_visible_in_calendar == True).all()):
+            if (servizio.servizio_nome or '').strip().lower() == 'dummy':
+                continue
+            servizio.operators.append(new_operator)
+
         db.session.commit()
     except Exception as e:
         app.logger.error("Errore durante l'aggiunta dell'operatore: %s", str(e))
@@ -751,6 +766,12 @@ def add_service():
             servizio_sottocategoria_id=service_subcategory,
             is_visible_in_calendar=is_visible_in_calendar
         )
+        # Un servizio nuovo nasce abilitato a tutti gli operatori DELLA SUA
+        # CATEGORIA: un trattamento Solarium non deve nascere sulle estetiste.
+        # Senza questo la lista nascerebbe vuota, che vuol dire "nessun vincolo"
+        # e quindi nessun avviso in agenda finche' qualcuno non se ne accorge.
+        if is_visible_in_calendar:
+            new_service.operators = operatori_della_categoria(ServiceCategory(service_category))
 
         db.session.add(new_service)
         db.session.commit()
@@ -2345,11 +2366,44 @@ def delete_user(user_id):
     return redirect(url_for('settings.manage_users'))
 
 # ===================== ONLINE BOOKING SETTINGS =====================
-@settings_bp.route('/settings/set_bookings', methods=['GET'])
-def set_bookings():
-    user_id = session.get('user_id')
-    current_user = user = db.session.get(User, user_id) if user_id else None
-    business_info = db.session.get(BusinessInfo, 1)
+def operatori_della_categoria(categoria):
+    """Operatori visibili abilitati ad almeno un servizio di quella categoria.
+
+    Serve come default per i servizi nuovi: l'insieme e' l'unione, non
+    l'intersezione, perche' le esclusioni sul singolo servizio (es. una ceretta
+    che una sola operatrice non fa) non devono restringere anche tutto il resto
+    della categoria. Le eccezioni si tolgono poi a mano dal servizio.
+
+    Se la categoria non ha ancora nessuna associazione l'insieme e' vuoto, cioe'
+    "nessun vincolo": e' il comportamento di prima, e resta giusto perche' non
+    c'e' nessuna informazione da cui dedurre chi sia abilitato.
+    """
+    servizi = (db.session.query(Service)
+               .filter(Service.is_deleted == False,
+                       Service.is_visible_in_calendar == True)
+               .all())
+    abilitati = {}
+    for servizio in servizi:
+        if getattr(servizio, 'servizio_categoria', None) != categoria:
+            continue
+        for op in servizio.operators:
+            if op.is_visible and not op.is_deleted:
+                abilitati[op.id] = op
+    return list(abilitati.values())
+
+
+def tabella_servizi_operatori():
+    """Dati della tabella "Operatori selezionabili per servizio".
+
+    Vive nella pagina OPERATORI (Impostazioni > Operatori): la stessa lista
+    decide chi puo' eseguire un servizio in agenda e chi viene proposto dalle
+    prenotazioni online, percio' sta in un posto solo.
+
+    Ritorna (servizi_tabella, operatori_serializzati). Fra gli operatori
+    compaiono solo quelli visibili: chi e' nascosto conserva le sue
+    associazioni nel database (vedi update_service_operators) ma non si
+    configura da qui, perche' non ha nemmeno la colonna in agenda.
+    """
     # carica servizi con sottocategoria e operators in modo efficiente (evita N+1)
     servizi = (db.session.query(Service)
                .options(
@@ -2400,14 +2454,162 @@ def set_bookings():
         {"id": op.id, "nome": op.user_nome, "cognome": op.user_cognome, "full_name": f"{op.user_nome} {op.user_cognome}"}
         for op in operatori
     ]
+    return servizi_tabella, operatori_serializzati
 
+
+@settings_bp.route('/settings/set_bookings', methods=['GET'])
+def set_bookings():
+    """Regole delle prenotazioni online + quali servizi si vedono online.
+
+    Chi puo' eseguire un servizio NON si decide piu' qui: e' passato alla pagina
+    Operatori, dove si ragiona per operatore ("cosa sa fare Aurora") invece che
+    per servizio. La tabella qui resta solo per la visibilita' online, che e'
+    una proprieta' del servizio e non c'entra con le abilitazioni.
+    """
+    user_id = session.get('user_id')
+    current_user = db.session.get(User, user_id) if user_id else None
+    business_info = db.session.get(BusinessInfo, 1)
+    servizi_tabella, _ = tabella_servizi_operatori()
     return render_template(
         'set_booking.html',
         current_user=current_user,
         servizi_tabella=servizi_tabella,
-        operatori=operatori_serializzati,
         business_info=business_info
     )
+
+def _operatori_nascosti_associati(service):
+    """Operatori NON visibili gia' associati a un servizio.
+
+    La pagina mostra solo gli operatori visibili in agenda, quindi le loro
+    spunte non dicono niente su chi e' nascosto: se il salvataggio riscrivesse
+    la lista secca, nascondere un'operatrice per una stagione le cancellerebbe
+    in silenzio tutte le associazioni, e al ritorno non tornerebbero da sole.
+    Queste righe vanno quindi ri-aggiunte a ogni salvataggio.
+    """
+    return [op for op in service.operators if not op.is_visible and not op.is_deleted]
+
+
+@settings_bp.route('/api/operator-services/<int:operator_id>', methods=['GET'])
+def get_operator_services(operator_id):
+    """Cosa sa fare UN operatore: le stesse associazioni, guardate dall'altro lato.
+
+    In database non cambia niente (e' sempre service_operator, la lista che
+    vale anche per le prenotazioni online): qui si gira solo il punto di vista,
+    perche' "cosa sa fare Aurora" e' la domanda che ci si pone davvero, mentre
+    la vista per servizio costringeva ad aprire un servizio alla volta.
+
+    Le categorie non sono un dato salvato: una categoria risulta attiva se
+    l'operatore ha almeno un servizio di quella categoria. Servono a filtrare
+    l'elenco e a spuntare/togliere in blocco.
+    """
+    operator = db.session.get(Operator, operator_id)
+    if not operator:
+        return jsonify({'success': False, 'error': 'Operatore non trovato'}), 404
+
+    # Solo i servizi che l'agenda mostra davvero: prodotti, crediti e voci a
+    # durata zero non li "esegue" nessuno, non finiscono mai su una colonna e
+    # quindi non hanno operatori da spuntare. Stesso filtro di /calendar/api/services.
+    servizi = (db.session.query(Service)
+               .options(joinedload(Service.servizio_sottocategoria))
+               .filter(Service.is_deleted == False,
+                       Service.is_visible_in_calendar == True)
+               .all())
+
+    # Direttamente dalla tabella di associazione: passare da servizio.operators
+    # farebbe una query per ogni servizio (un centinaio, ogni volta che si apre
+    # il pannello).
+    abilitati = {
+        riga[0] for riga in db.session.query(service_operator.c.service_id)
+                                      .filter(service_operator.c.operator_id == operator_id).all()
+    }
+
+    elenco = []
+    for servizio in servizi:
+        nome = (servizio.servizio_nome or '').strip()
+        if nome.lower() == 'dummy':
+            continue
+        elenco.append({
+            'id': servizio.id,
+            'nome': nome,
+            'categoria': getattr(servizio.servizio_categoria, 'value', servizio.servizio_categoria) or '',
+            'sottocategoria': servizio.servizio_sottocategoria.nome if servizio.servizio_sottocategoria else '',
+            'abilitato': servizio.id in abilitati,
+        })
+    elenco.sort(key=lambda x: (x['categoria'], (x['sottocategoria'] or '').lower(), x['nome'].lower()))
+
+    # Categoria "attiva" = l'operatore ha almeno un servizio di quella categoria.
+    # Se non ne ha nessuno (operatore mai configurato) si mostrano comunque tutte
+    # le categorie: altrimenti si aprirebbe un pannello vuoto, senza capire dove
+    # mettere le mani.
+    categorie_attive = sorted({x['categoria'] for x in elenco if x['abilitato'] and x['categoria']})
+    if not categorie_attive:
+        categorie_attive = [c.value for c in ServiceCategory]
+
+    return jsonify({
+        'success': True,
+        'operatore': {
+            'id': operator.id,
+            'nome': (f"{operator.user_nome or ''} {operator.user_cognome or ''}").strip(),
+            'tipo': operator.user_tipo,
+        },
+        'categorie_disponibili': [c.value for c in ServiceCategory],
+        'categorie_attive': categorie_attive,
+        'servizi': elenco,
+    })
+
+
+@settings_bp.route('/api/operator-services/<int:operator_id>', methods=['POST'])
+def save_operator_services(operator_id):
+    """Salva le spunte di UN operatore. Payload: {servizi: {"12": true, ...}}.
+
+    Tocca SOLO l'appartenenza di questo operatore: gli altri restano dove sono,
+    quindi due schede aperte su operatori diversi non si cancellano a vicenda.
+    """
+    operator = db.session.get(Operator, operator_id)
+    if not operator:
+        return jsonify({'success': False, 'error': 'Operatore non trovato'}), 404
+
+    data = request.get_json(silent=True) or {}
+    scelte = data.get('servizi') or {}
+
+    validi = {row[0] for row in db.session.query(Service.id)
+                                          .filter(Service.is_deleted == False,
+                                                  Service.is_visible_in_calendar == True).all()}
+    volute = set()
+    da_togliere = set()
+    for sid_raw, valore in scelte.items():
+        try:
+            sid = int(sid_raw)
+        except (TypeError, ValueError):
+            continue
+        if sid not in validi:
+            continue
+        (volute if valore else da_togliere).add(sid)
+
+    attuali = {
+        riga[0] for riga in db.session.query(service_operator.c.service_id)
+                                      .filter(service_operator.c.operator_id == operator_id).all()
+    }
+
+    da_inserire = volute - attuali
+    da_cancellare = da_togliere & attuali
+
+    if da_cancellare:
+        db.session.execute(
+            service_operator.delete().where(
+                and_(service_operator.c.operator_id == operator_id,
+                     service_operator.c.service_id.in_(list(da_cancellare)))
+            )
+        )
+    if da_inserire:
+        db.session.execute(
+            service_operator.insert(),
+            [{'service_id': sid, 'operator_id': operator_id} for sid in sorted(da_inserire)]
+        )
+
+    db.session.commit()
+    return jsonify({'success': True})
+
 
 @settings_bp.route('/update_service_operators', methods=['POST'])
 def update_service_operators():
@@ -2416,12 +2618,13 @@ def update_service_operators():
     if not service:
         return jsonify(success=False)
     ids = [int(x) for x in (data.get('operator_ids') or [])]
+    nascosti = _operatori_nascosti_associati(service)
     new_ops = db.session.query(Operator).filter(
         Operator.id.in_(ids),
         Operator.is_visible == True,
         Operator.is_deleted == False
     ).all()
-    service.operators = new_ops
+    service.operators = new_ops + nascosti
     db.session.commit()
     return {'success': True}
 
@@ -2554,7 +2757,9 @@ def update_category_operators():
     ]
 
     for service in services:
-        service.operators = new_ops
+        # Le associazioni degli operatori nascosti restano: non sono
+        # rappresentate dalle spunte (vedi _operatori_nascosti_associati).
+        service.operators = new_ops + _operatori_nascosti_associati(service)
 
     db.session.commit()
     return {'success': True, 'updated': len(services)}
@@ -2584,7 +2789,9 @@ def update_subcategory_operators():
     ]
 
     for service in services:
-        service.operators = new_ops
+        # Le associazioni degli operatori nascosti restano: non sono
+        # rappresentate dalle spunte (vedi _operatori_nascosti_associati).
+        service.operators = new_ops + _operatori_nascosti_associati(service)
 
     db.session.commit()
     return {'success': True, 'updated': len(services)}

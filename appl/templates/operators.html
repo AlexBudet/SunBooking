@@ -143,6 +143,12 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-sm btn-danger">Elimina</button>
     </form>
+    <button type="button"
+            class="btn btn-sm operator-abilitazioni-btn"
+            data-operator-id="{{ operator.id }}"
+            data-operator-name="{{ operator.user_nome }} {{ operator.user_cognome }}">
+      Servizi
+    </button>
   {% endif %}
   <a href="#" 
      class="btn btn-sm btn-warning operator-shift-link-settings"
@@ -158,6 +164,224 @@
 </table>
 <br><br><br>
 </div>
+<!-- =========== ABILITAZIONI PER OPERATORE ===========
+     Stessa tabella di prima (service_operator, quella che vale anche per le
+     prenotazioni online), guardata dall'altro lato: si apre un operatore e si
+     vede cosa sa fare, invece di aprire un servizio alla volta. -->
+<div class="modal fade" id="OperatorAbilitazioniModal" tabindex="-1" aria-hidden="true" style="z-index:25000;">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Servizi associati a <span id="abilOperatorName"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-warning py-2">
+          Vale <b>anche per le prenotazioni online</b>: togliendo la spunta a un
+          servizio, quel servizio non sar&agrave; pi&ugrave; prenotabile online
+          con questo operatore. In agenda non blocca nulla, fa comparire un avviso.
+        </div>
+        <p class="text-muted small">
+          Sono elencati solo i servizi che compaiono in agenda: prodotti, crediti
+          e voci a durata zero non li esegue nessuno e non hanno operatori.
+        </p>
+
+        <div class="d-flex align-items-center gap-3 mb-3" id="abilCategorie"></div>
+
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <input type="text" class="form-control form-control-sm" id="abilFiltro"
+                 placeholder="Filtra per nome servizio..." style="max-width:280px;">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="abilTuttiBtn">Spunta tutti</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="abilNessunoBtn">Togli tutti</button>
+          <span class="ms-auto text-muted small" id="abilConteggio"></span>
+        </div>
+
+        <div id="abilServizi"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" id="abilSalvaBtn">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // url_for porta gia' il prefisso del negozio (/s/<idx>): l'id 0 e' un
+  // segnaposto da sostituire con quello dell'operatore aperto.
+  const ABIL_URL = "{{ url_for('settings.get_operator_services', operator_id=0) }}";
+  const abilUrlFor = (id) => ABIL_URL.replace(/0$/, String(id));
+
+  let abilStato = null;      // risposta del server per l'operatore aperto
+  let abilOperatorId = null;
+  let abilScelte = {};       // {service_id: true/false} mentre si lavora
+
+  function abilEsc(t) {
+    return String(t == null ? '' : t)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function abilCategorieSelezionate() {
+    return Array.from(document.querySelectorAll('#abilCategorie input:checked')).map(i => i.value);
+  }
+
+  // Le categorie non sono salvate da nessuna parte: filtrano l'elenco qui
+  // sotto e servono a spuntare/togliere in blocco. Una categoria tolta vuol
+  // dire "questo operatore non fa niente di quella categoria", quindi i suoi
+  // servizi spariscono dall'elenco E dalle spunte.
+  function abilRenderCategorie() {
+    const box = document.getElementById('abilCategorie');
+    box.innerHTML = '<span class="fw-bold">Categorie:</span>' +
+      (abilStato.categorie_disponibili || []).map(c =>
+        '<div class="form-check form-check-inline m-0">' +
+          '<input class="form-check-input abil-categoria" type="checkbox" value="' + abilEsc(c) + '" id="abilCat_' + abilEsc(c) + '"' +
+          ((abilStato.categorie_attive || []).indexOf(c) !== -1 ? ' checked' : '') + '>' +
+          '<label class="form-check-label" for="abilCat_' + abilEsc(c) + '">' + abilEsc(c) + '</label>' +
+        '</div>'
+      ).join('');
+
+    box.querySelectorAll('.abil-categoria').forEach(inp => {
+      inp.addEventListener('change', function () {
+        const attiva = this.checked;
+        (abilStato.servizi || []).forEach(sv => {
+          if (sv.categoria === this.value) abilScelte[sv.id] = attiva;
+        });
+        abilRenderServizi();
+      });
+    });
+  }
+
+  function abilRenderServizi() {
+    const box = document.getElementById('abilServizi');
+    const categorie = abilCategorieSelezionate();
+    const filtro = (document.getElementById('abilFiltro').value || '').trim().toLowerCase();
+
+    const visibili = (abilStato.servizi || []).filter(sv =>
+      categorie.indexOf(sv.categoria) !== -1 &&
+      (!filtro || sv.nome.toLowerCase().indexOf(filtro) !== -1)
+    );
+
+    const gruppi = {};
+    visibili.forEach(sv => {
+      const chiave = (sv.categoria || '-') + ' \u203a ' + (sv.sottocategoria || 'senza sottocategoria');
+      (gruppi[chiave] = gruppi[chiave] || []).push(sv);
+    });
+
+    box.innerHTML = Object.keys(gruppi).map(chiave => {
+      const righe = gruppi[chiave].map(sv =>
+        '<div class="form-check">' +
+          '<input class="form-check-input abil-servizio" type="checkbox" id="abilSvc_' + sv.id + '"' +
+            ' data-service-id="' + sv.id + '"' + (abilScelte[sv.id] ? ' checked' : '') + '>' +
+          '<label class="form-check-label" for="abilSvc_' + sv.id + '">' + abilEsc(sv.nome) + '</label>' +
+        '</div>'
+      ).join('');
+      return '<div class="mb-3">' +
+        '<div class="d-flex align-items-center gap-2 mb-1">' +
+          '<b>' + abilEsc(chiave) + '</b>' +
+          '<button type="button" class="btn btn-sm btn-link p-0 abil-gruppo" data-gruppo="' + abilEsc(chiave) + '" data-valore="1">tutti</button>' +
+          '<button type="button" class="btn btn-sm btn-link p-0 abil-gruppo" data-gruppo="' + abilEsc(chiave) + '" data-valore="0">nessuno</button>' +
+        '</div>' + righe + '</div>';
+    }).join('') || '<div class="text-muted">Nessun servizio per le categorie selezionate.</div>';
+
+    box.querySelectorAll('.abil-servizio').forEach(cb => {
+      cb.addEventListener('change', function () {
+        abilScelte[parseInt(this.dataset.serviceId, 10)] = this.checked;
+        abilAggiornaConteggio();
+      });
+    });
+    box.querySelectorAll('.abil-gruppo').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const valore = this.dataset.valore === '1';
+        visibili.forEach(sv => {
+          const chiave = (sv.categoria || '-') + ' \u203a ' + (sv.sottocategoria || 'senza sottocategoria');
+          if (chiave === this.dataset.gruppo) abilScelte[sv.id] = valore;
+        });
+        abilRenderServizi();
+      });
+    });
+    abilAggiornaConteggio();
+  }
+
+  function abilAggiornaConteggio() {
+    const totale = (abilStato.servizi || []).length;
+    const attivi = (abilStato.servizi || []).filter(sv => abilScelte[sv.id]).length;
+    document.getElementById('abilConteggio').textContent = attivi + ' servizi abilitati su ' + totale;
+  }
+
+  document.querySelectorAll('.operator-abilitazioni-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      abilOperatorId = this.getAttribute('data-operator-id');
+      document.getElementById('abilOperatorName').textContent = this.getAttribute('data-operator-name') || '';
+      document.getElementById('abilCategorie').innerHTML = 'Caricamento...';
+      document.getElementById('abilServizi').innerHTML = '';
+      document.getElementById('abilFiltro').value = '';
+      new bootstrap.Modal(document.getElementById('OperatorAbilitazioniModal')).show();
+
+      fetch(abilUrlFor(abilOperatorId), { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => {
+          if (!data || !data.success) throw new Error((data && data.error) || 'Errore');
+          abilStato = data;
+          abilScelte = {};
+          (data.servizi || []).forEach(sv => { abilScelte[sv.id] = !!sv.abilitato; });
+          abilRenderCategorie();
+          abilRenderServizi();
+        })
+        .catch(err => {
+          document.getElementById('abilCategorie').innerHTML =
+            '<div class="text-danger">Errore nel caricamento: ' + abilEsc(err.message) + '</div>';
+        });
+    });
+  });
+
+  document.getElementById('abilFiltro').addEventListener('input', function () {
+    if (abilStato) abilRenderServizi();
+  });
+
+  // "Spunta tutti"/"Togli tutti" lavorano su cio' che e' a video: le categorie
+  // spente restano fuori, che e' proprio il senso di averle spente.
+  function abilTuttiVisibili(valore) {
+    if (!abilStato) return;
+    const categorie = abilCategorieSelezionate();
+    const filtro = (document.getElementById('abilFiltro').value || '').trim().toLowerCase();
+    (abilStato.servizi || []).forEach(sv => {
+      if (categorie.indexOf(sv.categoria) === -1) return;
+      if (filtro && sv.nome.toLowerCase().indexOf(filtro) === -1) return;
+      abilScelte[sv.id] = valore;
+    });
+    abilRenderServizi();
+  }
+  document.getElementById('abilTuttiBtn').addEventListener('click', () => abilTuttiVisibili(true));
+  document.getElementById('abilNessunoBtn').addEventListener('click', () => abilTuttiVisibili(false));
+
+  document.getElementById('abilSalvaBtn').addEventListener('click', function () {
+    if (!abilOperatorId || !abilStato) return;
+    // Si mandano TUTTI i servizi, anche quelli nascosti dal filtro o da una
+    // categoria spenta: le loro spunte sono in abilScelte e devono valere.
+    const servizi = {};
+    (abilStato.servizi || []).forEach(sv => { servizi[sv.id] = !!abilScelte[sv.id]; });
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    this.disabled = true;
+    fetch(abilUrlFor(abilOperatorId), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify({ servizi: servizi })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (!data || !data.success) throw new Error((data && data.error) || 'Errore');
+        bootstrap.Modal.getInstance(document.getElementById('OperatorAbilitazioniModal')).hide();
+      })
+      .catch(err => alert('Errore nel salvataggio: ' + err.message))
+      .finally(() => { this.disabled = false; });
+  });
+})();
+</script>
+
 <!-- Popup per utenti user -->
 <div class="modal fade" id="noRightsModal" tabindex="-1" aria-labelledby="noRightsModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
@@ -1250,6 +1474,26 @@ document.addEventListener('DOMContentLoaded', function() {
 <style>
     .custom-modal-width {
         max-width: 70% !important;
+    }
+
+    /* Pulsante "Servizi" nella colonna Azioni: viola/rosa del brand, in tono
+       con le intestazioni dei modal, invece di un colore fuori palette. */
+    .operators-table .operator-abilitazioni-btn {
+      background: #87647c;
+      border: 1px solid #87647c;
+      color: #fff;
+    }
+    .operators-table .operator-abilitazioni-btn:hover {
+      background: #75556a;
+      border-color: #75556a;
+      color: #fff;
+    }
+
+    /* Senza questo il pannello non scorre: styles.css forza
+       .modal-body { overflow: visible !important; max-height: 70vh }. */
+    #OperatorAbilitazioniModal .modal-body {
+      overflow-y: auto !important;
+      max-height: 72vh;
     }
     </style>
 {% endblock %}

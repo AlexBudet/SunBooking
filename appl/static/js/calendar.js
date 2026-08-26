@@ -394,7 +394,11 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribut
 
     try {
       const syncSuspended = Number(window.__suspendCalendarMutationSync || 0) > 0;
-      if (!syncSuspended && response && response.ok && isMutationMethod(method) && shouldSyncUrl(url)) {
+      // Un blocco appena creato su una colonna diversa da quella cliccata va
+      // ridisegnato dal database anche se questo flusso aveva sospeso il sync
+      // (vedi abilForzaRidisegno).
+      const forzatoAbilitazioni = Boolean(window.__abilRefreshPending) && /\/calendar\/create(?:$|\?)/.test(String(url || ''));
+      if ((!syncSuspended || forzatoAbilitazioni) && response && response.ok && isMutationMethod(method) && shouldSyncUrl(url)) {
         scheduleSync();
       }
     } catch (_) {}
@@ -3792,6 +3796,10 @@ document.querySelectorAll('.selectable-cell').forEach(cell => {
 
     // Raccogli i dati dalla cella
     const operatorId = cell.getAttribute('data-operator-id');
+    // Colonna di apertura del modal: la tendina servizi la usa per farsi dare
+    // dal server prima i servizi che questa colonna esegue. Si memorizza qui
+    // perche' e' l'unico punto in cui la cella e' certa.
+    window.__abilUltimaColonna = operatorId;
     const operatorName = cell.getAttribute('data-operator-name') || '';
     const operatorFirstName = cell.getAttribute('data-operator-first-name') || operatorName;
     const hour = cell.getAttribute('data-hour');
@@ -3986,6 +3994,26 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
           data.pseudoblocks = pseudoblocks;
         }
 
+        // ABILITAZIONI: la colonna scelta puo' essere di un operatore che quel
+        // servizio non lo fa. Non si blocca nulla, si chiede cosa fare; se si
+        // sceglie di spostare basta cambiare operatore, perche' subito dopo la
+        // creazione questo flusso ridisegna l'agenda dal database.
+        if (!isOffBlockFinal) {
+          const blocchiAbil = (Array.isArray(data.pseudoblocks) && data.pseudoblocks.length)
+            ? data.pseudoblocks
+            : [{ service_id: serviceId, duration: data.duration }];
+          const esitoAbil = await verificaAbilitazioniOperatore(
+            data.operator_id, blocchiAbil, data.appointment_date, data.start_time);
+          if (!esitoAbil) return;
+          data.operator_id = esitoAbil.operatorId;
+          // Gruppo misto: i blocchi restano contigui nell'ora, ma quelli spostati
+          // nascono sulla loro colonna. Ci pensa il server, che riceve la mappa.
+          if (esitoAbil.spostamenti && Object.keys(esitoAbil.spostamenti).length) {
+            data.spostamenti = esitoAbil.spostamenti;
+            abilForzaRidisegno();
+          }
+        }
+
         // Evita doppio render: in questo flusso usiamo un solo refresh controllato
         // invece dell'inserimento manuale + sync automatico mutation.
         window.__suspendCalendarMutationSync = Number(window.__suspendCalendarMutationSync || 0) + 1;
@@ -4177,6 +4205,9 @@ function startCustomDragFromHandle(block, e) {
   customInitialLeft = parseFloat(window.getComputedStyle(customDraggedBlock).left) || 0;
   customInitialTop = parseFloat(window.getComputedStyle(customDraggedBlock).top) || 0;
   customDraggedBlock.__oldParent = block.parentNode;
+  // Colonna di partenza per il controllo abilitazioni: va letta ADESSO, perche'
+  // chi gestisce il drop riscrive data-operator-id prima di salvare.
+  customDraggedBlock.__abilOperatoreOrigine = block.getAttribute('data-operator-id');
   customDraggedBlock.__originalPosition = {
     left: customDraggedBlock.style.left,
     top: customDraggedBlock.style.top
@@ -4854,7 +4885,299 @@ function resetDragState() {
 // =============================================================
 //   Salvataggio posizione nel backend
 // =============================================================
-async function saveDraggedBlockPosition(block, cell) {
+// =============================================================
+//   ABILITAZIONI OPERATORE -> SERVIZI
+//   Chi puo' eseguire cosa si imposta in Impostazioni > Operatori, tabella
+//   "Operatori selezionabili per servizio" (la stessa che vale per le
+//   prenotazioni online). Qui non si blocca niente: qualunque servizio si puo'
+//   mettere su qualunque colonna, ma se l'operatore non e' fra quelli associati
+//   compare un avviso con tre strade - spostare sull'operatore abilitato libero
+//   alla stessa ora, procedere comunque, annullare.
+// =============================================================
+
+// Prefisso del blueprint calendario: con piu' negozi montati sulla stessa app
+// la pagina sta sotto /s/<idx>/calendar, e un path assoluto finirebbe fuori.
+function abilCalendarBase() {
+  // Tutto quello che sta PRIMA di /calendar nel percorso corrente, qualunque sia
+  // la profondita' del mount. La vecchia versione pretendeva un solo segmento
+  // (/dbX/calendar) e su /s/1/calendar non trovava niente: cadeva su /calendar
+  // assoluto, che li' e' 404, e ogni chiamata falliva in silenzio.
+  const m = window.location.pathname.match(/^(.*)\/calendar(?:\/|$)/);
+  return (m ? m[1] : '') + '/calendar';
+}
+
+function abilOraInMinuti(hhmm) {
+  const m = String(hhmm || '').match(/(\d{1,2}):(\d{2})/);
+  return m ? (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : null;
+}
+
+function abilMinutiInOra(min) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+
+// I blocchi di un gruppo nascono uno dopo l'altro a partire dall'ora della
+// cella (lo fa il server in POST /calendar/create): qui si ricostruiscono gli
+// stessi orari, che servono a capire chi e' libero in quella fascia.
+function abilBlocchiConsecutivi(blocchi, startHHMM) {
+  let t = abilOraInMinuti(startHHMM);
+  const out = [];
+  (blocchi || []).forEach(b => {
+    if (!b) return;
+    const sid = parseInt(b.service_id != null ? b.service_id : b.serviceId, 10);
+    const dur = parseInt(b.duration != null ? b.duration : b.durata, 10) || 0;
+    if (sid) out.push({ service_id: sid, duration: dur, start_time: (t === null ? null : abilMinutiInOra(t)) });
+    if (t !== null) t += dur;
+  });
+  return out;
+}
+
+// Avviso: per OGNI servizio non abilitato si sceglie dove mandarlo, fra le
+// colonne abilitate e libere a quell'ora. Chi non ha alternative - o chi non si
+// vuole spostare - resta dov'e'. Risolve con:
+//   {azione:'sposta', operatorId}                -> un solo servizio, spostato tutto li'
+//   {azione:'procedi', operatorId, spostamenti}  -> si va avanti; spostamenti = {service_id: operator_id}
+//   null                                          -> annullato
+function abilMostraAvviso(esito, operatorIdCorrente, serviziNelGruppo) {
+  const violazioni = (esito.violazioni || []).filter(Boolean);
+  const operatore = esito.operatore || 'Questo operatore';
+  const elenco = violazioni.map(v => v.servizio).filter(Boolean).join(', ') || 'questo servizio';
+
+  if (typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+    const ok = confirm('ATTENZIONE! ' + operatore + ' non e\' abilitato all\'esecuzione di '
+      + elenco + '.\n\nOK = procedi comunque su ' + operatore + '\nAnnulla = non fare niente');
+    return Promise.resolve(ok ? { azione: 'procedi', operatorId: operatorIdCorrente, spostamenti: {} } : null);
+  }
+
+  return new Promise(resolve => {
+    const vecchioModal = document.getElementById('abilWarnModal');
+    if (vecchioModal) vecchioModal.remove();
+
+    // L'agenda usa z-index molto alti su blocchi e popup: senza questo il modal
+    // finirebbe sotto la griglia.
+    if (!document.getElementById('abilWarnStyle')) {
+      const st = document.createElement('style');
+      st.id = 'abilWarnStyle';
+      st.textContent = '#abilWarnModal{z-index:25050}'
+        + '.modal-backdrop.abil-warn-backdrop{z-index:25040}'
+        + '#abilWarnModal .modal-body{overflow-y:auto !important;max-height:60vh}';
+      document.head.appendChild(st);
+    }
+
+    const esc = (t) => String(t == null ? '' : t)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    // Una riga per servizio: a sinistra il nome, a destra dove mandarlo.
+    // La prima colonna libera e' gia' selezionata, cosi' "Sposta" fa la cosa
+    // giusta con un click solo; chi non ha colonne libere resta dov'e'.
+    const righe = violazioni.map(v => {
+      const alt = v.alternative || [];
+      const opzioni = alt.length
+        ? alt.map((a, i) => '<option value="' + a.id + '"' + (i === 0 ? ' selected' : '') + '>'
+            + esc(a.nome) + '</option>').join('')
+            + '<option value="">Lascia su ' + esc(operatore) + '</option>'
+        : '<option value="">Nessuna colonna libera: resta su ' + esc(operatore) + '</option>';
+      return '<div class="d-flex align-items-center gap-2 mb-2">'
+        + '<span class="flex-grow-1">' + esc(v.servizio) + '</span>'
+        + '<select class="form-select form-select-sm abil-destinazione" style="max-width:230px"'
+        + ' data-service-id="' + v.service_id + '"' + (alt.length ? '' : ' disabled') + '>'
+        + opzioni + '</select></div>';
+    }).join('');
+
+    const qualcheAlternativa = violazioni.some(v => (v.alternative || []).length);
+
+    const el = document.createElement('div');
+    el.className = 'modal fade';
+    el.id = 'abilWarnModal';
+    el.tabIndex = -1;
+    el.innerHTML =
+      '<div class="modal-dialog modal-dialog-centered">' +
+        '<div class="modal-content">' +
+          '<div class="modal-header bg-warning">' +
+            '<h5 class="modal-title">&#9888;&#65039; Operatore non abilitato</h5>' +
+            '<button type="button" class="btn-close" id="abilBtnX" aria-label="Chiudi"></button>' +
+          '</div>' +
+          '<div class="modal-body">' +
+            '<p class="mb-3"><b>' + esc(operatore) + '</b> non &egrave; abilitato all\'esecuzione di <b>' +
+              esc(elenco) + '</b>.</p>' +
+            (qualcheAlternativa
+              ? '<p class="mb-2">Dove vuoi mettere questi servizi? L\'orario non cambia.</p>'
+              : '<p class="mb-2 text-muted">Nessuna colonna abilitata &egrave; libera a quest\'ora.</p>') +
+            righe +
+          '</div>' +
+          '<div class="modal-footer d-flex flex-column align-items-stretch gap-2">' +
+            (qualcheAlternativa
+              ? '<button type="button" class="btn btn-primary" id="abilBtnSposta">Sposta come indicato</button>'
+              : '') +
+            '<button type="button" class="btn btn-outline-warning" id="abilBtnComunque">Tieni tutto su ' + esc(operatore) + '</button>' +
+            '<button type="button" class="btn btn-secondary" id="abilBtnAnnulla">Annulla</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(el);
+
+    const modal = new bootstrap.Modal(el, { backdrop: 'static', keyboard: true });
+    let scelta = null;
+
+    function raccogliSpostamenti() {
+      const mappa = {};
+      el.querySelectorAll('.abil-destinazione').forEach(sel => {
+        const opId = sel.value;
+        if (opId) mappa[sel.dataset.serviceId] = opId;
+      });
+      return mappa;
+    }
+
+    const btnSposta = el.querySelector('#abilBtnSposta');
+    if (btnSposta) {
+      btnSposta.addEventListener('click', () => {
+        const mappa = raccogliSpostamenti();
+        const destinazioni = Object.keys(mappa).map(k => String(mappa[k]));
+        // "Sposta tutto" vale SOLO se nel gruppo c'e' quell'unico servizio: e' il
+        // caso del trascinamento e dello spostamento di un pagato. In un gruppo
+        // misto (tre cerette + una lampada) spostare tutto porterebbe anche le
+        // cerette sulla colonna del lettino: li' si sposta blocco per blocco.
+        const gruppoDiUnServizio = (serviziNelGruppo === 1) && (violazioni.length === 1)
+          && destinazioni.length === 1;
+        const nome = (violazioni[0] && (violazioni[0].alternative || [])
+          .find(a => String(a.id) === destinazioni[0]) || {}).nome;
+        scelta = gruppoDiUnServizio
+          ? { azione: 'sposta', operatorId: destinazioni[0], nome: nome, spostamenti: mappa }
+          : { azione: 'procedi', operatorId: operatorIdCorrente, spostamenti: mappa };
+        modal.hide();
+      });
+    }
+    el.querySelector('#abilBtnComunque').addEventListener('click', () => {
+      scelta = { azione: 'procedi', operatorId: operatorIdCorrente, spostamenti: {} };
+      modal.hide();
+    });
+    el.querySelector('#abilBtnAnnulla').addEventListener('click', () => { scelta = null; modal.hide(); });
+    el.querySelector('#abilBtnX').addEventListener('click', () => { scelta = null; modal.hide(); });
+
+    el.addEventListener('shown.bs.modal', () => {
+      const backs = document.querySelectorAll('.modal-backdrop');
+      const ultimo = backs[backs.length - 1];
+      if (ultimo) ultimo.classList.add('abil-warn-backdrop');
+    }, { once: true });
+
+    el.addEventListener('hidden.bs.modal', () => {
+      el.remove();
+      resolve(scelta);
+    }, { once: true });
+
+    modal.show();
+  });
+}
+
+// I flussi di creazione disegnano i blocchi nella cella cliccata e sospendono
+// il refresh automatico: se pero' qualche blocco e' finito su un'altra colonna,
+// a video sarebbe nel posto sbagliato. Questo flag fa passare comunque il
+// refresh centrale (vedi setupCalendarMutationSync) per i prossimi secondi.
+function abilForzaRidisegno() {
+  window.__abilRefreshPending = true;
+  setTimeout(() => { window.__abilRefreshPending = false; }, 5000);
+}
+
+// Ordinamento della tendina servizi nel modal "Nuovo appuntamento": prima
+// quelli che l'operatore della colonna esegue, poi gli altri (che restano
+// selezionabili: al salvataggio arriva l'avviso, non un blocco).
+const _abilServiziColonnaCache = new Map();   // operatorId -> {abilitati, nonAbilitati}
+
+// Repertorio della colonna: cosa sa fare e cosa no. Una fetch per colonna.
+async function abilServiziColonna(operatorId) {
+  const opId = parseInt(operatorId, 10);
+  const vuoto = { abilitati: [], nonAbilitati: new Set() };
+  if (!opId) return vuoto;
+  if (_abilServiziColonnaCache.has(opId)) return _abilServiziColonnaCache.get(opId);
+  let dati = vuoto;
+  try {
+    const resp = await fetch(abilCalendarBase() + '/api/servizi-colonna/' + opId,
+                             { credentials: 'same-origin' });
+    if (resp.ok) {
+      const data = await resp.json();
+      dati = {
+        abilitati: Array.isArray(data.abilitati) ? data.abilitati : [],
+        nonAbilitati: new Set((data.non_abilitati || []).map(String))
+      };
+    }
+  } catch (err) {
+    // Tendina invariata: i suggerimenti restano quelli di sempre.
+    console.warn('Repertorio della colonna non recuperato:', err);
+  }
+  _abilServiziColonnaCache.set(opId, dati);
+  return dati;
+}
+
+async function abilServiziNonAbilitati(operatorId) {
+  return (await abilServiziColonna(operatorId)).nonAbilitati;
+}
+
+// L'operatore della colonna da cui e' stato aperto il modal.
+function abilOperatoreDelModal() {
+  const campo = document.querySelector('#CreateAppointmentForm [name="operator_id"]');
+  return campo ? campo.value : null;
+}
+
+// Stabile: mantiene l'ordine di arrivo dentro i due gruppi (frequenza, recenti,
+// rilevanza della ricerca), sposta in fondo solo i non abilitati.
+function abilOrdinaServizi(servizi, nonAbilitati) {
+  if (!Array.isArray(servizi) || !nonAbilitati || !nonAbilitati.size) return servizi;
+  const buoni = [];
+  const altri = [];
+  servizi.forEach(sv => {
+    (nonAbilitati.has(String(sv && sv.id)) ? altri : buoni).push(sv);
+  });
+  return buoni.concat(altri);
+}
+
+// Controlla i blocchi che si stanno piazzando sulla colonna `operatorId`.
+// Ritorna {azione, operatorId} se si va avanti, null se si annulla.
+async function verificaAbilitazioniOperatore(operatorId, blocchi, dataISO, startHHMM, ignoraAppointmentIds) {
+  const opId = parseInt(operatorId, 10);
+  const lista = abilBlocchiConsecutivi(blocchi, startHHMM);
+  if (!opId || !lista.length) return { azione: 'procedi', operatorId: operatorId, spostamenti: {} };
+
+  let esito = null;
+  try {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const resp = await fetch(abilCalendarBase() + '/api/check-abilitazioni', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({
+        operator_id: opId,
+        date: dataISO,
+        blocchi: lista,
+        // Se si sta SPOSTANDO qualcosa, quell'appuntamento non deve rendere
+        // occupato l'operatore da cui parte: e' proprio quello che si libera.
+        ignora_appointment_ids: (ignoraAppointmentIds || []).map(String).filter(Boolean)
+      })
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    esito = await resp.json();
+  } catch (err) {
+    // L'abilitazione e' un avviso, non un permesso: se il controllo non
+    // risponde si lascia lavorare l'operatore invece di bloccare l'agenda.
+    console.warn('Controllo abilitazioni non riuscito, si procede comunque:', err);
+    return { azione: 'procedi', operatorId: operatorId, spostamenti: {} };
+  }
+
+  if (!esito || esito.ok) return { azione: 'procedi', operatorId: operatorId, spostamenti: {} };
+  // Quanti servizi DIVERSI si stanno piazzando: decide se "sposta" puo' valere
+  // per tutto il gruppo o se ogni blocco va indirizzato per conto suo.
+  const serviziDistinti = new Set(lista.map(b => String(b.service_id))).size;
+  return abilMostraAvviso(esito, operatorId, serviziDistinti);
+}
+window.verificaAbilitazioniOperatore = verificaAbilitazioniOperatore;
+// Le funzioni della tendina servizi (loadServicesForModal & co.) stanno in un
+// altro scope di questo stesso file: senza l'esportazione i nomi nudi non sono
+// visibili da li' e il focus sul campo servizi finiva in ReferenceError.
+window.abilServiziNonAbilitati = abilServiziNonAbilitati;
+window.abilServiziColonna = abilServiziColonna;
+window.abilOperatoreDelModal = abilOperatoreDelModal;
+window.abilOrdinaServizi = abilOrdinaServizi;
+
+async function saveDraggedBlockPosition(block, cell, opzioni) {
   const appointmentId = block.getAttribute('data-appointment-id');
   const operatorId = cell.getAttribute('data-operator-id');
   const hour = parseInt(cell.getAttribute('data-hour'), 10);
@@ -4878,6 +5201,47 @@ async function saveDraggedBlockPosition(block, cell) {
 
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
+  // ABILITAZIONI: trascinare un appuntamento su una colonna che quel servizio
+  // non lo fa deve avvisare come quando lo si crea. Si controlla solo se la
+  // COLONNA cambia: spostarsi di orario dentro la stessa colonna non c'entra,
+  // e senza questo filtro ogni ritocco d'orario su un blocco gia' fuori posto
+  // farebbe ricomparire l'avviso.
+  //
+  // opzioni.skipAbilitazioni e' per il ripristino automatico
+  // (revertToOldPosition): la posizione di partenza puo' essere a sua volta non
+  // abilitata, e l'annullamento richiamerebbe l'avviso all'infinito.
+  let operatorIdFinale = operatorId;
+  let ridisegnaDopoSalvataggio = false;
+  const serviceIdBlocco = block.getAttribute('data-service-id');
+  // Colonna di partenza da __abilOperatoreOrigine, scritta all'inizio di
+  // ENTRAMBI i tipi di trascinamento: __oldParent resta appiccicata al blocco
+  // anche dopo il drop e al giro successivo indicherebbe una colonna vecchia.
+  const opOrigine = block.__abilOperatoreOrigine || null;
+  const colonnaCambiata = !opOrigine || String(opOrigine) !== String(operatorId);
+
+  if (!(opzioni && opzioni.skipAbilitazioni) && serviceIdBlocco && colonnaCambiata
+      && typeof verificaAbilitazioniOperatore === 'function') {
+    const esitoAbil = await verificaAbilitazioniOperatore(
+      operatorId,
+      [{ service_id: serviceIdBlocco, duration: block.getAttribute('data-duration') }],
+      newDateStr,
+      String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0'),
+      [appointmentId]
+    );
+    if (!esitoAbil) {
+      // Annullato: non si salva NIENTE e si ridisegna dal database, cosi' il
+      // blocco torna da solo dov'era senza ricostruire a mano la posizione
+      // (che nel drag HTML5 non e' nemmeno memorizzata).
+      if (typeof fetchCalendarData === 'function') fetchCalendarData();
+      return;
+    }
+    operatorIdFinale = esitoAbil.operatorId;
+    // A video il blocco e' gia' nella colonna sbagliata: si salva sull'operatore
+    // scelto e si lascia ridisegnare l'agenda dal database.
+    ridisegnaDopoSalvataggio = (esitoAbil.azione === 'sposta'
+                                && String(operatorIdFinale) !== String(operatorId));
+  }
+
   // Con linea lenta questa POST puo' durare secondi: finche' e' in volo il
   // refresh di riserva non deve partire, o ridisegnerebbe il blocco nella
   // vecchia posizione (il server non sa ancora che si e' spostato).
@@ -4889,13 +5253,17 @@ async function saveDraggedBlockPosition(block, cell) {
         'Content-Type': 'application/json',
         'X-CSRFToken': csrfToken
       },
-      body: JSON.stringify({ operator_id: operatorId, hour, minute, date: newDateStr })
+      body: JSON.stringify({ operator_id: operatorIdFinale, hour, minute, date: newDateStr })
     });
     if (!resp.ok) {
       const errorText = await resp.text();
       console.warn("Errore update posizione:", errorText);
     } else {
       console.log("Posizione salvata con successo.");
+      if (ridisegnaDopoSalvataggio) {
+        block.setAttribute('data-operator-id', operatorIdFinale);
+        if (typeof fetchCalendarData === 'function') fetchCalendarData();
+      }
     }
   } catch (err) {
     console.error("Errore salvataggio posizione:", err);
@@ -6287,6 +6655,8 @@ document.addEventListener('dragstart', function(e) {
     clearCalendarFloatingArtifacts();
     resetAppointmentPopupInlineStyles(block);
     block.classList.add('dragging');
+    // Colonna di partenza per il controllo abilitazioni (vedi sopra).
+    block.__abilOperatoreOrigine = block.getAttribute('data-operator-id');
   }
 }, true);
 
@@ -8314,18 +8684,52 @@ if (blocksInCell.length >= 2) {
             // Blocca ulteriori click
             window.isCreatingAppointment = true;
 
-            const operatorId = cell.getAttribute('data-operator-id');
+            let operatorId = cell.getAttribute('data-operator-id');
+            let spostamentiAbil = {};   // {service_id: operator_id} dall'avviso abilitazioni
             const hour = parseInt(cell.getAttribute('data-hour'), 10);
             const minute = parseInt(cell.getAttribute('data-minute'), 10);
             const date = cell.getAttribute('data-date') || window.selectedAppointmentDate || new Date().toISOString().slice(0,10);
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+            // ABILITAZIONI: avviso se la colonna e' di un operatore che non fa
+            // questi servizi. Vale per tutti i rami qui sotto (blocco singolo,
+            // selezione multipla, gruppo intero) e per lo spostamento dei
+            // PAGATI, che da qui in giu' usano tutti operatorId.
+            {
+              const blocchiAbil = (selectedPseudoBlockIndexes.size === 1
+                  ? [window.pseudoBlocks[Array.from(selectedPseudoBlockIndexes)[0]]]
+                  : window.pseudoBlocks).filter(Boolean);
+              const esitoAbil = await verificaAbilitazioniOperatore(
+                operatorId, blocchiAbil, date, minutesToTime(hour * 60 + minute),
+                blocchiAbil.map(b => b && b._origin_appointment_id).filter(Boolean));
+              if (!esitoAbil) { window.isCreatingAppointment = false; return; }
+              if (esitoAbil.azione === 'sposta' && String(esitoAbil.operatorId) !== String(operatorId)) {
+                // I rami qui sotto appendono il blocco DENTRO la cella cliccata:
+                // per cambiare davvero colonna si ripete il click sulla cella
+                // giusta, invece di creare a un operatore e disegnare a un altro.
+                // Il secondo giro non fa ricomparire l'avviso: il server propone
+                // solo operatori abilitati a tutti i servizi del gruppo.
+                const cellaTarget = findCellAt(esitoAbil.operatorId, hour, minute);
+                window.isCreatingAppointment = false;
+                if (!cellaTarget) {
+                  alert('La colonna di ' + (esitoAbil.nome || 'quell\'operatore')
+                        + ' non e\' visibile in agenda: rendila visibile e riprova.');
+                  return;
+                }
+                cellaTarget.click();
+                return;
+              }
+              operatorId = esitoAbil.operatorId;
+              spostamentiAbil = esitoAbil.spostamenti || {};
+              if (Object.keys(spostamentiAbil).length) abilForzaRidisegno();
+            }
 
             // SPOSTAMENTO BLOCCHI PAGATI: non si crea nulla, si aggiornano gli
             // appuntamenti esistenti (id invariati → scontrini ancora collegati).
             // Anche più d'uno alla volta: si piazzano contigui dalla cella cliccata.
             if ((window.pseudoBlocks || []).some(isPaidMovePseudoBlock)) {
               try {
-                await pastePaidMovePseudoBlocks(cell, operatorId, hour, minute, date, csrfToken);
+                await pastePaidMovePseudoBlocks(cell, operatorId, hour, minute, date, csrfToken, spostamentiAbil);
               } finally {
                 window.isCreatingAppointment = false;
               }
@@ -8356,6 +8760,7 @@ if (blocksInCell.length >= 2) {
                     client_id: blk.clientId,
                     service_id: blk.serviceId,
                     operator_id: operatorId,
+                    spostamenti: spostamentiAbil,
                     appointment_date: date,
                     start_time: startTimeStr,
                     duration: blk.duration,
@@ -8585,6 +8990,7 @@ return;
                         client_id: blk.clientId,
                         service_id: blk.serviceId,
                         operator_id: operatorId,
+                        spostamenti: spostamentiAbil,
                         appointment_date: date,
                         start_time: startTimeStr,
                         duration: blk.duration,
@@ -8792,6 +9198,7 @@ return;
                         client_id: blk.clientId,
                         service_id: blk.serviceId,
                         operator_id: operatorId,
+                        spostamenti: spostamentiAbil,
                         appointment_date: date,
                         start_time: startTimeStr,
                         duration: blk.duration,
@@ -9536,7 +9943,7 @@ document.addEventListener('DOMContentLoaded', () => {
     block.style.left = block.__originalPosition.left;
     block.style.top = block.__originalPosition.top;
     // Aggiorna il backend con la posizione originale
-    await saveDraggedBlockPosition(block, block.__oldParent);
+    await saveDraggedBlockPosition(block, block.__oldParent, { skipAbilitazioni: true });
 }
 
 async function saveBlockLayout(block, width, left, zIndex) {
@@ -9663,22 +10070,35 @@ document.addEventListener('DOMContentLoaded', function() {
 function loadServicesForModal() {
   const clientId = document.getElementById('client_id').value;
 
+  // Colonna da cui si sta creando: il server mette in cima i servizi che quella
+  // colonna esegue (vedi _servizi_per_colonna in calendar.py). Qui si rende e basta.
+  // Colonna: dal campo nascosto del form, o da quella memorizzata all'apertura
+  // del modal. Niente dipendenze da altri helper: se uno non fosse definito, il
+  // parametro sparirebbe in silenzio e il server non riordinerebbe niente.
+  const campoOperatore = document.querySelector('#CreateAppointmentForm [name="operator_id"]');
+  const opColonna = (campoOperatore && campoOperatore.value) || window.__abilUltimaColonna || '';
+  const codaOperatore = opColonna ? ('?operator_id=' + encodeURIComponent(opColonna)) : '';
+  // Con piu' negozi montati sulla stessa app la pagina sta sotto /s/<idx>: un
+  // path assoluto /calendar/... li' e' 404 e la tendina resta vuota.
+  const m = window.location.pathname.match(/^(.*)\/calendar(?:\/|$)/);
+  const base = (m ? m[1] : '') + '/calendar';
+
   // Funzione interna per caricare i servizi frequenti/recenti
   const loadFrequentServices = () => {
-      fetch('/calendar/api/top-frequent-or-latest-services')
+      fetch(base + '/api/top-frequent-or-latest-services' + codaOperatore, { credentials: 'same-origin' })
           .then(resp => resp.json())
           .then(services => {
-              showServicesDropdownModal(services.slice(0, 10)); // Limita a 10
+              showServicesDropdownModal(services);
           })
           .catch(err => console.error("Errore caricamento servizi frequenti:", err));
   };
 
   if (clientId) {
-      fetch(`/calendar/api/last-services-for-client/${clientId}`)
+      fetch(`${base}/api/last-services-for-client/${clientId}${codaOperatore}`, { credentials: 'same-origin' })
           .then(resp => resp.json())
           .then(services => {
               if (Array.isArray(services) && services.length > 0) {
-                  showServicesDropdownModal(services.slice(0, 10)); // Mostra i primi 10 servizi del cliente
+                  showServicesDropdownModal(services);
               } else {
                   loadFrequentServices(); // Fallback se non vengono trovati servizi per il cliente
               }
@@ -9759,7 +10179,9 @@ function handleServiceSearchModal(query) {
       }
       return;
   }
-  fetch(`/calendar/api/search-services/${encodeURIComponent(query)}`)
+  const baseRicerca = (typeof window.abilCalendarBase === 'function')
+    ? window.abilCalendarBase() : '/calendar';
+  fetch(`${baseRicerca}/api/search-services/${encodeURIComponent(query)}`, { credentials: 'same-origin' })
       .then(response => response.json())
       .then(async (services) => {
           if (!Array.isArray(services) || services.length === 0) {
@@ -9770,6 +10192,13 @@ function handleServiceSearchModal(query) {
           } else {
 // versione sicura
 resultsContainer.innerHTML = '';
+// Stessa gerarchia della lista iniziale: prima cio' che questa colonna esegue.
+// Qui si ordina PRIMA del taglio a 10, perche' fra i risultati della ricerca
+// quello abilitato deve venire a galla anche se il nome lo mette undicesimo.
+const nonAbilitatiRicerca = window.abilServiziNonAbilitati
+  ? await window.abilServiziNonAbilitati(window.abilOperatoreDelModal())
+  : new Set();
+if (window.abilOrdinaServizi) services = window.abilOrdinaServizi(services, nonAbilitatiRicerca);
 const clientIdModal = String(document.getElementById('client_id')?.value || '').trim();
 const serviceIds = services.map(s => String(s?.id ?? '')).filter(Boolean);
 const pacchettoServiceIds = clientIdModal
@@ -11826,7 +12255,7 @@ async function movePaidAppointmentTo(blk, fallbackCell, operatorId, hour, minute
 // cliccata, ognuno con un UPDATE (id invariato → scontrino ancora collegato).
 // Se sono selezionati solo alcuni pseudoblocchi si spostano quelli, gli altri
 // restano nel Navigator.
-async function pastePaidMovePseudoBlocks(cell, operatorId, hour, minute, date, csrfToken) {
+async function pastePaidMovePseudoBlocks(cell, operatorId, hour, minute, date, csrfToken, spostamenti) {
   const all = window.pseudoBlocks || [];
   const dateStr = /^\d{4}-\d{2}-\d{2}$/.test(String(date))
     ? String(date)
@@ -11848,7 +12277,10 @@ async function pastePaidMovePseudoBlocks(cell, operatorId, hour, minute, date, c
     const blk = all[idx];
     const h = Math.floor(startTimeInMin / 60);
     const m = startTimeInMin % 60;
-    const ok = await movePaidAppointmentTo(blk, cell, operatorId, h, m, dateStr, csrfToken);
+    // Se l'avviso abilitazioni ha mandato questo servizio su un'altra colonna,
+    // il blocco ci va: gli altri restano dove sono stati incollati.
+    const opBlocco = (spostamenti && spostamenti[String(blk.serviceId)]) || operatorId;
+    const ok = await movePaidAppointmentTo(blk, cell, opBlocco, h, m, dateStr, csrfToken);
     // Al primo errore ci si ferma: i blocchi non ancora spostati restano nel
     // Navigator (e al loro posto in agenda), niente stati a metà.
     if (!ok) break;
