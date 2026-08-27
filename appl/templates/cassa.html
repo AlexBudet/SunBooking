@@ -159,6 +159,14 @@
             <br><br>
             <button class="btn btn-success ms-2 bozza-conferma" id="confermaBtn" data-bs-toggle="tooltip" data-bs-placement="top" title="Ricontrolla i dati dello scontrino: con un click lo prepari per la stampa">CONFERMA</button>
             <button id="reset-scontrino" class="btn btn-outline-danger bozza-svuota">SVUOTA</button>
+            <!-- Calcolo del resto: compare solo a bozza confermata con almeno una
+                 voce a contanti. Lo accende aggiornaBottoneResto() in cassa.js. -->
+            <button type="button" id="btnCalcolaResto"
+                    class="btn btn-outline-secondary btn-sm ms-2 bozza-resto d-none"
+                    data-bs-toggle="tooltip" data-bs-placement="top"
+                    title="clicca per calcolare il resto">
+              <i class="bi bi-plus-slash-minus"></i>R
+            </button>
             <!-- Subtotali pagamenti, nascosto di default -->
             <div id="subtotaliPagamenti" class="mt-2 bozza-subtot" style="display:none;"></div>
           </div>
@@ -786,6 +794,110 @@ document.addEventListener('DOMContentLoaded', function() {
   display: none !important;
 }
 
+/* ===== CALCOLO DEL RESTO =========================================
+   Tastino accanto a INDIETRO sulla bozza confermata: apre il modal che
+   somma le banconote/monete date dal cliente. La card confermata ha
+   pointer-events:none (vedi sopra), quindi va riabilitato a mano come
+   .bozza-conferma, altrimenti il tastino si vedrebbe ma non si cliccherebbe. */
+.pseudoscontrino-bloccato .bozza-resto {
+  pointer-events: auto;
+}
+
+.resto-griglia {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* Banconote e monete sono disegnate qui, non sono immagini: niente file da
+   caricare e nessuna riproduzione di banconote vere. */
+.resto-pezzo {
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  line-height: 1;
+  transition: transform .08s ease, filter .08s ease;
+}
+.resto-pezzo:hover { transform: translateY(-2px); filter: brightness(1.05); }
+.resto-pezzo:active { transform: translateY(1px) scale(0.97); }
+
+.resto-banconota {
+  width: 82px;
+  height: 46px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #23201f;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.22), inset 0 0 0 3px rgba(255,255,255,0.35);
+}
+.resto-banconota small { font-size: .72em; margin-left: 2px; }
+/* Colori delle serie euro: 5 grigia, 10 rossa, 20 blu, 50 arancio,
+   100 verde, 200 gialla, 500 viola. */
+.resto-b5   { background: linear-gradient(135deg, #d9d9d4, #a9a9a2); }
+.resto-b10  { background: linear-gradient(135deg, #e79a8c, #c04f3c); }
+.resto-b20  { background: linear-gradient(135deg, #93b6dd, #4576b5); color:#1c2b3d; }
+.resto-b50  { background: linear-gradient(135deg, #f2bd7b, #dd8a26); }
+.resto-b100 { background: linear-gradient(135deg, #93c9a8, #3f8f61); }
+.resto-b200 { background: linear-gradient(135deg, #efdc8f, #c9ab35); }
+.resto-b500 { background: linear-gradient(135deg, #c3a3cd, #8a5f9c); color:#2a1b31; }
+
+.resto-moneta {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  font-weight: 700;
+  font-size: .82rem;
+  color: #4a3a13;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+}
+.resto-moneta span { font-size: .62rem; font-weight: 600; opacity: .8; }
+/* 2 € anello argento + cuore oro, 1 € il contrario, i centesimi in oro
+   nordico, i 5 cent in rame. */
+.resto-m200 { background: radial-gradient(circle, #e7c766 0 52%, #d6d6d6 53% 100%); }
+.resto-m100 { background: radial-gradient(circle, #dcdcdc 0 52%, #e7c766 53% 100%); }
+.resto-m50, .resto-m20, .resto-m10 { background: radial-gradient(circle at 35% 30%, #f2dc9a, #d7b45c); }
+.resto-m5 { background: radial-gradient(circle at 35% 30%, #dfa07a, #b96f47); color:#43230f; }
+
+.resto-scelti {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 26px;
+  margin-top: 8px;
+}
+.resto-chip {
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #f7f4f6;
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: .82rem;
+  cursor: pointer;
+}
+.resto-chip:hover { background: #efe6ec; text-decoration: line-through; }
+
+.resto-esito {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #f1efe6;
+  text-align: center;
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: .5px;
+  color: #2f6b45;
+}
+.resto-esito.resto-manca { color: #b03030; font-size: 1.25rem; }
+.resto-esito.resto-vuoto { color: #8a8a8a; font-size: 1.25rem; }
+
 /* Bozza non confermata mentre un'altra è confermata: grigia e non interagibile,
    tranne il suo tasto CONFERMA che la riattiva. */
 .bozza-disattivata {
@@ -970,6 +1082,49 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annulla</button>
         <button type="button" class="btn btn-success btn-sm" id="splitModalApplica" disabled>Applica</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Calcolo del resto: puramente informativo. Non tocca la bozza, non tocca
+     l'incasso, non finisce da nessuna parte: serve solo a contare al volo
+     quanto va reso al cliente che paga in contanti. -->
+<div class="modal fade" id="modalCalcolaResto" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width: 560px;">
+    <div class="modal-content" style="border-radius: 14px;">
+      <div class="modal-header py-2 px-3">
+        <span class="modal-title" style="font-weight:600; color:#5a4a54;">
+          <i class="bi bi-plus-slash-minus"></i> Calcolo del resto
+        </span>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body p-3">
+        <div class="d-flex justify-content-between align-items-baseline mb-3">
+          <span class="text-muted">Da pagare in contanti</span>
+          <strong id="restoDaPagare">€ 0.00</strong>
+        </div>
+
+        <div class="text-muted mb-2" style="font-size:.85rem;">Clicca quello che ti d&agrave; il cliente</div>
+        <div id="restoBanconote" class="resto-griglia"></div>
+
+        <div class="d-flex gap-2 my-3 justify-content-center">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="restoMostraTutti">mostra tutti</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="restoAggiungiMonete">aggiungi monete</button>
+        </div>
+        <div id="restoMonete" class="resto-griglia d-none"></div>
+
+        <hr class="my-3">
+        <div class="d-flex justify-content-between align-items-baseline">
+          <span class="text-muted">Dato dal cliente</span>
+          <span>
+            <strong id="restoDato">€ 0.00</strong>
+            <button type="button" class="btn btn-link btn-sm p-0 ms-2 d-none" id="restoAzzera">azzera</button>
+          </span>
+        </div>
+        <div id="restoPezziScelti" class="resto-scelti"></div>
+
+        <div id="restoEsito" class="resto-esito resto-vuoto">RESTO: &mdash;</div>
       </div>
     </div>
   </div>

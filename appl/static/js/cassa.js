@@ -2358,6 +2358,8 @@ function aggiornaTotale() {
     if (t) t.textContent = `Scontrino: € ${totaleScontrino.toFixed(2)}`;
     if (ta) ta.textContent = `Totale: € ${totaleComplessivo.toFixed(2)}`;
   });
+  // Il tastino del resto segue le righe: cambio metodo, prezzo o voce.
+  if (typeof window.aggiornaBottoneResto === 'function') window.aggiornaBottoneResto();
 }
 
 function getCurrentAppointmentIds() {
@@ -2459,6 +2461,8 @@ function resetScontrino(keepData = false) {
   if (window.originalAppointmentIds && typeof window.originalAppointmentIds.clear === 'function') {
     window.originalAppointmentIds.clear();
   }
+
+  if (typeof window.aggiornaBottoneResto === 'function') window.aggiornaBottoneResto();
 
   if (!keepData) {
     window.location.href = '/cassa';
@@ -4331,6 +4335,7 @@ window.apriModalOperatoreRiga = apriModalOperatoreRiga;
     if (btn) { btn.style.display = on ? 'flex' : 'none'; btn.classList.toggle('attivo', on); btn.disabled = !on; }
     if (label) label.classList.toggle('d-none', !on);
     aggiornaStatoBozze();
+    if (typeof window.aggiornaBottoneResto === 'function') window.aggiornaBottoneResto();
   }
   window.aggiornaStampaVisibile = aggiornaStampaVisibile;
 
@@ -5857,4 +5862,218 @@ async function aggiungiPulsantiRicaricaSolarium() {
   }
 
   programma();
+})();
+
+// ============================================================
+// CALCOLO DEL RESTO (solo informativo)
+// Sulla bozza CONFERMATA che ha almeno una voce a contanti compare un
+// tastino accanto a INDIETRO: apre un modal dove si clicca quello che il
+// cliente appoggia sul bancone e si legge il resto. Non salva niente, non
+// tocca lo scontrino ne' l'incasso. Contano anche le voci NON fiscali (le
+// righe grigie): quei contanti il cliente li tira fuori lo stesso.
+// ============================================================
+(function () {
+  const BANCONOTE = [10000, 5000, 2000, 1000, 500];   // 100 50 20 10 5
+  const BANCONOTE_TUTTE = [50000, 20000, 10000, 5000, 2000, 1000, 500];
+  const MONETE = [200, 100, 50, 20, 10, 5];
+
+  let pezzi = [];     // un elemento (in centesimi) per ogni click sul taglio
+  let dovuto = 0;     // centesimi da incassare in contanti sulla bozza aperta
+
+  function euro(cents) { return '€ ' + (cents / 100).toFixed(2); }
+
+  function etichettaPezzo(cents) {
+    return cents >= 100 ? (cents / 100) + ' €' : cents + ' cent';
+  }
+
+  // Quota a contanti di una riga: se il pagamento e' diviso conta solo la
+  // parte 'cash', altrimenti il prezzo pieno quando il metodo e' cash.
+  function cashDellaRiga(row) {
+    const split = (typeof getRowPagamenti === 'function') ? getRowPagamenti(row) : null;
+    if (split && split.length) {
+      return split.reduce((s, p) => s + (p.metodo === 'cash'
+        ? Math.round((parseFloat(p.importo) || 0) * 100) : 0), 0);
+    }
+    const metodo = row.querySelector('select')?.value || 'cash';
+    if (metodo !== 'cash') return 0;
+    return Math.round((parseFloat(row.querySelector('.scontrino-row-prezzo')?.value) || 0) * 100);
+  }
+
+  function haQuotaCash(row) {
+    const split = (typeof getRowPagamenti === 'function') ? getRowPagamenti(row) : null;
+    if (split && split.length) return split.some(p => p.metodo === 'cash');
+    return (row.querySelector('select')?.value || 'cash') === 'cash';
+  }
+
+  function totaleCashCard(card) {
+    if (!card) return 0;
+    let cents = 0;
+    card.querySelectorAll('.scontrino-row').forEach(row => { cents += cashDellaRiga(row); });
+    return cents;
+  }
+
+  // Basta UNA voce a contanti, anche a importo zero: il tastino compare.
+  function haVociCash(card) {
+    if (!card) return false;
+    return Array.from(card.querySelectorAll('.scontrino-row')).some(haQuotaCash);
+  }
+
+  // Il tastino vive solo sulla bozza confermata. I cloni della bozza perdono
+  // gli id ma tengono le classi, quindi qui si lavora per classe e si crea
+  // anche il tooltip Bootstrap (l'init di pagina gira a DOMContentLoaded e i
+  // cloni nascono dopo: senza questo resterebbe il tooltip nativo).
+  function aggiornaBottoneResto() {
+    document.querySelectorAll('.bozza-editor').forEach(card => {
+      const btn = card.querySelector('.bozza-resto');
+      if (!btn) return;
+      const attivo = card.classList.contains('pseudoscontrino-bloccato') && haVociCash(card);
+      btn.classList.toggle('d-none', !attivo);
+      if (attivo && window.bootstrap && bootstrap.Tooltip) {
+        try { bootstrap.Tooltip.getOrCreateInstance(btn, { trigger: 'hover' }); } catch (_) {}
+      }
+    });
+  }
+  window.aggiornaBottoneResto = aggiornaBottoneResto;
+
+  function creaBanconota(cents) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'resto-pezzo resto-banconota resto-b' + (cents / 100);
+    b.dataset.cents = String(cents);
+    b.setAttribute('aria-label', etichettaPezzo(cents));
+    b.innerHTML = (cents / 100) + '<small>€</small>';
+    return b;
+  }
+
+  function creaMoneta(cents) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'resto-pezzo resto-moneta resto-m' + cents;
+    b.dataset.cents = String(cents);
+    b.setAttribute('aria-label', etichettaPezzo(cents));
+    b.innerHTML = (cents >= 100 ? (cents / 100) + '<span>euro</span>' : cents + '<span>cent</span>');
+    return b;
+  }
+
+  function disegnaBanconote(tutte) {
+    const box = document.getElementById('restoBanconote');
+    if (!box) return;
+    box.innerHTML = '';
+    (tutte ? BANCONOTE_TUTTE : BANCONOTE).forEach(c => box.appendChild(creaBanconota(c)));
+  }
+
+  function disegnaMonete() {
+    const box = document.getElementById('restoMonete');
+    if (!box || box.dataset.pronto === '1') return;
+    MONETE.forEach(c => box.appendChild(creaMoneta(c)));
+    box.dataset.pronto = '1';
+  }
+
+  // Riscrive quanto e' stato dato, i gettoni di quello che si e' cliccato e
+  // il resto in fondo. Unico posto che tocca la parte bassa del modal.
+  function aggiornaEsito() {
+    const dato = pezzi.reduce((s, c) => s + c, 0);
+    const elDato = document.getElementById('restoDato');
+    if (elDato) elDato.textContent = euro(dato);
+    const azzera = document.getElementById('restoAzzera');
+    if (azzera) azzera.classList.toggle('d-none', pezzi.length === 0);
+
+    const box = document.getElementById('restoPezziScelti');
+    if (box) {
+      box.innerHTML = '';
+      const conteggio = new Map();
+      pezzi.forEach(c => conteggio.set(c, (conteggio.get(c) || 0) + 1));
+      Array.from(conteggio.keys()).sort((a, b) => b - a).forEach(c => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'resto-chip';
+        chip.dataset.cents = String(c);
+        const n = conteggio.get(c);
+        chip.textContent = etichettaPezzo(c) + (n > 1 ? ' ×' + n : '');
+        chip.setAttribute('aria-label', 'Togli un pezzo da ' + etichettaPezzo(c));
+        box.appendChild(chip);
+      });
+    }
+
+    const esito = document.getElementById('restoEsito');
+    if (!esito) return;
+    esito.classList.remove('resto-manca', 'resto-vuoto');
+    if (!pezzi.length) {
+      esito.classList.add('resto-vuoto');
+      esito.innerHTML = 'RESTO: &mdash;';
+    } else if (dato < dovuto) {
+      esito.classList.add('resto-manca');
+      esito.textContent = 'Mancano ' + euro(dovuto - dato);
+    } else {
+      esito.textContent = 'RESTO: ' + euro(dato - dovuto);
+    }
+  }
+
+  function apriModalResto(btn) {
+    const modalEl = document.getElementById('modalCalcolaResto');
+    if (!modalEl || !window.bootstrap || !bootstrap.Modal) return;
+    const card = btn.closest('.bozza-editor');
+    dovuto = totaleCashCard(card);
+    pezzi = [];
+
+    const daPagare = document.getElementById('restoDaPagare');
+    if (daPagare) daPagare.textContent = euro(dovuto);
+    disegnaBanconote(false);
+    disegnaMonete();
+    const btnTutti = document.getElementById('restoMostraTutti');
+    if (btnTutti) btnTutti.textContent = 'mostra tutti';
+    const boxMonete = document.getElementById('restoMonete');
+    if (boxMonete) boxMonete.classList.add('d-none');
+    const btnMonete = document.getElementById('restoAggiungiMonete');
+    if (btnMonete) btnMonete.textContent = 'aggiungi monete';
+    aggiornaEsito();
+
+    // Il tooltip del tastino resterebbe appeso sopra il modal.
+    try { const t = bootstrap.Tooltip.getInstance(btn); if (t) t.hide(); } catch (_) {}
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  }
+
+  // Un solo listener per tutto: il tastino sta dentro una card con
+  // pointer-events:none (riabilitato via CSS) e i tagli nascono a runtime.
+  document.addEventListener('click', function (e) {
+    if (!e.target || !e.target.closest) return;
+
+    const apri = e.target.closest('.bozza-resto');
+    if (apri) { e.preventDefault(); apriModalResto(apri); return; }
+
+    const modal = e.target.closest('#modalCalcolaResto');
+    if (!modal) return;
+
+    const pezzo = e.target.closest('.resto-pezzo');
+    if (pezzo) {
+      pezzi.push(parseInt(pezzo.dataset.cents, 10) || 0);
+      aggiornaEsito();
+      return;
+    }
+    // Gettone cliccato = un pezzo di quel taglio in meno (rimedio ai click di troppo)
+    const chip = e.target.closest('.resto-chip');
+    if (chip) {
+      const c = parseInt(chip.dataset.cents, 10);
+      const i = pezzi.indexOf(c);
+      if (i >= 0) pezzi.splice(i, 1);
+      aggiornaEsito();
+      return;
+    }
+    if (e.target.closest('#restoAzzera')) { pezzi = []; aggiornaEsito(); return; }
+    if (e.target.closest('#restoMostraTutti')) {
+      const btn = document.getElementById('restoMostraTutti');
+      const tutte = btn.textContent.trim() === 'mostra tutti';
+      disegnaBanconote(tutte);
+      btn.textContent = tutte ? 'mostra meno' : 'mostra tutti';
+      return;
+    }
+    if (e.target.closest('#restoAggiungiMonete')) {
+      const btn = document.getElementById('restoAggiungiMonete');
+      const box = document.getElementById('restoMonete');
+      const apriMonete = box.classList.contains('d-none');
+      box.classList.toggle('d-none', !apriMonete);
+      btn.textContent = apriMonete ? 'nascondi monete' : 'aggiungi monete';
+      return;
+    }
+  });
 })();

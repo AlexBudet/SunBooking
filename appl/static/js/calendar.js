@@ -3919,25 +3919,6 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
         const serviceIdEmpty = serviceIdRaw === null || serviceIdRaw === '' || serviceIdRaw === '0' || serviceIdRaw === 'null';
         const isOffBlock = clientIdEmpty && serviceIdEmpty;
 
-        // Se NON è blocco OFF, chiedi conferma per l'invio WhatsApp; se è OFF, salta sempre la richiesta
-        let inviaWhatsapp = false;
-        if (!isOffBlock) {
-          try {
-            // Gestione difensiva: la funzione può risolvere 'back' per tornare all'editing
-            const risposta = await chiediInvioWhatsappAuto();
-            if (risposta === 'back') {
-              // Torna all'editing del modal: non creare l'appuntamento, non chiudere il modal
-              return;
-            }
-            inviaWhatsapp = !!risposta;
-          } catch (e) {
-            console.warn('chiediInvioWhatsappAuto errore ignorato:', e);
-            inviaWhatsapp = false;
-          }
-        } else {
-          inviaWhatsapp = false;
-        }
-
         const data = Object.fromEntries(formData.entries());
 
         data.appointment_date = data.appointment_date || data.date || selectedDate || window.selectedAppointmentDate;
@@ -4003,7 +3984,8 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
             ? data.pseudoblocks
             : [{ service_id: serviceId, duration: data.duration }];
           const esitoAbil = await verificaAbilitazioniOperatore(
-            data.operator_id, blocchiAbil, data.appointment_date, data.start_time);
+            data.operator_id, blocchiAbil, data.appointment_date, data.start_time,
+            null, { inline: true });
           if (!esitoAbil) return;
           data.operator_id = esitoAbil.operatorId;
           // Gruppo misto: i blocchi restano contigui nell'ora, ma quelli spostati
@@ -4012,6 +3994,28 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
             data.spostamenti = esitoAbil.spostamenti;
             abilForzaRidisegno();
           }
+        }
+
+        // WHATSAPP: si chiede per ULTIMO, quando la destinazione dei blocchi
+        // è già decisa. Prima si chiedeva subito dopo il submit e l'avviso
+        // abilitazioni arrivava dopo: si confermava l'invio senza sapere ancora
+        // su quale colonna sarebbe finito l'appuntamento.
+        let inviaWhatsapp = false;
+        if (!isOffBlock) {
+          try {
+            // Gestione difensiva: la funzione può risolvere 'back' per tornare all'editing
+            const risposta = await chiediInvioWhatsappAuto();
+            if (risposta === 'back') {
+              // Torna all'editing del modal: non creare l'appuntamento, non chiudere il modal
+              return;
+            }
+            inviaWhatsapp = !!risposta;
+          } catch (e) {
+            console.warn('chiediInvioWhatsappAuto errore ignorato:', e);
+            inviaWhatsapp = false;
+          }
+        } else {
+          inviaWhatsapp = false;
         }
 
         // Evita doppio render: in questo flusso usiamo un solo refresh controllato
@@ -4932,16 +4936,182 @@ function abilBlocchiConsecutivi(blocchi, startHHMM) {
   return out;
 }
 
+// Pezzi comuni ai due modi di chiedere la stessa cosa: il modal separato
+// (trascinamento, Navigator) e il pannello dentro il modal di creazione.
+function abilEsc(t) {
+  return String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Una riga per servizio: a sinistra il nome, a destra dove mandarlo.
+// La prima colonna libera e' gia' selezionata, cosi' "Sposta" fa la cosa
+// giusta con un click solo; chi non ha colonne libere resta dov'e'.
+function abilCostruisciRighe(violazioni, operatore) {
+  const righe = violazioni.map(v => {
+    const alt = v.alternative || [];
+    const opzioni = alt.length
+      ? alt.map((a, i) => '<option value="' + a.id + '"' + (i === 0 ? ' selected' : '') + '>'
+          + abilEsc(a.nome) + '</option>').join('')
+          + '<option value="">Lascia su ' + abilEsc(operatore) + '</option>'
+      : '<option value="">Nessuna colonna libera: resta su ' + abilEsc(operatore) + '</option>';
+    return '<div class="d-flex align-items-center gap-2 mb-2">'
+      + '<span class="flex-grow-1">' + abilEsc(v.servizio) + '</span>'
+      + '<select class="form-select form-select-sm abil-destinazione" style="max-width:230px"'
+      + ' data-service-id="' + v.service_id + '"' + (alt.length ? '' : ' disabled') + '>'
+      + opzioni + '</select></div>';
+  }).join('');
+  return { righe: righe, qualcheAlternativa: violazioni.some(v => (v.alternative || []).length) };
+}
+
+function abilRaccogliSpostamenti(radice) {
+  const mappa = {};
+  radice.querySelectorAll('.abil-destinazione').forEach(sel => {
+    const opId = sel.value;
+    if (opId) mappa[sel.dataset.serviceId] = opId;
+  });
+  return mappa;
+}
+
+// "Sposta tutto" vale SOLO se nel gruppo c'e' quell'unico servizio: e' il
+// caso del trascinamento e dello spostamento di un pagato. In un gruppo
+// misto (tre cerette + una lampada) spostare tutto porterebbe anche le
+// cerette sulla colonna del lettino: li' si sposta blocco per blocco.
+function abilCalcolaScelta(mappa, violazioni, serviziNelGruppo, operatorIdCorrente) {
+  const destinazioni = Object.keys(mappa).map(k => String(mappa[k]));
+  const gruppoDiUnServizio = (serviziNelGruppo === 1) && (violazioni.length === 1)
+    && destinazioni.length === 1;
+  const nome = (violazioni[0] && (violazioni[0].alternative || [])
+    .find(a => String(a.id) === destinazioni[0]) || {}).nome;
+  return gruppoDiUnServizio
+    ? { azione: 'sposta', operatorId: destinazioni[0], nome: nome, spostamenti: mappa }
+    : { azione: 'procedi', operatorId: operatorIdCorrente, spostamenti: mappa };
+}
+
+// Il corpo del modal "Nuovo appuntamento", ma solo se e' davvero aperto: e'
+// li' che vanno le domande del flusso di creazione.
+function abilModalBodyCreazione() {
+  const modalEl = document.getElementById('CreateAppointmentModal');
+  if (!modalEl || !modalEl.classList.contains('show')) return null;
+  return document.getElementById('CreateAppointmentModalBody')
+      || modalEl.querySelector('.modal-body')
+      || null;
+}
+
+// Stessa domanda dell'avviso, ma dentro il modal gia' aperto - come la
+// conferma WhatsApp. Ritorna null (sincrono, non una Promise) se quel modal
+// non c'e': chi chiama ripiega sul modal separato.
+function abilPannelloInline(esito, operatorIdCorrente, serviziNelGruppo) {
+  const modalBody = abilModalBodyCreazione();
+  if (!modalBody) return null;
+
+  const violazioni = (esito.violazioni || []).filter(Boolean);
+  const operatore = esito.operatore || 'Questo operatore';
+  const elenco = violazioni.map(v => v.servizio).filter(Boolean).join(', ') || 'questo servizio';
+  const righeEsito = abilCostruisciRighe(violazioni, operatore);
+  const qualcheAlternativa = righeEsito.qualcheAlternativa;
+
+  return new Promise(resolve => {
+    const vecchio = document.getElementById('abilInlineConfirm');
+    if (vecchio) vecchio.remove();
+
+    const panel = document.createElement('div');
+    panel.id = 'abilInlineConfirm';
+    panel.setAttribute('role', 'region');
+    panel.setAttribute('aria-label', 'Operatore non abilitato');
+    panel.style.width = '100%';
+    panel.style.boxSizing = 'border-box';
+    panel.style.marginTop = '12px';
+    panel.style.padding = '12px';
+    panel.style.border = '1px solid rgba(0,0,0,0.08)';
+    panel.style.borderRadius = '6px';
+    panel.style.background = '#fff';
+    panel.style.boxShadow = '0 6px 18px rgba(0,0,0,0.06)';
+    panel.style.fontSize = '14px';
+    panel.style.color = '#222';
+    panel.innerHTML =
+      '<div style="margin-bottom:10px">&#9888;&#65039; <b>' + abilEsc(operatore) + '</b> non &egrave; abilitato'
+        + ' all\'esecuzione di <b>' + abilEsc(elenco) + '</b>.</div>'
+      + (qualcheAlternativa
+          ? '<div class="mb-2">Dove vuoi mettere questi servizi? L\'orario non cambia.</div>'
+          : '<div class="mb-2 text-muted">Nessuna colonna abilitata &egrave; libera a quest\'ora.</div>')
+      + righeEsito.righe
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">'
+        + '<button type="button" class="btn btn-link" id="abilInlineIndietro"'
+          + ' style="margin-right:auto;color:#666">INDIETRO</button>'
+        + '<button type="button" class="btn btn-outline-warning" id="abilInlineComunque">Tieni tutto su '
+          + abilEsc(operatore) + '</button>'
+        + (qualcheAlternativa
+            ? '<button type="button" class="btn btn-primary" id="abilInlineSposta">Sposta come indicato</button>'
+            : '')
+      + '</div>';
+
+    const formEl = modalBody.querySelector('#CreateAppointmentForm') || modalBody.querySelector('form');
+    if (formEl && formEl.parentNode) formEl.insertAdjacentElement('afterend', panel);
+    else modalBody.appendChild(panel);
+    try { panel.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+
+    const modalEl = document.getElementById('CreateAppointmentModal');
+
+    function cleanup() {
+      const p = document.getElementById('abilInlineConfirm');
+      if (p && p.parentNode) p.parentNode.removeChild(p);
+      if (modalEl) modalEl.removeEventListener('hidden.bs.modal', onModalHidden);
+      document.removeEventListener('keydown', onKey);
+    }
+    // Chiudere il modal o premere ESC vale "Annulla" del vecchio avviso: non
+    // si crea niente. INDIETRO riporta all'editing con il modal aperto: in
+    // tutti e due i casi si risolve null e il submit si ferma li'.
+    function onModalHidden() { cleanup(); resolve(null); }
+    function onKey(e) { if (e.key === 'Escape') { cleanup(); resolve(null); } }
+    if (modalEl) modalEl.addEventListener('hidden.bs.modal', onModalHidden);
+    document.addEventListener('keydown', onKey);
+
+    const btnSposta = panel.querySelector('#abilInlineSposta');
+    if (btnSposta) {
+      btnSposta.addEventListener('click', () => {
+        const scelta = abilCalcolaScelta(abilRaccogliSpostamenti(panel), violazioni,
+                                         serviziNelGruppo, operatorIdCorrente);
+        cleanup();
+        resolve(scelta);
+      });
+    }
+    panel.querySelector('#abilInlineComunque').addEventListener('click', () => {
+      cleanup();
+      resolve({ azione: 'procedi', operatorId: operatorIdCorrente, spostamenti: {} });
+    });
+    panel.querySelector('#abilInlineIndietro').addEventListener('click', (e) => {
+      e.preventDefault();
+      cleanup();
+      resolve(null);
+    });
+
+    setTimeout(() => {
+      const primo = btnSposta || panel.querySelector('#abilInlineComunque');
+      if (primo) primo.focus();
+    }, 50);
+  });
+}
+
 // Avviso: per OGNI servizio non abilitato si sceglie dove mandarlo, fra le
 // colonne abilitate e libere a quell'ora. Chi non ha alternative - o chi non si
 // vuole spostare - resta dov'e'. Risolve con:
 //   {azione:'sposta', operatorId}                -> un solo servizio, spostato tutto li'
 //   {azione:'procedi', operatorId, spostamenti}  -> si va avanti; spostamenti = {service_id: operator_id}
 //   null                                          -> annullato
-function abilMostraAvviso(esito, operatorIdCorrente, serviziNelGruppo) {
+// Con opzioni.inline la domanda non apre un secondo modal sopra il primo: va
+// DENTRO il modal "Nuovo appuntamento" già aperto, come la conferma WhatsApp.
+function abilMostraAvviso(esito, operatorIdCorrente, serviziNelGruppo, opzioni) {
   const violazioni = (esito.violazioni || []).filter(Boolean);
   const operatore = esito.operatore || 'Questo operatore';
   const elenco = violazioni.map(v => v.servizio).filter(Boolean).join(', ') || 'questo servizio';
+
+  // Creazione da click su cella: la scelta sta dentro il modal gia' aperto,
+  // come la conferma WhatsApp. Trascinamento e Navigator non hanno nessun
+  // modal aperto e continuano con l'avviso qui sotto.
+  if (opzioni && opzioni.inline) {
+    const inline = abilPannelloInline(esito, operatorIdCorrente, serviziNelGruppo);
+    if (inline) return inline;
+  }
 
   if (typeof bootstrap === 'undefined' || !bootstrap.Modal) {
     const ok = confirm('ATTENZIONE! ' + operatore + ' non e\' abilitato all\'esecuzione di '
@@ -4964,27 +5134,10 @@ function abilMostraAvviso(esito, operatorIdCorrente, serviziNelGruppo) {
       document.head.appendChild(st);
     }
 
-    const esc = (t) => String(t == null ? '' : t)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-    // Una riga per servizio: a sinistra il nome, a destra dove mandarlo.
-    // La prima colonna libera e' gia' selezionata, cosi' "Sposta" fa la cosa
-    // giusta con un click solo; chi non ha colonne libere resta dov'e'.
-    const righe = violazioni.map(v => {
-      const alt = v.alternative || [];
-      const opzioni = alt.length
-        ? alt.map((a, i) => '<option value="' + a.id + '"' + (i === 0 ? ' selected' : '') + '>'
-            + esc(a.nome) + '</option>').join('')
-            + '<option value="">Lascia su ' + esc(operatore) + '</option>'
-        : '<option value="">Nessuna colonna libera: resta su ' + esc(operatore) + '</option>';
-      return '<div class="d-flex align-items-center gap-2 mb-2">'
-        + '<span class="flex-grow-1">' + esc(v.servizio) + '</span>'
-        + '<select class="form-select form-select-sm abil-destinazione" style="max-width:230px"'
-        + ' data-service-id="' + v.service_id + '"' + (alt.length ? '' : ' disabled') + '>'
-        + opzioni + '</select></div>';
-    }).join('');
-
-    const qualcheAlternativa = violazioni.some(v => (v.alternative || []).length);
+    const esc = abilEsc;
+    const righeEsito = abilCostruisciRighe(violazioni, operatore);
+    const righe = righeEsito.righe;
+    const qualcheAlternativa = righeEsito.qualcheAlternativa;
 
     const el = document.createElement('div');
     el.className = 'modal fade';
@@ -5019,31 +5172,11 @@ function abilMostraAvviso(esito, operatorIdCorrente, serviziNelGruppo) {
     const modal = new bootstrap.Modal(el, { backdrop: 'static', keyboard: true });
     let scelta = null;
 
-    function raccogliSpostamenti() {
-      const mappa = {};
-      el.querySelectorAll('.abil-destinazione').forEach(sel => {
-        const opId = sel.value;
-        if (opId) mappa[sel.dataset.serviceId] = opId;
-      });
-      return mappa;
-    }
-
     const btnSposta = el.querySelector('#abilBtnSposta');
     if (btnSposta) {
       btnSposta.addEventListener('click', () => {
-        const mappa = raccogliSpostamenti();
-        const destinazioni = Object.keys(mappa).map(k => String(mappa[k]));
-        // "Sposta tutto" vale SOLO se nel gruppo c'e' quell'unico servizio: e' il
-        // caso del trascinamento e dello spostamento di un pagato. In un gruppo
-        // misto (tre cerette + una lampada) spostare tutto porterebbe anche le
-        // cerette sulla colonna del lettino: li' si sposta blocco per blocco.
-        const gruppoDiUnServizio = (serviziNelGruppo === 1) && (violazioni.length === 1)
-          && destinazioni.length === 1;
-        const nome = (violazioni[0] && (violazioni[0].alternative || [])
-          .find(a => String(a.id) === destinazioni[0]) || {}).nome;
-        scelta = gruppoDiUnServizio
-          ? { azione: 'sposta', operatorId: destinazioni[0], nome: nome, spostamenti: mappa }
-          : { azione: 'procedi', operatorId: operatorIdCorrente, spostamenti: mappa };
+        scelta = abilCalcolaScelta(abilRaccogliSpostamenti(el), violazioni,
+                                   serviziNelGruppo, operatorIdCorrente);
         modal.hide();
       });
     }
@@ -5132,7 +5265,7 @@ function abilOrdinaServizi(servizi, nonAbilitati) {
 
 // Controlla i blocchi che si stanno piazzando sulla colonna `operatorId`.
 // Ritorna {azione, operatorId} se si va avanti, null se si annulla.
-async function verificaAbilitazioniOperatore(operatorId, blocchi, dataISO, startHHMM, ignoraAppointmentIds) {
+async function verificaAbilitazioniOperatore(operatorId, blocchi, dataISO, startHHMM, ignoraAppointmentIds, opzioni) {
   const opId = parseInt(operatorId, 10);
   const lista = abilBlocchiConsecutivi(blocchi, startHHMM);
   if (!opId || !lista.length) return { azione: 'procedi', operatorId: operatorId, spostamenti: {} };
@@ -5166,7 +5299,7 @@ async function verificaAbilitazioniOperatore(operatorId, blocchi, dataISO, start
   // Quanti servizi DIVERSI si stanno piazzando: decide se "sposta" puo' valere
   // per tutto il gruppo o se ogni blocco va indirizzato per conto suo.
   const serviziDistinti = new Set(lista.map(b => String(b.service_id))).size;
-  return abilMostraAvviso(esito, operatorId, serviziDistinti);
+  return abilMostraAvviso(esito, operatorId, serviziDistinti, opzioni);
 }
 window.verificaAbilitazioniOperatore = verificaAbilitazioniOperatore;
 // Le funzioni della tendina servizi (loadServicesForModal & co.) stanno in un
