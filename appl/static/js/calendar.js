@@ -5210,6 +5210,10 @@ function abilForzaRidisegno() {
   window.__abilRefreshPending = true;
   setTimeout(() => { window.__abilRefreshPending = false; }, 5000);
 }
+// Serve anche FUORI da questo IIFE: il piazzamento dei pseudoblocchi dal
+// Navigator sta in un altro scope e il nome nudo li' e' un ReferenceError
+// (dopo "Sposta come indicato" la procedura si interrompeva senza creare nulla).
+window.abilForzaRidisegno = abilForzaRidisegno;
 
 // Ordinamento della tendina servizi nel modal "Nuovo appuntamento": prima
 // quelli che l'operatore della colonna esegue, poi gli altri (che restano
@@ -8854,7 +8858,7 @@ if (blocksInCell.length >= 2) {
               }
               operatorId = esitoAbil.operatorId;
               spostamentiAbil = esitoAbil.spostamenti || {};
-              if (Object.keys(spostamentiAbil).length) abilForzaRidisegno();
+              if (Object.keys(spostamentiAbil).length) window.abilForzaRidisegno();
             }
 
             // SPOSTAMENTO BLOCCHI PAGATI: non si crea nulla, si aggiornano gli
@@ -9402,27 +9406,6 @@ Promise.all(requests)
 .then(async responses => {
   console.log("Appuntamenti creati dai pseudo-blocchi:", responses);
 
-  const want = await chiediInvioWhatsappNavigator();
-  if (want === true) {
-    const servizi = pseudoBlocksSnapshot.map(blk => blk.serviceName);
-    const firstAppointment = responses[0];
-    // Normalizza ora in formato HH:MM
-    let oraMsg = '';
-    if (typeof firstAppointment.start_time === 'string') {
-      const m = firstAppointment.start_time.match(/(\d{2}:\d{2})/);
-      oraMsg = m ? m[1] : '';
-    }
-    await inviaWhatsappAutoSeRichiesto(firstAppointment, {
-      client_id: pseudoBlocksSnapshot[0].clientId,
-      client_name: pseudoBlocksSnapshot[0].clientName,
-      data: date,
-      ora: oraMsg || (('0' + hour).slice(-2) + ':' + ('0' + minute).slice(-2)),
-      servizi: servizi
-    }, csrfToken);
-    alert("Messaggio WhatsApp inviato!");
-  }
-  window._navSession = null; // già chiesto qui (e navigator svuotato per intero): nessun debito residuo
-
     // Salva i dati dei pseudoBlocks prima di svuotare l'array
     const pseudoBlocksData = [...window.pseudoBlocks];
     console.log("pseudoBlocksData prima del ciclo:", pseudoBlocksData); // [1]
@@ -9474,8 +9457,12 @@ Promise.all(requests)
             appointmentMinute = parseInt(initialCell.getAttribute('data-minute'), 10);
         }
         
-        // Trova la cella corretta per questo appuntamento in base all'ora e ai minuti
-        const targetCell = findCellAt(operatorId, appointmentHour, appointmentMinute);
+        // Colonna reale del blocco: se l'avviso abilitazioni ha mandato questo
+        // servizio su un'altra colonna il server l'ha creato lì, e la risposta
+        // lo dice. Disegnarlo sulla colonna cliccata lo metterebbe nel posto
+        // sbagliato (stessa regola di pastePaidMovePseudoBlocks).
+        const opBlocco = (appointment.operator_id != null) ? appointment.operator_id : operatorId;
+        const targetCell = findCellAt(opBlocco, appointmentHour, appointmentMinute);
         
         // IMPORTANTE: Forza il colore dal pseudo-blocco originale
         appointment.colore = commonColor;
@@ -9491,7 +9478,7 @@ Promise.all(requests)
         
         if (targetCell) {
             // Crea il blocco con i dati corretti e aggiungilo alla cella appropriata
-            const blockEl = createAppointmentBlockElement(appointment, operatorId, appointmentHour, appointmentMinute);
+            const blockEl = createAppointmentBlockElement(appointment, opBlocco, appointmentHour, appointmentMinute);
             console.log(`[${index}] Blocco creato:`, blockEl); // [3]
             
             targetCell.appendChild(blockEl);
@@ -9500,7 +9487,7 @@ Promise.all(requests)
         } else {
             console.warn(`Cella non trovata per orario ${appointmentHour}:${appointmentMinute}`);
             // Fallback: aggiunge comunque il blocco alla cella iniziale
-            const blockEl = createAppointmentBlockElement(appointment, operatorId, appointmentHour, appointmentMinute);
+            const blockEl = createAppointmentBlockElement(appointment, opBlocco, appointmentHour, appointmentMinute);
             console.log(`[${index}] Blocco creato (fallback):`, blockEl); // [3]
             
             initialCell.appendChild(blockEl);
@@ -9511,10 +9498,36 @@ Promise.all(requests)
       pseudoBlocksData.forEach(pb => consumeCutPseudoBlockOrigin(pb));
     
     // Svuota l'Appointment Navigator se non ci sono più pseudo-blocchi
-    // Svuota l'Appointment Navigator se non ci sono più pseudo-blocchi
     if (window.pseudoBlocks.length === 0) {
       clearNavigator(false);
     }
+
+  // WHATSAPP: si chiede DOPO aver disegnato i blocchi, come negli altri due
+  // rami del Navigator. Chiedendolo prima, il ridisegno forzato dall'avviso
+  // abilitazioni (abilForzaRidisegno -> fetchCalendarData, 120 ms dopo le
+  // create) arrivava mentre la domanda era ancora aperta: ridisegnava tutto
+  // dal database e poi questo codice ci appendeva sopra la sua copia, così
+  // ogni pseudoblocco si vedeva due volte.
+  const want = await chiediInvioWhatsappNavigator();
+  if (want === true) {
+    const servizi = pseudoBlocksSnapshot.map(blk => blk.serviceName);
+    const firstAppointment = responses[0];
+    // Normalizza ora in formato HH:MM
+    let oraMsg = '';
+    if (typeof firstAppointment.start_time === 'string') {
+      const m = firstAppointment.start_time.match(/(\d{2}:\d{2})/);
+      oraMsg = m ? m[1] : '';
+    }
+    await inviaWhatsappAutoSeRichiesto(firstAppointment, {
+      client_id: pseudoBlocksSnapshot[0].clientId,
+      client_name: pseudoBlocksSnapshot[0].clientName,
+      data: date,
+      ora: oraMsg || (('0' + hour).slice(-2) + ':' + ('0' + minute).slice(-2)),
+      servizi: servizi
+    }, csrfToken);
+    alert("Messaggio WhatsApp inviato!");
+  }
+  window._navSession = null; // già chiesto qui (e navigator svuotato per intero): nessun debito residuo
 
     // Se proviene da pacchetto, aggiorna data seduta e redirect
     const firstBlock = pseudoBlocksData[0];
