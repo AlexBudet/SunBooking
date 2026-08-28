@@ -149,7 +149,7 @@ def _leggi_metriche(resource_id, metriche, minuti=60, intervallo='PT5M',
             motivo = ''
         if not motivo:
             motivo = (r.text or '')[:400]
-        raise RuntimeError('HTTP %s - %s' % (r.status_code, motivo.strip()[:400]))
+        raise RuntimeError('HTTP %s - %s' % (r.status_code, motivo.strip()[:900]))
 
     campo = aggregazione.lower()
     risultato = {}
@@ -163,6 +163,10 @@ def _leggi_metriche(resource_id, metriche, minuti=60, intervallo='PT5M',
                     serie.append((punto.get('timeStamp'), float(valore)))
         risultato[nome] = {
             'ultimo': serie[-1][1] if serie else None,
+            # Per una PERCENTUALE ha senso l'ultimo valore, per un CONTEGGIO no:
+            # "quante e-mail" e' la somma del periodo, non l'ultimo intervallo
+            # da cinque minuti. Si calcolano entrambi, sceglie chi mostra.
+            'somma': sum(v for _t, v in serie) if serie else None,
             'serie': serie,
         }
     return risultato
@@ -181,9 +185,13 @@ def _con_cache(chiave, produttore):
     return valore
 
 
-def _blocco(resource_env, metriche, minuti, etichette):
+def _blocco(resource_env, metriche, minuti, etichette, aggregazione='Average'):
     """Costruisce un riquadro del pannello, gestendo i tre stati possibili:
-    non configurato / errore / dati."""
+    non configurato / errore / dati.
+
+    `aggregazione` non e' un dettaglio: 'Average' su un contatore di e-mail
+    darebbe la media per intervallo da 5 minuti, un numero che non vuol dire
+    niente e che sembra bassissimo. I conteggi vogliono 'Total'."""
     resource_id = os.environ.get(resource_env)
     if not resource_id:
         return {'stato': 'non_configurato',
@@ -192,12 +200,13 @@ def _blocco(resource_env, metriche, minuti, etichette):
         return {'stato': 'non_configurato',
                 'dettaglio': 'managed identity non attiva su questa app'}
     try:
-        dati = _leggi_metriche(resource_id, metriche, minuti=minuti)
+        dati = _leggi_metriche(resource_id, metriche, minuti=minuti,
+                               aggregazione=aggregazione)
     except Exception as e:
         # 500 e non 200: un messaggio d'errore tagliato a meta' costa piu' di
         # quanto faccia risparmiare. Quello di Azure arriva a ~300 caratteri e
         # la parte che serve sta in fondo.
-        return {'stato': 'errore', 'dettaglio': str(e)[:500],
+        return {'stato': 'errore', 'dettaglio': str(e)[:1000],
                 'metriche_chieste': list(metriche)}
 
     valori = {}
@@ -205,10 +214,11 @@ def _blocco(resource_env, metriche, minuti, etichette):
         m = dati.get(nome) or {}
         valori[nome] = {
             'etichetta': etichetta,
-            'valore': m.get('ultimo'),
+            'valore': m.get('somma') if aggregazione == 'Total' else m.get('ultimo'),
             'serie': m.get('serie', []),
         }
-    return {'stato': 'ok', 'metriche': valori}
+    return {'stato': 'ok', 'metriche': valori, 'aggregazione': aggregazione,
+            'finestra_minuti': minuti}
 
 
 # ---- I riquadri del pannello -----------------------------------------------
@@ -280,14 +290,22 @@ def quota_storage_postgres():
 def metriche_email(minuti=1440):
     """Volume e-mail di Azure Communication Services. Conta gli invii DAL LATO
     DI AZURE: e' il numero che finisce in fattura, e comprende anche quelli che
-    l'applicazione non e' riuscita a registrare (processo morto a meta' invio)."""
+    l'applicazione non e' riuscita a registrare (processo morto a meta' invio).
+
+    I nomi delle metriche NON sono inventabili: EmailSendMailRequestCount,
+    EmailDeliveredCount e EmailBouncedCount - che sembrano i piu' ovvi - non
+    esistono, e Azure risponde 400 all'intera richiesta. I nomi validi per
+    Microsoft.Communication/CommunicationServices li ha elencati Azure stesso
+    nel messaggio d'errore il 28/08/2026: quelli dell'e-mail sono
+    DeliveryStatusUpdate (uno per destinatario, con l'esito) e UserEngagement
+    (aperture e clic). Aggregazione Total: sono conteggi."""
     return _con_cache(('acs', minuti), lambda: _blocco(
         RES_ACS,
-        ['EmailSendMailRequestCount', 'EmailDeliveredCount', 'EmailBouncedCount'],
+        ['DeliveryStatusUpdate', 'UserEngagement'],
         minuti,
-        {'EmailSendMailRequestCount': 'Richieste di invio',
-         'EmailDeliveredCount': 'Consegnate',
-         'EmailBouncedCount': 'Respinte'},
+        {'DeliveryStatusUpdate': 'E-mail con esito di consegna',
+         'UserEngagement': 'Aperture e clic'},
+        aggregazione='Total',
     ))
 
 

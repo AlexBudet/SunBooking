@@ -169,12 +169,12 @@ const SPIEGA = {
   connAttive: "Quante connessioni risultano aperte in questo momento, misurate da " +
     "Azure invece che dall'applicazione. Se questo numero e' molto piu' alto della " +
     "somma dei negozi, c'e' qualcos'altro che si sta collegando.",
-  emailRichieste: "Quante e-mail sono state consegnate ad Azure per l'invio. " +
-    "E' il numero che finisce in fattura.",
-  emailConsegnate: "Quante sono davvero arrivate nella casella del destinatario.",
-  emailRespinte: "Quante sono state rifiutate: indirizzo inesistente, casella " +
-    "piena, dominio che ci considera spam. Se questo numero sale, peggiora la " +
-    "reputazione del mittente e cominciano a non arrivare nemmeno le altre.",
+  emailEsiti: "Aggiornamenti di stato di consegna, uno per destinatario: e' la " +
+    "misura del volume vista da Azure, quella che finisce in fattura. Comprende " +
+    "anche gli invii che l'applicazione non e' riuscita a registrare da sola.",
+  emailAperture: "Aperture e clic sulle e-mail inviate. Si popola solo se il " +
+    "tracciamento del coinvolgimento e' attivo sulla risorsa; a zero significa " +
+    "quasi sempre che e' spento, non che nessuno le apre.",
   pesoDb: "Quanto pesa il database di quel negozio: anagrafiche, appuntamenti, " +
     "scontrini e tutto lo storico.",
   richiesteOra: "Quante pagine e comandi il negozio chiede all'applicazione in " +
@@ -322,9 +322,8 @@ function bloccoAzure(titolo, blocco) {
     MemoryPercentage: 'ram', memory_percent: 'ram',
     storage_percent: 'storagePct',
     active_connections: 'connAttive',
-    EmailSendMailRequestCount: 'emailRichieste',
-    EmailDeliveredCount: 'emailConsegnate',
-    EmailBouncedCount: 'emailRespinte'
+    DeliveryStatusUpdate: 'emailEsiti',
+    UserEngagement: 'emailAperture'
   };
   let righe = '';
   for (const chiave in blocco.metriche) {
@@ -338,9 +337,18 @@ function bloccoAzure(titolo, blocco) {
              '<span>' + sp(m.etichetta, SPIEGA_AZURE[chiave]) + '</span><strong>' +
              v + '</strong></div>';
   }
+  // Un conteggio senza la finestra su cui e' calcolato non e' un numero
+  // leggibile: "1.200 e-mail" vuol dire cose diverse in un'ora o in un mese.
+  const finestra = (blocco.aggregazione === 'Total' && blocco.finestra_minuti)
+    ? '<div class="nota" style="margin-top:6px">totale nelle ultime ' +
+      (blocco.finestra_minuti >= 2880
+        ? dec(blocco.finestra_minuti / 1440, 0) + ' giornate'
+        : dec(blocco.finestra_minuti / 60, 0) + ' ore') + '</div>'
+    : '';
   return '<div class="card"><div class="etichetta" style="font-size:.78em;color:#7a8699;' +
          'text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">' + titolo +
-         '</div>' + (righe || '<span class="vuoto">nessuna metrica</span>') + '</div>';
+         '</div>' + (righe || '<span class="vuoto">nessuna metrica</span>') +
+         finestra + '</div>';
 }
 
 function tabellaTenant(tenant) {
