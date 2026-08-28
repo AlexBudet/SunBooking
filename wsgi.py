@@ -1073,18 +1073,45 @@ def owner_monitor_dati():
 
     byte_tenant = [t['database']['dimensione_byte'] for t in validi
                    if (t.get('database') or {}).get('dimensione_byte')]
+
+    # Il denominatore dello spazio: prima quello dichiarato a mano, poi quello
+    # che Azure sa da se'. Da dentro PostgreSQL non si vede quanto disco c'e'
+    # sotto, e senza un tetto "66 MB" non dice niente a nessuno.
     quota = None
+    fonte_quota = None
     try:
         quota = int(os.environ.get('AZURE_QUOTA_STORAGE_BYTE', '0')) or None
+        if quota:
+            fonte_quota = 'AZURE_QUOTA_STORAGE_BYTE'
     except (TypeError, ValueError):
         quota = None
+    if not quota:
+        try:
+            quota = azure_monitor.quota_storage_postgres()
+            if quota:
+                fonte_quota = 'metrica Azure storage_limit'
+        except Exception:
+            quota = None
     prj_storage = usage_projection.proiezione_storage(byte_tenant, n_tenant, quota_byte=quota)
+    prj_storage['fonte_quota'] = fonte_quota
 
+    # Un tenant che non si riesce a leggere NON entra nella media come se
+    # avesse mandato zero messaggi: viene messo da parte e dichiarato. Prima
+    # una tabella usage_events mancante diventava uno "0 msg" indistinguibile
+    # da un negozio che davvero non manda niente.
     invii_tenant = []
+    invii_non_misurati = []
     for t in validi:
-        canali = (t.get('invii') or {}).get('per_canale') or {}
+        inv = t.get('invii') or {}
+        if inv.get('errore') or 'per_canale' not in inv:
+            invii_non_misurati.append(t.get('nome') or t.get('idx'))
+            continue
+        canali = inv.get('per_canale') or {}
         invii_tenant.append({c: v.get('stima_mensile', 0) for c, v in canali.items()})
-    prj_msg = usage_projection.proiezione_messaggi(invii_tenant, n_tenant)
+    prj_msg = usage_projection.proiezione_messaggi(
+        invii_tenant, n_tenant, tenant_non_misurati=len(invii_non_misurati))
+    if invii_non_misurati:
+        prj_msg['negozi_non_misurati'] = invii_non_misurati
 
     picchi = [(t.get('traffico') or {}).get('picco_orario', 0) for t in validi]
     prj_traffico = usage_projection.proiezione_traffico(

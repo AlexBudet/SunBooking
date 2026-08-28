@@ -36,6 +36,12 @@ def registra_uso(canale, tipo='altro', origine='crm', esito='ok', errore=None):
     Non solleva mai: se il monitoraggio non riesce a scrivere, l'invio e' gia'
     avvenuto e non ha senso propagare l'errore a chi stava mandando il
     messaggio. Il caso tipico e' proprio quello: connessioni esaurite.
+
+    Non sollevare pero' non vuol dire sparire: il fallimento finisce nel log
+    come WARNING. Un contatore che perde righe in silenzio e' peggio di un
+    contatore assente, perche' il pannello mostra "0 messaggi" e quello zero
+    sembra un dato buono. Se usage_events manca su un tenant, quella riga di
+    log e' l'unico posto in cui il guasto si vede.
     """
     try:
         db.session.add(UsageEvent(
@@ -46,9 +52,14 @@ def registra_uso(canale, tipo='altro', origine='crm', esito='ok', errore=None):
             errore=(str(errore)[:300] if errore else None),
         ))
         db.session.commit()
-    except Exception:
+    except Exception as e:
         try:
             db.session.rollback()
+        except Exception:
+            pass
+        try:
+            current_app.logger.warning(
+                "[consumi] invio %s/%s NON contato: %s", canale, tipo, str(e)[:200])
         except Exception:
             pass
 
@@ -365,11 +376,17 @@ def invii_marketing_storici():
 
 def errori(giorni=30):
     """Errori registrati, con in evidenza quelli di connessione: sono gli unici
-    che parlano di capienza e non di logica applicativa."""
+    che parlano di capienza e non di logica applicativa.
+
+    Si porta dietro anche il `context` dell'occorrenza piu' recente. Un numero
+    ("3 errori") non e' un'informazione su cui si possa fare qualcosa: per
+    decidere serve leggere QUALI, e senza il dettaglio si finisce a rifare la
+    stessa query a mano in psql ogni volta."""
     try:
         da = datetime.now(timezone.utc) - timedelta(days=giorni)
         righe = db.session.execute(text("""
-            SELECT reason, count(*) AS n, max(created_at) AS ultimo
+            SELECT reason, count(*) AS n, max(created_at) AS ultimo,
+                   (array_agg(context::text ORDER BY created_at DESC))[1] AS dettaglio
             FROM crm_error_logs WHERE created_at >= :da
             GROUP BY reason ORDER BY n DESC LIMIT 10
         """), {'da': da}).mappings().all()
@@ -384,8 +401,10 @@ def errori(giorni=30):
         """), {'da': da}).mappings().all()
 
         return {
+            'totale': sum(r['n'] for r in righe),
             'principali': [
-                {'motivo': r['reason'], 'n': r['n'], 'ultimo': r['ultimo'].isoformat()}
+                {'motivo': r['reason'], 'n': r['n'], 'ultimo': r['ultimo'].isoformat(),
+                 'dettaglio': (r['dettaglio'][:300] if r['dettaglio'] else None)}
                 for r in righe
             ],
             'connessioni': [

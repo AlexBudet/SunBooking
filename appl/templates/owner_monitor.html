@@ -181,8 +181,13 @@ const SPIEGA = {
     "un'ora. Il “picco” e' l'ora piu' intensa del periodo scelto.",
   picco: "L'ora piu' carica del periodo. E' il numero che conta per capire se si " +
     "regge: un'applicazione cade nell'ora di punta, non nella media della settimana.",
-  erroriTot: "Errori registrati dal gestionale nel periodo scelto. Quelli di " +
-    "connessione, se ci sono, vengono elencati sotto la riga.",
+  erroriTot: "Errori registrati dal gestionale nel periodo scelto. Sono " +
+    "elencati per esteso nella riga sotto: motivo, quante volte, quando " +
+    "l'ultima e il dettaglio tecnico dell'occorrenza piu' recente.",
+  quotaStorage: "Lo spazio totale del server PostgreSQL, non del singolo " +
+    "negozio: i database stanno tutti sullo stesso disco e se finisce, " +
+    "finisce per tutti insieme. Si legge dalla metrica Azure storage_limit " +
+    "oppure dalla variabile AZURE_QUOTA_STORAGE_BYTE.",
   invii: "Messaggi inviati nel periodo, con la media al giorno tra parentesi. " +
     "Il conteggio parte da quando questa versione e' stata installata: prima " +
     "gli invii non venivano registrati da nessuna parte.",
@@ -218,6 +223,16 @@ const fmtEuro = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'E
 function euro(n) {
   if (n === null || n === undefined) return '—';
   return fmtEuro.format(n);
+}
+
+// I messaggi d'errore e i nomi dei negozi arrivano dal database e finiscono in
+// innerHTML: un < in un messaggio di PostgreSQL romperebbe il resto della
+// tabella. Nessun testo che non abbiamo scritto noi entra in pagina senza
+// passare di qui.
+function esc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 // I numeri che arrivano dal server sono float Python: concatenarli in pagina
@@ -326,14 +341,16 @@ function tabellaTenant(tenant) {
 
   tenant.forEach(function (t) {
     if (t.errore) {
-      html += '<tr><td>' + t.nome + '</td><td colspan="7"><span class="stato stato-errore">' +
-              t.errore + '</span></td></tr>';
+      html += '<tr><td>' + esc(t.nome) + '</td><td colspan="7"><span class="stato stato-errore">' +
+              esc(t.errore) + '</span></td></tr>';
       return;
     }
     const db = t.database || {};
     const conn = db.connessioni || {};
     const pool = t.pool || {};
-    const canali = (t.invii || {}).per_canale || {};
+    const invii = t.invii || {};
+    const inviiRotti = Boolean(invii.errore) || !('per_canale' in invii);
+    const canali = invii.per_canale || {};
     const wa = canali.whatsapp || {};
     const em = canali.email || {};
     const tr = t.traffico || {};
@@ -342,15 +359,20 @@ function tabellaTenant(tenant) {
     const usoPool = pool.tetto ? (100 * pool.in_uso / pool.tetto) : null;
 
     html += '<tr>' +
-      '<td><strong>' + t.nome + '</strong></td>' +
+      '<td><strong>' + esc(t.nome) + '</strong></td>' +
       '<td class="num">' + byte(db.dimensione_byte) + '</td>' +
       '<td class="num">' + (conn.del_db !== undefined ? conn.del_db : '—') + '</td>' +
       '<td class="num">' + (pool.tetto ? pool.in_uso + '/' + pool.tetto : '—') +
         (usoPool !== null ? barra(usoPool) : '') + '</td>' +
-      '<td class="num">' + (wa.totale ? fmt.format(wa.totale) + ' <span class="nota">(' +
-        dec(wa.media_giornaliera, 1) + '/g)</span>' : '—') + '</td>' +
-      '<td class="num">' + (em.totale ? fmt.format(em.totale) + ' <span class="nota">(' +
-        dec(em.media_giornaliera, 1) + '/g)</span>' : '—') + '</td>' +
+      // "-" vuol dire zero invii, "n/d" vuol dire che il conteggio non si e'
+      // potuto leggere: confonderli e' il modo in cui un guasto passa per un
+      // dato buono.
+      '<td class="num">' + (inviiRotti ? '<span class="stato stato-errore">n/d</span>' :
+        (wa.totale ? fmt.format(wa.totale) + ' <span class="nota">(' +
+        dec(wa.media_giornaliera, 1) + '/g)</span>' : '—')) + '</td>' +
+      '<td class="num">' + (inviiRotti ? '<span class="stato stato-errore">n/d</span>' :
+        (em.totale ? fmt.format(em.totale) + ' <span class="nota">(' +
+        dec(em.media_giornaliera, 1) + '/g)</span>' : '—')) + '</td>' +
       '<td class="num">' + (tr.media_oraria !== undefined ? dec(tr.media_oraria, 1) +
         ' <span class="nota">picco ' + fmt.format(tr.picco_orario || 0) + '</span>' : '—') + '</td>' +
       '<td class="num">' + ((err.principali || []).reduce(function (a, e) { return a + e.n; }, 0) || 0) + '</td>' +
@@ -365,12 +387,38 @@ function tabellaTenant(tenant) {
                     new Date(c.ultimo).toLocaleString('it-IT'));
       });
     }
-    if (!(t.invii || {}).dati_da) {
+
+    if (inviiRotti) {
+      avvisi.push('conteggio invii NON leggibile: ' + esc(invii.errore || 'risposta incompleta') +
+                  ' — controlla che la tabella usage_events esista su questo negozio');
+    } else if (!invii.dati_da) {
       avvisi.push('nessun invio ancora registrato: il conteggio parte da quando l\'applicazione e\' stata aggiornata');
     }
     if (avvisi.length) {
       html += '<tr><td colspan="8" style="padding-top:0;color:#8a6410;font-size:.85em">' +
               avvisi.join(' · ') + '</td></tr>';
+    }
+
+    // Gli errori si LEGGONO. Un "3" in colonna non e' una informazione su cui
+    // si possa decidere niente: senza il motivo si finisce comunque a rifare
+    // la query a mano in psql, che e' esattamente cio' che il pannello
+    // dovrebbe evitare.
+    if ((err.principali || []).length) {
+      html += '<tr><td colspan="8" style="padding-top:0">' +
+        '<details style="font-size:.86em">' +
+        '<summary style="cursor:pointer;color:#b01046;font-weight:600">' +
+        err.principali.length + (err.principali.length === 1 ? ' motivo' : ' motivi') +
+        ' di errore — clicca per leggerli</summary>' +
+        '<div style="margin-top:6px;border-left:3px solid #f2c4d3;padding-left:10px">' +
+        err.principali.map(function (e) {
+          return '<div style="padding:4px 0;border-bottom:1px solid #f4f6f8">' +
+            '<span style="font-weight:700">' + e.n + '×</span> ' + esc(e.motivo) +
+            '<div class="nota">ultimo: ' + new Date(e.ultimo).toLocaleString('it-IT') + '</div>' +
+            (e.dettaglio ? '<div class="nota" style="font-family:ui-monospace,Consolas,monospace;' +
+              'word-break:break-all;color:#5a6678">' + esc(e.dettaglio) + '</div>' : '') +
+            '</div>';
+        }).join('') +
+        '</div></details></td></tr>';
     }
   });
   return html + '</tbody>';
@@ -419,9 +467,17 @@ function schedaConnessioni(p) {
 }
 
 function schedaStorage(p) {
+  // "66 MB" da solo non e' un'informazione: senza il tetto non si sa se e'
+  // niente o se e' quasi pieno. Il titolone porta sempre il denominatore, e
+  // quando il denominatore non c'e' lo dice invece di far finta di niente.
   let corpo =
     '<div class="valore" style="font-size:1.6em;font-weight:700;margin:6px 0 2px">' +
-      byte(p.totale_byte) + '</div>' +
+      byte(p.totale_byte) +
+      (p.quota_byte
+        ? ' <span style="font-size:.5em;font-weight:400;color:#7a8699">su ' +
+          byte(p.quota_byte) + ' ' + sp('disponibili', 'quotaStorage') + '</span>'
+        : '') +
+    '</div>' +
     '<div class="nota">totale dei ' + p.tenant_ora + ' database</div>' +
     '<div style="margin-top:10px">' +
       riga('Media per negozio', byte(p.medio_byte), true, 'spazioMedio') +
@@ -430,9 +486,20 @@ function schedaStorage(p) {
   if (p.quota_byte) {
     corpo += barra(p.percentuale_usata) +
       '<div style="margin-top:6px">' +
-        riga('Quota', byte(p.quota_byte)) +
+        riga('Spazio totale', byte(p.quota_byte), false, 'quotaStorage') +
+        riga('Ancora libero', byte(p.quota_byte - p.totale_byte), true) +
         riga('Negozi che ci stanno', fmt.format(p.tenant_massimi), true, 'negoziMax') +
-      '</div>';
+      '</div>' +
+      (p.fonte_quota ? '<div class="nota" style="margin-top:6px">tetto letto da: ' +
+        p.fonte_quota + '</div>' : '');
+  } else {
+    corpo += '<div style="margin-top:10px;padding:8px 10px;border-radius:6px;' +
+      'background:#fdf3d8;color:#8a6410;font-size:.85em">' +
+      '&#9888; Spazio totale del server sconosciuto, quindi non si sa quanto manca ' +
+      'al pieno n&eacute; quanti negozi ci stanno. Da dentro PostgreSQL il disco non si ' +
+      'vede: serve il ruolo <strong>Monitoring Reader</strong> sul server (metrica ' +
+      '<code>storage_limit</code>) oppure la variabile <code>AZURE_QUOTA_STORAGE_BYTE</code> ' +
+      'con il tetto in byte.</div>';
   }
   return guscio(p, corpo);
 }
@@ -453,13 +520,23 @@ function schedaMessaggi(p) {
       '</div>';
   }
 
-  const corpo =
+  // Se qualche negozio non e' misurabile va detto SOPRA i numeri, non sotto:
+  // altrimenti si legge "0 msg" e si crede che nessuno mandi niente.
+  const avviso = p.avviso
+    ? '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#fdf3d8;' +
+      'color:#8a6410;font-size:.85em">&#9888; ' + p.avviso +
+      (p.negozi_non_misurati ? ' (' + p.negozi_non_misurati.join(', ') + ')' : '') + '</div>'
+    : '';
+
+  const corpo = avviso +
     '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px">' +
       colonna('Oggi · ' + o.tenant + ' negozi', o) +
       colonna('A ' + f.tenant + ' negozi', f) +
     '</div>' +
     '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #eceff3">' +
-      riga('Media per negozio', dec(p.per_tenant_mese.whatsapp, 1) + ' WhatsApp · ' +
+      riga('Media per negozio' + (p.tenant_non_misurati ?
+             ' (su ' + p.tenant_misurati + ' misurati)' : ''),
+           dec(p.per_tenant_mese.whatsapp, 1) + ' WhatsApp · ' +
            dec(p.per_tenant_mese.email, 1) + ' e-mail al mese') +
     '</div>' +
     '<div class="ipotesi">Prezzi usati: WhatsApp ' + euro(pr.whatsapp_per_tenant_mese) +
@@ -480,7 +557,9 @@ function schedaTraffico(p) {
       riga('Picco orario per negozio', fmt.format(p.picco_orario_tenant) + ' richieste',
            false, 'picco') +
       riga('Media oraria per negozio', fmt.format(p.medio_orario_tenant) + ' richieste') +
-      (p.tenant_massimi ? riga('Negozi che reggi', fmt.format(p.tenant_massimi), true, 'negoziMax') : '') +
+      (p.tenant_massimi
+        ? riga('Negozi che reggi', fmt.format(p.tenant_massimi), true, 'negoziMax')
+        : riga('Negozi che reggi', '— tetto req/s non impostato')) +
     '</div>';
   return guscio(p, corpo);
 }

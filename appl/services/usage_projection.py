@@ -102,7 +102,8 @@ def proiezione_storage(byte_per_tenant, n_tenant, quota_byte=None):
     return res
 
 
-def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=100):
+def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=100,
+                        tenant_non_misurati=0):
     """Volume di messaggi e costo, oggi e all'obiettivo.
 
     Il costo WhatsApp NON e' per messaggio ma per account collegato: e' un
@@ -110,34 +111,49 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
     invece si pagano a pezzo. Sono due matematiche diverse e tenerle separate
     evita la stima sbagliata classica (moltiplicare i messaggi per un prezzo
     unitario che non esiste).
+
+    `invii_per_canale_per_tenant` contiene SOLO i negozi che si e' riusciti a
+    misurare; `tenant_non_misurati` conta quelli letti male (tabella mancante,
+    database non raggiungibile). La distinzione non e' formale: un negozio che
+    non si riesce a leggere non e' un negozio che manda zero messaggi, e
+    metterlo nel denominatore abbassa la media e sottostima la proiezione.
     """
     wa_mese = sum(t.get('whatsapp', 0) for t in invii_per_canale_per_tenant)
     em_mese = sum(t.get('email', 0) for t in invii_per_canale_per_tenant)
-    tenant = max(1, n_tenant)
+    misurati = len(invii_per_canale_per_tenant)
+    divisore = max(1, misurati)
 
-    wa_per_tenant = wa_mese / tenant
-    em_per_tenant = em_mese / tenant
+    wa_per_tenant = wa_mese / divisore
+    em_per_tenant = em_mese / divisore
 
     prezzo_wa = _euro(*PREZZO_WHATSAPP_TENANT_MESE)
     prezzo_em = _euro(*PREZZO_EMAIL_UNITARIO)
     inclusi = int(_euro(*TENANT_WHATSAPP_INCLUSI))
 
-    def costo(n):
+    def blocco(n, wa_msg, em_msg):
+        """I messaggi sono un dato, il costo una funzione del numero di negozi.
+        Per "oggi" i messaggi sono la somma MISURATA, non una moltiplicazione:
+        estrapolare il presente da se stesso e' solo un modo per nasconderci
+        dentro i negozi non misurati."""
         return {
             'tenant': n,
-            'whatsapp_messaggi_mese': round(wa_per_tenant * n),
-            'email_messaggi_mese': round(em_per_tenant * n),
+            'whatsapp_messaggi_mese': round(wa_msg),
+            'email_messaggi_mese': round(em_msg),
             'costo_whatsapp_mese': round(max(0, n - inclusi) * prezzo_wa, 2),
-            'costo_email_mese': round(em_per_tenant * n * prezzo_em, 2),
+            'costo_email_mese': round(em_msg * prezzo_em, 2),
         }
 
-    oggi = costo(n_tenant)
-    domani = costo(tenant_obiettivo)
-    return {
+    oggi = blocco(n_tenant, wa_mese, em_mese)
+    domani = blocco(tenant_obiettivo,
+                    wa_per_tenant * tenant_obiettivo,
+                    em_per_tenant * tenant_obiettivo)
+    res = {
         'tipo': 'messaggi',
         'metrica': 'Messaggi e costo variabile',
         'oggi': oggi,
         'obiettivo': domani,
+        'tenant_misurati': misurati,
+        'tenant_non_misurati': tenant_non_misurati,
         'per_tenant_mese': {
             'whatsapp': round(wa_per_tenant, 1),
             'email': round(em_per_tenant, 1),
@@ -150,6 +166,15 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
         'ipotesi': ('un negozio nuovo manda quanto la media di quelli attuali; il '
                     'canone WhatsApp si paga per account collegato, non per messaggio'),
     }
+    if tenant_non_misurati:
+        def _negozi(n):
+            return '1 negozio' if n == 1 else '%d negozi' % n
+        res['avviso'] = (
+            "Di %s su %d non si riesce a leggere il conteggio (manca la tabella "
+            "usage_events o il database non risponde): i messaggi qui sotto sono "
+            "solo quelli di %s, non un totale."
+            % (_negozi(tenant_non_misurati), n_tenant, _negozi(misurati)))
+    return res
 
 
 def proiezione_traffico(richieste_ora_per_tenant, n_tenant, tenant_obiettivo=100,

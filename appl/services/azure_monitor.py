@@ -208,7 +208,13 @@ def metriche_app_service(minuti=180):
 
 def metriche_postgres(minuti=180):
     """Server PostgreSQL: e' qui che si legge quanto manca al tetto delle
-    connessioni, la metrica che ha prodotto l'avviso del 27/08/2026."""
+    connessioni, la metrica che ha prodotto l'avviso del 27/08/2026.
+
+    Le metriche di spazio NON stanno qui ma in `spazio_postgres()`, in una
+    chiamata separata apposta: Azure risponde 400 all'intera richiesta se anche
+    un solo nome di metrica non esiste per quel tipo di server. Tenendole
+    insieme, un `storage_limit` non riconosciuto porterebbe via anche CPU, RAM e
+    connessioni - cioe' le metriche che servono di piu'."""
     return _con_cache(('postgres', minuti), lambda: _blocco(
         RES_POSTGRES,
         ['cpu_percent', 'memory_percent', 'storage_percent', 'active_connections'],
@@ -216,6 +222,37 @@ def metriche_postgres(minuti=180):
         {'cpu_percent': 'CPU %', 'memory_percent': 'RAM %',
          'storage_percent': 'Storage %', 'active_connections': 'Connessioni attive'},
     ))
+
+
+def spazio_postgres(minuti=180):
+    """Spazio del server: usato, libero e TOTALE.
+
+    `storage_limit` e' l'unico posto da cui si ricava il denominatore: da dentro
+    PostgreSQL si vede quanto pesa un database, non quanto disco c'e' sotto.
+    Senza, il pannello puo' solo dire "66 MB" e lasciare indovinare se sia
+    niente o se sia quasi pieno."""
+    return _con_cache(('postgres_spazio', minuti), lambda: _blocco(
+        RES_POSTGRES,
+        ['storage_used', 'storage_free', 'storage_limit'],
+        minuti,
+        {'storage_used': 'Spazio usato sul server', 'storage_free': 'Spazio libero',
+         'storage_limit': 'Spazio totale del server'},
+    ))
+
+
+def quota_storage_postgres():
+    """Il tetto di spazio del server in byte, se Azure lo dice. None altrimenti.
+
+    Vive qui e non nel pannello perche' e' una domanda sola con una risposta
+    sola: chi la chiama non deve sapere com'e' fatto il blocco metriche."""
+    blocco = spazio_postgres()
+    if blocco.get('stato') != 'ok':
+        return None
+    valore = ((blocco.get('metriche') or {}).get('storage_limit') or {}).get('valore')
+    try:
+        return int(valore) if valore else None
+    except (TypeError, ValueError):
+        return None
 
 
 def metriche_email(minuti=1440):

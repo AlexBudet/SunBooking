@@ -4879,6 +4879,11 @@ def api_help_contatta_supporto():
         return jsonify(success=False, error='Numero del supporto non configurato correttamente.',
                        fallback=True), 500
 
+    # Anche la richiesta di assistenza e' una chiamata a Unipile e va contata:
+    # il canone si paga per account collegato, ma il pannello consumi serve a
+    # sapere QUANTO passa da quell'account, non solo quanto costa.
+    from ..services.usage_monitor import registra_uso
+
     try:
         # Form-encoded (data=), non json=: e' quanto si aspetta Unipile.
         response = requests.post(
@@ -4891,8 +4896,9 @@ def api_help_contatta_supporto():
             headers={'X-API-KEY': unipile_token, 'accept': 'application/json'},
             timeout=30,
         )
-    except Exception:
+    except Exception as exc:
         current_app.logger.exception("[supporto] invio WhatsApp fallito per '%s'", negozio)
+        registra_uso('whatsapp', tipo='assistenza', origine='crm', esito='errore', errore=exc)
         return jsonify(success=False, error='Non siamo riusciti a inviare la richiesta.',
                        fallback=True), 502
 
@@ -4900,9 +4906,12 @@ def api_help_contatta_supporto():
         current_app.logger.error(
             "[supporto] Unipile http=%s body=%s", response.status_code, (response.text or '')[:500]
         )
+        registra_uso('whatsapp', tipo='assistenza', origine='crm', esito='errore',
+                     errore=f"HTTP {response.status_code}: {(response.text or '')[:200]}")
         return jsonify(success=False, error='Non siamo riusciti a inviare la richiesta.',
                        fallback=True), 502
 
+    registra_uso('whatsapp', tipo='assistenza', origine='crm', esito='ok')
     current_app.logger.info("[supporto] richiesta inviata da '%s' (%s)", negozio, current_user.username)
     return jsonify(success=True, negozio=negozio)
 
