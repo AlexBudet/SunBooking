@@ -6,6 +6,14 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, redirect, url_for, request, session, send_from_directory
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from waitress import serve
+
+# Thread di waitress: quante richieste l'applicazione puo' servire davvero in
+# parallelo. Non e' un dettaglio del server ma IL numero da cui dipende la
+# capienza: con 16 thread e una richiesta che dura in media D secondi, il tetto
+# teorico e' 16/D richieste al secondo. Sta qui in cima, e non sepolto dentro
+# la serve() in fondo al file, perche' il pannello consumi lo legge per
+# calcolare quanti negozi si reggono.
+THREAD_SERVER = 16
 from appl import create_app, db
 from appl.models import BusinessInfo
 from appl.autologin import issue_token as autologin_issue
@@ -1149,8 +1157,28 @@ def owner_monitor_dati():
     prj_msg['unipile'] = unipile_monitor.stato_account()
 
     picchi = [(t.get('traffico') or {}).get('picco_orario', 0) for t in validi]
+
+    # Il tetto di richieste al secondo NON e' un numero che Azure pubblica: i
+    # piani App Service non dichiarano req/s. Lo si ricava dai due numeri che
+    # misuriamo: quante richieste si servono in parallelo (i thread) e quanto
+    # dura in media una richiesta. 16 thread e 80 ms l'una fanno 200 req/s.
+    # E' un tetto di CONCORRENZA: la CPU puo' saturare prima, e quando le
+    # metriche Azure sono configurate il riquadro App Service lo dice.
+    ms_totali = sum(((t.get('traffico') or {}).get('ms_medi') or 0) *
+                    ((t.get('traffico') or {}).get('richieste_misurate') or 0)
+                    for t in validi)
+    richieste_misurate = sum((t.get('traffico') or {}).get('richieste_misurate') or 0
+                             for t in validi)
+    ms_medi = (ms_totali / richieste_misurate) if richieste_misurate else None
+    tetto_req_sec = (THREAD_SERVER / (ms_medi / 1000.0)) if ms_medi else None
+
     prj_traffico = usage_projection.proiezione_traffico(
-        [p for p in picchi if p], n_tenant)
+        [p for p in picchi if p], n_tenant,
+        tetto_richieste_secondo=tetto_req_sec)
+    if ms_medi:
+        prj_traffico['ms_medi_misurati'] = round(ms_medi)
+        prj_traffico['thread_server'] = THREAD_SERVER
+        prj_traffico['richieste_misurate'] = richieste_misurate
 
     proiezioni = [prj_conn, prj_storage, prj_msg, prj_traffico]
 
@@ -1836,4 +1864,4 @@ def owner_logout():
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5050"))
     print(f"Avvio server su http://127.0.0.1:{port}/landing-web")
-    serve(application, host='127.0.0.1', port=port, threads=16)
+    serve(application, host='127.0.0.1', port=port, threads=THREAD_SERVER)

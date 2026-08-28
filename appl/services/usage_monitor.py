@@ -184,12 +184,26 @@ def traffico(giorni=7):
 
         totale = sum(s['richieste'] for s in serie)
         ore = len(serie) or 1
+
+        # Durata media pesata sulle richieste, non media delle medie: un'ora
+        # con 3 richieste lente non deve contare quanto un'ora con 2.000.
+        # Serve a calcolare la capienza del server: con N thread e una
+        # richiesta che dura D secondi, il tetto e' N/D richieste al secondo.
+        ms_totali = sum(r.ms_totali for r in righe)
+        richieste_db = sum(r.richieste for r in righe)
+        if corrente.get('richieste'):
+            ms_totali += corrente['ms_totali']
+            richieste_db += corrente['richieste']
+
         return {
             'serie': serie,
             'totale': totale,
             'media_oraria': round(totale / ore, 1),
             'picco_orario': max((s['richieste'] for s in serie), default=0),
             'errori': sum(s['errori'] for s in serie),
+            'ms_medi': round(ms_totali / richieste_db) if richieste_db else None,
+            'ms_max': max((s['ms_max'] for s in serie), default=0),
+            'richieste_misurate': richieste_db,
             'giorni': giorni,
         }
     except Exception as e:

@@ -57,6 +57,26 @@
     .stato-errore { background: #fce4eb; color: #b01046; }
     .stato-spento { background: #eceff3; color: #7a8699; }
 
+    /* Le barre dei limiti sono piu' alte di quelle delle schede apposta: qui
+       il colpo d'occhio e' il punto, non un dettaglio a corredo. */
+    .limite { display: grid; grid-template-columns: minmax(150px, 1.1fr) 1fr auto auto;
+              gap: 12px; align-items: center; padding: 10px 0;
+              border-bottom: 1px solid #f0f2f5; }
+    .limite:last-child { border-bottom: 0; }
+    .limite .nome { font-weight: 600; }
+    .limite .quanto { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .limite .pct { font-weight: 700; font-variant-numeric: tabular-nums;
+                   white-space: nowrap; min-width: 58px; text-align: right; }
+    .limite-barra { height: 12px; border-radius: 6px; background: #eceff3; overflow: hidden; }
+    .limite-barra > span { display: block; height: 100%; border-radius: 6px; }
+    .b-ok > span { background: #34a06a; }
+    .b-attenzione > span { background: #e0a325; }
+    .b-superata > span { background: #e72c64; }
+    @media (max-width: 640px) {
+      .limite { grid-template-columns: 1fr auto; }
+      .limite-barra { grid-column: 1 / -1; }
+    }
+
     .ipotesi { font-size: .82em; color: #7a8699; margin-top: 8px; font-style: italic; }
     .vincolo { border-left: 4px solid #e72c64; }
     .vuoto { color: #7a8699; font-style: italic; }
@@ -119,6 +139,9 @@
   <div id="contenuto" style="display:none">
 
     <div class="card vincolo" id="riepilogo"></div>
+
+    <h2>Limiti di invio</h2>
+    <div id="limiti"></div>
 
     <h2>Infrastruttura Azure</h2>
     <div class="griglia" id="azure"></div>
@@ -209,6 +232,12 @@ const SPIEGA = {
   costoEmail: "Le e-mail si pagano a messaggio. Il prezzo singolo e' minuscolo, " +
     "ma va moltiplicato per il volume: e' l'opposto del WhatsApp.",
   reqSec: "Richieste al secondo che l'applicazione deve servire.",
+  tettoReqSec: "Quante richieste al secondo l'applicazione riesce a servire. " +
+    "Azure NON pubblica un limite di richieste al secondo per i piani App " +
+    "Service: questo numero non e' preso da un listino, e' calcolato dai " +
+    "thread del server diviso la durata media misurata di una richiesta. " +
+    "E' un tetto di CONCORRENZA: la CPU puo' saturare prima, e in quel caso " +
+    "se ne accorge il riquadro App Service qui sopra.",
   spazioMedio: "Media dei database esistenti. Si usa la media e non il totale " +
     "perche' i negozi hanno anzianita' diverse: dice quanto pesera' il prossimo.",
   periodo: "Cambia la finestra di tempo su cui sono calcolati invii, errori e " +
@@ -528,6 +557,65 @@ function schedaStorage(p) {
   return guscio(p, corpo);
 }
 
+
+// ---------------------------------------------------------------------------
+// Limiti di invio: la domanda "quanto ne ho usato del massimo?" merita un
+// blocco suo in cima, non tre righe in fondo alla scheda dei costi. Una riga
+// per limite, barra colorata, percentuale grande e una frase in italiano che
+// dice cosa succede se si sfonda. Zero gergo.
+// ---------------------------------------------------------------------------
+function schedaLimiti(soglie, picchi) {
+  if (!soglie || !soglie.length) {
+    return '<div class="card"><span class="vuoto">Nessun limite da controllare.</span></div>';
+  }
+
+  // Il peggiore in testa: e' quello che si tocca per primo, e l'unico che
+  // conta davvero finche' non lo si e' risolto.
+  const ordinate = soglie.slice().sort(function (a, b) { return b.percentuale - a.percentuale; });
+  const peggiore = ordinate[0];
+
+  const titolo = peggiore.livello === 'superata'
+    ? {testo: 'Un limite è stato superato', colore: '#b01046'}
+    : peggiore.livello === 'attenzione'
+      ? {testo: 'Ti stai avvicinando a un limite', colore: '#8a6410'}
+      : {testo: 'Tutti i limiti sono lontani', colore: '#2c7a4b'};
+
+  const righe = ordinate.map(function (s) {
+    const larghezza = Math.min(100, Math.max(2, s.percentuale));
+    const chip = s.livello === 'superata' ? 'stato-errore'
+               : s.livello === 'attenzione' ? 'stato-attenzione' : 'stato-ok';
+    const etichetta = s.livello === 'superata' ? 'SUPERATO'
+                    : s.livello === 'attenzione' ? 'ATTENZIONE' : 'ok';
+    return '<div class="limite">' +
+      '<div class="nome">' + esc(s.canale) + '<div class="nota">' + esc(s.periodo) + '</div></div>' +
+      '<div class="limite-barra b-' + s.livello + '"><span style="width:' + larghezza + '%"></span></div>' +
+      '<div class="quanto">' + fmt.format(s.inviati) + ' / ' + fmt.format(s.soglia) + '</div>' +
+      '<div class="pct" style="color:' + (s.livello === 'superata' ? '#b01046'
+        : s.livello === 'attenzione' ? '#8a6410' : '#2c7a4b') + '">' +
+      dec(s.percentuale, 0) + '%<div><span class="stato ' + chip + '">' + etichetta + '</span></div></div>' +
+      '</div>';
+  }).join('');
+
+  // La conseguenza in chiaro, una sola volta e solo se serve davvero.
+  const conseguenza = peggiore.livello === 'ok' ? '' :
+    '<div style="margin-top:10px;padding:10px 12px;border-radius:8px;background:' +
+    (peggiore.livello === 'superata' ? '#fce4eb;color:#b01046' : '#fdf3d8;color:#8a6410') +
+    ';font-size:.9em"><strong>Cosa succede:</strong> ' + esc(peggiore.rischio || '') +
+    '. Riguarda ' + esc(peggiore.canale) + ' ' + esc(peggiore.periodo) + '.</div>';
+
+  return '<div class="card">' +
+    '<div style="font-size:1.15em;font-weight:700;color:' + titolo.colore + ';margin-bottom:2px">' +
+      titolo.testo + '</div>' +
+    '<div class="nota" style="margin-bottom:10px">Quanto è stato usato del massimo consentito, ' +
+      'nel momento più intenso del periodo scelto</div>' +
+    righe + conseguenza +
+    (picchi ? '<div class="ipotesi">Misurato: ' + fmt.format(picchi.email_ora) +
+      ' e-mail nell’ora di punta sommando tutti i negozi (il tetto Azure è ' +
+      'condiviso da tutta la sottoscrizione) · ' + fmt.format(picchi.whatsapp_minuto) +
+      ' WhatsApp nel minuto di punta del negozio più attivo.</div>' : '') +
+    '</div>';
+}
+
 function schedaMessaggi(p) {
   const o = p.oggi, f = p.obiettivo, pr = p.prezzi_usati;
 
@@ -589,55 +677,9 @@ function schedaMessaggi(p) {
            dec(p.per_tenant_mese.email, 1) + ' e-mail al mese') +
     '</div>' +
     riquadroUnipile +
-    // Quanto si e' vicini al tetto. Un totale di messaggi senza il tetto non
-    // dice se si sta per sbattere: e' lo stesso difetto dello spazio database.
-    (p.soglie || []).map(function (s) {
-      // Tre stati, tre colori. Il giallo all'80% e' il solo che serva davvero:
-      // il rosso al 100% arriva quando i messaggi sono gia' stati respinti.
-      const allarme = s.livello === 'superata'
-        ? {sfondo:'#fce4eb', testo:'#b01046',
-           msg:'LIMITE SUPERATO: ' + esc(s.rischio || '') + '.'}
-        : s.livello === 'attenzione'
-          ? {sfondo:'#fdf3d8', testo:'#8a6410',
-             msg:'Sei oltre l’' + dec(SOGLIA_ATTENZIONE, 0) + '% del limite: ne restano ' +
-                 fmt.format(s.margine) + '.'}
-          : null;
-      return '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #eceff3">' +
-        riga(s.canale + ' ' + s.periodo,
-             fmt.format(s.inviati) + ' su ' + fmt.format(s.soglia) +
-             ' <span class="nota">(' + dec(s.percentuale, 1) + '%)</span>', true) +
-        barra(s.percentuale) +
-        (allarme
-          ? '<div style="margin-top:6px;padding:8px 10px;border-radius:6px;background:' +
-            allarme.sfondo + ';color:' + allarme.testo + ';font-size:.85em">&#9888; ' +
-            allarme.msg + '</div>'
-          : '') +
-        (s.sfora_a_obiettivo
-          ? '<div style="margin-top:6px;padding:8px 10px;border-radius:6px;' +
-            'background:#fce4eb;color:#b01046;font-size:.85em">&#9888; A ' +
-            s.tenant_obiettivo + ' negozi ne manderesti ' +
-            fmt.format(s.previsti_obiettivo) + ', cioè il ' +
-            dec(s.percentuale_obiettivo, 0) + '% del tetto: lo sfondi crescendo.</div>'
-          : (s.previsti_obiettivo !== undefined
-              ? riga('A ' + s.tenant_obiettivo + ' negozi',
-                     fmt.format(s.previsti_obiettivo) + ' su ' + fmt.format(s.soglia) +
-                     ' <span class="nota">(' + dec(s.percentuale_obiettivo, 1) + '%)</span>')
-              : '')) +
-        '</div>';
-    }).join('') +
-    // I picchi si mostrano SEMPRE, anche senza un tetto dichiarato: sapere che
-    // in un minuto sono partite 300 e-mail e' un'informazione utile di suo.
-    (p.picchi && (p.picchi.email_minuto || p.picchi.email_ora || p.picchi.whatsapp_ora)
-      ? '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #eceff3">' +
-        riga('Raffica massima (tutti i negozi insieme)',
-             fmt.format(p.picchi.email_ora) + ' e-mail in un’ora · ' +
-             fmt.format(p.picchi.whatsapp_ora) + ' WhatsApp in un’ora',
-             false, 'raffica') +
-        riga('Punta al minuto (singolo negozio)',
-             fmt.format(p.picchi.email_minuto) + ' e-mail · ' +
-             fmt.format(p.picchi.whatsapp_minuto) + ' WhatsApp') +
-        '</div>'
-      : '') +
+    // Le soglie e i picchi NON stanno piu' qui: hanno un blocco tutto loro in
+    // cima alla pagina (schedaLimiti). Questa scheda torna a parlare di una
+    // cosa sola - volumi e costo - invece di mescolare due domande diverse.
     (p.soglie_assenti
       ? '<div class="nota" style="margin-top:10px">' + p.soglie_assenti + '</div>'
       : '') +
@@ -661,7 +703,17 @@ function schedaTraffico(p) {
       riga('Media oraria per negozio', fmt.format(p.medio_orario_tenant) + ' richieste') +
       (p.tenant_massimi
         ? riga('Negozi che reggi', fmt.format(p.tenant_massimi), true, 'negoziMax')
-        : riga('Negozi che reggi', '— tetto req/s non impostato')) +
+        : riga('Negozi che reggi', '— non ancora calcolabile')) +
+      (p.tetto_richieste_secondo
+        ? riga('Tetto del server', dec(p.tetto_richieste_secondo, 0) + ' req/s',
+               false, 'tettoReqSec')
+        : '') +
+      (p.ms_medi_misurati
+        ? '<div class="nota" style="margin-top:6px">' + p.thread_server +
+          ' thread ÷ ' + fmt.format(p.ms_medi_misurati) +
+          ' ms per richiesta (media misurata su ' +
+          fmt.format(p.richieste_misurate) + ' richieste)</div>'
+        : '') +
     '</div>';
   return guscio(p, corpo);
 }
@@ -704,6 +756,12 @@ function disegna(d) {
     bloccoAzure('App Service (CPU / RAM)', az.app_service) +
     bloccoAzure('PostgreSQL', az.postgres) +
     bloccoAzure('E-mail (ACS)', az.email);
+
+  // I limiti di invio vivono dentro la proiezione "messaggi", ma si disegnano
+  // in cima e da soli: e' la domanda che l'owner si fa per prima.
+  const msg = (d.proiezioni || []).filter(function (x) { return x.tipo === 'messaggi'; })[0];
+  document.getElementById('limiti').innerHTML =
+    schedaLimiti(msg && msg.soglie, msg && msg.picchi);
 
   document.getElementById('tabella-tenant').innerHTML = tabellaTenant(d.tenant || []);
   document.getElementById('proiezioni').innerHTML =
