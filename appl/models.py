@@ -948,3 +948,75 @@ class Oroscopo(db.Model):
 
     def __repr__(self):
         return f"<Oroscopo {self.scan_batch} {self.segno}>"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Monitoraggio consumi (pannello owner)
+# ─────────────────────────────────────────────────────────────────────────────
+# Due tabelle sole, entrambe nel database DEL TENANT: chi consuma e' il singolo
+# negozio, e il pannello owner somma i tenant leggendoli uno per uno. Tenerle
+# qui invece che nel registro centrale evita scritture cross-database dai thread
+# di invio (che girano fuori da qualunque request context) e fa si' che un
+# tenant spento smetta semplicemente di contribuire.
+
+class UsageEvent(db.Model):
+    """Una riga per ogni invio che COSTA: WhatsApp (Unipile) ed e-mail (Azure
+    Communication Services). Serve a rispondere a "quanti ne ho mandati e con
+    che frequenza", che oggi non e' ricostruibile: gli invii finiscono solo
+    nei print() del processo e si perdono al riavvio.
+
+    Perche' non riusare marketing_invii: quella tabella esiste per far
+    rispettare il limite giornaliero del marketing e copre SOLO il marketing.
+    Promemoria, conferme, memo mattutino e codici d'accesso - cioe' il grosso
+    del consumo - non sono tracciati da nessuna parte.
+
+    NON si salva il destinatario: per contare i consumi non serve, e un numero
+    di telefono in piu' in giro e' un dato personale in piu' da proteggere.
+    Per risalire al singolo invio restano i log applicativi."""
+    __tablename__ = 'usage_events'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now(),
+                           nullable=False, index=True)
+
+    # 'whatsapp' | 'email'
+    canale = db.Column(db.String(20), nullable=False, index=True)
+    # A cosa serviva l'invio: 'promemoria', 'conferma', 'marketing', 'memo_operatore',
+    # 'codice_accesso', 'riepilogo_errori', 'manuale'. Stringa e non Enum apposta:
+    # nasceranno altri tipi e un Enum su PostgreSQL va migrato ogni volta.
+    tipo = db.Column(db.String(40), nullable=False, default='altro')
+    # Quale applicazione ha inviato: 'crm' (questa) o 'booking' (app prenotazioni).
+    origine = db.Column(db.String(20), nullable=False, default='crm')
+    # 'ok' | 'errore'
+    esito = db.Column(db.String(10), nullable=False, default='ok', index=True)
+    errore = db.Column(db.String(300), nullable=True)
+
+    __table_args__ = (
+        db.Index('ix_usage_events_canale_data', 'canale', 'created_at'),
+    )
+
+    def __repr__(self):
+        return f"<UsageEvent {self.canale}/{self.tipo} {self.esito}>"
+
+
+class UsageTrafficHourly(db.Model):
+    """Traffico HTTP aggregato per ora. Non una riga per richiesta: a ~1 req/s
+    con il solarium aperto sarebbero milioni di righe l'anno per contare una
+    cosa che si guarda a colpo d'occhio. Il conteggio vive in memoria e viene
+    scaricato qui una volta all'ora (e all'arrivo della prima richiesta
+    dell'ora successiva), cosi' un riavvio perde al massimo l'ora in corso.
+
+    ms_totali invece della media: le medie non si possono sommare fra ore
+    diverse, i totali si. La media si ricava dividendo per richieste."""
+    __tablename__ = 'usage_traffic_hourly'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    # Ora troncata (UTC). Unica: il flush fa UPSERT su questa colonna.
+    ora = db.Column(db.DateTime(timezone=True), nullable=False, unique=True, index=True)
+
+    richieste = db.Column(db.Integer, nullable=False, default=0)
+    errori = db.Column(db.Integer, nullable=False, default=0)      # risposte 5xx
+    ms_totali = db.Column(db.BigInteger, nullable=False, default=0)
+    ms_max = db.Column(db.Integer, nullable=False, default=0)
+
+    def __repr__(self):
+        return f"<UsageTrafficHourly {self.ora} {self.richieste} req>"

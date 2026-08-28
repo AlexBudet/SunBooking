@@ -1,6 +1,6 @@
 # appl/__init__.py
 from flask_wtf.csrf import CSRFProtect, generate_csrf
-from flask import Flask, current_app, jsonify, render_template, request, redirect, url_for, session, flash
+from flask import Flask, current_app, g, jsonify, render_template, request, redirect, url_for, session, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash
 from argon2 import PasswordHasher, exceptions as argon2_exceptions
@@ -619,6 +619,35 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
         except Exception as e:
             # Non trapelo stacktrace lato client, basta l'esito
             return {"ok": False, "db": "down"}, 503
+
+    # ── Conteggio del traffico (pannello owner) ───────────────────────────
+    # Due hook leggerissimi: uno segna l'inizio, l'altro somma in memoria. Il
+    # database lo si tocca una volta all'ora, quando cambia l'ora e c'e' un
+    # blocco da scaricare - non a ogni richiesta, altrimenti si consumerebbe
+    # piu' database per misurare il traffico che per servirlo.
+    #
+    # Volutamente fuori da qualunque try di comodo: se il conteggio fallisce
+    # non deve rompere la risposta, ma nemmeno restare invisibile.
+    @app.before_request
+    def _traffico_inizio():
+        g._t_inizio = time.monotonic()
+
+    @app.after_request
+    def _traffico_fine(response):
+        inizio = getattr(g, '_t_inizio', None)
+        if inizio is None:
+            return response
+        try:
+            from appl.services.usage_monitor import registra_richiesta, scarica_traffico
+            da_scaricare = registra_richiesta((time.monotonic() - inizio) * 1000.0,
+                                              response.status_code)
+            # Lo scarico avviene fuori dal lock e una sola volta all'ora: e' la
+            # prima richiesta dell'ora nuova a pagare la INSERT dell'ora vecchia.
+            if da_scaricare:
+                scarica_traffico(da_scaricare)
+        except Exception:
+            app.logger.debug("[traffico] conteggio non riuscito", exc_info=True)
+        return response
 
     # ── Esaurimento connessioni al database ───────────────────────────────
     # Registrato qui, una volta per app, invece che nelle singole rotte:

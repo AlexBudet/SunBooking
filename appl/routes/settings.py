@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 import os, ipaddress, requests
 from sqlalchemy.sql import func, or_
 from .. import db
-from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession, PrepagataRicaricaRegola, service_operator
+from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession, PrepagataRicaricaRegola, service_operator, UsageEvent
 from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
 from .calendar import _compute_client_loyalty, LOYALTY_DEFAULT
 
@@ -4085,6 +4085,8 @@ def marketing_send_whatsapp():
                     stato='inviato'
                 )
                 db.session.add(invio)
+                db.session.add(UsageEvent(canale='whatsapp', tipo='marketing',
+                                          origine='crm', esito='ok'))
                 risultati['inviati'] += 1
             else:
                 # Registra errore
@@ -4096,9 +4098,12 @@ def marketing_send_whatsapp():
                     errore=errore_msg
                 )
                 db.session.add(invio)
+                db.session.add(UsageEvent(canale='whatsapp', tipo='marketing',
+                                          origine='crm', esito='errore',
+                                          errore=errore_msg[:300]))
                 risultati['errori'] += 1
                 risultati['dettagli_errori'].append(f"{client_data.get('nome', '?')}: {errore_msg[:50]}")
-                
+
         except Exception as e:
             invio = MarketingInvio(
                 client_id=client_id,
@@ -4107,6 +4112,9 @@ def marketing_send_whatsapp():
                 errore=str(e)[:500]
             )
             db.session.add(invio)
+            db.session.add(UsageEvent(canale='whatsapp', tipo='marketing',
+                                      origine='crm', esito='errore',
+                                      errore=str(e)[:300]))
             risultati['errori'] += 1
             risultati['dettagli_errori'].append(f"{client_data.get('nome', '?')}: {str(e)[:50]}")
     

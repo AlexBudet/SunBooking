@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TOSCA — Consumi e capienza</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 30px 20px 60px;
+      background: #f0f2f5;
+      min-height: 100vh;
+      color: #2f3b4b;
+    }
+    h1 { color: #2f3b4b; margin: 0 0 4px; }
+    h2 { color: #2f3b4b; font-size: 1.05em; margin: 28px 0 10px; }
+    .subtitle { color: #777; font-size: 0.92em; margin: 0; }
+    .header-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px; flex-wrap: wrap; gap: 10px;
+    }
+    .btn {
+      padding: 7px 16px; border: none; border-radius: 7px; cursor: pointer;
+      font-size: 0.9em; text-decoration: none; font-weight: 600;
+      background: #4b5c72; color: #fff; display: inline-block;
+    }
+    .btn:hover { background: #34435a; }
+    .btn-logout { background: #e72c64; }
+    .btn-logout:hover { background: #c01f50; }
+
+    .card {
+      background: #fff; border-radius: 10px; padding: 16px 18px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 14px;
+    }
+    .griglia { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+    .tessera .etichetta { font-size: .78em; color: #7a8699; text-transform: uppercase; letter-spacing: .04em; }
+    .tessera .valore { font-size: 1.7em; font-weight: 700; margin: 4px 0 2px; }
+    .tessera .nota { font-size: .82em; color: #7a8699; }
+
+    .barra { height: 7px; border-radius: 4px; background: #e6e9ef; overflow: hidden; margin-top: 8px; }
+    .barra > span { display: block; height: 100%; background: #3d9a5b; }
+    .barra.attenzione > span { background: #d99b2b; }
+    .barra.critico > span { background: #e72c64; }
+
+    table { width: 100%; border-collapse: collapse; font-size: .88em; }
+    th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eceff3; white-space: nowrap; }
+    th { color: #7a8699; font-weight: 600; font-size: .82em; text-transform: uppercase; letter-spacing: .03em; }
+    td.num, th.num { text-align: right; }
+    .tabella-wrap { overflow-x: auto; }
+
+    .stato { font-size: .78em; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+    .stato-ok { background: #e4f3ea; color: #2c7a4b; }
+    .stato-attenzione { background: #fbf0da; color: #8a6410; }
+    .stato-errore { background: #fce4eb; color: #b01046; }
+    .stato-spento { background: #eceff3; color: #7a8699; }
+
+    .ipotesi { font-size: .82em; color: #7a8699; margin-top: 8px; font-style: italic; }
+    .vincolo { border-left: 4px solid #e72c64; }
+    .vuoto { color: #7a8699; font-style: italic; }
+    select { padding: 6px 10px; border-radius: 6px; border: 1px solid #d3d9e2; font-size: .9em; }
+
+    /* SPIEGAZIONI A PASSAGGIO DEL MOUSE
+       Niente Bootstrap: questa pagina non lo carica (come owner_setup.html) e
+       un pannello di amministrazione non deve dipendere da una CDN per farsi
+       leggere. Niente nemmeno title= nativo: comparirebbe dopo un secondo, con
+       il carattere di sistema, e su tablet non comparirebbe affatto.
+       Il fumetto e' UNO SOLO, agganciato a <body> e posizionato con
+       position:fixed: dentro la tabella (che scorre in orizzontale) un
+       tooltip in position:absolute verrebbe tagliato dal bordo. */
+    .spiega {
+      border-bottom: 1px dotted #a9b3c1;
+      cursor: help;
+    }
+    .spiega::after {
+      content: 'i';
+      font-size: .62em; font-style: italic; font-weight: 700;
+      vertical-align: super; margin-left: 2px; color: #8d97a6;
+    }
+    #fumetto {
+      position: fixed; z-index: 9999; max-width: 280px;
+      background: #2f3b4b; color: #fff;
+      padding: 8px 11px; border-radius: 6px;
+      font-size: .82em; font-style: normal; font-weight: 400; line-height: 1.45;
+      box-shadow: 0 4px 14px rgba(0,0,0,.22);
+      opacity: 0; pointer-events: none;
+      transition: opacity .12s ease;
+    }
+    #fumetto.visibile { opacity: 1; }
+    #fumetto::after {
+      content: ''; position: absolute; left: 50%; margin-left: -6px;
+      border: 6px solid transparent;
+    }
+    #fumetto.sopra::after { top: 100%; border-top-color: #2f3b4b; }
+    #fumetto.sotto::after { bottom: 100%; border-bottom-color: #2f3b4b; }
+  </style>
+</head>
+<body>
+
+  <div class="header-bar">
+    <div>
+      <h1>Consumi e capienza</h1>
+      <p class="subtitle">Quanto si sta usando, e a quanti negozi si rompe qualcosa</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select id="periodo" data-tip="Cambia la finestra di tempo su cui sono calcolati invii, errori e traffico. Non influenza le metriche Azure, che hanno una finestra propria.">
+        <option value="7">ultimi 7 giorni</option>
+        <option value="30" selected>ultimi 30 giorni</option>
+        <option value="90">ultimi 90 giorni</option>
+      </select>
+      <a class="btn" href="/owner-setup">← Setup</a>
+      <a class="btn btn-logout" href="/owner-logout">Esci</a>
+    </div>
+  </div>
+
+  <div id="caricamento" class="card">Raccolta dei dati in corso…</div>
+  <div id="contenuto" style="display:none">
+
+    <div class="card vincolo" id="riepilogo"></div>
+
+    <h2>Infrastruttura Azure</h2>
+    <div class="griglia" id="azure"></div>
+
+    <h2>Per negozio</h2>
+    <div class="card tabella-wrap"><table id="tabella-tenant"></table></div>
+
+    <h2>Proiezioni</h2>
+    <div id="proiezioni"></div>
+
+  </div>
+
+<script>
+// Nessuna libreria esterna: la pagina owner e' l'ultima che deve dipendere da
+// una CDN raggiungibile. Sono quattro funzioni di formattazione e una tabella.
+
+// ---- Spiegazioni -----------------------------------------------------------
+// Tutte insieme e in un posto solo, non sparse dentro l'HTML: cosi' si
+// rileggono come un glossario e si correggono senza andare a caccia.
+// Sono scritte per chi NON conosce i termini: niente "pool", niente "slot",
+// niente sigle - e ogni voce dice anche perche' il numero conta.
+const SPIEGA = {
+  connessioni: "Un canale aperto verso il database. Non e' un utente collegato: " +
+    "viene preso in prestito per la durata di una singola domanda al database " +
+    "(qualche centesimo di secondo) e subito restituito. Chi tiene l'agenda " +
+    "aperta senza cliccare non ne occupa nessuna.",
+  pool: "Le connessioni che il singolo negozio puo' tenere aperte insieme. " +
+    "“1/3” vuol dire: una in uso adesso, tre al massimo. Se servono tutte e " +
+    "tre contemporaneamente per piu' di 10 secondi, le richieste in attesa falliscono " +
+    "e il negozio vede errori o lentezza.",
+  tettoServer: "Quante connessioni accetta in tutto il server del database, " +
+    "sommando tutti i negozi e anche le altre applicazioni. E' un limite del " +
+    "piano tariffario di Azure: si alza solo cambiando piano.",
+  altreApp: "Connessioni aperte sullo stesso server da programmi diversi dal " +
+    "gestionale - per esempio l'applicazione delle prenotazioni online. Non sono " +
+    "nostre, ma occupano posti che poi mancano.",
+  margine: "Quanti negozi si possono ancora aggiungere prima di toccare il limite.",
+  negoziMax: "Quanti negozi entrerebbero al massimo con i consumi misurati oggi.",
+  primoVincolo: "La cosa che si rompe per prima crescendo di negozi. E' l'unica " +
+    "che conta davvero: le altre non le vedi nemmeno, perche' ti fermi prima.",
+  cpu: "Quanto sta lavorando il processore. Sopra l'80% costante il sito rallenta " +
+    "per tutti.",
+  ram: "Quanta memoria e' occupata. Se si riempie, Azure riavvia l'applicazione " +
+    "da sola - e il riavvio si vede: per qualche secondo il negozio trova errori.",
+  storagePct: "Quanto spazio disco e' occupato sul server del database. Arrivato " +
+    "al 100% il database smette di accettare scritture: niente piu' appuntamenti " +
+    "salvati, niente piu' scontrini.",
+  connAttive: "Quante connessioni risultano aperte in questo momento, misurate da " +
+    "Azure invece che dall'applicazione. Se questo numero e' molto piu' alto della " +
+    "somma dei negozi, c'e' qualcos'altro che si sta collegando.",
+  emailRichieste: "Quante e-mail sono state consegnate ad Azure per l'invio. " +
+    "E' il numero che finisce in fattura.",
+  emailConsegnate: "Quante sono davvero arrivate nella casella del destinatario.",
+  emailRespinte: "Quante sono state rifiutate: indirizzo inesistente, casella " +
+    "piena, dominio che ci considera spam. Se questo numero sale, peggiora la " +
+    "reputazione del mittente e cominciano a non arrivare nemmeno le altre.",
+  pesoDb: "Quanto pesa il database di quel negozio: anagrafiche, appuntamenti, " +
+    "scontrini e tutto lo storico.",
+  richiesteOra: "Quante pagine e comandi il negozio chiede all'applicazione in " +
+    "un'ora. Il “picco” e' l'ora piu' intensa del periodo scelto.",
+  picco: "L'ora piu' carica del periodo. E' il numero che conta per capire se si " +
+    "regge: un'applicazione cade nell'ora di punta, non nella media della settimana.",
+  erroriTot: "Errori registrati dal gestionale nel periodo scelto. Quelli di " +
+    "connessione, se ci sono, vengono elencati sotto la riga.",
+  invii: "Messaggi inviati nel periodo, con la media al giorno tra parentesi. " +
+    "Il conteggio parte da quando questa versione e' stata installata: prima " +
+    "gli invii non venivano registrati da nessuna parte.",
+  costoWa: "Il canone WhatsApp si paga per account collegato, non per messaggio: " +
+    "un negozio che manda 10 messaggi costa quanto uno che ne manda 1.000. " +
+    "Cresce quindi con il numero di negozi, non con l'uso.",
+  costoEmail: "Le e-mail si pagano a messaggio. Il prezzo singolo e' minuscolo, " +
+    "ma va moltiplicato per il volume: e' l'opposto del WhatsApp.",
+  reqSec: "Richieste al secondo che l'applicazione deve servire.",
+  spazioMedio: "Media dei database esistenti. Si usa la media e non il totale " +
+    "perche' i negozi hanno anzianita' diverse: dice quanto pesera' il prossimo.",
+  periodo: "Cambia la finestra di tempo su cui sono calcolati invii, errori e " +
+    "traffico. Non influenza le metriche Azure, che hanno una finestra propria."
+};
+
+// Marca una parola come spiegabile. La spiegazione NON finisce in un title=
+// nativo: quello compare in ritardo, col carattere del sistema operativo, e su
+// tablet non compare per niente.
+function sp(testo, chiave) {
+  const t = SPIEGA[chiave];
+  if (!t) return testo;
+  return '<span class="spiega" data-tip="' + t.replace(/"/g, '&quot;') + '">' +
+         testo + '</span>';
+}
+
+const fmt = new Intl.NumberFormat('it-IT');
+const fmtEuro = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' });
+
+// Due formattatori diversi apposta: un canone si legge "5,00 EUR", ma il prezzo
+// di una singola e-mail e' 0,00025 EUR e con l'arrotondamento a due decimali
+// diventerebbe "0,00" - cioe' gratis, che e' esattamente la cosa sbagliata da
+// far credere a chi sta stimando un costo su centomila messaggi.
+function euro(n) {
+  if (n === null || n === undefined) return '—';
+  return fmtEuro.format(n);
+}
+
+// I numeri che arrivano dal server sono float Python: concatenarli in pagina
+// stampa "0.57" con il punto. In italiano il separatore decimale e' la virgola,
+// e un pannello che mescola le due notazioni sembra scritto male.
+function dec(n, cifre) {
+  if (n === null || n === undefined) return '—';
+  return new Intl.NumberFormat('it-IT', {
+    minimumFractionDigits: 0, maximumFractionDigits: (cifre === undefined ? 2 : cifre)
+  }).format(n);
+}
+
+function euroPreciso(n) {
+  if (n === null || n === undefined) return '—';
+  return new Intl.NumberFormat('it-IT', {
+    style: 'currency', currency: 'EUR',
+    minimumFractionDigits: 2, maximumFractionDigits: 6
+  }).format(n);
+}
+
+function byte(n) {
+  if (n === null || n === undefined) return '—';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return dec(n, i ? 1 : 0) + ' ' + u[i];
+}
+
+function pct(n) {
+  return (n === null || n === undefined) ? '—' : dec(n, 1) + '%';
+}
+
+// Verde fino al 70%, giallo fino all'85%, rosso oltre: le soglie servono a far
+// vedere il problema prima che diventi un guasto, non a certificarlo dopo.
+function classeBarra(p) {
+  if (p === null || p === undefined) return '';
+  if (p >= 85) return 'critico';
+  if (p >= 70) return 'attenzione';
+  return '';
+}
+
+function barra(percentuale) {
+  if (percentuale === null || percentuale === undefined) return '';
+  const larghezza = Math.min(100, Math.max(0, percentuale));
+  return '<div class="barra ' + classeBarra(percentuale) + '"><span style="width:' +
+         larghezza + '%"></span></div>';
+}
+
+function tessera(etichetta, valore, nota, percentuale) {
+  return '<div class="card tessera">' +
+    '<div class="etichetta">' + etichetta + '</div>' +
+    '<div class="valore">' + valore + '</div>' +
+    (nota ? '<div class="nota">' + nota + '</div>' : '') +
+    barra(percentuale) +
+    '</div>';
+}
+
+function bloccoAzure(titolo, blocco) {
+  if (!blocco || blocco.stato === 'non_configurato') {
+    return '<div class="card tessera"><div class="etichetta">' + titolo + '</div>' +
+      '<div class="valore" style="font-size:1em;color:#7a8699">Non configurato</div>' +
+      '<div class="nota">' + ((blocco && blocco.dettaglio) || '') + '</div></div>';
+  }
+  if (blocco.stato === 'errore') {
+    return '<div class="card tessera"><div class="etichetta">' + titolo + '</div>' +
+      '<div class="valore" style="font-size:1em;color:#b01046">Errore</div>' +
+      '<div class="nota">' + blocco.dettaglio + '</div></div>';
+  }
+  const SPIEGA_AZURE = {
+    CpuPercentage: 'cpu', cpu_percent: 'cpu',
+    MemoryPercentage: 'ram', memory_percent: 'ram',
+    storage_percent: 'storagePct',
+    active_connections: 'connAttive',
+    EmailSendMailRequestCount: 'emailRichieste',
+    EmailDeliveredCount: 'emailConsegnate',
+    EmailBouncedCount: 'emailRespinte'
+  };
+  let righe = '';
+  for (const chiave in blocco.metriche) {
+    const m = blocco.metriche[chiave];
+    let v = m.valore;
+    if (v === null || v === undefined) { v = '—'; }
+    else if (chiave === 'UsedCapacity') { v = byte(v); }
+    else if (m.etichetta.indexOf('%') >= 0) { v = pct(v); }
+    else { v = fmt.format(Math.round(v)); }
+    righe += '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:.9em">' +
+             '<span>' + sp(m.etichetta, SPIEGA_AZURE[chiave]) + '</span><strong>' +
+             v + '</strong></div>';
+  }
+  return '<div class="card"><div class="etichetta" style="font-size:.78em;color:#7a8699;' +
+         'text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">' + titolo +
+         '</div>' + (righe || '<span class="vuoto">nessuna metrica</span>') + '</div>';
+}
+
+function tabellaTenant(tenant) {
+  let html = '<thead><tr>' +
+    '<th>Negozio</th>' +
+    '<th class="num">' + sp('Database', 'pesoDb') + '</th>' +
+    '<th class="num">' + sp('Connessioni', 'connessioni') + '</th>' +
+    '<th class="num">' + sp('Pool', 'pool') + '</th>' +
+    '<th class="num">' + sp('WhatsApp', 'invii') + '</th>' +
+    '<th class="num">' + sp('E-mail', 'invii') + '</th>' +
+    '<th class="num">' + sp('Richieste/ora', 'richiesteOra') + '</th>' +
+    '<th class="num">' + sp('Errori', 'erroriTot') + '</th>' +
+    '</tr></thead><tbody>';
+
+  tenant.forEach(function (t) {
+    if (t.errore) {
+      html += '<tr><td>' + t.nome + '</td><td colspan="7"><span class="stato stato-errore">' +
+              t.errore + '</span></td></tr>';
+      return;
+    }
+    const db = t.database || {};
+    const conn = db.connessioni || {};
+    const pool = t.pool || {};
+    const canali = (t.invii || {}).per_canale || {};
+    const wa = canali.whatsapp || {};
+    const em = canali.email || {};
+    const tr = t.traffico || {};
+    const err = t.errori || {};
+
+    const usoPool = pool.tetto ? (100 * pool.in_uso / pool.tetto) : null;
+
+    html += '<tr>' +
+      '<td><strong>' + t.nome + '</strong></td>' +
+      '<td class="num">' + byte(db.dimensione_byte) + '</td>' +
+      '<td class="num">' + (conn.del_db !== undefined ? conn.del_db : '—') + '</td>' +
+      '<td class="num">' + (pool.tetto ? pool.in_uso + '/' + pool.tetto : '—') +
+        (usoPool !== null ? barra(usoPool) : '') + '</td>' +
+      '<td class="num">' + (wa.totale ? fmt.format(wa.totale) + ' <span class="nota">(' +
+        dec(wa.media_giornaliera, 1) + '/g)</span>' : '—') + '</td>' +
+      '<td class="num">' + (em.totale ? fmt.format(em.totale) + ' <span class="nota">(' +
+        dec(em.media_giornaliera, 1) + '/g)</span>' : '—') + '</td>' +
+      '<td class="num">' + (tr.media_oraria !== undefined ? dec(tr.media_oraria, 1) +
+        ' <span class="nota">picco ' + fmt.format(tr.picco_orario || 0) + '</span>' : '—') + '</td>' +
+      '<td class="num">' + ((err.principali || []).reduce(function (a, e) { return a + e.n; }, 0) || 0) + '</td>' +
+      '</tr>';
+
+    // Riga di dettaglio: solo quando c'e' davvero qualcosa da dire, cosi' la
+    // tabella resta leggibile quando va tutto bene.
+    const avvisi = [];
+    if ((err.connessioni || []).length) {
+      err.connessioni.forEach(function (c) {
+        avvisi.push(c.n + '× connessioni esaurite (' + c.origine + '), ultima ' +
+                    new Date(c.ultimo).toLocaleString('it-IT'));
+      });
+    }
+    if (!(t.invii || {}).dati_da) {
+      avvisi.push('nessun invio ancora registrato: il conteggio parte da quando l\'applicazione e\' stata aggiornata');
+    }
+    if (avvisi.length) {
+      html += '<tr><td colspan="8" style="padding-top:0;color:#8a6410;font-size:.85em">' +
+              avvisi.join(' · ') + '</td></tr>';
+    }
+  });
+  return html + '</tbody>';
+}
+
+// Ogni proiezione ha la sua scheda scritta a mano. La versione generica
+// "cicla sulle chiavi e stampale" produceva un elenco alfabetico illeggibile
+// ("obiettivo · costo email mese: 0"): i dati c'erano tutti e non si capiva
+// niente lo stesso. Si aggancia a p.tipo e non all'etichetta, che e' testo per
+// gli occhi e puo' cambiare.
+
+function riga(etichetta, valore, forte, chiave) {
+  return '<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;font-size:.9em">' +
+         '<span style="color:#7a8699">' + (chiave ? sp(etichetta, chiave) : etichetta) + '</span>' +
+         '<span style="font-weight:' + (forte ? '700' : '600') + '">' + valore + '</span></div>';
+}
+
+function guscio(p, corpo) {
+  return '<div class="card">' +
+    '<div style="font-size:.78em;color:#7a8699;text-transform:uppercase;letter-spacing:.04em">' +
+      p.metrica + '</div>' + corpo +
+    (p.ipotesi ? '<div class="ipotesi">Ipotesi: ' + p.ipotesi + '</div>' : '') +
+    (p.nota ? '<div class="ipotesi">' + p.nota + '</div>' : '') +
+    '</div>';
+}
+
+function schedaConnessioni(p) {
+  const corpo =
+    '<div class="valore" style="font-size:1.6em;font-weight:700;margin:6px 0 2px">' +
+      fmt.format(p.valore_attuale) + ' <span style="font-size:.5em;font-weight:400;color:#7a8699">su ' +
+      fmt.format(p.disponibili_per_app) + ' ' + sp('utilizzabili', 'connessioni') +
+      '</span></div>' +
+    barra(p.percentuale_usata) +
+    '<div style="margin-top:10px">' +
+      riga('Negozi che reggi', fmt.format(p.tenant_massimi), true, 'negoziMax') +
+      riga('Negozi attivi ora', fmt.format(p.tenant_ora)) +
+      riga('Margine', (p.margine_tenant > 0 ? '+' : '') + fmt.format(p.margine_tenant), true, 'margine') +
+      riga('Connessioni per negozio', fmt.format(p.per_tenant), false, 'pool') +
+      riga('Tetto del server', fmt.format(p.limite), false, 'tettoServer') +
+      (p.connessioni_altre_app_misurate
+        ? riga('Usate da altre applicazioni', fmt.format(p.connessioni_altre_app_misurate),
+               false, 'altreApp')
+        : '') +
+    '</div>';
+  return guscio(p, corpo);
+}
+
+function schedaStorage(p) {
+  let corpo =
+    '<div class="valore" style="font-size:1.6em;font-weight:700;margin:6px 0 2px">' +
+      byte(p.totale_byte) + '</div>' +
+    '<div class="nota">totale dei ' + p.tenant_ora + ' database</div>' +
+    '<div style="margin-top:10px">' +
+      riga('Media per negozio', byte(p.medio_byte), true, 'spazioMedio') +
+      riga('Il piu’ grande', byte(p.massimo_byte)) +
+    '</div>';
+  if (p.quota_byte) {
+    corpo += barra(p.percentuale_usata) +
+      '<div style="margin-top:6px">' +
+        riga('Quota', byte(p.quota_byte)) +
+        riga('Negozi che ci stanno', fmt.format(p.tenant_massimi), true, 'negoziMax') +
+      '</div>';
+  }
+  return guscio(p, corpo);
+}
+
+function schedaMessaggi(p) {
+  const o = p.oggi, f = p.obiettivo, pr = p.prezzi_usati;
+
+  // Due colonne affiancate: "oggi" e "a N negozi". E' l'unico modo in cui il
+  // confronto si legge - il costo che cresce e i messaggi che crescono con lui.
+  function colonna(titolo, d) {
+    return '<div style="flex:1;min-width:130px">' +
+      '<div style="font-size:.78em;color:#7a8699;text-transform:uppercase;margin-bottom:4px">' +
+        titolo + '</div>' +
+      riga('WhatsApp', fmt.format(d.whatsapp_messaggi_mese) + ' msg') +
+      riga('E-mail', fmt.format(d.email_messaggi_mese) + ' msg') +
+      riga('Costo WhatsApp', euro(d.costo_whatsapp_mese), true, 'costoWa') +
+      riga('Costo e-mail', euro(d.costo_email_mese), true, 'costoEmail') +
+      '</div>';
+  }
+
+  const corpo =
+    '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px">' +
+      colonna('Oggi · ' + o.tenant + ' negozi', o) +
+      colonna('A ' + f.tenant + ' negozi', f) +
+    '</div>' +
+    '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #eceff3">' +
+      riga('Media per negozio', dec(p.per_tenant_mese.whatsapp, 1) + ' WhatsApp · ' +
+           dec(p.per_tenant_mese.email, 1) + ' e-mail al mese') +
+    '</div>' +
+    '<div class="ipotesi">Prezzi usati: WhatsApp ' + euro(pr.whatsapp_per_tenant_mese) +
+      ' per negozio al mese (primi ' + pr.tenant_whatsapp_inclusi + ' inclusi nel canone) · ' +
+      'e-mail ' + euroPreciso(pr.email_unitario) + ' a messaggio. ' +
+      'Si cambiano da variabili d’ambiente, non nel codice.</div>';
+  return guscio(p, corpo);
+}
+
+function schedaTraffico(p) {
+  const corpo =
+    '<div class="valore" style="font-size:1.6em;font-weight:700;margin:6px 0 2px">' +
+      dec(p.req_sec_oggi) + ' <span style="font-size:.5em;font-weight:400;color:#7a8699">' +
+      sp('richieste al secondo', 'reqSec') + '</span></div>' +
+    '<div style="margin-top:10px">' +
+      riga('A ' + p.tenant_obiettivo + ' negozi', dec(p.req_sec_obiettivo) + ' req/s', true) +
+      riga('… nell’ora di punta', dec(p.req_sec_obiettivo_picco) + ' req/s', true) +
+      riga('Picco orario per negozio', fmt.format(p.picco_orario_tenant) + ' richieste',
+           false, 'picco') +
+      riga('Media oraria per negozio', fmt.format(p.medio_orario_tenant) + ' richieste') +
+      (p.tenant_massimi ? riga('Negozi che reggi', fmt.format(p.tenant_massimi), true, 'negoziMax') : '') +
+    '</div>';
+  return guscio(p, corpo);
+}
+
+function schedaProiezione(p) {
+  // "Non ho ancora dati" non e' un guasto: e' lo stato normale di una misura
+  // che parte da zero il giorno del rilascio. Mostrarlo come errore fa
+  // sembrare rotto un pannello che sta soltanto aspettando.
+  if (p.in_attesa) {
+    return '<div class="card">' +
+      '<div style="font-size:.78em;color:#7a8699;text-transform:uppercase;letter-spacing:.04em">' +
+        p.metrica + '</div>' +
+      '<div style="margin:8px 0 0;color:#7a8699">In attesa di dati</div>' +
+      '<div class="nota" style="margin-top:4px">' + p.in_attesa + '</div></div>';
+  }
+  if (p.errore) {
+    return '<div class="card"><div style="font-size:.78em;color:#7a8699;text-transform:uppercase">' +
+      p.metrica + '</div><div class="vuoto">' + p.errore + '</div></div>';
+  }
+  if (p.tipo === 'connessioni') return schedaConnessioni(p);
+  if (p.tipo === 'storage') return schedaStorage(p);
+  if (p.tipo === 'messaggi') return schedaMessaggi(p);
+  if (p.tipo === 'traffico') return schedaTraffico(p);
+  return guscio(p, '');
+}
+
+function disegna(d) {
+  const r = d.riepilogo || {};
+  document.getElementById('riepilogo').innerHTML =
+    r.primo_vincolo
+      ? '<div class="etichetta" style="font-size:.78em;color:#7a8699;text-transform:uppercase">' +
+        sp('Primo vincolo che si incontra crescendo', 'primoVincolo') + '</div>' +
+        '<div style="font-size:1.5em;font-weight:700;margin:6px 0">' + r.primo_vincolo + '</div>' +
+        '<div>Tetto stimato: <strong>' + r.tenant_massimi + ' negozi</strong> · margine attuale: <strong>' +
+        r.margine_tenant + '</strong></div>'
+      : '<span class="vuoto">Non ci sono ancora dati sufficienti per indicare un vincolo.</span>';
+
+  const az = d.azure || {};
+  document.getElementById('azure').innerHTML =
+    bloccoAzure('App Service (CPU / RAM)', az.app_service) +
+    bloccoAzure('PostgreSQL', az.postgres) +
+    bloccoAzure('E-mail (ACS)', az.email) +
+    bloccoAzure('Storage', az.storage);
+
+  document.getElementById('tabella-tenant').innerHTML = tabellaTenant(d.tenant || []);
+  document.getElementById('proiezioni').innerHTML =
+    '<div class="griglia">' + (d.proiezioni || []).map(schedaProiezione).join('') + '</div>';
+
+  document.getElementById('caricamento').style.display = 'none';
+  document.getElementById('contenuto').style.display = '';
+}
+
+function carica() {
+  const giorni = document.getElementById('periodo').value;
+  document.getElementById('caricamento').style.display = '';
+  document.getElementById('caricamento').textContent = 'Raccolta dei dati in corso…';
+  document.getElementById('contenuto').style.display = 'none';
+
+  fetch('/owner-setup/monitor/dati?giorni=' + giorni, { credentials: 'same-origin' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(disegna)
+    .catch(function (e) {
+      document.getElementById('caricamento').textContent =
+        'Non e\' stato possibile raccogliere i dati: ' + e.message;
+    });
+}
+
+// ---- Motore del fumetto ----------------------------------------------------
+// Un solo elemento riusato per tutta la pagina, agganciato in delega: i
+// contenuti sono ricostruiti a ogni caricamento dei dati, quindi mettere un
+// ascoltatore su ciascun elemento vorrebbe dire rimetterli tutti ogni volta.
+(function () {
+  const fumetto = document.createElement('div');
+  fumetto.id = 'fumetto';
+  document.body.appendChild(fumetto);
+
+  let attivo = null;
+
+  function mostra(el) {
+    const testo = el.getAttribute('data-tip');
+    if (!testo) return;
+    attivo = el;
+    fumetto.textContent = testo;
+    fumetto.classList.add('visibile');
+
+    // Prima lo rendo visibile, poi ne misuro l'ingombro: a display nascosto
+    // le dimensioni sarebbero zero e il calcolo verrebbe sbagliato.
+    const r = el.getBoundingClientRect();
+    const f = fumetto.getBoundingClientRect();
+
+    let sinistra = r.left + r.width / 2 - f.width / 2;
+    sinistra = Math.max(8, Math.min(sinistra, window.innerWidth - f.width - 8));
+
+    // Sopra se c'e' posto, altrimenti sotto: un fumetto che esce dallo schermo
+    // e' peggio di nessun fumetto.
+    const sopra = r.top > f.height + 12;
+    fumetto.classList.toggle('sopra', sopra);
+    fumetto.classList.toggle('sotto', !sopra);
+    fumetto.style.left = sinistra + 'px';
+    fumetto.style.top = (sopra ? r.top - f.height - 8 : r.bottom + 8) + 'px';
+  }
+
+  function nascondi() {
+    attivo = null;
+    fumetto.classList.remove('visibile');
+  }
+
+  document.addEventListener('mouseover', function (e) {
+    const el = e.target.closest('[data-tip]');
+    if (el && el !== attivo) mostra(el);
+  });
+  document.addEventListener('mouseout', function (e) {
+    if (e.target.closest('[data-tip]')) nascondi();
+  });
+  // Tastiera: chi naviga con il tab deve poterle leggere anche lui.
+  document.addEventListener('focusin', function (e) {
+    const el = e.target.closest('[data-tip]');
+    if (el) mostra(el);
+  });
+  document.addEventListener('focusout', nascondi);
+  // Allo scorrimento la posizione calcolata non vale piu': meglio chiuderlo
+  // che lasciarlo appeso in mezzo alla pagina.
+  window.addEventListener('scroll', nascondi, true);
+})();
+
+document.getElementById('periodo').addEventListener('change', carica);
+carica();
+</script>
+</body>
+</html>

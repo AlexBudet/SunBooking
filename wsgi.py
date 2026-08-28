@@ -982,6 +982,131 @@ def owner_setup():
                            da_cancellare=_tenant_da_cancellare(),
                            giorni_conservazione=GIORNI_CONSERVAZIONE)
 
+@root_app.route('/owner-setup/monitor')
+def owner_monitor():
+    """Pannello consumi: una pagina, i dati arrivano dopo via JSON.
+
+    Separare pagina e dati non e' un vezzo: la raccolta interroga ogni tenant e
+    puo' arrivare a qualche secondo, mentre Azure Monitor - quando la cache e'
+    fredda - fa quattro chiamate HTTP. Servire l'HTML subito e riempirlo dopo
+    evita che il pannello sembri bloccato.
+    """
+    if not _require_owner_auth():
+        return redirect(url_for('landing_web'))
+    return render_template('owner_monitor.html')
+
+
+@root_app.route('/owner-setup/monitor/dati')
+def owner_monitor_dati():
+    """Raccolta vera. Un tenant alla volta, ognuno nel proprio app context.
+
+    Un tenant che non risponde NON fa cadere il pannello: finisce nella lista
+    con la propria chiave 'errore' e gli altri si vedono lo stesso. E' il caso
+    di un database spento o di un negozio in migrazione, che non deve rendere
+    cieco il monitoraggio di tutti gli altri.
+    """
+    if not _require_owner_auth():
+        return jsonify({'errore': 'non autorizzato'}), 403
+
+    try:
+        giorni = max(1, min(365, int(request.args.get('giorni', 30))))
+    except (TypeError, ValueError):
+        giorni = 30
+
+    from appl.services import usage_monitor, usage_projection, azure_monitor
+
+    per_tenant = []
+    for idx, uri in pool.items():
+        child = children.get(idx)
+        voce = {'idx': idx, 'nome': db_label(uri)}
+        if not child:
+            voce['errore'] = 'tenant non montato'
+            per_tenant.append(voce)
+            continue
+        try:
+            with child.app_context():
+                from appl.models import BusinessInfo
+                try:
+                    bi = BusinessInfo.query.first()
+                    if bi and bi.business_name:
+                        voce['nome'] = bi.business_name
+                except Exception:
+                    pass
+                voce.update(usage_monitor.raccogli(giorni=giorni))
+        except Exception as e:
+            voce['errore'] = str(e)[:200]
+        per_tenant.append(voce)
+
+    # ---- Proiezioni -------------------------------------------------------
+    # Tutti gli ingredienti sono MISURATI, non stimati: e' il punto della
+    # pagina. L'unica cosa che resta un'ipotesi e' il prezzo, che infatti sta
+    # in una variabile d'ambiente e viene dichiarato accanto al risultato.
+    validi = [t for t in per_tenant if 'errore' not in t]
+    n_tenant = len(validi)
+
+    tetto_pool = 3
+    max_conn = 35
+    riservate = 0
+    conn_server = conn_tenant = 0
+    for t in validi:
+        p = t.get('pool') or {}
+        if p.get('tetto'):
+            tetto_pool = p['tetto']
+        d = t.get('database') or {}
+        if d.get('max_connections'):
+            max_conn = d['max_connections']
+            riservate = d.get('connessioni_riservate', 0)
+        c = d.get('connessioni') or {}
+        conn_server = max(conn_server, c.get('del_server') or 0)
+        conn_tenant += c.get('del_db') or 0
+
+    # Quanto del server NON e' nostro: l'app di prenotazione ha i propri engine
+    # e i propri pool sullo stesso PostgreSQL. Si misura per differenza invece
+    # di indovinarlo, perche' indovinarlo e' esattamente il modo in cui si
+    # sbaglia una previsione di capienza.
+    altre_app = max(0, conn_server - conn_tenant)
+
+    prj_conn = usage_projection.proiezione_connessioni(
+        n_tenant, tetto_pool, max_conn,
+        connessioni_riservate=riservate, connessioni_altre_app=altre_app)
+    prj_conn['connessioni_altre_app_misurate'] = altre_app
+
+    byte_tenant = [t['database']['dimensione_byte'] for t in validi
+                   if (t.get('database') or {}).get('dimensione_byte')]
+    quota = None
+    try:
+        quota = int(os.environ.get('AZURE_QUOTA_STORAGE_BYTE', '0')) or None
+    except (TypeError, ValueError):
+        quota = None
+    prj_storage = usage_projection.proiezione_storage(byte_tenant, n_tenant, quota_byte=quota)
+
+    invii_tenant = []
+    for t in validi:
+        canali = (t.get('invii') or {}).get('per_canale') or {}
+        invii_tenant.append({c: v.get('stima_mensile', 0) for c, v in canali.items()})
+    prj_msg = usage_projection.proiezione_messaggi(invii_tenant, n_tenant)
+
+    picchi = [(t.get('traffico') or {}).get('picco_orario', 0) for t in validi]
+    prj_traffico = usage_projection.proiezione_traffico(
+        [p for p in picchi if p], n_tenant)
+
+    proiezioni = [prj_conn, prj_storage, prj_msg, prj_traffico]
+
+    return jsonify({
+        'tenant': per_tenant,
+        'proiezioni': proiezioni,
+        'riepilogo': usage_projection.riepilogo(proiezioni),
+        'azure': {
+            'configurazione': azure_monitor.stato_configurazione(),
+            'app_service': azure_monitor.metriche_app_service(),
+            'postgres': azure_monitor.metriche_postgres(),
+            'email': azure_monitor.metriche_email(),
+            'storage': azure_monitor.metriche_storage(),
+        },
+        'giorni': giorni,
+    })
+
+
 @root_app.route('/owner-setup/save/<int:db_idx>', methods=['POST'])
 def owner_setup_save(db_idx):
     if not _require_owner_auth():

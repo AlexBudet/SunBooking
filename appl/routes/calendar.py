@@ -3173,6 +3173,10 @@ def send_whatsapp_auto():
             "text": messaggio
         }
 
+        # Ogni chiamata a Unipile - riuscita o no - viene contata per il
+        # pannello consumi: anche un invio fallito e' una chiamata all'API.
+        from appl.services.usage_monitor import registra_uso
+
         try:
             import requests
             # IMPORTANTE: usa data= (form-encoded) NON json=
@@ -3184,13 +3188,17 @@ def send_whatsapp_auto():
                     resp_json = response.json()
                 except Exception:
                     resp_json = {"raw": response.text}
+                registra_uso('whatsapp', tipo='manuale', origine='crm', esito='ok')
                 return jsonify({'success': True, 'unipile_response': resp_json})
             else:
                 app.logger.error("[WHATSAPP-UNIPILE] send failed http_status=%s body=%s", response.status_code, response.text)
+                registra_uso('whatsapp', tipo='manuale', origine='crm', esito='errore',
+                             errore=f"HTTP {response.status_code}: {response.text[:200]}")
                 return jsonify({'error': 'Invio fallito', 'http_status': response.status_code, 'details': response.text}), 500
 
         except Exception as exc:
             app.logger.exception("[WHATSAPP-UNIPILE] Exception during requests.post")
+            registra_uso('whatsapp', tipo='manuale', origine='crm', esito='errore', errore=exc)
             return jsonify({'error': str(exc)}), 500
 
     except Exception as e:
