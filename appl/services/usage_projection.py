@@ -297,38 +297,57 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
     return res
 
 
-def proiezione_traffico(richieste_ora_per_tenant, n_tenant, tenant_obiettivo=100,
+def proiezione_traffico(picco_simultaneo, richieste_totali, ore_osservate,
+                        n_tenant, tenant_obiettivo=100,
                         tetto_richieste_secondo=None):
     """Richieste al secondo, oggi e all'obiettivo.
 
-    Il numero da guardare e' il PICCO, non la media: un'applicazione cade
-    nell'ora di punta, non nella media di sette giorni.
+    Attenzione a cosa sono gli ingredienti, perche' la versione precedente di
+    questa funzione sbagliava proprio qui:
+
+    - `picco_simultaneo` e' l'ora peggiore sommando i negozi NELLA STESSA ORA.
+      Prima si sommavano i picchi di ciascun negozio, che pero' capitano in ore
+      diverse: il risultato era un'ora che non e' mai esistita, presentata come
+      "richieste al secondo" attuali.
+    - `richieste_totali` / `ore_osservate` danno la media VERA. Prima la
+      "media oraria per negozio" era la media dei picchi, cioe' un numero
+      sistematicamente troppo alto con l'etichetta di una media.
+
+    Il numero su cui si decide resta il picco: un'applicazione cade nell'ora di
+    punta, non nella media della settimana.
     """
-    if not richieste_ora_per_tenant:
+    if not richieste_totali or not ore_osservate:
         return {'tipo': 'traffico', 'metrica': 'Traffico HTTP',
                 'in_attesa': ('il conteggio parte dal primo rilascio di questa '
                               'versione: i primi numeri compaiono dopo qualche '
                               'ora di lavoro normale')}
     tenant = max(1, n_tenant)
-    picco_ora = max(richieste_ora_per_tenant)
-    medio_ora = sum(richieste_ora_per_tenant) / tenant
+    media_oraria_totale = richieste_totali / float(ore_osservate)
+    media_per_tenant = media_oraria_totale / tenant
+    picco_per_tenant = picco_simultaneo / float(tenant)
 
     res = {
         'tipo': 'traffico',
         'metrica': 'Traffico HTTP',
-        'picco_orario_tenant': picco_ora,
-        'medio_orario_tenant': round(medio_ora, 1),
-        'req_sec_oggi': round(sum(richieste_ora_per_tenant) / 3600.0, 2),
-        'req_sec_obiettivo': round(medio_ora * tenant_obiettivo / 3600.0, 2),
-        'req_sec_obiettivo_picco': round(picco_ora * tenant_obiettivo / 3600.0, 2),
+        'picco_simultaneo': round(picco_simultaneo),
+        'picco_per_tenant': round(picco_per_tenant),
+        'media_oraria_per_tenant': round(media_per_tenant, 1),
+        'ore_osservate': round(ore_osservate),
+        'req_sec_medio': round(media_oraria_totale / 3600.0, 2),
+        'req_sec_picco': round(picco_simultaneo / 3600.0, 2),
+        'req_sec_obiettivo': round(media_per_tenant * tenant_obiettivo / 3600.0, 2),
+        'req_sec_obiettivo_picco': round(picco_per_tenant * tenant_obiettivo / 3600.0, 2),
         'tenant_obiettivo': tenant_obiettivo,
-        'ipotesi': ("i negozi hanno l'ora di punta nello stesso momento. E' "
-                    "l'ipotesi prudente: stessi orari di apertura, stessa zona"),
+        'ipotesi': ("per la riga di punta si assume che i negozi abbiano l'ora "
+                    "piena nello stesso momento: e' l'ipotesi prudente, stessi "
+                    "orari di apertura e stessa zona"),
     }
     if tetto_richieste_secondo:
         res['tetto_richieste_secondo'] = tetto_richieste_secondo
-        if medio_ora:
-            res['tenant_massimi'] = int(tetto_richieste_secondo * 3600 / medio_ora)
+        # La capienza si calcola sul PICCO per negozio, non sulla media: un
+        # server dimensionato sulla media va giu' tutti i giorni alle nove.
+        if picco_per_tenant:
+            res['tenant_massimi'] = int(tetto_richieste_secondo * 3600 / picco_per_tenant)
             res['margine_tenant'] = res['tenant_massimi'] - n_tenant
     return res
 

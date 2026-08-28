@@ -163,7 +163,11 @@ def traffico(giorni=7):
                  .filter(UsageTrafficHourly.ora >= da)
                  .order_by(UsageTrafficHourly.ora).all())
         serie = [{
-            'ora': r.ora.isoformat(),
+            # SEMPRE in UTC: queste ore vengono sommate fra database diversi
+            # per trovare il picco simultaneo, e due sessioni PostgreSQL con
+            # TimeZone diverso produrrebbero chiavi diverse per la stessa ora.
+            # Il totale risulterebbe piu' basso del vero, in silenzio.
+            'ora': r.ora.astimezone(timezone.utc).isoformat(),
             'richieste': r.richieste,
             'errori': r.errori,
             'ms_medi': round(r.ms_totali / r.richieste) if r.richieste else 0,
@@ -174,7 +178,7 @@ def traffico(giorni=7):
             corrente = dict(_traffico.get(_chiave_tenant()) or {})
         if corrente.get('ora') and corrente.get('richieste'):
             serie.append({
-                'ora': corrente['ora'].isoformat(),
+                'ora': corrente['ora'].astimezone(timezone.utc).isoformat(),
                 'richieste': corrente['richieste'],
                 'errori': corrente['errori'],
                 'ms_medi': round(corrente['ms_totali'] / corrente['richieste']),
@@ -337,9 +341,25 @@ def invii(giorni=30):
                 c['errori'] += r['n']
             c['per_tipo'][r['tipo']] = c['per_tipo'].get(r['tipo'], 0) + r['n']
 
+        # Da quanti giorni esistono DAVVERO i dati. Dividere per `giorni` (30)
+        # quando il contatore e' acceso da tre ore produce una media
+        # giornaliera dieci volte piu' bassa del vero, e una "stima mensile"
+        # che sembra un dato misurato. Si divide per il periodo osservato, e si
+        # dichiara quant'e'.
+        primo = db.session.execute(
+            text("SELECT min(created_at) FROM usage_events")).scalar()
+        giorni_osservati = giorni
+        if primo:
+            trascorsi = (datetime.now(timezone.utc) - primo).total_seconds() / 86400.0
+            giorni_osservati = max(0.04, min(float(giorni), trascorsi))   # min ~1 ora
+
         for c in per_canale.values():
-            c['media_giornaliera'] = round(c['totale'] / giorni, 1)
-            c['stima_mensile'] = round(c['totale'] / giorni * 30)
+            c['media_giornaliera'] = round(c['totale'] / giorni_osservati, 1)
+            c['stima_mensile'] = round(c['totale'] / giorni_osservati * 30)
+            c['giorni_osservati'] = round(giorni_osservati, 2)
+            # Sotto i tre giorni una proiezione mensile e' un moltiplicatore
+            # applicato al rumore: chi la mostra deve poterlo dire.
+            c['estrapolazione_fragile'] = giorni_osservati < 3
 
         # I PICCHI, non solo i totali. I limiti dei fornitori (ACS in testa)
         # sono al minuto e all'ora, non al mese: un totale mensile basso non
@@ -350,7 +370,8 @@ def invii(giorni=30):
         # fra tutti i negozi: il tetto lo si tocca con la somma di quello che
         # parte nella stessa ora, non con il picco del negozio piu' attivo.
         serie_ore = db.session.execute(text("""
-            SELECT date_trunc('hour', created_at) AS ora, canale, count(*) AS n
+            SELECT date_trunc('hour', created_at AT TIME ZONE 'UTC') AS ora,
+                   canale, count(*) AS n
             FROM usage_events WHERE created_at >= :da
             GROUP BY 1, 2 ORDER BY 1
         """), {'da': da}).mappings().all()
@@ -374,11 +395,9 @@ def invii(giorni=30):
             GROUP BY 1, 2 ORDER BY 1
         """), {'da': da}).mappings().all()
 
-        primo = db.session.execute(
-            text("SELECT min(created_at) FROM usage_events")).scalar()
-
         return {
             'per_canale': per_canale,
+            'giorni_osservati': round(giorni_osservati, 2),
             'serie_giornaliera': [
                 {'giorno': s['giorno'].date().isoformat(), 'canale': s['canale'], 'n': s['n']}
                 for s in serie

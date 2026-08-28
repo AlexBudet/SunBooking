@@ -1145,9 +1145,17 @@ def owner_monitor_dati():
         elif canale == 'whatsapp' and totale > picchi_msg['whatsapp_ora']:
             picchi_msg['whatsapp_ora'] = totale
 
+    # Da quanti giorni si misura davvero. I totali "al mese" sono estrapolati:
+    # se il contatore e' acceso da tre ore, quel numero e' un moltiplicatore
+    # applicato al rumore e va detto, non mostrato come una misura.
+    osservati = [(t.get('invii') or {}).get('giorni_osservati')
+                 for t in validi if (t.get('invii') or {}).get('giorni_osservati')]
     prj_msg = usage_projection.proiezione_messaggi(
         invii_tenant, n_tenant, tenant_non_misurati=len(invii_non_misurati),
         picchi_orari=picchi_msg)
+    if osservati:
+        prj_msg['giorni_osservati'] = round(max(osservati), 2)
+        prj_msg['estrapolazione_fragile'] = max(osservati) < 3
     if invii_non_misurati:
         prj_msg['negozi_non_misurati'] = invii_non_misurati
 
@@ -1156,7 +1164,19 @@ def owner_monitor_dati():
     # 28/08/2026: 3 negozi, 2 account). Una chiamata sola, con cache di 5 minuti.
     prj_msg['unipile'] = unipile_monitor.stato_account()
 
-    picchi = [(t.get('traffico') or {}).get('picco_orario', 0) for t in validi]
+    # Picco SIMULTANEO: si sommano le ore uguali fra i negozi e si prende la
+    # peggiore. Sommare invece i picchi di ciascun negozio - che capitano in ore
+    # diverse - descriverebbe un'ora mai esistita. Le chiavi sono ISO in UTC
+    # proprio perche' devono combaciare fra database diversi.
+    ore_http = {}
+    for t in validi:
+        for punto in ((t.get('traffico') or {}).get('serie') or []):
+            ora = punto.get('ora')
+            if ora:
+                ore_http[ora] = ore_http.get(ora, 0) + (punto.get('richieste') or 0)
+    picco_simultaneo = max(ore_http.values()) if ore_http else 0
+    richieste_totali = sum(ore_http.values())
+    ore_osservate = len(ore_http)
 
     # Il tetto di richieste al secondo NON e' un numero che Azure pubblica: i
     # piani App Service non dichiarano req/s. Lo si ricava dai due numeri che
@@ -1173,7 +1193,7 @@ def owner_monitor_dati():
     tetto_req_sec = (THREAD_SERVER / (ms_medi / 1000.0)) if ms_medi else None
 
     prj_traffico = usage_projection.proiezione_traffico(
-        [p for p in picchi if p], n_tenant,
+        picco_simultaneo, richieste_totali, ore_osservate, n_tenant,
         tetto_richieste_secondo=tetto_req_sec)
     if ms_medi:
         prj_traffico['ms_medi_misurati'] = round(ms_medi)

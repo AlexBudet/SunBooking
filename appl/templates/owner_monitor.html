@@ -202,8 +202,10 @@ const SPIEGA = {
     "scontrini e tutto lo storico.",
   richiesteOra: "Quante pagine e comandi il negozio chiede all'applicazione in " +
     "un'ora. Il “picco” e' l'ora piu' intensa del periodo scelto.",
-  picco: "L'ora piu' carica del periodo. E' il numero che conta per capire se si " +
-    "regge: un'applicazione cade nell'ora di punta, non nella media della settimana.",
+  picco: "L'ora piu' carica del periodo, sommando i negozi NELLA STESSA ora. " +
+    "Non e' la somma dei picchi di ciascuno: quelli capitano in ore diverse e " +
+    "sommarli descriverebbe un'ora che non e' mai esistita. E' il numero che " +
+    "conta per capire se si regge: si cade nell'ora di punta, non nella media.",
   erroriTot: "Errori registrati dal gestionale nel periodo scelto. Sono " +
     "elencati per esteso nella riga sotto: motivo, quante volte, quando " +
     "l'ultima e il dettaglio tecnico dell'occorrenza piu' recente.",
@@ -665,7 +667,19 @@ function schedaMessaggi(p) {
       (p.negozi_non_misurati ? ' (' + p.negozi_non_misurati.join(', ') + ')' : '') + '</div>'
     : '';
 
-  const corpo = avviso +
+  // Un "al mese" ricavato da poche ore di dati non e' una misura: e' una
+  // moltiplicazione. Se non lo si dice, chi legge decide su un numero inventato.
+  const fragile = p.estrapolazione_fragile
+    ? '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#fdf3d8;' +
+      'color:#8a6410;font-size:.85em">&#9888; I totali mensili qui sotto sono ' +
+      '<strong>estrapolati da ' + dec(p.giorni_osservati, 1) + ' giorni</strong> di ' +
+      'misure: indicativi, non ancora un dato. Servono almeno tre giorni.</div>'
+    : (p.giorni_osservati
+        ? '<div class="nota" style="margin-top:6px">totali mensili ricavati da ' +
+          dec(p.giorni_osservati, 1) + ' giorni di misure</div>'
+        : '');
+
+  const corpo = avviso + fragile +
     '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px">' +
       colonna('Oggi · ' + o.tenant + ' negozi', o) +
       colonna('A ' + f.tenant + ' negozi', f) +
@@ -691,16 +705,20 @@ function schedaMessaggi(p) {
 }
 
 function schedaTraffico(p) {
+  // Il numero grande e' il PICCO simultaneo, non una "media di oggi": e'
+  // quello su cui si decide, ed e' l'unico che sia davvero successo.
   const corpo =
     '<div class="valore" style="font-size:1.6em;font-weight:700;margin:6px 0 2px">' +
-      dec(p.req_sec_oggi) + ' <span style="font-size:.5em;font-weight:400;color:#7a8699">' +
-      sp('richieste al secondo', 'reqSec') + '</span></div>' +
+      dec(p.req_sec_picco) + ' <span style="font-size:.5em;font-weight:400;color:#7a8699">' +
+      sp('richieste al secondo nell’ora di punta', 'reqSec') + '</span></div>' +
+    '<div class="nota">media del periodo: ' + dec(p.req_sec_medio) + ' req/s su ' +
+      fmt.format(p.ore_osservate) + ' ore misurate</div>' +
     '<div style="margin-top:10px">' +
       riga('A ' + p.tenant_obiettivo + ' negozi', dec(p.req_sec_obiettivo) + ' req/s', true) +
       riga('… nell’ora di punta', dec(p.req_sec_obiettivo_picco) + ' req/s', true) +
-      riga('Picco orario per negozio', fmt.format(p.picco_orario_tenant) + ' richieste',
-           false, 'picco') +
-      riga('Media oraria per negozio', fmt.format(p.medio_orario_tenant) + ' richieste') +
+      riga('Ora di punta, tutti i negozi insieme',
+           fmt.format(p.picco_simultaneo) + ' richieste', false, 'picco') +
+      riga('Media oraria per negozio', fmt.format(p.media_oraria_per_tenant) + ' richieste') +
       (p.tenant_massimi
         ? riga('Negozi che reggi', fmt.format(p.tenant_massimi), true, 'negoziMax')
         : riga('Negozi che reggi', '— non ancora calcolabile')) +
@@ -712,7 +730,10 @@ function schedaTraffico(p) {
         ? '<div class="nota" style="margin-top:6px">' + p.thread_server +
           ' thread ÷ ' + fmt.format(p.ms_medi_misurati) +
           ' ms per richiesta (media misurata su ' +
-          fmt.format(p.richieste_misurate) + ' richieste)</div>'
+          fmt.format(p.richieste_misurate) + ' richieste). ' +
+          '<strong>Vale solo se in Azure gira waitress</strong>: se l’App Service ' +
+          'usa il gunicorn predefinito i thread sono altri e questo tetto è sbagliato. ' +
+          'Si verifica in Configurazione › Comando di avvio.</div>'
         : '') +
     '</div>';
   return guscio(p, corpo);
