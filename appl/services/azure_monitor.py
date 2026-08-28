@@ -1,5 +1,5 @@
 # appl/services/azure_monitor.py
-"""Lettura delle metriche Azure (CPU, RAM, storage, e-mail) via Azure Monitor.
+"""Lettura delle metriche Azure (CPU, RAM, spazio, e-mail) via Azure Monitor.
 
 Perche' serve un servizio esterno per CPU e RAM: dentro l'App Service il
 processo NON vede la propria quota. Un psutil.virtual_memory() qui riporta la
@@ -33,7 +33,6 @@ import requests
 RES_APP_SERVICE = 'AZURE_RES_APP_SERVICE'   # Microsoft.Web/serverfarms (il PIANO, non il sito)
 RES_POSTGRES    = 'AZURE_RES_POSTGRES'      # Microsoft.DBforPostgreSQL/flexibleServers
 RES_ACS         = 'AZURE_RES_ACS'           # Microsoft.Communication/communicationServices
-RES_STORAGE     = 'AZURE_RES_STORAGE'       # Microsoft.Storage/storageAccounts
 
 API_VERSION_METRICS = '2023-10-01'
 MANAGEMENT_SCOPE = 'https://management.azure.com'
@@ -136,7 +135,21 @@ def _leggi_metriche(resource_id, metriche, minuti=60, intervallo='PT5M',
         raise RuntimeError("permesso negato: manca il ruolo Monitoring Reader sulla risorsa")
     if r.status_code == 404:
         raise RuntimeError('risorsa non trovata: ID risorsa errato')
-    r.raise_for_status()
+    if r.status_code >= 400:
+        # Il messaggio di requests dice solo "400 Bad Request for url: <url>" e
+        # la vera spiegazione sta nel CORPO della risposta: Azure nomina la
+        # metrica che non riconosce, o la parte sbagliata dell'ID risorsa.
+        # Buttarlo via costringe a indovinare, ed e' quello che e' successo il
+        # 28/08/2026 sul riquadro ACS.
+        motivo = ''
+        try:
+            errore = (r.json() or {}).get('error') or {}
+            motivo = errore.get('message') or errore.get('code') or ''
+        except Exception:
+            motivo = ''
+        if not motivo:
+            motivo = (r.text or '')[:400]
+        raise RuntimeError('HTTP %s - %s' % (r.status_code, motivo.strip()[:400]))
 
     campo = aggregazione.lower()
     risultato = {}
@@ -181,7 +194,11 @@ def _blocco(resource_env, metriche, minuti, etichette):
     try:
         dati = _leggi_metriche(resource_id, metriche, minuti=minuti)
     except Exception as e:
-        return {'stato': 'errore', 'dettaglio': str(e)[:200]}
+        # 500 e non 200: un messaggio d'errore tagliato a meta' costa piu' di
+        # quanto faccia risparmiare. Quello di Azure arriva a ~300 caratteri e
+        # la parte che serve sta in fondo.
+        return {'stato': 'errore', 'dettaglio': str(e)[:500],
+                'metriche_chieste': list(metriche)}
 
     valori = {}
     for nome, etichetta in etichette.items():
@@ -194,7 +211,12 @@ def _blocco(resource_env, metriche, minuti, etichette):
     return {'stato': 'ok', 'metriche': valori}
 
 
-# ---- I quattro riquadri ----------------------------------------------------
+# ---- I riquadri del pannello -----------------------------------------------
+# Niente riquadro "Storage": non esiste nessun account di archiviazione in
+# questa sottoscrizione (verificato il 28/08/2026). Un riquadro perennemente
+# "Non configurato" che chiede una variabile per una risorsa inesistente e' solo
+# una caccia al tesoro. Lo spazio che conta - quello del server PostgreSQL - si
+# legge da `spazio_postgres()` e finisce nella scheda "Spazio database".
 def metriche_app_service(minuti=180):
     """CPU e memoria del PIANO App Service (non del singolo sito: le quote sono
     del piano, ed e' il piano che va in throttling)."""
@@ -269,16 +291,6 @@ def metriche_email(minuti=1440):
     ))
 
 
-def metriche_storage(minuti=1440):
-    """Spazio occupato dall'account di storage (allegati, backup applicativi)."""
-    return _con_cache(('storage', minuti), lambda: _blocco(
-        RES_STORAGE,
-        ['UsedCapacity'],
-        minuti,
-        {'UsedCapacity': 'Spazio usato (byte)'},
-    ))
-
-
 def stato_configurazione():
     """Riassunto per il pannello: cosa manca prima che i riquadri Azure possano
     funzionare. Serve a non far indovinare all'utente quale delle quattro
@@ -289,6 +301,5 @@ def stato_configurazione():
             'app_service': bool(os.environ.get(RES_APP_SERVICE)),
             'postgres': bool(os.environ.get(RES_POSTGRES)),
             'acs': bool(os.environ.get(RES_ACS)),
-            'storage': bool(os.environ.get(RES_STORAGE)),
         },
     }

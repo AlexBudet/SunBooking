@@ -32,6 +32,13 @@ PREZZO_WHATSAPP_TENANT_MESE = ('PREZZO_WHATSAPP_TENANT_MESE', 5.0)   # Unipile, 
 PREZZO_EMAIL_UNITARIO       = ('PREZZO_EMAIL_UNITARIO', 0.00025)     # Azure Communication Services, per e-mail
 TENANT_WHATSAPP_INCLUSI     = ('TENANT_WHATSAPP_INCLUSI', 10)        # account gia' compresi nel canone
 
+# Tetti mensili di messaggi, se ce ne sono. Zero (o variabile assente) = nessun
+# tetto: si mostrano i totali e basta. NON si mette qui un numero inventato -
+# una soglia sbagliata e' peggio di una soglia assente, perche' fa stare
+# tranquilli fino al giorno in cui non arrivano piu' i messaggi.
+SOGLIA_WHATSAPP_MESE        = ('SOGLIA_WHATSAPP_MESE', 0)
+SOGLIA_EMAIL_MESE           = ('SOGLIA_EMAIL_MESE', 0)
+
 
 def proiezione_connessioni(n_tenant, tetto_pool_per_tenant, max_connections,
                            connessioni_riservate=0, connessioni_altre_app=0):
@@ -166,6 +173,36 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
         'ipotesi': ('un negozio nuovo manda quanto la media di quelli attuali; il '
                     'canone WhatsApp si paga per account collegato, non per messaggio'),
     }
+    # Quanto si e' vicini al tetto, oggi e all'obiettivo. La seconda riga e' la
+    # piu' utile delle due: dice se il tetto lo si sfonda CRESCENDO, cioe'
+    # mentre si e' ancora in tempo a cambiare piano.
+    def _soglia(canale, inviati, previsti, tetto):
+        if not tetto:
+            return None
+        return {
+            'canale': canale,
+            'inviati': round(inviati),
+            'soglia': int(tetto),
+            'percentuale': round(100.0 * inviati / tetto, 1),
+            'margine': int(round(tetto - inviati)),
+            'previsti_obiettivo': round(previsti),
+            'percentuale_obiettivo': round(100.0 * previsti / tetto, 1),
+            'sfora_a_obiettivo': previsti > tetto,
+            'tenant_obiettivo': tenant_obiettivo,
+        }
+
+    soglie = [
+        _soglia('WhatsApp', wa_mese, wa_per_tenant * tenant_obiettivo,
+                int(_euro(*SOGLIA_WHATSAPP_MESE))),
+        _soglia('E-mail', em_mese, em_per_tenant * tenant_obiettivo,
+                int(_euro(*SOGLIA_EMAIL_MESE))),
+    ]
+    res['soglie'] = [s for s in soglie if s]
+    if not res['soglie']:
+        res['soglie_assenti'] = (
+            'nessun tetto dichiarato: imposta SOGLIA_WHATSAPP_MESE e '
+            'SOGLIA_EMAIL_MESE per vedere quanto manca al limite')
+
     if tenant_non_misurati:
         def _negozi(n):
             return '1 negozio' if n == 1 else '%d negozi' % n

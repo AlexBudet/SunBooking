@@ -1013,7 +1013,8 @@ def owner_monitor_dati():
     except (TypeError, ValueError):
         giorni = 30
 
-    from appl.services import usage_monitor, usage_projection, azure_monitor
+    from appl.services import (usage_monitor, usage_projection, azure_monitor,
+                               unipile_monitor)
 
     per_tenant = []
     for idx, uri in pool.items():
@@ -1113,6 +1114,11 @@ def owner_monitor_dati():
     if invii_non_misurati:
         prj_msg['negozi_non_misurati'] = invii_non_misurati
 
+    # Il canone WhatsApp si paga per ACCOUNT COLLEGATO. Quanti ce ne siano lo
+    # sa solo Unipile: dedurlo dal numero di negozi e' comodo e sbagliato (il
+    # 28/08/2026: 3 negozi, 2 account). Una chiamata sola, con cache di 5 minuti.
+    prj_msg['unipile'] = unipile_monitor.stato_account()
+
     picchi = [(t.get('traffico') or {}).get('picco_orario', 0) for t in validi]
     prj_traffico = usage_projection.proiezione_traffico(
         [p for p in picchi if p], n_tenant)
@@ -1128,7 +1134,6 @@ def owner_monitor_dati():
             'app_service': azure_monitor.metriche_app_service(),
             'postgres': azure_monitor.metriche_postgres(),
             'email': azure_monitor.metriche_email(),
-            'storage': azure_monitor.metriche_storage(),
         },
         'giorni': giorni,
     })

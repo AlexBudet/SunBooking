@@ -184,6 +184,10 @@ const SPIEGA = {
   erroriTot: "Errori registrati dal gestionale nel periodo scelto. Sono " +
     "elencati per esteso nella riga sotto: motivo, quante volte, quando " +
     "l'ultima e il dettaglio tecnico dell'occorrenza piu' recente.",
+  accountCollegati: "Gli account WhatsApp realmente collegati a Unipile, letti " +
+    "dal loro sistema. E' il numero su cui si paga il canone: un negozio che " +
+    "non ha collegato WhatsApp non costa, e un account scollegato smette di " +
+    "mandare messaggi senza avvisare nessuno.",
   quotaStorage: "Lo spazio totale del server PostgreSQL, non del singolo " +
     "negozio: i database stanno tutti sullo stesso disco e se finisce, " +
     "finisce per tutti insieme. Si legge dalla metrica Azure storage_limit " +
@@ -520,6 +524,31 @@ function schedaMessaggi(p) {
       '</div>';
   }
 
+  // Gli account collegati sono il dato che fa la fattura: il canone e' per
+  // account, non per negozio. Un account non-OK e' un WhatsApp scollegato, cioe'
+  // un negozio che ha smesso di mandare promemoria senza dirlo a nessuno.
+  const u = p.unipile || {};
+  let riquadroUnipile = '';
+  if (u.stato === 'ok') {
+    const rotti = (u.stati_da_sistemare || []).length;
+    riquadroUnipile =
+      '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #eceff3">' +
+      riga('Account WhatsApp collegati',
+           fmt.format(u.account_whatsapp) + ' <span class="nota">su ' +
+           fmt.format(o.tenant) + ' negozi</span>', true, 'accountCollegati') +
+      (rotti
+        ? '<div style="margin-top:6px;padding:8px 10px;border-radius:6px;' +
+          'background:#fce4eb;color:#b01046;font-size:.85em">&#9888; ' +
+          esc(u.stati_da_sistemare.join(', ')) + ': WhatsApp scollegato. ' +
+          'Quel negozio non manda più promemoria né conferme finché ' +
+          'non si rifa’ la scansione del QR.</div>'
+        : '<div class="nota" style="margin-top:4px">tutti attivi</div>') +
+      '</div>';
+  } else if (u.stato) {
+    riquadroUnipile = '<div class="nota" style="margin-top:10px">Account Unipile non leggibili: ' +
+      esc(u.dettaglio || '') + '</div>';
+  }
+
   // Se qualche negozio non e' misurabile va detto SOPRA i numeri, non sotto:
   // altrimenti si legge "0 msg" e si crede che nessuno mandi niente.
   const avviso = p.avviso
@@ -539,6 +568,29 @@ function schedaMessaggi(p) {
            dec(p.per_tenant_mese.whatsapp, 1) + ' WhatsApp · ' +
            dec(p.per_tenant_mese.email, 1) + ' e-mail al mese') +
     '</div>' +
+    riquadroUnipile +
+    // Quanto si e' vicini al tetto. Un totale di messaggi senza il tetto non
+    // dice se si sta per sbattere: e' lo stesso difetto dello spazio database.
+    (p.soglie || []).map(function (s) {
+      return '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #eceff3">' +
+        riga(s.canale + ' verso il tetto',
+             fmt.format(s.inviati) + ' su ' + fmt.format(s.soglia) +
+             ' <span class="nota">(' + dec(s.percentuale, 1) + '%)</span>', true) +
+        barra(s.percentuale) +
+        (s.sfora_a_obiettivo
+          ? '<div style="margin-top:6px;padding:8px 10px;border-radius:6px;' +
+            'background:#fce4eb;color:#b01046;font-size:.85em">&#9888; A ' +
+            s.tenant_obiettivo + ' negozi ne manderesti ' +
+            fmt.format(s.previsti_obiettivo) + ', cioè il ' +
+            dec(s.percentuale_obiettivo, 0) + '% del tetto: lo sfondi prima di arrivarci.</div>'
+          : riga('A ' + s.tenant_obiettivo + ' negozi',
+                 fmt.format(s.previsti_obiettivo) + ' su ' + fmt.format(s.soglia) +
+                 ' <span class="nota">(' + dec(s.percentuale_obiettivo, 1) + '%)</span>')) +
+        '</div>';
+    }).join('') +
+    (p.soglie_assenti
+      ? '<div class="nota" style="margin-top:10px">' + p.soglie_assenti + '</div>'
+      : '') +
     '<div class="ipotesi">Prezzi usati: WhatsApp ' + euro(pr.whatsapp_per_tenant_mese) +
       ' per negozio al mese (primi ' + pr.tenant_whatsapp_inclusi + ' inclusi nel canone) · ' +
       'e-mail ' + euroPreciso(pr.email_unitario) + ' a messaggio. ' +
@@ -601,8 +653,7 @@ function disegna(d) {
   document.getElementById('azure').innerHTML =
     bloccoAzure('App Service (CPU / RAM)', az.app_service) +
     bloccoAzure('PostgreSQL', az.postgres) +
-    bloccoAzure('E-mail (ACS)', az.email) +
-    bloccoAzure('Storage', az.storage);
+    bloccoAzure('E-mail (ACS)', az.email);
 
   document.getElementById('tabella-tenant').innerHTML = tabellaTenant(d.tenant || []);
   document.getElementById('proiezioni').innerHTML =
