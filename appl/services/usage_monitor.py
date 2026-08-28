@@ -327,6 +327,33 @@ def invii(giorni=30):
             c['media_giornaliera'] = round(c['totale'] / giorni, 1)
             c['stima_mensile'] = round(c['totale'] / giorni * 30)
 
+        # I PICCHI, non solo i totali. I limiti dei fornitori (ACS in testa)
+        # sono al minuto e all'ora, non al mese: un totale mensile basso non
+        # dice niente su una raffica. 2.000 e-mail sparse in trenta giorni non
+        # sfiorano nessun limite, 300 nello stesso minuto lo sfondano.
+        # Serie oraria per canale: serve al chiamante per sommare i negozi
+        # ORA PER ORA. I limiti di ACS sono "per Subscription", cioe' condivisi
+        # fra tutti i negozi: il tetto lo si tocca con la somma di quello che
+        # parte nella stessa ora, non con il picco del negozio piu' attivo.
+        serie_ore = db.session.execute(text("""
+            SELECT date_trunc('hour', created_at) AS ora, canale, count(*) AS n
+            FROM usage_events WHERE created_at >= :da
+            GROUP BY 1, 2 ORDER BY 1
+        """), {'da': da}).mappings().all()
+
+        for unita, chiave in (('hour', 'picco_orario'), ('minute', 'picco_al_minuto')):
+            righe_picco = db.session.execute(text("""
+                SELECT canale, max(n) AS picco FROM (
+                    SELECT canale, date_trunc(CAST(:unita AS text), created_at) AS blocco,
+                           count(*) AS n
+                    FROM usage_events WHERE created_at >= :da
+                    GROUP BY 1, 2
+                ) x GROUP BY canale
+            """), {'da': da, 'unita': unita}).mappings().all()
+            for r in righe_picco:
+                if r['canale'] in per_canale:
+                    per_canale[r['canale']][chiave] = r['picco']
+
         serie = db.session.execute(text("""
             SELECT date_trunc('day', created_at) AS giorno, canale, count(*) AS n
             FROM usage_events WHERE created_at >= :da
@@ -341,6 +368,10 @@ def invii(giorni=30):
             'serie_giornaliera': [
                 {'giorno': s['giorno'].date().isoformat(), 'canale': s['canale'], 'n': s['n']}
                 for s in serie
+            ],
+            'serie_oraria': [
+                {'ora': s['ora'].isoformat(), 'canale': s['canale'], 'n': s['n']}
+                for s in serie_ore
             ],
             'dati_da': primo.isoformat() if primo else None,
             'giorni': giorni,

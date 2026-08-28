@@ -184,6 +184,14 @@ const SPIEGA = {
   erroriTot: "Errori registrati dal gestionale nel periodo scelto. Sono " +
     "elencati per esteso nella riga sotto: motivo, quante volte, quando " +
     "l'ultima e il dettaglio tecnico dell'occorrenza piu' recente.",
+  raffica: "Il momento più intenso del periodo, sommando TUTTI i negozi: " +
+    "i limiti di Azure Communication Services sono per sottoscrizione, quindi " +
+    "i negozi pescano dallo stesso tetto e quello che conta e' quanto parte " +
+    "insieme. Il picco al minuto invece e' quello del singolo negozio più " +
+    "attivo: sommarlo costerebbe la serie al minuto di ogni database. " +
+    "E' questo il numero che sfonda i limiti, non il totale del mese: i tetti " +
+    "ACS sono al minuto e all'ora, un limite mensile non esiste. Un mese " +
+    "tranquillo con una raffica sola basta a farsi respingere i messaggi.",
   accountCollegati: "Gli account WhatsApp realmente collegati a Unipile, letti " +
     "dal loro sistema. E' il numero su cui si paga il canone: un negozio che " +
     "non ha collegato WhatsApp non costa, e un account scollegato smette di " +
@@ -216,6 +224,10 @@ function sp(testo, chiave) {
   return '<span class="spiega" data-tip="' + t.replace(/"/g, '&quot;') + '">' +
          testo + '</span>';
 }
+
+// Deve restare uguale ad ATTENZIONE_PCT in usage_projection.py: e' il livello
+// a cui il pannello passa al giallo.
+const SOGLIA_ATTENZIONE = 80;
 
 const fmt = new Intl.NumberFormat('it-IT');
 const fmtEuro = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' });
@@ -572,22 +584,52 @@ function schedaMessaggi(p) {
     // Quanto si e' vicini al tetto. Un totale di messaggi senza il tetto non
     // dice se si sta per sbattere: e' lo stesso difetto dello spazio database.
     (p.soglie || []).map(function (s) {
+      // Tre stati, tre colori. Il giallo all'80% e' il solo che serva davvero:
+      // il rosso al 100% arriva quando i messaggi sono gia' stati respinti.
+      const allarme = s.livello === 'superata'
+        ? {sfondo:'#fce4eb', testo:'#b01046',
+           msg:'LIMITE SUPERATO: ' + esc(s.rischio || '') + '.'}
+        : s.livello === 'attenzione'
+          ? {sfondo:'#fdf3d8', testo:'#8a6410',
+             msg:'Sei oltre l’' + dec(SOGLIA_ATTENZIONE, 0) + '% del limite: ne restano ' +
+                 fmt.format(s.margine) + '.'}
+          : null;
       return '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #eceff3">' +
-        riga(s.canale + ' verso il tetto',
+        riga(s.canale + ' ' + s.periodo,
              fmt.format(s.inviati) + ' su ' + fmt.format(s.soglia) +
              ' <span class="nota">(' + dec(s.percentuale, 1) + '%)</span>', true) +
         barra(s.percentuale) +
+        (allarme
+          ? '<div style="margin-top:6px;padding:8px 10px;border-radius:6px;background:' +
+            allarme.sfondo + ';color:' + allarme.testo + ';font-size:.85em">&#9888; ' +
+            allarme.msg + '</div>'
+          : '') +
         (s.sfora_a_obiettivo
           ? '<div style="margin-top:6px;padding:8px 10px;border-radius:6px;' +
             'background:#fce4eb;color:#b01046;font-size:.85em">&#9888; A ' +
             s.tenant_obiettivo + ' negozi ne manderesti ' +
             fmt.format(s.previsti_obiettivo) + ', cioè il ' +
-            dec(s.percentuale_obiettivo, 0) + '% del tetto: lo sfondi prima di arrivarci.</div>'
-          : riga('A ' + s.tenant_obiettivo + ' negozi',
-                 fmt.format(s.previsti_obiettivo) + ' su ' + fmt.format(s.soglia) +
-                 ' <span class="nota">(' + dec(s.percentuale_obiettivo, 1) + '%)</span>')) +
+            dec(s.percentuale_obiettivo, 0) + '% del tetto: lo sfondi crescendo.</div>'
+          : (s.previsti_obiettivo !== undefined
+              ? riga('A ' + s.tenant_obiettivo + ' negozi',
+                     fmt.format(s.previsti_obiettivo) + ' su ' + fmt.format(s.soglia) +
+                     ' <span class="nota">(' + dec(s.percentuale_obiettivo, 1) + '%)</span>')
+              : '')) +
         '</div>';
     }).join('') +
+    // I picchi si mostrano SEMPRE, anche senza un tetto dichiarato: sapere che
+    // in un minuto sono partite 300 e-mail e' un'informazione utile di suo.
+    (p.picchi && (p.picchi.email_minuto || p.picchi.email_ora || p.picchi.whatsapp_ora)
+      ? '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #eceff3">' +
+        riga('Raffica massima (tutti i negozi insieme)',
+             fmt.format(p.picchi.email_ora) + ' e-mail in un’ora · ' +
+             fmt.format(p.picchi.whatsapp_ora) + ' WhatsApp in un’ora',
+             false, 'raffica') +
+        riga('Punta al minuto (singolo negozio)',
+             fmt.format(p.picchi.email_minuto) + ' e-mail · ' +
+             fmt.format(p.picchi.whatsapp_minuto) + ' WhatsApp') +
+        '</div>'
+      : '') +
     (p.soglie_assenti
       ? '<div class="nota" style="margin-top:10px">' + p.soglie_assenti + '</div>'
       : '') +

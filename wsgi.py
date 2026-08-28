@@ -1102,6 +1102,19 @@ def owner_monitor_dati():
     # da un negozio che davvero non manda niente.
     invii_tenant = []
     invii_non_misurati = []
+    # I limiti di Azure Communication Services sono "per Subscription": tutti i
+    # negozi pescano dallo STESSO tetto. Quindi per ora si SOMMA quello che e'
+    # partito nella stessa ora da tutti, e poi si prende l'ora peggiore. Il
+    # massimo fra i negozi - che sembra la cosa naturale - sottostimerebbe
+    # proprio il caso che fa scattare il 429: tre negozi che mandano insieme.
+    #
+    # Il picco al MINUTO resta invece il massimo di un singolo negozio: per
+    # sommarlo servirebbe la serie al minuto di ogni negozio (43.200 righe per
+    # 30 giorni ciascuno), che costa piu' di quanto valga. E' dichiarato come
+    # tale nel pannello, non spacciato per il totale.
+    picchi_msg = {'whatsapp_ora': 0, 'whatsapp_minuto': 0,
+                  'email_ora': 0, 'email_minuto': 0}
+    per_ora = {}          # (ora, canale) -> totale su tutti i negozi
     for t in validi:
         inv = t.get('invii') or {}
         if inv.get('errore') or 'per_canale' not in inv:
@@ -1109,8 +1122,24 @@ def owner_monitor_dati():
             continue
         canali = inv.get('per_canale') or {}
         invii_tenant.append({c: v.get('stima_mensile', 0) for c, v in canali.items()})
+        for canale, chiave in (('email', 'email_minuto'), ('whatsapp', 'whatsapp_minuto')):
+            valore = (canali.get(canale) or {}).get('picco_al_minuto') or 0
+            if valore > picchi_msg[chiave]:
+                picchi_msg[chiave] = valore
+
+        for punto in (inv.get('serie_oraria') or []):
+            chiave = (punto.get('ora'), punto.get('canale'))
+            per_ora[chiave] = per_ora.get(chiave, 0) + (punto.get('n') or 0)
+
+    for (_ora, canale), totale in per_ora.items():
+        if canale == 'email' and totale > picchi_msg['email_ora']:
+            picchi_msg['email_ora'] = totale
+        elif canale == 'whatsapp' and totale > picchi_msg['whatsapp_ora']:
+            picchi_msg['whatsapp_ora'] = totale
+
     prj_msg = usage_projection.proiezione_messaggi(
-        invii_tenant, n_tenant, tenant_non_misurati=len(invii_non_misurati))
+        invii_tenant, n_tenant, tenant_non_misurati=len(invii_non_misurati),
+        picchi_orari=picchi_msg)
     if invii_non_misurati:
         prj_msg['negozi_non_misurati'] = invii_non_misurati
 

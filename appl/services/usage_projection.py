@@ -39,6 +39,45 @@ TENANT_WHATSAPP_INCLUSI     = ('TENANT_WHATSAPP_INCLUSI', 10)        # account g
 SOGLIA_WHATSAPP_MESE        = ('SOGLIA_WHATSAPP_MESE', 0)
 SOGLIA_EMAIL_MESE           = ('SOGLIA_EMAIL_MESE', 0)
 
+# I limiti dei fornitori sono AL MINUTO e ALL'ORA, non al mese: un totale
+# mensile tranquillo non esclude affatto una raffica che li sfonda, e infatti
+# un tetto mensile non esiste ne' per ACS ne' per Unipile (le due SOGLIA_*_MESE
+# restano a 0 apposta).
+#
+# Questi tre numeri stanno NEL CODICE e non solo nell'ambiente, al contrario
+# dei prezzi qui sopra. Non e' un'incoerenza: un prezzo cambia in silenzio con
+# un contratto e nessuno se ne accorge, un limite di piattaforma e' pubblicato
+# da Microsoft e cambia con la documentazione. Averlo qui vuol dire che il
+# pannello avvisa da subito, senza dipendere da una variabile che qualcuno deve
+# ricordarsi di impostare. La variabile d'ambiente resta e ha la precedenza:
+# serve il giorno che si ottiene un aumento di quota dal supporto.
+#
+# Fonte: learn.microsoft.com/azure/communication-services/concepts/service-limits
+# "Rate Limits for Email" - Custom Domains, letta il 28/08/2026.
+# Attenzione: quei limiti sono PER SOTTOSCRIZIONE, non per risorsa e non per
+# negozio - tutti i tenant pescano dallo stesso tetto.
+SOGLIA_EMAIL_MINUTO         = ('SOGLIA_EMAIL_MINUTO', 30)    # ACS, dominio verificato
+SOGLIA_EMAIL_ORA            = ('SOGLIA_EMAIL_ORA', 100)      # ACS, dominio verificato
+
+# WhatsApp via Unipile: **nessun limite orario esiste**, ne' di Unipile ne' di
+# WhatsApp. Unipile non impone tetti (il piano e' ad account collegati, non a
+# messaggi) e WhatsApp non pubblica soglie: restringe in base al COMPORTAMENTO
+# - troppe chat nuove senza risposta, segnalazioni di spam. Quindi qui 0: una
+# percentuale su un tetto inventato e' peggio di nessuna percentuale.
+SOGLIA_WHATSAPP_ORA         = ('SOGLIA_WHATSAPP_ORA', 0)
+
+# L'unico numero che Unipile pubblica davvero e' un INTERVALLO: mai sotto i
+# 10-20 secondi fra un messaggio e l'altro. Tradotto in tetto misurabile sono 6
+# messaggi al minuto al massimo (3 volendo stare sui 20 secondi).
+# E il rischio non e' un errore che si ritenta: e' la sospensione del numero
+# WhatsApp DEL NEGOZIO, che nessuna riprova rimette a posto.
+# Fonte: developer.unipile.com/docs/provider-limits-and-restrictions, 28/08/2026.
+SOGLIA_WHATSAPP_MINUTO      = ('SOGLIA_WHATSAPP_MINUTO', 6)
+
+# Sopra questa percentuale si avvisa PRIMA di sbattere. Un allarme che scatta
+# al 100% e' un allarme che scatta a danno avvenuto.
+ATTENZIONE_PCT = 80.0
+
 
 def proiezione_connessioni(n_tenant, tetto_pool_per_tenant, max_connections,
                            connessioni_riservate=0, connessioni_altre_app=0):
@@ -110,7 +149,7 @@ def proiezione_storage(byte_per_tenant, n_tenant, quota_byte=None):
 
 
 def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=100,
-                        tenant_non_misurati=0):
+                        tenant_non_misurati=0, picchi_orari=None):
     """Volume di messaggi e costo, oggi e all'obiettivo.
 
     Il costo WhatsApp NON e' per messaggio ma per account collegato: e' un
@@ -176,32 +215,76 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
     # Quanto si e' vicini al tetto, oggi e all'obiettivo. La seconda riga e' la
     # piu' utile delle due: dice se il tetto lo si sfonda CRESCENDO, cioe'
     # mentre si e' ancora in tempo a cambiare piano.
-    def _soglia(canale, inviati, previsti, tetto):
+    # La conseguenza NON e' la stessa sui due canali, e scriverne una sola
+    # sarebbe falso su uno dei due: superare ACS fa respingere i messaggi e si
+    # ritenta, superare il ritmo su WhatsApp puo' far sospendere il numero DEL
+    # NEGOZIO - e da li' non si torna indietro con una riprova.
+    RISCHIO = {
+        'E-mail': 'gli invii oltre il tetto vengono respinti dal fornitore (errore 429)',
+        'WhatsApp': 'WhatsApp puo’ sospendere il numero del negozio',
+    }
+
+    def _soglia(canale, periodo, usati, tetto, previsti=None):
+        """Un tetto solo, con il suo livello di allarme.
+
+        `livello` e' cio' che il pannello colora: 'ok' / 'attenzione' / 'superata'.
+        Si avvisa all'80% e non al 100% perche' un allarme che scatta quando il
+        limite e' gia' stato raggiunto arriva a messaggi gia' respinti.
+        """
         if not tetto:
             return None
-        return {
+        pct = 100.0 * usati / tetto
+        voce = {
             'canale': canale,
-            'inviati': round(inviati),
+            'periodo': periodo,
+            'inviati': round(usati),
             'soglia': int(tetto),
-            'percentuale': round(100.0 * inviati / tetto, 1),
-            'margine': int(round(tetto - inviati)),
-            'previsti_obiettivo': round(previsti),
-            'percentuale_obiettivo': round(100.0 * previsti / tetto, 1),
-            'sfora_a_obiettivo': previsti > tetto,
-            'tenant_obiettivo': tenant_obiettivo,
+            'percentuale': round(pct, 1),
+            'margine': int(round(tetto - usati)),
+            'livello': ('superata' if pct >= 100 else
+                        'attenzione' if pct >= ATTENZIONE_PCT else 'ok'),
+            'rischio': RISCHIO.get(canale, ''),
         }
+        if previsti is not None:
+            voce.update({
+                'previsti_obiettivo': round(previsti),
+                'percentuale_obiettivo': round(100.0 * previsti / tetto, 1),
+                'sfora_a_obiettivo': previsti > tetto,
+                'tenant_obiettivo': tenant_obiettivo,
+            })
+        return voce
 
+    picchi = picchi_orari or {}
     soglie = [
-        _soglia('WhatsApp', wa_mese, wa_per_tenant * tenant_obiettivo,
-                int(_euro(*SOGLIA_WHATSAPP_MESE))),
-        _soglia('E-mail', em_mese, em_per_tenant * tenant_obiettivo,
-                int(_euro(*SOGLIA_EMAIL_MESE))),
+        _soglia('WhatsApp', 'al mese', wa_mese, int(_euro(*SOGLIA_WHATSAPP_MESE)),
+                previsti=wa_per_tenant * tenant_obiettivo),
+        _soglia('E-mail', 'al mese', em_mese, int(_euro(*SOGLIA_EMAIL_MESE)),
+                previsti=em_per_tenant * tenant_obiettivo),
+        # I picchi NON si proiettano a 100 negozi: il picco di un negozio non
+        # si somma a quello di un altro se non mandano nello stesso istante, e
+        # moltiplicarlo per 100 produrrebbe un allarme finto.
+        _soglia('WhatsApp', "nell'ora di punta", picchi.get('whatsapp_ora', 0),
+                int(_euro(*SOGLIA_WHATSAPP_ORA))),
+        _soglia('WhatsApp', 'nel minuto di punta', picchi.get('whatsapp_minuto', 0),
+                int(_euro(*SOGLIA_WHATSAPP_MINUTO))),
+        _soglia('E-mail', "nell'ora di punta", picchi.get('email_ora', 0),
+                int(_euro(*SOGLIA_EMAIL_ORA))),
+        _soglia('E-mail', 'nel minuto di punta', picchi.get('email_minuto', 0),
+                int(_euro(*SOGLIA_EMAIL_MINUTO))),
     ]
     res['soglie'] = [s for s in soglie if s]
+    res['picchi'] = {
+        'whatsapp_ora': picchi.get('whatsapp_ora', 0),
+        'whatsapp_minuto': picchi.get('whatsapp_minuto', 0),
+        'email_ora': picchi.get('email_ora', 0),
+        'email_minuto': picchi.get('email_minuto', 0),
+    }
     if not res['soglie']:
         res['soglie_assenti'] = (
-            'nessun tetto dichiarato: imposta SOGLIA_WHATSAPP_MESE e '
-            'SOGLIA_EMAIL_MESE per vedere quanto manca al limite')
+            'nessun tetto dichiarato. I limiti dei fornitori sono al minuto e '
+            "all'ora, non al mese: le variabili sono SOGLIA_EMAIL_MINUTO, "
+            'SOGLIA_EMAIL_ORA, SOGLIA_EMAIL_MESE (e le corrispondenti '
+            'SOGLIA_WHATSAPP_*)')
 
     if tenant_non_misurati:
         def _negozi(n):
