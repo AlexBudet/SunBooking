@@ -14,7 +14,9 @@ pannello. Ogni raccolta e' avvolta in un try e in caso di guaio restituisce un
 dizionario con la chiave 'errore'.
 """
 
+import random
 import threading
+import time as _time
 from datetime import datetime, timedelta, timezone
 
 from flask import current_app
@@ -62,6 +64,82 @@ def registra_uso(canale, tipo='altro', origine='crm', esito='ok', errore=None):
                 "[consumi] invio %s/%s NON contato: %s", canale, tipo, str(e)[:200])
         except Exception:
             pass
+
+
+# ============================================================================
+# 1-bis. Ritmo degli invii WhatsApp
+# ============================================================================
+# Unipile non impone tetti, ma raccomanda di non scendere sotto i 10-20 secondi
+# fra un messaggio e l'altro: sotto quella soglia WhatsApp puo' sospendere il
+# NUMERO DEL NEGOZIO, e da li' non si torna indietro.
+#
+# I due invii automatici (memo mattutino e notifica operatori) vivono nell'app
+# booking e sono gia' a un messaggio al minuto. L'invio MANUALE dall'Agenda no:
+# cinque conferme mandate di fila partivano tutte nello stesso minuto (misurato
+# il 29/08/2026: cinque invii 'crm/manuale' alle 06:41).
+#
+# L'orologio condiviso e' `usage_events`: ci scrivono ENTRAMBE le applicazioni,
+# quindi il gestionale sa quando ha mandato l'app booking e viceversa, senza
+# bisogno di una tabella di coda (che sara' il passo successivo).
+
+INTERVALLO_MINIMO_S = 12       # mai piu' vicini di cosi'
+INTERVALLO_MASSIMO_S = 20      # limite alto della finestra casuale
+ATTESA_MASSIMA_S = 20          # quanto al massimo si fa aspettare una richiesta web
+
+_lock_ritmo = threading.Lock()
+_lock_per_tenant = {}
+
+
+def _lock_invio():
+    """Un lucchetto per tenant: due invii manuali contemporanei dello stesso
+    negozio devono mettersi in fila, altrimenti leggono lo stesso "ultimo
+    invio" e partono insieme, che e' esattamente il caso da evitare."""
+    chiave = _chiave_tenant()
+    with _lock_ritmo:
+        lock = _lock_per_tenant.get(chiave)
+        if lock is None:
+            lock = threading.Lock()
+            _lock_per_tenant[chiave] = lock
+        return lock
+
+
+def secondi_da_attendere(canale='whatsapp'):
+    """Quanto manca prima che sia prudente mandare il prossimo messaggio.
+
+    L'intervallo richiesto e' CASUALE nella finestra 12-20 s e non fisso: un
+    ritmo perfettamente regolare e' a sua volta un segnale di automazione.
+
+    Non solleva mai e in caso di dubbio torna 0: il ritmo e' una precauzione,
+    non deve poter impedire a un operatore di mandare un messaggio.
+    """
+    try:
+        ultimo = db.session.execute(text(
+            "SELECT max(created_at) FROM usage_events WHERE canale = :c"),
+            {'c': canale}).scalar()
+        if not ultimo:
+            return 0.0
+        trascorsi = (datetime.now(timezone.utc) - ultimo).total_seconds()
+        richiesto = random.uniform(INTERVALLO_MINIMO_S, INTERVALLO_MASSIMO_S)
+        return max(0.0, min(ATTESA_MASSIMA_S, richiesto - trascorsi))
+    except Exception:
+        return 0.0
+
+
+def attendi_il_turno(canale='whatsapp'):
+    """Blocca finche' non e' il momento di mandare. Ritorna i secondi attesi.
+
+    Va usata con `with usage_monitor.lock_invio():` attorno all'invio, cosi' il
+    turno preso non viene scavalcato da un'altra richiesta dello stesso negozio.
+    """
+    attesa = secondi_da_attendere(canale)
+    if attesa > 0:
+        _time.sleep(attesa)
+    return attesa
+
+
+def lock_invio():
+    """Il lucchetto del tenant corrente, da usare come context manager."""
+    return _lock_invio()
 
 
 # ============================================================================

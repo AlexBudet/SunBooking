@@ -1021,6 +1021,14 @@ def owner_monitor_dati():
     except (TypeError, ValueError):
         giorni = 30
 
+    # A quanti negozi proiettare. Fisso a 100 rispondeva sempre alla domanda
+    # piu' lontana; quella che si fa davvero adesso e' "e con dieci?".
+    try:
+        obiettivo = int(request.args.get('negozi', 10))
+    except (TypeError, ValueError):
+        obiettivo = 10
+    obiettivo = max(10, min(100, round(obiettivo / 10.0) * 10))
+
     from appl.services import (usage_monitor, usage_projection, azure_monitor,
                                unipile_monitor)
 
@@ -1151,7 +1159,8 @@ def owner_monitor_dati():
     osservati = [(t.get('invii') or {}).get('giorni_osservati')
                  for t in validi if (t.get('invii') or {}).get('giorni_osservati')]
     prj_msg = usage_projection.proiezione_messaggi(
-        invii_tenant, n_tenant, tenant_non_misurati=len(invii_non_misurati),
+        invii_tenant, n_tenant, tenant_obiettivo=obiettivo,
+        tenant_non_misurati=len(invii_non_misurati),
         picchi_orari=picchi_msg)
     if osservati:
         # Il MINIMO, non il massimo. I totali sono una SOMMA fra negozi: se uno
@@ -1202,6 +1211,7 @@ def owner_monitor_dati():
 
     prj_traffico = usage_projection.proiezione_traffico(
         picco_simultaneo, richieste_totali, ore_osservate, n_tenant,
+        tenant_obiettivo=obiettivo,
         tetto_richieste_secondo=tetto_req_sec,
         tenant_misurati=tenant_con_traffico)
     if ms_medi:
@@ -1267,6 +1277,7 @@ def owner_monitor_dati():
             'email': azure_monitor.metriche_email(),
         },
         'giorni': giorni,
+        'negozi_obiettivo': obiettivo,
     })
 
 

@@ -3175,26 +3175,45 @@ def send_whatsapp_auto():
 
         # Ogni chiamata a Unipile - riuscita o no - viene contata per il
         # pannello consumi: anche un invio fallito e' una chiamata all'API.
+        from appl.services import usage_monitor
         from appl.services.usage_monitor import registra_uso
 
         try:
             import requests
-            # IMPORTANTE: usa data= (form-encoded) NON json=
-            response = requests.post(send_url, data=payload, headers=headers, timeout=30)
-            app.logger.info("[WHATSAPP-UNIPILE] Response status=%s body=%s", response.status_code, response.text[:500] if response.text else "")
 
-            if response.status_code in (200, 201, 202):
-                try:
-                    resp_json = response.json()
-                except Exception:
-                    resp_json = {"raw": response.text}
-                registra_uso('whatsapp', tipo='manuale', origine='crm', esito='ok')
-                return jsonify({'success': True, 'unipile_response': resp_json})
-            else:
-                app.logger.error("[WHATSAPP-UNIPILE] send failed http_status=%s body=%s", response.status_code, response.text)
-                registra_uso('whatsapp', tipo='manuale', origine='crm', esito='errore',
-                             errore=f"HTTP {response.status_code}: {response.text[:200]}")
-                return jsonify({'error': 'Invio fallito', 'http_status': response.status_code, 'details': response.text}), 500
+            # RITMO. Gli invii automatici (memo mattutino, notifica operatori)
+            # partono dall'app booking gia' distanziati di un minuto l'uno
+            # dall'altro. Questo qui invece e' l'invio a mano dall'Agenda, e
+            # finora non aveva nessuna pausa: cinque conferme di fila partivano
+            # nello stesso minuto. Il numero WhatsApp e' quello del NEGOZIO, e
+            # una sospensione la paga il cliente.
+            #
+            # Il lucchetto e' per tenant e serve al caso di due operatori che
+            # premono insieme: senza, leggerebbero lo stesso "ultimo invio" e
+            # aspetterebbero entrambi lo stesso tempo, cioe' partirebbero
+            # comunque insieme. L'attesa e' comunque limitata a 20 secondi:
+            # meglio un messaggio un po' ravvicinato che una pagina appesa.
+            with usage_monitor.lock_invio():
+                atteso = usage_monitor.attendi_il_turno()
+                if atteso:
+                    app.logger.info("[WHATSAPP-UNIPILE] atteso %.1fs per non accavallare gli invii", atteso)
+
+                # IMPORTANTE: usa data= (form-encoded) NON json=
+                response = requests.post(send_url, data=payload, headers=headers, timeout=30)
+                app.logger.info("[WHATSAPP-UNIPILE] Response status=%s body=%s", response.status_code, response.text[:500] if response.text else "")
+
+                if response.status_code in (200, 201, 202):
+                    try:
+                        resp_json = response.json()
+                    except Exception:
+                        resp_json = {"raw": response.text}
+                    registra_uso('whatsapp', tipo='manuale', origine='crm', esito='ok')
+                    return jsonify({'success': True, 'unipile_response': resp_json})
+                else:
+                    app.logger.error("[WHATSAPP-UNIPILE] send failed http_status=%s body=%s", response.status_code, response.text)
+                    registra_uso('whatsapp', tipo='manuale', origine='crm', esito='errore',
+                                 errore=f"HTTP {response.status_code}: {response.text[:200]}")
+                    return jsonify({'error': 'Invio fallito', 'http_status': response.status_code, 'details': response.text}), 500
 
         except Exception as exc:
             app.logger.exception("[WHATSAPP-UNIPILE] Exception during requests.post")

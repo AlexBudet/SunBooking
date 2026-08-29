@@ -125,6 +125,18 @@
       <p class="subtitle">Quanto si sta usando, e a quanti negozi si rompe qualcosa</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
+      <select id="negozi" data-tip="A quanti negozi proiettare i consumi. Le proiezioni assumono che ogni negozio nuovo consumi quanto la media di quelli misurati oggi.">
+        <option value="10" selected>proietta a 10 negozi</option>
+        <option value="20">proietta a 20 negozi</option>
+        <option value="30">proietta a 30 negozi</option>
+        <option value="40">proietta a 40 negozi</option>
+        <option value="50">proietta a 50 negozi</option>
+        <option value="60">proietta a 60 negozi</option>
+        <option value="70">proietta a 70 negozi</option>
+        <option value="80">proietta a 80 negozi</option>
+        <option value="90">proietta a 90 negozi</option>
+        <option value="100">proietta a 100 negozi</option>
+      </select>
       <select id="periodo" data-tip="Cambia la finestra di tempo su cui sono calcolati invii, errori e traffico. Non influenza le metriche Azure, che hanno una finestra propria.">
         <option value="7">ultimi 7 giorni</option>
         <option value="30" selected>ultimi 30 giorni</option>
@@ -816,11 +828,13 @@ function disegna(d) {
 
 function carica() {
   const giorni = document.getElementById('periodo').value;
+  const negozi = document.getElementById('negozi').value;
   document.getElementById('caricamento').style.display = '';
   document.getElementById('caricamento').textContent = 'Raccolta dei dati in corso…';
   document.getElementById('contenuto').style.display = 'none';
 
-  fetch('/owner-setup/monitor/dati?giorni=' + giorni, { credentials: 'same-origin' })
+  fetch('/owner-setup/monitor/dati?giorni=' + giorni + '&negozi=' + negozi,
+        { credentials: 'same-origin' })
     .then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
@@ -891,6 +905,7 @@ function carica() {
 })();
 
 document.getElementById('periodo').addEventListener('change', carica);
+document.getElementById('negozi').addEventListener('change', carica);
 carica();
 </script>
 </body>
