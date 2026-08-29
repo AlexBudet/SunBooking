@@ -299,7 +299,7 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
 
 def proiezione_traffico(picco_simultaneo, richieste_totali, ore_osservate,
                         n_tenant, tenant_obiettivo=100,
-                        tetto_richieste_secondo=None):
+                        tetto_richieste_secondo=None, tenant_misurati=None):
     """Richieste al secondo, oggi e all'obiettivo.
 
     Attenzione a cosa sono gli ingredienti, perche' la versione precedente di
@@ -321,7 +321,11 @@ def proiezione_traffico(picco_simultaneo, richieste_totali, ore_osservate,
                 'in_attesa': ('il conteggio parte dal primo rilascio di questa '
                               'versione: i primi numeri compaiono dopo qualche '
                               'ora di lavoro normale')}
-    tenant = max(1, n_tenant)
+    # Si divide per i negozi che hanno DAVVERO dei dati, non per quelli che
+    # esistono. Il 28/08/2026 il traffico era registrato su un negozio solo su
+    # tre: dividere per tre avrebbe dato un consumo per negozio tre volte piu'
+    # basso del vero, e una proiezione a 100 negozi tre volte ottimista.
+    tenant = max(1, tenant_misurati if tenant_misurati else n_tenant)
     media_oraria_totale = richieste_totali / float(ore_osservate)
     media_per_tenant = media_oraria_totale / tenant
     picco_per_tenant = picco_simultaneo / float(tenant)
@@ -333,6 +337,11 @@ def proiezione_traffico(picco_simultaneo, richieste_totali, ore_osservate,
         'picco_per_tenant': round(picco_per_tenant),
         'media_oraria_per_tenant': round(media_per_tenant, 1),
         'ore_osservate': round(ore_osservate),
+        'tenant_misurati': tenant,
+        'tenant_totali': n_tenant,
+        # Poche ore di misura non bastano per una proiezione: va detto, come
+        # per i messaggi. Una giornata intera copre almeno un ciclo di lavoro.
+        'misura_fragile': ore_osservate < 24,
         'req_sec_medio': round(media_oraria_totale / 3600.0, 2),
         'req_sec_picco': round(picco_simultaneo / 3600.0, 2),
         'req_sec_obiettivo': round(media_per_tenant * tenant_obiettivo / 3600.0, 2),
@@ -341,6 +350,11 @@ def proiezione_traffico(picco_simultaneo, richieste_totali, ore_osservate,
         'ipotesi': ("per la riga di punta si assume che i negozi abbiano l'ora "
                     "piena nello stesso momento: e' l'ipotesi prudente, stessi "
                     "orari di apertura e stessa zona"),
+        'nota': ("conta solo il gestionale: l'app delle prenotazioni online e' "
+                 "separata e non passa da qui. Il contatore si salva a ogni "
+                 "cambio d'ora, quindi ogni riavvio perde l'ora in corso e i "
+                 "negozi che in quel momento non erano in uso restano a zero - "
+                 "uno zero qui vuol dire 'non misurato', non 'nessun traffico'"),
     }
     if tetto_richieste_secondo:
         res['tetto_richieste_secondo'] = tetto_richieste_secondo

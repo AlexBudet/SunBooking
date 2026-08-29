@@ -200,8 +200,12 @@ const SPIEGA = {
     "quasi sempre che e' spento, non che nessuno le apre.",
   pesoDb: "Quanto pesa il database di quel negozio: anagrafiche, appuntamenti, " +
     "scontrini e tutto lo storico.",
-  richiesteOra: "Quante pagine e comandi il negozio chiede all'applicazione in " +
-    "un'ora. Il “picco” e' l'ora piu' intensa del periodo scelto.",
+  richiesteOra: "Quante pagine e comandi il negozio chiede al GESTIONALE in " +
+    "un'ora. Non comprende l'app delle prenotazioni online, che e' " +
+    "un'applicazione separata e non passa da questo contatore: un negozio " +
+    "pieno di prenotazioni web puo' risultare a zero qui. Il conteggio si " +
+    "salva a ogni cambio d'ora, quindi un riavvio dell'applicazione fa perdere " +
+    "l'ora in corso: dopo un rilascio i buchi sono normali.",
   picco: "L'ora piu' carica del periodo, sommando i negozi NELLA STESSA ora. " +
     "Non e' la somma dei picchi di ciascuno: quelli capitano in ore diverse e " +
     "sommarli descriverebbe un'ora che non e' mai esistita. E' il numero che " +
@@ -566,14 +570,22 @@ function schedaStorage(p) {
 // per limite, barra colorata, percentuale grande e una frase in italiano che
 // dice cosa succede se si sfonda. Zero gergo.
 // ---------------------------------------------------------------------------
-function schedaLimiti(soglie, picchi) {
-  if (!soglie || !soglie.length) {
-    return '<div class="card"><span class="vuoto">Nessun limite da controllare.</span></div>';
+function schedaLimiti(limiti) {
+  if (!limiti || !limiti.length) {
+    return '<div class="card"><span class="vuoto">Nessun limite misurabile al momento.</span></div>';
   }
 
-  // Il peggiore in testa: e' quello che si tocca per primo, e l'unico che
-  // conta davvero finche' non lo si e' risolto.
-  const ordinate = soglie.slice().sort(function (a, b) { return b.percentuale - a.percentuale; });
+  // Ogni riga e' "usato su massimo" con la stessa forma, qualunque sia l'unita':
+  // connessioni, byte, richieste al secondo, messaggi. Il senso e' che l'owner
+  // legga una colonna sola di percentuali invece di raccogliere numeri sparsi
+  // in quattro schede e confrontarli a mente.
+  function quanto(l) {
+    if (l.formato === 'byte') return byte(l.usato) + ' / ' + byte(l.limite);
+    if (l.formato === 'reqsec') return dec(l.usato, 2) + ' / ' + dec(l.limite, 0) + ' req/s';
+    return fmt.format(l.usato) + ' / ' + fmt.format(l.limite);
+  }
+
+  const ordinate = limiti.slice().sort(function (a, b) { return b.percentuale - a.percentuale; });
   const peggiore = ordinate[0];
 
   const titolo = peggiore.livello === 'superata'
@@ -582,40 +594,37 @@ function schedaLimiti(soglie, picchi) {
       ? {testo: 'Ti stai avvicinando a un limite', colore: '#8a6410'}
       : {testo: 'Tutti i limiti sono lontani', colore: '#2c7a4b'};
 
-  const righe = ordinate.map(function (s) {
-    const larghezza = Math.min(100, Math.max(2, s.percentuale));
-    const chip = s.livello === 'superata' ? 'stato-errore'
-               : s.livello === 'attenzione' ? 'stato-attenzione' : 'stato-ok';
-    const etichetta = s.livello === 'superata' ? 'SUPERATO'
-                    : s.livello === 'attenzione' ? 'ATTENZIONE' : 'ok';
+  const righe = ordinate.map(function (l) {
+    const larghezza = Math.min(100, Math.max(2, l.percentuale));
+    const colore = l.livello === 'superata' ? '#b01046'
+                 : l.livello === 'attenzione' ? '#8a6410' : '#2c7a4b';
+    const chip = l.livello === 'superata' ? 'stato-errore'
+               : l.livello === 'attenzione' ? 'stato-attenzione' : 'stato-ok';
+    const etichetta = l.livello === 'superata' ? 'SUPERATO'
+                    : l.livello === 'attenzione' ? 'ATTENZIONE' : 'ok';
     return '<div class="limite">' +
-      '<div class="nome">' + esc(s.canale) + '<div class="nota">' + esc(s.periodo) + '</div></div>' +
-      '<div class="limite-barra b-' + s.livello + '"><span style="width:' + larghezza + '%"></span></div>' +
-      '<div class="quanto">' + fmt.format(s.inviati) + ' / ' + fmt.format(s.soglia) + '</div>' +
-      '<div class="pct" style="color:' + (s.livello === 'superata' ? '#b01046'
-        : s.livello === 'attenzione' ? '#8a6410' : '#2c7a4b') + '">' +
-      dec(s.percentuale, 0) + '%<div><span class="stato ' + chip + '">' + etichetta + '</span></div></div>' +
+      '<div class="nome">' + esc(l.nome) +
+        '<div class="nota">' + esc(l.dettaglio) + '</div></div>' +
+      '<div class="limite-barra b-' + l.livello + '"><span style="width:' +
+        larghezza + '%"></span></div>' +
+      '<div class="quanto">' + quanto(l) + '</div>' +
+      '<div class="pct" style="color:' + colore + '">' + dec(l.percentuale, 0) + '%' +
+        '<div><span class="stato ' + chip + '">' + etichetta + '</span></div></div>' +
       '</div>';
   }).join('');
 
-  // La conseguenza in chiaro, una sola volta e solo se serve davvero.
   const conseguenza = peggiore.livello === 'ok' ? '' :
     '<div style="margin-top:10px;padding:10px 12px;border-radius:8px;background:' +
     (peggiore.livello === 'superata' ? '#fce4eb;color:#b01046' : '#fdf3d8;color:#8a6410') +
     ';font-size:.9em"><strong>Cosa succede:</strong> ' + esc(peggiore.rischio || '') +
-    '. Riguarda ' + esc(peggiore.canale) + ' ' + esc(peggiore.periodo) + '.</div>';
+    '. Riguarda <strong>' + esc(peggiore.nome) + '</strong> ' + esc(peggiore.dettaglio) + '.</div>';
 
   return '<div class="card">' +
     '<div style="font-size:1.15em;font-weight:700;color:' + titolo.colore + ';margin-bottom:2px">' +
       titolo.testo + '</div>' +
-    '<div class="nota" style="margin-bottom:10px">Quanto è stato usato del massimo consentito, ' +
-      'nel momento più intenso del periodo scelto</div>' +
-    righe + conseguenza +
-    (picchi ? '<div class="ipotesi">Misurato: ' + fmt.format(picchi.email_ora) +
-      ' e-mail nell’ora di punta sommando tutti i negozi (il tetto Azure è ' +
-      'condiviso da tutta la sottoscrizione) · ' + fmt.format(picchi.whatsapp_minuto) +
-      ' WhatsApp nel minuto di punta del negozio più attivo.</div>' : '') +
-    '</div>';
+    '<div class="nota" style="margin-bottom:10px">Quanto è stato usato del massimo ' +
+      'consentito, nel momento più intenso del periodo</div>' +
+    righe + conseguenza + '</div>';
 }
 
 function schedaMessaggi(p) {
@@ -673,7 +682,12 @@ function schedaMessaggi(p) {
     ? '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#fdf3d8;' +
       'color:#8a6410;font-size:.85em">&#9888; I totali mensili qui sotto sono ' +
       '<strong>estrapolati da ' + dec(p.giorni_osservati, 1) + ' giorni</strong> di ' +
-      'misure: indicativi, non ancora un dato. Servono almeno tre giorni.</div>'
+      'misure: indicativi, non ancora un dato. Servono almeno tre giorni.' +
+      (p.giorni_osservati_max && p.giorni_osservati_max - p.giorni_osservati > 1
+        ? ' I negozi non misurano dallo stesso momento (dal più vecchio: ' +
+          dec(p.giorni_osservati_max, 1) + ' giorni): vale il più recente, ' +
+          'perché i totali sono una somma.'
+        : '') + '</div>'
     : (p.giorni_osservati
         ? '<div class="nota" style="margin-top:6px">totali mensili ricavati da ' +
           dec(p.giorni_osservati, 1) + ' giorni di misure</div>'
@@ -681,8 +695,8 @@ function schedaMessaggi(p) {
 
   const corpo = avviso + fragile +
     '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:10px">' +
-      colonna('Oggi · ' + o.tenant + ' negozi', o) +
-      colonna('A ' + f.tenant + ' negozi', f) +
+      colonna('Al mese, con ' + o.tenant + ' negozi', o) +
+      colonna('Al mese, a ' + f.tenant + ' negozi', f) +
     '</div>' +
     '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #eceff3">' +
       riga('Media per negozio' + (p.tenant_non_misurati ?
@@ -712,7 +726,17 @@ function schedaTraffico(p) {
       dec(p.req_sec_picco) + ' <span style="font-size:.5em;font-weight:400;color:#7a8699">' +
       sp('richieste al secondo nell’ora di punta', 'reqSec') + '</span></div>' +
     '<div class="nota">media del periodo: ' + dec(p.req_sec_medio) + ' req/s su ' +
-      fmt.format(p.ore_osservate) + ' ore misurate</div>' +
+      fmt.format(p.ore_osservate) + ' ore misurate' +
+      (p.tenant_misurati < p.tenant_totali
+        ? ', e su ' + p.tenant_misurati + ' negozi su ' + p.tenant_totali +
+          ' (gli altri non hanno ancora dati di traffico)'
+        : '') + '</div>' +
+    (p.misura_fragile
+      ? '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#fdf3d8;' +
+        'color:#8a6410;font-size:.85em">&#9888; Meno di 24 ore di misure: la proiezione a ' +
+        p.tenant_obiettivo + ' negozi è indicativa. Serve almeno una giornata intera ' +
+        'per coprire un ciclo di lavoro completo.</div>'
+      : '') +
     '<div style="margin-top:10px">' +
       riga('A ' + p.tenant_obiettivo + ' negozi', dec(p.req_sec_obiettivo) + ' req/s', true) +
       riga('… nell’ora di punta', dec(p.req_sec_obiettivo_picco) + ' req/s', true) +
@@ -780,9 +804,7 @@ function disegna(d) {
 
   // I limiti di invio vivono dentro la proiezione "messaggi", ma si disegnano
   // in cima e da soli: e' la domanda che l'owner si fa per prima.
-  const msg = (d.proiezioni || []).filter(function (x) { return x.tipo === 'messaggi'; })[0];
-  document.getElementById('limiti').innerHTML =
-    schedaLimiti(msg && msg.soglie, msg && msg.picchi);
+  document.getElementById('limiti').innerHTML = schedaLimiti(d.limiti);
 
   document.getElementById('tabella-tenant').innerHTML = tabellaTenant(d.tenant || []);
   document.getElementById('proiezioni').innerHTML =

@@ -153,10 +153,35 @@ def scarica_traffico(blocco):
             pass
 
 
+def _scarica_se_arretrato():
+    """Se il blocco in memoria appartiene a un'ora GIA' CHIUSA, lo scrive.
+
+    Serve perche' lo scarico normale avviene solo quando arriva una richiesta
+    nell'ora successiva: un negozio che chiude alle 19 tiene in memoria l'ultima
+    ora fino alla mattina dopo, e se nel frattempo il processo viene riavviato -
+    cosa che succede a ogni rilascio - quell'ora e' persa per sempre.
+
+    Chiamarlo dalla lettura del pannello non e' elegante ma e' il momento in cui
+    si e' sicuri di essere dentro l'app context giusto, senza aggiungere thread.
+    """
+    chiave = _chiave_tenant()
+    ora = _ora_corrente()
+    da_scaricare = None
+    with _traffico_lock:
+        corrente = _traffico.get(chiave)
+        if corrente and corrente.get('ora') and corrente['ora'] != ora and corrente.get('richieste'):
+            da_scaricare = dict(corrente)
+            corrente.update({'ora': ora, 'richieste': 0, 'errori': 0,
+                             'ms_totali': 0, 'ms_max': 0})
+    if da_scaricare:
+        scarica_traffico(da_scaricare)
+
+
 def traffico(giorni=7):
     """Serie oraria + medie. Include l'ora in corso, che e' ancora in memoria e
     non e' stata scaricata: senza, il pannello mostrerebbe sempre un buco
     proprio sull'ora che si sta guardando."""
+    _scarica_se_arretrato()
     try:
         da = datetime.now(timezone.utc) - timedelta(days=giorni)
         righe = (UsageTrafficHourly.query
@@ -348,7 +373,10 @@ def invii(giorni=30):
         # dichiara quant'e'.
         primo = db.session.execute(
             text("SELECT min(created_at) FROM usage_events")).scalar()
-        giorni_osservati = giorni
+        # None, NON `giorni`, quando non c'e' nemmeno un evento. Con il valore
+        # di comodo un negozio che non ha misurato NIENTE dichiarava "30 giorni
+        # di misure", e bastava lui a far sembrare solido il totale di tutti.
+        giorni_osservati = None
         if primo:
             trascorsi = (datetime.now(timezone.utc) - primo).total_seconds() / 86400.0
             giorni_osservati = max(0.04, min(float(giorni), trascorsi))   # min ~1 ora

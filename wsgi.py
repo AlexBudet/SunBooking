@@ -1154,8 +1154,14 @@ def owner_monitor_dati():
         invii_tenant, n_tenant, tenant_non_misurati=len(invii_non_misurati),
         picchi_orari=picchi_msg)
     if osservati:
-        prj_msg['giorni_osservati'] = round(max(osservati), 2)
-        prj_msg['estrapolazione_fragile'] = max(osservati) < 3
+        # Il MINIMO, non il massimo. I totali sono una SOMMA fra negozi: se uno
+        # misura da 30 giorni e un altro da tre ore, il totale vale quanto il
+        # piu' debole dei due, perche' il secondo ci mette dentro una
+        # estrapolazione x240. Dichiarare i 30 giorni del migliore nasconderebbe
+        # esattamente il difetto che il campo esiste per rendere visibile.
+        prj_msg['giorni_osservati'] = round(min(osservati), 2)
+        prj_msg['giorni_osservati_max'] = round(max(osservati), 2)
+        prj_msg['estrapolazione_fragile'] = min(osservati) < 3
     if invii_non_misurati:
         prj_msg['negozi_non_misurati'] = invii_non_misurati
 
@@ -1177,6 +1183,8 @@ def owner_monitor_dati():
     picco_simultaneo = max(ore_http.values()) if ore_http else 0
     richieste_totali = sum(ore_http.values())
     ore_osservate = len(ore_http)
+    tenant_con_traffico = sum(1 for t in validi
+                              if ((t.get('traffico') or {}).get('serie') or []))
 
     # Il tetto di richieste al secondo NON e' un numero che Azure pubblica: i
     # piani App Service non dichiarano req/s. Lo si ricava dai due numeri che
@@ -1194,7 +1202,8 @@ def owner_monitor_dati():
 
     prj_traffico = usage_projection.proiezione_traffico(
         picco_simultaneo, richieste_totali, ore_osservate, n_tenant,
-        tetto_richieste_secondo=tetto_req_sec)
+        tetto_richieste_secondo=tetto_req_sec,
+        tenant_misurati=tenant_con_traffico)
     if ms_medi:
         prj_traffico['ms_medi_misurati'] = round(ms_medi)
         prj_traffico['thread_server'] = THREAD_SERVER
@@ -1202,9 +1211,54 @@ def owner_monitor_dati():
 
     proiezioni = [prj_conn, prj_storage, prj_msg, prj_traffico]
 
+    # ---- Un elenco solo: quanto si sta usando di ogni tetto ---------------
+    # L'owner non deve girare quattro schede e mettere insieme i numeri da se'.
+    # Ogni riga e' "usato su massimo", con la stessa forma per tutti i limiti,
+    # a prescindere dall'unita' di misura.
+    def _limite(nome, dettaglio, usato, limite, formato='numero', rischio=''):
+        if not limite:
+            return None
+        pct = 100.0 * usato / limite
+        return {
+            'nome': nome, 'dettaglio': dettaglio,
+            'usato': usato, 'limite': limite, 'formato': formato,
+            'percentuale': round(pct, 1),
+            'livello': ('superata' if pct >= 100
+                        else 'attenzione' if pct >= usage_projection.ATTENZIONE_PCT
+                        else 'ok'),
+            'rischio': rischio,
+        }
+
+    limiti = [
+        _limite('Connessioni al database', 'nel momento peggiore',
+                prj_conn.get('valore_attuale') or 0,
+                prj_conn.get('disponibili_per_app') or 0,
+                rischio=('le richieste in attesa falliscono e i negozi vedono '
+                         'errori o lentezza')),
+        _limite('Spazio database', 'sul disco del server',
+                prj_storage.get('totale_byte') or 0, prj_storage.get('quota_byte'),
+                formato='byte',
+                rischio='il database smette di accettare scritture'),
+        _limite('Traffico HTTP', "nell'ora di punta",
+                prj_traffico.get('req_sec_picco') or 0,
+                prj_traffico.get('tetto_richieste_secondo'),
+                formato='reqsec',
+                rischio='le richieste si accodano e le pagine rallentano'),
+    ]
+    # Le soglie dei messaggi hanno gia' questa forma, si convertono e basta.
+    for s in (prj_msg.get('soglie') or []):
+        limiti.append({
+            'nome': s['canale'], 'dettaglio': s['periodo'],
+            'usato': s['inviati'], 'limite': s['soglia'], 'formato': 'numero',
+            'percentuale': s['percentuale'], 'livello': s['livello'],
+            'rischio': s.get('rischio', ''),
+        })
+    limiti = [x for x in limiti if x]
+
     return jsonify({
         'tenant': per_tenant,
         'proiezioni': proiezioni,
+        'limiti': limiti,
         'riepilogo': usage_projection.riepilogo(proiezioni),
         'azure': {
             'configurazione': azure_monitor.stato_configurazione(),
