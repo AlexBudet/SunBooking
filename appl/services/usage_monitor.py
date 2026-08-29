@@ -503,7 +503,12 @@ def invii(giorni=30):
 
         return {
             'per_canale': per_canale,
-            'giorni_osservati': round(giorni_osservati, 2),
+            # None quando non c'e' un solo evento: e' il caso normale di un
+            # negozio che non ha WhatsApp collegato, non un guasto. Passare
+            # None a round() faceva fallire tutta la raccolta, e il pannello
+            # bollava quel negozio come "non leggibile".
+            'giorni_osservati': (round(giorni_osservati, 2)
+                                 if giorni_osservati is not None else None),
             'serie_giornaliera': [
                 {'giorno': s['giorno'].date().isoformat(), 'canale': s['canale'], 'n': s['n']}
                 for s in serie

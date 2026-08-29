@@ -1177,7 +1177,23 @@ def owner_monitor_dati():
     # Il canone WhatsApp si paga per ACCOUNT COLLEGATO. Quanti ce ne siano lo
     # sa solo Unipile: dedurlo dal numero di negozi e' comodo e sbagliato (il
     # 28/08/2026: 3 negozi, 2 account). Una chiamata sola, con cache di 5 minuti.
-    prj_msg['unipile'] = unipile_monitor.stato_account()
+    stato_unipile = unipile_monitor.stato_account()
+    prj_msg['unipile'] = stato_unipile
+    # Il canone si paga sugli account collegati: se Unipile risponde, il costo
+    # di oggi si ricalcola sul numero vero invece che sul numero di negozi.
+    if stato_unipile.get('stato') == 'ok':
+        prj_msg = usage_projection.proiezione_messaggi(
+            invii_tenant, n_tenant, tenant_obiettivo=obiettivo,
+            tenant_non_misurati=len(invii_non_misurati),
+            picchi_orari=picchi_msg,
+            account_whatsapp=stato_unipile.get('account_whatsapp'))
+        prj_msg['unipile'] = stato_unipile
+        if invii_non_misurati:
+            prj_msg['negozi_non_misurati'] = invii_non_misurati
+        if osservati:
+            prj_msg['giorni_osservati'] = round(min(osservati), 2)
+            prj_msg['giorni_osservati_max'] = round(max(osservati), 2)
+            prj_msg['estrapolazione_fragile'] = min(osservati) < 3
 
     # Picco SIMULTANEO: si sommano le ore uguali fra i negozi e si prende la
     # peggiore. Sommare invece i picchi di ciascun negozio - che capitano in ore

@@ -28,9 +28,42 @@ def _euro(chiave, predefinito):
 
 
 # Valori di partenza, tutti sovrascrivibili da .env.
-PREZZO_WHATSAPP_TENANT_MESE = ('PREZZO_WHATSAPP_TENANT_MESE', 5.0)   # Unipile, per account collegato
 PREZZO_EMAIL_UNITARIO       = ('PREZZO_EMAIL_UNITARIO', 0.00025)     # Azure Communication Services, per e-mail
-TENANT_WHATSAPP_INCLUSI     = ('TENANT_WHATSAPP_INCLUSI', 10)        # account gia' compresi nel canone
+
+# ---- Listino Unipile -------------------------------------------------------
+# Letto dalla RICEVUTA vera del 20/08/2026: "Tariffa fissa 49,00 EUR", 2 account
+# API a 0,00 EUR ciascuno, subtotale 49,00 EUR + IVA 22% = 59,78 EUR.
+#
+# Quindi sotto i 10 account NON si paga zero: si paga comunque il minimo di 49
+# EUR. La formula precedente (`max(0, n - 10) * 5`) dava 0,00 EUR con 3 negozi,
+# che e' semplicemente falso - il canone lo si paga da mesi.
+#
+# Gli scaglioni NON sono progressivi: si applica la tariffa dello scaglione a
+# TUTTI gli account, non solo a quelli eccedenti (esempio ufficiale Unipile:
+# 11 account x 5 EUR = 55 EUR, non 49 + 1 x 5).
+CANONE_MINIMO_UNIPILE = ('CANONE_MINIMO_UNIPILE', 49.0)   # fino a 10 account inclusi
+ACCOUNT_INCLUSI_NEL_MINIMO = ('ACCOUNT_INCLUSI_NEL_MINIMO', 10)
+# (fino_a, prezzo per account al mese) - il primo scaglione che copre n vince.
+SCAGLIONI_UNIPILE = ((50, 5.00), (200, 4.50))
+IVA = ('ALIQUOTA_IVA', 22.0)
+
+
+def costo_unipile(account):
+    """Quanto costa Unipile al mese con `account` account collegati, IVA esclusa.
+
+    Non e' una moltiplicazione: sotto la soglia vale il minimo, sopra vale la
+    tariffa dello scaglione applicata a tutti gli account.
+    """
+    minimo = _euro(*CANONE_MINIMO_UNIPILE)
+    inclusi = int(_euro(*ACCOUNT_INCLUSI_NEL_MINIMO))
+    if account <= inclusi:
+        return round(minimo, 2)
+    prezzo = SCAGLIONI_UNIPILE[-1][1]
+    for fino_a, tariffa in SCAGLIONI_UNIPILE:
+        if account <= fino_a:
+            prezzo = tariffa
+            break
+    return round(max(minimo, account * prezzo), 2)
 
 # Tetti mensili di messaggi, se ce ne sono. Zero (o variabile assente) = nessun
 # tetto: si mostrano i totali e basta. NON si mette qui un numero inventato -
@@ -149,7 +182,8 @@ def proiezione_storage(byte_per_tenant, n_tenant, quota_byte=None):
 
 
 def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=100,
-                        tenant_non_misurati=0, picchi_orari=None):
+                        tenant_non_misurati=0, picchi_orari=None,
+                        account_whatsapp=None):
     """Volume di messaggi e costo, oggi e all'obiettivo.
 
     Il costo WhatsApp NON e' per messaggio ma per account collegato: e' un
@@ -172,32 +206,48 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
     wa_per_tenant = wa_mese / divisore
     em_per_tenant = em_mese / divisore
 
-    prezzo_wa = _euro(*PREZZO_WHATSAPP_TENANT_MESE)
     prezzo_em = _euro(*PREZZO_EMAIL_UNITARIO)
-    inclusi = int(_euro(*TENANT_WHATSAPP_INCLUSI))
+    inclusi = int(_euro(*ACCOUNT_INCLUSI_NEL_MINIMO))
+    aliquota = _euro(*IVA) / 100.0
 
-    def blocco(n, wa_msg, em_msg):
-        """I messaggi sono un dato, il costo una funzione del numero di negozi.
+    # Il canone Unipile si paga sugli ACCOUNT COLLEGATI. Oggi il numero vero lo
+    # sa Unipile (lo legge unipile_monitor); se non e' disponibile si ripiega
+    # sui negozi, che e' la stima prudente. Per la proiezione si assume un
+    # account per negozio: e' l'ipotesi cara, quindi quella giusta da mostrare.
+    account_oggi = account_whatsapp if account_whatsapp is not None else n_tenant
+
+    def blocco(n, account, wa_msg, em_msg):
+        """I messaggi sono un dato, il costo una funzione degli ACCOUNT.
         Per "oggi" i messaggi sono la somma MISURATA, non una moltiplicazione:
         estrapolare il presente da se stesso e' solo un modo per nasconderci
         dentro i negozi non misurati."""
+        costo_wa = costo_unipile(account)
+        costo_em = round(em_msg * prezzo_em, 2)
         return {
             'tenant': n,
+            'account_whatsapp': account,
             'whatsapp_messaggi_mese': round(wa_msg),
             'email_messaggi_mese': round(em_msg),
-            'costo_whatsapp_mese': round(max(0, n - inclusi) * prezzo_wa, 2),
-            'costo_email_mese': round(em_msg * prezzo_em, 2),
+            'costo_whatsapp_mese': costo_wa,
+            'costo_email_mese': costo_em,
+            'costo_totale_mese': round(costo_wa + costo_em, 2),
+            'costo_totale_ivato': round((costo_wa + costo_em) * (1 + aliquota), 2),
         }
 
-    oggi = blocco(n_tenant, wa_mese, em_mese)
-    domani = blocco(tenant_obiettivo,
+    oggi = blocco(n_tenant, account_oggi, wa_mese, em_mese)
+    domani = blocco(tenant_obiettivo, tenant_obiettivo,
                     wa_per_tenant * tenant_obiettivo,
                     em_per_tenant * tenant_obiettivo)
+    # Tutti gli scenari, cosi' il selettore nella scheda cambia i numeri
+    # all'istante invece di rifare il giro dei database per una moltiplicazione.
+    scenari = {str(n): blocco(n, n, wa_per_tenant * n, em_per_tenant * n)
+               for n in range(10, 101, 10)}
     res = {
         'tipo': 'messaggi',
         'metrica': 'Messaggi e costo variabile',
         'oggi': oggi,
         'obiettivo': domani,
+        'scenari': scenari,
         'tenant_misurati': misurati,
         'tenant_non_misurati': tenant_non_misurati,
         'per_tenant_mese': {
@@ -205,12 +255,16 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
             'email': round(em_per_tenant, 1),
         },
         'prezzi_usati': {
-            'whatsapp_per_tenant_mese': prezzo_wa,
+            'canone_minimo_unipile': _euro(*CANONE_MINIMO_UNIPILE),
+            'account_inclusi': inclusi,
+            'scaglioni_unipile': [{'fino_a': f, 'prezzo': p} for f, p in SCAGLIONI_UNIPILE],
             'email_unitario': prezzo_em,
-            'tenant_whatsapp_inclusi': inclusi,
+            'aliquota_iva': _euro(*IVA),
         },
-        'ipotesi': ('un negozio nuovo manda quanto la media di quelli attuali; il '
-                    'canone WhatsApp si paga per account collegato, non per messaggio'),
+        'ipotesi': ('un negozio nuovo manda quanto la media di quelli attuali e '
+                    'collega un proprio account WhatsApp. Il canone Unipile si paga '
+                    'per account collegato, non per messaggio, e sotto i 10 account '
+                    'resta il minimo fisso'),
     }
     # Quanto si e' vicini al tetto, oggi e all'obiettivo. La seconda riga e' la
     # piu' utile delle due: dice se il tetto lo si sfonda CRESCENDO, cioe'
@@ -347,6 +401,10 @@ def proiezione_traffico(picco_simultaneo, richieste_totali, ore_osservate,
         'req_sec_obiettivo': round(media_per_tenant * tenant_obiettivo / 3600.0, 2),
         'req_sec_obiettivo_picco': round(picco_per_tenant * tenant_obiettivo / 3600.0, 2),
         'tenant_obiettivo': tenant_obiettivo,
+        'scenari': {str(n): {
+            'req_sec_obiettivo': round(media_per_tenant * n / 3600.0, 2),
+            'req_sec_obiettivo_picco': round(picco_per_tenant * n / 3600.0, 2),
+        } for n in range(10, 101, 10)},
         'ipotesi': ("per la riga di punta si assume che i negozi abbiano l'ora "
                     "piena nello stesso momento: e' l'ipotesi prudente, stessi "
                     "orari di apertura e stessa zona"),

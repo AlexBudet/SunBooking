@@ -125,18 +125,6 @@
       <p class="subtitle">Quanto si sta usando, e a quanti negozi si rompe qualcosa</p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
-      <select id="negozi" data-tip="A quanti negozi proiettare i consumi. Le proiezioni assumono che ogni negozio nuovo consumi quanto la media di quelli misurati oggi.">
-        <option value="10" selected>proietta a 10 negozi</option>
-        <option value="20">proietta a 20 negozi</option>
-        <option value="30">proietta a 30 negozi</option>
-        <option value="40">proietta a 40 negozi</option>
-        <option value="50">proietta a 50 negozi</option>
-        <option value="60">proietta a 60 negozi</option>
-        <option value="70">proietta a 70 negozi</option>
-        <option value="80">proietta a 80 negozi</option>
-        <option value="90">proietta a 90 negozi</option>
-        <option value="100">proietta a 100 negozi</option>
-      </select>
       <select id="periodo" data-tip="Cambia la finestra di tempo su cui sono calcolati invii, errori e traffico. Non influenza le metriche Azure, che hanno una finestra propria.">
         <option value="7">ultimi 7 giorni</option>
         <option value="30" selected>ultimi 30 giorni</option>
@@ -244,9 +232,11 @@ const SPIEGA = {
   invii: "Messaggi inviati nel periodo, con la media al giorno tra parentesi. " +
     "Il conteggio parte da quando questa versione e' stata installata: prima " +
     "gli invii non venivano registrati da nessuna parte.",
-  costoWa: "Il canone WhatsApp si paga per account collegato, non per messaggio: " +
+  costoWa: "Il canone Unipile si paga per ACCOUNT COLLEGATO, non per messaggio: " +
     "un negozio che manda 10 messaggi costa quanto uno che ne manda 1.000. " +
-    "Cresce quindi con il numero di negozi, non con l'uso.",
+    "Sotto i 10 account si paga comunque il minimo fisso - non e' gratis. " +
+    "Sopra, la tariffa dello scaglione si applica a tutti gli account, per cui " +
+    "esistono soglie in cui aggiungere un negozio fa CALARE il totale.",
   costoEmail: "Le e-mail si pagano a messaggio. Il prezzo singolo e' minuscolo, " +
     "ma va moltiplicato per il volume: e' l'opposto del WhatsApp.",
   reqSec: "Richieste al secondo che l'applicazione deve servire.",
@@ -507,6 +497,37 @@ function riga(etichetta, valore, forte, chiave) {
          '<span style="font-weight:' + (forte ? '700' : '600') + '">' + valore + '</span></div>';
 }
 
+// Il selettore vive DENTRO la scheda che cambia, non in cima alla pagina:
+// "e con venti negozi?" e' una domanda che ci si fa guardando quei numeri li'.
+// Gli scenari sono gia' tutti calcolati dal server, quindi cambiarlo non rifa'
+// il giro dei database: e' istantaneo.
+const OBIETTIVO = {messaggi: 10, traffico: 10};
+
+function selettoreObiettivo(tipo) {
+  let opzioni = '';
+  for (let n = 10; n <= 100; n += 10) {
+    opzioni += '<option value="' + n + '"' +
+      (n === OBIETTIVO[tipo] ? ' selected' : '') + '>' + n + ' negozi</option>';
+  }
+  // Niente onchange in linea: l'ascoltatore e' in delega su document, come per
+  // i tooltip. Le schede vengono ricostruite a ogni ridisegno e riattaccare gli
+  // ascoltatori ogni volta sarebbe un modo per dimenticarsene una.
+  return '<div style="display:flex;justify-content:space-between;align-items:center;' +
+    'gap:8px;margin:8px 0 2px;padding-top:8px;border-top:1px solid #eceff3">' +
+    '<span class="nota">simula con</span>' +
+    '<select data-obiettivo="' + tipo + '" style="font-size:.85em;padding:2px 6px">' +
+    opzioni + '</select></div>';
+}
+
+document.addEventListener('change', function (ev) {
+  const sel = ev.target;
+  if (!sel || !sel.getAttribute) return;
+  const tipo = sel.getAttribute('data-obiettivo');
+  if (!tipo) return;
+  OBIETTIVO[tipo] = parseInt(sel.value, 10);
+  disegnaProiezioni();
+});
+
 function guscio(p, corpo) {
   return '<div class="card">' +
     '<div style="font-size:.78em;color:#7a8699;text-transform:uppercase;letter-spacing:.04em">' +
@@ -640,7 +661,9 @@ function schedaLimiti(limiti) {
 }
 
 function schedaMessaggi(p) {
-  const o = p.oggi, f = p.obiettivo, pr = p.prezzi_usati;
+  const n = OBIETTIVO.messaggi;
+  const o = p.oggi, pr = p.prezzi_usati;
+  const f = (p.scenari && p.scenari[n]) || p.obiettivo;
 
   // Due colonne affiancate: "oggi" e "a N negozi". E' l'unico modo in cui il
   // confronto si legge - il costo che cresce e i messaggi che crescono con lui.
@@ -650,8 +673,11 @@ function schedaMessaggi(p) {
         titolo + '</div>' +
       riga('WhatsApp', fmt.format(d.whatsapp_messaggi_mese) + ' msg') +
       riga('E-mail', fmt.format(d.email_messaggi_mese) + ' msg') +
-      riga('Costo WhatsApp', euro(d.costo_whatsapp_mese), true, 'costoWa') +
+      riga('Costo WhatsApp', euro(d.costo_whatsapp_mese) +
+           ' <span class="nota">(' + fmt.format(d.account_whatsapp) + ' account)</span>',
+           true, 'costoWa') +
       riga('Costo e-mail', euro(d.costo_email_mese), true, 'costoEmail') +
+      riga('Totale con IVA', euro(d.costo_totale_ivato), true) +
       '</div>';
   }
 
@@ -710,6 +736,7 @@ function schedaMessaggi(p) {
       colonna('Al mese, con ' + o.tenant + ' negozi', o) +
       colonna('Al mese, a ' + f.tenant + ' negozi', f) +
     '</div>' +
+    selettoreObiettivo('messaggi') +
     '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #eceff3">' +
       riga('Media per negozio' + (p.tenant_non_misurati ?
              ' (su ' + p.tenant_misurati + ' misurati)' : ''),
@@ -723,14 +750,19 @@ function schedaMessaggi(p) {
     (p.soglie_assenti
       ? '<div class="nota" style="margin-top:10px">' + p.soglie_assenti + '</div>'
       : '') +
-    '<div class="ipotesi">Prezzi usati: WhatsApp ' + euro(pr.whatsapp_per_tenant_mese) +
-      ' per negozio al mese (primi ' + pr.tenant_whatsapp_inclusi + ' inclusi nel canone) · ' +
-      'e-mail ' + euroPreciso(pr.email_unitario) + ' a messaggio. ' +
-      'Si cambiano da variabili d’ambiente, non nel codice.</div>';
+    '<div class="ipotesi">Listino Unipile: minimo ' + euro(pr.canone_minimo_unipile) +
+      ' al mese fino a ' + pr.account_inclusi + ' account collegati, poi ' +
+      (pr.scaglioni_unipile || []).map(function (s) {
+        return euro(s.prezzo) + ' per account fino a ' + s.fino_a;
+      }).join(', ') +
+      ' — applicati a TUTTI gli account, non solo a quelli in eccesso. ' +
+      'E-mail ' + euroPreciso(pr.email_unitario) + ' a messaggio. Importi IVA esclusa (' +
+      dec(pr.aliquota_iva, 0) + '%).</div>';
   return guscio(p, corpo);
 }
 
 function schedaTraffico(p) {
+  const sc = (p.scenari && p.scenari[OBIETTIVO.traffico]) || p;
   // Il numero grande e' il PICCO simultaneo, non una "media di oggi": e'
   // quello su cui si decide, ed e' l'unico che sia davvero successo.
   const corpo =
@@ -740,24 +772,25 @@ function schedaTraffico(p) {
     '<div class="nota">media del periodo: ' + dec(p.req_sec_medio) + ' req/s su ' +
       fmt.format(p.ore_osservate) + ' ore misurate' +
       (p.tenant_misurati < p.tenant_totali
-        ? ', e su ' + p.tenant_misurati + ' negozi su ' + p.tenant_totali +
-          ' (gli altri non hanno ancora dati di traffico)'
+        ? ', e su ' + p.tenant_misurati + (p.tenant_misurati === 1 ? ' negozio' : ' negozi') +
+          ' su ' + p.tenant_totali + ' (gli altri non hanno ancora dati di traffico)'
         : '') + '</div>' +
     (p.misura_fragile
       ? '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#fdf3d8;' +
-        'color:#8a6410;font-size:.85em">&#9888; Meno di 24 ore di misure: la proiezione a ' +
-        p.tenant_obiettivo + ' negozi è indicativa. Serve almeno una giornata intera ' +
+        'color:#8a6410;font-size:.85em">&#9888; Meno di 24 ore di misure: la proiezione ' +
+        'è indicativa. Serve almeno una giornata intera ' +
         'per coprire un ciclo di lavoro completo.</div>'
       : '') +
     '<div style="margin-top:10px">' +
-      riga('A ' + p.tenant_obiettivo + ' negozi', dec(p.req_sec_obiettivo) + ' req/s', true) +
-      riga('… nell’ora di punta', dec(p.req_sec_obiettivo_picco) + ' req/s', true) +
+      riga('A ' + OBIETTIVO.traffico + ' negozi', dec(sc.req_sec_obiettivo) + ' req/s', true) +
+      riga('… nell’ora di punta', dec(sc.req_sec_obiettivo_picco) + ' req/s', true) +
       riga('Ora di punta, tutti i negozi insieme',
            fmt.format(p.picco_simultaneo) + ' richieste', false, 'picco') +
       riga('Media oraria per negozio', fmt.format(p.media_oraria_per_tenant) + ' richieste') +
       (p.tenant_massimi
         ? riga('Negozi che reggi', fmt.format(p.tenant_massimi), true, 'negoziMax')
         : riga('Negozi che reggi', '— non ancora calcolabile')) +
+      selettoreObiettivo('traffico') +
       (p.tetto_richieste_secondo
         ? riga('Tetto del server', dec(p.tetto_richieste_secondo, 0) + ' req/s',
                false, 'tettoReqSec')
@@ -797,6 +830,13 @@ function schedaProiezione(p) {
   return guscio(p, '');
 }
 
+let PROIEZIONI = [];
+
+function disegnaProiezioni() {
+  document.getElementById('proiezioni').innerHTML =
+    '<div class="griglia">' + PROIEZIONI.map(schedaProiezione).join('') + '</div>';
+}
+
 function disegna(d) {
   const r = d.riepilogo || {};
   document.getElementById('riepilogo').innerHTML =
@@ -819,8 +859,8 @@ function disegna(d) {
   document.getElementById('limiti').innerHTML = schedaLimiti(d.limiti);
 
   document.getElementById('tabella-tenant').innerHTML = tabellaTenant(d.tenant || []);
-  document.getElementById('proiezioni').innerHTML =
-    '<div class="griglia">' + (d.proiezioni || []).map(schedaProiezione).join('') + '</div>';
+  PROIEZIONI = d.proiezioni || [];
+  disegnaProiezioni();
 
   document.getElementById('caricamento').style.display = 'none';
   document.getElementById('contenuto').style.display = '';
@@ -828,13 +868,11 @@ function disegna(d) {
 
 function carica() {
   const giorni = document.getElementById('periodo').value;
-  const negozi = document.getElementById('negozi').value;
   document.getElementById('caricamento').style.display = '';
   document.getElementById('caricamento').textContent = 'Raccolta dei dati in corso…';
   document.getElementById('contenuto').style.display = 'none';
 
-  fetch('/owner-setup/monitor/dati?giorni=' + giorni + '&negozi=' + negozi,
-        { credentials: 'same-origin' })
+  fetch('/owner-setup/monitor/dati?giorni=' + giorni, { credentials: 'same-origin' })
     .then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
@@ -905,7 +943,6 @@ function carica() {
 })();
 
 document.getElementById('periodo').addEventListener('change', carica);
-document.getElementById('negozi').addEventListener('change', carica);
 carica();
 </script>
 </body>
