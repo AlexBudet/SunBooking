@@ -396,6 +396,13 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
             biz = BusinessInfo.query.first()
             reset_email = getattr(biz, 'email', '') or getattr(biz, 'business_email', '') or ''
         except Exception:
+            # Rollback obbligatorio: senza, la transazione resta abortita e la
+            # User.query qui sotto fallisce a sua volta -> login rifiutato anche
+            # con la password giusta.
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
             reset_email = ''
 
         try:
