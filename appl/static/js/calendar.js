@@ -13349,6 +13349,34 @@ document.addEventListener('DOMContentLoaded', function() {
       let data = btn.getAttribute('data-date') || '';
       let hour = btn.getAttribute('data-hour') || '';
       let minute = btn.getAttribute('data-minute') || '';
+
+      // Bottone "proxy" senza data-*: in touch-ui la bottom bar crea un secondo
+      // WhatsApp (.touch-bottom-wa) che ha la stessa classe ma nessun dato del
+      // cliente, e questo handler (capture su document + stopImmediatePropagation)
+      // scatta prima del suo click di rimbalzo. In modalita' default il gemello
+      // e' .whatsapp-bottom nel template, che si limita a cliccare l'originale.
+      // Qui si legge dal bottone originale del blocco, che resta nel DOM anche
+      // se il CSS touch lo nasconde.
+      if (block && !cellulare) {
+        const srcBtn = Array.from(block.querySelectorAll('.btn-popup.whatsapp-btn'))
+          .find(b => b !== btn && (b.getAttribute('data-client-cellulare') || '').trim());
+        if (srcBtn) {
+          nome = nome || srcBtn.getAttribute('data-client-nome') || '';
+          cellulare = srcBtn.getAttribute('data-client-cellulare') || '';
+          data = data || srcBtn.getAttribute('data-date') || '';
+          hour = hour || srcBtn.getAttribute('data-hour') || '';
+          minute = minute || srcBtn.getAttribute('data-minute') || '';
+        } else {
+          // Ultima risorsa: il blocco (e il link sul nome) portano gli stessi
+          // dati del cliente, ed entrambi sono tenuti allineati da
+          // applyClientPhoneToBlocks quando il cellulare cambia senza refresh.
+          const link = block.querySelector('.client-info-link');
+          cellulare = ((link && link.getAttribute('data-client-cellulare')) ||
+                       block.getAttribute('data-client-cellulare') || '').trim();
+          nome = nome || block.getAttribute('data-client-nome') || '';
+        }
+      }
+
       hour = hour.toString().padStart(2, '0');
       minute = minute.toString().padStart(2, '0');
       let ora = (hour && minute) ? `${hour}:${minute}` : '';

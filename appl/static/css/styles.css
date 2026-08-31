@@ -360,6 +360,19 @@ display: none
     background: rgba(255, 233, 168, 0.09);
 }
 
+/* Riassunto pacchetto / prepagata, in fondo al riquadro e solo in touch-ui:
+   e' lo stesso testo che in modalita' default si legge a mouseover sul badge
+   del blocco. Stessa forma dei riquadri nota, accento azzurro invece del
+   giallo, cosi' non si confonde con una nota scritta da qualcuno. */
+.ci-riassunto {
+    border-left-color: rgba(140, 197, 255, 0.60);
+    background: rgba(140, 197, 255, 0.10);
+}
+
+.ci-riassunto .ci-label-nota {
+    color: #cfe6ff;
+}
+
 .ci-meta {
     margin-top: 10px;
     padding-top: 7px;

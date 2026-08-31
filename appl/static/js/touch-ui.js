@@ -43,9 +43,44 @@ function stripTooltip(el) {
   el.removeAttribute('aria-describedby');
 }
 
+// Badge pacchetto / prepagata: il riassunto vive nel title, scritto in HTML,
+// perche' in modalita' default lo mostra un tooltip Bootstrap. In touch quei
+// tooltip non nascono mai (initCalendarDesktopTooltips esce subito se touch) e
+// il browser ripiegava sul tooltip nativo, che stampa il markup coi tag in
+// chiaro. Qui il testo trasloca in data-touch-tip: sparisce il tooltip nativo e
+// il riassunto resta a disposizione del popup INFO APPUNTAMENTO, che lo rimette
+// in fondo (showClientInfoForBlock, calendar.html). Fuori dal touch si fa il
+// giro inverso, cosi' un cambio di modalita' senza reload non lascia badge muti.
+function normalizeBadgeTooltip(el, touch) {
+  if (touch) {
+    const testo = el.getAttribute('title') || el.getAttribute('data-bs-original-title') || '';
+    if (testo && !el.getAttribute('data-touch-tip')) el.setAttribute('data-touch-tip', testo);
+    stripTooltip(el);
+    el.removeAttribute('title');
+    el.removeAttribute('data-bs-html');
+    return;
+  }
+  const salvato = el.getAttribute('data-touch-tip');
+  if (!salvato) return;
+  if (!el.getAttribute('title')) {
+    el.setAttribute('title', salvato);
+    el.setAttribute('data-bs-toggle', 'tooltip');
+    el.setAttribute('data-bs-html', 'true');
+  }
+  el.removeAttribute('data-touch-tip');
+}
+
 function normalizeTooltips(container = document) {
   container.querySelectorAll('.appointment-block .btn-popup').forEach(stripTooltip);
   container.querySelectorAll('.myspia-item .btn-popup').forEach(stripTooltip);
+  const touch = isTouchUiSettingEnabled();
+  const badge = container.querySelectorAll('.appointment-block .pacchetto-badge, .appointment-block .prepagata-badge');
+  badge.forEach(el => normalizeBadgeTooltip(el, touch));
+  // Uscendo dal touch senza reload il title torna al suo posto, ma senza
+  // istanza Bootstrap resterebbe il tooltip nativo: ricrea le istanze.
+  if (!touch && badge.length && typeof window.initCalendarDesktopTooltips === 'function') {
+    try { window.initCalendarDesktopTooltips(container); } catch (_) {}
+  }
 }
 
 // Helper per creare pulsanti bottom bar
@@ -596,22 +631,33 @@ function buildBottomButtons(block) {
     setDuration(block, current + 15);
   }));
 
-  // 2) WhatsApp
-  const waBtn = document.createElement('button');
-  waBtn.type = 'button';
-  waBtn.className = 'btn-popup whatsapp-btn touch-bottom-wa';
-  waBtn.title = 'Invia WhatsApp';
-  waBtn.appendChild(biIcon('whatsapp'));
-  waBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const src = block.querySelector('.btn-popup.whatsapp-btn');
-    if (src) {
-      try { src.click(); } catch (_) {}
-    }
-    closeAllPopups();
-  }, true);
-  buttons.push(waBtn);
+  // 2) WhatsApp — solo se il blocco ha il bottone WhatsApp originale, quello
+  // che porta data-client-cellulare & C. Il template lo omette per clienti
+  // eliminati/dummy (e li' omette anche il gemello .whatsapp-bottom della
+  // bottom bar): senza questa guardia in touch nasceva un pulsante che non
+  // poteva che rispondere "Numero di cellulare non disponibile".
+  const waSource = block.querySelector('.btn-popup.whatsapp-btn:not(.touch-bottom-wa)');
+  if (waSource) {
+    const waBtn = document.createElement('button');
+    waBtn.type = 'button';
+    waBtn.className = 'btn-popup whatsapp-btn touch-bottom-wa';
+    waBtn.title = 'Invia WhatsApp';
+    waBtn.appendChild(biIcon('whatsapp'));
+    // NB: questo click di rimbalzo normalmente non scatta, perche' l'handler
+    // delegato di calendar.js e' in capture su document e ferma l'evento prima
+    // (li' il bottone senza data-* viene risolto leggendo il bottone originale
+    // del blocco). Resta come rete di sicurezza: mai cliccare se stesso.
+    waBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const src = block.querySelector('.btn-popup.whatsapp-btn:not(.touch-bottom-wa)');
+      if (src) {
+        try { src.click(); } catch (_) {}
+      }
+      closeAllPopups();
+    }, true);
+    buttons.push(waBtn);
+  }
 
   // 3) My-spia
   const mySpiaBtn = document.createElement('button');

@@ -2702,6 +2702,69 @@ document.addEventListener('DOMContentLoaded', function() {
       popup.appendChild(meta);
     }
 
+    // 5) TOUCH-UI: RIASSUNTO PACCHETTO / PREPAGATA IN FONDO
+    // In modalita' default questo testo si legge passando il mouse sul badge
+    // del blocco (tooltip Bootstrap costruito dal title del badge). In touch
+    // quel tooltip non esiste — initCalendarDesktopTooltips esce subito, e
+    // touch-ui.js sposta il title in data-touch-tip per non far uscire il
+    // tooltip nativo del browser col markup in chiaro — e il click sul badge
+    // non arriva a destinazione, perche' in touch il click dentro al blocco
+    // e' intercettato in cattura dal toggle del popup. Quindi il riassunto si
+    // legge qui: stessa fonte (il badge), stesso testo, in coda al riquadro.
+    const inTouchUi = (function () {
+      try {
+        return localStorage.getItem('sun_touch_ui') === '1'
+          || document.body.classList.contains('touch-ui');
+      } catch (_) {
+        return document.body.classList.contains('touch-ui');
+      }
+    })();
+
+    if (inTouchUi) {
+      const RIASSUNTI = [
+        { selettore: '.pacchetto-badge', etichetta: 'PACCHETTO' },
+        { selettore: '.prepagata-badge', etichetta: 'PREPAGATA' }
+      ];
+
+      RIASSUNTI.forEach(function (voce) {
+        const badge = block.querySelector(voce.selettore);
+        if (!badge) return;
+
+        const raw = badge.getAttribute('data-touch-tip')
+          || badge.getAttribute('data-bs-original-title')
+          || badge.getAttribute('title')
+          || '';
+
+        // Il title e' HTML (<br> fra le righe, <strong> sui numeri): qui si
+        // torna a testo, riga per riga, e si stampa con textContent.
+        const righe = raw
+          .split(/<br\s*\/?>/i)
+          .map(function (r) { return decodeHtml(r.replace(/<[^>]*>/g, '')).trim(); })
+          .filter(Boolean);
+
+        // La prima riga della prepagata e' gia' l'intestazione: la fa l'etichetta.
+        if (righe.length && /carta\s+prepagata/i.test(righe[0])) righe.shift();
+        if (!righe.length) return;
+
+        const box = document.createElement('div');
+        box.className = 'ci-nota-box ci-riassunto';
+
+        const lab = document.createElement('div');
+        lab.className = 'ci-label-nota';
+        lab.textContent = voce.etichetta;
+        box.appendChild(lab);
+
+        righe.forEach(function (riga) {
+          const d = document.createElement('div');
+          d.className = 'ci-nota';
+          d.textContent = riga;
+          box.appendChild(d);
+        });
+
+        popup.appendChild(box);
+      });
+    }
+
     // Posizionamento
     const rect = block.getBoundingClientRect();
     const scrollY = window.scrollY || window.pageYOffset;
