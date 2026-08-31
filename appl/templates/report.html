@@ -917,6 +917,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 <th>Passaggi uomo</th>
                 <th>Passaggi donna</th>
               </tr>
+              <!-- Riga TOTALE agganciata sotto l'intestazione: resta visibile
+                   durante lo scroll (secondo livello sticky, il "top" lo calcola
+                   allineaTotaleSticky misurando l'header). -->
+              <tr class="riga-totale-sticky">
+                <th colspan="2">Totale</th>
+                <th id="totPassaggiTotali"></th>
+                <th id="totPassaggiFiscali"></th>
+                <th id="totPassaggiUomo"></th>
+                <th id="totPassaggiDonna"></th>
+              </tr>
             </thead>
             <tbody id="corpoTabellaPassaggiCassa"></tbody>
           </table>
@@ -976,7 +986,6 @@ document.addEventListener('DOMContentLoaded', function() {
           <table class="table table-bordered table-sm mb-0 sticky-thead" id="tabellaOperatori" style="width:100%;">
             <thead class="table-dark" id="theadOperatori"></thead>
             <tbody id="corpoTabellaOperatori"></tbody>
-            <tfoot id="tfootOperatori"></tfoot>
           </table>
         </div>
       </div>
@@ -1582,6 +1591,22 @@ document.addEventListener('DOMContentLoaded', function() {
   background: #f1f2f4;
   color: #424242 !important;
   font-weight: bold !important;
+}
+
+/* Riga TOTALE dentro al thead: secondo livello sticky, si ferma subito sotto
+   l'intestazione. Il "top" qui e' solo un valore di partenza, quello vero lo
+   scrive il JS misurando l'altezza reale dell'header (che cambia con il numero
+   di colonne). Stesso colore della vecchia riga totale, per non cambiare la
+   lettura della tabella. */
+.sticky-thead tr.riga-totale-sticky th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f1f2f4 !important;
+  color: #424242 !important;
+  font-weight: bold !important;
+  border: 1px solid #dee2e6 !important;
+  cursor: default;
 }
 
 #btnExportExcelCorrispettivi,
@@ -2585,17 +2610,11 @@ document.addEventListener('DOMContentLoaded', function() {
               tr.insertCell().textContent = row.donna;
             });
 
-            // Aggiungi la riga dei totali
-            const trTotale = tbody.insertRow();
-            trTotale.className = 'ultima-riga-totale';
-            const thTotale = document.createElement('th');
-            thTotale.colSpan = 2;
-            thTotale.textContent = 'Totale';
-            trTotale.appendChild(thTotale);
-            trTotale.insertCell().textContent = data.totali.totali;
-            trTotale.insertCell().textContent = data.totali.fiscali;
-            trTotale.insertCell().textContent = data.totali.uomo;
-            trTotale.insertCell().textContent = data.totali.donna;
+            // I totali vanno nella riga fissa dentro al thead, non in fondo al corpo.
+            document.getElementById('totPassaggiTotali').textContent  = data.totali.totali;
+            document.getElementById('totPassaggiFiscali').textContent = data.totali.fiscali;
+            document.getElementById('totPassaggiUomo').textContent    = data.totali.uomo;
+            document.getElementById('totPassaggiDonna').textContent   = data.totali.donna;
 
             const modal = new bootstrap.Modal(document.querySelector('#modalPassaggiCassa'));
             modal.show();
@@ -2622,12 +2641,29 @@ document.addEventListener('DOMContentLoaded', function() {
             // PATCH: Costruzione sicura dell'header
             const thead = document.getElementById('theadOperatori');
             thead.innerHTML = '';
+
+            // <th> e non <td>: e' la regola .sticky-thead th a tenere fissa
+            // l'intestazione durante lo scroll.
+            const addTh = (tr, testo) => {
+              const th = document.createElement('th');
+              th.textContent = testo;
+              tr.appendChild(th);
+              return th;
+            };
+
             const headRow = thead.insertRow();
-            headRow.insertCell().textContent = 'Data';
+            addTh(headRow, 'Data');
+            data.operatori.forEach(op => addTh(headRow, op.nome));
+            addTh(headRow, 'Totale giorno');
+
+            // Riga TOTALE: subito sotto l'intestazione e fissa insieme a lei.
+            const totRow = thead.insertRow();
+            totRow.className = 'riga-totale-sticky';
+            addTh(totRow, 'TOTALE');
             data.operatori.forEach(op => {
-              headRow.insertCell().textContent = op.nome;
+              addTh(totRow, (data.totali_operatori[op.id] || 0).toFixed(2));
             });
-            headRow.insertCell().textContent = 'Totale giorno';
+            addTh(totRow, (data.totale_periodo || 0).toFixed(2));
 
             // PATCH: Costruzione sicura del corpo
             const tbody = document.getElementById('corpoTabellaOperatori');
@@ -2640,17 +2676,6 @@ document.addEventListener('DOMContentLoaded', function() {
               });
               tr.insertCell().textContent = row.totale.toFixed(2);
             });
-
-            // PATCH: Costruzione sicura del footer
-            const tfoot = document.getElementById('tfootOperatori');
-            tfoot.innerHTML = '';
-            const footRow = tfoot.insertRow();
-            footRow.style.fontWeight = 'bold';
-            footRow.insertCell().textContent = 'TOTALE';
-            data.operatori.forEach(op => {
-              footRow.insertCell().textContent = (data.totali_operatori[op.id] || 0).toFixed(2);
-            });
-            footRow.insertCell().textContent = (data.totale_periodo || 0).toFixed(2);
 
             const modal = new bootstrap.Modal(document.querySelector('#modalOperatori'));
             modal.show();
@@ -4596,12 +4621,9 @@ document.getElementById('btnExportPdfPassaggiCassa').addEventListener('click', f
     didDrawPage: function (data) {
       doc.setFontSize(10);
       doc.text(`Passaggi di Cassa - ${mese}/${anno} - ${businessName}`, 40, 40);
-    },
-    didParseCell: function (data) {
-      if (data.row.index === data.table.body.length - 1) {
-        data.cell.styles.fontStyle = 'bold';
-      }
     }
+    // Niente grassetto sull'ultima riga del corpo: li' stava il totale prima,
+    // adesso e' nell'intestazione, che autoTable stampa gia' in grassetto.
   });
   doc.save(nomeFile);
 });
@@ -5777,6 +5799,54 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       });
     }
+  });
+})();
+</script>
+
+<script>
+/* Riga TOTALE fissa sotto l'intestazione, modali "Incasso per Operatore" e
+   "Passaggi di Cassa".
+
+   L'intestazione e' gia' sticky a top:0; la riga dei totali deve fermarsi
+   esattamente sotto, quindi il suo "top" vale l'altezza della riga di
+   intestazione. Quell'altezza non e' fissa (cambia con il numero di operatori e
+   con il testo che va a capo), percio' la misuriamo a modale aperta invece di
+   scriverla a mano nel CSS. */
+(function () {
+  var MODALI = ['#modalOperatori', '#modalPassaggiCassa'];
+
+  function allineaTotaleSticky(tabella) {
+    if (!tabella || !tabella.tHead) return;
+    var righe = tabella.tHead.rows;
+    if (righe.length < 2) return;
+    var altezzaHeader = righe[0].getBoundingClientRect().height;
+    Array.prototype.forEach.call(righe[1].cells, function (cella) {
+      cella.style.top = altezzaHeader + 'px';
+    });
+  }
+
+  function allineaModale(sel) {
+    var modale = document.querySelector(sel);
+    if (!modale) return;
+    allineaTotaleSticky(modale.querySelector('table'));
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    MODALI.forEach(function (sel) {
+      var modale = document.querySelector(sel);
+      if (!modale) return;
+      // shown e non show: prima della fine dell'animazione la misura sarebbe sbagliata.
+      modale.addEventListener('shown.bs.modal', function () {
+        allineaTotaleSticky(modale.querySelector('table'));
+      });
+    });
+
+    window.addEventListener('resize', function () {
+      MODALI.forEach(function (sel) {
+        var modale = document.querySelector(sel);
+        if (modale && modale.classList.contains('show')) allineaModale(sel);
+      });
+    });
   });
 })();
 </script>

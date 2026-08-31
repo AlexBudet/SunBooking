@@ -1422,7 +1422,17 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       // Categoria della riga: per le voci SENZA servizio a listino (vendita o
       // ricarica di una carta prepagata) e' l'unico modo che hanno i report per
       // attribuirle a Estetica o Solarium invece di lasciarle senza categoria.
-      if (row.dataset.categoria) voce.categoria = row.dataset.categoria;
+      // Nessuna voce deve uscire senza: in Report finirebbe nel totale ma in
+      // nessuna delle due fette, e le percentuali non farebbero 100.
+      // Se la riga ha un servizio a listino NON si inventa niente: la categoria
+      // vera la risolve il server dal Service (che ce l'ha sempre). Il ripiego
+      // "Estetica" vale solo per le righe senza servizio dietro (carte
+      // prepagate), com'e' gia' lato server nella rotta /cassa.
+      voce.categoria = row.dataset.categoria || (voce.servizio_id ? '' : 'Estetica');
+      if (!row.dataset.categoria) {
+        console.warn('Riga senza categoria in bozza:', nome,
+                     voce.servizio_id ? '(la risolve il server dal servizio)' : '(ripiego Estetica)');
+      }
 
       // IMPORTANTE: Copia prepagata_id e ricarica_prepagata_id dal dataset della riga
       const prepagataId = row.dataset.prepagataId;
@@ -5552,7 +5562,11 @@ document.getElementById('btnSalvaNuovaPrepagataCassa')?.addEventListener('click'
       nome: `Carta Prepagata${numeroTessera ? ' n. ' + numeroTessera : ''} - ${clientInput.value || ''}`.trim(),
       // Categoria = quella del vincolo d'uso scelto per la carta: una tessera
       // solo-Solarium e' una vendita Solarium anche se non ha un servizio dietro.
-      categoria: (vincoloSel && vincoloSel !== 'tutti') ? vincoloSel : '',
+      // Carta senza vincolo di categoria ("tutti i servizi"): si ripiega su
+      // Estetica, la stessa scelta che fa gia' il server quando la carta arriva
+      // in Cassa da Pacchetti (rotta /cassa). Mai stringa vuota: lascerebbe la
+      // voce fuori da entrambe le fette del Report.
+      categoria: (vincoloSel && vincoloSel !== 'tutti') ? vincoloSel : 'Estetica',
       prezzo: importo,
       prepagata_id: data.id,
       credito_da_caricare: credito
@@ -5656,6 +5670,10 @@ function aggiungiRigaRicaricaPrepagata(prepagataId, servizioGruppo, soglia) {
   aggiungiRigaServizio({
     id: servizioGruppo.service_id,
     nome: servizioGruppo.service_nome,
+    // La regola di ricarica porta gia' la categoria (dal servizio abbinato o
+    // dalla categoria della regola): senza passarla qui la riga finiva in bozza
+    // senza categoria e in Report restava fuori da Estetica e da Solarium.
+    categoria: servizioGruppo.categoria || '',
     prezzo: soglia.importo_pagato,
     ricarica_prepagata_id: prepagataId,
     ricarica_importo: soglia.importo_pagato,
