@@ -321,6 +321,11 @@ class BusinessInfo(db.Model):
         default=PrinterModel.RCH_PRINT_RT.value
     )
     whatsapp_modal_disable = db.Column(db.Boolean, default=False)
+    # Cassa, movimenti su carta prepagata: il riepilogo a fine scontrino esce
+    # sempre, questo flag governa SOLO la parte WhatsApp in fondo al riquadro
+    # (testo modificabile + invio). Acceso di default perche' prima di esistere
+    # l'invio veniva proposto sempre: spegnerlo resta una scelta esplicita.
+    whatsapp_cassa_prepagata_enabled = db.Column(db.Boolean, nullable=False, server_default='true', default=True)
     whatsapp_message = db.Column(db.Text, nullable=True)
     whatsapp_message_auto = db.Column(db.Text)
     # Bottone WhatsApp nel popup blocco calendario: se True invia via API (WhatsApp Web

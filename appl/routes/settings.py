@@ -1741,13 +1741,17 @@ def _normalize_bool(val):
 
 @settings_bp.route('/api/settings/whatsapp', methods=['GET', 'POST'])
 def api_whatsapp_setting():
-    """GET: ritorna JSON con la preferenza whatsapp_modal_disable.
-       POST: aggiorna il flag (JSON body: {"whatsapp_modal_disable": bool})."""
+    """GET: ritorna JSON con le preferenze whatsapp_modal_disable (richiesta di
+       invio dentro al modal di creazione appuntamento) e
+       whatsapp_cassa_prepagata_enabled (parte WhatsApp del riepilogo carta in Cassa).
+       POST: aggiorna i flag presenti nel body JSON."""
     try:
         if request.method == 'GET':
             biz = BusinessInfo.query.first()
             return jsonify({
                 'whatsapp_modal_disable': bool(getattr(biz, 'whatsapp_modal_disable', False)) if biz else False,
+                # Assente o senza BusinessInfo: acceso, com'era prima del flag.
+                'whatsapp_cassa_prepagata_enabled': bool(getattr(biz, 'whatsapp_cassa_prepagata_enabled', True)) if biz else True,
             })
 
         # POST -> aggiorna i flag presenti nel body
@@ -1761,15 +1765,19 @@ def api_whatsapp_setting():
         if 'whatsapp_modal_disable' in data:
             biz.whatsapp_modal_disable = _normalize_bool(data.get('whatsapp_modal_disable'))
 
+        if 'whatsapp_cassa_prepagata_enabled' in data:
+            biz.whatsapp_cassa_prepagata_enabled = _normalize_bool(data.get('whatsapp_cassa_prepagata_enabled'))
+
         db.session.commit()
 
         return jsonify({
             'whatsapp_modal_disable': bool(biz.whatsapp_modal_disable),
+            'whatsapp_cassa_prepagata_enabled': bool(biz.whatsapp_cassa_prepagata_enabled),
         }), 200
 
     except Exception as e:
         current_app.logger.exception("Errore lettura/aggiornamento impostazione whatsapp: %s", e)
-        return jsonify({'whatsapp_modal_disable': False}), 500
+        return jsonify({'whatsapp_modal_disable': False, 'whatsapp_cassa_prepagata_enabled': True}), 500
 
 @settings_bp.route('/whatsapp', methods=['GET', 'POST'])
 def whatsapp():

@@ -186,6 +186,32 @@
 <hr>
 
 <div class="container mt-4" style="max-width:600px;">
+
+  <h3>Riepilogo carta prepagata in Cassa</h3>
+
+  <!-- Toggle senza pulsante Salva -->
+  <div class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" role="switch" id="whatsapp_cassa_prepagata_enabled"
+           {% if not business_info or business_info.whatsapp_cassa_prepagata_enabled %}checked{% endif %}>
+    <label class="form-check-label" for="whatsapp_cassa_prepagata_enabled">
+      Proponi anche l'invio del messaggio WhatsApp in fondo al riepilogo
+    </label>
+  </div>
+
+  <div class="form-text">
+    A scontrino chiuso, per ogni carta movimentata, la Cassa mostra un riepilogo con credito
+    precedente, movimento (seduta scalata e/o ricarica) e credito residuo.<br>
+    Con l'interruttore acceso, sotto al riepilogo compare anche il messaggio per il cliente,
+    modificabile: l'invio parte solo alla conferma dell'operatore e ogni messaggio ha un costo.
+    Spento, resta il solo riepilogo.
+  </div>
+
+</div><!-- fine container riepilogo prepagata -->
+
+<br>
+<hr>
+
+<div class="container mt-4" style="max-width:600px;">
   <br>
   <h3>WhatsApp reminder giornaliero</h3>
   <form id="morningReminderForm" method="post" action="{{ url_for('settings.whatsapp') }}">
@@ -349,6 +375,37 @@ function insertWaTag(textareaId, value) {
     .catch(err => {
       console.error('Errore salvataggio impostazione WhatsApp', err);
       cb.checked = !disabled;
+    });
+  });
+})();
+
+(function() {
+  // === Toggle whatsapp_cassa_prepagata_enabled ===
+  // Stesso endpoint dell'altro interruttore: il POST manda solo la chiave
+  // toccata, quindi i due flag non si sovrascrivono a vicenda.
+  const cb = document.getElementById('whatsapp_cassa_prepagata_enabled');
+  if (!cb) return;
+
+  cb.addEventListener('change', function () {
+    const enabled = !!cb.checked;
+    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    fetch("{{ url_for('settings.api_whatsapp_setting') }}", {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': token
+      },
+      body: JSON.stringify({ whatsapp_cassa_prepagata_enabled: enabled })
+    })
+    .then(resp => resp.ok ? resp.json() : Promise.reject(resp))
+    .then(json => {
+      console.log('whatsapp_cassa_prepagata_enabled saved:', json);
+    })
+    .catch(err => {
+      console.error('Errore salvataggio impostazione riepilogo prepagata', err);
+      cb.checked = !enabled;
     });
   });
 })();

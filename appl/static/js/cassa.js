@@ -2211,11 +2211,31 @@ function unisciMovimentiPerCarta(listaInfo) {
     // server DOPO tutti i movimenti ed e' quindi il piu' aggiornato.
     if (info.tipo === 'ricarica' || info.tipo === 'attivazione') {
       acc.creditoResiduo = info.creditoResiduo;
+      // Serve all'etichetta del riepilogo: "Attivazione carta" o "Ricarica".
+      acc.tipo = info.tipo;
     }
   });
   return Array.from(perCarta.values());
 }
 window.unisciMovimentiPerCarta = unisciMovimentiPerCarta;
+
+// Interruttore di Tools > WhatsApp: governa SOLO la parte WhatsApp in fondo al
+// riepilogo, mai il riepilogo stesso. Letto una volta e tenuto per la pagina; se
+// la lettura non riesce si tiene il comportamento storico (parte WhatsApp c'e').
+let _whatsappPrepagataAbilitatoCache = null;
+async function whatsappPrepagataAbilitato() {
+  if (_whatsappPrepagataAbilitatoCache !== null) return _whatsappPrepagataAbilitatoCache;
+  try {
+    const endpoint = window.apiWhatsappSettingUrl || '/settings/api/settings/whatsapp';
+    const res = await fetch(endpoint, { credentials: 'same-origin' });
+    const json = res.ok ? await res.json() : null;
+    _whatsappPrepagataAbilitatoCache = !json || json.whatsapp_cassa_prepagata_enabled !== false;
+  } catch (err) {
+    console.warn('Impostazione WhatsApp del riepilogo carta non leggibile:', err);
+    _whatsappPrepagataAbilitatoCache = true;
+  }
+  return _whatsappPrepagataAbilitatoCache;
+}
 
 async function proponiWhatsappPrepagateInSequenza(listaInfo, onDone) {
   const lista = unisciMovimentiPerCarta(listaInfo);
@@ -2223,6 +2243,7 @@ async function proponiWhatsappPrepagateInSequenza(listaInfo, onDone) {
     onDone();
     return;
   }
+  await whatsappPrepagataAbilitato();
   let i = 0;
   const prossimo = () => {
     if (i >= lista.length) { onDone(); return; }
@@ -2234,7 +2255,6 @@ async function proponiWhatsappPrepagateInSequenza(listaInfo, onDone) {
 window.proponiWhatsappPrepagateInSequenza = proponiWhatsappPrepagateInSequenza;
 
 async function proponiWhatsappPrepagata(info, onDone) {
-  if (!info.clienteId) { onDone(); return; }
   const cap = window.capitalizeName || (s => s || '');
   // Nome cliente: il messaggio va al TITOLARE della carta, che può non essere il
   // cliente della bozza (es. tessera di Alessio usata per un servizio di Rebecca):
@@ -2247,19 +2267,22 @@ async function proponiWhatsappPrepagata(info, onDone) {
     ? cap(info.titolare)
     : ((clientInput && clientInput.value.trim()) ? cap(clientInput.value.trim()) : 'Cliente');
   let numero = '';
-  try {
-    const res = await fetch(`/settings/api/client_info/${info.clienteId}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && !data.error) {
-        if (data.display_name) clienteNome = data.display_name;
-        numero = data.cliente_cellulare || '';
+  if (info.clienteId) {
+    try {
+      const res = await fetch(`/settings/api/client_info/${info.clienteId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && !data.error) {
+          if (data.display_name) clienteNome = data.display_name;
+          numero = data.cliente_cellulare || '';
+        }
       }
+    } catch (err) {
+      console.warn('Impossibile recuperare i dati cliente per il messaggio WhatsApp prepagata:', err);
     }
-  } catch (err) {
-    console.warn('Impossibile recuperare i dati cliente per il messaggio WhatsApp prepagata:', err);
   }
-  if (!numero) { onDone(); return; }
+  // Carta senza cliente collegato o cliente senza cellulare: il riepilogo esce
+  // lo stesso, e' un riepilogo di cassa. Sparisce solo la parte WhatsApp.
 
   // Messaggio unico per carta, con i movimenti dello scontrino: ricarica sola,
   // seduta scalata sola, oppure entrambe.
@@ -2286,11 +2309,42 @@ async function proponiWhatsappPrepagata(info, onDone) {
   const testo = `Ciao *${clienteNome}*, sulla tua Fidelity Card${rigaTessera}${movimento}`
     + ` disponi attualmente di un credito solarium di ${eur(info.creditoResiduo)}${codaSito}`;
 
+  // Riepilogo mostrato in cima al riquadro. Il saldo di partenza non arriva dal
+  // server: si ricostruisce dal saldo finale (riletto DOPO tutti i movimenti
+  // dello scontrino) e dagli importi movimentati. Vale in ogni caso, attivazione
+  // compresa, dove il precedente viene 0.
+  const residuo = Number(info.creditoResiduo || 0);
+  const movimenti = [];
+  if (scalato > 0) {
+    movimenti.push({
+      etichetta: info.descrizione ? `Seduta: ${info.descrizione}` : 'Seduta scalata',
+      importo: scalato,
+      verso: '-'
+    });
+  }
+  if (caricato > 0) {
+    movimenti.push({
+      etichetta: info.tipo === 'attivazione' ? 'Attivazione carta' : 'Ricarica',
+      importo: caricato,
+      verso: '+'
+    });
+  }
+
+  const riepilogo = {
+    intestatario: clienteNome,
+    numeroTessera: info.numeroTessera || null,
+    creditoPrecedente: residuo + scalato - caricato,
+    creditoResiduo: residuo,
+    movimenti
+  };
+
   window.showWhatsappAutoSendPanel({
     numero,
     testo,
     nome: clienteNome,
     clientId: info.clienteId,
+    riepilogo,
+    whatsappAbilitato: await whatsappPrepagataAbilitato(),
     onClose: onDone
   });
 }

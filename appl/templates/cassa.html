@@ -1222,6 +1222,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Sito del negozio (BusinessInfo.website): chiude il messaggio WhatsApp
     // delle carte prepagate. Cambia da tenant a tenant, quindi arriva da qui.
     window.BUSINESS_WEBSITE = "{{ businessinfo.website|escapejs if businessinfo and businessinfo.website else '' }}";
+    // Interruttore "parte WhatsApp nel riepilogo carta" (Tools > WhatsApp).
+    // Via url_for e non come path assoluto: l'app puo' essere montata sotto
+    // /s/<idx> e una fetch su '/settings/...' finirebbe fuori dal tenant.
+    window.apiWhatsappSettingUrl = "{{ url_for('settings.api_whatsapp_setting') }}";
 
     if (operatorName) {
       const operatorInput = document.getElementById('operatorSelectInput');

@@ -3,6 +3,107 @@
 // carta prepagata): mostra sempre il testo in una textarea modificabile, l'invio parte SOLO al
 // click su "Invia", mai in automatico senza conferma esplicita (i messaggi WhatsApp via API
 // hanno un costo).
+// Riquadro di riepilogo del movimento su carta prepagata, in cima al pannello.
+// Lo prepara la Cassa e lo passa in payload.riepilogo:
+//   intestatario     nome e cognome del titolare della carta
+//   numeroTessera    numero della tessera, se c'e'
+//   creditoPrecedente / creditoResiduo   saldo prima e dopo lo scontrino
+//   movimenti        [{ etichetta, importo, verso: '+' | '-' }]
+// Tutto in stili inline, come il resto del pannello: gira su tre pagine
+// diverse (Agenda, Cassa, scheda pacchetto) e non dipende da un CSS suo.
+function costruisciRiquadroRiepilogo(dati) {
+  const eur = (v) => '€ ' + Number(v || 0).toLocaleString('it-IT', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+
+  const box = document.createElement('div');
+  box.style.border = '1px solid #e0e0e0';
+  box.style.borderRadius = '8px';
+  box.style.padding = '14px 16px';
+  box.style.background = '#fafafa';
+
+  // Intestazione: chi e' il titolare e su quale tessera si sta lavorando.
+  const testa = document.createElement('div');
+  testa.style.display = 'flex';
+  testa.style.alignItems = 'baseline';
+  testa.style.justifyContent = 'space-between';
+  testa.style.gap = '10px';
+  testa.style.paddingBottom = '10px';
+  testa.style.borderBottom = '1px solid #e8e8e8';
+
+  const chi = document.createElement('div');
+  chi.style.fontWeight = '700';
+  chi.style.fontSize = '1.05em';
+  chi.style.textTransform = 'uppercase';
+  chi.textContent = dati.intestatario || 'Cliente';
+  testa.appendChild(chi);
+
+  if (dati.numeroTessera) {
+    const tessera = document.createElement('div');
+    tessera.style.fontSize = '0.85em';
+    tessera.style.color = '#666';
+    tessera.style.whiteSpace = 'nowrap';
+    tessera.textContent = 'Tessera n. ' + dati.numeroTessera;
+    testa.appendChild(tessera);
+  }
+  box.appendChild(testa);
+
+  function riga(etichetta, valore, opzioni) {
+    const o = opzioni || {};
+    const r = document.createElement('div');
+    r.style.display = 'flex';
+    r.style.alignItems = 'baseline';
+    r.style.justifyContent = 'space-between';
+    r.style.gap = '14px';
+    r.style.marginTop = o.marginTop || '7px';
+
+    const sx = document.createElement('div');
+    sx.style.color = o.coloreEtichetta || '#555';
+    if (o.grande) {
+      sx.style.fontWeight = '700';
+      sx.style.fontSize = '0.9em';
+      sx.style.letterSpacing = '0.04em';
+    }
+    sx.textContent = etichetta;
+
+    const dx = document.createElement('div');
+    dx.style.whiteSpace = 'nowrap';
+    dx.style.fontVariantNumeric = 'tabular-nums';
+    dx.style.fontWeight = o.grande ? '700' : '600';
+    if (o.grande) dx.style.fontSize = '1.6em';
+    if (o.colore) dx.style.color = o.colore;
+    dx.textContent = valore;
+
+    r.appendChild(sx);
+    r.appendChild(dx);
+    box.appendChild(r);
+    return r;
+  }
+
+  riga('Credito precedente', eur(dati.creditoPrecedente));
+
+  (dati.movimenti || []).forEach(function (m) {
+    const scalo = m.verso === '-';
+    riga(m.etichetta || (scalo ? 'Scalato' : 'Ricarica'),
+         (scalo ? '− ' : '+ ') + eur(m.importo),
+         { colore: scalo ? '#b3261e' : '#1b7f3b' });
+  });
+
+  const separatore = document.createElement('div');
+  separatore.style.borderTop = '1px solid #e8e8e8';
+  separatore.style.marginTop = '11px';
+  box.appendChild(separatore);
+
+  riga('CREDITO RESIDUO', eur(dati.creditoResiduo), {
+    grande: true,
+    marginTop: '9px',
+    coloreEtichetta: '#333'
+  });
+
+  return box;
+}
+
 function showWhatsappAutoSendPanel(payload) {
   const existing = document.getElementById('whatsappAutoSendOverlay');
   if (existing) existing.remove();
@@ -29,61 +130,92 @@ function showWhatsappAutoSendPanel(payload) {
   panel.style.maxWidth = '94vw';
   panel.style.zIndex = '99999';
 
+  // Riepilogo del movimento carta (lo passa la Cassa): quando c'e', il riquadro
+  // e' prima di tutto un riepilogo, e il messaggio WhatsApp e' una coda
+  // facoltativa. La parte WhatsApp sparisce se l'operatore l'ha spenta in
+  // Tools > WhatsApp (whatsappAbilitato) o se non c'e' un numero a cui scrivere.
+  const riepilogo = payload.riepilogo || null;
+  const conWhatsapp = payload.whatsappAbilitato !== false && !!payload.numero;
+
   const title = document.createElement('div');
   title.style.fontWeight = '700';
   title.style.marginBottom = '10px';
-  title.textContent = `Invia WhatsApp a ${payload.nome || 'cliente'}${payload.numero ? ' (' + payload.numero + ')' : ''}`;
+  title.textContent = riepilogo
+    ? 'Riepilogo carta prepagata'
+    : `Invia WhatsApp a ${payload.nome || 'cliente'}${payload.numero ? ' (' + payload.numero + ')' : ''}`;
   panel.appendChild(title);
 
-  const warn = document.createElement('div');
-  warn.className = 'text-muted';
-  warn.style.fontSize = '0.85em';
-  warn.style.marginBottom = '8px';
-  warn.textContent = 'Invio via WhatsApp Web collegato: ogni messaggio ha un costo. Controlla/modifica il testo prima di inviare.';
-  panel.appendChild(warn);
+  if (riepilogo) panel.appendChild(costruisciRiquadroRiepilogo(riepilogo));
 
-  const textarea = document.createElement('textarea');
-  textarea.value = payload.testo || '';
-  textarea.className = 'form-control';
-  textarea.rows = 11;
-  textarea.style.marginBottom = '14px';
-  panel.appendChild(textarea);
+  let textarea = null;
+  let sendBtn = null;
+  let manualLink = null;
+
+  if (conWhatsapp) {
+    if (riepilogo) {
+      const waTitle = document.createElement('div');
+      waTitle.style.fontWeight = '700';
+      waTitle.style.marginTop = '18px';
+      waTitle.style.marginBottom = '10px';
+      waTitle.textContent = `Invia WhatsApp a ${payload.nome || 'cliente'}${payload.numero ? ' (' + payload.numero + ')' : ''}`;
+      panel.appendChild(waTitle);
+    }
+
+    const warn = document.createElement('div');
+    warn.className = 'text-muted';
+    warn.style.fontSize = '0.85em';
+    warn.style.marginBottom = '8px';
+    warn.textContent = 'Invio via WhatsApp Web collegato: ogni messaggio ha un costo. Controlla/modifica il testo prima di inviare.';
+    panel.appendChild(warn);
+
+    textarea = document.createElement('textarea');
+    textarea.value = payload.testo || '';
+    textarea.className = 'form-control';
+    textarea.rows = riepilogo ? 6 : 11;
+    textarea.style.marginBottom = '14px';
+    panel.appendChild(textarea);
+  }
 
   const btnRow = document.createElement('div');
   btnRow.style.display = 'flex';
   btnRow.style.gap = '10px';
   btnRow.style.justifyContent = 'flex-end';
+  if (!conWhatsapp) btnRow.style.marginTop = '16px';
 
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
-  cancelBtn.className = 'btn btn-secondary';
-  cancelBtn.textContent = 'Annulla';
-
-  const sendBtn = document.createElement('button');
-  sendBtn.type = 'button';
-  sendBtn.className = 'btn btn-success';
-  sendBtn.textContent = 'Invia';
-
+  // Senza la parte WhatsApp non c'e' niente da annullare: il pulsante chiude e basta.
+  cancelBtn.className = conWhatsapp ? 'btn btn-secondary' : 'btn btn-primary';
+  cancelBtn.textContent = conWhatsapp ? 'Annulla' : 'Chiudi';
   btnRow.appendChild(cancelBtn);
-  btnRow.appendChild(sendBtn);
+
+  if (conWhatsapp) {
+    sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.className = 'btn btn-success';
+    sendBtn.textContent = 'Invia';
+    btnRow.appendChild(sendBtn);
+  }
   panel.appendChild(btnRow);
 
-  const manualRow = document.createElement('div');
-  manualRow.style.marginTop = '12px';
-  manualRow.style.paddingTop = '10px';
-  manualRow.style.borderTop = '1px solid #e5e5e5';
-  manualRow.style.textAlign = 'center';
+  if (conWhatsapp) {
+    const manualRow = document.createElement('div');
+    manualRow.style.marginTop = '12px';
+    manualRow.style.paddingTop = '10px';
+    manualRow.style.borderTop = '1px solid #e5e5e5';
+    manualRow.style.textAlign = 'center';
 
-  const manualLink = document.createElement('a');
-  manualLink.href = '#';
-  manualLink.style.fontSize = '0.85em';
-  manualLink.textContent = 'Preferisci inviarlo tu manualmente? Apri WhatsApp con il messaggio pronto';
-  manualRow.appendChild(manualLink);
-  panel.appendChild(manualRow);
+    manualLink = document.createElement('a');
+    manualLink.href = '#';
+    manualLink.style.fontSize = '0.85em';
+    manualLink.textContent = 'Preferisci inviarlo tu manualmente? Apri WhatsApp con il messaggio pronto';
+    manualRow.appendChild(manualLink);
+    panel.appendChild(manualRow);
+  }
 
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
-  setTimeout(() => textarea.focus(), 50);
+  if (textarea) setTimeout(() => textarea.focus(), 50);
 
   function cleanup() {
     document.removeEventListener('keydown', onKey);
@@ -128,7 +260,7 @@ function showWhatsappAutoSendPanel(payload) {
   });
   cancelBtn.addEventListener('click', cleanup);
 
-  manualLink.addEventListener('click', function(e) {
+  if (manualLink) manualLink.addEventListener('click', function(e) {
     e.preventDefault();
     const testoManuale = textarea.value.trim();
     const numero = String(payload.numero || '').replace(/^\+/, '');
@@ -137,7 +269,7 @@ function showWhatsappAutoSendPanel(payload) {
     cleanup();
   });
 
-  sendBtn.addEventListener('click', async function() {
+  if (sendBtn) sendBtn.addEventListener('click', async function() {
     const testoFinale = textarea.value.trim();
     if (!testoFinale) { textarea.focus(); return; }
     sendBtn.disabled = true;
