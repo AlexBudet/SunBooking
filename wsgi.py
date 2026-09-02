@@ -621,28 +621,165 @@ def owner_setup_purged(tenant_id):
         return jsonify({'error': str(e)}), 500
 
 
-def _piano_tenant(idx):
-    """Piano sottoscritto da un negozio: 'standard' | 'premium' | 'custom'.
+# I tre moduli che il PREMIUM porta con se'. Il BASE non e' in lista: quello
+# c'e' sempre e non dipende dal piano sottoscritto.
+MODULI_EXTRA = ('web', 'pacchetti', 'solarium')
 
-    None quando non c'e' un contratto — e' il caso dei tre database
-    dell'owner, che non ne hanno e restano liberi di attivare tutto.
-    In caso di registro irraggiungibile si torna None: meglio lasciare il
-    pannello com'e' che bloccare i moduli per un problema di connessione.
+
+def _contratto_tenant(idx):
+    """Piano e stato del contratto di un negozio, IN QUESTO MOMENTO.
+
+    Torna sempre un dizionario, mai None: il pannello deve poter scrivere
+    "nessun contratto" senza confonderlo con "registro irraggiungibile".
+
+        piano               'standard' | 'premium' | 'custom' | None
+        status              lo stato del contratto, com'e' nel registro
+        extra_ammessi       se i tre moduli aggiuntivi sono consentiti
+        extra_da_accendere  se vanno accesi da soli alla prima occasione
+        etichetta           cosa scrivere nella colonna STATO del pannello
+
+    Lo status prima veniva ignorato, e conta: `contract.status` ammette
+    'draft', 'ready', 'signed', 'void'. Un premium ancora da firmare non e'
+    un premium, e accendere i moduli su una bozza vuol dire regalarli.
+
+    L'asimmetria fra i due casi e' voluta:
+      - lo STANDARD blocca i moduli QUALUNQUE sia lo status: non si concede
+        mai piu' di quello che c'e' scritto nel contratto;
+      - il PREMIUM li accende SOLO se firmato: non si concede prima del tempo.
+
+    Registro spento o irraggiungibile: nessun vincolo e nessuna forzatura. E'
+    il caso dei tre database dell'owner, che un contratto non ce l'hanno, ed
+    e' anche la scelta prudente quando il registro non risponde - meglio
+    lasciare il pannello com'e' che spegnere i moduli di un negozio per un
+    problema di connessione.
     """
+    vuoto = {'piano': None, 'status': None, 'extra_ammessi': True,
+             'extra_da_accendere': False, 'etichetta': None}
     if not _registry_on():
-        return None
+        return vuoto
     try:
-        from appl.registry_models import registry_session, Tenant, Contract
+        from appl.registry_models import registry_session, Tenant, Contract, Billing
         with registry_session() as s:
-            row = (s.query(Contract.price_plan)
+            # I DATABASE NOSTRI (suncity, sunexp3, sunbookingdb) non sono
+            # clienti: li usiamo in negozio con TUTTI i moduli accesi. Non
+            # devono poter essere spenti da questa logica nemmeno per sbaglio -
+            # per esempio se un contratto finisse agganciato a uno di loro.
+            # `extra_da_accendere` a True e' la rete di sicurezza: se un giorno
+            # si ritrovassero tutti e tre spenti, tornano su da soli.
+            owner_db = (s.query(Billing.is_owner_db)
+                         .join(Tenant, Tenant.id == Billing.tenant_id)
+                         .filter(Tenant.idx == idx)
+                         .first())
+            if owner_db and owner_db[0]:
+                nostro = dict(vuoto)
+                nostro['extra_da_accendere'] = True
+                nostro['etichetta'] = 'database nostro'
+                return nostro
+
+            row = (s.query(Contract.price_plan, Contract.status)
                     .join(Tenant, Tenant.id == Contract.tenant_id)
                     .filter(Tenant.idx == idx)
                     .order_by(Contract.id.desc())
                     .first())
-            return row[0] if row else None
     except Exception:
-        root_app.logger.warning("[registry] piano del tenant %s non leggibile", idx)
-        return None
+        root_app.logger.warning("[registry] contratto del tenant %s non leggibile", idx)
+        return vuoto
+    if not row:
+        return vuoto
+
+    piano = (row[0] or '').strip().lower() or None
+    status = (row[1] or '').strip().lower() or None
+    firmato = (status == 'signed')
+    coda = '' if firmato else ' - da firmare'
+
+    if piano == 'standard':
+        return {'piano': 'standard', 'status': status, 'extra_ammessi': False,
+                'extra_da_accendere': False, 'etichetta': 'BASE' + coda}
+    if piano in ('premium', 'custom'):
+        nome = 'PREMIUM' if piano == 'premium' else 'PREMIUM - prezzo concordato'
+        return {'piano': piano, 'status': status, 'extra_ammessi': True,
+                'extra_da_accendere': firmato, 'etichetta': nome + coda}
+
+    fuori = dict(vuoto)
+    fuori['status'] = status
+    fuori['etichetta'] = 'contratto senza piano'
+    return fuori
+
+
+def _spegni_invii_automatici():
+    """Senza il modulo WEB non partono ne' il memo mattutino ne' le notifiche
+    dei turni. Lasciarli accesi vorrebbe dire continuare a mandare WhatsApp
+    per conto di un negozio che quel modulo non ce l'ha. Da chiamare DENTRO
+    l'app context del tenant."""
+    from appl.models import BusinessInfo as _BI, Operator as _Op
+    from appl import db as child_db
+    bi = _BI.query.first()
+    if bi:
+        bi.whatsapp_morning_reminder_enabled = False
+    child_db.session.query(_Op).filter_by(is_deleted=False).update(
+        {'notify_turni_via_whatsapp': False}
+    )
+
+
+def _applica_regole_moduli(owner_cfg, contratto, richiesti=None):
+    """Porta i flag `module_*` di OWNER a quello che il contratto consente.
+
+    `richiesti`: i quattro booleani arrivati dal pannello quando si preme
+    Salva, oppure None per dire "tieni quelli che ci sono" - cioe' la semplice
+    apertura della pagina.
+
+    Ritorna la lista dei moduli cambiati, vuota quando non c'era niente da
+    fare: serve al chiamante per decidere se committare e cosa scrivere nel
+    log. NON committa: il commit e' di chi ha aperto l'app context.
+
+    Questa funzione e' l'unico posto in cui si decide se un modulo e' acceso.
+    Il pannello mostra il risultato, non lo calcola: un controllo che vive
+    solo nel browser lo aggira chiunque sappia aprire la console.
+    """
+    from datetime import date as _date
+
+    attuali = {m: bool(getattr(owner_cfg, 'module_%s_enabled' % m))
+               for m in ('base',) + MODULI_EXTRA}
+    voluti = dict(attuali)
+    if richiesti is not None:
+        voluti.update({m: bool(v) for m, v in richiesti.items() if m in voluti})
+
+    if not contratto.get('extra_ammessi', True):
+        # Contratto BASE: i moduli aggiuntivi non esistono. Non "disabilitati
+        # nel pannello" - spenti nel database del negozio, che e' l'unico
+        # posto che la sua applicazione legge davvero.
+        for m in MODULI_EXTRA:
+            voluti[m] = False
+    elif (contratto.get('extra_da_accendere') and richiesti is None
+            and not any(attuali[m] for m in MODULI_EXTRA)):
+        # PREMIUM firmato e tutti e tre i moduli spenti: e' un cliente che
+        # paga il canone alto per non avere niente in piu' di un BASE. E' lo
+        # stato in cui si trova un negozio appena passato al premium, e si
+        # sistema da solo alla prima apertura del pannello.
+        #
+        # La condizione richiede che siano spenti TUTTI E TRE apposta: da qui
+        # in avanti spegnerne uno (il solarium a chi non ha lampade) resta una
+        # scelta dell'owner e non viene piu' toccata.
+        for m in MODULI_EXTRA:
+            voluti[m] = True
+
+    cambiati = []
+    oggi = _date.today()
+    for m in ('base',) + MODULI_EXTRA:
+        if voluti[m] == attuali[m]:
+            continue
+        setattr(owner_cfg, 'module_%s_enabled' % m, voluti[m])
+        # La data di attivazione non si scrive piu' a mano nel pannello: la
+        # tiene il programma. Serve alla fatturazione - da quando quel negozio
+        # paga quel modulo - non all'occhio dell'owner, che dal pannello vuole
+        # sapere un'altra cosa: se il contratto ADESSO e' base o premium.
+        setattr(owner_cfg, 'module_%s_activated_on' % m, oggi if voluti[m] else None)
+        cambiati.append(m)
+
+    if not voluti['web'] and ('web' in cambiati or richiesti is not None):
+        _spegni_invii_automatici()
+
+    return cambiati
 
 
 def _load_billing_json():
@@ -927,6 +1064,10 @@ def owner_setup():
         except Exception:
             _db_name = _db_user = '—'
 
+        # Il piano si legge PRIMA di aprire il negozio: e' quello che decide
+        # cosa mostrare, non il contrario.
+        contratto = _contratto_tenant(idx)
+
         info = {
             'idx': idx,
             'uri_masked': _mask_uri(uri),
@@ -938,14 +1079,14 @@ def owner_setup():
             'module_base_enabled': True,
             'module_web_enabled': True,
             'module_pacchetti_enabled': True,
-            'module_base_activated_on': None,
-            'module_web_activated_on': None,
-            'module_pacchetti_activated_on': None,
+            'module_solarium_enabled': False,
+            'contratto': contratto,
         }
         if child:
             try:
                 with child.app_context():
                     from appl.models import BusinessInfo, OWNER
+                    from appl import db as child_db
                     bi = BusinessInfo.query.first()
                     if bi:
                         if bi.business_name:
@@ -953,28 +1094,36 @@ def owner_setup():
                         info['localita'] = bi.city or ''
                     owner_cfg = OWNER.query.first()
                     if owner_cfg:
+                        # Il pannello non si limita a MOSTRARE i moduli: prima
+                        # di disegnarli li rimette in riga con il contratto.
+                        # Senza questo passaggio un negozio passato allo
+                        # standard restava con i moduli accesi nel proprio
+                        # database - il pannello li faceva vedere spenti e
+                        # l'applicazione del cliente continuava a usarli.
+                        try:
+                            cambiati = _applica_regole_moduli(owner_cfg, contratto)
+                            if cambiati:
+                                child_db.session.commit()
+                                root_app.logger.info(
+                                    "[moduli] tenant %s allineato al contratto %s: %s",
+                                    idx, contratto.get('piano') or 'assente',
+                                    ', '.join(cambiati))
+                        except Exception:
+                            child_db.session.rollback()
+                            root_app.logger.warning(
+                                "[moduli] tenant %s: allineamento al contratto non "
+                                "riuscito, mostro i valori come stanno", idx,
+                                exc_info=True)
                         info['module_base_enabled'] = owner_cfg.module_base_enabled
                         info['module_web_enabled'] = owner_cfg.module_web_enabled
                         info['module_pacchetti_enabled'] = owner_cfg.module_pacchetti_enabled
                         info['module_solarium_enabled'] = owner_cfg.module_solarium_enabled
-                        info['module_base_activated_on'] = (
-                            owner_cfg.module_base_activated_on.isoformat()
-                            if owner_cfg.module_base_activated_on else None
-                        )
-                        info['module_web_activated_on'] = (
-                            owner_cfg.module_web_activated_on.isoformat()
-                            if owner_cfg.module_web_activated_on else None
-                        )
-                        info['module_pacchetti_activated_on'] = (
-                            owner_cfg.module_pacchetti_activated_on.isoformat()
-                            if owner_cfg.module_pacchetti_activated_on else None
-                        )
-                        info['module_solarium_activated_on'] = (
-                            owner_cfg.module_solarium_activated_on.isoformat()
-                            if owner_cfg.module_solarium_activated_on else None
-                        )
             except Exception:
-                pass
+                # Un negozio irraggiungibile non deve far sparire la pagina, ma
+                # nemmeno passare inosservato: la riga resta con i valori di
+                # comodo e il motivo finisce nel log.
+                root_app.logger.warning(
+                    "[owner-setup] tenant %s non leggibile", idx, exc_info=True)
         tenants.append(info)
 
     billing_all = _load_billing()
@@ -982,9 +1131,6 @@ def owner_setup():
         entry = billing_all.get(str(info['idx']), {})
         info['compliance'] = _compliance_status(entry)
         info['is_owner_db'] = bool(entry.get('is_owner_db', False))
-        # Serve al template per bloccare i moduli aggiuntivi sui contratti
-        # STANDARD. None = nessun contratto (database dell'owner): nessun blocco.
-        info['price_plan'] = _piano_tenant(info['idx'])
 
     return render_template('owner_setup.html', tenants=tenants,
                            da_cancellare=_tenant_da_cancellare(),
@@ -1128,8 +1274,30 @@ def owner_monitor_dati():
     # sommarlo servirebbe la serie al minuto di ogni negozio (43.200 righe per
     # 30 giorni ciascuno), che costa piu' di quanto valga. E' dichiarato come
     # tale nel pannello, non spacciato per il totale.
+    # Di ogni picco si porta dietro QUANDO e, dove ha senso, DI CHI.
+    # Un "8 su 6" da solo non si puo' nemmeno andare a guardare: non si sa in
+    # che negozio e' successo ne' a che ora, e finche' resta nella finestra dei
+    # 30 giorni sembra una cosa che sta succedendo adesso.
+    # Il "chi" c'e' solo per i picchi al MINUTO, che sono il massimo di un
+    # singolo negozio. I picchi ORARI sono la SOMMA di tutti i negozi (i limiti
+    # ACS valgono per sottoscrizione): li' un nome sarebbe falso, e resta l'ora.
     picchi_msg = {'whatsapp_ora': 0, 'whatsapp_minuto': 0,
-                  'email_ora': 0, 'email_minuto': 0}
+                  'email_ora': 0, 'email_minuto': 0,
+                  'whatsapp_minuto_quando': None, 'email_minuto_quando': None,
+                  'whatsapp_minuto_chi': None, 'email_minuto_chi': None,
+                  'whatsapp_ora_quando': None, 'email_ora_quando': None}
+
+    def _ora_italiana(iso):
+        """serie_oraria arriva in UTC senza fuso (AT TIME ZONE 'UTC' nella
+        query). L'owner legge l'ora del negozio, non quella di Greenwich."""
+        try:
+            from zoneinfo import ZoneInfo
+            momento = datetime.fromisoformat(iso)
+            if momento.tzinfo is None:
+                momento = momento.replace(tzinfo=timezone.utc)
+            return momento.astimezone(ZoneInfo('Europe/Rome')).strftime('%d/%m alle %H:%M')
+        except Exception:
+            return None
     per_ora = {}          # (ora, canale) -> totale su tutti i negozi
     for t in validi:
         inv = t.get('invii') or {}
@@ -1139,9 +1307,12 @@ def owner_monitor_dati():
         canali = inv.get('per_canale') or {}
         invii_tenant.append({c: v.get('stima_mensile', 0) for c, v in canali.items()})
         for canale, chiave in (('email', 'email_minuto'), ('whatsapp', 'whatsapp_minuto')):
-            valore = (canali.get(canale) or {}).get('picco_al_minuto') or 0
+            dati_canale = canali.get(canale) or {}
+            valore = dati_canale.get('picco_al_minuto') or 0
             if valore > picchi_msg[chiave]:
                 picchi_msg[chiave] = valore
+                picchi_msg[chiave + '_quando'] = dati_canale.get('picco_al_minuto_quando')
+                picchi_msg[chiave + '_chi'] = t.get('nome') or ('negozio %s' % t.get('idx'))
 
         for punto in (inv.get('serie_oraria') or []):
             chiave = (punto.get('ora'), punto.get('canale'))
@@ -1150,8 +1321,10 @@ def owner_monitor_dati():
     for (_ora, canale), totale in per_ora.items():
         if canale == 'email' and totale > picchi_msg['email_ora']:
             picchi_msg['email_ora'] = totale
+            picchi_msg['email_ora_quando'] = _ora_italiana(_ora)
         elif canale == 'whatsapp' and totale > picchi_msg['whatsapp_ora']:
             picchi_msg['whatsapp_ora'] = totale
+            picchi_msg['whatsapp_ora_quando'] = _ora_italiana(_ora)
 
     # Da quanti giorni si misura davvero. I totali "al mese" sono estrapolati:
     # se il contatore e' acceso da tre ore, quel numero e' un moltiplicatore
@@ -1313,43 +1486,29 @@ def owner_setup_save(db_idx):
     # aggiuntivi: quelli appartengono al PREMIUM. Il Premium invece puo'
     # spegnerne uno o due quando vuole — il canone non cambia.
     # Il controllo sta qui e non solo nel pannello: il pannello e' una comodita',
-    # questa e' la regola.
-    solo_base = _piano_tenant(db_idx) == 'standard'
+    # questa e' la regola. Le date di attivazione arrivate dal pannello vengono
+    # ignorate apposta: da adesso le tiene il programma.
+    contratto = _contratto_tenant(db_idx)
 
     try:
         with child.app_context():
             from appl.models import OWNER
             from appl import db as child_db
-            from datetime import date as _date
             owner_cfg = OWNER.query.first()
             if not owner_cfg:
                 owner_cfg = OWNER()
                 child_db.session.add(owner_cfg)
-            owner_cfg.module_base_enabled = bool(data.get('module_base_enabled', True))
-            owner_cfg.module_web_enabled = (not solo_base) and bool(data.get('module_web_enabled', True))
-            owner_cfg.module_pacchetti_enabled = (not solo_base) and bool(data.get('module_pacchetti_enabled', True))
-            owner_cfg.module_solarium_enabled = (not solo_base) and bool(data.get('module_solarium_enabled', False))
-            for field in ('module_base_activated_on', 'module_web_activated_on',
-                          'module_pacchetti_activated_on', 'module_solarium_activated_on'):
-                val = data.get(field)
-                if val:
-                    try:
-                        setattr(owner_cfg, field, _date.fromisoformat(val))
-                    except (ValueError, AttributeError):
-                        pass
-                else:
-                    setattr(owner_cfg, field, None)
-            if not owner_cfg.module_web_enabled:
-                from appl.models import BusinessInfo as _BI, Operator as _Op
-                bi = _BI.query.first()
-                if bi:
-                    bi.whatsapp_morning_reminder_enabled = False
-                child_db.session.query(_Op).filter_by(is_deleted=False).update(
-                    {'notify_turni_via_whatsapp': False}
-                )
+            _applica_regole_moduli(owner_cfg, contratto, richiesti={
+                'base': data.get('module_base_enabled', True),
+                'web': data.get('module_web_enabled', True),
+                'pacchetti': data.get('module_pacchetti_enabled', True),
+                'solarium': data.get('module_solarium_enabled', False),
+            })
             child_db.session.commit()
         return jsonify({'ok': True})
     except Exception as e:
+        root_app.logger.warning("[moduli] salvataggio del tenant %s non riuscito: %s",
+                                db_idx, e)
         return jsonify({'error': str(e)}), 500
 
 @root_app.route('/owner-setup/reveal-password/<int:db_idx>', methods=['POST'])

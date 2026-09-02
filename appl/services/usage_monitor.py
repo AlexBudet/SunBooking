@@ -171,6 +171,13 @@ def _chiave_tenant():
         return 'unico'
 
 
+def chiave_tenant():
+    """L'identificatore del tenant, per chi sta fuori da questo modulo (la
+    coda del marketing ne tiene una per negozio). E' la stessa chiave del
+    lucchetto degli invii: coda e ritmo devono parlare dello stesso negozio."""
+    return _chiave_tenant()
+
+
 def _ora_corrente():
     return datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
@@ -482,18 +489,30 @@ def invii(giorni=30):
             GROUP BY 1, 2 ORDER BY 1
         """), {'da': da}).mappings().all()
 
+        # Del picco serve QUANTO ma anche QUANDO. Senza la data resta appeso nel
+        # pannello per tutti i 30 giorni della finestra e sembra una cosa che
+        # sta succedendo adesso: i cinque invii in un minuto del 29/08/2026
+        # tenevano l'indicatore in giallo tre giorni dopo, quando il ritmo
+        # minimo fra un messaggio e l'altro era gia' stato messo.
+        # L'ora e' quella italiana e non UTC: e' quella che l'owner confronta
+        # con la propria giornata per capire cos'era successo.
         for unita, chiave in (('hour', 'picco_orario'), ('minute', 'picco_al_minuto')):
             righe_picco = db.session.execute(text("""
-                SELECT canale, max(n) AS picco FROM (
+                SELECT DISTINCT ON (canale) canale, n AS picco,
+                       to_char(blocco AT TIME ZONE 'Europe/Rome',
+                               'DD/MM alle HH24:MI') AS quando
+                FROM (
                     SELECT canale, date_trunc(CAST(:unita AS text), created_at) AS blocco,
                            count(*) AS n
                     FROM usage_events WHERE created_at >= :da
                     GROUP BY 1, 2
-                ) x GROUP BY canale
+                ) x
+                ORDER BY canale, n DESC, blocco DESC
             """), {'da': da, 'unita': unita}).mappings().all()
             for r in righe_picco:
                 if r['canale'] in per_canale:
                     per_canale[r['canale']][chiave] = r['picco']
+                    per_canale[r['canale']][chiave + '_quando'] = r['quando']
 
         serie = db.session.execute(text("""
             SELECT date_trunc('day', created_at) AS giorno, canale, count(*) AS n

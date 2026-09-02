@@ -87,7 +87,7 @@
     }
     .reveal-btn:hover { background: #eee; }
 
-    /* Modulo checkbox + data */
+    /* Interruttori dei moduli */
     .module-cell {
       display: flex;
       flex-direction: column;
@@ -123,16 +123,24 @@
     .module-toggle input:checked + .slider { background: #2ec56c; }
     .module-toggle input:checked + .slider:before { transform: translateX(20px); }
 
-    .date-input {
-      border: 1px solid #d0d0d0;
-      border-radius: 5px;
-      padding: 4px 7px;
-      font-size: 0.82em;
-      color: #444;
-      width: 120px;
-      text-align: center;
+    /* Piano del contratto. Sta accanto allo stato dei pagamenti e non sotto ai
+       singoli interruttori: e' UNA proprieta' del negozio, non tre. Prima li'
+       sotto c'era una data di attivazione che nessun calcolo leggeva. */
+    .plan-badge {
+      display: inline-block;
+      margin-top: 5px;
+      border-radius: 20px;
+      padding: 2px 9px;
+      font-size: 0.74em;
+      font-weight: 700;
+      letter-spacing: .3px;
+      white-space: nowrap;
     }
-    .date-input:focus { border-color: #e72c64; outline: none; }
+    .plan-premium { background:#efe3fb; color:#5b2ea6; border:1px solid #d6bdf3; }
+    .plan-base    { background:#e9edf3; color:#44536a; border:1px solid #cdd6e2; }
+    .plan-nessuno { background:#f4f4f4; color:#8a8a8a; border:1px solid #e6e6e6; font-weight:400; }
+    /* Contratto non ancora firmato: il piano c'e' ma non e' in essere. */
+    .plan-attesa  { opacity:.75; font-style:italic; }
 
     /* Save button per riga */
     .save-row-btn {
@@ -296,7 +304,7 @@
           <th style="min-width:90px;">USER</th>
           <th style="min-width:100px;">PWRD</th>
           <th style="min-width:220px;">STRINGA di CONNESSIONE</th>
-          <th style="min-width:90px;">STATO</th>
+          <th style="min-width:140px;">STATO<br><small style="font-weight:400;opacity:.8">pagamenti + piano</small></th>
           <th>BASE<br><small style="font-weight:400;opacity:.8">Agenda + Report + Clienti</small></th>
           <th>WEB<br><small style="font-weight:400;opacity:.8">WhatsApp + Booking + Marketing</small></th>
           <th>PACCHETTI<br><small style="font-weight:400;opacity:.8">Pacchetti + Prepagate</small></th>
@@ -335,7 +343,7 @@
             </div>
           </td>
 
-          <!-- STATO compliance -->
+          <!-- STATO compliance + PIANO in essere -->
           <td class="center">
             {% if t.compliance == 'owner' %}
               <span class="badge-owner" id="badge-{{ t.idx }}">🏠 Owner</span>
@@ -348,6 +356,11 @@
             {% else %}
               <span class="badge-unconfigured" id="badge-{{ t.idx }}">⚪ Non partito</span>
             {% endif %}
+            {# Il piano ADESSO: e' questo che dice se i tre moduli aggiuntivi
+               si possono accendere, ed e' l'unica cosa che serviva sapere. #}
+            <div class="plan-badge {% if t.contratto.piano == 'standard' %}plan-base{% elif t.contratto.piano %}plan-premium{% else %}plan-nessuno{% endif %}{% if t.contratto.piano and t.contratto.status != 'signed' %} plan-attesa{% endif %}"
+                 id="plan-{{ t.idx }}"
+                 title="Piano del contratto in questo momento. Decide se i moduli WEB, PACCHETTI e SOLARIUM si possono accendere.">{{ t.contratto.etichetta or 'nessun contratto' }}</div>
           </td>
 
           <!-- Modulo BASE -->
@@ -358,9 +371,6 @@
                        {% if t.module_base_enabled %}checked{% endif %}>
                 <span class="slider"></span>
               </label>
-              <input type="date" class="date-input" data-mod="base-date"
-                     value="{{ t.module_base_activated_on or '' }}"
-                     placeholder="Data att.">
             </div>
           </td>
 
@@ -370,13 +380,10 @@
               <label class="module-toggle">
                 <input type="checkbox" class="mod-check" data-mod="web"
                        {% if t.module_web_enabled %}checked{% endif %}
-                       {% if t.price_plan == 'standard' %}disabled
-                       title="Contratto STANDARD: i moduli aggiuntivi richiedono il PREMIUM"{% endif %}>
+                       {% if not t.contratto.extra_ammessi %}disabled
+                       title="Contratto BASE: i moduli aggiuntivi richiedono il PREMIUM"{% endif %}>
                 <span class="slider"></span>
               </label>
-              <input type="date" class="date-input" data-mod="web-date"
-                     value="{{ t.module_web_activated_on or '' }}"
-                     placeholder="Data att.">
             </div>
           </td>
 
@@ -386,13 +393,10 @@
               <label class="module-toggle">
                 <input type="checkbox" class="mod-check" data-mod="pacchetti"
                        {% if t.module_pacchetti_enabled %}checked{% endif %}
-                       {% if t.price_plan == 'standard' %}disabled
-                       title="Contratto STANDARD: i moduli aggiuntivi richiedono il PREMIUM"{% endif %}>
+                       {% if not t.contratto.extra_ammessi %}disabled
+                       title="Contratto BASE: i moduli aggiuntivi richiedono il PREMIUM"{% endif %}>
                 <span class="slider"></span>
               </label>
-              <input type="date" class="date-input" data-mod="pacchetti-date"
-                     value="{{ t.module_pacchetti_activated_on or '' }}"
-                     placeholder="Data att.">
             </div>
           </td>
 
@@ -402,13 +406,10 @@
               <label class="module-toggle">
                 <input type="checkbox" class="mod-check" data-mod="solarium"
                        {% if t.module_solarium_enabled %}checked{% endif %}
-                       {% if t.price_plan == 'standard' %}disabled
-                       title="Contratto STANDARD: i moduli aggiuntivi richiedono il PREMIUM"{% endif %}>
+                       {% if not t.contratto.extra_ammessi %}disabled
+                       title="Contratto BASE: i moduli aggiuntivi richiedono il PREMIUM"{% endif %}>
                 <span class="slider"></span>
               </label>
-              <input type="date" class="date-input" data-mod="solarium-date"
-                     value="{{ t.module_solarium_activated_on or '' }}"
-                     placeholder="Data att.">
             </div>
           </td>
 
@@ -808,18 +809,13 @@
       function checked(mod) {
         return row.querySelector(`input[data-mod="${mod}"]`).checked;
       }
-      function dateVal(mod) {
-        return row.querySelector(`input[data-mod="${mod}-date"]`).value || null;
-      }
+      // Solo gli interruttori: le date di attivazione le tiene il programma,
+      // e il server rifiuta comunque i moduli che il contratto non prevede.
       return {
         module_base_enabled: checked('base'),
         module_web_enabled: checked('web'),
         module_pacchetti_enabled: checked('pacchetti'),
         module_solarium_enabled: checked('solarium'),
-        module_base_activated_on: dateVal('base'),
-        module_web_activated_on: dateVal('web'),
-        module_pacchetti_activated_on: dateVal('pacchetti'),
-        module_solarium_activated_on: dateVal('solarium'),
       };
     }
 
@@ -1291,7 +1287,6 @@
     }
 
     function addRowToTable(t) {
-      const today = t.module_base_activated_on || new Date().toISOString().split('T')[0];
       const tbody = document.querySelector('table tbody');
       const tr = document.createElement('tr');
       tr.dataset.idx = t.idx;
@@ -1310,23 +1305,26 @@
             <button class="reveal-btn" onclick="revealField('uri-${t.idx}', ${t.idx}, 'uri', this)">👁 Mostra</button>
           </div>
         </td>
-        <td class="center"><span class="badge-unconfigured" id="badge-${t.idx}">⚪ Non partito</span></td>
+        <td class="center"><span class="badge-unconfigured" id="badge-${t.idx}">⚪ Non partito</span>
+          <div class="plan-badge plan-nessuno" id="plan-${t.idx}">nessun contratto</div></td>
         <td class="center">
           <div class="module-cell">
             <label class="module-toggle"><input type="checkbox" class="mod-check" data-mod="base" checked><span class="slider"></span></label>
-            <input type="date" class="date-input" data-mod="base-date" value="${today}">
           </div>
         </td>
         <td class="center">
           <div class="module-cell">
             <label class="module-toggle"><input type="checkbox" class="mod-check" data-mod="web" checked><span class="slider"></span></label>
-            <input type="date" class="date-input" data-mod="web-date" value="${today}">
           </div>
         </td>
         <td class="center">
           <div class="module-cell">
             <label class="module-toggle"><input type="checkbox" class="mod-check" data-mod="pacchetti" checked><span class="slider"></span></label>
-            <input type="date" class="date-input" data-mod="pacchetti-date" value="${today}">
+          </div>
+        </td>
+        <td class="center">
+          <div class="module-cell">
+            <label class="module-toggle"><input type="checkbox" class="mod-check" data-mod="solarium"><span class="slider"></span></label>
           </div>
         </td>
         <td class="center" style="white-space:nowrap;">

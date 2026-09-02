@@ -260,6 +260,22 @@
                             <small class="text-muted d-block text-center mt-2">
                                 <span id="dailyStatsInfo">Limite giornaliero: {{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 30 }} invii</span>
                             </small>
+
+                            {# Avanzamento della coda. L'invio non finisce piu' insieme
+                               alla richiesta: i messaggi partono uno ogni 12-20 secondi
+                               per non far sospendere il numero WhatsApp del negozio, e
+                               senza questo riquadro l'operatore non saprebbe a che punto
+                               e' ne' se puo' chiudere la pagina (puo'). #}
+                            <div id="marketingCoda" class="alert alert-info py-2 px-3 mt-2 mb-0" style="display:none;">
+                              <div class="d-flex justify-content-between align-items-center">
+                                <strong class="small"><i class="bi bi-hourglass-split me-1"></i>Invio in corso</strong>
+                                <span class="small" id="codaConteggio">0 / 0</span>
+                              </div>
+                              <div class="progress mt-2" style="height:6px;">
+                                <div class="progress-bar" id="codaBarra" role="progressbar" style="width:0%;"></div>
+                              </div>
+                              <div class="small text-muted mt-2" id="codaDettaglio"></div>
+                            </div>
                             <div class="btn-group w-100">
                                 <button type="button" class="btn btn-outline-primary" id="btnSaveTemplate">
                                     <i class="bi bi-save me-2"></i>Salva come nuovo
@@ -536,8 +552,10 @@ function insertNewClientVariable(variable) {
 
 document.addEventListener('DOMContentLoaded', function() {
     
-    // Carica statistiche invii giornalieri
-    fetch('/settings/api/marketing/daily-stats')
+    // Carica statistiche invii giornalieri.
+    // url_for e non il percorso assoluto: con wsgi.py l'applicazione e'
+    // montata su /s/<idx> e un '/settings/...' scritto a mano e' un 404 muto.
+    fetch("{{ url_for('settings.marketing_daily_stats') }}")
         .then(r => r.json())
         .then(data => {
             const info = document.getElementById('dailyStatsInfo');
@@ -980,7 +998,7 @@ Ti aspettiamo 💆‍♀️`
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Invio in corso...';
         
-        fetch('/settings/api/marketing/send', {
+        fetch("{{ url_for('settings.marketing_send_whatsapp') }}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1003,12 +1021,13 @@ Ti aspettiamo 💆‍♀️`
                 }
                 alert(msg);
                 
-                // Deseleziona i clienti inviati
+                // Deseleziona i clienti accodati
                 document.querySelectorAll('.client-checkbox:checked').forEach(cb => {
                     cb.checked = false;
                     cb.closest('.client-item')?.classList.remove('selected');
                 });
                 updateCounts();
+                seguiCodaMarketing();
             } else {
                 let errMsg = '❌ ' + (data.error || 'Errore sconosciuto');
                 if (data.dettagli_errori && data.dettagli_errori.length > 0) {
@@ -1024,6 +1043,84 @@ Ti aspettiamo 💆‍♀️`
             alert('❌ Errore di connessione durante l\'invio');
         });
     }
+
+    // ---------------------------------------------------------------------
+    // Coda degli invii marketing.
+    // I messaggi partono distanziati di 12-20 secondi l'uno dall'altro: sotto
+    // quella soglia WhatsApp puo' sospendere il numero del negozio. Quindi la
+    // richiesta accoda e torna subito, e l'avanzamento si chiede qui.
+    // ---------------------------------------------------------------------
+    let timerCodaMarketing = null;
+
+    // Il contatore "Oggi: N/M invii" va rinfrescato quando la coda finisce:
+    // le righe in marketing_invii nascono a invio avvenuto, non all'accodamento.
+    function aggiornaLimiteGiornaliero() {
+        fetch("{{ url_for('settings.marketing_daily_stats') }}")
+            .then(r => r.json())
+            .then(data => {
+                const info = document.getElementById('dailyStatsInfo');
+                if (info && data) {
+                    info.innerHTML = `Oggi: <strong>${data.inviati_oggi}</strong>/${data.limite} invii | Disponibili: <strong>${data.disponibili}</strong>`;
+                }
+            })
+            .catch(() => {});
+    }
+
+    function mostraCodaMarketing(stato) {
+        const box = document.getElementById('marketingCoda');
+        if (!box) return false;
+
+        if (!stato || !stato.totale) { box.style.display = 'none'; return false; }
+
+        const fatti = (stato.inviati || 0) + (stato.errori || 0);
+        const totale = stato.totale || 0;
+        box.style.display = '';
+        box.classList.toggle('alert-info', !!stato.attiva);
+        box.classList.toggle('alert-success', !stato.attiva && !stato.errori);
+        box.classList.toggle('alert-warning', !stato.attiva && !!stato.errori);
+        document.getElementById('codaConteggio').textContent = fatti + ' / ' + totale;
+        document.getElementById('codaBarra').style.width =
+            (totale ? Math.round(100 * fatti / totale) : 0) + '%';
+
+        let testo;
+        if (stato.attiva) {
+            const min = Math.max(1, Math.round((stato.secondi_stimati || 0) / 60));
+            testo = `Ne mancano ${stato.in_coda} (circa ${min} min). Puoi chiudere la pagina: l'invio va avanti da solo.`;
+        } else {
+            testo = `Invio finito: ${stato.inviati} spediti` +
+                    (stato.errori ? `, ${stato.errori} non riusciti` : '') + '.';
+        }
+        if (stato.errori && stato.dettagli_errori && stato.dettagli_errori.length) {
+            testo += ' — ' + stato.dettagli_errori.join(' · ');
+        }
+        document.getElementById('codaDettaglio').textContent = testo;
+        return !!stato.attiva;
+    }
+
+    function seguiCodaMarketing() {
+        if (timerCodaMarketing) return;
+        const chiedi = () => {
+            fetch("{{ url_for('settings.marketing_stato_coda') }}")
+                .then(r => r.json())
+                .then(stato => {
+                    if (!mostraCodaMarketing(stato)) {
+                        clearInterval(timerCodaMarketing);
+                        timerCodaMarketing = null;
+                        aggiornaLimiteGiornaliero();
+                    }
+                })
+                .catch(() => {});
+        };
+        chiedi();
+        timerCodaMarketing = setInterval(chiedi, 5000);
+    }
+    window.seguiCodaMarketing = seguiCodaMarketing;
+
+    // A pagina appena aperta: se un invio e' gia' in corso da prima, si ritrova.
+    fetch("{{ url_for('settings.marketing_stato_coda') }}")
+        .then(r => r.json())
+        .then(stato => { if (mostraCodaMarketing(stato)) seguiCodaMarketing(); })
+        .catch(() => {});
 
     // Inizializza link recensione listener
     document.getElementById('google_review_link')?.addEventListener('input', updateNewClientPreview);

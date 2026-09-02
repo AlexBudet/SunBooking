@@ -3975,178 +3975,152 @@ def marketing_delete_template(template_id):
 # ================= INVIO MARKETING WHATSAPP ====================
 @settings_bp.route('/api/marketing/send', methods=['POST'])
 def marketing_send_whatsapp():
+    """Mette in coda i messaggi WhatsApp di marketing per i clienti scelti.
+
+    NON manda piu' dentro la richiesta. Prima li mandava tutti di fila e senza
+    pause: trenta messaggi nello stesso minuto sono il modo piu' rapido per
+    farsi sospendere il numero WhatsApp DEL NEGOZIO, che e' un guaio senza
+    ritorno. Qui i messaggi si preparano - dentro la richiesta, dove un numero
+    sbagliato si puo' ancora mostrare a chi ha premuto il pulsante - e si
+    accodano; li manda `marketing_queue`, uno ogni 12-20 secondi, con lo stesso
+    orologio dell'invio manuale dall'Agenda.
+
+    Il limite giornaliero conta anche quello che e' GIA' in coda: un messaggio
+    accodato e' un messaggio impegnato, anche se la sua riga in
+    `marketing_invii` nascera' solo quando parte davvero.
     """
-    Invia messaggi WhatsApp marketing ai clienti selezionati.
-    Rispetta il limite giornaliero configurato.
-    """
-    import requests
-    import os
     from datetime import date
-    
+    from ..services import marketing_queue, usage_monitor
+
     data = request.get_json()
     if not data:
         return jsonify({'success': False, 'error': 'Dati mancanti'}), 400
-    
+
     clients = data.get('clients', [])
     template = data.get('template', '')
-    
+
     if not clients:
         return jsonify({'success': False, 'error': 'Nessun cliente selezionato'}), 400
     if not template.strip():
         return jsonify({'success': False, 'error': 'Messaggio vuoto'}), 400
-    
-    # Recupera impostazioni
+
     business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
     if not business_info:
         return jsonify({'success': False, 'error': 'BusinessInfo non configurato'}), 400
-    
-    # Verifica connessione WhatsApp
+
     account_id = business_info.unipile_account_id
     if not account_id:
         return jsonify({'success': False, 'error': 'WhatsApp non connesso. Vai in Impostazioni > WhatsApp per collegare.'}), 400
-    
-    # Conta invii di oggi
+
+    # Le stesse variabili che usa l'invio manuale dell'Agenda, e nello stesso
+    # modo: il DSN e' senza schema (api15.unipile.com:14552) e l'https lo mette
+    # il codice. Qui prima si leggeva una UNIPILE_API_KEY che nel .env non
+    # esiste, e la richiesta moriva su quel controllo senza mandare niente.
+    # Il ripiego su UNIPILE_API_KEY resta per non rompere un'installazione che
+    # l'avesse impostata davvero.
+    unipile_dsn = (os.getenv('UNIPILE_DSN') or '').strip()
+    unipile_token = (os.getenv('UNIPILE_ACCESS_TOKEN')
+                     or os.getenv('UNIPILE_API_KEY') or '').strip()
+    if not unipile_dsn or not unipile_token:
+        current_app.logger.error(
+            "[marketing] Unipile non configurato (dsn=%s token=%s)",
+            bool(unipile_dsn), bool(unipile_token))
+        return jsonify({'success': False,
+                        'error': 'WhatsApp non e\' configurato sul server.'}), 500
+
+    chiave = usage_monitor.chiave_tenant()
+
     oggi = date.today()
     invii_oggi = MarketingInvio.query.filter(
         func.date(MarketingInvio.data_invio) == oggi,
         MarketingInvio.stato == 'inviato'
     ).count()
-    
     max_giornalieri = business_info.marketing_max_daily_sends or 30
-    disponibili = max_giornalieri - invii_oggi
-    
+    disponibili = max_giornalieri - invii_oggi - marketing_queue.in_coda(chiave)
+
     if disponibili <= 0:
         return jsonify({
-            'success': False, 
+            'success': False,
             'error': f'Limite giornaliero raggiunto ({max_giornalieri} invii). Riprova domani.'
         }), 400
-    
-    # Limita al numero disponibile
-    clients_to_send = clients[:disponibili]
-    
-    # Configurazione Unipile
-    UNIPILE_API_KEY = os.getenv('UNIPILE_API_KEY', '')
-    UNIPILE_BASE_URL = os.getenv('UNIPILE_DSN', 'https://api.unipile.com:13337')
-    
-    if not UNIPILE_API_KEY:
-        return jsonify({'success': False, 'error': 'UNIPILE_API_KEY non configurata'}), 500
-    
-    headers = {
-        'X-API-KEY': UNIPILE_API_KEY,
-        'Content-Type': 'application/json'
-    }
-    
-    risultati = {
-        'inviati': 0,
-        'errori': 0,
-        'dettagli_errori': []
-    }
-    
-    centro_nome = business_info.business_name or 'Centro'
-    
-    for client_data in clients_to_send:
-        client_id = client_data.get('id')
-        cellulare = client_data.get('cellulare', '')
-        
-        if not cellulare:
-            risultati['errori'] += 1
-            risultati['dettagli_errori'].append(f"{client_data.get('nome', '?')} {client_data.get('cognome', '?')}: numero mancante")
-            continue
-        
-        # Normalizza numero
-        numero_normalizzato = _normalize_phone_for_whatsapp(cellulare)
-        if not numero_normalizzato:
-            risultati['errori'] += 1
-            risultati['dettagli_errori'].append(f"{client_data.get('nome', '?')}: numero non valido")
-            continue
-        
-        # Sostituisci variabili nel template
-        messaggio = template
-        messaggio = messaggio.replace('{{nome}}', client_data.get('nome', ''))
-        messaggio = messaggio.replace('{{cognome}}', client_data.get('cognome', ''))
-        messaggio = messaggio.replace('{{giorni_assenza}}', str(client_data.get('giorni_assenza', '0')))
-        messaggio = messaggio.replace('{{totale_visite}}', str(client_data.get('totale_visite', '0')))
-        messaggio = messaggio.replace('{{totale_speso}}', str(client_data.get('totale_speso', '0')))
-        messaggio = messaggio.replace('{{servizio_preferito}}', client_data.get('servizio_preferito', ''))
-        messaggio = messaggio.replace('{{centro}}', centro_nome)
-        
-        # Invia via Unipile
-        try:
-            payload = {
-                'account_id': account_id,
-                'text': messaggio,
-                'attendees_ids': [f"{numero_normalizzato}@s.whatsapp.net"]
-            }
-            
-            resp = requests.post(
-                f"{UNIPILE_BASE_URL}/api/v1/chats/",
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
-            
-            if resp.status_code in (200, 201):
-                # Registra invio riuscito
-                invio = MarketingInvio(
-                    client_id=client_id,
-                    messaggio=messaggio[:500],
-                    stato='inviato'
-                )
-                db.session.add(invio)
-                db.session.add(UsageEvent(canale='whatsapp', tipo='marketing',
-                                          origine='crm', esito='ok'))
-                risultati['inviati'] += 1
-            else:
-                # Registra errore
-                errore_msg = resp.text[:200] if resp.text else f"HTTP {resp.status_code}"
-                invio = MarketingInvio(
-                    client_id=client_id,
-                    messaggio=messaggio[:500],
-                    stato='errore',
-                    errore=errore_msg
-                )
-                db.session.add(invio)
-                db.session.add(UsageEvent(canale='whatsapp', tipo='marketing',
-                                          origine='crm', esito='errore',
-                                          errore=errore_msg[:300]))
-                risultati['errori'] += 1
-                risultati['dettagli_errori'].append(f"{client_data.get('nome', '?')}: {errore_msg[:50]}")
 
-        except Exception as e:
-            invio = MarketingInvio(
-                client_id=client_id,
-                messaggio=messaggio[:500],
-                stato='errore',
-                errore=str(e)[:500]
-            )
-            db.session.add(invio)
-            db.session.add(UsageEvent(canale='whatsapp', tipo='marketing',
-                                      origine='crm', esito='errore',
-                                      errore=str(e)[:300]))
-            risultati['errori'] += 1
-            risultati['dettagli_errori'].append(f"{client_data.get('nome', '?')}: {str(e)[:50]}")
-    
-    db.session.commit()
-    
-    # Messaggio di risposta
-    if risultati['inviati'] > 0:
-        msg = f"Inviati {risultati['inviati']} messaggi."
-        if risultati['errori'] > 0:
-            msg += f" {risultati['errori']} errori."
-        return jsonify({
-            'success': True,
-            'message': msg,
-            'inviati': risultati['inviati'],
-            'errori': risultati['errori'],
-            'dettagli_errori': risultati['dettagli_errori'][:5],
-            'rimanenti_oggi': disponibili - risultati['inviati']
+    centro_nome = business_info.business_name or 'Centro'
+    messaggi, scartati = [], []
+
+    for client_data in clients[:disponibili]:
+        nome = (client_data.get('nome') or '?').strip()
+        cognome = (client_data.get('cognome') or '').strip()
+        etichetta = (nome + ' ' + cognome).strip()
+
+        cellulare = client_data.get('cellulare', '')
+        if not cellulare:
+            scartati.append(f"{etichetta}: numero mancante")
+            continue
+        numero = _normalize_phone_for_whatsapp(cellulare)
+        if not numero:
+            scartati.append(f"{etichetta}: numero non valido")
+            continue
+
+        messaggio = template
+        for segnaposto, valore in (
+                ('{{nome}}', client_data.get('nome', '')),
+                ('{{cognome}}', client_data.get('cognome', '')),
+                ('{{giorni_assenza}}', str(client_data.get('giorni_assenza', '0'))),
+                ('{{totale_visite}}', str(client_data.get('totale_visite', '0'))),
+                ('{{totale_speso}}', str(client_data.get('totale_speso', '0'))),
+                ('{{servizio_preferito}}', client_data.get('servizio_preferito', '')),
+                ('{{centro}}', centro_nome)):
+            messaggio = messaggio.replace(segnaposto, valore or '')
+
+        messaggi.append({
+            'client_id': client_data.get('id'),
+            'nome': etichetta,
+            'numero': numero,
+            'testo': messaggio,
         })
-    else:
+
+    if not messaggi:
         return jsonify({
             'success': False,
-            'error': 'Nessun messaggio inviato',
-            'dettagli_errori': risultati['dettagli_errori'][:5]
+            'error': 'Nessun messaggio da inviare',
+            'dettagli_errori': scartati[:5]
         }), 400
+
+    accodati = marketing_queue.accoda(
+        current_app._get_current_object(), chiave, messaggi,
+        {'account_id': account_id,
+         'token': unipile_token,
+         'base_url': f'https://{unipile_dsn}'})
+
+    secondi = accodati * marketing_queue.SECONDI_MEDI_PER_MESSAGGIO
+    minuti = max(1, round(secondi / 60.0))
+    msg = (f"{accodati} messaggi in coda. Partono uno ogni 12-20 secondi "
+           f"(circa {minuti} min): il ritmo serve a non far sospendere il numero "
+           f"WhatsApp del negozio. Puoi chiudere la pagina, l'invio va avanti.")
+    if scartati:
+        msg += f" {len(scartati)} scartati per numero mancante o non valido."
+
+    return jsonify({
+        'success': True,
+        'message': msg,
+        'accodati': accodati,
+        'scartati': len(scartati),
+        'dettagli_errori': scartati[:5],
+        'rimanenti_oggi': disponibili - accodati,
+        'secondi_stimati': secondi,
+    })
+
+
+@settings_bp.route('/api/marketing/stato', methods=['GET'])
+def marketing_stato_coda():
+    """Come sta andando la coda del marketing.
+
+    Serve perche' l'invio non finisce piu' insieme alla richiesta HTTP: la
+    pagina lo chiede ogni pochi secondi e mostra a che punto siamo. Chiamabile
+    anche a pagina appena aperta, per ritrovare un invio partito prima.
+    """
+    from ..services import marketing_queue, usage_monitor
+    return jsonify(marketing_queue.stato(usage_monitor.chiave_tenant()))
 
 
 def _normalize_phone_for_whatsapp(numero):

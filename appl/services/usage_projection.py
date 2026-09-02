@@ -107,6 +107,28 @@ SOGLIA_WHATSAPP_ORA         = ('SOGLIA_WHATSAPP_ORA', 0)
 # Fonte: developer.unipile.com/docs/provider-limits-and-restrictions, 28/08/2026.
 SOGLIA_WHATSAPP_MINUTO      = ('SOGLIA_WHATSAPP_MINUTO', 6)
 
+# Quanti messaggi al minuto puo' produrre il RITMO, al massimo. Con l'attesa
+# minima di 12 secondi (usage_monitor.INTERVALLO_MINIMO_S) gli invii cadono a
+# 0, 12, 24, 36, 48: cinque dentro lo stesso minuto d'orologio, il sesto e' gia'
+# nel minuto dopo.
+#
+# Da qui viene una conseguenza che cambia il senso della riga nel pannello: 5
+# al minuto NON e' "quasi al limite", e' il massimo previsto dal codice. Con la
+# banda di attenzione all'80% quella riga diventava gialla lavorando bene, e un
+# allarme che scatta sul funzionamento normale e' un allarme che si impara a
+# ignorare.
+#
+# Il tetto di 6 resta, ma cambia mestiere: non avvisa che ci si sta
+# avvicinando, dice che qualcosa ha mandato FUORI dal ritmo - un invio che
+# scavalca usage_monitor, come oggi fa ancora quello di assistenza. Per questo
+# la riga non ha piu' la banda gialla (`avvisa_prima=False`) ma tiene il rosso.
+#
+# ATTENZIONE: questo numero e' legato a INTERVALLO_MINIMO_S. Se cambia quello,
+# cambia anche questo (60 // INTERVALLO_MINIMO_S). Non si importa usage_monitor
+# per calcolarlo perche' quello si porta dietro flask e il database, e questo
+# modulo e' volutamente fatto di sola aritmetica.
+MAX_AL_MINUTO_DAL_RITMO = 5
+
 # Sopra questa percentuale si avvisa PRIMA di sbattere. Un allarme che scatta
 # al 100% e' un allarme che scatta a danno avvenuto.
 ATTENZIONE_PCT = 80.0
@@ -278,12 +300,28 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
         'WhatsApp': 'WhatsApp puo’ sospendere il numero del negozio',
     }
 
-    def _soglia(canale, periodo, usati, tetto, previsti=None):
+    def _soglia(canale, periodo, usati, tetto, previsti=None, quando=None,
+                chi=None, avvisa_prima=True):
         """Un tetto solo, con il suo livello di allarme.
 
         `livello` e' cio' che il pannello colora: 'ok' / 'attenzione' / 'superata'.
         Si avvisa all'80% e non al 100% perche' un allarme che scatta quando il
         limite e' gia' stato raggiunto arriva a messaggi gia' respinti.
+
+        `quando`: per i picchi, il momento in cui sono avvenuti. Un picco e' un
+        fatto ISOLATO dentro una finestra di 30 giorni, non uno stato: senza la
+        data la riga resta gialla per un mese e allarma per una cosa gia'
+        passata, magari gia' corretta.
+
+        `chi`: in quale negozio e' successo. Solo per i picchi al minuto, che
+        sono il massimo di UN negozio; quelli orari sono la somma di tutti e un
+        nome li' sarebbe una bugia. Senza il nome, davanti a un picco non si sa
+        nemmeno dove andare a guardare.
+
+        `avvisa_prima=False` toglie la banda gialla e lascia solo il rosso. Si
+        usa dove il valore e' gia' limitato dal codice e avvicinarsi al tetto e'
+        il comportamento previsto, non un segnale: li' l'80% scatterebbe
+        lavorando normalmente. Vedi MAX_AL_MINUTO_DAL_RITMO.
         """
         if not tetto:
             return None
@@ -296,7 +334,8 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
             'percentuale': round(pct, 1),
             'margine': int(round(tetto - usati)),
             'livello': ('superata' if pct >= 100 else
-                        'attenzione' if pct >= ATTENZIONE_PCT else 'ok'),
+                        'attenzione' if (avvisa_prima and pct >= ATTENZIONE_PCT)
+                        else 'ok'),
             'rischio': RISCHIO.get(canale, ''),
         }
         if previsti is not None:
@@ -306,6 +345,19 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
                 'sfora_a_obiettivo': previsti > tetto,
                 'tenant_obiettivo': tenant_obiettivo,
             })
+        # Il pannello ha una riga sola di testo sotto al nome: nome del
+        # negozio e momento vanno li', in chiaro. Non in un tooltip: questa
+        # pagina non carica Bootstrap, e un dato che si vede solo passandoci
+        # sopra col mouse e' un dato che non si stampa e non si legge da tablet.
+        if chi or quando:
+            pezzi = [periodo]
+            if chi:
+                pezzi.append(chi)
+            if quando:
+                pezzi.append('il %s' % quando)
+            voce['periodo'] = ' — '.join([pezzi[0], ', '.join(pezzi[1:])])
+            voce['quando'] = quando
+            voce['chi'] = chi
         return voce
 
     picchi = picchi_orari or {}
@@ -318,13 +370,23 @@ def proiezione_messaggi(invii_per_canale_per_tenant, n_tenant, tenant_obiettivo=
         # si somma a quello di un altro se non mandano nello stesso istante, e
         # moltiplicarlo per 100 produrrebbe un allarme finto.
         _soglia('WhatsApp', "nell'ora di punta", picchi.get('whatsapp_ora', 0),
-                int(_euro(*SOGLIA_WHATSAPP_ORA))),
+                int(_euro(*SOGLIA_WHATSAPP_ORA)),
+                quando=picchi.get('whatsapp_ora_quando')),
+        # Niente banda gialla qui: fino a MAX_AL_MINUTO_DAL_RITMO e' il ritmo
+        # che lavora come deve. Resta il rosso oltre il tetto, che vuol dire
+        # invii partiti fuori dal ritmo.
         _soglia('WhatsApp', 'nel minuto di punta', picchi.get('whatsapp_minuto', 0),
-                int(_euro(*SOGLIA_WHATSAPP_MINUTO))),
+                int(_euro(*SOGLIA_WHATSAPP_MINUTO)),
+                quando=picchi.get('whatsapp_minuto_quando'),
+                chi=picchi.get('whatsapp_minuto_chi'),
+                avvisa_prima=False),
         _soglia('E-mail', "nell'ora di punta", picchi.get('email_ora', 0),
-                int(_euro(*SOGLIA_EMAIL_ORA))),
+                int(_euro(*SOGLIA_EMAIL_ORA)),
+                quando=picchi.get('email_ora_quando')),
         _soglia('E-mail', 'nel minuto di punta', picchi.get('email_minuto', 0),
-                int(_euro(*SOGLIA_EMAIL_MINUTO))),
+                int(_euro(*SOGLIA_EMAIL_MINUTO)),
+                quando=picchi.get('email_minuto_quando'),
+                chi=picchi.get('email_minuto_chi')),
     ]
     res['soglie'] = [s for s in soglie if s]
     res['picchi'] = {

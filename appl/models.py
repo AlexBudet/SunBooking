@@ -7,7 +7,7 @@ from sqlalchemy import JSON, DateTime
 from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import validates
 from appl import db
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 from pytz import timezone as pytz_timezone
 from werkzeug.security import generate_password_hash
 
@@ -980,7 +980,24 @@ class UsageEvent(db.Model):
     __tablename__ = 'usage_events'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    # ATTENZIONE al default lato Python: NON basta il server_default.
+    # In PostgreSQL now() e' transaction_timestamp(), cioe' l'istante in cui e'
+    # cominciata la TRANSAZIONE, non quello della INSERT. La route che manda un
+    # WhatsApp interroga il database (BusinessInfo, il cliente...) PRIMA di
+    # aspettare il proprio turno: la transazione e' gia' aperta, e l'ora
+    # scritta qui finiva per essere quella di inizio richiesta, secondi prima
+    # della partenza vera del messaggio.
+    #
+    # Su una riga di conteggio sarebbe un dettaglio. Qui no: questa colonna E'
+    # l'orologio del ritmo fra un WhatsApp e l'altro (usage_monitor). Misurando
+    # da un istante troppo indietro, l'attesa calcolata era sempre piu' corta
+    # del dovuto e la distanza fra due invii si assestava a META' di quella
+    # richiesta - misurato il 02/09/2026 su sunexp3: 13 invii distanziati 4-8
+    # secondi invece dei 12-20, otto dei quali nello stesso minuto.
+    #
+    # Il server_default resta per chi scrive senza SQLAlchemy (l'app booking).
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now(),
+                           default=lambda: datetime.now(timezone.utc),
                            nullable=False, index=True)
 
     # 'whatsapp' | 'email'

@@ -618,7 +618,17 @@ function schedaLimiti(limiti) {
     return fmt.format(l.usato) + ' / ' + fmt.format(l.limite);
   }
 
-  const ordinate = limiti.slice().sort(function (a, b) { return b.percentuale - a.percentuale; });
+  // Prima la GRAVITA', poi la percentuale. Non era necessario finche' il
+  // livello seguiva la percentuale; adesso non e' piu' vero: la riga del picco
+  // WhatsApp al minuto sta all'83% ed e' 'ok' apposta (83% e' il massimo che il
+  // ritmo produce). Ordinando per sola percentuale finiva prima lei, e il
+  // titolo della scheda leggeva il suo livello dicendo "tutti i limiti sono
+  // lontani" mentre piu' sotto un'altra riga era in ATTENZIONE.
+  const gravita = {superata: 2, attenzione: 1, ok: 0};
+  const ordinate = limiti.slice().sort(function (a, b) {
+    const d = (gravita[b.livello] || 0) - (gravita[a.livello] || 0);
+    return d !== 0 ? d : b.percentuale - a.percentuale;
+  });
   const peggiore = ordinate[0];
 
   const titolo = peggiore.livello === 'superata'
