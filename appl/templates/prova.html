@@ -48,6 +48,10 @@
     .credenziali b { display: inline-block; min-width: 92px; color: #555; font-weight: normal; }
     .credenziali code { font-size: 1.15rem; background: #fff; padding: 3px 8px;
                         border: 1px solid #d6e6d6; border-radius: 4px; letter-spacing: .5px; }
+    .copia { margin-left: 8px; padding: 4px 10px; font-size: .8rem; cursor: pointer;
+             border: 1px solid #cbd8cb; background: #fff; border-radius: 4px; color: #4a7c59; }
+    .copia:hover { background: #eef5ee; }
+    .copia.fatto { background: #4a7c59; color: #fff; border-color: #4a7c59; }
     .entra { display: block; text-align: center; margin-top: 14px; padding: 13px;
              background: #4a7c59; color: #fff; text-decoration: none; border-radius: 6px; font-size: 1.05rem; }
     .nota-legale { margin-top: 22px; padding-top: 14px; border-top: 1px solid #e2e2e2;
@@ -72,7 +76,13 @@
   <div class="credenziali">
     <div><b>Indirizzo</b> <code>{{ esito.url }}</code></div>
     <div><b>Utente</b> <code>{{ esito.username }}</code></div>
-    <div><b>Password</b> <code>{{ esito.password }}</code></div>
+    <div>
+      <b>Password</b> <code id="provaPassword">{{ esito.password }}</code>
+      {# Una password generata si sbaglia a ricopiare: il pulsante toglie di
+         mezzo l'unico passaggio che puo' far fallire il primo accesso. #}
+      <button type="button" class="copia" id="btnCopia"
+              onclick="copiaPassword()">copia</button>
+    </div>
   </div>
 
   <a class="entra" href="{{ esito.link }}">Entra nella prova</a>
@@ -218,6 +228,43 @@
 </div>
 
 <script>
+// Copia della password. `navigator.clipboard` esiste solo su https (qui c'e'),
+// ma su qualche browser vecchio no: in quel caso si ripiega sulla selezione
+// del testo, che almeno lascia fare un copia-incolla a mano.
+function copiaPassword() {
+  var codice = document.getElementById('provaPassword');
+  var bottone = document.getElementById('btnCopia');
+  if (!codice) return;
+  var testo = codice.textContent.trim();
+
+  function fatto() {
+    bottone.textContent = 'copiata';
+    bottone.classList.add('fatto');
+    setTimeout(function () {
+      bottone.textContent = 'copia';
+      bottone.classList.remove('fatto');
+    }, 2000);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(testo).then(fatto, seleziona);
+  } else {
+    seleziona();
+  }
+
+  function seleziona() {
+    var intervallo = document.createRange();
+    intervallo.selectNodeContents(codice);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(intervallo);
+    try {
+      if (document.execCommand('copy')) { fatto(); return; }
+    } catch (_) {}
+    bottone.textContent = 'copiala a mano';
+  }
+}
+
 // La preparazione della prova impiega qualche secondo (si costruisce un centro
 // intero, con appuntamenti e scontrini). Dirlo evita il doppio click, che
 // altrimenti aprirebbe due richieste e brucerebbe due slot.

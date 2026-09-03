@@ -95,6 +95,12 @@ OPERATORI = [
     ("Martina", "Conti",   "estetista"),
 ]
 
+# Apertura del centro finto: 9-19 tutti i giorni tranne la domenica. La
+# griglia dell'agenda mostra pero' 8-20 (vedi BusinessInfo piu' sotto), cosi'
+# il primo appuntamento non sta incollato al bordo.
+ORA_APERTURA = time(9, 0)
+ORA_CHIUSURA = time(19, 0)
+
 GIORNI_PASSATO = 21
 GIORNI_FUTURO = 14
 CHIUSO = {6}  # domenica (weekday(): lunedi = 0)
@@ -185,13 +191,21 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
 
     with Session(engine) as s:
         # ── Dati del centro ────────────────────────────────────────────────
+        # ATTENZIONE ai nomi, sono controintuitivi e li avevo invertiti:
+        #   opening_time / closing_time         = la fascia VISIBILE in agenda
+        #       (calendar.html: range(opening_time.hour, closing_time.hour + 1))
+        #   active_opening_time / active_closing = l'apertura VERA del centro
+        #       (fuori da questa gli slot prendono la classe calendar-closed)
+        # Con le due coincidenti, il primo appuntamento della giornata finiva
+        # incollato al bordo superiore della griglia e sembrava cominciare prima
+        # della prima cella. Un'ora di margine sopra e una sotto lo evitano.
         s.add(BusinessInfo(
             business_name=nome_centro,
             city='Milano',
-            opening_time=time(9, 0),
-            closing_time=time(19, 30),
+            opening_time=time(8, 0),
+            closing_time=time(20, 0),
             active_opening_time=time(9, 0),
-            active_closing_time=time(19, 30),
+            active_closing_time=time(19, 0),
             closing_days=json.dumps(['Domenica']),
             vat_percentage=22.0,
             # Nessun invio automatico da uno slot demo: se il potenziale cliente
@@ -289,10 +303,9 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
                 # sempre presenti non somiglia a nessun centro vero.
                 if i == 1 and g.weekday() == 0:
                     continue
-                fine = time(18, 0) if g.weekday() == 5 else time(19, 30)
                 s.add(OperatorShift(operator_id=op.id, shift_date=g,
-                                    shift_start_time=time(9, 0),
-                                    shift_end_time=fine))
+                                    shift_start_time=ORA_APERTURA,
+                                    shift_end_time=ORA_CHIUSURA))
                 n_turni += 1
 
         # ── Appuntamenti ───────────────────────────────────────────────────
@@ -316,7 +329,7 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
 
         for g in _giorni_apertura(oggi - timedelta(days=GIORNI_PASSATO),
                                   oggi + timedelta(days=GIORNI_FUTURO)):
-            fine_turno = time(18, 0) if g.weekday() == 5 else time(19, 30)
+            fine_turno = ORA_CHIUSURA
             # Il futuro non e' ancora pieno: le prenotazioni arrivano piano piano,
             # e piu' e' lontano il giorno piu' e' vuoto.
             atteso = RIEMPIMENTO[g.weekday()]
@@ -328,7 +341,7 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
                 if i == 1 and g.weekday() == 0:
                     continue  # il turno che manca, come nei turni seminati sopra
 
-                orario = datetime.combine(g, time(9, 0))
+                orario = datetime.combine(g, ORA_APERTURA)
                 chiusura = datetime.combine(g, fine_turno)
                 while orario < chiusura:
                     if rng.random() > atteso:

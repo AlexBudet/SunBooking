@@ -4222,6 +4222,36 @@ function configureMobileModalButtons(modal, block) {
   document.addEventListener('click', intercettaDemo, true);
 })();
 </script>
+
+{% if selected_date_str == today_str %}
+<script>
+// ===== LA PROVA SI APRE SULL'ORA DI ADESSO =====
+// Aprendo in cima alla giornata si vedono solo appuntamenti gia' pagati, cioe'
+// tutti grigi: sembra un programma spento. Portando la vista sull'ora corrente
+// si vede il lavoro in corso, che e' quello che si sta cercando di mostrare.
+//
+// Solo nella prova, e solo se la pagina non aveva gia' un suo punto dove
+// andare (un ritorno dalla cassa, un ?ora=HH:MM): quello vince sempre, e la
+// lettura va fatta ADESSO, prima che il gestore di calendar.js la consumi.
+(function () {
+  var richiestoAltrove = false;
+  try {
+    richiestoAltrove = sessionStorage.getItem('scrollToHour') !== null
+                    || /[?&]ora=/.test(window.location.search);
+  } catch (_) {}
+
+  document.addEventListener('DOMContentLoaded', function () {
+    if (richiestoAltrove) return;
+    var adesso = new Date();
+    setTimeout(function () {
+      if (typeof scrollToHourMinute === 'function') {
+        scrollToHourMinute(adesso.getHours(), adesso.getMinutes());
+      }
+    }, 300);   // dopo che le altezze dei quarti d'ora sono state applicate
+  });
+})();
+</script>
+{% endif %}
 {% endif %}
 {% if hide_cassa and not is_demo %}
 <style>
