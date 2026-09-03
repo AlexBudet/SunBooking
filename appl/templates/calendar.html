@@ -4223,6 +4223,10 @@ function configureMobileModalButtons(modal, block) {
 })();
 </script>
 
+{# La visita guidata vive qui e non in base.html: tutti i suoi passi puntano a
+   elementi dell'Agenda, e caricarla su Report o altrove sarebbe peso inutile. #}
+{% include '_demo_tour.html' %}
+
 {% if selected_date_str == today_str %}
 <script>
 // ===== LA PROVA SI APRE SULL'ORA DI ADESSO =====

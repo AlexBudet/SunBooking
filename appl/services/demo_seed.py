@@ -388,6 +388,38 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
                         orario += timedelta(minutes=5 - avanzo)
         s.flush()
 
+        # ── Blocchi nota (i "blocchi off") ─────────────────────────────────
+        # Un appuntamento intestato al cliente "dummy" in agenda non e' un
+        # appuntamento ma un promemoria: niente popup, niente cassa, solo un
+        # riquadro con scritto cosa succede a quell'ora. Servono anche alla
+        # visita guidata, che altrimenti non avrebbe un blocco off da mostrare.
+        segnaposto = Client(cliente_nome='dummy', cliente_cognome='dummy',
+                            cliente_cellulare='0', cliente_sesso='-', is_deleted=False)
+        s.add(segnaposto)
+        s.flush()
+
+        promemoria = [
+            (0,  time(13, 0), 30, 'Consegna prodotti'),
+            (0,  time(18, 30), 30, 'Riordino cabina'),
+            (2,  time(9, 0), 60, 'Riunione con le ragazze'),
+            (-3, time(17, 0), 45, 'Corso di aggiornamento'),
+        ]
+        n_note = 0
+        for scarto, ora, durata, testo in promemoria:
+            giorno = oggi + timedelta(days=scarto)
+            if giorno.weekday() in CHIUSO:
+                continue
+            s.add(Appointment(
+                client_id=segnaposto.id, operator_id=operatori[0].id,
+                service_id=servizi[0].id,
+                start_time=datetime.combine(giorno, ora), duration=durata,
+                colore='#e9ecef', note=testo,
+                stato=AppointmentStatus.DEFAULT,
+                source=AppointmentSource.gestionale,
+            ))
+            n_note += 1
+        s.flush()
+
         # ── Scontrini ──────────────────────────────────────────────────────
         # Uno per cliente per giornata, con dentro tutte le voci di quel giorno:
         # e' come paga davvero un cliente, e da' uno scontrino medio credibile.
@@ -444,6 +476,7 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
             'clienti': len(clienti),
             'turni': n_turni,
             'appuntamenti': len(appuntamenti),
+            'blocchi_nota': n_note,
             'scontrini': n_scontrini,
             'incasso': round(incasso, 2),
             'dal': str(oggi - timedelta(days=GIORNI_PASSATO)),

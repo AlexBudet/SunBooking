@@ -1,0 +1,586 @@
+{# ========== VISITA GUIDATA DELLA PROVA ==========
+   Inclusa da calendar.html solo quando is_demo.
+
+   PERCHE'
+   Chi apre la demo trova un'agenda piena e non sa da dove si comincia. Una
+   riga di istruzioni non la legge nessuno; un giro di dieci minuti nemmeno.
+   Qui i passi sono corti, uno per elemento, nell'ordine in cui si usano
+   davvero: prima si crea un appuntamento, poi lo si sposta, poi lo si chiude.
+
+   COME
+   - Il riflettore e' fatto di quattro pannelli attorno all'elemento, non di un
+     velo bucato: cosi' l'elemento sotto resta CLICCABILE e chi vuole prova
+     mentre legge.
+   - Un passo che non trova il suo elemento viene saltato da solo. L'agenda
+     cambia da un giorno all'altro (un blocco pagato oggi puo' non esserci
+     domani) e un passo che punta al vuoto bloccherebbe tutto il giro.
+   - Per far comparire la barra dei pulsanti si aggiunge al blocco la classe
+     `active-popup`, che e' quella che usa gia' l'applicazione. Nessun
+     display:none inventato qui: la gestione dei popup in touch e' delicata.
+   - Dove serve, il passo si prepara la scena da solo (apre la finestra del
+     nuovo appuntamento simulando il click su una cella libera) e la richiude
+     quando si va oltre.
+
+   DOVE SI FERMA
+   `localStorage` tiene il numero del passo raggiunto: si esce quando si vuole
+   e si riprende da li', anche il giorno dopo. E' una preferenza della
+   postazione, come la scelta mouse/dito. #}
+
+<style>
+  #tourVelo { position: fixed; inset: 0; z-index: 30000; pointer-events: none; }
+  .tour-pannello {
+    position: fixed; background: rgba(24, 20, 22, .62); pointer-events: auto;
+    transition: all .18s ease;
+  }
+  #tourAlone {
+    position: fixed; border: 3px solid #ffc107; border-radius: 8px;
+    box-shadow: 0 0 0 3px rgba(255,193,7,.35); pointer-events: none;
+    transition: all .18s ease; z-index: 30001;
+  }
+  #tourCard {
+    position: fixed; z-index: 30002; width: 330px; max-width: calc(100vw - 24px);
+    background: #fff; border-radius: 12px; padding: 18px 18px 14px;
+    box-shadow: 0 10px 34px rgba(0,0,0,.34); pointer-events: auto;
+    font-family: inherit;
+  }
+  #tourCard h6 {
+    margin: 0 0 8px; font-size: 1.02rem; font-weight: 700; color: #4a3543;
+  }
+  #tourCard p { margin: 0 0 14px; font-size: .93rem; line-height: 1.55; color: #444; }
+  #tourCard .tour-piede {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  #tourCard .tour-conta { font-size: .78rem; color: #999; }
+  #tourCard button { font-size: .86rem; padding: 6px 14px; border-radius: 6px; cursor: pointer; }
+  #tourCard .tour-avanti { background: #87647c; color: #fff; border: 0; }
+  #tourCard .tour-indietro { background: #fff; color: #666; border: 1px solid #ddd; }
+  #tourCard .tour-esci {
+    background: none; border: 0; color: #999; font-size: .78rem;
+    text-decoration: underline; padding: 0;
+  }
+  /* Il richiamo per riprendere: sempre a portata, mai in mezzo ai piedi. */
+  #tourAvvio {
+    position: fixed; right: 14px; bottom: 14px; z-index: 29000;
+    background: #87647c; color: #fff; border: 0; border-radius: 22px;
+    padding: 10px 16px; font-size: .86rem; box-shadow: 0 4px 14px rgba(0,0,0,.24);
+    cursor: pointer;
+  }
+  #tourAvvio:hover { background: #7a5870; }
+  #tourMenu {
+    position: fixed; right: 14px; bottom: 58px; z-index: 29001; background: #fff;
+    border-radius: 10px; box-shadow: 0 6px 22px rgba(0,0,0,.22); padding: 6px;
+    display: none;
+  }
+  #tourMenu button {
+    display: block; width: 100%; text-align: left; background: none; border: 0;
+    padding: 9px 14px; font-size: .88rem; cursor: pointer; border-radius: 6px; color: #333;
+  }
+  #tourMenu button:hover { background: #f2eef1; }
+  @media (max-width: 640px) {
+    #tourCard { width: calc(100vw - 24px); }
+  }
+</style>
+
+<div id="tourVelo" style="display:none;">
+  <div class="tour-pannello" id="tourSu"></div>
+  <div class="tour-pannello" id="tourGiu"></div>
+  <div class="tour-pannello" id="tourSx"></div>
+  <div class="tour-pannello" id="tourDx"></div>
+</div>
+<div id="tourAlone" style="display:none;"></div>
+<div id="tourCard" style="display:none;">
+  <h6 id="tourTitolo"></h6>
+  <p id="tourTesto"></p>
+  <div class="tour-piede">
+    <button type="button" class="tour-esci" onclick="tourEsci()">esci</button>
+    <span class="tour-conta" id="tourConta"></span>
+    <span>
+      <button type="button" class="tour-indietro" onclick="tourIndietro()">Indietro</button>
+      <button type="button" class="tour-avanti" onclick="tourAvanti()">Avanti</button>
+    </span>
+  </div>
+</div>
+
+<button type="button" id="tourAvvio" onclick="tourApriMenu()">Visita guidata</button>
+<div id="tourMenu">
+  <button type="button" onclick="tourRiprendi()" id="tourVoceRiprendi">Riprendi da dove ero</button>
+  <button type="button" onclick="tourRicomincia()">Ricomincia da capo</button>
+  <button type="button" onclick="tourChiudiMenu()">Chiudi</button>
+</div>
+
+<script>
+(function () {
+  // Marcatore: dice a colpo d'occhio se questo script e' stato eseguito
+  // davvero, non solo inserito nella pagina. Serve ai collaudi.
+  window.__tourCaricato = true;
+
+  var CHIAVE_PASSO = 'tosca_demo_tour_passo';
+  var CHIAVE_STATO = 'tosca_demo_tour_stato';   // mai | in_corso | finita
+
+  /* ---------------------------------------------------------------
+     I PASSI, nell'ordine in cui si usano le cose davvero.
+     `sel` puo' essere una stringa o una funzione che torna l'elemento.
+     `prima` prepara la scena, `dopo` la smonta.
+     Un passo che non trova il suo elemento viene saltato.
+     --------------------------------------------------------------- */
+  function bloccoNormale() {
+    var b = document.querySelectorAll(
+      '.appointment-block:not(.status-2):not(.note-off):not(.disable-popup)');
+    for (var i = 0; i < b.length; i++) {
+      if (visibile(b[i]) && b[i].offsetHeight > 40) return b[i];
+    }
+    return null;
+  }
+  function dentroBlocco(selettore) {
+    return function () {
+      var b = bloccoNormale();
+      return b ? b.querySelector(selettore) : null;
+    };
+  }
+  function mostraPopup() {
+    var b = bloccoNormale();
+    if (b) b.classList.add('active-popup');
+  }
+  function nascondiPopup() {
+    document.querySelectorAll('.appointment-block.active-popup').forEach(function (b) {
+      b.classList.remove('active-popup');
+    });
+  }
+  function cellaLibera() {
+    var celle = document.querySelectorAll('.selectable-cell:not(.calendar-closed)');
+    for (var i = 0; i < celle.length; i++) {
+      var c = celle[i];
+      if (visibile(c) && !c.querySelector('.appointment-block')) return c;
+    }
+    return null;
+  }
+
+  var TAPPE = [
+    /* ---------- 1. IL NAVIGATORE: da qui nascono gli appuntamenti ---------- */
+    {
+      sel: '#appointmentNavigator',
+      titolo: 'Si comincia da qui',
+      testo: 'Questo è il navigatore. Funziona come un vassoio: ci appoggi sopra ' +
+             'la cliente e i servizi, poi lo posi in agenda. Tre secondi in tutto, ' +
+             'ed è il gesto che farai cento volte al giorno.'
+    },
+    {
+      sel: '#clientSearchInputNav',
+      titolo: 'Prima la cliente',
+      testo: 'Scrivi due o tre lettere del nome, del cognome o del numero di ' +
+             'cellulare: i nomi compaiono mentre digiti. Clicca quello giusto e ' +
+             'resta agganciato al vassoio.'
+    },
+    {
+      sel: '.btn-add-client-nav',
+      titolo: 'Cliente nuova? Il "+"',
+      testo: 'Se non c\'è ancora, il "+" apre la scheda per crearla al volo: ' +
+             'nome, cognome, cellulare e via. Non devi uscire dall\'agenda né ' +
+             'perdere quello che stavi facendo.'
+    },
+    {
+      sel: '#serviceInputNav',
+      titolo: 'Poi il servizio',
+      testo: 'Stessa cosa: scrivi le prime lettere e scegli. La durata la mette ' +
+             'lui, presa dal listino. Puoi aggiungerne più di uno, se la cliente ' +
+             'fa manicure e ceretta di fila.'
+    },
+    {
+      sel: '#selectedServicesList',
+      titolo: 'Il blocco che stai preparando',
+      testo: 'Qui vedi cosa hai messo sul vassoio. È l\'anteprima ' +
+             'dell\'appuntamento: se ti sei sbagliata, togli e rifai, tanto in ' +
+             'agenda non è ancora finito niente.'
+    },
+    {
+      sel: '#navigatorHint',
+      titolo: 'E adesso lo posi',
+      testo: 'Con cliente e servizio pronti, clicca sulla cella dell\'ora che ti ' +
+             'serve, nella colonna di chi lo fa. L\'appuntamento nasce ' +
+             'lì, senza altre finestre da riempire.'
+    },
+    {
+      sel: '#clearNavigatorBtn',
+      titolo: 'Ho cambiato idea',
+      testo: '"Svuota" pulisce il vassoio e si riparte. Nessun danno: finché non ' +
+             'clicchi in agenda, non è stato scritto niente.'
+    },
+
+    /* ---------- 2. LA FINESTRA DELL'APPUNTAMENTO ---------- */
+    {
+      /* Questo passo NON apre la finestra da solo: la fa aprire a chi sta
+         provando. Il primo tentativo la apriva simulando il click su una cella
+         libera, ma quel click dipende da troppe cose (cella giusta, navigatore
+         vuoto, tempi di apertura) e quando falliva la visita restava
+         inchiodata. Chiedere il gesto e' piu' robusto - e anche piu' utile:
+         il gesto se lo ricorda chi lo fa, non chi lo guarda fare. */
+      sel: function () { return cellaLibera() || document.querySelector('.calendar-table'); },
+      titolo: 'Prova tu: clicca una cella libera',
+      testo: 'Senza niente sul vassoio, un click su una casella vuota apre la ' +
+             'finestra dell\'appuntamento: stessa cosa di prima, ma con calma. ' +
+             'Comoda quando la cliente è al telefono e ti detta le cose una alla ' +
+             'volta. Provaci: la visita va avanti da sola appena si apre.',
+      prima: function (vai) {
+        if (typeof clearNavigator === 'function') { try { clearNavigator(); } catch (_) {} }
+        vai();
+      },
+      attendi: '#CreateAppointmentModal.show'
+    },
+    {
+      sel: '#CreateAppointmentModal #clientSearchInput',
+      titolo: 'La cliente, di nuovo',
+      testo: 'Cerchi per nome, cognome o cellulare. Se la cliente ha più numeri o ' +
+             'due omonime, vedi anche il recapito: così non prenoti alla persona ' +
+             'sbagliata.'
+    },
+    {
+      sel: '#CreateAppointmentModal .btn-add-client-square',
+      titolo: 'Il "+" per la cliente nuova',
+      testo: 'Anche qui il "+" crea la scheda sul momento. La trovi già scelta ' +
+             'quando torni indietro: niente da riscrivere.'
+    },
+    {
+      sel: function () {
+        return document.querySelector('#CreateAppointmentModal .client-info-link')
+            || document.querySelector('.client-info-link');
+      },
+      titolo: 'La "i" racconta la cliente',
+      testo: 'La "i" apre la scheda: telefono, e-mail, note e ultimi ' +
+             'appuntamenti. Serve per sapere in due secondi cosa le hai fatto ' +
+             'l\'ultima volta, senza rovistare in un quaderno.'
+    },
+    {
+      sel: '#CreateAppointmentModal #serviceSearchInput',
+      titolo: 'Il servizio',
+      testo: 'Scrivi le prime lettere e scegli. La durata arriva dal listino, ma ' +
+             'se quella cliente ci mette sempre un quarto d\'ora in più la puoi ' +
+             'allungare a mano.',
+      dopo: function () {
+        var m = document.getElementById('CreateAppointmentModal');
+        if (m && window.bootstrap) {
+          var istanza = bootstrap.Modal.getInstance(m);
+          if (istanza) istanza.hide();
+        }
+      }
+    },
+
+    /* ---------- 3. IL BLOCCO IN AGENDA ---------- */
+    {
+      sel: bloccoNormale,
+      titolo: 'Questo è un appuntamento',
+      testo: 'Un rettangolo colorato: nome della cliente, servizio, ora. Il ' +
+             'colore del blocco è suo per tutta la giornata, così se torna nel ' +
+             'pomeriggio la riconosci al volo.'
+    },
+    {
+      sel: dentroBlocco('.drag-handle'),
+      titolo: 'Trascinalo dove vuoi',
+      testo: 'Prendilo da qui e spostalo: altra ora, altra collega, altro giorno ' +
+             'se passi avanti con le frecce. La cliente chiede di spostare di ' +
+             'mezz\'ora? Lo trascini e hai finito.'
+    },
+    {
+      sel: dentroBlocco('.resize-handle'),
+      titolo: 'Allungalo o accorcialo',
+      testo: 'Il bordo in basso allunga la durata. Il trattamento in cabina sta ' +
+             'andando per le lunghe e ci vuole un quarto d\'ora in più? Tiri giù, ' +
+             'e l\'agenda si riscrive da sola.'
+    },
+    {
+      sel: dentroBlocco('.delete-icon'),
+      titolo: 'Il cestino',
+      testo: 'Cancella l\'appuntamento. Chiede conferma: non si butta via una ' +
+             'prenotazione per un click storto.'
+    },
+    {
+      sel: dentroBlocco('.my-spia'),
+      titolo: 'È arrivata',
+      testo: 'Questa spia dice che la cliente è in istituto. Un colpo d\'occhio e ' +
+             'sai chi c\'è dentro e chi stai ancora aspettando.'
+    },
+    {
+      sel: dentroBlocco('.btn-popup.no-show-button, .btn-popup.touch-no-show, [class*="no-show"]'),
+      titolo: 'Non si è presentata',
+      testo: 'Segna il buco senza cancellare l\'appuntamento: resta scritto che ' +
+             'quel giorno non è venuta. Nel Report vedi quante ne saltano, e a chi.',
+      prima: function (vai) { mostraPopup(); vai(); }
+    },
+    {
+      sel: dentroBlocco('.btn-popup.sposta'),
+      titolo: 'Togli e sposta',
+      testo: 'Stacca il blocco e te lo tiene in mano finché non decidi dove ' +
+             'metterlo: comodo per spostarlo lontano, in un altro giorno.',
+      prima: function (vai) { mostraPopup(); vai(); }
+    },
+    {
+      sel: dentroBlocco('.btn-popup.copia'),
+      titolo: 'Copia',
+      testo: 'Duplica l\'appuntamento. La cliente che viene ogni giovedì alla ' +
+             'stessa ora si prenota una volta e si ricopia.',
+      prima: function (vai) { mostraPopup(); vai(); }
+    },
+    {
+      sel: dentroBlocco('.btn-popup.colore'),
+      titolo: 'Il colore del blocco',
+      testo: 'Cambia il colore del rettangolo in agenda. Ognuna si fa il suo ' +
+             'codice: il rosa per chi paga con la tessera, il verde per le clienti ' +
+             'nuove. Fai come ti viene comodo.',
+      prima: function (vai) { mostraPopup(); vai(); }
+    },
+    {
+      sel: dentroBlocco('.btn-popup.aggiungi-servizi'),
+      titolo: 'Aggiungi un servizio',
+      testo: 'La cliente è già sul lettino e chiede anche le sopracciglia: lo ' +
+             'aggiungi qui, il blocco si allunga e il conto si aggiorna.',
+      prima: function (vai) { mostraPopup(); vai(); }
+    },
+    {
+      sel: dentroBlocco('.btn-popup.nota'),
+      titolo: 'La nota',
+      testo: 'Due righe attaccate all\'appuntamento: "ha la pelle sensibile", ' +
+             '"la volta scorsa la cera l\'ha irritata". Le ritrovi la prossima volta.',
+      prima: function (vai) { mostraPopup(); vai(); }
+    },
+    {
+      sel: dentroBlocco('.btn-popup.whatsapp-btn'),
+      titolo: 'Il WhatsApp',
+      testo: 'Manda il promemoria alla cliente dal numero del centro, con data e ' +
+             'ora già scritte. Nella prova è spento: te lo raccontiamo e basta.',
+      prima: function (vai) { mostraPopup(); vai(); }
+    },
+    {
+      sel: dentroBlocco('.btn-popup.pagamento'),
+      titolo: 'L\'euro: si va in cassa',
+      testo: 'Da qui l\'appuntamento diventa scontrino, senza riscrivere niente. ' +
+             'Nella prova la Cassa è spenta: cliccalo e ti raccontiamo cosa fa.',
+      prima: function (vai) { mostraPopup(); vai(); },
+      dopo: nascondiPopup
+    },
+
+    /* ---------- 4. GLI ALTRI DUE TIPI DI BLOCCO ---------- */
+    {
+      sel: function () {
+        var b = document.querySelectorAll('.appointment-block.note-off');
+        for (var i = 0; i < b.length; i++) if (visibile(b[i])) return b[i];
+        return null;
+      },
+      titolo: 'Il blocco promemoria',
+      testo: 'Grigio e senza cliente: non è un appuntamento ma un appunto sulla ' +
+             'giornata — la consegna dei prodotti, la riunione, la cabina da ' +
+             'sistemare. Occupa il posto, così nessuno ci prenota sopra.'
+    },
+    {
+      sel: function () {
+        var b = document.querySelectorAll('.appointment-block.status-2');
+        for (var i = 0; i < b.length; i++) if (visibile(b[i])) return b[i];
+        return null;
+      },
+      titolo: 'Il blocco già pagato',
+      testo: 'Quando l\'appuntamento è stato incassato diventa grigio con la ' +
+             'scritta PAGATO. A fine giornata guardi la colonna e sai subito chi ' +
+             'ha saldato e chi no, senza aprire niente.'
+    },
+    {
+      sel: '#appointmentNavigator',
+      titolo: 'Finito. Ora tocca a te',
+      testo: 'Prova a creare un appuntamento vero: nessuno si offende, i dati ' +
+             'sono finti. Se ti perdi, il pulsante "Visita guidata" in basso a ' +
+             'destra rifà il giro quando vuoi, anche solo un pezzo.'
+    }
+  ];
+
+  /* --------------------------------------------------------------- */
+  var passo = -1;
+  var vigile = null;          // controllo periodico dei passi che aspettano un gesto
+  var velo = document.getElementById('tourVelo');
+  var alone = document.getElementById('tourAlone');
+  var card = document.getElementById('tourCard');
+
+  function fermaVigile() {
+    if (vigile) { clearInterval(vigile); vigile = null; }
+  }
+
+  function leggi(chiave, difetto) {
+    try { return localStorage.getItem(chiave) || difetto; } catch (_) { return difetto; }
+  }
+  function scrivi(chiave, valore) {
+    try { localStorage.setItem(chiave, valore); } catch (_) {}
+  }
+
+  function visibile(e) {
+    if (!e) return false;
+    var r = e.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return false;
+    var s = window.getComputedStyle(e);
+    return s.display !== 'none' && s.visibility !== 'hidden';
+  }
+
+  function elementoDi(t) {
+    try {
+      var e = (typeof t.sel === 'function') ? t.sel() : document.querySelector(t.sel);
+      return visibile(e) ? e : null;
+    } catch (_) { return null; }
+  }
+
+  function disegna(el) {
+    var r = el.getBoundingClientRect();
+    var m = 6;
+    var su = Math.max(0, r.top - m), giu = Math.min(window.innerHeight, r.bottom + m);
+    var sx = Math.max(0, r.left - m), dx = Math.min(window.innerWidth, r.right + m);
+
+    document.getElementById('tourSu').style.cssText =
+      'left:0;top:0;width:100%;height:' + su + 'px;';
+    document.getElementById('tourGiu').style.cssText =
+      'left:0;top:' + giu + 'px;width:100%;height:' + Math.max(0, window.innerHeight - giu) + 'px;';
+    document.getElementById('tourSx').style.cssText =
+      'left:0;top:' + su + 'px;width:' + sx + 'px;height:' + Math.max(0, giu - su) + 'px;';
+    document.getElementById('tourDx').style.cssText =
+      'left:' + dx + 'px;top:' + su + 'px;width:' + Math.max(0, window.innerWidth - dx) +
+      'px;height:' + Math.max(0, giu - su) + 'px;';
+
+    alone.style.cssText = 'left:' + sx + 'px;top:' + su + 'px;width:' +
+      Math.max(0, dx - sx) + 'px;height:' + Math.max(0, giu - su) + 'px;';
+    alone.style.display = 'block';
+
+    // La cartellina: sotto se c'e' posto, altrimenti sopra, altrimenti al centro.
+    var alt = card.offsetHeight || 190, largh = card.offsetWidth || 330;
+    var top, left = Math.min(Math.max(8, r.left), window.innerWidth - largh - 8);
+    if (giu + alt + 14 < window.innerHeight) top = giu + 12;
+    else if (su - alt - 14 > 0) top = su - alt - 12;
+    else top = Math.max(8, (window.innerHeight - alt) / 2);
+    card.style.top = top + 'px';
+    card.style.left = left + 'px';
+  }
+
+  function mostra(indice, direzione) {
+    direzione = direzione || 1;
+    if (indice < 0) indice = 0;
+    if (indice >= TAPPE.length) { tourFine(); return; }
+
+    var t = TAPPE[indice];
+
+    function prosegui() {
+      var el = elementoDi(t);
+      if (!el) {              // niente da mostrare: si tira dritto
+        mostra(indice + direzione, direzione);
+        return;
+      }
+      passo = indice;
+      scrivi(CHIAVE_PASSO, String(indice));
+      scrivi(CHIAVE_STATO, 'in_corso');
+
+      document.getElementById('tourTitolo').textContent = t.titolo;
+      document.getElementById('tourTesto').textContent = t.testo;
+      document.getElementById('tourConta').textContent = (indice + 1) + ' di ' + TAPPE.length;
+      velo.style.display = 'block';
+      card.style.display = 'block';
+      document.getElementById('tourAvvio').style.display = 'none';
+      tourChiudiMenu();
+
+      try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+      setTimeout(function () { disegna(el); }, 260);
+      window.__tourElemento = el;
+
+      // Passo che aspetta un gesto: quando la cosa attesa compare, si va
+      // avanti da soli. Chi non ha voglia preme Avanti e salta.
+      fermaVigile();
+      if (t.attendi) {
+        vigile = setInterval(function () {
+          if (passo !== indice) { fermaVigile(); return; }
+          if (document.querySelector(t.attendi)) { fermaVigile(); tourAvanti(); }
+        }, 400);
+      }
+    }
+
+    if (typeof t.prima === 'function') t.prima(prosegui);
+    else prosegui();
+  }
+
+  function smonta(indice) {
+    var t = TAPPE[indice];
+    if (t && typeof t.dopo === 'function') { try { t.dopo(); } catch (_) {} }
+  }
+
+  window.tourAvanti = function () { fermaVigile(); smonta(passo); mostra(passo + 1, 1); };
+  window.tourIndietro = function () { fermaVigile(); smonta(passo); mostra(passo - 1, -1); };
+
+  function chiudiScena() {
+    fermaVigile();
+    smonta(passo);
+    nascondiPopup();
+    velo.style.display = 'none';
+    alone.style.display = 'none';
+    card.style.display = 'none';
+    document.getElementById('tourAvvio').style.display = 'block';
+    window.__tourElemento = null;
+  }
+
+  window.tourEsci = function () {
+    scrivi(CHIAVE_PASSO, String(Math.max(0, passo)));
+    scrivi(CHIAVE_STATO, 'in_corso');
+    chiudiScena();
+    document.getElementById('tourAvvio').textContent = 'Riprendi la visita';
+  };
+
+  function tourFine() {
+    scrivi(CHIAVE_STATO, 'finita');
+    scrivi(CHIAVE_PASSO, '0');
+    chiudiScena();
+    document.getElementById('tourAvvio').textContent = 'Visita guidata';
+  }
+
+  window.tourApriMenu = function () {
+    var m = document.getElementById('tourMenu');
+    var iniziata = leggi(CHIAVE_STATO, 'mai') === 'in_corso';
+    document.getElementById('tourVoceRiprendi').style.display = iniziata ? 'block' : 'none';
+    m.style.display = (m.style.display === 'block') ? 'none' : 'block';
+  };
+  window.tourChiudiMenu = function () {
+    document.getElementById('tourMenu').style.display = 'none';
+  };
+  window.tourRiprendi = function () {
+    tourChiudiMenu();
+    mostra(parseInt(leggi(CHIAVE_PASSO, '0'), 10) || 0, 1);
+  };
+  window.tourRicomincia = function () {
+    tourChiudiMenu();
+    scrivi(CHIAVE_PASSO, '0');
+    mostra(0, 1);
+  };
+
+  // Il riflettore segue l'elemento se la pagina si muove sotto.
+  ['scroll', 'resize'].forEach(function (evento) {
+    window.addEventListener(evento, function () {
+      if (card.style.display === 'block' && window.__tourElemento) {
+        disegna(window.__tourElemento);
+      }
+    }, true);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (card.style.display !== 'block') return;
+    if (e.key === 'Escape') tourEsci();
+    else if (e.key === 'ArrowRight') tourAvanti();
+    else if (e.key === 'ArrowLeft') tourIndietro();
+  });
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var stato = leggi(CHIAVE_STATO, 'mai');
+    if (stato === 'in_corso') {
+      document.getElementById('tourAvvio').textContent = 'Riprendi la visita';
+    }
+    // Al primo ingresso parte da sola, ma dopo la scelta mouse/dito: due
+    // finestre insieme all'apertura sarebbero un muro.
+    if (stato === 'mai') {
+      var attese = 0;
+      (function aspetta() {
+        var scelto = leggi('tosca_demo_dispositivo_scelto', '') === '1';
+        var apertaAltra = document.querySelector('.modal.show');
+        if (scelto && !apertaAltra) { setTimeout(function () { mostra(0, 1); }, 700); return; }
+        if (++attese > 120) return;      // due minuti, poi si lascia perdere
+        setTimeout(aspetta, 1000);
+      })();
+    }
+  });
+})();
+</script>
