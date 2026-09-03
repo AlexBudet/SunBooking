@@ -327,7 +327,12 @@ def create_app(db_uri: str | None = None, tenant_idx=None, is_demo: bool = False
     # invece di nasconderli, e per la fascia "prova gratuita" in alto.
     @app.context_processor
     def inject_demo_flag():
-        return {'is_demo': bool(app.config.get('IS_DEMO'))}
+        # current_app, NON app: create_app dichiara "global app", quindi qui
+        # dentro il nome "app" e' la variabile globale del modulo, che dopo il
+        # montaggio di wsgi.py punta all'ULTIMA app creata - uno slot demo.
+        # Con `app` la visita guidata e la finestra "mouse o dito" comparivano
+        # dentro i negozi VERI, che demo non sono.
+        return {'is_demo': bool(current_app.config.get('IS_DEMO'))}
 
     # ---- CONTEXT PROCESSOR: default Cassa visibile (start.py / non-cloud) ----
     # Questo viene SOVRASCRITTO da wsgi.py che registra un context processor
