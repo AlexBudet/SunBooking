@@ -1000,7 +1000,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-    {% if is_demo %}{% include '_demo_upsell_modal.html' %}{% endif %}
+    {% if is_demo %}
+      {% include '_demo_upsell_modal.html' %}
+      {% include '_demo_dispositivo_modal.html' %}
+    {% endif %}
 
     {% block scripts %}{% endblock %}
 </body>

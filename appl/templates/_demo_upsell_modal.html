@@ -28,12 +28,21 @@
           <strong>Report</strong>, con dati dimostrativi.
         </p>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer d-flex justify-content-between align-items-center">
+        {# L'unica impostazione che serve davvero durante la prova: il pannello
+           Impostazioni e' chiuso dal recinto, e chi prova da un palmare deve
+           poter accendere i pulsanti grandi senza chiedere aiuto. #}
+        <a href="#" style="font-size:.85rem;"
+           onclick="bootstrap.Modal.getInstance(document.getElementById('demoUpsellModal')).hide(); setTimeout(apriSceltaDispositivo, 300); return false;">
+          Mouse o dito?
+        </a>
+        <span>
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
           Continua la prova
         </button>
         <a class="btn btn-primary" href="https://www.tosca-crm.it/#demo"
            target="_blank" rel="noopener">Voglio saperne di più</a>
+        </span>
       </div>
     </div>
   </div>

@@ -25,3 +25,7 @@ WTForms==3.2.1
 filetype==1.2.0
 Pillow>=10.0.0
 Phidget22
+# Invio e-mail della prova gratuita: stessa risorsa ACS gia usata
+# dall app di prenotazione (variabili AZURE_EMAIL_CONNECTION_STRING
+# e AZURE_EMAIL_SENDER).
+azure-communication-email>=1.0.0

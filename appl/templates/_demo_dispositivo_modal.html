@@ -1,0 +1,96 @@
+{# ========== MODAL: con che cosa lavori? (solo prova gratuita) ==========
+   Incluso da base.html quando is_demo.
+
+   PERCHE' SERVE
+   Tosca ha due modi di rispondere al tocco: col mouse i pulsantini appaiono
+   passandoci sopra, col dito no - servono i pulsanti grandi della modalita'
+   touch. Nel programma completo la scelta sta in Impostazioni > Info Azienda,
+   che nella prova e' chiusa dal recinto: senza questa finestra, chi prova da
+   un palmare troverebbe un'agenda che sembra non rispondere, e darebbe la
+   colpa al programma.
+
+   COME
+   Si scrive nelle STESSE chiavi usate dal pannello Impostazioni:
+     sun_touch_ui_user  la scelta esplicita, l'unica autorevole
+     sun_touch_ui       il valore in uso
+   e si cancellano le due chiavi del forzamento automatico, esattamente come
+   fa business_info.html: una scelta dichiarata deve battere l'automatismo che
+   accende il touch quando la finestra e' stretta.
+
+   Sta in localStorage e non nel database perche' e' una preferenza della
+   POSTAZIONE, non del negozio: lo stesso centro puo' avere il computer in
+   cassa e il palmare in cabina. #}
+<div class="modal fade" id="demoDispositivoModal" tabindex="-1"
+     data-bs-backdrop="static" data-bs-keyboard="false"
+     aria-labelledby="demoDispositivoTitolo" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="demoDispositivoTitolo">Con che cosa lavori?</h5>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="font-size:.94rem;">
+          Serve a farti trovare l'agenda già pronta per le tue mani. Puoi cambiare
+          idea quando vuoi.
+        </p>
+
+        <button type="button" class="btn btn-outline-primary w-100 text-start py-3 mb-2"
+                onclick="scegliDispositivoDemo('mouse')">
+          <i class="bi bi-display" style="font-size:1.4rem;vertical-align:-4px;"></i>
+          <span style="margin-left:10px;">
+            <b>Un computer, con il mouse</b><br>
+            <span class="text-muted" style="font-size:.86rem;">
+              Fisso o portatile, con tastiera e mouse o trackpad
+            </span>
+          </span>
+        </button>
+
+        <button type="button" class="btn btn-outline-primary w-100 text-start py-3"
+                onclick="scegliDispositivoDemo('dito')">
+          <i class="bi bi-tablet" style="font-size:1.4rem;vertical-align:-4px;"></i>
+          <span style="margin-left:10px;">
+            <b>Un tablet o un palmare, con il dito</b><br>
+            <span class="text-muted" style="font-size:.86rem;">
+              Pulsanti più grandi, pensati per toccare lo schermo
+            </span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== CON CHE COSA LAVORI (PROVA) =====================
+(function () {
+  var CHIAVE_SCELTO = 'tosca_demo_dispositivo_scelto';
+
+  window.scegliDispositivoDemo = function (quale) {
+    var touch = (quale === 'dito') ? '1' : '0';
+    try {
+      localStorage.setItem('sun_touch_ui_user', touch);
+      localStorage.setItem('sun_touch_ui', touch);
+      // Una scelta dichiarata annulla il forzamento automatico in corso:
+      // stesse due chiavi che ripulisce il pannello Impostazioni.
+      localStorage.removeItem('sun_touch_ui_forced');
+      localStorage.removeItem('sun_touch_ui_prev');
+      localStorage.setItem(CHIAVE_SCELTO, '1');
+    } catch (_) {}
+    // La classe touch-ui viene messa all'avvio della pagina: per applicarla
+    // davvero, e senza mezze misure, si ricarica.
+    window.location.reload();
+  };
+
+  window.apriSceltaDispositivo = function () {
+    var el = document.getElementById('demoDispositivoModal');
+    if (el) bootstrap.Modal.getOrCreateInstance(el).show();
+  };
+
+  // Prima volta su questa postazione: si chiede prima che tocchi qualcosa.
+  document.addEventListener('DOMContentLoaded', function () {
+    var gia;
+    try { gia = localStorage.getItem(CHIAVE_SCELTO) === '1'; } catch (_) { gia = true; }
+    if (!gia) window.apriSceltaDispositivo();
+  });
+})();
+</script>

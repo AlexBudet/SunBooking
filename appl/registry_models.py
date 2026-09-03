@@ -380,3 +380,93 @@ class Payment(Base):
     provider_payment_id = Column(String(64))   # id dell'incasso presso il provider
     created_at = Column(DateTime(timezone=True), nullable=False,
                         server_default=func.now())
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  PROVA GRATUITA 7 GIORNI
+#
+#  Tabelle create da registry/03_tabelle_demo.sql. Stanno qui accanto ai
+#  negozi ma NON sono negozi: una prova non ha contratto, non ha fatture e
+#  non deve entrare nel conteggio dei clienti. Per questo non riusa `tenant`.
+# ═══════════════════════════════════════════════════════════════════════
+
+class DemoSlot(Base):
+    """Uno dei database demo, montato su /s/(90 + numero).
+
+    Non si cancella mai: a fine prova si svuota e si risemina. Uno slot in
+    'da_risemina' e' occupato da dati di qualcun altro e non va assegnato
+    finche' non e' stato ripulito.
+    """
+    __tablename__ = 'demo_slot'
+
+    idx        = Column(Integer, primary_key=True)      # 91, 92, 93
+    db_name    = Column(String(50), nullable=False)     # demo1, demo2, demo3
+    stato      = Column(String(20), nullable=False, default='libero',
+                        server_default='libero')
+    trial_id   = Column(Integer)                        # prova che lo occupa
+    updated_at = Column(DateTime(timezone=True), nullable=False,
+                        server_default=func.now())
+
+
+class DemoTrial(Base):
+    """Una richiesta di prova, dalla domanda alla scadenza.
+
+    Le righe in coda non hanno ancora uno slot: `slot_idx` resta NULL finche'
+    non se ne libera uno.
+    """
+    __tablename__ = 'demo_trial'
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    slot_idx      = Column(Integer, ForeignKey('demo_slot.idx'))
+    stato         = Column(String(20), nullable=False, default='in_coda',
+                           server_default='in_coda')
+
+    business_name = Column(String(150), nullable=False)
+    referente     = Column(String(120))
+    email         = Column(String(120), nullable=False)
+    telefono      = Column(String(30), nullable=False)
+    # Sole cifre con prefisso: e' la chiave con cui si riconosce chi ha gia'
+    # fatto la prova. Senza, "333 123 4567" e "+39 3331234567" sarebbero due
+    # persone diverse.
+    telefono_norm = Column(String(20), nullable=False, index=True)
+    ip_richiesta  = Column(String(45))
+    user_agent    = Column(Text)
+    fonte         = Column(String(200))
+
+    token_hash    = Column(String(64), unique=True)
+    username      = Column(String(80))
+
+    creata_at     = Column(DateTime(timezone=True), nullable=False,
+                           server_default=func.now())
+    invitata_at   = Column(DateTime(timezone=True))
+    claim_entro   = Column(DateTime(timezone=True))
+    # Il cronometro parte al PRIMO ACCESSO, non all'invio del link: una prova
+    # consumata dalla posta non e' una prova.
+    inizio_at     = Column(DateTime(timezone=True))
+    scadenza_at   = Column(DateTime(timezone=True))
+    chiusa_at     = Column(DateTime(timezone=True))
+
+    privacy_versione     = Column(String(20))
+    privacy_accettata_at = Column(DateTime(timezone=True))
+    termini_versione     = Column(String(20))
+    termini_accettati_at = Column(DateTime(timezone=True))
+
+    note          = Column(Text)
+
+
+class DemoDeroga(Base):
+    """Il permesso di rifare una prova con lo stesso numero.
+
+    La regola e' una prova per cellulare, ma due titolari possono condividerlo
+    davvero: nel progetto e' misurato che il 2,7% dei recapiti e' in comune fra
+    clienti diversi. Chi si vede rifiutare una prova che non ha mai fatto se ne
+    va, quindi serve un modo per riaprirgliela.
+    """
+    __tablename__ = 'demo_deroga'
+
+    telefono_norm = Column(String(20), primary_key=True)
+    prove_extra   = Column(Integer, nullable=False, default=1, server_default='1')
+    motivo        = Column(Text)
+    concessa_da   = Column(String(80))
+    concessa_at   = Column(DateTime(timezone=True), nullable=False,
+                           server_default=func.now())

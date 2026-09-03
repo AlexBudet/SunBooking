@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prova Tosca sette giorni</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png">
+  <meta name="theme-color" content="#87647c">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 0; padding: 40px 16px;
+      background-color: #f7f7f7;
+      background-image: url("/static/img/landing-bg.png");
+      background-size: cover; background-position: center;
+      background-repeat: no-repeat;
+      min-height: 100vh;
+    }
+    .bg-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.32); z-index: 0; }
+    .container {
+      position: relative; z-index: 1; max-width: 520px; margin: 0 auto;
+      background: rgba(255,255,255,.94); padding: 26px 24px 24px;
+      border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.14);
+    }
+    h1 { margin: 0 0 4px; font-size: 1.5rem; color: #4a3543; }
+    .sotto { margin: 0 0 20px; color: #666; font-size: .95rem; line-height: 1.5; }
+    label { display: block; font-size: .85rem; color: #555; margin: 12px 0 4px; font-weight: bold; }
+    input[type=text], input[type=email], input[type=tel] {
+      width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem;
+    }
+    .aiuto { font-size: .8rem; color: #888; margin-top: 4px; }
+    .spunta { display: flex; gap: 8px; align-items: flex-start; margin: 18px 0 6px; font-size: .85rem; color: #555; }
+    .spunta input { margin-top: 3px; }
+    button.invia {
+      width: 100%; margin-top: 18px; padding: 13px; border: 0; border-radius: 6px;
+      background: #87647c; color: #fff; font-size: 1.05rem; cursor: pointer;
+    }
+    button.invia:disabled { background: #b9a5b3; cursor: progress; }
+    .errore { background: #fdecea; border: 1px solid #f5c6cb; color: #842029;
+              padding: 12px; border-radius: 6px; margin-bottom: 16px; font-size: .92rem; }
+    .avviso { background: #fff8e1; border: 1px solid #ffe0a3; color: #6b5300;
+              padding: 14px; border-radius: 6px; margin-bottom: 18px; font-size: .92rem; line-height: 1.5; }
+    .credenziali { background: #f2f7f2; border: 1px solid #cbe3cb; border-radius: 8px;
+                   padding: 16px; margin: 18px 0; font-size: 1rem; }
+    .credenziali div { margin: 6px 0; }
+    .credenziali b { display: inline-block; min-width: 92px; color: #555; font-weight: normal; }
+    .credenziali code { font-size: 1.15rem; background: #fff; padding: 3px 8px;
+                        border: 1px solid #d6e6d6; border-radius: 4px; letter-spacing: .5px; }
+    .entra { display: block; text-align: center; margin-top: 14px; padding: 13px;
+             background: #4a7c59; color: #fff; text-decoration: none; border-radius: 6px; font-size: 1.05rem; }
+    .nota-legale { margin-top: 22px; padding-top: 14px; border-top: 1px solid #e2e2e2;
+                   font-size: .78rem; color: #888; line-height: 1.55; }
+    .nota-legale a { color: #87647c; }
+    ul.dentro { margin: 8px 0 0; padding-left: 20px; font-size: .9rem; color: #555; line-height: 1.6; }
+  </style>
+</head>
+<body>
+<div class="bg-overlay"></div>
+<div class="container">
+
+{% if esito %}
+  {# ─── La prova e' pronta ─────────────────────────────────────────── #}
+  <h1>La tua prova è pronta</h1>
+  <p class="sotto">
+    Hai sette giorni per girare dentro Tosca con l'agenda di un centro di esempio,
+    già piena di appuntamenti e di incassi. Nessuna carta di credito, nessun rinnovo:
+    alla scadenza si chiude da sola.
+  </p>
+
+  <div class="credenziali">
+    <div><b>Indirizzo</b> <code>{{ esito.url }}</code></div>
+    <div><b>Utente</b> <code>{{ esito.username }}</code></div>
+    <div><b>Password</b> <code>{{ esito.password }}</code></div>
+  </div>
+
+  <a class="entra" href="{{ esito.link }}">Entra nella prova</a>
+  <p class="aiuto" style="text-align:center;margin-top:10px;">
+    {% if esito.email_inviata %}
+      Ti abbiamo mandato questi dati anche per e-mail, per rientrare quando vuoi.
+    {% else %}
+      Segnati indirizzo, utente e password: servono per rientrare nei prossimi sette giorni.
+    {% endif %}
+  </p>
+
+  <div class="nota-legale">
+    Durante la prova sono attive <b>Agenda</b> e <b>Report</b>. Cassa, prenotazioni online,
+    pacchetti e messaggi automatici fanno parte della versione completa: dentro il programma
+    trovi un riquadro che ti spiega cosa fanno.<br><br>
+    I dati che vedi sono inventati. <b>Non inserire nomi, numeri o indirizzi di persone
+    reali</b>: la prova viene cancellata al settimo giorno e non è recuperabile. Il servizio
+    è fornito così com'è, senza garanzie e senza copie di sicurezza.
+  </div>
+
+{% elif in_coda %}
+  {# ─── Messo in lista d'attesa ────────────────────────────────────── #}
+  <h1>Sei in lista</h1>
+  <p class="sotto">
+    Le tre prove disponibili sono tutte in corso. Sei il <b>{{ in_coda.posizione }}º</b> in attesa:
+    {% if in_coda.data %}la tua parte intorno al <b>{{ in_coda.data }}</b>{% else %}ti avvisiamo appena se ne libera una{% endif %}.
+    Ti scriviamo noi, non devi ricontrollare la pagina.
+  </p>
+  <div class="avviso">
+    Non hai voglia di aspettare? Facciamo prima: <b>mezz'ora insieme</b>, ti mostriamo Tosca dal
+    vivo sullo schermo e rispondiamo alle tue domande.
+    <a href="https://www.tosca-crm.it/#demo" target="_blank" rel="noopener">Prenota una presentazione</a>.
+  </div>
+
+{% elif codice %}
+  {# ─── Il codice arrivato per e-mail ──────────────────────────────── #}
+  <h1>Controlla la posta</h1>
+  <p class="sotto">
+    Abbiamo mandato un codice di sei cifre a <b>{{ codice.email }}</b>.
+    Scrivilo qui sotto: serve solo a essere sicuri che l'indirizzo sia tuo.
+    Vale {{ codice.minuti }} minuti.
+  </p>
+
+  {% if errore %}<div class="errore">{{ errore }}</div>{% endif %}
+
+  {% if codice.in_coda %}
+    <div class="avviso">
+      Ti avvisiamo subito: in questo momento le prove sono tutte in corso.
+      Confermando il codice entri in lista d'attesa e ti scriviamo appena si libera un posto.
+    </div>
+  {% endif %}
+
+  <form method="post" action="/prova">
+    <input type="hidden" name="richiesta_id" value="{{ codice.richiesta_id }}">
+    <label for="codiceCampo">Codice ricevuto</label>
+    <input type="text" id="codiceCampo" name="codice" required inputmode="numeric"
+           autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}"
+           placeholder="123456" autofocus
+           style="font-size:1.6rem;letter-spacing:8px;text-align:center;">
+    <button type="submit" class="invia">
+      {% if codice.in_coda %}Mettimi in lista{% else %}Apri la prova{% endif %}
+    </button>
+  </form>
+  <p class="aiuto" style="text-align:center;margin-top:14px;">
+    Non è arrivato? Guarda nella posta indesiderata, oppure
+    <a href="/prova">ricomincia</a> e controlla l'indirizzo.
+  </p>
+
+{% else %}
+  {# ─── Il modulo ──────────────────────────────────────────────────── #}
+  <h1>Prova Tosca per sette giorni</h1>
+  <p class="sotto">
+    Entri subito, senza installare niente e senza carta di credito. Trovi l'agenda di un
+    centro di esempio con tre settimane di lavoro già dentro, così vedi come si muove
+    davvero e non una schermata vuota.
+  </p>
+
+  {% if errore %}<div class="errore">{{ errore }}</div>{% endif %}
+
+  {% if not stato.disponibile %}
+    <div class="avviso">
+      Al momento le tre prove sono tutte in corso.
+      {% if stato.prima_data_libera_testo %}
+        La prima si libera il <b>{{ stato.prima_data_libera_testo }}</b>.
+      {% endif %}
+      {% if stato.coda_aperta %}
+        Lascia i tuoi dati qui sotto e ti avvisiamo appena tocca a te.
+      {% else %}
+        La lista d'attesa è al completo:
+        <a href="https://www.tosca-crm.it/#demo" target="_blank" rel="noopener">prenota una presentazione</a>,
+        facciamo prima.
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if stato.disponibile or stato.coda_aperta %}
+  <form method="post" action="/prova" id="formProva">
+    <label for="centro">Nome del centro *</label>
+    <input type="text" id="centro" name="centro" required maxlength="150"
+           placeholder="Es. Centro Benessere Aurora" value="{{ valori.centro or '' }}">
+
+    <label for="referente">Il tuo nome *</label>
+    <input type="text" id="referente" name="referente" required maxlength="120"
+           placeholder="Es. Giulia Rossi" value="{{ valori.referente or '' }}">
+
+    <label for="email">E-mail *</label>
+    <input type="email" id="email" name="email" required maxlength="120"
+           placeholder="tuonome@esempio.it" value="{{ valori.email or '' }}">
+
+    <label for="telefono">Cellulare *</label>
+    <input type="tel" id="telefono" name="telefono" required maxlength="30"
+           placeholder="333 1234567" value="{{ valori.telefono or '' }}">
+    <div class="aiuto">Ci serve per mandarti il link di accesso su WhatsApp. Una prova per numero.</div>
+
+    {# Campo trappola per i moduli riempiti dai robot: una persona non lo vede
+       e quindi non lo compila. Se arriva pieno, la richiesta si butta. #}
+    <div style="position:absolute;left:-9999px;" aria-hidden="true">
+      <label for="sitoweb">Non compilare</label>
+      <input type="text" id="sitoweb" name="sitoweb" tabindex="-1" autocomplete="off">
+    </div>
+
+    <label class="spunta" for="consenso">
+      <input type="checkbox" id="consenso" name="consenso" required>
+      <span>Ho letto l'<a href="/prova/informativa" target="_blank">informativa privacy</a> e le
+      <a href="/prova/termini" target="_blank">condizioni della prova</a>. So che i dati inseriti
+      durante i sette giorni vengono cancellati alla scadenza.</span>
+    </label>
+
+    <button type="submit" class="invia" id="btnProva">Ricevi il codice</button>
+    <p class="aiuto" style="text-align:center;">
+      Ti mandiamo un codice per e-mail: serve solo a verificare l'indirizzo.
+    </p>
+  </form>
+  {% endif %}
+
+  <div class="nota-legale">
+    Nella prova sono attive Agenda e Report, con dati dimostrativi. Non va usata per il
+    lavoro vero: non ha valore fiscale, non produce scontrini e non viene salvata da
+    nessuna parte. Alla scadenza tutto il contenuto viene cancellato.
+  </div>
+{% endif %}
+
+</div>
+
+<script>
+// La preparazione della prova impiega qualche secondo (si costruisce un centro
+// intero, con appuntamenti e scontrini). Dirlo evita il doppio click, che
+// altrimenti aprirebbe due richieste e brucerebbe due slot.
+(function () {
+  var f = document.getElementById('formProva');
+  if (!f) return;
+  f.addEventListener('submit', function () {
+    var b = document.getElementById('btnProva');
+    if (b) { b.disabled = true; b.textContent = 'Ti mando il codice…'; }
+  });
+})();
+</script>
+</body>
+</html>

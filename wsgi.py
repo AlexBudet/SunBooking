@@ -163,7 +163,10 @@ root_app.jinja_env.globals['csrf_token'] = lambda: ''
 @root_app.before_request
 def root_redirect_to_selected_db():
     path = request.path or '/'
-    if path in ('/', '/landing-web', '/landing-logout') or path.startswith('/select-db/') or path.startswith('/s/') or path.startswith('/owner') or path.startswith('/static/') or path.startswith('/apple-touch-icon'):
+    # /prova sta nell'elenco perche' e' una pagina PUBBLICA: senza, chi ha gia'
+    # visitato un negozio (e quindi ha il cookie dbidx) verrebbe spedito su
+    # /s/<idx>/prova, che non esiste, e vedrebbe un 404 al posto del modulo.
+    if path in ('/', '/landing-web', '/landing-logout') or path.startswith('/prova') or path.startswith('/select-db/') or path.startswith('/s/') or path.startswith('/owner') or path.startswith('/static/') or path.startswith('/apple-touch-icon'):
         return None
     dbidx = request.cookies.get('dbidx', '').strip()
     if dbidx and dbidx.isdigit():
@@ -471,6 +474,445 @@ def landing_web():
                            db_links=None,
                            root_user=None,
                            login_error=error)
+
+
+# =============================================================
+#   PROVA GRATUITA 7 GIORNI
+#
+#   Il modulo sta qui, sulla root app, e non dentro un tenant: deve poter
+#   scegliere fra i tre slot, e uno slot non puo' assegnare se stesso.
+# =============================================================
+_prova_richieste_ip = {}          # ip -> [timestamp, ...]
+PROVA_MAX_PER_IP = 5              # in un'ora: freno agli invii a raffica, non
+                                  # un blocco per persona (su rete mobile lo
+                                  # stesso indirizzo IP e' condiviso da molti)
+
+
+def _prova_troppe_richieste(ip):
+    adesso = time_mod.time()
+    recenti = [t for t in _prova_richieste_ip.get(ip, []) if adesso - t < 3600]
+    _prova_richieste_ip[ip] = recenti
+    return len(recenti) >= PROVA_MAX_PER_IP
+
+
+def _prova_segna_richiesta(ip):
+    _prova_richieste_ip.setdefault(ip, []).append(time_mod.time())
+
+
+def _owner_di_riferimento():
+    """(username, hash) dell'owner, preso da un negozio VERO.
+
+    Serve per infilare l'utente owner dentro lo slot appena seminato: senza,
+    l'unico modo di entrare in una prova sarebbe usare le credenziali che si
+    sono appena consegnate al potenziale cliente.
+    """
+    for idx, child in children.items():
+        if idx in DEMO_IDX:
+            continue
+        try:
+            with child.app_context():
+                from appl.models import User as _U, RuoloUtente as _R
+                u = _U.query.filter_by(ruolo=_R.owner).first()
+                if u:
+                    return (u.username, u.password)
+        except Exception:
+            continue
+    return None
+
+
+def _utente_demo_id(idx):
+    """id dell'utente 'demo' dentro lo slot: lo vuole l'auto-login."""
+    child = children.get(idx)
+    if child is None:
+        return None
+    try:
+        with child.app_context():
+            from appl.models import User as _U
+            u = _U.query.filter_by(username='demo').first()
+            return u.id if u else None
+    except Exception:
+        return None
+
+
+def _prova_chiudi_scadute():
+    """Chiude le prove finite e rimette in circolo gli slot.
+
+    Gira all'apertura della pagina della prova invece che con uno scheduler:
+    e' esattamente il momento in cui serve sapere se c'e' uno slot libero, e
+    non aggiunge un thread che gira a vuoto tutto il giorno.
+    """
+    try:
+        from appl.services import demo_trials
+        for finita in demo_trials.da_chiudere():
+            uri = demo_pool.get(finita['slot_idx'])
+            demo_trials.chiudi(finita['trial_id'], uri,
+                               stato='scaduta' if finita['motivo'] == 'scaduta'
+                               else 'annullata')
+            root_app.logger.info("[prova] chiusa %s (%s), slot %s liberato",
+                                 finita['trial_id'], finita['motivo'],
+                                 finita['slot_idx'])
+        # Uno slot appena liberato va al primo della coda.
+        from appl.services.demo_trials import primo_in_coda, assegna_slot, stato_coda
+        while True:
+            stato = stato_coda()
+            primo = primo_in_coda()
+            if not primo or not stato.get('slot_liberi'):
+                break
+            from appl.registry_models import registry_session, DemoSlot
+            with registry_session() as s:
+                libero = (s.query(DemoSlot).filter(DemoSlot.stato == 'libero')
+                           .order_by(DemoSlot.idx).first())
+                idx_libero = libero.idx if libero else None
+            if idx_libero is None or not assegna_slot(primo['trial_id'], idx_libero):
+                break
+            root_app.logger.info("[prova] slot %s assegnato alla prova %s in coda",
+                                 idx_libero, primo['trial_id'])
+            # Assegnare non basta: lo slot va preparato e le credenziali vanno
+            # consegnate, altrimenti chi e' in lista non sa di essere passato.
+            try:
+                _prova_prepara_e_avvisa(primo['trial_id'], idx_libero,
+                                        primo.get('business_name'),
+                                        primo.get('referente'), in_coda=True)
+            except Exception:
+                root_app.logger.exception(
+                    "[prova] preparazione dello slot %s per la prova %s fallita",
+                    idx_libero, primo['trial_id'])
+                demo_trials.chiudi(primo['trial_id'], demo_pool.get(idx_libero),
+                                   stato='annullata')
+                break
+    except Exception:
+        root_app.logger.exception("[prova] manutenzione code/scadenze fallita")
+
+
+def _prova_prepara_e_avvisa(trial_id, idx, business_name, referente,
+                            in_coda=False, radice=None):
+    """Semina lo slot, crea le credenziali e prova a mandarle per e-mail.
+
+    Ritorna il dizionario con le credenziali piu' `email_inviata`. L'esito
+    dell'invio conta: la pagina non deve promettere una mail che non e'
+    partita, e chi arriva dalla coda senza mail resterebbe ad aspettare per
+    sempre - per quello, se l'invio fallisce, resta scritto nel log e la prova
+    si vede comunque nel pannello.
+    """
+    from appl.services import demo_trials, mailer
+
+    uri = demo_pool.get(idx)
+    attivata = demo_trials.attiva(trial_id, uri,
+                                  owner_user=_owner_di_riferimento(),
+                                  nome_centro=business_name)
+    # host_url solo se c'e' davvero una richiesta in corso: se un domani questa
+    # funzione venisse chiamata da un lavoro schedulato, `request` fuori
+    # contesto solleverebbe invece di rispondere "vuoto".
+    if not radice:
+        from flask import has_request_context
+        radice = request.host_url.rstrip('/') if has_request_context() else ''
+    url = "%s/s/%d/" % (radice, idx)
+    link = "%s/prova/entra/%s" % (radice, attivata['token'])
+
+    if in_coda:
+        oggetto, corpo = mailer.testo_tocca_a_te(
+            referente, url, attivata['username'], attivata['password'], link)
+    else:
+        oggetto, corpo = mailer.testo_credenziali(
+            referente, url, attivata['username'], attivata['password'], link)
+    inviata = mailer.invia(attivata.get('email'), oggetto, corpo,
+                           logger=root_app.logger)
+
+    attivata.update({'url': url, 'link': link, 'email_inviata': inviata})
+    return attivata
+
+
+def _data_it(dt):
+    if not dt:
+        return ''
+    mesi = ('gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio',
+            'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre')
+    return "%d %s" % (dt.day, mesi[dt.month - 1])
+
+
+@root_app.route('/prova', methods=['GET', 'POST'])
+def prova_gratuita():
+    from appl.services import demo_trials
+
+    _prova_chiudi_scadute()
+    stato = demo_trials.stato_coda()
+    stato['prima_data_libera_testo'] = _data_it(stato.get('prima_data_libera'))
+    valori = {}
+
+    if request.method == 'GET':
+        return render_template('prova.html', stato=stato, valori=valori,
+                               esito=None, in_coda=None, errore=None, codice=None)
+
+    ip = request.remote_addr or 'sconosciuto'
+    valori = {k: (request.form.get(k) or '').strip()
+              for k in ('centro', 'referente', 'email', 'telefono')}
+
+    def _rifiuta(messaggio):
+        return render_template('prova.html', stato=stato, valori=valori,
+                               esito=None, in_coda=None, errore=messaggio,
+                               codice=None)
+
+    # Campo trappola: una persona non lo vede, un robot lo riempie.
+    if (request.form.get('sitoweb') or '').strip():
+        root_app.logger.info("[prova] richiesta scartata (campo trappola) da %s", ip)
+        return _rifiuta("Richiesta non valida.")
+
+    if _prova_troppe_richieste(ip):
+        return _rifiuta("Troppe richieste da questa connessione. Riprova fra un'ora.")
+
+    # I campi si controllano solo al primo passo: al secondo il modulo porta
+    # soltanto il codice e l'identificativo della richiesta, e i dati stanno
+    # gia' da parte.
+    if not request.form.get('richiesta_id'):
+        if not all(valori.values()):
+            return _rifiuta("Compila tutti i campi: servono per attivare la prova.")
+        if not request.form.get('consenso'):
+            return _rifiuta("Per attivare la prova serve l'accettazione delle condizioni.")
+
+    # ── Passo 1: si manda il codice di verifica ───────────────────────────
+    # Prima di impegnare uno slot si controlla che l'indirizzo esista davvero:
+    # gli slot sono tre, e uno assegnato a una e-mail inventata resterebbe
+    # fermo tre giorni prima di tornare libero.
+    if not request.form.get('richiesta_id'):
+        _prova_segna_richiesta(ip)
+        preparata = demo_trials.prepara_codice(valori)
+        if not preparata.get('ok'):
+            return _rifiuta(preparata.get('errore') or "Richiesta non valida.")
+        from appl.services import mailer
+        oggetto, corpo = mailer.testo_codice(valori['referente'],
+                                             preparata['codice'],
+                                             preparata['minuti'])
+        if not mailer.invia(valori['email'], oggetto, corpo, logger=root_app.logger):
+            return _rifiuta("Non siamo riusciti a mandare il codice a quell'indirizzo. "
+                            "Controlla che sia scritto bene.")
+        return render_template('prova.html', stato=stato, valori=valori,
+                               esito=None, in_coda=None, errore=None,
+                               codice={'richiesta_id': preparata['richiesta_id'],
+                                       'email': preparata['email'],
+                                       'minuti': preparata['minuti'],
+                                       'in_coda': preparata['in_coda']})
+
+    # ── Passo 2: si controlla il codice ───────────────────────────────────
+    controllo = demo_trials.verifica_codice(request.form.get('richiesta_id'),
+                                            request.form.get('codice'))
+    if not controllo.get('ok'):
+        if controllo.get('scaduto'):
+            return _rifiuta(controllo['errore'])
+        return render_template('prova.html', stato=stato, valori=valori,
+                               esito=None, in_coda=None,
+                               errore=controllo.get('errore'),
+                               codice={'richiesta_id': request.form.get('richiesta_id'),
+                                       'email': valori.get('email'),
+                                       'minuti': demo_trials.OTP_VALIDO_MINUTI,
+                                       'in_coda': False})
+
+    valori = {'centro': controllo['dati'].get('centro'),
+              'referente': controllo['dati'].get('referente'),
+              'email': controllo['dati'].get('email'),
+              'telefono': controllo['dati'].get('telefono')}
+
+    esito = demo_trials.crea_richiesta(
+        business_name=valori['centro'], referente=valori['referente'],
+        email=valori['email'], telefono=valori['telefono'], ip=ip,
+        user_agent=request.headers.get('User-Agent', ''),
+        fonte=request.args.get('fonte') or request.referrer or '')
+
+    if not esito.get('ok'):
+        return _rifiuta(esito.get('errore') or "Non siamo riusciti ad attivare la prova.")
+
+    if esito.get('in_coda'):
+        from appl.services import mailer
+        prossima = demo_trials.stato_coda().get('prima_data_libera')
+        oggetto, corpo = mailer.testo_in_coda(valori['referente'],
+                                              esito.get('posizione') or 1,
+                                              _data_it(prossima))
+        mailer.invia(valori['email'], oggetto, corpo, logger=root_app.logger)
+        return render_template('prova.html', stato=stato, valori={}, esito=None,
+                               errore=None, codice=None,
+                               in_coda={'posizione': esito.get('posizione'),
+                                        'data': _data_it(prossima)})
+
+    # Slot assegnato: si semina e si creano le credenziali. Ci vogliono alcuni
+    # secondi, ed e' il motivo per cui il pulsante avvisa prima di partire.
+    idx = esito['slot_idx']
+    uri = demo_pool.get(idx)
+    if not uri:
+        root_app.logger.error("[prova] slot %s assegnato ma non montato", idx)
+        return _rifiuta("Le prove non sono disponibili in questo momento.")
+
+    try:
+        attivata = _prova_prepara_e_avvisa(esito['trial_id'], idx,
+                                           valori['centro'], valori['referente'])
+    except Exception:
+        root_app.logger.exception("[prova] attivazione fallita per slot %s", idx)
+        demo_trials.chiudi(esito['trial_id'], uri, stato='annullata')
+        return _rifiuta("Non siamo riusciti a preparare la prova. Riprova fra qualche minuto.")
+
+    return render_template(
+        'prova.html', stato=stato, valori={}, in_coda=None, errore=None, codice=None,
+        esito={'username': attivata['username'], 'password': attivata['password'],
+               'url': attivata['url'], 'link': attivata['link'],
+               'email_inviata': attivata['email_inviata']})
+
+
+@root_app.route('/prova/entra/<token>')
+def prova_entra(token):
+    """Primo accesso col link: qui parte il cronometro dei sette giorni."""
+    from appl.services import demo_trials
+
+    dati = demo_trials.consuma_token(token)
+    if not dati:
+        return render_template('prova_scaduta.html'), 410
+
+    idx = dati['slot_idx']
+    user_id = _utente_demo_id(idx)
+    if user_id is None:
+        return redirect("/s/%d/" % idx)
+
+    token_login = autologin_issue(idx, user_id)
+    resp = redirect("/s/%d/?_autologin=%s" % (idx, token_login), code=302)
+    cookie = "dbidx=%d; Path=/; SameSite=Lax" % idx
+    if use_https:
+        cookie += "; Secure"
+    resp.headers.add('Set-Cookie', cookie)
+    return resp
+
+
+# ── API per il modulo sul sito ─────────────────────────────────────────
+# Il sito sta su IONOS e l'applicazione su Azure: sono due origini diverse,
+# quindi il browser fa la richiesta solo se glielo diciamo esplicitamente.
+# L'elenco e' chiuso: non "*", perche' queste due rotte prendono uno slot e
+# mandano e-mail, e non devono poterle chiamare da qualunque pagina.
+PROVA_ORIGINI = (
+    'https://www.tosca-crm.it',
+    'https://tosca-crm.it',
+)
+
+
+def _prova_cors(risposta, origine):
+    if origine in PROVA_ORIGINI:
+        risposta.headers['Access-Control-Allow-Origin'] = origine
+        risposta.headers['Vary'] = 'Origin'
+        risposta.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        risposta.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    return risposta
+
+
+@root_app.route('/prova/api/codice', methods=['POST', 'OPTIONS'])
+def prova_api_codice():
+    """Passo 1 dal sito: controlla i dati e manda il codice per e-mail."""
+    origine = request.headers.get('Origin', '')
+    if request.method == 'OPTIONS':
+        return _prova_cors(root_app.make_response(('', 204)), origine)
+
+    from appl.services import demo_trials, mailer
+    dati = request.get_json(silent=True) or {}
+    ip = request.remote_addr or 'sconosciuto'
+
+    def _risposta(carico, stato=200):
+        r = jsonify(carico)
+        r.status_code = stato
+        return _prova_cors(r, origine)
+
+    if (dati.get('sitoweb') or '').strip():
+        return _risposta({'ok': False, 'errore': 'Richiesta non valida.'}, 400)
+    if _prova_troppe_richieste(ip):
+        return _risposta({'ok': False, 'errore': "Troppe richieste da questa "
+                                                 "connessione. Riprova fra un'ora."}, 429)
+
+    valori = {k: (dati.get(k) or '').strip()
+              for k in ('centro', 'referente', 'email', 'telefono')}
+    if not all(valori.values()):
+        return _risposta({'ok': False, 'errore': 'Compila tutti i campi.'}, 400)
+    if not dati.get('consenso'):
+        return _risposta({'ok': False,
+                          'errore': "Serve l'accettazione delle condizioni."}, 400)
+
+    _prova_chiudi_scadute()
+    _prova_segna_richiesta(ip)
+    preparata = demo_trials.prepara_codice(valori)
+    if not preparata.get('ok'):
+        return _risposta({'ok': False, 'errore': preparata.get('errore')}, 400)
+
+    oggetto, corpo = mailer.testo_codice(valori['referente'], preparata['codice'],
+                                         preparata['minuti'])
+    if not mailer.invia(valori['email'], oggetto, corpo, logger=root_app.logger):
+        return _risposta({'ok': False,
+                          'errore': "Non siamo riusciti a mandare il codice a "
+                                    "quell'indirizzo. Controlla che sia scritto bene."}, 502)
+
+    return _risposta({'ok': True, 'richiesta_id': preparata['richiesta_id'],
+                      'email': preparata['email'], 'minuti': preparata['minuti'],
+                      'in_coda': preparata['in_coda']})
+
+
+@root_app.route('/prova/api/verifica', methods=['POST', 'OPTIONS'])
+def prova_api_verifica():
+    """Passo 2 dal sito: controlla il codice e apre la prova (o la accoda)."""
+    origine = request.headers.get('Origin', '')
+    if request.method == 'OPTIONS':
+        return _prova_cors(root_app.make_response(('', 204)), origine)
+
+    from appl.services import demo_trials, mailer
+    dati = request.get_json(silent=True) or {}
+    ip = request.remote_addr or 'sconosciuto'
+
+    def _risposta(carico, stato=200):
+        r = jsonify(carico)
+        r.status_code = stato
+        return _prova_cors(r, origine)
+
+    controllo = demo_trials.verifica_codice(dati.get('richiesta_id'), dati.get('codice'))
+    if not controllo.get('ok'):
+        return _risposta({'ok': False, 'errore': controllo.get('errore'),
+                          'scaduto': bool(controllo.get('scaduto'))}, 400)
+
+    d = controllo['dati']
+    esito = demo_trials.crea_richiesta(
+        business_name=d.get('centro'), referente=d.get('referente'),
+        email=d.get('email'), telefono=d.get('telefono'), ip=ip,
+        user_agent=request.headers.get('User-Agent', ''),
+        fonte=(dati.get('fonte') or origine or 'sito'))
+
+    if not esito.get('ok'):
+        return _risposta({'ok': False, 'errore': esito.get('errore')}, 400)
+
+    if esito.get('in_coda'):
+        prossima = demo_trials.stato_coda().get('prima_data_libera')
+        oggetto, corpo = mailer.testo_in_coda(d.get('referente'),
+                                              esito.get('posizione') or 1,
+                                              _data_it(prossima))
+        mailer.invia(d.get('email'), oggetto, corpo, logger=root_app.logger)
+        return _risposta({'ok': True, 'in_coda': True,
+                          'posizione': esito.get('posizione'),
+                          'data': _data_it(prossima)})
+
+    idx = esito['slot_idx']
+    try:
+        attivata = _prova_prepara_e_avvisa(esito['trial_id'], idx,
+                                           d.get('centro'), d.get('referente'))
+    except Exception:
+        root_app.logger.exception("[prova] attivazione dal sito fallita, slot %s", idx)
+        demo_trials.chiudi(esito['trial_id'], demo_pool.get(idx), stato='annullata')
+        return _risposta({'ok': False,
+                          'errore': 'Non siamo riusciti a preparare la prova. '
+                                    'Riprova fra qualche minuto.'}, 500)
+
+    return _risposta({'ok': True, 'in_coda': False,
+                      'url': attivata['url'], 'link': attivata['link'],
+                      'username': attivata['username'],
+                      'password': attivata['password'],
+                      'email_inviata': attivata['email_inviata']})
+
+
+@root_app.route('/prova/termini')
+def prova_termini():
+    return render_template('prova_legale.html', sezione='termini')
+
+
+@root_app.route('/prova/informativa')
+def prova_informativa():
+    return render_template('prova_legale.html', sezione='privacy')
 
 
 @root_app.route('/landing-logout')

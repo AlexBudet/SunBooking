@@ -1,0 +1,174 @@
+{# Informativa privacy e condizioni della prova gratuita.
+   Una pagina sola, due sezioni: sono due testi brevi, e tenerli separati
+   avrebbe voluto dire due file da aggiornare in coppia ogni volta.
+
+   ⚠️  I campi fra «virgolette basse» vanno compilati con i dati del
+   Licenziante, come nel contratto. Il testo e' redatto su base
+   tecnico-documentale e va fatto validare da un avvocato prima di
+   pubblicarlo: qui si descrive cio' che il programma fa davvero, non si
+   fornisce una consulenza legale.
+
+   La versione dichiarata qui sotto deve restare allineata a
+   VERSIONE_PRIVACY / VERSIONE_TERMINI in appl/services/demo_trials.py: nel
+   registro si conserva quale versione ha accettato ciascuno, e un numero che
+   non corrisponde a nessun testo non prova niente. #}
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if sezione == 'termini' %}Condizioni della prova{% else %}Informativa privacy{% endif %} — Tosca</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <meta name="theme-color" content="#87647c">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 32px 16px 60px;
+           background: #f7f7f7; color: #333; }
+    .foglio { max-width: 720px; margin: 0 auto; background: #fff; padding: 32px;
+              border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+    h1 { font-size: 1.4rem; color: #4a3543; margin: 0 0 4px; }
+    .versione { color: #999; font-size: .8rem; margin: 0 0 24px; }
+    h2 { font-size: 1.02rem; color: #4a3543; margin: 26px 0 8px; }
+    p, li { line-height: 1.65; font-size: .94rem; }
+    ul { padding-left: 20px; }
+    .campo { background: #fff6d6; padding: 0 4px; border-radius: 3px; }
+    .torna { display: inline-block; margin-top: 30px; color: #87647c; font-size: .9rem; }
+    .rilievo { background: #fdecea; border: 1px solid #f5c6cb; padding: 14px 16px;
+               border-radius: 6px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+<div class="foglio">
+
+{% if sezione == 'termini' %}
+  <h1>Condizioni della prova gratuita</h1>
+  <p class="versione">Versione 1.0 — settembre 2026</p>
+
+  <h2>1. Che cos'è</h2>
+  <p>La prova gratuita è un accesso temporaneo a Tosca, della durata di <b>sette giorni
+  consecutivi dal primo accesso</b>, pensato per farti vedere come funziona il programma
+  prima di decidere. Non è un contratto, non si rinnova e non chiede pagamenti: alla
+  scadenza si chiude da sola.</p>
+
+  <h2>2. Che cosa è attivo</h2>
+  <p>Durante la prova sono disponibili <b>Agenda</b> e <b>Report</b>, con i dati
+  dimostrativi di un centro di esempio. Non sono disponibili la Cassa e lo scontrino
+  fiscale, i pacchetti e le tessere prepagate, le prenotazioni online e l'invio automatico
+  di messaggi. Dentro il programma trovi, al posto di quelle funzioni, una spiegazione di
+  cosa fanno nella versione completa.</p>
+
+  <h2>3. Non va usata per lavorare</h2>
+  <div class="rilievo">
+    <p style="margin:0;">La prova <b>non ha alcun valore fiscale</b>: non emette scontrini,
+    non registra corrispettivi e non è collegata ad alcun registratore telematico. Non
+    utilizzarla per gestire l'attività reale del tuo centro. Ogni adempimento fiscale resta
+    a tuo carico, e nessun dato inserito qui ha valore verso l'Agenzia delle Entrate.</p>
+  </div>
+
+  <h2>4. Non inserire dati di persone reali</h2>
+  <p>I nomi, i numeri e gli indirizzi che vedi sono inventati. <b>Non inserire dati di
+  clienti veri</b>, né i tuoi dati sensibili: la prova non è pensata per custodirli, e al
+  settimo giorno viene cancellata insieme a tutto il resto. Se lo fai comunque, sei tu a
+  risponderne come titolare del trattamento e ti impegni a rimuoverli prima della scadenza.</p>
+
+  <h2>5. Nessuna garanzia, nessun salvataggio</h2>
+  <p>Il servizio è fornito <b>così com'è</b>, secondo un'obbligazione di mezzi: non ci sono
+  garanzie di funzionamento continuo, non ci sono tempi di intervento promessi e non
+  vengono eseguite copie di sicurezza dei dati che inserisci. La prova può essere sospesa o
+  interrotta in qualsiasi momento, anche senza preavviso, per esigenze tecniche o per uso
+  non conforme a queste condizioni.</p>
+
+  <h2>6. Cancellazione alla scadenza</h2>
+  <p>Al termine dei sette giorni l'accesso viene chiuso e <b>il contenuto della prova viene
+  cancellato in modo definitivo</b>. Non è previsto alcun recupero, né l'esportazione dei
+  dati inseriti. Se dopo la prova decidi di attivare Tosca, si parte da un'installazione
+  nuova: è il momento in cui, se ci sono dati da recuperare dal tuo vecchio programma, li
+  migriamo insieme.</p>
+
+  <h2>7. Una prova per centro</h2>
+  <p>È prevista una sola prova gratuita per centro e per numero di cellulare. Se hai
+  bisogno di più tempo o di una seconda prova, scrivici: si concorda.</p>
+
+  <h2>8. Limitazione di responsabilità</h2>
+  <p>Salvo i casi di dolo o colpa grave e le responsabilità inderogabili di legge,
+  <span class="campo">«Licenziante»</span> non risponde della perdita dei dati inseriti
+  durante la prova, delle interruzioni del servizio, né di eventuali decisioni prese sulla
+  base di quanto visualizzato durante la prova. Le condizioni economiche e contrattuali
+  della versione completa sono oggetto di un contratto distinto, che non si perfeziona con
+  l'attivazione della prova.</p>
+
+  <h2>9. Contatti</h2>
+  <p><span class="campo">«Licenziante»</span> — <span class="campo">«sede»</span> —
+  <span class="campo">«e-mail»</span>. Per qualunque domanda sulla prova, scrivici prima
+  della scadenza.</p>
+
+{% else %}
+  <h1>Informativa privacy — prova gratuita</h1>
+  <p class="versione">Versione 1.0 — settembre 2026 · artt. 13-14 Regolamento UE 2016/679</p>
+
+  <h2>Chi tratta i tuoi dati</h2>
+  <p>Titolare del trattamento è <span class="campo">«Licenziante»</span>, con sede in
+  <span class="campo">«sede»</span>, e-mail <span class="campo">«e-mail»</span>.</p>
+
+  <h2>Quali dati raccogliamo</h2>
+  <ul>
+    <li>i dati che scrivi nel modulo: nome del centro, tuo nome, e-mail, cellulare;</li>
+    <li>l'indirizzo IP e il tipo di browser da cui arriva la richiesta, con data e ora;</li>
+    <li>la pagina o l'annuncio da cui sei arrivato, se disponibile;</li>
+    <li>la data del primo accesso e quella di scadenza della prova.</li>
+  </ul>
+
+  <h2>Perché li usiamo</h2>
+  <ul>
+    <li><b>Per attivarti la prova e assisterti durante i sette giorni.</b> Base giuridica:
+    l'esecuzione di misure precontrattuali richieste da te (art. 6.1.b GDPR).</li>
+    <li><b>Per ricontattarti al termine</b> e sapere come è andata. Stessa base giuridica:
+    è il seguito naturale della richiesta che ci hai fatto.</li>
+    <li><b>Per evitare abusi</b>: il cellulare serve anche a verificare che la stessa prova
+    non venga richiesta più volte. Base giuridica: il nostro legittimo interesse a non
+    vedere occupate da richieste automatiche le poche prove disponibili (art. 6.1.f).</li>
+  </ul>
+  <p>Non ti iscriviamo ad alcuna newsletter e non usiamo questi dati per pubblicità.</p>
+
+  <h2>Per quanto tempo</h2>
+  <ul>
+    <li><b>Il contenuto della prova</b> (tutto ciò che inserisci dentro il programma) viene
+    cancellato alla scadenza dei sette giorni, insieme all'accesso.</li>
+    <li><b>I tuoi contatti</b> restano per dodici mesi dalla richiesta, il tempo di seguire
+    la trattativa. Se attivi Tosca, valgono da quel momento i termini del contratto.</li>
+  </ul>
+
+  <h2>A chi arrivano</h2>
+  <p>I dati sono conservati su server Microsoft Azure nella regione <b>Italia Nord</b>, che
+  agisce come responsabile del trattamento. Per l'invio dei messaggi ci appoggiamo al
+  fornitore del servizio di messaggistica, anch'esso responsabile del trattamento. Non
+  vengono trasferiti fuori dall'Unione Europea e non vengono comunicati a terzi per
+  finalità proprie.</p>
+
+  <h2>Dati che inserisci tu durante la prova</h2>
+  <div class="rilievo">
+    <p style="margin:0;">Nella prova <b>non vanno inseriti dati di persone reali</b>: i
+    clienti che vedi sono inventati e servono solo a mostrare come lavora il programma. Se
+    inserisci dati di persone vere, il titolare di quel trattamento sei tu, e sei tenuto a
+    rimuoverli prima della scadenza. In ogni caso vengono cancellati con tutto il resto al
+    settimo giorno, e durante la prova nessun messaggio automatico viene inviato ad alcun
+    numero.</p>
+  </div>
+
+  <h2>I tuoi diritti</h2>
+  <p>Puoi chiedere in qualsiasi momento di vedere i tuoi dati, correggerli, cancellarli,
+  limitarne l'uso o opporti al trattamento (artt. 15-22 GDPR), scrivendo a
+  <span class="campo">«e-mail»</span>. Rispondiamo entro un mese. Se ritieni che qualcosa
+  non vada, puoi rivolgerti al Garante per la protezione dei dati personali
+  (www.garanteprivacy.it).</p>
+
+  <h2>Decisioni automatiche</h2>
+  <p>Non c'è alcun processo decisionale automatizzato né profilazione. L'unico controllo
+  automatico è la verifica che dallo stesso numero non risulti una prova già fatta; se
+  succede, ce lo puoi far presente e la riapriamo noi.</p>
+{% endif %}
+
+  <a class="torna" href="/prova">← Torna alla prova gratuita</a>
+</div>
+</body>
+</html>
