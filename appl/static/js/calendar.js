@@ -13973,6 +13973,7 @@ function loadWebAppointments(date, search) {
               btn.dataset.matchNome = matchNameParts[0] || '';
               btn.dataset.matchCognome = matchNameParts.slice(1).join(' ') || '';
               btn.dataset.matchCellulare = matchParts[1] || '';
+              btn.dataset.matchPhoneCount = String(session.match_phone_count || 0);
             }
             
             const icon = document.createElement('span');
@@ -14135,7 +14136,8 @@ if (tdAppt.textContent.trim()) {
           const existingClientData = {
             nome: btn.dataset.matchNome || '',
             cognome: btn.dataset.matchCognome || '',
-            cellulare: btn.dataset.matchCellulare || ''
+            cellulare: btn.dataset.matchCellulare || '',
+            phoneCount: parseInt(btn.dataset.matchPhoneCount || '0', 10)
           };
 
           showPhoneOnlyMatchModal(
@@ -15006,6 +15008,8 @@ function showPhoneOnlyMatchModal(bookingData, existingClientData, onConfirm, onC
           Vuoi associare questo appuntamento al cliente esistente?
         </p>
       </div>
+
+      <div class="alert alert-danger d-none" role="alert" id="phoneMatchDupWarn"></div>
       
       <div class="row mt-4">
         <div class="col-6">
@@ -15061,6 +15065,19 @@ function showPhoneOnlyMatchModal(bookingData, existingClientData, onConfirm, onC
   formContainer.querySelector('#existingNome').textContent = window.capitalizeName(existingClientData.nome || '') || '-';
   formContainer.querySelector('#existingCognome').textContent = window.capitalizeName(existingClientData.cognome || '') || '-';
   formContainer.querySelector('#existingCellulare').textContent = existingClientData.cellulare || '-';
+
+  // Avviso: piu' schede in rubrica condividono questo numero, qui ne mostriamo una sola
+  const dupWarn = formContainer.querySelector('#phoneMatchDupWarn');
+  if (dupWarn) {
+    const dupCount = parseInt(existingClientData.phoneCount || 0, 10);
+    if (dupCount > 1) {
+      dupWarn.textContent = 'Attenzione: ' + dupCount + ' schede in rubrica hanno questo numero. Qui ne vedi una sola: verifica in anagrafica prima di associare.';
+      dupWarn.classList.remove('d-none');
+    } else {
+      dupWarn.textContent = '';
+      dupWarn.classList.add('d-none');
+    }
+  }
   
   // Gestisci i click sui bottoni
   const btnConfirm = formContainer.querySelector('#btnPhoneMatchConfirm');

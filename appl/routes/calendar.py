@@ -2411,6 +2411,7 @@ def online_appointments_by_booking_date():
                 "match_cliente": "",
                 "match_cliente_id": None,
                 "match_type": "none",
+                "match_phone_count": 0,
                 "data_appuntamento": [],
                 "ids": [],
                 "placeholder_exists": False,
@@ -2436,20 +2437,24 @@ def online_appointments_by_booking_date():
                 client_cache[key] = Client.query.filter(
                     func.lower(Client.cliente_nome) == nome_norm,
                     func.lower(Client.cliente_cognome) == cognome_norm,
-                    func.replace(func.replace(func.lower(Client.cliente_cellulare), ' ', ''), '+39', '') == func.replace(func.replace(cellulare_norm, ' ', ''), '+39', '')
+                    func.replace(func.replace(func.lower(Client.cliente_cellulare), ' ', ''), '+39', '') == func.replace(func.replace(cellulare_norm, ' ', ''), '+39', ''),
+                    Client.is_deleted == False
                 ).first()
             client = client_cache[key]
             
             # NEW: Se non c'è match completo, prova match solo cellulare
             phone_only_match = None
+            phone_match_count = 0
             if not client and cellulare_norm:
                 phone_key = f"phone_{cellulare_norm}"
                 if phone_key not in client_cache:
                     client_cache[phone_key] = Client.query.filter(
                         func.replace(func.replace(func.lower(Client.cliente_cellulare), ' ', ''), '+39', '') == func.replace(func.replace(cellulare_norm, ' ', ''), '+39', ''),
                         Client.is_deleted == False
-                    ).first()
-                phone_only_match = client_cache[phone_key]
+                    ).all()
+                phone_matches = client_cache[phone_key] or []
+                phone_match_count = len(phone_matches)
+                phone_only_match = phone_matches[0] if phone_matches else None
             
             if client:
                 # Match completo
@@ -2461,6 +2466,7 @@ def online_appointments_by_booking_date():
                 grouped[session_id]["match_cliente"] = f"{phone_only_match.cliente_nome} {phone_only_match.cliente_cognome} - {phone_only_match.cliente_cellulare}"
                 grouped[session_id]["match_cliente_id"] = phone_only_match.id
                 grouped[session_id]["match_type"] = "phone_only"
+                grouped[session_id]["match_phone_count"] = phone_match_count
             else:
                 # Nessun match
                 grouped[session_id]["match_type"] = "none"
