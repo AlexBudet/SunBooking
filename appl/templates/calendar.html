@@ -135,8 +135,9 @@
     &nbsp;<a href="{{ url_for('calendar.calendar_home', date=today_str) }}" class="btn-today"
              data-bs-toggle="tooltip" data-bs-placement="bottom" title="Torna a oggi">Vai a OGGI</a>
     {% endif %}
-  <!-- Pulsante Web: visibile solo se modulo WEB attivo -->
-  {% if module_web_enabled %}
+  <!-- Pulsante Web: visibile se il modulo WEB e' attivo, e nella prova gratuita,
+       dove pero' non apre le prenotazioni ma racconta cosa fanno. -->
+  {% if module_web_enabled or is_demo %}
 <button id="btnWebInformatica"
         class="btn btn-outline-secondary"
         title="<b>PRENOTAZIONI DA WEB</b><br><br>Clicca per gestire le prenotazioni online"
@@ -4179,7 +4180,50 @@ function configureMobileModalButtons(modal, block) {
   document.addEventListener('click', interceptClientInfo, true);
 })();
 </script>
-{% if hide_cassa %}
+{% if is_demo %}
+<script>
+// ===== PULSANTI VETRINA NELLA PROVA GRATUITA =====
+// Nella prova la Cassa, le prenotazioni online e i messaggi WhatsApp sono
+// spenti. La scelta comoda sarebbe nascondere i pulsanti; ma un pulsante che
+// non c'e' non racconta niente, mentre uno che spiega cosa sta dietro fa
+// vedere cosa manca. Quindi restano al loro posto e, al click, aprono la
+// finestra che descrive la funzione.
+//
+// Si intercetta in fase di cattura, prima che calendar.js veda l'evento, e si
+// ferma li'. Niente closeAllPopups e nessun display:none sulle barre: la
+// gestione dei popup in modalita' touch e' delicata e non va toccata da qui.
+//
+// INFO, "Cerca un buco" e il resto dell'Agenda non sono toccati: quelli nella
+// prova funzionano davvero.
+(function () {
+  const VETRINA = [
+    ['.btn-popup.pagamento', 'cassa'],
+    // Due pulsanti per lo stesso messaggio: quello dentro il blocco e quello
+    // della barra bassa in modalita' touch, che inoltra il click al primo.
+    ['.btn-popup.whatsapp-btn', 'whatsapp'],
+    ['.btn-popup.whatsapp-bottom', 'whatsapp'],
+    ['#btnWebInformatica', 'web'],
+  ];
+
+  function intercettaDemo(e) {
+    if (!e.target || !e.target.closest) return;
+    for (const [selettore, argomento] of VETRINA) {
+      if (!e.target.closest(selettore)) continue;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.type === 'click' && typeof apriModalDemo === 'function') {
+        apriModalDemo(argomento);
+      }
+      return;
+    }
+  }
+  // Anche pointerdown: in touch-ui i pulsanti reagiscono prima del click.
+  document.addEventListener('pointerdown', intercettaDemo, true);
+  document.addEventListener('click', intercettaDemo, true);
+})();
+</script>
+{% endif %}
+{% if hide_cassa and not is_demo %}
 <style>
   /* Nascondi popup button € solo in wsgi */
   .appointment-block .btn-popup.pagamento,

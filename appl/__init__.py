@@ -52,10 +52,14 @@ def get_base_path():
         # Eseguito come script Python
         return os.path.dirname(os.path.abspath(__file__))
 
-def create_app(db_uri: str | None = None, tenant_idx=None):
+def create_app(db_uri: str | None = None, tenant_idx=None, is_demo: bool = False):
     """
     Restituisce una nuova istanza Flask.
     - Usa SOLO PostgreSQL (es. Azure). Se la variabile non è impostata o non è PostgreSQL, solleva errore.
+    - is_demo: slot della prova gratuita. Va passato QUI e non impostato dopo,
+      perche' decide anche cosa NON fare all'avvio: uno slot demo fermo non
+      deve toccare il database, altrimenti si porta via una connessione (su
+      questo server ne restano poche) solo per esistere.
     """
 
     global app
@@ -243,27 +247,39 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
     # soldi sopra. Le carte ricaricate prima che questo controllo esistesse
     # sono rimaste indietro: si sistemano qui, con un solo UPDATE all'avvio.
     # Durante l'uso ci pensano le pagine che le leggono (elenchi, Agenda, Cassa).
-    with app.app_context():
-        try:
-            from appl.routes.pacchetti import allinea_status_prepagate_con_credito
-            corrette = allinea_status_prepagate_con_credito()
-            if corrette:
-                app.logger.info(
-                    "[prepagate] %s carte con credito riportate ad Attivo all'avvio", corrette)
-        except Exception:
-            db.session.rollback()
-            app.logger.exception("[prepagate] allineamento stato/credito all'avvio fallito")
+    app.config['IS_DEMO'] = bool(is_demo)
+
+    # Uno slot demo salta questo controllo: non ha carte prepagate (il modulo e'
+    # spento) e soprattutto non deve aprire una connessione all'avvio. Il pool
+    # di SQLAlchemy si riempie solo quando arriva una richiesta, quindi tre slot
+    # demo fermi costano zero connessioni invece di tre - e su questo server le
+    # connessioni libere si contano sulle dita di una mano.
+    if not app.config['IS_DEMO']:
+        with app.app_context():
+            try:
+                from appl.routes.pacchetti import allinea_status_prepagate_con_credito
+                corrette = allinea_status_prepagate_con_credito()
+                if corrette:
+                    app.logger.info(
+                        "[prepagate] %s carte con credito riportate ad Attivo all'avvio", corrette)
+            except Exception:
+                db.session.rollback()
+                app.logger.exception("[prepagate] allineamento stato/credito all'avvio fallito")
 
     # ---- SCAN NOTIZIE BEAUTY (thread interno, due volte a settimana) ----
     # Il modulo si auto-disattiva se manca ANTHROPIC_API_KEY: in quel caso non
     # parte nessun thread e non viene fatta nessuna chiamata. Il thread viene
     # avviato una sola volta dal primo tenant registrato; gli altri si limitano
     # a registrarsi per ricevere le stesse notizie nel proprio database.
-    try:
-        from appl.news_beauty import register_app as _register_news
-        _register_news(app)
-    except Exception:
-        app.logger.exception("[news_beauty] registrazione fallita")
+    # Uno slot demo non si registra: la scansione scriverebbe notizie nel suo
+    # database a ogni giro (connessione + token AI) per un negozio che non
+    # esiste, e sette giorni dopo il database viene comunque azzerato.
+    if not app.config['IS_DEMO']:
+        try:
+            from appl.news_beauty import register_app as _register_news
+            _register_news(app)
+        except Exception:
+            app.logger.exception("[news_beauty] registrazione fallita")
 
     # ---- SECURITY HEADERS ----
     @app.after_request
@@ -304,6 +320,14 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
             'module_pacchetti_enabled': True,
             'module_solarium_enabled': False,
         }
+
+    # ---- CONTEXT PROCESSOR: e' uno slot della prova gratuita? ----
+    # Non tocca il database: la marcatura arriva da wsgi.py al montaggio. Serve
+    # ai template per mostrare il pulsante euro e la voce Cassa come vetrina
+    # invece di nasconderli, e per la fascia "prova gratuita" in alto.
+    @app.context_processor
+    def inject_demo_flag():
+        return {'is_demo': bool(app.config.get('IS_DEMO'))}
 
     # ---- CONTEXT PROCESSOR: default Cassa visibile (start.py / non-cloud) ----
     # Questo viene SOVRASCRITTO da wsgi.py che registra un context processor
@@ -606,6 +630,59 @@ def create_app(db_uri: str | None = None, tenant_idx=None):
             if is_ajax:
                 return jsonify({'error': 'session_expired', 'message': 'Sessione scaduta'}), 401
             return redirect(url_for('landing'))
+
+    # ---- RECINTO DELLA PROVA GRATUITA ----
+    # Uno slot demo fa vedere Agenda e Report, e basta.
+    #
+    # Perche' qui e non con un blocco sulle URL al momento del montaggio
+    # (block_paths in wsgi.py): quello risponderebbe 404 a CHIUNQUE, owner
+    # compreso, e l'owner deve poter entrare in ogni prova per dare una mano a
+    # chi la sta usando. Il permesso dipende da chi e' collegato, non
+    # dall'indirizzo, quindi si decide dentro l'app.
+    #
+    # E si decide QUI, non nascondendo le voci di menu: nascondere non e'
+    # proteggere, un indirizzo scritto a mano arriverebbe lo stesso alla Cassa.
+    DEMO_SEZIONI_APERTE = {'calendar', 'report'}
+    DEMO_ENDPOINT_APERTI = {'landing', 'logout', 'static', 'ping', 'healthz'}
+
+    @app.before_request
+    def recinto_demo():
+        if not current_app.config.get('IS_DEMO'):
+            return None
+
+        ep = request.endpoint or ''
+        if ep in DEMO_ENDPOINT_APERTI:
+            return None
+        if ep.split('.')[0] in DEMO_SEZIONI_APERTE:
+            return None
+
+        # L'Agenda chiama sette API sotto /settings/api/ (scheda cliente, note,
+        # recapiti, storico): senza queste il pannello del cliente in Agenda si
+        # rompe. Le PAGINE di Impostazioni restano chiuse.
+        if request.path.startswith('/settings/api/'):
+            return None
+
+        # L'owner passa sempre.
+        try:
+            from .models import User, RuoloUtente
+            utente = db.session.get(User, session.get('user_id'))
+            if utente is not None and utente.ruolo == RuoloUtente.owner:
+                return None
+        except Exception:
+            db.session.rollback()
+
+        messaggio = ("Questa parte di Tosca non e' inclusa nella prova: "
+                     "durante i sette giorni sono attive Agenda e Report.")
+        chiede_json = (
+            request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or request.accept_mimetypes.best == 'application/json'
+            or request.content_type == 'application/json'
+            or '/api/' in request.path
+        )
+        if chiede_json:
+            return jsonify({'error': 'demo', 'message': messaggio}), 403
+        flash(messaggio, 'info')
+        return redirect(url_for('calendar.calendar_home'))
 
     # ---- PING: verifica raggiungibilità dell'app (non tocca il DB) ----
     @app.get("/ping")

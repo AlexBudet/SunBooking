@@ -1,0 +1,115 @@
+{# ========== MODAL: funzione fuori dalla prova gratuita ==========
+   Incluso da base.html solo quando is_demo e' vero.
+
+   Perche' esiste: nella prova la Cassa e' spenta, e la scelta piu' comoda
+   sarebbe stata nascondere il pulsante euro in Agenda. Ma un pulsante che non
+   c'e' non racconta niente, mentre un pulsante che spiega cosa sta dietro fa
+   vedere quanto manca. Il click quindi non porta in Cassa: apre questa
+   finestra.
+
+   Non e' una protezione: quella e' il recinto lato server in appl/__init__.py
+   (recinto_demo). Questa e' solo la parte che si vede.
+
+   Uso: {% include '_demo_upsell_modal.html' %} una sola volta per pagina,
+   poi onclick="apriModalDemo('cassa')" - oppure 'tools', oppure niente. #}
+<div class="modal fade" id="demoUpsellModal" tabindex="-1"
+     aria-labelledby="demoUpsellTitolo" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="demoUpsellTitolo">Questa parte è nella versione completa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <p id="demoUpsellIntro" class="mb-3"></p>
+        <ul id="demoUpsellElenco" class="mb-3" style="line-height:1.7;"></ul>
+        <p class="text-muted mb-0" style="font-size:0.92rem;">
+          Durante i sette giorni di prova restano attive <strong>Agenda</strong> e
+          <strong>Report</strong>, con dati dimostrativi.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+          Continua la prova
+        </button>
+        <a class="btn btn-primary" href="https://www.tosca-crm.it/#demo"
+           target="_blank" rel="noopener">Voglio saperne di più</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== FUNZIONE FUORI DALLA PROVA =====================
+(function () {
+  var TESTI = {
+    cassa: {
+      titolo: 'La Cassa di Tosca',
+      intro: 'Da qui l’appuntamento diventa uno scontrino, senza riscrivere niente.',
+      punti: [
+        'Lo scontrino parte da solo al registratore telematico: nessun doppio lavoro alla chiusura',
+        'L’appuntamento pagato diventa grigio in Agenda, così sai a colpo d’occhio chi ha già saldato',
+        'Gli incassi finiscono nel Report mentre lavori, non a fine mese',
+        'Tessere prepagate e pacchetti si scalano da soli, con il saldo che arriva sul telefono della cliente'
+      ]
+    },
+    whatsapp: {
+      titolo: 'I messaggi WhatsApp',
+      intro: 'Tosca scrive alle clienti dal numero del tuo centro, senza che tu apra il telefono.',
+      punti: [
+        'Il promemoria del mattino con l’ora dell’appuntamento: meno buchi in agenda per le dimenticate',
+        'Il messaggio di conferma quando prendi o sposti un appuntamento, con un click',
+        'Il saldo aggiornato della tessera prepagata subito dopo il pagamento',
+        'Il messaggio di bentornata a chi non si vede da un po’, per riportarla in negozio'
+      ]
+    },
+    web: {
+      titolo: 'Le prenotazioni online',
+      intro: 'Le clienti prenotano da sole, dal telefono, anche quando il centro è chiuso.',
+      punti: [
+        'La prenotazione entra dritta in Agenda: nessuno la deve ricopiare',
+        'Vedi solo gli orari davvero liberi, secondo i turni e le durate dei tuoi servizi',
+        'La cliente nuova viene riconosciuta e agganciata alla scheda giusta',
+        'Il badge in alto ti avvisa quando arriva una prenotazione da approvare'
+      ]
+    },
+    tools: {
+      titolo: 'Le Impostazioni di Tosca',
+      intro: 'È la stanza dei bottoni: qui il gestionale prende la forma del tuo centro.',
+      punti: [
+        'Listino, operatori, turni e orari di apertura',
+        'Promemoria WhatsApp automatici il mattino degli appuntamenti',
+        'Prenotazioni online dei clienti, che entrano dritte in Agenda',
+        'Anagrafica clienti completa, storico e note'
+      ]
+    },
+    generico: {
+      titolo: 'Questa parte è nella versione completa',
+      intro: 'Nella prova gratuita sono attive Agenda e Report.',
+      punti: [
+        'Cassa e scontrino fiscale',
+        'Pacchetti e tessere prepagate',
+        'Prenotazioni online e promemoria automatici'
+      ]
+    }
+  };
+
+  window.apriModalDemo = function (quale) {
+    var t = TESTI[quale] || TESTI.generico;
+    document.getElementById('demoUpsellTitolo').textContent = t.titolo;
+    document.getElementById('demoUpsellIntro').textContent = t.intro;
+    var ul = document.getElementById('demoUpsellElenco');
+    ul.innerHTML = '';
+    t.punti.forEach(function (p) {
+      var li = document.createElement('li');
+      li.textContent = p;
+      ul.appendChild(li);
+    });
+    var el = document.getElementById('demoUpsellModal');
+    // getOrCreateInstance e non new: riaprendolo una seconda volta con `new`
+    // Bootstrap lascerebbe due istanze attaccate allo stesso nodo e lo sfondo
+    // scuro non se ne andrebbe piu'.
+    bootstrap.Modal.getOrCreateInstance(el).show();
+  };
+})();
+</script>

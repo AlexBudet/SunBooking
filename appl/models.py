@@ -585,8 +585,15 @@ class Pacchetto(db.Model):
     tipo = db.Column(
         ENUM(
             PacchettoTipo, 
-            name="pacchetto_tipo_enum", 
-            create_type=False,  # L'enum esiste già nel DB
+            name="pacchetto_tipo_enum",
+            # create_type=False diceva "l'enum esiste gia' nel DB", ed e' vero per
+            # i negozi nati da una migrazione. Non lo e' per un database NUOVO:
+            # li' create_all() emetteva la tabella senza prima creare il tipo e
+            # si fermava con 'type "pacchetto_tipo_enum" does not exist'. Con True
+            # il tipo viene creato solo se manca (create_all controlla prima), per
+            # cui i negozi esistenti non se ne accorgono e provision_tenant()
+            # riesce finalmente a creare un tenant da zero.
+            create_type=True,
             values_callable=lambda x: [e.value for e in x]  # Usa i valori, non i nomi
         ),
         nullable=False,

@@ -55,6 +55,33 @@ def collect_db_pool():
                 pass
     return dict(sorted(pool.items()))
 
+
+def collect_demo_pool():
+    """Gli slot della prova gratuita, da variabili tutte loro.
+
+    Perche' non SQLALCHEMY_DATABASE_URI<n> come i negozi: quel dizionario e'
+    l'elenco dei NEGOZI, e da li' provision_tenant() ricava il numero del
+    prossimo cliente con max(indici)+1. Bastavano tre slot dentro il pool
+    perche' il primo cliente pagante finisse su /s/94 invece che su /s/4.
+
+    Numerare gli slot 001/002/003 sarebbe stato peggio: l'indice si ricava con
+    int(), quindi "001" vale 1 e avrebbe sovrascritto il primo negozio - /s/1
+    avrebbe potuto puntare a un database demo.
+
+    Restano montati su /s/91-93 (indice = 90 + numero dello slot) per riusare
+    senza modifiche il cookie dbidx, l'auto-login e i percorsi gia' esistenti.
+    """
+    pattern = re.compile(r'^DEMO_DATABASE_URI(\d+)$', re.IGNORECASE)
+    demo = {}
+    for k, v in os.environ.items():
+        m = pattern.match(k)
+        if m and v:
+            try:
+                demo[90 + int(m.group(1))] = v
+            except Exception:
+                pass
+    return dict(sorted(demo.items()))
+
 def db_label(uri):
     try:
         p = urlparse(uri)
@@ -110,7 +137,11 @@ def fix_delete_method_middleware(app):
         return app(environ, start_response)
     return wrapper
 
-pool = collect_db_pool()
+pool = collect_db_pool()          # i NEGOZI: /s/1, /s/2, ... e la numerazione
+                                  # dei clienti si conta solo qui dentro.
+demo_pool = collect_demo_pool()   # gli SLOT della prova gratuita: /s/91-93
+DEMO_IDX = set(demo_pool)
+
 secret = os.getenv('SECRET_KEY') or os.urandom(24)
 use_https = os.getenv('USE_HTTPS', 'false').lower() in ('1', 'true', 'yes')
 
@@ -238,13 +269,17 @@ def root_apple_touch_icon():
 def root():
     return redirect(url_for('landing_web'))
 
-# Costruzione mounts e cache dei child
+# Costruzione mounts e cache dei child.
+# Negozi e slot demo si montano allo stesso modo - stessa app, stessi cookie,
+# stessi middleware - e stanno insieme in `children` perche' anche il login
+# dalla landing root deve poter trovare l'utente di una prova. Cio' che NON
+# devono condividere e' la numerazione: quella vive in `pool` e basta.
 mounts = {}
 children = {}
-for idx, uri in pool.items():
+for idx, uri in {**pool, **demo_pool}.items():
     # tenant_idx: da qui il child ricava nome del cookie, percorso e chiave di
     # firma tutti suoi. Senza, i negozi condividerebbero la sessione.
-    child = create_app(uri, tenant_idx=idx)
+    child = create_app(uri, tenant_idx=idx, is_demo=idx in DEMO_IDX)
     # NB: la chiave la imposta create_app derivandola per tenant. Riassegnare
     # qui "secret" a tutti rimetterebbe la chiave in comune e riaprirebbe il
     # buco: si tocca solo se manca SECRET_KEY nell'ambiente.
@@ -1179,9 +1214,11 @@ def owner_monitor_dati():
                                unipile_monitor)
 
     per_tenant = []
-    for idx, uri in pool.items():
+    # Anche gli slot demo: non sono negozi, ma le connessioni le occupano sullo
+    # stesso server, e una capienza calcolata ignorandoli sarebbe ottimistica.
+    for idx, uri in {**pool, **demo_pool}.items():
         child = children.get(idx)
-        voce = {'idx': idx, 'nome': db_label(uri)}
+        voce = {'idx': idx, 'nome': db_label(uri), 'demo': idx in DEMO_IDX}
         if not child:
             voce['errore'] = 'tenant non montato'
             per_tenant.append(voce)
@@ -1204,7 +1241,15 @@ def owner_monitor_dati():
     # Tutti gli ingredienti sono MISURATI, non stimati: e' il punto della
     # pagina. L'unica cosa che resta un'ipotesi e' il prezzo, che infatti sta
     # in una variabile d'ambiente e viene dichiarato accanto al risultato.
-    validi = [t for t in per_tenant if 'errore' not in t]
+    # Gli slot della prova gratuita NON sono negozi. Stanno sullo stesso
+    # server e le connessioni le consumano davvero, ma contarli fra i clienti
+    # farebbe dire al pannello "sei negozi" e sballerebbe ogni proiezione:
+    # spazio, messaggi, traffico. Restano quindi fuori da `validi` - che da qui
+    # in poi vuol dire "negozi veri" - ed entrano solo nel conto delle
+    # connessioni, come consumo che non appartiene ai negozi.
+    validi = [t for t in per_tenant
+              if 'errore' not in t and t['idx'] not in DEMO_IDX]
+    slot_demo = [t for t in per_tenant if t['idx'] in DEMO_IDX]
     n_tenant = len(validi)
 
     tetto_pool = 3
@@ -1229,10 +1274,19 @@ def owner_monitor_dati():
     # sbaglia una previsione di capienza.
     altre_app = max(0, conn_server - conn_tenant)
 
+    # Le connessioni che gli slot demo possono arrivare a occupare vengono
+    # tolte dal disponibile PRIMA di calcolare quanti negozi ci stanno: sono
+    # posti gia' prenotati. A riposo ne aprono zero (create_app salta il
+    # controllo prepagate per le demo), ma la capienza si calcola sul peggio.
+    conn_demo = tetto_pool * len(slot_demo)
+
     prj_conn = usage_projection.proiezione_connessioni(
         n_tenant, tetto_pool, max_conn,
-        connessioni_riservate=riservate, connessioni_altre_app=altre_app)
+        connessioni_riservate=riservate,
+        connessioni_altre_app=altre_app + conn_demo)
     prj_conn['connessioni_altre_app_misurate'] = altre_app
+    prj_conn['slot_demo'] = len(slot_demo)
+    prj_conn['connessioni_slot_demo'] = conn_demo
 
     byte_tenant = [t['database']['dimensione_byte'] for t in validi
                    if (t.get('database') or {}).get('dimensione_byte')]
@@ -1676,7 +1730,12 @@ def provision_tenant(uri, business_name, city='', modules=None,
             from appl.models import User, RuoloUtente
             if not User.query.first():
                 owner_source = None
-                for _existing_child in children.values():
+                for _idx_src, _existing_child in children.items():
+                    # Mai copiare l'utente owner da uno slot demo: quello e' un
+                    # database che viene azzerato ogni settimana, non la fonte
+                    # di verita' delle credenziali.
+                    if _idx_src in DEMO_IDX:
+                        continue
                     try:
                         with _existing_child.app_context():
                             from appl.models import User as _U, RuoloUtente as _R

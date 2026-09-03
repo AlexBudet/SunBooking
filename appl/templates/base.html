@@ -239,6 +239,16 @@ html.in-side-pane #reconnectingIndicator { display: none !important; }
             <span class="menu-label">Cassa</span>
         </a>
     </li>
+    {% elif is_demo %}
+    {# Nella prova la voce resta, ma non porta in Cassa: racconta cosa fa. Una
+       voce che sparisce non fa venire voglia di niente. #}
+    <li class="nav-item">
+        <a class="nav-link menu-link" data-nav="cassa" href="#"
+           onclick="apriModalDemo('cassa'); return false;">
+            <i class="bi bi-cash-coin menu-icon"></i>
+            <span class="menu-label">Cassa</span>
+        </a>
+    </li>
     {% endif %}
     <li class="nav-item">
         <a class="nav-link menu-link" data-nav="report" href="{{ url_for('report.report') }}">
@@ -255,7 +265,11 @@ html.in-side-pane #reconnectingIndicator { display: none !important; }
     </li>
     {% endif %}
     <li class="nav-item">
-        <a class="nav-link menu-link" data-nav="tools" href="{{ url_for('settings.settings_home') }}">
+        {# In demo il recinto lato server rimanderebbe comunque in Agenda: meglio
+           dirlo prima con una spiegazione che dopo con un rimbalzo. #}
+        <a class="nav-link menu-link" data-nav="tools"
+           href="{% if is_demo %}#{% else %}{{ url_for('settings.settings_home') }}{% endif %}"
+           {% if is_demo %}onclick="apriModalDemo('tools'); return false;"{% endif %}>
             <i class="bi bi-gear menu-icon"></i>
             <span class="menu-label">Tools</span>
         </a>
@@ -985,6 +999,8 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
+
+    {% if is_demo %}{% include '_demo_upsell_modal.html' %}{% endif %}
 
     {% block scripts %}{% endblock %}
 </body>
