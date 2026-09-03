@@ -206,7 +206,12 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
             closing_time=time(20, 0),
             active_opening_time=time(9, 0),
             active_closing_time=time(19, 0),
-            closing_days=json.dumps(['Domenica']),
+            # In INGLESE, come lo scrivono i negozi veri: il confronto lo fa
+            # `selected_date.strftime('%A')` lato server e `_DOW_EN` lato
+            # browser. Scritto "Domenica" non corrispondeva a niente, e nel
+            # modal degli orari la domenica compariva col turno 9-19 invece
+            # che OFF.
+            closing_days=json.dumps(['Sunday']),
             vat_percentage=22.0,
             # Nessun invio automatico da uno slot demo: se il potenziale cliente
             # scrive per prova un numero vero, non deve partirgli niente.
@@ -327,6 +332,21 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
         appuntamenti = []
         colore_del_giorno = {}   # (cliente, giorno) -> colore
 
+        # Giornate PIENE: qualche colonna del passato riempita da cima a fondo,
+        # senza un buco. Servono al pannello dei turni, che segna "FULL" solo
+        # quando i minuti prenotati raggiungono quelli del turno: senza almeno
+        # una giornata cosi', quella scritta non si vedrebbe mai.
+        giorni_passati = [g for g in _giorni_apertura(
+            oggi - timedelta(days=GIORNI_PASSATO), oggi - timedelta(days=1))]
+        piene = set()
+        for scarto, indice_op in ((-2, 0), (-3, 2), (-6, 1), (-9, 0)):
+            if len(giorni_passati) >= abs(scarto):
+                piene.add((giorni_passati[scarto], indice_op))
+
+        # Solo servizi da un'ora: dieci di fila coprono esattamente le 9-19 e
+        # la giornata risulta piena al minuto, senza avanzi.
+        da_un_ora = [sv for sv in servizi if sv.servizio_durata == 60]
+
         for g in _giorni_apertura(oggi - timedelta(days=GIORNI_PASSATO),
                                   oggi + timedelta(days=GIORNI_FUTURO)):
             fine_turno = ORA_CHIUSURA
@@ -343,11 +363,12 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
 
                 orario = datetime.combine(g, ORA_APERTURA)
                 chiusura = datetime.combine(g, fine_turno)
+                giornata_piena = (g, i) in piene and da_un_ora
                 while orario < chiusura:
-                    if rng.random() > atteso:
+                    if not giornata_piena and rng.random() > atteso:
                         orario += timedelta(minutes=15)   # buco in agenda
                         continue
-                    sv = rng.choice(servizi)
+                    sv = rng.choice(da_un_ora if giornata_piena else servizi)
                     if orario + timedelta(minutes=sv.servizio_durata) > chiusura:
                         break   # non si sfora la chiusura
 
@@ -379,7 +400,8 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
                     appuntamenti.append((ap, sv, cl, op, g))
 
                     orario += timedelta(minutes=sv.servizio_durata)
-                    orario += timedelta(minutes=rng.choice([0, 0, 5, 10, 15]))
+                    if not giornata_piena:
+                        orario += timedelta(minutes=rng.choice([0, 0, 5, 10, 15]))
                     # Riporta l'orario a un multiplo di 5 minuti: un trattamento
                     # di durata dispari lascerebbe l'agenda piena di orari come
                     # le 10:37.
@@ -477,6 +499,7 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
             'turni': n_turni,
             'appuntamenti': len(appuntamenti),
             'blocchi_nota': n_note,
+            'giornate_piene': len(piene),
             'scontrini': n_scontrini,
             'incasso': round(incasso, 2),
             'dal': str(oggi - timedelta(days=GIORNI_PASSATO)),

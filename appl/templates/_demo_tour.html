@@ -17,9 +17,11 @@
    - Per far comparire la barra dei pulsanti si aggiunge al blocco la classe
      `active-popup`, che e' quella che usa gia' l'applicazione. Nessun
      display:none inventato qui: la gestione dei popup in touch e' delicata.
-   - Dove serve, il passo si prepara la scena da solo (apre la finestra del
-     nuovo appuntamento simulando il click su una cella libera) e la richiude
-     quando si va oltre.
+   - I passi che hanno bisogno di una finestra aperta NON la aprono da soli:
+     chiedono il gesto e aspettano (`attendi:`), poi vanno avanti da soli.
+     Simulare il click era fragile e quando falliva la visita si inchiodava.
+   - Si guarda e basta: per usare il programma si esce e si riprende dopo. Lo
+     dice la nota gialla, fissa in ogni passo.
 
    DOVE SI FERMA
    `localStorage` tiene il numero del passo raggiunto: si esce quando si vuole
@@ -55,19 +57,29 @@
   #tourCard .tour-avanti { background: #87647c; color: #fff; border: 0; }
   #tourCard .tour-indietro { background: #fff; color: #666; border: 1px solid #ddd; }
   #tourCard .tour-esci {
-    background: none; border: 0; color: #999; font-size: .78rem;
-    text-decoration: underline; padding: 0;
+    background: #fff; border: 1px solid #d8ccd4; color: #6b5566;
+    font-size: .88rem; padding: 6px 14px; border-radius: 6px;
+  }
+  #tourCard .tour-esci:hover { background: #f6f1f5; border-color: #b79fb0; }
+  /* Nota fissa: vale per tutti i passi, quindi non sta nel testo di nessuno. */
+  #tourCard .tour-nota {
+    margin: 0 0 12px; padding: 8px 10px; background: #fff8e1;
+    border-radius: 6px; font-size: .8rem; line-height: 1.45; color: #6b5300;
   }
   /* Il richiamo per riprendere: sempre a portata, mai in mezzo ai piedi. */
   #tourAvvio {
-    position: fixed; right: 14px; bottom: 14px; z-index: 29000;
+    /* In basso a SINISTRA: l'angolo destro e' della colonna badge (INFO e
+       Cerca un buco, z-index 99990) e finivano uno sopra l'altro. z-index
+       99991 perche' un richiamo che serve a uscire dalla visita non deve mai
+       stare sotto a qualcosa. */
+    position: fixed; left: 14px; bottom: 14px; z-index: 99991;
     background: #87647c; color: #fff; border: 0; border-radius: 22px;
     padding: 10px 16px; font-size: .86rem; box-shadow: 0 4px 14px rgba(0,0,0,.24);
     cursor: pointer;
   }
   #tourAvvio:hover { background: #7a5870; }
   #tourMenu {
-    position: fixed; right: 14px; bottom: 58px; z-index: 29001; background: #fff;
+    position: fixed; left: 14px; bottom: 58px; z-index: 99992; background: #fff;
     border-radius: 10px; box-shadow: 0 6px 22px rgba(0,0,0,.22); padding: 6px;
     display: none;
   }
@@ -91,8 +103,13 @@
 <div id="tourCard" style="display:none;">
   <h6 id="tourTitolo"></h6>
   <p id="tourTesto"></p>
+  <p class="tour-nota">
+    Qui si <b>guarda</b> soltanto: se serve provare qualcosa te lo dico io.
+    Per mettere le mani sul programma premi <b>Esci</b> — poi riprendi dal
+    pulsante in basso a sinistra e ritrovi il punto dove eri rimasta.
+  </p>
   <div class="tour-piede">
-    <button type="button" class="tour-esci" onclick="tourEsci()">esci</button>
+    <button type="button" class="tour-esci" onclick="tourEsci()">Esci</button>
     <span class="tour-conta" id="tourConta"></span>
     <span>
       <button type="button" class="tour-indietro" onclick="tourIndietro()">Indietro</button>
@@ -160,9 +177,10 @@
     {
       sel: '#appointmentNavigator',
       titolo: 'Si comincia da qui',
-      testo: 'Questo è il navigatore. Funziona come un vassoio: ci appoggi sopra ' +
-             'la cliente e i servizi, poi lo posi in agenda. Tre secondi in tutto, ' +
-             'ed è il gesto che farai cento volte al giorno.'
+      testo: 'Facciamo un giro insieme: ti mostro un pezzo per volta, e tu ' +
+             'guardi. Quando vuoi provare davvero, esci e rientra quando ti pare. ' +
+             'Si comincia da questo: è il navigatore, e funziona come un vassoio ' +
+             '— ci appoggi la cliente e i servizi, poi lo posi in agenda.'
     },
     {
       sel: '#clientSearchInputNav',
@@ -380,12 +398,46 @@
              'scritta PAGATO. A fine giornata guardi la colonna e sai subito chi ' +
              'ha saldato e chi no, senza aprire niente.'
     },
+    /* ---------- 5. I TURNI DELLE RAGAZZE ---------- */
+    {
+      sel: '.operator-header .operator-shift-link',
+      titolo: 'Il nome in cima alla colonna',
+      testo: 'Cliccalo: si apre il quadro dei turni di quella collega. Orari, ' +
+             'giorni di riposo e giornate al completo, tutto in un colpo d\'occhio. ' +
+             'Provaci, la visita va avanti da sola appena si apre.',
+      attendi: '#OperatorShiftsModalCalendar.show'
+    },
+    {
+      sel: '#shiftsMonthGrid',
+      titolo: 'Il mese a colpo d\'occhio',
+      testo: 'Ogni casella dice com\'è quel giorno: l\'orario di turno, ' +
+             '<b>OFF</b> quando è chiuso o è il suo riposo, <b>FULL</b> quando la ' +
+             'giornata è piena e non entra più nessuno. Serve quando una cliente ' +
+             'chiede "quando c\'è la Laura?" e devi rispondere subito.'
+    },
+    {
+      sel: function () {
+        var m = document.getElementById('OperatorShiftsModalCalendar');
+        return m ? m.querySelector('button[onclick*="setDayOffCalendar"]') : null;
+      },
+      titolo: 'Il giorno di riposo',
+      testo: 'Segna la giornata come riposo: l\'agenda si chiude per quella ' +
+             'collega e nessuno può prenotarci sopra, nemmeno per sbaglio.',
+      dopo: function () {
+        var m = document.getElementById('OperatorShiftsModalCalendar');
+        if (m && window.bootstrap) {
+          var i = bootstrap.Modal.getInstance(m);
+          if (i) i.hide();
+        }
+      }
+    },
+
     {
       sel: '#appointmentNavigator',
       titolo: 'Finito. Ora tocca a te',
       testo: 'Prova a creare un appuntamento vero: nessuno si offende, i dati ' +
              'sono finti. Se ti perdi, il pulsante "Visita guidata" in basso a ' +
-             'destra rifà il giro quando vuoi, anche solo un pezzo.'
+             'sinistra rifà il giro quando vuoi, anche solo un pezzo.'
     }
   ];
 
@@ -470,7 +522,7 @@
       scrivi(CHIAVE_STATO, 'in_corso');
 
       document.getElementById('tourTitolo').textContent = t.titolo;
-      document.getElementById('tourTesto').textContent = t.testo;
+      document.getElementById('tourTesto').innerHTML = t.testo;
       document.getElementById('tourConta').textContent = (indice + 1) + ' di ' + TAPPE.length;
       velo.style.display = 'block';
       card.style.display = 'block';
