@@ -149,7 +149,7 @@
 6. COSA MANCA ANCORA
 --------------------------------------------------------------------------------
 
-  [ ] Partita IVA -> poi utenza OpenAPI per la fatturazione elettronica
+  [x] Partita IVA 02857360032 (04/09/2026) -> resta da aprire l'utenza OpenAPI
       (la colonna billing.einvoice_customer_id e' gia' pronta)
 
   [ ] Generazione del PDF del contratto compilato
@@ -171,7 +171,7 @@
       In particolare: clausole ex artt. 1341-1342, DPA (Allegato B),
       limitazione di responsabilita'.
 
-  [ ] Compilare nel contratto: partita IVA, REA, requisiti minimi CPU/RAM
+  [ ] Compilare nel contratto: REA, requisiti minimi CPU/RAM (P.IVA fatta)
       (li rilevo da Gestione risorse), e i nomi dei fornitori nell'Allegato B.
 
 ================================================================================
