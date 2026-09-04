@@ -73,26 +73,36 @@
     alla scadenza si chiude da sola.
   </p>
 
-  <div class="credenziali">
-    <div><b>Indirizzo</b> <code>{{ esito.url }}</code></div>
-    <div><b>Utente</b> <code>{{ esito.username }}</code></div>
-    <div>
-      <b>Password</b> <code id="provaPassword">{{ esito.password }}</code>
-      {# Una password generata si sbaglia a ricopiare: il pulsante toglie di
-         mezzo l'unico passaggio che puo' far fallire il primo accesso. #}
-      <button type="button" class="copia" id="btnCopia"
-              onclick="copiaPassword()">copia</button>
-    </div>
-  </div>
-
+  {# Qui c'e' UNA cosa sola da fare: entrare. Indirizzo, utente e password
+     stampati accanto a un pulsante che entra da solo facevano leggere tre
+     dati inutili in quel momento - e chiedersi quale dei due usare. I dati
+     per rientrare stanno nell'e-mail, che e' anche il posto giusto per
+     ritrovarli fra tre giorni. Se pero' l'e-mail NON e' partita si mostrano
+     qui: senza, la prova sarebbe irraggiungibile dal secondo accesso. #}
   <a class="entra" href="{{ esito.link }}">Entra nella prova</a>
-  <p class="aiuto" style="text-align:center;margin-top:10px;">
-    {% if esito.email_inviata %}
-      Ti abbiamo mandato questi dati anche per e-mail, per rientrare quando vuoi.
-    {% else %}
-      Segnati indirizzo, utente e password: servono per rientrare nei prossimi sette giorni.
-    {% endif %}
-  </p>
+
+  {% if esito.email_inviata %}
+    <p class="aiuto" style="text-align:center;margin-top:12px;">
+      Ti abbiamo mandato per e-mail questo stesso link, l'indirizzo, l'utente e
+      la password: è da lì che rientri nei prossimi sette giorni.
+    </p>
+  {% else %}
+    <div class="avviso" style="margin-top:18px;">
+      Non siamo riusciti a mandarti l'e-mail. <b>Segnati questi dati adesso</b>:
+      servono per rientrare nei prossimi sette giorni.
+    </div>
+    <div class="credenziali">
+      <div><b>Indirizzo</b> <code>{{ esito.url }}</code></div>
+      <div><b>Utente</b> <code>{{ esito.username }}</code></div>
+      <div>
+        <b>Password</b> <code id="provaPassword">{{ esito.password }}</code>
+        {# Una password generata si sbaglia a ricopiare: il pulsante toglie di
+           mezzo l'unico passaggio che puo' far fallire il primo accesso. #}
+        <button type="button" class="copia" id="btnCopia"
+                onclick="copiaPassword()">copia</button>
+      </div>
+    </div>
+  {% endif %}
 
   <div class="nota-legale">
     Durante la prova sono attive <b>Agenda</b> e <b>Report</b>. Cassa, prenotazioni online,

@@ -68,20 +68,24 @@ COLORI = ["#f8d7da", "#d1e7dd", "#cfe2ff", "#fff3cd", "#e2d9f3", "#d7f5f0",
           "#ffe5d0", "#e6e6fa", "#d9f2d9", "#fde2e4"]
 
 # (nome, tag, durata, prezzo, categoria, sottocategoria)
+# Il tag e' quello che si legge SUL BLOCCO in agenda, ed e' l'abbreviazione del
+# nome del servizio: tagliare tutto a cinque lettere fabbricava parole che non
+# vogliono dire niente ("MASRE") o che dicono un'altra cosa ("CERCO"). Meglio
+# accorciare la parola intera e separare i pezzi con un punto.
 LISTINO = [
-    ("Manicure",               "MANI",  45, 25.0, "Estetica", "Mani e piedi"),
-    ("Semipermanente mani",    "SEMIP", 60, 35.0, "Estetica", "Mani e piedi"),
-    ("Ricostruzione unghie",   "RICOS", 90, 60.0, "Estetica", "Mani e piedi"),
-    ("Pedicure estetico",      "PEDIC", 60, 35.0, "Estetica", "Mani e piedi"),
-    ("Pulizia viso",           "VISO",  60, 45.0, "Estetica", "Viso"),
-    ("Trattamento antieta",    "ANTIE", 75, 65.0, "Estetica", "Viso"),
-    ("Laminazione ciglia",     "CIGLI", 60, 50.0, "Estetica", "Viso"),
-    ("Ceretta gambe",          "CERGA", 40, 25.0, "Estetica", "Epilazione"),
-    ("Ceretta completa",       "CERCO", 60, 40.0, "Estetica", "Epilazione"),
-    ("Massaggio relax",        "MASRE", 50, 50.0, "Estetica", "Massaggi"),
-    ("Massaggio decontratt.",  "MASDE", 50, 55.0, "Estetica", "Massaggi"),
-    ("Pressoterapia",          "PRESS", 40, 30.0, "Estetica", "Corpo"),
-    ("Trattamento corpo",      "CORPO", 60, 55.0, "Estetica", "Corpo"),
+    ("Manicure",               "MANICURE",   45, 25.0, "Estetica", "Mani e piedi"),
+    ("Semipermanente mani",    "SEMIPERM",   60, 35.0, "Estetica", "Mani e piedi"),
+    ("Ricostruzione unghie",   "RICOSTR",    90, 60.0, "Estetica", "Mani e piedi"),
+    ("Pedicure estetico",      "PEDICURE",   60, 35.0, "Estetica", "Mani e piedi"),
+    ("Pulizia viso",           "PUL.VISO",   60, 45.0, "Estetica", "Viso"),
+    ("Trattamento antieta",    "TR.ANTIETA", 75, 65.0, "Estetica", "Viso"),
+    ("Laminazione ciglia",     "LAM.CIGLIA", 60, 50.0, "Estetica", "Viso"),
+    ("Ceretta gambe",          "CER.GAMBE",  40, 25.0, "Estetica", "Epilazione"),
+    ("Ceretta completa",       "CER.COMPL",  60, 40.0, "Estetica", "Epilazione"),
+    ("Massaggio relax",        "MASS.RELAX", 50, 50.0, "Estetica", "Massaggi"),
+    ("Massaggio decontratt.",  "MASS.DECON", 50, 55.0, "Estetica", "Massaggi"),
+    ("Pressoterapia",          "PRESSOTER",  40, 30.0, "Estetica", "Corpo"),
+    ("Trattamento corpo",      "TR.CORPO",   60, 55.0, "Estetica", "Corpo"),
 ]
 
 # Niente solarium nella demo, ne' fra i servizi ne' fra gli operatori: il
@@ -256,6 +260,18 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
             s.add(sv)
             servizi.append(sv)
 
+        # Il servizio "dummy" non e' del listino e non si vede da nessuna parte:
+        # l'applicazione lo esclude ovunque per nome (func.lower(...) != "dummy").
+        # Serve solo a reggere i blocchi OFF, che in tabella hanno comunque
+        # bisogno di un servizio: attaccarli a Manicure, come si faceva prima,
+        # li faceva contare fra le manicure nel Report.
+        servizio_off = Service(
+            servizio_nome='dummy', servizio_tag='dummy', servizio_durata=0,
+            servizio_prezzo=0.0, servizio_categoria=ServiceCategory['Estetica'],
+            is_deleted=False, is_visible_in_calendar=False, is_visible_online=False,
+        )
+        s.add(servizio_off)
+
         # ── Operatori ──────────────────────────────────────────────────────
         operatori = []
         for i, (nome, cognome, tipo) in enumerate(OPERATORI):
@@ -420,20 +436,26 @@ def semina(uri: str, reset: bool = True, password_demo: str = 'prova2026',
         s.add(segnaposto)
         s.flush()
 
+        # Uno per giornata, non quattro attorno al giorno della semina: la prova
+        # dura sette giorni e i dati si scrivono una volta sola, quindi dal
+        # secondo giorno in poi "oggi" restava senza nemmeno un blocco OFF - e
+        # la visita guidata saltava il passo che lo racconta.
         promemoria = [
-            (0,  time(13, 0), 30, 'Consegna prodotti'),
-            (0,  time(18, 30), 30, 'Riordino cabina'),
-            (2,  time(9, 0), 60, 'Riunione con le ragazze'),
-            (-3, time(17, 0), 45, 'Corso di aggiornamento'),
+            (time(13, 0), 30, 'Consegna prodotti'),
+            (time(18, 30), 30, 'Riordino cabina'),
+            (time(9, 0), 60, 'Riunione'),
+            (time(17, 0), 45, 'Corso aggiornamento'),
+            (time(12, 30), 30, 'Pausa pranzo'),
         ]
         n_note = 0
-        for scarto, ora, durata, testo in promemoria:
+        for scarto in range(-3, 11):
             giorno = oggi + timedelta(days=scarto)
             if giorno.weekday() in CHIUSO:
                 continue
+            ora, durata, testo = promemoria[(scarto + 3) % len(promemoria)]
             s.add(Appointment(
                 client_id=segnaposto.id, operator_id=operatori[0].id,
-                service_id=servizi[0].id,
+                service_id=servizio_off.id,
                 start_time=datetime.combine(giorno, ora), duration=durata,
                 colore='#e9ecef', note=testo,
                 stato=AppointmentStatus.DEFAULT,
