@@ -823,6 +823,15 @@ def delete_service(service_id):
     
     return redirect(url_for('settings.services'))
 
+def _html_senza_testo(html):
+    """True se l'HTML non ha testo visibile: "<br>", "<div><br></div>", spazi
+    unificatori. Serve a distinguere "descrizione cancellata" da "descrizione
+    scritta", che per il database sono due stringhe non vuote uguali."""
+    testo = re.sub(r'<[^>]+>', '', html or '')
+    testo = testo.replace('&nbsp;', ' ').replace('&#160;', ' ').replace(chr(160), ' ')
+    return not testo.strip()
+
+
 @settings_bp.route('/settings/services/<int:service_id>/description', methods=['POST'])
 def service_description(service_id):
     """Salva la descrizione HTML del servizio (servizio_descrizione)."""
@@ -841,8 +850,39 @@ def service_description(service_id):
 
     data = request.get_json(silent=True) or {}
     descr = (data.get('descrizione') or '').strip()
+
+    # Il tetto della colonna servizio_descrizione, varchar(2000). Si controlla
+    # QUI e non si lascia sbagliare al database: superandolo, l'UPDATE muore e
+    # dall'Agenda si vedeva solo "Errore nel salvataggio". Sono 2000 caratteri
+    # di HTML, non di testo: cio' che li faceva finire era la formattazione
+    # incollata da Word, che adesso l'editor non fa piu' entrare.
+    MAX_DESCRIZIONE = 2000
+    if len(descr) > MAX_DESCRIZIONE:
+        return jsonify({'error': "Descrizione troppo lunga: %d caratteri contro "
+                                 "un massimo di %d. Accorciala, oppure "
+                                 "riscrivila qui invece di incollarla."
+                                 % (len(descr), MAX_DESCRIZIONE)}), 400
+
+    # Svuotando il riquadro, il browser NON lascia una stringa vuota: lascia
+    # "<br>" o "<div><br></div>". Erano 4 caratteri che valevano "c'e' una
+    # descrizione": il pulsante restava giallo e sulla pagina di prenotazione
+    # restava la "i", che apriva un riquadro vuoto. Se non c'e' testo visibile
+    # si scrive NULL.
+    if _html_senza_testo(descr):
+        descr = ''
+
     service.servizio_descrizione = descr if descr else None
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as exc:
+        # Senza rollback la sessione resta sporca e la richiesta DOPO questa
+        # fallisce a sua volta, in un punto che non c'entra niente. E il
+        # messaggio va restituito: prima l'errore diventava un 500 muto e
+        # dall'Agenda si vedeva solo "Errore nel salvataggio".
+        db.session.rollback()
+        app.logger.exception("Salvataggio descrizione servizio %s fallito", service_id)
+        return jsonify({'error': "Il salvataggio non e' riuscito (%d caratteri). "
+                                 "Dettaglio: %s" % (len(descr), exc.__class__.__name__)}), 400
     return jsonify({'ok': True})
 
 @settings_bp.route('/download-listino', methods=['GET'])

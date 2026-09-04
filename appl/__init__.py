@@ -253,6 +253,17 @@ def create_app(db_uri: str | None = None, tenant_idx=None, is_demo: bool = False
     from appl.services.demo_trials import URL_BOOKING_DEMO
     app.jinja_env.globals['url_booking_demo'] = URL_BOOKING_DEMO
 
+    # Vero solo se dentro l'HTML c'e' del testo. Le descrizioni dei servizi
+    # sono HTML: svuotando il riquadro resta "<br>", che e' una stringa non
+    # vuota e faceva restare acceso il pulsante "Descrizione" su un servizio
+    # che descrizione non ne ha piu'.
+    def _ha_testo(html):
+        import re as _re
+        testo = _re.sub(r'<[^>]+>', '', html or '')
+        testo = testo.replace('&nbsp;', ' ').replace('&#160;', ' ').replace(chr(160), ' ')
+        return bool(testo.strip())
+    app.jinja_env.filters['ha_testo'] = _ha_testo
+
     # Uno slot demo salta questo controllo: non ha carte prepagate (il modulo e'
     # spento) e soprattutto non deve aprire una connessione all'avvio. Il pool
     # di SQLAlchemy si riempie solo quando arriva una richiesta, quindi tre slot

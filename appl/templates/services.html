@@ -110,7 +110,7 @@
   {% if current_user.ruolo.value == 'user' %}
     <button type="button"
             class="btn btn-sm info-btn"
-            style="background-color: {{ '#ffeb3b' if service.servizio_descrizione else '#e9ecef' }}; color: #000;"
+            style="background-color: {{ '#ffeb3b' if service.servizio_descrizione|ha_testo else '#e9ecef' }}; color: #000;"
             data-service-id="{{ service.id }}"
             data-service-name="{{ service.servizio_nome }}"
             onclick="openServiceInfoModalReadOnly(this)">Descrizione</button>
@@ -123,7 +123,7 @@
   {% else %}
     <button type="button"
             class="btn btn-sm info-btn"
-            style="background-color: {{ '#ffeb3b' if service.servizio_descrizione else '#e9ecef' }}; color: #000;"
+            style="background-color: {{ '#ffeb3b' if service.servizio_descrizione|ha_testo else '#e9ecef' }}; color: #000;"
             data-service-id="{{ service.id }}"
             data-service-name="{{ service.servizio_nome }}"
             onclick="openServiceInfoModal(this)">Descrizione</button>
@@ -751,6 +751,18 @@ function attachEditorToolbarListeners() {
   const editor = document.getElementById('serviceInfoEditor');
   if (!editor) return;
   ['keyup', 'mouseup', 'focus'].forEach(ev => editor.addEventListener(ev, updateToolbarStates));
+
+  // Incolla SENZA formattazione. Quello che si salva e' l'HTML di questo
+  // riquadro: incollando da Word o da una pagina web arrivano anche i suoi
+  // stili, e sette righe di testo diventano migliaia di caratteri di roba
+  // invisibile - che gonfiano il salvataggio e sporcano l'impaginazione.
+  // Il grassetto e il corsivo si rimettono con i pulsanti qui sopra.
+  editor.addEventListener('paste', function (e) {
+    e.preventDefault();
+    const dati = e.clipboardData || window.clipboardData;
+    const testo = dati ? dati.getData('text/plain') : '';
+    if (testo) document.execCommand('insertText', false, testo);
+  });
   document.addEventListener('selectionchange', function() {
     const sel = document.getSelection();
     if (editor && sel && editor.contains(sel.anchorNode)) updateToolbarStates();
@@ -760,6 +772,15 @@ function attachEditorToolbarListeners() {
 
   // Lock globale per salvataggio info servizio
   let saveServiceInfoLock = false;
+
+  // Vero solo se dentro l'HTML c'e' del testo: "<br>" o "<div><br></div>",
+  // che e' quello che resta cancellando tutto, non contano.
+  function haTestoVisibile(html) {
+    if (!html) return false;
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    return (d.textContent || '').replace(/ /g, ' ').trim().length > 0;
+  }
 
   // Riporta il pulsante allo stato di riposo. La finestra e' UNA sola per
   // tutti i servizi: quello che resta addosso al pulsante se lo ritrova il
@@ -781,7 +802,10 @@ function attachEditorToolbarListeners() {
 
     if (!currentServiceId) return;
     const editor = document.getElementById('serviceInfoEditor');
-    const html = editor.innerHTML.trim();
+    // Se non e' rimasto testo visibile si manda la stringa vuota: cancellando
+    // tutto, il browser lascia "<br>", che per il server sarebbe una
+    // descrizione vera. Il server fa comunque lo stesso controllo.
+    const html = haTestoVisibile(editor.innerHTML) ? editor.innerHTML.trim() : '';
 
     // Attiva il lock
     saveServiceInfoLock = true;
