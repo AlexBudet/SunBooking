@@ -19,9 +19,9 @@ Documento predisposto dal Licenziante ai sensi degli artt. 1341 e 1342 c.c.
 - Codice Fiscale: **BDTLSS80H12B019U**
 - Partita IVA: **02857360032**
 - Sede: **Via Lorella 6, 28010 Ameno (NO), Italia**
-- Iscrizione REA: «numero da assegnare» — CCIAA di «provincia»
+- Iscrizione REA: **NO - 326407** — CCIAA di **Novara**
 - PEC: **alessio.budetta@pec.it**
-- E-mail ordinaria: «indirizzo»
+- E-mail ordinaria: **info@tosca-crm.it**
 
 di seguito il **"Licenziante"** o **"TOSCA"**.
 
