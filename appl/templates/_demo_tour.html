@@ -179,15 +179,15 @@
       titolo: 'Si comincia da qui',
       testo: 'Facciamo un giro insieme: ti mostro un pezzo per volta, e tu ' +
              'guardi. Quando vuoi provare davvero, esci e rientra quando ti pare. ' +
-             'Si comincia da questo: è il navigatore, e funziona come un vassoio ' +
-             '— ci appoggi la cliente e i servizi, poi lo posi in agenda.'
+             'Si comincia da questo: è il navigatore. Scegli qui la cliente e i ' +
+             'servizi, poi clicchi in agenda e l\'appuntamento è fatto.'
     },
     {
       sel: '#clientSearchInputNav',
       titolo: 'Prima la cliente',
       testo: 'Scrivi due o tre lettere del nome, del cognome o del numero di ' +
              'cellulare: i nomi compaiono mentre digiti. Clicca quello giusto e ' +
-             'resta agganciato al vassoio.'
+             'resta scelto qui sopra.'
     },
     {
       sel: '.btn-add-client-nav',
@@ -206,13 +206,13 @@
     {
       sel: '#selectedServicesList',
       titolo: 'Il blocco che stai preparando',
-      testo: 'Qui vedi cosa hai messo sul vassoio. È l\'anteprima ' +
+      testo: 'Qui vedi i servizi che hai scelto. È l\'anteprima ' +
              'dell\'appuntamento: se ti sei sbagliata, togli e rifai, tanto in ' +
              'agenda non è ancora finito niente.'
     },
     {
       sel: '#navigatorHint',
-      titolo: 'E adesso lo posi',
+      titolo: 'E adesso clicca in agenda',
       testo: 'Con cliente e servizio pronti, clicca sulla cella dell\'ora che ti ' +
              'serve, nella colonna di chi lo fa. L\'appuntamento nasce ' +
              'lì, senza altre finestre da riempire.'
@@ -220,8 +220,8 @@
     {
       sel: '#clearNavigatorBtn',
       titolo: 'Ho cambiato idea',
-      testo: '"Svuota" pulisce il vassoio e si riparte. Nessun danno: finché non ' +
-             'clicchi in agenda, non è stato scritto niente.'
+      testo: '"Svuota" toglie la cliente e i servizi scelti e si riparte. Nessun ' +
+             'danno: finché non clicchi in agenda, non è stato scritto niente.'
     },
 
     /* ---------- 2. LA FINESTRA DELL'APPUNTAMENTO ---------- */
@@ -234,7 +234,7 @@
          il gesto se lo ricorda chi lo fa, non chi lo guarda fare. */
       sel: function () { return cellaLibera() || document.querySelector('.calendar-table'); },
       titolo: 'Prova tu: clicca una cella libera',
-      testo: 'Senza niente sul vassoio, un click su una casella vuota apre la ' +
+      testo: 'Con il navigatore vuoto, un click su una casella libera apre la ' +
              'finestra dell\'appuntamento: stessa cosa di prima, ma con calma. ' +
              'Comoda quando la cliente è al telefono e ti detta le cose una alla ' +
              'volta. Provaci: la visita va avanti da sola appena si apre.',
@@ -326,8 +326,8 @@
     {
       sel: dentroBlocco('.btn-popup.sposta'),
       titolo: 'Togli e sposta',
-      testo: 'Stacca il blocco e te lo tiene in mano finché non decidi dove ' +
-             'metterlo: comodo per spostarlo lontano, in un altro giorno.',
+      testo: 'Toglie il blocco dall\'agenda e lo mette in attesa finché non ' +
+             'clicchi dove rimetterlo: comodo per spostarlo in un altro giorno.',
       prima: function (vai) { mostraPopup(); vai(); }
     },
     {
