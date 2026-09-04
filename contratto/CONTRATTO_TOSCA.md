@@ -17,7 +17,7 @@ Documento predisposto dal Licenziante ai sensi degli artt. 1341 e 1342 c.c.
 
 **Alessio Budetta**, titolare dell'omonima impresa individuale
 - Codice Fiscale: **BDTLSS80H12B019U**
-- Partita IVA: «da assegnare»
+- Partita IVA: **02857360032**
 - Sede: **Via Lorella 6, 28010 Ameno (NO), Italia**
 - Iscrizione REA: «numero da assegnare» — CCIAA di «provincia»
 - PEC: **alessio.budetta@pec.it**

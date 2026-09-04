@@ -23,9 +23,22 @@
       <div class="modal-body">
         <p id="demoUpsellIntro" class="mb-3"></p>
         <ul id="demoUpsellElenco" class="mb-3" style="line-height:1.7;"></ul>
+
+        {# Solo alcune voci hanno qualcosa da PROVARE davvero: le prenotazioni
+           online hanno una pagina pubblica, e farla vedere vale piu' di quattro
+           righe che la descrivono. Le altre voci (Cassa, WhatsApp) qui non
+           hanno niente, e il riquadro resta nascosto. #}
+        <div id="demoUpsellProva" class="mb-3" style="display:none;
+             background:#f2f7f2;border:1px solid #cbe3cb;border-radius:8px;padding:14px;">
+          <div style="font-weight:bold;color:#4a3543;margin-bottom:4px;">
+            Prenota come farebbe una tua cliente
+          </div>
+          <p id="demoUpsellProvaTesto" class="mb-2" style="font-size:.92rem;line-height:1.5;color:#555;"></p>
+          <a id="demoUpsellProvaLink" class="btn btn-sm btn-success" href="#"
+             target="_blank" rel="noopener">Apri la pagina di prenotazione</a>
+        </div>
         <p class="text-muted mb-0" style="font-size:0.92rem;">
-          Durante i sette giorni di prova restano attive <strong>Agenda</strong> e
-          <strong>Report</strong>, con dati dimostrativi.
+          Nella prova restano attive <strong>Agenda</strong> e <strong>Report</strong>.
         </p>
       </div>
       <div class="modal-footer d-flex justify-content-between align-items-center">
@@ -54,32 +67,33 @@
   var TESTI = {
     cassa: {
       titolo: 'La Cassa di Tosca',
-      intro: 'Da qui l’appuntamento diventa uno scontrino, senza riscrivere niente.',
+      intro: 'L’appuntamento diventa uno scontrino, senza riscrivere niente.',
       punti: [
-        'Lo scontrino parte da solo al registratore telematico: nessun doppio lavoro alla chiusura',
-        'L’appuntamento pagato diventa grigio in Agenda, così sai a colpo d’occhio chi ha già saldato',
-        'Gli incassi finiscono nel Report mentre lavori, non a fine mese',
-        'Tessere prepagate e pacchetti si scalano da soli, con il saldo che arriva sul telefono della cliente'
+        'Lo scontrino parte da solo al registratore telematico',
+        'L’appuntamento pagato diventa grigio in Agenda',
+        'Gli incassi nel Report mentre lavori, non a fine mese',
+        'Tessere e pacchetti si scalano da soli'
       ]
     },
     whatsapp: {
       titolo: 'I messaggi WhatsApp',
-      intro: 'Tosca scrive alle clienti dal numero del tuo centro, senza che tu apra il telefono.',
+      intro: 'Tosca scrive alle clienti dal numero del tuo centro.',
       punti: [
-        'Il promemoria del mattino con l’ora dell’appuntamento: meno buchi in agenda per le dimenticate',
-        'Il messaggio di conferma quando prendi o sposti un appuntamento, con un click',
-        'Il saldo aggiornato della tessera prepagata subito dopo il pagamento',
-        'Il messaggio di bentornata a chi non si vede da un po’, per riportarla in negozio'
+        'Il promemoria del mattino, con l’ora dell’appuntamento',
+        'La conferma quando prendi o sposti un appuntamento',
+        'Il saldo della tessera subito dopo il pagamento',
+        'Il bentornata a chi non si vede da un po’'
       ]
     },
     web: {
       titolo: 'Le prenotazioni online',
-      intro: 'Le clienti prenotano da sole, dal telefono, anche quando il centro è chiuso.',
+      intro: 'Le clienti prenotano da sole, anche a negozio chiuso.',
+      prova: 'Su un centro di esempio: non tocca la tua prova.',
       punti: [
-        'La prenotazione entra dritta in Agenda: nessuno la deve ricopiare',
-        'Vedi solo gli orari davvero liberi, secondo i turni e le durate dei tuoi servizi',
-        'La cliente nuova viene riconosciuta e agganciata alla scheda giusta',
-        'Il badge in alto ti avvisa quando arriva una prenotazione da approvare'
+        'La prenotazione entra dritta in Agenda',
+        'Solo gli orari davvero liberi, secondo turni e durate',
+        'La cliente nuova finisce sulla scheda giusta',
+        'Un badge ti avvisa quando c’è da approvare'
       ]
     },
     tools: {
@@ -87,9 +101,9 @@
       intro: 'Qui il gestionale prende la forma del tuo centro.',
       punti: [
         'Listino, operatori, turni e orari di apertura',
-        'Promemoria WhatsApp automatici il mattino degli appuntamenti',
-        'Prenotazioni online dei clienti, che entrano dritte in Agenda',
-        'Anagrafica clienti completa, storico e note'
+        'Promemoria WhatsApp automatici',
+        'Prenotazioni online, che entrano dritte in Agenda',
+        'Anagrafica clienti, storico e note'
       ]
     },
     generico: {
@@ -114,6 +128,15 @@
       li.textContent = p;
       ul.appendChild(li);
     });
+    var riquadro = document.getElementById('demoUpsellProva');
+    if (t.prova) {
+      document.getElementById('demoUpsellProvaTesto').textContent = t.prova;
+      document.getElementById('demoUpsellProvaLink').href = '{{ url_booking_demo }}';
+      riquadro.style.display = '';
+    } else {
+      riquadro.style.display = 'none';
+    }
+
     var el = document.getElementById('demoUpsellModal');
     // getOrCreateInstance e non new: riaprendolo una seconda volta con `new`
     // Bootstrap lascerebbe due istanze attaccate allo stesso nodo e lo sfondo

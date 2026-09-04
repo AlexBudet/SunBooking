@@ -111,9 +111,8 @@
   <h6 id="tourTitolo"></h6>
   <div id="tourTesto"></div>
   <p class="tour-nota">
-    Qui si <b>guarda</b> soltanto: se serve provare qualcosa te lo dico io.
-    Per mettere le mani sul programma premi <b>Esci</b> — poi riprendi dal
-    pulsante in basso a sinistra e ritrovi il punto dove eri rimasta.
+    Qui si <b>guarda</b>: quando serve provare te lo dico io. Con <b>Esci</b>
+    metti le mani sul programma, poi riprendi da dove eri.
   </p>
   <div class="tour-piede">
     <button type="button" class="tour-esci" onclick="tourEsci()">Esci</button>
@@ -185,8 +184,7 @@
       sel: '#appointmentNavigator',
       titolo: 'Si comincia da qui',
       testo: ['👋 Ti mostro Tosca un pezzo per volta.',
-              '🧭 Questo è il navigatore appuntamenti.',
-              '✅ Scegli cliente e servizi, poi clicca in agenda.']
+              '🧭 Questo è il navigatore: cliente e servizi, poi l\'agenda.']
     },
     {
       sel: '#clientSearchInputNav',
@@ -197,35 +195,30 @@
     {
       sel: '.btn-add-client-nav',
       titolo: 'Cliente nuova? Il "+"',
-      testo: ['➕ Crea la scheda senza uscire dall\'agenda.',
-              '✅ Nome, cognome, cellulare e via.']
+      testo: ['➕ Crei la scheda senza uscire dall\'agenda.']
     },
     {
       sel: '#serviceInputNav',
       titolo: 'Poi il servizio',
-      testo: ['✏️ Prime lettere e scegli dal listino.',
-              '⏱️ La durata la mette lui.',
-              '➕ Più servizi di fila? Aggiungili qui.']
+      testo: ['✏️ Prime lettere e scegli: la durata la mette lui.',
+              '➕ Ne puoi aggiungere più di uno.']
     },
     {
       sel: '#selectedServicesList',
       titolo: 'Il blocco che stai preparando',
-      testo: ['👀 Qui vedi i servizi che hai scelto.',
-              '🔄 Sbagliato? Togli e rifai.',
-              '💡 In agenda non è ancora scritto niente.']
+      testo: ['👀 I servizi che hai scelto.',
+              '🔄 Togli e rifai: non è ancora scritto niente.']
     },
     {
       sel: '#navigatorHint',
       titolo: 'E adesso clicca in agenda',
-      testo: ['👆 Clicca la cella dell\'ora che ti serve.',
-              '👩 Nella colonna di chi fa il servizio.',
-              '✅ L\'appuntamento nasce lì.']
+      testo: ['👆 Clicca la cella dell\'ora, nella colonna di chi lo fa.']
     },
     {
       sel: '#clearNavigatorBtn',
       titolo: 'Ho cambiato idea',
-      testo: ['🧹 "Svuota" toglie cliente e servizi scelti.',
-              '💡 Finché non clicchi in agenda non è scritto niente.']
+      testo: ['🧹 "Svuota" toglie cliente e servizi.',
+              '💡 Niente è scritto finché non clicchi in agenda.']
     },
 
     /* ---------- 2. LA FINESTRA DELL'APPUNTAMENTO ---------- */
@@ -239,8 +232,7 @@
       sel: function () { return cellaLibera() || document.querySelector('.calendar-table'); },
       titolo: 'Prova tu: clicca una cella libera',
       testo: ['👆 Col navigatore vuoto, clicca una casella libera.',
-              '🪟 Si apre la finestra dell\'appuntamento.',
-              '▶️ Provaci: la visita va avanti da sola.'],
+              '🪟 Si apre la finestra: provaci, poi vado avanti da sola.'],
       prima: function (vai) {
         if (typeof clearNavigator === 'function') { try { clearNavigator(); } catch (_) {} }
         vai();
@@ -250,20 +242,13 @@
     {
       sel: '#CreateAppointmentModal #clientSearchInput',
       titolo: 'La cliente, di nuovo',
-      testo: ['🔍 Cerchi per nome, cognome o cellulare.',
-              '📞 Vedi anche il numero: due omonime non si sbagliano.']
-    },
-    {
-      sel: '#CreateAppointmentModal .btn-add-client-square',
-      titolo: 'Il "+" per la cliente nuova',
-      testo: ['➕ Crei la scheda sul momento.',
-              '✅ Torni indietro e la trovi già scelta.']
+      testo: ['🔍 Per nome, cognome o cellulare.',
+              '📞 Col numero non sbagli fra due omonime.']
     },
     {
       sel: '#CreateAppointmentModal #serviceSearchInput',
       titolo: 'Il servizio',
-      testo: ['✏️ Prime lettere e scegli.',
-              '⏱️ Durata dal listino, allungabile a mano.'],
+      testo: ['✏️ Prime lettere e scegli: la durata la allunghi a mano.'],
       dopo: function () {
         var m = document.getElementById('CreateAppointmentModal');
         if (m && window.bootstrap) {
@@ -277,7 +262,7 @@
     {
       sel: bloccoNormale,
       titolo: 'Questo è un appuntamento',
-      testo: ['🟪 Nome della cliente, servizio e ora.',
+      testo: ['🟪 Cliente, servizio e ora.',
               '🎨 Stesso colore per tutta la giornata.']
     },
     {
@@ -287,32 +272,27 @@
          dell'appuntamento, perche' e' il blocco in agenda a portarlo. */
       sel: dentroBlocco('.client-info-link'),
       titolo: 'Il nome apre la scheda',
-      testo: ['👆 Clicca il nome della cliente sul blocco.',
-              '📇 Telefono, e-mail, note e ultimi appuntamenti.']
+      testo: ['👆 Il nome apre la scheda: telefono, note, storico.']
     },
     {
       sel: dentroBlocco('.drag-handle'),
       titolo: 'Trascinalo dove vuoi',
-      testo: ['✋ Prendilo da qui e spostalo.',
-              '🕐 Altra ora, altra collega, altro giorno.']
+      testo: ['✋ Spostalo: altra ora, altra collega, altro giorno.']
     },
     {
       sel: dentroBlocco('.resize-handle'),
       titolo: 'Allungalo o accorcialo',
-      testo: ['↕️ Il bordo in basso cambia la durata.',
-              '✅ L\'agenda si risistema da sola.']
+      testo: ['↕️ Il bordo in basso cambia la durata.']
     },
     {
       sel: dentroBlocco('.delete-icon'),
       titolo: 'Il cestino',
-      testo: ['🗑️ Cancella l\'appuntamento.',
-              '⚠️ Chiede conferma prima di cancellare.']
+      testo: ['🗑️ Cancella l\'appuntamento: chiede conferma.']
     },
     {
       sel: dentroBlocco('.my-spia'),
       titolo: 'È arrivata',
-      testo: ['🟢 La spia dice che la cliente è in istituto.',
-              '👀 Sai chi c\'è dentro e chi stai aspettando.']
+      testo: ['🟢 La spia dice che la cliente è in istituto.']
     },
     {
       sel: dentroBlocco('.btn-popup.no-show-button, .btn-popup.touch-no-show, [class*="no-show"]'),
@@ -326,14 +306,13 @@
       titolo: 'Togli e sposta',
       testo: ['✂️ Toglie il blocco dall\'agenda per un momento.',
               '📥 Torna nel navigatore come pseudoblocco, in attesa.',
-              '↩️ Ci ripensi? Con "Svuota" torna dov\'era.'],
+              '↩️ Con "Svuota" torna dov\'era.'],
       prima: function (vai) { mostraPopup(); vai(); }
     },
     {
       sel: dentroBlocco('.btn-popup.copia'),
       titolo: 'Copia',
-      testo: ['📄 Duplica l\'appuntamento.',
-              '🔁 Per chi viene ogni settimana alla stessa ora.'],
+      testo: ['📄 Duplica l\'appuntamento: per chi torna ogni settimana.'],
       prima: function (vai) { mostraPopup(); vai(); }
     },
     {
@@ -346,30 +325,28 @@
     {
       sel: dentroBlocco('.btn-popup.aggiungi-servizi'),
       titolo: 'Aggiungi un servizio',
-      testo: ['➕ La cliente chiede anche le sopracciglia?',
-              '📋 Lo aggiungi qui: la lista dei servizi si allunga.',
-              '💶 E il conto si aggiorna.'],
+      testo: ['➕ Chiede anche le sopracciglia?',
+              '📋 La lista si allunga e il conto si aggiorna.'],
       prima: function (vai) { mostraPopup(); vai(); }
     },
     {
       sel: dentroBlocco('.btn-popup.nota'),
       titolo: 'La nota appuntamento',
       testo: ['📝 Due righe attaccate a questo appuntamento.',
-              '👤 Diversa dalla nota cliente, che resta sulla scheda.'],
+              '👤 Non è la nota cliente, che sta sulla scheda.'],
       prima: function (vai) { mostraPopup(); vai(); }
     },
     {
       sel: dentroBlocco('.btn-popup.whatsapp-btn'),
       titolo: 'Il WhatsApp',
-      testo: ['💬 Manda il promemoria dal numero del centro.',
-              '🔒 Nella prova è spento: te lo raccontiamo e basta.'],
+      testo: ['💬 Il promemoria dal numero del centro, spento nella prova.'],
       prima: function (vai) { mostraPopup(); vai(); }
     },
     {
       sel: dentroBlocco('.btn-popup.pagamento'),
       titolo: 'L\'euro: si va in cassa',
-      testo: ['💶 L\'appuntamento diventa scontrino, senza riscrivere.',
-              '🔒 Nella prova la Cassa è spenta: cliccalo e ti spieghiamo.'],
+      testo: ['💶 L\'appuntamento diventa scontrino.',
+              '🔒 Nella prova è spenta: cliccalo e ti spieghiamo.'],
       prima: function (vai) { mostraPopup(); vai(); },
       dopo: nascondiPopup
     },
@@ -382,8 +359,7 @@
         return null;
       },
       titolo: 'Il blocco OFF',
-      testo: ['🚫 Chiude una fascia dell\'agenda.',
-              '🧰 Pausa, consegna prodotti, riunione.',
+      testo: ['🚫 Chiude una fascia: pausa, consegna, riunione.',
               '🔒 Nessuno ci può prenotare sopra.']
     },
     {
@@ -393,24 +369,21 @@
         return null;
       },
       titolo: 'Il blocco già pagato',
-      testo: ['⬜ Incassato: diventa grigio, con scritto PAGATO.',
-              '👀 A fine giornata vedi subito chi ha saldato.']
+      testo: ['⬜ Incassato: grigio, con scritto PAGATO.']
     },
     /* ---------- 5. I TURNI DELLE RAGAZZE ---------- */
     {
       sel: '.operator-header .operator-shift-link',
       titolo: 'Il nome in cima alla colonna',
-      testo: ['👆 Cliccalo: si apre il quadro dei turni.',
-              '🗓️ Orari, riposi e giornate al completo.',
-              '▶️ Provaci: la visita va avanti da sola.'],
+      testo: ['👆 Cliccalo: orari, riposi e giornate al completo.',
+              '▶️ Provaci, poi vado avanti da sola.'],
       attendi: '#OperatorShiftsModalCalendar.show'
     },
     {
       sel: '#shiftsMonthGrid',
       titolo: 'Il mese a colpo d\'occhio',
-      testo: ['🗓️ Ogni casella dice com\'è quel giorno.',
-              '🔴 <b>OFF</b>: chiuso, oppure è il suo riposo.',
-              '🔵 <b>FULL</b>: giornata piena, non entra più nessuno.']
+      testo: ['🔴 <b>OFF</b>: chiuso, oppure è il suo riposo.',
+              '🔵 <b>FULL</b>: giornata piena.']
     },
     {
       sel: function () {
@@ -418,8 +391,7 @@
         return m ? m.querySelector('button[onclick*="setDayOffCalendar"]') : null;
       },
       titolo: 'Il giorno di riposo',
-      testo: ['🛌 Segna la giornata come riposo.',
-              '🔒 L\'agenda si chiude: nessuno prenota per sbaglio.'],
+      testo: ['🛌 Segna il riposo: l\'agenda si chiude per quel giorno.'],
       dopo: function () {
         var m = document.getElementById('OperatorShiftsModalCalendar');
         if (m && window.bootstrap) {
@@ -430,10 +402,19 @@
     },
 
     {
+      /* Il passo NON chiede il click e non aspetta la finestra: aprendola, la
+         cartellina della visita finirebbe sotto lo sfondo scuro del modale.
+         Si dice dov'e' il pulsante, poi lo si preme con calma alla fine. */
+      sel: '#btnWebInformatica',
+      titolo: 'Le prenotazioni online',
+      testo: ['🌐 Il mappamondo in alto: le prenotazioni dal web.',
+              '📱 Da lì apri la pagina e la provi come una cliente.']
+    },
+
+    {
       sel: '#appointmentNavigator',
       titolo: 'Finito. Ora tocca a te',
-      testo: ['✅ Prova a creare un appuntamento vero.',
-              '🎭 I dati sono finti, non si rompe niente.',
+      testo: ['✅ Prova a creare un appuntamento: i dati sono finti.',
               '↩️ "Visita guidata" in basso a sinistra rifà il giro.']
     }
   ];

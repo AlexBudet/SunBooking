@@ -58,19 +58,39 @@
                    font-size: .78rem; color: #888; line-height: 1.55; }
     .nota-legale a { color: #87647c; }
     ul.dentro { margin: 8px 0 0; padding-left: 20px; font-size: .9rem; color: #555; line-height: 1.6; }
+    .prova-web { background: #f4f1f6; border: 1px solid #ddd2e0; border-radius: 8px;
+                 padding: 16px; margin-top: 20px; }
+    .prova-web h2 { margin: 0 0 6px; font-size: 1.02rem; color: #4a3543; }
+    .prova-web p { margin: 0 0 12px; font-size: .92rem; line-height: 1.5; color: #555; }
+    .prova-web a.apri { display: inline-block; padding: 9px 16px; border-radius: 6px;
+                        background: #87647c; color: #fff; text-decoration: none; font-size: .95rem; }
+    .prova-web small { display: block; margin-top: 10px; color: #888; font-size: .8rem; line-height: 1.45; }
   </style>
 </head>
 <body>
 <div class="bg-overlay"></div>
 <div class="container">
 
+{# La prenotazione online e' l'unica parte di Tosca che si puo' far vedere
+   SENZA entrare da nessuna parte: e' una pagina pubblica. Vale sia per chi e'
+   appena entrato nella prova sia - soprattutto - per chi e' in lista d'attesa
+   e altrimenti non avrebbe niente da guardare. #}
+{% macro riquadro_booking() %}
+  <div class="prova-web">
+    <h2>Prenota come farebbe una tua cliente</h2>
+    <p>Su un centro di esempio: non tocca la tua prova.</p>
+    <a class="apri" href="{{ url_booking_demo }}" target="_blank" rel="noopener">
+      Apri la pagina di prenotazione
+    </a>
+  </div>
+{% endmacro %}
+
 {% if esito %}
   {# ─── La prova e' pronta ─────────────────────────────────────────── #}
   <h1>La tua prova è pronta</h1>
   <p class="sotto">
-    Hai sette giorni per girare dentro Tosca con l'agenda di un centro di esempio,
-    già piena di appuntamenti e di incassi. Nessuna carta di credito, nessun rinnovo:
-    alla scadenza si chiude da sola.
+    Sette giorni sull'agenda di un centro di esempio, già piena.
+    Alla scadenza si chiude da sola.
   </p>
 
   {# Qui c'e' UNA cosa sola da fare: entrare. Indirizzo, utente e password
@@ -83,13 +103,11 @@
 
   {% if esito.email_inviata %}
     <p class="aiuto" style="text-align:center;margin-top:12px;">
-      Ti abbiamo mandato per e-mail questo stesso link, l'indirizzo, l'utente e
-      la password: è da lì che rientri nei prossimi sette giorni.
+      Link, utente e password sono nella tua e-mail: da lì rientri.
     </p>
   {% else %}
     <div class="avviso" style="margin-top:18px;">
-      Non siamo riusciti a mandarti l'e-mail. <b>Segnati questi dati adesso</b>:
-      servono per rientrare nei prossimi sette giorni.
+      L'e-mail non è partita: <b>segnati questi dati</b>, servono per rientrare.
     </div>
     <div class="credenziali">
       <div><b>Indirizzo</b> <code>{{ esito.url }}</code></div>
@@ -104,44 +122,41 @@
     </div>
   {% endif %}
 
+  {{ riquadro_booking() }}
+
   <div class="nota-legale">
-    Durante la prova sono attive <b>Agenda</b> e <b>Report</b>. Cassa, prenotazioni online,
-    pacchetti e messaggi automatici fanno parte della versione completa: dentro il programma
-    trovi un riquadro che ti spiega cosa fanno.<br><br>
-    I dati che vedi sono inventati. <b>Non inserire nomi, numeri o indirizzi di persone
-    reali</b>: la prova viene cancellata al settimo giorno e non è recuperabile. Il servizio
-    è fornito così com'è, senza garanzie e senza copie di sicurezza.
+    Attive <b>Agenda</b> e <b>Report</b>; il resto è nella versione completa.<br><br>
+    I dati sono inventati: <b>non inserire persone reali</b>. Al settimo giorno tutto
+    viene cancellato, senza copie di sicurezza e senza garanzie.
   </div>
 
 {% elif in_coda %}
   {# ─── Messo in lista d'attesa ────────────────────────────────────── #}
   <h1>Sei in lista</h1>
   <p class="sotto">
-    Le tre prove disponibili sono tutte in corso. Sei il <b>{{ in_coda.posizione }}º</b> in attesa:
+    Le tre prove sono tutte in corso. Sei il <b>{{ in_coda.posizione }}º</b>:
     {% if in_coda.data %}la tua parte intorno al <b>{{ in_coda.data }}</b>{% else %}ti avvisiamo appena se ne libera una{% endif %}.
-    Ti scriviamo noi, non devi ricontrollare la pagina.
+    Ti scriviamo noi.
   </p>
   <div class="avviso">
-    Non hai voglia di aspettare? Facciamo prima: <b>mezz'ora insieme</b>, ti mostriamo Tosca dal
-    vivo sullo schermo e rispondiamo alle tue domande.
+    Non vuoi aspettare? <b>Mezz'ora insieme</b>, Tosca dal vivo e le tue domande.
     <a href="https://www.tosca-crm.it/#demo" target="_blank" rel="noopener">Prenota una presentazione</a>.
   </div>
+
+  {{ riquadro_booking() }}
 
 {% elif codice %}
   {# ─── Il codice arrivato per e-mail ──────────────────────────────── #}
   <h1>Controlla la posta</h1>
   <p class="sotto">
-    Abbiamo mandato un codice di sei cifre a <b>{{ codice.email }}</b>.
-    Scrivilo qui sotto: serve solo a essere sicuri che l'indirizzo sia tuo.
-    Vale {{ codice.minuti }} minuti.
+    Codice di sei cifre mandato a <b>{{ codice.email }}</b>. Vale {{ codice.minuti }} minuti.
   </p>
 
   {% if errore %}<div class="errore">{{ errore }}</div>{% endif %}
 
   {% if codice.in_coda %}
     <div class="avviso">
-      Ti avvisiamo subito: in questo momento le prove sono tutte in corso.
-      Confermando il codice entri in lista d'attesa e ti scriviamo appena si libera un posto.
+      Le prove sono tutte in corso: col codice entri in lista.
     </div>
   {% endif %}
 
@@ -157,33 +172,30 @@
     </button>
   </form>
   <p class="aiuto" style="text-align:center;margin-top:14px;">
-    Non è arrivato? Guarda nella posta indesiderata, oppure
-    <a href="/prova">ricomincia</a> e controlla l'indirizzo.
+    Non è arrivato? Guarda nello spam, oppure <a href="/prova">ricomincia</a>.
   </p>
 
 {% else %}
   {# ─── Il modulo ──────────────────────────────────────────────────── #}
   <h1>Prova Tosca per sette giorni</h1>
   <p class="sotto">
-    Entri subito, senza installare niente e senza carta di credito. Trovi l'agenda di un
-    centro di esempio con tre settimane di lavoro già dentro, così vedi come si muove
-    davvero e non una schermata vuota.
+    Entri subito, senza installare niente e senza carta di credito: dentro c'è
+    un centro di esempio con tre settimane di lavoro.
   </p>
 
   {% if errore %}<div class="errore">{{ errore }}</div>{% endif %}
 
   {% if not stato.disponibile %}
     <div class="avviso">
-      Al momento le tre prove sono tutte in corso.
+      Le tre prove sono tutte in corso.
       {% if stato.prima_data_libera_testo %}
         La prima si libera il <b>{{ stato.prima_data_libera_testo }}</b>.
       {% endif %}
       {% if stato.coda_aperta %}
-        Lascia i tuoi dati qui sotto e ti avvisiamo appena tocca a te.
+        Lascia i dati: ti avvisiamo appena tocca a te.
       {% else %}
-        La lista d'attesa è al completo:
-        <a href="https://www.tosca-crm.it/#demo" target="_blank" rel="noopener">prenota una presentazione</a>,
-        facciamo prima.
+        Lista al completo:
+        <a href="https://www.tosca-crm.it/#demo" target="_blank" rel="noopener">prenota una presentazione</a>.
       {% endif %}
     </div>
   {% endif %}
@@ -205,7 +217,7 @@
     <label for="telefono">Cellulare *</label>
     <input type="tel" id="telefono" name="telefono" required maxlength="30"
            placeholder="333 1234567" value="{{ valori.telefono or '' }}">
-    <div class="aiuto">Ci serve per mandarti il link di accesso su WhatsApp. Una prova per numero.</div>
+    <div class="aiuto">Per il link di accesso su WhatsApp. Una prova per numero.</div>
 
     {# Campo trappola per i moduli riempiti dai robot: una persona non lo vede
        e quindi non lo compila. Se arriva pieno, la richiesta si butta. #}
@@ -217,21 +229,20 @@
     <label class="spunta" for="consenso">
       <input type="checkbox" id="consenso" name="consenso" required>
       <span>Ho letto l'<a href="/prova/informativa" target="_blank">informativa privacy</a> e le
-      <a href="/prova/termini" target="_blank">condizioni della prova</a>. So che i dati inseriti
-      durante i sette giorni vengono cancellati alla scadenza.</span>
+      <a href="/prova/termini" target="_blank">condizioni della prova</a>. So che alla scadenza
+      i dati inseriti vengono cancellati.</span>
     </label>
 
     <button type="submit" class="invia" id="btnProva">Ricevi il codice</button>
     <p class="aiuto" style="text-align:center;">
-      Ti mandiamo un codice per e-mail: serve solo a verificare l'indirizzo.
+      Ti mandiamo un codice per e-mail.
     </p>
   </form>
   {% endif %}
 
   <div class="nota-legale">
-    Nella prova sono attive Agenda e Report, con dati dimostrativi. Non va usata per il
-    lavoro vero: non ha valore fiscale, non produce scontrini e non viene salvata da
-    nessuna parte. Alla scadenza tutto il contenuto viene cancellato.
+    Attive Agenda e Report, con dati dimostrativi. Non ha valore fiscale: alla scadenza
+    il contenuto viene cancellato.
   </div>
 {% endif %}
 

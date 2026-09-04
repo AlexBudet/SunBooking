@@ -248,6 +248,10 @@ def create_app(db_uri: str | None = None, tenant_idx=None, is_demo: bool = False
     # sono rimaste indietro: si sistemano qui, con un solo UPDATE all'avvio.
     # Durante l'uso ci pensano le pagine che le leggono (elenchi, Agenda, Cassa).
     app.config['IS_DEMO'] = bool(is_demo)
+    # L'indirizzo della prenotazione online di esempio: lo usa la finestra
+    # "versione completa" quando si clicca il pulsante delle prenotazioni web.
+    from appl.services.demo_trials import URL_BOOKING_DEMO
+    app.jinja_env.globals['url_booking_demo'] = URL_BOOKING_DEMO
 
     # Uno slot demo salta questo controllo: non ha carte prepagate (il modulo e'
     # spento) e soprattutto non deve aprire una connessione all'avvio. Il pool

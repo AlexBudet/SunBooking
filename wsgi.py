@@ -17,6 +17,7 @@ THREAD_SERVER = 16
 from appl import create_app, db
 from appl.models import BusinessInfo
 from appl.autologin import issue_token as autologin_issue
+from appl.services.demo_trials import URL_BOOKING_DEMO
 import time as time_mod
 import json
 import uuid
@@ -620,6 +621,11 @@ def _prova_prepara_e_avvisa(trial_id, idx, business_name, referente,
 
     attivata.update({'url': url, 'link': link, 'email_inviata': inviata})
     return attivata
+
+
+# Stesso indirizzo usato dalla finestra "versione completa" dentro l'Agenda:
+# la pagina /prova lo mostra a chi e' appena entrato e a chi sta in lista.
+root_app.jinja_env.globals['url_booking_demo'] = URL_BOOKING_DEMO
 
 
 def _data_it(dt):

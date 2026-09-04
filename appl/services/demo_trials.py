@@ -42,6 +42,15 @@ CODA_MAX = 6          # oltre questa lunghezza si offre solo la chiamata
 VERSIONE_TERMINI = '1.0'
 VERSIONE_PRIVACY = '1.0'
 
+# La pagina di prenotazione online di un centro di esempio, quella che vedrebbe
+# una cliente dal telefono. Sta su un tenant SEPARATO dagli slot della prova:
+# chi prenota li' non tocca l'agenda della propria prova, ed e' il motivo per
+# cui va detto a chiare lettere dove si sta prenotando.
+# Sta qui, e non in due template, perche' la usano due applicazioni diverse:
+# la pagina /prova (root_app) e la finestra "versione completa" dentro l'Agenda.
+URL_BOOKING_DEMO = ('https://websunbooking-ckaxbhf6cjewabb8.italynorth-01'
+                    '.azurewebsites.net/t3/booking')
+
 # Alfabeto senza caratteri che si confondono a voce o su carta (0/O, 1/l/I):
 # la password la si detta al telefono piu' spesso di quanto si creda.
 ALFABETO = 'abcdefghijkmnpqrstuvwxyz23456789'
