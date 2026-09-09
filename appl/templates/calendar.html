@@ -2120,18 +2120,16 @@ body.asp-docked-modal-open {
         dopo = aCapo < 0 ? '' : coda.slice(aCapo);
       }
 
-      // Operatrice scelta: si legge quello che segue il punto interrogativo e si
-      // normalizza sull'iniziale, cosi' "SI", "Si", "S\u00cc" e "NO" finiscono tutti
-      // nella stessa etichetta senza dipendere dalla codifica del DB.
+      // Scelta dell'operatore: si legge quello che segue il punto interrogativo
+      // e si normalizza sull'iniziale, cosi' "SI", "Si", "S\u00cc" e "NO" finiscono
+      // tutti nello stesso valore senza dipendere dalla codifica del DB.
       let operatrice = '';
       const mOp = blocco.match(RE_WEB_OPERATRICE);
       let corpo = blocco.replace(RE_WEB_INIZIO, '');
       if (mOp) {
         const grezza = blocco.slice(mOp.index + mOp[0].length).trim();
-        // "SI" / "NO" da soli, sotto un'etichetta, non si capisce a cosa
-        // rispondano: qui diventa la frase intera.
-        if (/^s/i.test(grezza)) operatrice = 'Scelta dal cliente';
-        else if (/^n/i.test(grezza)) operatrice = 'Non scelta';
+        if (/^s/i.test(grezza)) operatrice = 'SI';
+        else if (/^n/i.test(grezza)) operatrice = 'NO';
         const tagliaCorpo = corpo.search(RE_WEB_OPERATRICE);
         if (tagliaCorpo >= 0) corpo = corpo.slice(0, tagliaCorpo);
       }
@@ -2161,7 +2159,10 @@ body.asp-docked-modal-open {
         if (k === 'nome' || k === 'cognome' || k === 'telefono' || k === 'email') return;
         if (c[1]) righe.push([c[0].toUpperCase(), c[1]]);
       });
-      if (operatrice) righe.push(['OPERATRICE', operatrice]);
+      // Terzo elemento: la variante di colore. La decide chi legge la nota,
+      // non chi la disegna - verde se il cliente ha chiesto una persona
+      // precisa, rosso se no, cosi' si distinguono senza leggere.
+      if (operatrice) righe.push(['SCELTA OPERATORE', operatrice, operatrice === 'SI' ? 'si' : 'no']);
 
       if (!righe.length) return null;
 
@@ -2664,11 +2665,16 @@ document.addEventListener('DOMContentLoaded', function() {
     dati.righe.forEach(function (r) {
       const riga = document.createElement('div');
       riga.className = 'ci-web-riga';
+      // Etichetta di piu' parole = va a capo nella sua colonna (SCELTA
+      // OPERATORE): il valore si centra sulle due righe invece di restare
+      // appeso alla prima.
+      if (/\s/.test(r[0])) riga.classList.add('ci-web-riga-alta');
       const et = document.createElement('span');
       et.className = 'ci-web-etichetta';
       et.textContent = r[0];
       const va = document.createElement('span');
       va.className = 'ci-web-valore';
+      if (r[2]) va.classList.add('ci-web-valore-' + r[2]);
       va.textContent = r[1];
       riga.append(et, va);
       corpo.appendChild(riga);

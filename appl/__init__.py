@@ -223,7 +223,7 @@ def create_app(db_uri: str | None = None, tenant_idx=None, is_demo: bool = False
     migrate.init_app(app, db)
 
     # Importa e registra i blueprint
-    from .routes.calendar import calendar_bp
+    from .routes.calendar import calendar_bp, cache as calendar_cache
     from .routes.settings import settings_bp
     from .routes.clients import clients_bp
     from .routes.services import services_bp
@@ -240,6 +240,13 @@ def create_app(db_uri: str | None = None, tenant_idx=None, is_demo: bool = False
     app.register_blueprint(cassa_bp)
     app.register_blueprint(report_bp)
     app.register_blueprint(pacchetti_bp, url_prefix="/pacchetti")
+
+    # La cache delle viste di calendar.py va agganciata a OGNI app: il modulo
+    # si importa una volta sola, questa funzione gira una volta per tenant.
+    # Senza questa riga solo il primo tenant montato aveva la cache e gli
+    # altri riempivano il log di KeyError: 'cache'. init_app crea un backend
+    # per app, quindi i tenant restano separati.
+    calendar_cache.init_app(app)
 
     # ---- CARTE PREPAGATE: STATO ALLINEATO AL CREDITO ----
     # Una carta con credito non puo' restare "Completato" (= esaurita): sarebbe

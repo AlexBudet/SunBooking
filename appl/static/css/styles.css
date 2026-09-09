@@ -402,8 +402,12 @@ display: none
 }
 
 .ci-web-etichetta {
-    flex: 0 0 auto;
-    min-width: 74px;
+    /* Colonna a larghezza FISSA, non "almeno 74px": un'etichetta lunga come
+       SCELTA OPERATORE altrimenti si allarga in linea e sfasa la colonna dei
+       valori. Cosi' va a capo dentro la sua colonna e i valori restano
+       incolonnati; il valore si allinea alla prima riga dell'etichetta. */
+    flex: 0 0 74px;
+    width: 74px;
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.07em;
@@ -417,6 +421,29 @@ display: none
     font-weight: 600;
     color: #fff;
 }
+
+/* Riga la cui etichetta va a capo (SCELTA OPERATORE): il valore si centra
+   sull'altezza delle due righe invece di allinearsi alla prima, e sta un paio
+   di pixel piu' grande - e' un SI / no che si legge di sfuggita. */
+.ci-web-riga-alta {
+    align-items: center;
+}
+
+.ci-web-riga-alta .ci-web-valore {
+    font-size: 0.94rem;
+}
+
+/* SCELTA OPERATORE sta un gradino piu' chiara delle altre etichette: la sua
+   riga e' l'unica che si guarda per il valore, non per il campo. */
+.ci-web-riga-alta .ci-web-etichetta {
+    color: rgba(255, 255, 255, 0.72);
+}
+
+/* SI e NO si distinguono dal colore, non dal maiuscolo: verde e rosso ripresi
+   dai badge del tooltip (pacchetto e a rischio), cosi' il riquadro resta
+   dentro la stessa tavolozza. */
+.ci-web-valore-si { color: #a7e9be; }
+.ci-web-valore-no { color: #ff9d9d; }
 
 .ci-meta {
     margin-top: 10px;

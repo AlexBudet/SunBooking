@@ -18,7 +18,16 @@ from pytz import timezone as pytz_timezone
 from sqlalchemy import func, and_, or_, case
 from dotenv import load_dotenv
 
-cache = Cache(app, config={'CACHE_TYPE': 'simple'})
+# Cache SENZA app: questo modulo viene importato una volta sola, mentre
+# create_app() gira una volta per tenant. Legandola qui a "app" (che e' il
+# riferimento globale, cioe' il PRIMO tenant montato) tutti gli altri tenant
+# sollevavano KeyError: 'cache' a ogni chiamata delle viste sotto - errore
+# intercettato e loggato da flask_caching, vista eseguita senza cache.
+# L'aggancio si fa in create_app con cache.init_app(app), cosi' ogni tenant
+# ha il SUO backend: le key_prefix qui sotto sono fisse e non contengono il
+# tenant, quindi un backend condiviso servirebbe i clienti di un negozio a
+# un altro.
+cache = Cache(config={'CACHE_TYPE': 'simple'})
 
 NEW_CLIENT_MARKER = " ***NUOVO CLIENTE*** "
 
