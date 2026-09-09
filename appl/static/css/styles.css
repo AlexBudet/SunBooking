@@ -373,6 +373,51 @@ display: none
     color: #cfe6ff;
 }
 
+/* Riquadro "PRENOTAZIONE ONLINE" del tooltip info appuntamento.
+   I dati di chi ha prenotato dal sito arrivano dentro la nota
+   dell'appuntamento: showClientInfoForBlock() li stacca e li mette qui, cosi'
+   NOTA APPUNTAMENTO resta la nota scritta al banco. Stessa forma dei riquadri
+   nota, accento azzurro come il badge DA WEB perche' i due parlano della
+   stessa cosa. Il contenuto e' sempre visibile: dentro a un tooltip che
+   sparisce quando il puntatore lo lascia non c'e' niente da cliccare. */
+.ci-web-box {
+    border-left-color: rgba(156, 203, 255, 0.60);
+    background: rgba(156, 203, 255, 0.10);
+}
+
+.ci-web-box .ci-label-nota {
+    color: #9ccbff;
+}
+
+.ci-web-corpo {
+    margin-top: 5px;
+}
+
+.ci-web-riga {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    line-height: 1.45;
+    font-size: 0.82rem;
+}
+
+.ci-web-etichetta {
+    flex: 0 0 auto;
+    min-width: 74px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.ci-web-valore {
+    flex: 1 1 auto;
+    min-width: 0;
+    word-break: break-word;
+    font-weight: 600;
+    color: #fff;
+}
+
 .ci-meta {
     margin-top: 10px;
     padding-top: 7px;
@@ -1926,6 +1971,21 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
 
 .appointment-block .note-indicator i {
     font-size: 16px;
+}
+
+/* Blocco che porta SOLO i dati della prenotazione arrivata dal sito: al posto
+   della matita c'e' il mappamondo, lo stesso simbolo del pulsante
+   "prenotazioni da web" in alto. La matita resta riservata a cio' che ha
+   scritto una persona, cosi' non promette una nota che non c'e'.
+   Lo scambio lo fa applicaIconaNota() nel template; qui si dimensiona solo
+   l'emoji, che non eredita il font-size pensato per le icone Bootstrap. */
+.appointment-block .note-indicator .globo-web {
+    display: inline-block;
+    font-size: 14px;
+    line-height: 16px;
+    /* Un'emoji a colori finisce sia su blocchi chiari sia su blocchi scuri:
+       un alone sottile la stacca da tutti e due. */
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.45);
 }
   
 /* Stile per l'appuntamento "non arrivato" - regola più specifica */

@@ -2074,6 +2074,144 @@ body.asp-docked-modal-open {
     var calendarHomeUrl = "{{ url_for('calendar.calendar_home') }}";
 </script>
 <script>
+/* Note arrivate dal booking online: parser condiviso.
+   Serve in due punti diversi - il riquadro PRENOTAZIONE ONLINE del tooltip
+   info e l'icona in basso a sinistra nel blocco - quindi sta qui, in uno
+   script globale caricato dopo calendar.js e prima di ogni altro inline,
+   invece di essere scritto due volte. */
+(function () {
+    // --- PRENOTAZIONI DAL SITO -------------------------------------------
+    // Chi prenota online finisce sul cliente segnaposto "cliente booking", e i
+    // suoi dati arrivano dentro la nota dell'appuntamento, in una riga sola:
+    //   PRENOTATO DA BOOKING ONLINE - Nome: X, Cognome: Y, Telefono: Z,
+    //   Email: W - ha selezionato l'operatrice? SI
+    // Qui quella riga si stacca dalla nota e diventa un riquadro a se', cosi'
+    // NOTA APPUNTAMENTO torna a contenere solo cio' che ha scritto qualcuno al
+    // banco. Il riconoscimento si fa sul TESTO e non su data-source="web":
+    // in agenda ci sono appuntamenti nati dal sito e poi rifatti a mano che
+    // portano ancora la nota ma non piu' quella sorgente.
+    const RE_WEB_INIZIO = /PRENOTATO\s+DA\s+BOOKING\s+ONLINE\s*[-:]?\s*/i;
+    const RE_WEB_OPERATRICE = /-?\s*ha\s+selezionato\s+l['\u2019]?\s*operatrice\s*\?\s*/i;
+
+    function estraiPrenotazioneWeb(testo) {
+      const src = String(testo || '');
+      const inizio = src.search(RE_WEB_INIZIO);
+      if (inizio < 0) return null;
+
+      // Il blocco del sito va dal marcatore fino alla risposta sull'operatrice,
+      // che chiude la frase. Se quella parte manca (formati piu' vecchi) ci si
+      // ferma a fine riga. Tutto il resto della nota - prima e dopo - resta
+      // nota dell'operatore: e' il caso di chi scrive "pagato il .. scontrino
+      // n .." sopra al testo arrivato dal sito.
+      const prima = src.slice(0, inizio);
+      const coda = src.slice(inizio);
+
+      let blocco, dopo;
+      const fine = coda.match(RE_WEB_OPERATRICE);
+      if (fine) {
+        const restoDopoDomanda = coda.slice(fine.index + fine[0].length);
+        const risposta = (restoDopoDomanda.match(/^\s*\S+/) || [''])[0];
+        const tagliaA = fine.index + fine[0].length + risposta.length;
+        blocco = coda.slice(0, tagliaA);
+        dopo = coda.slice(tagliaA);
+      } else {
+        const aCapo = coda.indexOf('\n');
+        blocco = aCapo < 0 ? coda : coda.slice(0, aCapo);
+        dopo = aCapo < 0 ? '' : coda.slice(aCapo);
+      }
+
+      // Operatrice scelta: si legge quello che segue il punto interrogativo e si
+      // normalizza sull'iniziale, cosi' "SI", "Si", "S\u00cc" e "NO" finiscono tutti
+      // nella stessa etichetta senza dipendere dalla codifica del DB.
+      let operatrice = '';
+      const mOp = blocco.match(RE_WEB_OPERATRICE);
+      let corpo = blocco.replace(RE_WEB_INIZIO, '');
+      if (mOp) {
+        const grezza = blocco.slice(mOp.index + mOp[0].length).trim();
+        // "SI" / "NO" da soli, sotto un'etichetta, non si capisce a cosa
+        // rispondano: qui diventa la frase intera.
+        if (/^s/i.test(grezza)) operatrice = 'Scelta dal cliente';
+        else if (/^n/i.test(grezza)) operatrice = 'Non scelta';
+        const tagliaCorpo = corpo.search(RE_WEB_OPERATRICE);
+        if (tagliaCorpo >= 0) corpo = corpo.slice(0, tagliaCorpo);
+      }
+
+      // Coppie "Etichetta: valore" separate da virgola. Se un valore contiene a
+      // sua volta una virgola, il pezzo orfano viene riattaccato al campo
+      // precedente invece di sparire.
+      const campi = [];
+      corpo.split(',').forEach(function (pezzo) {
+        const m = pezzo.match(/^\s*([^:]{1,30}?)\s*:\s*([\s\S]*)$/);
+        if (m) campi.push([m[1].trim(), m[2].trim()]);
+        else if (pezzo.trim() && campi.length) campi[campi.length - 1][1] += ', ' + pezzo.trim();
+      });
+
+      const mappa = {};
+      campi.forEach(function (c) { mappa[c[0].toLowerCase()] = c[1]; });
+
+      const nome = [mappa['nome'] || '', mappa['cognome'] || ''].filter(Boolean).join(' ').trim();
+      const righe = [];
+      if (nome) righe.push(['NOME', nome]);
+      if (mappa['telefono']) righe.push(['TELEFONO', mappa['telefono']]);
+      if (mappa['email']) righe.push(['E-MAIL', mappa['email']]);
+      // Eventuali campi aggiunti in futuro dal sito compaiono lo stesso, in coda
+      // e con la loro etichetta, invece di essere buttati via in silenzio.
+      campi.forEach(function (c) {
+        const k = c[0].toLowerCase();
+        if (k === 'nome' || k === 'cognome' || k === 'telefono' || k === 'email') return;
+        if (c[1]) righe.push([c[0].toUpperCase(), c[1]]);
+      });
+      if (operatrice) righe.push(['OPERATRICE', operatrice]);
+
+      if (!righe.length) return null;
+
+      const resto = (prima.trim() + (prima.trim() && dopo.trim() ? '\n' : '') + dopo.trim()).trim();
+      return { righe: righe, nome: nome, resto: resto };
+    }
+
+  window.estraiPrenotazioneWeb = estraiPrenotazioneWeb;
+
+  /* Icona in basso a sinistra nel blocco appuntamento.
+       - nota scritta da una persona (da sola o insieme ai dati del sito)
+         -> matita, come sempre: e' l'unica che qualcuno deve leggere;
+       - solo i dati del sito -> mappamondo, lo stesso simbolo del pulsante
+         "prenotazioni da web" in alto, cosi' si capisce da dove arriva senza
+         far credere che ci sia una nota da leggere;
+       - niente nota -> resta la matita, tanto l'indicatore e' nascosto.
+     Qui si cambia SOLO il disegno: chi mostra e chi nasconde l'indicatore
+     resta quello di prima (display inline dal JS, regole [data-note] non
+     vuoto in touch-ui e quarter-55), che va bene in entrambi i casi. */
+  window.applicaIconaNota = function (block) {
+    if (!block) return;
+    const ind = block.querySelector('.note-indicator');
+    if (!ind) return;
+
+    const nota = block.getAttribute('data-note') || '';
+    const dati = nota.trim() ? estraiPrenotazioneWeb(nota) : null;
+    const soloWeb = !!dati && !dati.resto;
+
+    // data-nota-tipo resta leggibile dal CSS e dice a colpo d'occhio, in
+    // ispezione, perche' quel blocco porta un mappamondo.
+    block.setAttribute('data-nota-tipo', nota.trim() ? (soloWeb ? 'web' : 'nota') : '');
+
+    if (soloWeb === (ind.dataset.icona === 'web')) return;   // gia' giusta
+    ind.dataset.icona = soloWeb ? 'web' : 'nota';
+    ind.classList.toggle('nota-solo-web', soloWeb);
+    ind.textContent = '';
+    if (soloWeb) {
+      const globo = document.createElement('span');
+      globo.className = 'globo-web';
+      globo.textContent = '\ud83c\udf10';
+      ind.appendChild(globo);
+    } else {
+      const i = document.createElement('i');
+      i.className = 'bi bi-pencil-square';
+      ind.appendChild(i);
+    }
+  };
+})();
+</script>
+<script>
 document.addEventListener("DOMContentLoaded", function() {
   flatpickr("#date", {
     dateFormat: "Y-m-d",  // Valore input resta yyyy-mm-dd (backend)
@@ -2186,6 +2324,8 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             noteIndicator.style.display = 'none';
         }
+        // Matita o mappamondo a seconda di cosa c'e' dentro la nota.
+        if (window.applicaIconaNota) window.applicaIconaNota(block);
     });
 });
 </script>
@@ -2500,6 +2640,44 @@ document.addEventListener('DOMContentLoaded', function() {
     return p;
   }
 
+  // Il parser della nota del booking sta nello script globale piu' in alto:
+  // lo usa anche l'icona del blocco, e una copia sola non si disallinea.
+  const estraiPrenotazioneWeb = window.estraiPrenotazioneWeb;
+
+  /* Riquadro PRENOTAZIONE ONLINE: contenuto sempre tutto in chiaro.
+     Niente + / - da premere: il tooltip si apre al passaggio del mouse e si
+     chiude appena il puntatore lo lascia, quindi un comando da cliccare li'
+     dentro non e' raggiungibile - ne' col mouse, ne' in touch, dove il tocco
+     dentro al riquadro finisce nell'handler che chiude tutti i popup.
+     Sono quattro righe: si leggono senza far crescere troppo il riquadro. */
+  function costruisciBoxWeb(dati) {
+    const box = document.createElement('div');
+    box.className = 'ci-nota-box ci-web-box';
+
+    const lab = document.createElement('div');
+    lab.className = 'ci-label-nota';
+    lab.textContent = 'PRENOTAZIONE ONLINE';
+    box.appendChild(lab);
+
+    const corpo = document.createElement('div');
+    corpo.className = 'ci-web-corpo';
+    dati.righe.forEach(function (r) {
+      const riga = document.createElement('div');
+      riga.className = 'ci-web-riga';
+      const et = document.createElement('span');
+      et.className = 'ci-web-etichetta';
+      et.textContent = r[0];
+      const va = document.createElement('span');
+      va.className = 'ci-web-valore';
+      va.textContent = r[1];
+      riga.append(et, va);
+      corpo.appendChild(riga);
+    });
+    box.appendChild(corpo);
+
+    return box;
+  }
+
   function showClientInfoForBlock(block) {
     if (!block) return;
     // Estrai valori dal blocco o dal link interno (fallback)
@@ -2522,6 +2700,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const servizioD = decodeHtml(servizio);
     const notaClienteD = decodeHtml(notaCliente);
     const notaAppD = decodeHtml(notaApp);
+
+    // I dati del sito escono dalla nota e vanno nel riquadro dedicato: qui
+    // resta solo la nota scritta da qualcuno al banco.
+    const datiWeb = estraiPrenotazioneWeb(notaAppD);
+    const notaAppPulita = datiWeb ? datiWeb.resto : notaAppD;
+    // Finche' il blocco e' sul segnaposto "cliente booking" nessuno sa chi ha
+    // prenotato: in quel caso il riquadro nasce aperto e sale in cima.
+    const daAbbinare = /^cliente$/i.test(nomeD.trim()) && /^booking$/i.test(cognomeD.trim());
 
     const createdAt = block.getAttribute('data-created-at') || '';
     const lastEdit = block.getAttribute('data-last-edit') || '';
@@ -2672,6 +2858,9 @@ document.addEventListener('DOMContentLoaded', function() {
       popup.appendChild(box);
     }
 
+    const boxWeb = datiWeb ? costruisciBoxWeb(datiWeb) : null;
+    if (boxWeb && daAbbinare) popup.appendChild(boxWeb);
+
     if (notaClienteD) nota('NOTA CLIENTE', notaClienteD);
 
     // Servizio
@@ -2688,7 +2877,9 @@ document.addEventListener('DOMContentLoaded', function() {
       popup.appendChild(cellSpan);
     }
 
-    if (notaAppD) nota('NOTA APPUNTAMENTO', notaAppD);
+    if (boxWeb && !daAbbinare) popup.appendChild(boxWeb);
+
+    if (notaAppPulita) nota('NOTA APPUNTAMENTO', notaAppPulita);
 
     // 2b) META IN FONDO: "creato" e "ultima modifica" servono di rado, prima
     // erano la primissima riga e rubavano il posto al nome del cliente.
@@ -2845,6 +3036,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       const noteInd = block.querySelector('.note-indicator');
       if (noteInd) noteInd.style.display = (noteText && noteText.trim().length) ? 'block' : 'none';
+      if (window.applicaIconaNota) window.applicaIconaNota(block);
 
       const small = document.getElementById('clientInfoPopup');
       const isVisible = small && small.style.display && small.style.display !== 'none';

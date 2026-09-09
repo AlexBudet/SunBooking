@@ -7046,6 +7046,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const hasNote = !!String(noteText || '').trim();
         noteIndicator.style.display = hasNote ? 'block' : '';
       }
+      if (window.applicaIconaNota) window.applicaIconaNota(block);
     }
 })
         .catch(error => {
@@ -9846,6 +9847,9 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
     if (window.openNoteModal) window.openNoteModal(block);
   };
   block.appendChild(noteIndicator);
+  // Matita o mappamondo: lo decide il contenuto della nota (vedi
+  // applicaIconaNota nel template).
+  if (window.applicaIconaNota) window.applicaIconaNota(block);
 
   const contentDiv = document.createElement('div');
   contentDiv.className = 'appointment-content';
