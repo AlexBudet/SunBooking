@@ -673,7 +673,9 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="tile-neumorphic tile-large" id="tile-palette-stagionale">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
 <div class="tile-title" data-bs-toggle="tooltip" data-bs-placement="bottom"
-     title="Colori di tendenza del periodo, spunti per il marketing">PALETTE STAGIONALE</div>
+     title="Colori di tendenza del periodo, spunti per il marketing">PALETTE STAGIONALE<span
+     class="palette-storico" id="palette-storico" style="display:none;"><select
+     id="palette-stagione-sel" aria-label="Vedi stagioni precedenti"></select></span></div>
 <div class="palette-subtitle" id="palette-subtitle"></div>
 <div class="palette-container" id="palette-container"></div>
 </div>
@@ -1844,6 +1846,36 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 .palette-subtitle:empty {
   display: none;
+}
+
+/* Tendina "vedi stagioni precedenti": il JS la mostra solo se il JSON
+   contiene un archivio di stagioni passate.
+
+   Sta DENTRO .tile-title (che e' gia' un flex row) e non sotto le unghie:
+   li' allungava il riquadro e spingeva in basso il margine della finestra.
+   margin-left:auto la porta a filo destro dell'header, fuori dal flusso
+   verticale del riquadro, quindi l'altezza del tile non cambia. */
+.tile-title .palette-storico {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.tile-title .palette-storico select {
+  /* L'header e' corsivo e a 0.8em: le opzioni tornano diritte e leggibili.
+     Misure compatte per non sfondare i 36px di altezza dell'header. */
+  font-family: inherit;
+  font-style: normal;
+  font-size: 0.78em;
+  line-height: 1.1;
+  padding: 1px 4px;
+  border: 1px solid #d8dae0;
+  border-radius: 6px;
+  background: #f7f8fa;
+  color: #34343c;
+  cursor: pointer;
+  text-overflow: ellipsis;
 }
 
 /* Mirata a #tabella-riassunto dentro modal: nessun min-width, layout fisso e contenuto adattivo */
@@ -3927,19 +3959,16 @@ document.addEventListener('DOMContentLoaded', function() {
   function enableDrag() {
     if (sortableInstance) return;
     /* In modalita' touch il riordino dei riquadri parte solo dopo una
-       pressione un po' piu' lunga e non lo fanno partire i comandi
-       dell'header: cosi' il dito che scivola di un paio di pixel mentre
-       preme "30 gg" preme davvero il pulsante invece di trascinare il
-       riquadro. preventOnFilter:false lascia passare il click sui comandi
-       filtrati. Col mouse (delayOnTouchOnly) non cambia nulla, e senza la
-       modalita' touch Sortable resta configurato esattamente come prima. */
+       pressione un po' piu' lunga: cosi' il dito che scivola di un paio di
+       pixel mentre preme "30 gg" preme davvero il pulsante invece di
+       trascinare il riquadro. Col mouse (delayOnTouchOnly) l'attesa non si
+       applica. L'esclusione dei comandi dell'header non sta piu' qui ma
+       nelle opzioni di base, perche' serve anche col mouse: vedi filter. */
     const opzioniTouch = document.body.classList.contains('touch-ui')
       ? {
           delay: 200,
           delayOnTouchOnly: true,
-          touchStartThreshold: 6,
-          filter: '.btn, button, a, input, select, label',
-          preventOnFilter: false
+          touchStartThreshold: 6
         }
       : {};
 
@@ -3947,6 +3976,12 @@ document.addEventListener('DOMContentLoaded', function() {
       animation: 200,
       ghostClass: 'tile-ghost',
       chosenClass: 'tile-chosen',
+      /* filter vale anche col mouse, non solo in touch: gli header contengono
+         comandi veri (pulsanti, la tendina delle stagioni) e senza questo
+         Sortable avviava il trascinamento invece di aprire la tendina.
+         preventOnFilter:false lascia passare il click sul comando. */
+      filter: '.btn, button, a, input, select, label',
+      preventOnFilter: false,
       onEnd: salvaOrdine
     }, opzioniTouch));
     grid.classList.add('tiles-draggable');
@@ -4490,77 +4525,111 @@ root.appendChild(row);
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+  const container = document.getElementById('palette-container');
+  const subEl     = document.getElementById('palette-subtitle');
+  const selWrap   = document.getElementById('palette-storico');
+  const sel       = document.getElementById('palette-stagione-sel');
+  if (!container) return;
+
+  // Disegna le 4 unghie della stagione ricevuta.
+  function renderColori(colori) {
+    container.innerHTML = '';
+    (colori || []).slice(0, 4).forEach(col => {
+      const desc = col.descrizione || '';
+
+      const el = document.createElement('div');
+      el.className = 'palette-color';
+      Object.assign(el.style, {
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        width: '120px', marginTop: '15px', marginLeft: '3px', marginRight: '3px'
+      });
+
+      const nail = document.createElement('div');
+      nail.className = 'nail-shape';
+      Object.assign(nail.style, {
+        width: '38px', height: '62px', marginTop: '8px', marginBottom: '20px',
+        borderRadius: '18px 18px 30px 30px / 30px 30px 62px 62px'
+      });
+      if (typeof col.hex === 'string' && /^#?[0-9a-fA-F]{3,8}$/.test(col.hex)) {
+        nail.style.background = col.hex.startsWith('#') ? col.hex : `#${col.hex}`;
+      } else {
+        nail.style.background = '#ccc';
+      }
+
+      const descBox = document.createElement('div');
+      descBox.className = 'palette-desc';
+      Object.assign(descBox.style, {
+        fontSize: '1em', color: '#444', textAlign: 'center',
+        minHeight: '32px', maxWidth: '120px', lineHeight: '1.15',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal'
+      });
+
+      const b = document.createElement('b');
+      // Solo il nome: il codice prodotto resta nel JSON come riferimento,
+      // ma nel riquadro non si mostra (su 120px mandava il titolo a capo).
+      b.textContent = String(col.nome ?? '');
+      descBox.appendChild(b);
+      descBox.appendChild(document.createElement('br'));
+      descBox.appendChild(document.createTextNode(String(desc ?? '')));
+
+      el.appendChild(nail);
+      el.appendChild(descBox);
+      container.appendChild(el);
+    });
+
+    // Disposizione orizzontale. Niente flex-grow: il contenitore prende
+    // l'altezza naturale, così il blocco [titolo + unghie] resta compatto
+    // e centrato (margin auto).
+    Object.assign(container.style, {
+      display: 'flex', flexDirection: 'row', justifyContent: 'center',
+      alignItems: 'center', gap: '10px',
+      flex: '0 0 auto', marginBottom: 'auto', width: '100%', flexWrap: 'nowrap'
+    });
+  }
+
   fetch('/static/js/palette-stagionale.json')
     .then(r => r.json())
     .then(data => {
-      const container = document.getElementById('palette-container');
-      container.innerHTML = '';
+      // Formati accettati:
+      //   - array semplice di colori (vecchio formato, pre-archivio)
+      //   - { titolo, colori, archivio: [{ titolo, colori }, ...] }
+      const isArr = Array.isArray(data);
+      const corrente = {
+        titolo: isArr ? '' : (data.titolo || ''),
+        colori: isArr ? data : (data.colori || [])
+      };
+      const archivio = (!isArr && Array.isArray(data.archivio)) ? data.archivio : [];
 
-      // Il JSON è un oggetto { titolo, colori } (con fallback se fosse un array).
-      const colori = Array.isArray(data) ? data : (data.colori || []);
-      const titolo = (data && !Array.isArray(data)) ? (data.titolo || '') : '';
-      const subEl = document.getElementById('palette-subtitle');
-      if (subEl) subEl.textContent = titolo;
+      // Indice 0 = stagione in corso, poi lo storico dal più recente.
+      const stagioni = [corrente].concat(
+        archivio.filter(s => s && Array.isArray(s.colori) && s.colori.length)
+      );
 
-      // Usa solo le prime 4
-colori.slice(0, 4).forEach((col, idx) => {
-  let desc = col.descrizione || '';
-  const el = document.createElement('div');
-  el.className = 'palette-color';
-  el.style.display = 'flex';
-  el.style.flexDirection = 'column';
-  el.style.alignItems = 'center';
-  el.style.width = '120px';
-  el.style.marginTop = '15px';
-  el.style.marginLeft = '3px';
-  el.style.marginRight = '3px';
-el.textContent = '';
+      function mostra(i) {
+        const s = stagioni[i] || corrente;
+        if (subEl) subEl.textContent = s.titolo || '';
+        renderColori(s.colori);
+      }
 
-const nail = document.createElement('div');
-nail.className = 'nail-shape';
-nail.style.width = '38px';
-nail.style.height = '62px';
-nail.style.marginTop = '8px';
-nail.style.marginBottom = '20px';
-nail.style.borderRadius = '18px 18px 30px 30px / 30px 30px 62px 62px';
-if (typeof col.hex === 'string' && /^#?[0-9a-fA-F]{3,8}$/.test(col.hex)) {
-  nail.style.background = col.hex.startsWith('#') ? col.hex : `#${col.hex}`;
-} else {
-  nail.style.background = '#ccc';
-}
+      mostra(0);
 
-const descBox = document.createElement('div');
-descBox.className = 'palette-desc';
-Object.assign(descBox.style, {
-  fontSize: '1em', color: '#444', textAlign: 'center',
-  minHeight: '32px', maxWidth: '120px', lineHeight: '1.15',
-  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal'
-});
-
-const b = document.createElement('b');
-b.textContent = String(col.nome ?? '');
-descBox.appendChild(b);
-descBox.appendChild(document.createElement('br'));
-descBox.appendChild(document.createTextNode(String(desc ?? '')));
-
-el.appendChild(nail);
-el.appendChild(descBox);
-
-  container.appendChild(el);
-});
-
-      // Disposizione orizzontale
-      container.style.display = 'flex';
-      container.style.flexDirection = 'row';
-      container.style.justifyContent = 'center';
-      container.style.alignItems = 'center';
-      container.style.gap = '10px';
-      // Niente flex-grow: il contenitore prende l'altezza naturale, così il
-      // blocco [titolo + unghie] resta compatto e centrato (margin auto).
-      container.style.flex = '0 0 auto';
-      container.style.marginBottom = 'auto';
-      container.style.width = '100%';
-      container.style.flexWrap = 'nowrap';
+      // La tendina compare solo se esiste davvero uno storico da consultare.
+      if (sel && selWrap && stagioni.length > 1) {
+        sel.innerHTML = '';
+        stagioni.forEach((s, i) => {
+          const o = document.createElement('option');
+          o.value = String(i);
+          o.textContent = (s.titolo || `Stagione ${i}`) + (i === 0 ? ' (in corso)' : '');
+          sel.appendChild(o);
+        });
+        sel.value = '0';
+        sel.addEventListener('change', () => mostra(parseInt(sel.value, 10) || 0));
+        selWrap.style.display = '';
+      }
+    })
+    .catch(err => {
+      console.error('Palette stagionale non caricata:', err);
+      if (subEl) subEl.textContent = '';
     });
 });
 </script>

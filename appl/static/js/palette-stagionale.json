@@ -1,25 +1,137 @@
 {
-  "titolo": "ESTATE 2026",
+  "titolo": "AUTUNNO 2026",
+  "periodo": "2026-09",
+  "fonte": "Passione Beauty",
   "colori": [
     {
-      "nome": "Rosso Corallo",
-      "hex": "#FF5A4F",
-      "descrizione": "Caldo e vitaminico, energia solare estiva."
+      "nome": "ARANCIO DAMA",
+      "codice": "SPC94",
+      "hex": "#D56443",
+      "descrizione": "Ambra speziata, calda e profonda."
     },
     {
-      "nome": "Blu Oceano",
-      "hex": "#4FAFEF",
-      "descrizione": "Fresco e luminoso, brezza marina estiva."
+      "nome": "MARRON CUOIO",
+      "codice": "SP826",
+      "hex": "#422B1E",
+      "descrizione": "Marrone freddo, elegante e materico."
     },
     {
-      "nome": "Fucsia Ibisco",
-      "hex": "#E91E8F",
-      "descrizione": "Vivace e tropicale, audace mood mediterraneo."
+      "nome": "VERDE GIADA",
+      "codice": "SP828",
+      "hex": "#B1B8A6",
+      "descrizione": "Verde giada polveroso, tenue e sofisticato."
     },
     {
-      "nome": "Pesca Albicocca",
-      "hex": "#FFB38A",
-      "descrizione": "Dolce e radioso, tono pesca delicato d'estate."
+      "nome": "NERO ROSSO",
+      "codice": "SP752",
+      "hex": "#250309",
+      "descrizione": "Bordeaux quasi nero, intenso e glam."
+    }
+  ],
+  "archivio": [
+    {
+      "titolo": "ESTATE 2026",
+      "periodo": "2026-05",
+      "colori": [
+        {
+          "nome": "Rosso Corallo",
+          "hex": "#FF5A4F",
+          "descrizione": "Caldo e vitaminico, energia solare estiva."
+        },
+        {
+          "nome": "Blu Oceano",
+          "hex": "#4FAFEF",
+          "descrizione": "Fresco e luminoso, brezza marina estiva."
+        },
+        {
+          "nome": "Fucsia Ibisco",
+          "hex": "#E91E8F",
+          "descrizione": "Vivace e tropicale, audace mood mediterraneo."
+        },
+        {
+          "nome": "Pesca Albicocca",
+          "hex": "#FFB38A",
+          "descrizione": "Dolce e radioso, tono pesca delicato d'estate."
+        }
+      ]
+    },
+    {
+      "titolo": "INVERNO 2026",
+      "periodo": "2026-01",
+      "colori": [
+        {
+          "nome": "Blu Notte Chic",
+          "hex": "#0A1A40",
+          "descrizione": "Elegante e intenso, perfetto inverno chic."
+        },
+        {
+          "nome": "Verde Salvia Soft",
+          "hex": "#9AAE9D",
+          "descrizione": "Tenue verde neutro, elegante e moderno."
+        },
+        {
+          "nome": "Latte White",
+          "hex": "#F5F5F5",
+          "descrizione": "Minimal e luminoso, colore dell'anno 2026."
+        },
+        {
+          "nome": "Grigio Glacé",
+          "hex": "#B4BAC0",
+          "descrizione": "Grigio ghiacciato sofisticato, mood invernale."
+        }
+      ]
+    },
+    {
+      "titolo": "NATALE 2025",
+      "periodo": "2025-12",
+      "colori": [
+        {
+          "nome": "Rosso Natale",
+          "hex": "#D6001C",
+          "descrizione": "Un rosso acceso che riscalda il cuor."
+        },
+        {
+          "nome": "Bordeaux Glam",
+          "hex": "#800020",
+          "descrizione": "Un classico che non passa di moda."
+        },
+        {
+          "nome": "Verde Abete",
+          "hex": "#2E7D32",
+          "descrizione": "Un richiamo selvaggio ad una natura di charme."
+        },
+        {
+          "nome": "Golden Glow",
+          "hex": "#ECDE9B",
+          "descrizione": "Dorato con un tocco di magia glitter."
+        }
+      ]
+    },
+    {
+      "titolo": "AUTUNNO 2025",
+      "periodo": "2025-10",
+      "colori": [
+        {
+          "nome": "Bordeaux profondo",
+          "hex": "#5A0B1E",
+          "descrizione": "Un rosso vino intenso, sofisticato e caldo."
+        },
+        {
+          "nome": "Terracotta scuro",
+          "hex": "#A34726",
+          "descrizione": "Terracotta bruciata con accenti ramati."
+        },
+        {
+          "nome": "Prugna fumé",
+          "hex": "#4B2C39",
+          "descrizione": "Viola-prugna scuro con sottotoni caldi."
+        },
+        {
+          "nome": "Blu notte profondo",
+          "hex": "#0B1D3A",
+          "descrizione": "Blu quasi nero, elegante e profondo."
+        }
+      ]
     }
   ]
 }
