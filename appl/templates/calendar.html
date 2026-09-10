@@ -2172,6 +2172,32 @@ body.asp-docked-modal-open {
 
   window.estraiPrenotazioneWeb = estraiPrenotazioneWeb;
 
+    // --- PRIMA VISITA ----------------------------------------------------
+    // Quando qualcuno prenota per la prima volta, il server appende alla nota
+    // il marcatore ***NUOVO CLIENTE*** (append_new_client_marker, in
+    // calendar.py). Anche questo non e' una nota scritta da una persona: e'
+    // una cosa che l'agenda si e' calcolata da sola, contando gli
+    // appuntamenti di quel cliente. Esce quindi dalla nota come i dati del
+    // sito, e nel tooltip diventa un badge accanto a PAGATO e DA WEB.
+    // Il riconoscimento e' sul TESTO, come per il booking: il marcatore resta
+    // nella nota anche quando l'appuntamento viene poi rifatto a mano. Il
+    // numero di asterischi si accetta variabile perche' la nota puo' essere
+    // stata ritoccata al banco.
+    const RE_NUOVO_CLIENTE = /\*{2,3}\s*NUOVO\s+CLIENTE\s*\*{2,3}/i;
+
+    function estraiNuovoCliente(testo) {
+      const src = String(testo || '');
+      if (!RE_NUOVO_CLIENTE.test(src)) return null;
+      // Quel che resta e' la nota vera. Gli spazi si normalizzano perche' il
+      // marcatore viene appeso in fondo con uno spazio davanti: togliendolo e
+      // basta resterebbe una coda di spazi, che fa sembrare la nota non vuota
+      // e farebbe comparire la matita al posto dell'icona giusta.
+      const resto = src.replace(RE_NUOVO_CLIENTE, ' ').replace(/\s{2,}/g, ' ').trim();
+      return { resto: resto };
+    }
+
+  window.estraiNuovoCliente = estraiNuovoCliente;
+
   /* Icona in basso a sinistra nel blocco appuntamento.
        - nota scritta da una persona (da sola o insieme ai dati del sito)
          -> matita, come sempre: e' l'unica che qualcuno deve leggere;
@@ -2188,25 +2214,47 @@ body.asp-docked-modal-open {
     if (!ind) return;
 
     const nota = block.getAttribute('data-note') || '';
+
+    // La nota si sbuccia in due passaggi: prima esce quel che ha scritto il
+    // sito, poi il marcatore della prima visita. Quel che resta - se resta -
+    // e' testo scritto da una persona al banco.
     const dati = nota.trim() ? estraiPrenotazioneWeb(nota) : null;
-    const soloWeb = !!dati && !dati.resto;
+    const restoWeb = dati ? dati.resto : nota;
+    const nuovo = restoWeb.trim() ? estraiNuovoCliente(restoWeb) : null;
+    const restoVero = nuovo ? nuovo.resto : restoWeb;
+
+    // Tre disegni, in ordine di precedenza:
+    //   matita       -> c'e' del testo da LEGGERE, e vince sempre: gli altri
+    //                   due sono etichette, non messaggi lasciati a qualcuno;
+    //   mappamondo   -> solo i dati arrivati dal sito;
+    //   persona piu' -> solo la prima visita, senza note e senza sito.
+    // Un appuntamento nato dal sito da un cliente nuovo tiene il mappamondo:
+    // dice da dove arriva, che e' la cosa piu' rara delle due, e la prima
+    // visita resta comunque scritta nel badge del tooltip.
+    let tipo = '';
+    if (restoVero.trim()) tipo = 'nota';
+    else if (dati) tipo = 'web';
+    else if (nuovo) tipo = 'nuovo';
 
     // data-nota-tipo resta leggibile dal CSS e dice a colpo d'occhio, in
-    // ispezione, perche' quel blocco porta un mappamondo.
-    block.setAttribute('data-nota-tipo', nota.trim() ? (soloWeb ? 'web' : 'nota') : '');
+    // ispezione, perche' quel blocco porta quel disegno.
+    block.setAttribute('data-nota-tipo', tipo);
 
-    if (soloWeb === (ind.dataset.icona === 'web')) return;   // gia' giusta
-    ind.dataset.icona = soloWeb ? 'web' : 'nota';
-    ind.classList.toggle('nota-solo-web', soloWeb);
+    if (ind.dataset.icona === tipo) return;   // gia' giusta
+    ind.dataset.icona = tipo;
+    ind.classList.toggle('nota-solo-web', tipo === 'web');
+    ind.classList.toggle('nota-nuovo-cliente', tipo === 'nuovo');
     ind.textContent = '';
-    if (soloWeb) {
+    if (tipo === 'web') {
       const globo = document.createElement('span');
       globo.className = 'globo-web';
       globo.textContent = '\ud83c\udf10';
       ind.appendChild(globo);
     } else {
       const i = document.createElement('i');
-      i.className = 'bi bi-pencil-square';
+      // Senza nota l'indicatore resta nascosto: li' il disegno non si vede e
+      // la matita e' il comportamento di prima, che si tiene com'era.
+      i.className = (tipo === 'nuovo') ? 'bi bi-person-plus-fill' : 'bi bi-pencil-square';
       ind.appendChild(i);
     }
   };
@@ -2325,7 +2373,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             noteIndicator.style.display = 'none';
         }
-        // Matita o mappamondo a seconda di cosa c'e' dentro la nota.
+        // Matita, mappamondo o prima visita, a seconda di cosa c'e' dentro la nota.
         if (window.applicaIconaNota) window.applicaIconaNota(block);
     });
 });
@@ -2707,10 +2755,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const notaClienteD = decodeHtml(notaCliente);
     const notaAppD = decodeHtml(notaApp);
 
-    // I dati del sito escono dalla nota e vanno nel riquadro dedicato: qui
-    // resta solo la nota scritta da qualcuno al banco.
+    // I dati del sito escono dalla nota e vanno nel riquadro dedicato, e il
+    // marcatore della prima visita diventa un badge: sotto NOTA APPUNTAMENTO
+    // resta solo cio' che ha scritto qualcuno al banco. Se non resta niente,
+    // il riquadro della nota non compare nemmeno.
     const datiWeb = estraiPrenotazioneWeb(notaAppD);
-    const notaAppPulita = datiWeb ? datiWeb.resto : notaAppD;
+    const restoWeb = datiWeb ? datiWeb.resto : notaAppD;
+    const datiNuovo = window.estraiNuovoCliente ? window.estraiNuovoCliente(restoWeb) : null;
+    const notaAppPulita = datiNuovo ? datiNuovo.resto : restoWeb;
     // Finche' il blocco e' sul segnaposto "cliente booking" nessuno sa chi ha
     // prenotato: in quel caso il riquadro nasce aperto e sale in cima.
     const daAbbinare = /^cliente$/i.test(nomeD.trim()) && /^booking$/i.test(cognomeD.trim());
@@ -2814,6 +2866,10 @@ document.addEventListener('DOMContentLoaded', function() {
       badgeRiga.appendChild(b);
       return b;
     }
+
+    // Per primo: e' quello che cambia il modo di accogliere la persona, e chi
+    // guarda il tooltip lo deve vedere senza cercarlo.
+    if (datiNuovo) aggiungiBadge('NUOVO CLIENTE', 'nuovo');
 
     if (block.getAttribute('data-status') === '2') aggiungiBadge('PAGATO', 'pagato');
     if ((block.getAttribute('data-source') || '').toLowerCase() === 'web') aggiungiBadge('DA WEB', 'web');

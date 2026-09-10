@@ -82,7 +82,7 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 ⚫ **Nero a puntini, scritta in bianco** → Il cliente non si è presentato: No-Show! 😢
 🔵 **Blu** → colore tipico degli appuntamenti provenienti dal <span class="help-strong-dark">modulo opzionale Booking via Web</span>
 
-**Per cambiare stato ad un blocco appuntamento prosegui nella lettura per vedere le funzioni nascoste di ogni blocco...
+**Per cambiare stato ad un blocco appuntamento prosegui nella lettura per vedere le funzioni nascoste di ogni blocco...**
 
 <div class="help-approfondimento-box">
 <span class="help-approfondimento-label">Approfondimenti — leggere il calendario</span><br>
@@ -107,6 +107,7 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-files"></i></span> **COPIA BLOCCO** — Copia il blocco nel Navigator lasciando l'originale al suo posto. Utile per duplicare rapidamente lo stesso appuntamento su altre date o orari.
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-palette"></i></span> **IMPOSTA COLORE** — Apre il selettore colore del blocco. Il colore del testo si adatta automaticamente per restare leggibile su qualsiasi sfondo.
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-currency-euro"></i></span> **PORTA IN CASSA** — Porta in Cassa il servizio del blocco (e gli eventuali blocchi contigui dello stesso cliente) per il pagamento. <span class="help-strong-dark">Non è presente nelle versioni online</span>: la Cassa con stampante fiscale funziona solo nella versione locale. Se l'appuntamento è collegato a un <span class="help-strong-dark">pacchetto</span>, al posto del pulsante con l'euro compare il pulsante <span class="help-strong-dark">VAI AL PACCHETTO</span> (icona scatola): non apre la Cassa ma porta al dettaglio del pacchetto, dove segni la seduta come effettuata. Con la <span class="help-strong-dark">prepagata</span> invece il pulsante con l'euro resta: porti il servizio in Cassa e lì scegli <span class="help-strong-dark">Prepagata</span> come metodo di pagamento (la carta è segnalata da un badge accanto al nome del cliente).
+<span class="help-strong-dark">Anteprima del totale:</span> tenendo il puntatore fermo sull'icona per un istante, il tooltip si allunga e mostra il <span class="help-strong-dark">preventivo</span> di quello che il click porterebbe davvero in cassa: l'elenco dei servizi con il prezzo, le sedute di pacchetto segnalate come già pagate e il totale. Se il cliente ha una prepagata utilizzabile, prezzo di listino e importo scalato si alternano nella stessa riga, e in fondo si alternano <span class="help-strong-dark">TOT</span> e <span class="help-strong-dark">DA PAGARE</span>. È un preventivo da leggere al banco quando il cliente chiede "quanto vengo a pagare?": non decide nulla, cosa si paga e come lo stabilisce solo la Cassa.
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-plus"></i></span> **AGGIUNGI SERVIZI** — Apre il Navigator già precompilato con il cliente del blocco, per aggiungere altri servizi senza rifare la ricerca.
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-pencil-square"></i></span> **NOTA APPUNTAMENTO** — Aggiunge o modifica la nota del singolo appuntamento, distinta dalle note permanenti dell'anagrafica cliente.
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-whatsapp"></i></span> **INVIA WHATSAPP** — Solo con il <span class="help-strong-dark">modulo opzionale WhatsApp</span>: invia un promemoria diretto al cliente.
@@ -115,6 +116,31 @@ Se è attivo il <span class="help-strong-dark">modulo opzionale WhatsApp</span>,
 <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:21px;background:linear-gradient(to top,#5c5c5c,#2c2c2c);color:#fff;border-radius:6px;box-shadow:0 0 0 0.8px hsla(0,0%,96%,0.76);font-size:13px;vertical-align:middle;pointer-events:none;margin-right:5px;"><i class="bi bi-trash"></i></span> **CESTINO** (in alto a sinistra) — Apre il menu azioni: elimina il singolo blocco, elimina il gruppo contiguo se presente, oppure imposta No-Show.
 <span style="display:inline-block;width:16px;height:16px;border-radius:50%;border:1px solid rgba(0,0,0,0.4);background:rgba(0,0,0,0.08);vertical-align:middle;pointer-events:none;margin-right:5px;"></span> **CLIENTE IN ISTITUTO** (pallino in alto a destra) — Clicca per mostrare che il cliente è arrivato in istituto, il cerchiò si riempirà di giallo lampeggiante. Dopo l'ora corrente, se ancora in istituto, diventerò rosso lampeggiante ma non cambierà nulla, è solo un indicatore.
 **NOME CLIENTE** (al centro del blocco) — Un click sul nome apre la finestra per riassegnare l'appuntamento (e gli altri della stessa data) a un altro cliente.""",
+},
+
+"calendar_operatore_abilitato": {
+    "title": "⚠️ Operatore non abilitato a quel servizio",
+    "content": """Ogni operatore ha l'elenco dei servizi che sa fare. Se metti un appuntamento sulla colonna di chi non è abilitato a quel servizio, Tosca <span class="help-strong-dark">non blocca niente</span>: fa comparire un avviso e lascia decidere a te.
+
+<span class="help-strong-dark help-subtitle-pill">▸ DOVE SI IMPOSTA CHI FA COSA</span>
+In <span class="help-strong-dark">Tools → Operatori</span>, pulsante <span class="help-strong-dark">Servizi</span> sulla riga dell'operatore: si apre l'elenco dei trattamenti con la spunta su quelli che quella persona esegue.
+È <span class="help-strong-dark">la stessa lista che vale per le prenotazioni online</span>. Se non spunti niente per nessuno, in Agenda non compare mai nessun avviso.
+
+<span class="help-strong-dark help-subtitle-pill">▸ L'AVVISO E LE TRE STRADE</span>
+Quando l'operatore della colonna non è fra quelli abilitati compare la finestra <span class="help-strong-dark">Operatore non abilitato</span>, con il nome dell'operatore e i servizi in questione:
+• <span class="help-strong-dark">Sposta come indicato</span> → per ogni servizio scegli una delle colonne abilitate e <span class="help-strong-dark">libere alla stessa ora</span>: l'orario non cambia, cambia solo la colonna
+• <span class="help-strong-dark">Tieni tutto su …</span> → si procede lo stesso e l'appuntamento resta dov'è
+• <span class="help-strong-dark">Annulla</span> → non viene creato niente
+
+Se a quell'ora nessuna colonna abilitata è libera, l'avviso lo dice e restano solo "tieni tutto" e "annulla".
+
+<span class="help-strong-dark help-subtitle-pill">▸ DOVE COMPARE</span>
+L'avviso arriva creando l'appuntamento dal modal, trascinando un blocco su un'altra colonna e posizionando i mini-blocchi dal Navigator. Nella creazione da cella la domanda compare <span class="help-strong-dark">dentro il modal già aperto</span>, subito prima dell'eventuale conferma di invio WhatsApp, che resta sempre l'ultima cosa che ti viene chiesta.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Compila le abilitazioni <span class="help-strong-dark">operatore per operatore</span> quando entra una persona nuova: sono cinque minuti, e da lì in poi l'avviso ti evita di scoprire a fine giornata che un trattamento era finito sulla colonna sbagliata.</span>
+</div>""",
 },
 
 "calendar_block_click": {
@@ -177,6 +203,7 @@ Passa il mouse sul nome del cliente e appare un **TOOLTIP CON INFORMAZIONI** con
 • 📞 Numero di telefono
 • 📅 Data e ora dell'appuntamento
 • 💇 Servizio associato al blocco appuntamento
+• 🌐 Riquadro **PRENOTAZIONE ONLINE** (solo per gli appuntamenti arrivati dal sito)
 • 📝 Note Appuntamento (se presenti)
 
 <span class="help-strong-dark help-subtitle-pill">▸ NOTE: CLIENTE E APPUNTAMENTO</span>
@@ -198,12 +225,24 @@ Passando il mouse sul nome del cliente nel blocco appuntamento, il tooltip mostr
 1. In alto: **Note Cliente** (se presenti)
 2. In basso: **Note Appuntamento** (se presenti)
 
-⭐ **NOTE APPUNTAMENTO AUTOMATICHE**
-Alcune note appuntamento vengono create automaticamente dal sistema:
-• 🌐 **Prenotazioni da Booking Online:** compaiono solo con <span class="help-strong-dark">modulo opzionale Booking via Web</span> e mostrano informazioni sulla prenotazione web
-• 🆕 **Nuovo Cliente:** quando un cliente prenota per la prima volta, appare la dicitura ****NUOVO CLIENTE**** per avvisarti che è alla sua prima visita!
+<span class="help-strong-dark help-subtitle-pill">▸ PRENOTAZIONI DAL SITO: UN RIQUADRO A PARTE</span>
+I dati di chi prenota dal sito <span class="help-strong-dark">non stanno più dentro la nota</span>: il tooltip li mostra in un riquadro dedicato <span class="help-strong-dark">PRENOTAZIONE ONLINE</span>, con NOME, TELEFONO, E-MAIL e <span class="help-strong-dark">SCELTA OPERATORE</span> (verde <b>SI</b> se il cliente ha chiesto una persona precisa, rosso <b>NO</b> se ha accettato chiunque). Quello che resta sotto <span class="help-strong-dark">NOTA APPUNTAMENTO</span> è solo ciò che avete scritto voi al banco.
 
-Queste note speciali ti aiutano a riconoscere subito situazioni particolari! ✨""",
+Finché il blocco è ancora intestato al segnaposto <span class="help-strong-dark">cliente booking</span> il riquadro sale in cima al tooltip: è l'informazione che serve per abbinare la prenotazione alla persona giusta. Dopo l'abbinamento scende sotto agli altri dati, ma non sparisce.
+
+<span class="help-strong-dark help-subtitle-pill">▸ L'ICONA IN BASSO A SINISTRA NEL BLOCCO</span>
+• ✏️ **matita** → c'è una nota scritta da una persona, da leggere
+• 🌐 **mappamondo** → nel blocco ci sono solo i dati arrivati dal sito, nessuna nota da leggere
+• 👤➕ **persona con il più** → è la <span class="help-strong-dark">prima visita</span> di quel cliente, e non c'è nient'altro da leggere
+
+Quando in un blocco c'è più di una cosa, l'icona segue quest'ordine: la <span class="help-strong-dark">matita vince sempre</span>, perché è l'unica che segnala del testo da leggere; poi il mappamondo, che dice da dove arriva l'appuntamento; per ultima la prima visita. Un appuntamento arrivato dal sito da un cliente nuovo porta quindi il mappamondo — ma resta scritto <span class="help-strong-dark">NUOVO CLIENTE</span> nel tooltip.
+
+<span class="help-strong-dark help-subtitle-pill">▸ PRIMA VISITA: UN BADGE, NON UNA NOTA</span>
+Quando un cliente prenota per la prima volta, l'agenda se ne accorge da sola e lo segnala nel tooltip con il badge <span class="help-strong-dark">NUOVO CLIENTE</span>, in cima alla riga delle etichette (accanto a PAGATO, DA WEB, PACCHETTO).
+
+Prima quella dicitura veniva scritta <span class="help-strong-dark">dentro la nota</span> dell'appuntamento e finiva mescolata a quello che avevate scritto voi: adesso la nota resta pulita e mostra solo il testo di una persona. Se il blocco non ha nessun'altra nota, in basso a sinistra compare l'icona della <span class="help-strong-dark">persona con il più</span>.
+
+Per il flusso completo delle prenotazioni dal sito vedi <span class="help-strong-dark">[[PRENOTAZIONI DAL WEB IN AGENDA|booking_appuntamenti_in_agenda]]</span>.""",
     },
 
     "calendar_paid_block": {
@@ -310,6 +349,23 @@ Se il cliente ha una prepagata attiva, puoi scalare il costo direttamente da lì
 Puoi anche dividere il pagamento su più metodi (split): usa l'icona dividi accanto alla voce per dividere il singolo importo, o il tasto "Dividi" in basso per l'intero scontrino. 💡""",
     },
     
+    "cassa_calcolo_resto": {
+        "title": "🪙 Calcolare il resto in contanti",
+        "content": """Il tastino <span class="help-strong-dark">R</span> accanto a SVUOTA apre una finestra che conta il resto al posto tuo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ QUANDO COMPARE</span>
+Solo a <span class="help-strong-dark">bozza confermata</span> e solo se almeno una voce è impostata su <span class="help-strong-dark">Cash</span>. Se nello scontrino non ci sono contanti il pulsante resta nascosto: non ci sarebbe niente da rendere.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME SI USA</span>
+1️⃣ in alto leggi <span class="help-strong-dark">Da pagare in contanti</span>, cioè la somma delle sole righe in contanti
+2️⃣ clicca le banconote che ti dà il cliente: con <span class="help-strong-dark">mostra tutti</span> compaiono anche i tagli grandi, con <span class="help-strong-dark">aggiungi monete</span> le monete
+3️⃣ ogni pezzo cliccato diventa un'etichetta: se sbagli, cliccala e sparisce
+4️⃣ in fondo compare il <span class="help-strong-dark">resto da rendere</span> in verde; se quello che ti ha dato non basta il riquadro diventa rosso e dice quanto manca
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA NON FA</span>
+È <span class="help-strong-dark">solo una calcolatrice</span>: non tocca la bozza, non cambia gli importi, non modifica l'incasso e non lascia traccia da nessuna parte. Puoi aprirla e chiuderla quante volte vuoi senza conseguenze sullo scontrino.""",
+    },
+
     "cassa_blocchi_appuntamento": {
     "image": "Cassa_ClientiInIstituto.png",
     "image_caption": "Da <b>Clienti in istituto</b> si collega la cassa agli appuntamenti del giorno: il blocco scelto entra in bozza con servizio e prezzo già compilati.",
@@ -921,10 +977,15 @@ Viene però <span class="help-strong-dark">tracciata ovunque serva</span>:
 
 <span class="help-strong-dark">Una seduta scalata non fa però nascere uno scontrino da sola.</span> Se nella bozza c'è solo quella, non viene stampato nulla: non c'è niente da incassare, e un documento commerciale senza importo non esiste. Compare sullo scontrino solo quando il documento è già aperto da almeno una voce da pagare.
 
-<span class="help-strong-dark help-subtitle-pill">▸ IL MESSAGGIO AL CLIENTE</span>
-A fine pagamento viene proposto <span class="help-strong-dark">un solo messaggio WhatsApp per carta</span>, che riepiloga tutti i movimenti di quello scontrino: ricarica, seduta scalata o entrambe, seguiti dal credito disponibile aggiornato e dal sito del centro.
+<span class="help-strong-dark help-subtitle-pill">▸ IL RIEPILOGO A FINE SCONTRINO</span>
+Chiuso lo scontrino, per <span class="help-strong-dark">ogni carta movimentata</span> compare un riepilogo con intestatario, numero di tessera, <span class="help-strong-dark">credito precedente</span>, i movimenti di quello scontrino (seduta scalata, ricarica o "Attivazione carta") e il <span class="help-strong-dark">credito residuo</span>. Se le carte movimentate sono più d'una, i riepiloghi si presentano uno dopo l'altro.
 
-Il testo resta modificabile prima dell'invio.
+Il riepilogo esce <span class="help-strong-dark">sempre</span>, anche quando la carta non è collegata a nessun cliente o il cliente non ha il cellulare: è un riepilogo di cassa e serve a far vedere al cliente quanto aveva e quanto resta.
+
+<span class="help-strong-dark help-subtitle-pill">▸ IL MESSAGGIO AL CLIENTE</span>
+In fondo al riepilogo, se il <span class="help-strong-dark">modulo opzionale WhatsApp</span> è attivo, viene proposto <span class="help-strong-dark">un solo messaggio per carta</span> con gli stessi movimenti, il credito aggiornato e il sito del centro. Il testo resta modificabile e parte solo alla tua conferma; il destinatario è il <span class="help-strong-dark">titolare della carta</span>, che può non essere il cliente della bozza.
+
+Questa parte si spegne da <span class="help-strong-dark">Tools → WhatsApp → Riepilogo carta prepagata in Cassa</span>: a interruttore spento resta il solo riepilogo, senza messaggio.
 
 <span class="help-strong-dark help-subtitle-pill">▸ COSA CONTROLLARE SEMPRE</span>
 • saldo residuo
@@ -1226,6 +1287,9 @@ Flusso corretto:
 5️⃣ verifica l'anteprima
 6️⃣ invia
 
+<span class="help-strong-dark help-subtitle-pill">▸ COSA SUCCEDE DOPO "INVIA"</span>
+I messaggi <span class="help-strong-dark">non partono tutti insieme</span>: vengono messi in coda e spediti uno ogni 12-20 secondi, perché una raffica di invii ravvicinati porta WhatsApp a sospendere il numero del negozio. Sotto ai pulsanti compare l'avanzamento con quanti ne mancano e il tempo stimato: <span class="help-strong-dark">puoi chiudere la pagina</span>, l'invio va avanti da solo. Il contatore "Oggi: N/M invii" si aggiorna a coda finita, perché conta i messaggi partiti davvero.
+
 ⚠️ Mantieni sempre un uso misurato degli invii per non stressare i clienti e non saturare il canale WhatsApp.
 
 <div class="help-hint-box">
@@ -1306,7 +1370,7 @@ Se il modulo è attivo, puoi pubblicare servizi online, gestire regole e associa
 
 1️⃣ entra in <span class="help-strong-dark">Impostazioni → Booking Web</span>
 2️⃣ scegli quali servizi rendere visibili online
-3️⃣ associa gli operatori prenotabili per ogni servizio
+3️⃣ in <span class="help-strong-dark">Tools → Operatori</span>, pulsante <span class="help-strong-dark">Servizi</span>, spunta per ogni operatore i trattamenti che esegue: sono quelli prenotabili online con quella persona
 4️⃣ configura le regole di prenotazione
 5️⃣ pubblica e condividi il link booking
 
@@ -1345,14 +1409,15 @@ Inoltre puoi personalizzare il messaggio mostrato al cliente, così il sito comu
     "image_caption": "L'elenco dei servizi prenotabili online, raggruppati per <b>sottocategoria</b>. Il pallino <b>i</b> compare solo sui servizi che hanno una descrizione: il cliente ci clicca e la legge prima di scegliere.",
     "image_path": "Portale prenotazioni › Cerca un servizio",
         "title": "👩‍💼 Booking via Web: servizi visibili e operatori associati",
-        "content": """Nel pannello Booking Web trovi una tabella servizi dedicata al modulo online.
+        "content": """Servizi visibili e operatori prenotabili si impostano in <span class="help-strong-dark">due posti diversi</span>.
 
-Qui puoi decidere:
-• se un servizio è visibile online
-• quanti operatori sono associati a quel servizio
-• quali operatori possono essere prenotati dal cliente via web
+<span class="help-strong-dark help-subtitle-pill">▸ QUALI SERVIZI SI VEDONO ONLINE</span>
+In <span class="help-strong-dark">Impostazioni → Booking Web</span>: l'elenco è raggruppato per sottocategoria e ogni riga ha l'interruttore <span class="help-strong-dark">visibile online</span>. L'interruttore sulla riga della sottocategoria accende o spegne tutte le sue righe in un colpo solo, e si applica subito senza premere altro.
 
-Questo è un punto chiave: un servizio pubblicato online senza corretta associazione operatori non produrrà un'esperienza di prenotazione coerente.
+<span class="help-strong-dark help-subtitle-pill">▸ QUALI OPERATORI SI POSSONO PRENOTARE</span>
+In <span class="help-strong-dark">Tools → Operatori</span>, pulsante <span class="help-strong-dark">Servizi</span> sulla riga dell'operatore: si apre una persona alla volta e si spunta cosa sa fare, invece di aprire un servizio alla volta. È la stessa lista che in Agenda fa comparire l'avviso <span class="help-strong-dark">[[OPERATORE NON ABILITATO|calendar_operatore_abilitato]]</span>.
+
+Un servizio pubblicato online <span class="help-strong-dark">senza nessun operatore abilitato non produce slot</span>: il cliente lo vede nell'elenco ma non trova mai un orario libero.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
@@ -2246,7 +2311,7 @@ Nella tabella centrale vedi:
 • cellulare (visibile in base al ruolo)
 • flag <span class=\"help-strong-dark\">Visibile in Agenda</span>
 • flag <span class=\"help-strong-dark\">Invia Memo turni</span> (quando applicabile)
-• azioni: Modifica, Elimina, Turni
+• azioni: Modifica, Elimina, <span class=\"help-strong-dark\">Servizi</span>, Turni
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ COMANDI OPERATIVI IMPORTANTI</span>
 • <span class=\"help-strong-dark\">Visibile in Agenda</span>: decide se l'operatore compare nelle colonne Agenda
@@ -2254,6 +2319,14 @@ Nella tabella centrale vedi:
 • <span class=\"help-strong-dark\">Turni</span>: apre il modal per la gestione turni senza uscire dal tab
 
 Per il dettaglio sui turni vedi anche: <span class=\"help-strong-dark\">[[IMPOSTARE I TURNI OPERATORI|agenda_turni]]</span>.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ SERVIZI: CHI FA COSA</span>
+Il pulsante <span class=\"help-strong-dark\">Servizi</span> sulla riga dell'operatore apre l'elenco dei trattamenti con la spunta su quelli che quella persona esegue. Nell'elenco compaiono <span class=\"help-strong-dark\">solo i servizi che finiscono in agenda</span>: prodotti, crediti e voci senza durata non li esegue nessuno.
+• le <span class=\"help-strong-dark\">categorie</span> in alto filtrano l'elenco e spuntano o tolgono in blocco
+• la casella di filtro cerca per nome; <span class=\"help-strong-dark\">Spunta tutti</span> e <span class=\"help-strong-dark\">Togli tutti</span> agiscono su quello che stai vedendo
+• le modifiche diventano effettive con <span class=\"help-strong-dark\">Salva</span>
+
+⚠️ È una lista sola per due usi. Vale <span class=\"help-strong-dark\">anche per le prenotazioni online</span>: un servizio senza spunta non è più prenotabile online con quell'operatore. In Agenda invece non blocca niente, fa comparire un avviso — vedi <span class=\"help-strong-dark\">[[OPERATORE NON ABILITATO|calendar_operatore_abilitato]]</span>.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ PERMESSI</span>
 In base al ruolo, alcune azioni possono essere limitate o mostrate in sola lettura (es. modifica/eliminazione).""",
@@ -2292,9 +2365,16 @@ La tabella mostra:
 • azioni
 
 Nelle azioni trovi:
-• <span class=\"help-strong-dark\">Descrizione</span> (apre un modal editor del testo servizio)
+• <span class=\"help-strong-dark\">Descrizione</span> (apre l'editor del testo del servizio: il pulsante è <span class=\"help-strong-dark\">giallo</span> se una descrizione c'è, grigio se non c'è)
 • <span class=\"help-strong-dark\">Modifica</span>
 • <span class=\"help-strong-dark\">Elimina</span> (eliminazione logica)
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ LA DESCRIZIONE DEL SERVIZIO</span>
+È il testo che il cliente legge cliccando la <span class=\"help-strong-dark\">\"i\"</span> nella pagina di prenotazione online, e che puoi includere nel listino scaricabile.
+• si scrive direttamente nel riquadro, con i pulsanti grassetto e corsivo
+• <span class=\"help-strong-dark\">incollando da Word o da una pagina web la formattazione viene scartata</span> e resta il solo testo: gli stili nascosti riempivano lo spazio disponibile e facevano fallire il salvataggio
+• il limite è di <span class=\"help-strong-dark\">2000 caratteri</span>; superandolo il messaggio ti dice di quanto sei fuori, invece di lasciarti con un salvataggio non riuscito
+• <span class=\"help-strong-dark\">per togliere la descrizione</span> svuota il riquadro e salva: il pulsante torna grigio e online la \"i\" sparisce
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ GESTIONE SOTTOCATEGORIE</span>
 Con il pulsante dedicato apri una sezione con:
@@ -2362,6 +2442,7 @@ Le azioni possono variare in base al ruolo attivo (utente operativo o amministra
 • <span class=\"help-strong-dark\">Connessione WhatsApp Business</span> — lo stato del collegamento e il pulsante per collegare il numero col QR code
 • <span class=\"help-strong-dark\">Messaggio WhatsApp manuale</span> — il testo proposto quando invii dal blocco appuntamento in Agenda
 • <span class=\"help-strong-dark\">Promemoria automatici</span> — messaggio e orario dei promemoria ai clienti
+• <span class=\"help-strong-dark\">Riepilogo carta prepagata in Cassa</span> — l'interruttore che decide se, sotto al riepilogo di fine scontrino, compare anche il messaggio da mandare al titolare della carta
 • <span class=\"help-strong-dark\">Memo turni operatori</span> — il riepilogo serale con i turni del giorno dopo
 • <span class=\"help-strong-dark\">Memo mattutino</span> — il riepilogo ai clienti attesi in giornata
 
@@ -2501,9 +2582,10 @@ In home trovi anche:
 <span class=\"help-strong-dark help-subtitle-pill\">▸ PARTI DELLA PAGINA</span>
 • configurazione generale booking online
 • regole e vincoli prenotazione
-• tabella servizi pubblicabili
-• associazione operatori ai servizi pubblicati
+• tabella servizi pubblicabili, con l'interruttore <span class=\"help-strong-dark\">visibile online</span> per riga e per sottocategoria
 • controlli stato e salvataggio
+
+Gli <span class=\"help-strong-dark\">operatori prenotabili</span> non si impostano più qui: stanno in <span class=\"help-strong-dark\">Tools → Operatori</span>, pulsante <span class=\"help-strong-dark\">Servizi</span> sulla riga dell'operatore.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ COSA SI PUÒ FARE</span>
 • decidere cosa rendere prenotabile online
@@ -2556,7 +2638,7 @@ Guida collegata:
     • nome, tag, durata, prezzo, categorie, sottocategorie, descrizioni
 
     <span class="help-strong-dark">Operatori</span>
-    • anagrafica, visibilità, ordine, memo turni, turni operativi
+    • anagrafica, visibilità, ordine, memo turni, turni operativi, servizi che ogni operatore esegue
 
     Ogni modifica qui ha effetto diretto sui flussi quotidiani del centro.""",
     },
@@ -2812,28 +2894,44 @@ La pagina ha link a <span class="help-strong-dark">Informativa Privacy</span> e 
 <span class="help-strong-dark help-subtitle-pill">▸ COLORE BLU</span>
 Tutti gli appuntamenti provenienti dal Booking via Web sono di default <span class="help-strong-dark">blu</span>. Il colore è ricavato dalla sorgente dell'appuntamento (`web`) e ti aiuta a riconoscerli a colpo d'occhio.
 
-<span class="help-strong-dark help-subtitle-pill">▸ CLIENTE FITTIZIO "BOOKING ONLINE"</span>
-Finché il cliente non viene riconosciuto e riassegnato, l'appuntamento è intestato al cliente fittizio <span class="help-strong-dark">BOOKING ONLINE</span>. I dati veri del cliente sono nella <span class="help-strong-dark">nota appuntamento</span>:
-"PRENOTATO DA BOOKING ONLINE - Nome: …, Cognome: …, Telefono: …, Email: … - ha selezionato l'operatrice? Sì/No"
+<span class="help-strong-dark help-subtitle-pill">▸ CLIENTE SEGNAPOSTO "BOOKING ONLINE"</span>
+Finché la prenotazione non viene abbinata a una persona vera, l'appuntamento è intestato al cliente segnaposto <span class="help-strong-dark">BOOKING ONLINE</span>. I dati di chi ha prenotato — nome, telefono, e-mail e se ha chiesto un operatore preciso — si leggono nel riquadro <span class="help-strong-dark">PRENOTAZIONE ONLINE</span> del tooltip, passando il mouse sul nome nel blocco; finché il blocco è sul segnaposto quel riquadro sta in cima al tooltip.
 
-Per assegnare l'appuntamento all'anagrafica reale, clicca sul nome del cliente nel blocco e seleziona la persona corretta (o creala al volo). Da quel momento l'appuntamento è collegato a un cliente vero.
+Sono le stesse informazioni che prima venivano scritte dentro la nota: la <span class="help-strong-dark">NOTA APPUNTAMENTO</span> adesso contiene solo quello che avete scritto voi al banco. Nel blocco l'icona in basso a sinistra dice cosa c'è dentro: 🌐 <span class="help-strong-dark">mappamondo</span> = solo i dati arrivati dal sito, ✏️ <span class="help-strong-dark">matita</span> = c'è una nota scritta da una persona. Vedi anche <span class="help-strong-dark">[[TOOLTIP E NOTE|calendar_note]]</span>.
 
-<span class="help-strong-dark help-subtitle-pill">▸ DICITURA "NUOVO CLIENTE"</span>
-Quando un cliente prenota online per la prima volta e poi lo riassegni a una nuova anagrafica, sopra il blocco compare la nota automatica <span class="help-strong-dark">NUOVO CLIENTE</span>, per ricordare a chi è in turno che è una prima visita.
+<span class="help-strong-dark help-subtitle-pill">▸ ABBINARE LA PRENOTAZIONE AL CLIENTE GIUSTO</span>
+Il pulsante <span class="help-strong-dark">PRENOTAZIONI DA WEB</span> nella barra in alto dell'Agenda apre <span class="help-strong-dark">Appuntamenti Online</span>: l'elenco delle prenotazioni per data di richiesta, con le frecce per cambiare giorno e un campo di ricerca per nome.
+
+La colonna <span class="help-strong-dark">MATCH CLIENTE</span> dice cosa ha trovato Tosca in rubrica:
+• <span class="help-strong-dark">Sì</span> → nome, cognome e cellulare coincidono con un cliente esistente
+• 📱 → il cellulare coincide ma nome o cognome sono diversi
+• <span class="help-strong-dark">No</span> → in rubrica non c'è nessuno con quel numero
+
+Nella colonna <span class="help-strong-dark">ASSOCIA</span>: ❓ vuol dire da abbinare (un click apre la finestra), 🟢 vuol dire già abbinata. Le schede cancellate non vengono mai proposte.
+
+Con il match <span class="help-strong-dark">No</span> la finestra affianca i dati della prenotazione e l'eventuale <span class="help-strong-dark">cliente simile</span> trovato in rubrica, con un punteggio di somiglianza (👍 sopra 80, 😐 fra 60 e 80, 👎 sotto): puoi <span class="help-strong-dark">Associa a Cliente</span> se è lui, oppure <span class="help-strong-dark">Crea Nuovo Cliente</span> con i dati già compilati.
+
+Con il match 📱 <span class="help-strong-dark">solo cellulare</span> la finestra mette a confronto i dati arrivati dal sito e la scheda trovata, e sei tu a confermare. Se in rubrica <span class="help-strong-dark">quello stesso numero sta su più schede</span> compare un avviso rosso con quante sono: la finestra te ne mostra una sola, quindi controlla in anagrafica prima di confermare (numero di famiglia, vecchia scheda doppia, cambio di cognome).
+
+Scrivendo <span class="help-strong-dark">?</span> nel campo di ricerca vedi <span class="help-strong-dark">tutte</span> le prenotazioni ancora da abbinare, di qualunque data. Il pulsante <span class="help-strong-dark">?</span> tondo in alto a destra della finestra riepiloga il significato delle icone.
+
+In alternativa puoi sempre partire dal blocco: click sul nome del cliente e scegli la persona giusta, o creala al volo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ BADGE "NUOVO CLIENTE"</span>
+Quando un cliente prenota online per la prima volta e poi lo abbini a una nuova anagrafica, nel tooltip del blocco compare il badge <span class="help-strong-dark">NUOVO CLIENTE</span>, per ricordare a chi è in turno che è una prima visita. Non è più scritto dentro la nota: vedi <span class="help-strong-dark">[[TOOLTIP E NOTE|calendar_note]]</span>.
 
 <span class="help-strong-dark help-subtitle-pill">▸ CATENA MULTI-SERVIZIO</span>
-Se il cliente ha prenotato più servizi, in Agenda compaiono tanti blocchi quanti sono i servizi, contigui e collegati dalla stessa <span class="help-strong-dark">sessione di prenotazione</span>. Cancellando uno solo dei blocchi gli altri restano: per disdire l'intera sessione c'è il link nell'email del cliente.
+Se il cliente ha prenotato più servizi, in Agenda compaiono tanti blocchi quanti sono i servizi, contigui e collegati dalla stessa <span class="help-strong-dark">sessione di prenotazione</span>. L'abbinamento fatto dalla finestra Appuntamenti Online vale per <span class="help-strong-dark">tutti i blocchi della sessione</span>, non solo per il primo. Cancellando uno solo dei blocchi gli altri restano: per disdire l'intera sessione c'è il link nell'email del cliente.
 
 <span class="help-strong-dark help-subtitle-pill">▸ COSA FARE AL MATTINO</span>
-1️⃣ scorri l'Agenda del giorno e individua i blocchi blu
-2️⃣ verifica le note: nome, cognome, telefono
-3️⃣ se è un cliente già esistente, riassegna l'appuntamento all'anagrafica giusta
-4️⃣ se è un cliente nuovo, crea l'anagrafica e riassegna
-5️⃣ chiama o manda un WhatsApp per confermare definitivamente
+1️⃣ apri <span class="help-strong-dark">PRENOTAZIONI DA WEB</span> e scrivi <span class="help-strong-dark">?</span> nella ricerca: vedi tutto quello che è rimasto da abbinare
+2️⃣ abbina le righe con ❓, controllando l'avviso rosso quando il numero è su più schede
+3️⃣ se il cliente non c'è in rubrica, crealo dalla stessa finestra
+4️⃣ chiama o manda un WhatsApp per confermare definitivamente
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Il booking online genera "richieste", non conferme automatiche: prendi l'abitudine di sbloccare i blocchi blu ogni mattina prima dell'apertura, così non rischi di dimenticare di confermare al cliente.</span>
+<span class="help-hint-text">Il booking online genera "richieste", non conferme automatiche: prendi l'abitudine di svuotare l'elenco delle prenotazioni da abbinare ogni mattina prima dell'apertura, così non rischi di dimenticare di confermare al cliente.</span>
 </div>""",
     },
 
@@ -2975,6 +3073,7 @@ def get_topics_by_category():
             "calendar_drag",
             "calendar_status",
             "calendar_note",
+            "calendar_operatore_abilitato",
             "calendar_paid_block",
             "calendar_off_block",
             "calendar_info_box",
@@ -2985,6 +3084,7 @@ def get_topics_by_category():
             "cassa_myspia_save_reset",
             "cassa_registro_ruoli",
             "cassa_strumenti_fiscali_rch",
+            "cassa_calcolo_resto",
             "cassa_blocchi_appuntamento"
         ],
         "Report": [

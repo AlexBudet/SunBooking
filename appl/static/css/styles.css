@@ -464,6 +464,10 @@ display: none
 .ci-badge-riga {
     display: flex;
     flex-wrap: wrap;
+    /* Con badge di due misure diverse serve il centraggio: lasciando lo
+       "stretch" di partenza, quelli piccoli diventerebbero alti quanto i
+       grandi con il testo appeso in cima. */
+    align-items: center;
     gap: 5px;
     padding-right: 22px;   /* lascia libero l'angolo del pallino colorato */
 }
@@ -490,6 +494,19 @@ display: none
 .ci-badge-pagato    { background: rgba(255, 255, 255, 0.12); color: #cfc6cc; }
 .ci-badge-web       { background: rgba(130, 190, 255, 0.18); color: #9ccbff; }
 .ci-badge-pacchetto { background: rgba(167, 233, 190, 0.18); color: #a7e9be; }
+/* Prima visita. Gli altri badge hanno gia' preso giallo (VIP), rosso (a
+   rischio), azzurro (dal web), verde (pacchetto) e bianco (pagato): qui serve
+   una tinta che non si confonda con nessuna di quelle a colpo d'occhio. */
+.ci-badge-nuovo     { background: rgba(214, 160, 255, 0.20); color: #d6a0ff; }
+
+/* DA WEB e NUOVO CLIENTE si leggono piu' in grande degli altri badge: dicono
+   come si accoglie la persona che sta per arrivare, mentre PAGATO, PACCHETTO e
+   gli altri sono lo stato dell'appuntamento. Due punti di differenza bastano a
+   farli saltare all'occhio senza sfasare la riga. */
+.ci-badge-web,
+.ci-badge-nuovo {
+    font-size: 12px;
+}
 
 .modal-backdrop {
     z-index: 24500; /* Sfondo del modal */
@@ -2015,6 +2032,17 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     text-shadow: 0 0 2px rgba(0, 0, 0, 0.45);
 }
   
+/* Blocco di una PRIMA VISITA senza nessuna nota da leggere: al posto della
+   matita c'e' una persona con il piu'. Come per il mappamondo, la matita
+   resta riservata a cio' che ha scritto qualcuno, cosi' non promette una nota
+   che non c'e'. Lo scambio lo fa applicaIconaNota() nel template.
+   Bianco e non giallo: il giallo in agenda vuol dire "c'e' una nota", e qui
+   una nota non c'e'. L'alone scuro la stacca dai blocchi di qualunque tinta. */
+.appointment-block .note-indicator.nota-nuovo-cliente {
+    color: #ffffff;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.55);
+}
+
 /* Stile per l'appuntamento "non arrivato" - regola più specifica */
 .appointment-block[data-status="3"] {
     background-color: #000 !important;

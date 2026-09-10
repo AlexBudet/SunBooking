@@ -1,6 +1,6 @@
 # Centro Assistenza — screenshot da catturare
 
-Stato al 10/08/2026. Nel Centro Assistenza ci sono **98 topic**, di cui **49 senza immagine**.
+Stato al 09/09/2026. Nel Centro Assistenza ci sono **100 topic**, di cui **51 senza immagine**.
 
 ---
 
@@ -56,6 +56,29 @@ rompe nulla: appena li salvi in `appl/static/img/help/` compaiono da sole.
 
 > ⚠️ **Il numero collegato va mascherato**: è il numero reale del negozio e finisce in un repo
 > pubblico. Sostituiscilo con qualcosa tipo `+39 ••• ••• 1234`.
+
+---
+
+## 1-bis. Nuove schermate delle versioni 3.0.9 → 3.3.4
+
+Sei topic aggiornati o nuovi che oggi non hanno immagine. Nessun nome file è ancora cablato nel
+codice: quando gli scatti ci sono, va aggiunta la terna `"image"` / `"image_caption"` /
+`"image_path"` nel topic.
+
+| File proposto | Topic | Dove si cattura | Cosa inquadrare |
+|---|---|---|---|
+| `Agenda_OperatoreNonAbilitato.png` | `calendar_operatore_abilitato` | Agenda → metti un servizio sulla colonna di un operatore senza quella spunta | la sola finestra **Operatore non abilitato**, con le righe dei servizi e i tre pulsanti |
+| `Operatori_Servizi.png` | `tools_tab_operatori`, `booking_servizi_operatori` | Tools → Operatori → pulsante **Servizi** | la finestra con le categorie in alto, il filtro e le prime righe spuntate |
+| `Cassa_CalcolaResto.png` | `cassa_calcolo_resto` | Cassa → bozza confermata con una voce in **Cash** → tastino **R** | la finestra del resto con banconote, pezzi scelti e l'esito in verde |
+| `Agenda_PreventivoTastoEuro.png` | `calendar_block_buttons` | Agenda → puntatore fermo sull'icona € di un blocco | il tooltip allungato col preventivo: servizi, prezzi e riga del totale |
+| `Agenda_TooltipPrenotazioneOnline.png` | `calendar_note`, `booking_appuntamenti_in_agenda` | Agenda → mouse sul nome di un blocco blu ancora da abbinare | il tooltip con il riquadro **PRENOTAZIONE ONLINE** in cima (nome, telefono, e-mail, scelta operatore) |
+| `Agenda_AppuntamentiOnline.png` | `booking_appuntamenti_in_agenda` | Agenda → pulsante **PRENOTAZIONI DA WEB** | la tabella con le colonne MATCH CLIENTE e ASSOCIA, con almeno una riga 📱 e una ❓ |
+| `Agenda_IconeNota.png` | `calendar_note` | Agenda → tre blocchi affiancati | le tre icone in basso a sinistra a confronto: matita, mappamondo e persona con il più |
+| `Agenda_BadgeNuovoCliente.png` | `calendar_note`, `booking_appuntamenti_in_agenda` | Agenda → mouse sul nome di un blocco di prima visita | la riga dei badge del tooltip con **NUOVO CLIENTE** in testa |
+| `Cassa_RiepilogoPrepagata.png` | `prepagata_pagamento` | Cassa → scontrino con ricarica e/o seduta scalata, dopo la stampa | il riepilogo con credito precedente, movimenti e credito residuo |
+
+⚠️ Nomi neutri anche qui: la tabella **Appuntamenti Online** e il tooltip della prenotazione
+mostrano nome, cognome, cellulare **ed e-mail** di chi ha prenotato.
 
 ---
 
