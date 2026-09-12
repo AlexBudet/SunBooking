@@ -2324,21 +2324,7 @@ async function proponiWhatsappPrepagata(info, onDone) {
   // dello scontrino) e dagli importi movimentati. Vale in ogni caso, attivazione
   // compresa, dove il precedente viene 0.
   const residuo = Number(info.creditoResiduo || 0);
-  const movimenti = [];
-  if (scalato > 0) {
-    movimenti.push({
-      etichetta: info.descrizione ? `Seduta: ${info.descrizione}` : 'Seduta scalata',
-      importo: scalato,
-      verso: '-'
-    });
-  }
-  if (caricato > 0) {
-    movimenti.push({
-      etichetta: info.tipo === 'attivazione' ? 'Attivazione carta' : 'Ricarica',
-      importo: caricato,
-      verso: '+'
-    });
-  }
+  const movimenti = movimentiRiepilogoCarta(scalato, caricato, info.descrizione, info.tipo);
 
   const riepilogo = {
     intestatario: clienteNome,
@@ -2426,6 +2412,122 @@ function aggiornaTotale() {
   if (typeof window.aggiornaBottoneResto === 'function') window.aggiornaBottoneResto();
 }
 
+// Movimenti del riepilogo carta: prima la seduta scalata, poi il credito
+// caricato. Unica definizione, la usano il riepilogo alla CONFERMA (previsto)
+// e quello a scontrino chiuso (saldo riletto dal server).
+function movimentiRiepilogoCarta(scalato, caricato, descrizione, tipo) {
+  const movimenti = [];
+  if (scalato > 0) {
+    movimenti.push({
+      etichetta: descrizione ? `Seduta: ${descrizione}` : 'Seduta scalata',
+      importo: scalato,
+      verso: '-'
+    });
+  }
+  if (caricato > 0) {
+    movimenti.push({
+      etichetta: tipo === 'attivazione' ? 'Attivazione carta' : 'Ricarica',
+      importo: caricato,
+      verso: '+'
+    });
+  }
+  return movimenti;
+}
+window.movimentiRiepilogoCarta = movimentiRiepilogoCarta;
+
+// Riepilogo carta GIA' ALLA CONFERMA, sotto la bozza confermata: prima di
+// stampare si dice al cliente quanto ha, quanto gli viene scalato e quanto gli
+// resta, e si prende il suo ok. Stessi conti della STAMPA: si scala solo dalla
+// carta attiva, sommando le righe intere a prepagata e la quota prepagata di
+// quelle divise; il credito in arrivo e' quello delle righe di attivazione o
+// ricarica della stessa carta. Il saldo di partenza e' quello letto quando la
+// carta e' stata agganciata: a scontrino chiuso esce comunque il riepilogo
+// coi dati riletti dal server.
+function aggiornaRiepilogoCartaConferma() {
+  document.querySelectorAll('.bozza-riepilogo-carta').forEach(el => el.remove());
+  const card = window.bozzaConfermata;
+  const carta = window.cartaAttiva;
+  if (!card || !document.body.contains(card) || !card.classList.contains('pseudoscontrino-bloccato')) return;
+  if (!carta || typeof window.costruisciRiquadroRiepilogo !== 'function') return;
+
+  let scalato = 0;
+  let caricato = 0;
+  let attivazione = false;
+  const servizi = [];
+  card.querySelectorAll('.scontrino-row').forEach(row => {
+    if (row.dataset.prepagataId && String(row.dataset.prepagataId) === String(carta.id)) {
+      caricato += parseFloat(row.dataset.creditoDaCaricare || '0') || 0;
+      attivazione = true;
+      return;
+    }
+    if (row.dataset.ricaricaPrepagataId && String(row.dataset.ricaricaPrepagataId) === String(carta.id)) {
+      caricato += parseFloat(row.dataset.ricaricaCredito || row.dataset.ricaricaImporto || '0') || 0;
+      return;
+    }
+    const pagamenti = getRowPagamenti(row);
+    const quotaSplit = pagamenti ? pagamenti.find(p => p.metodo === 'prepagata') : null;
+    let quota = 0;
+    if (quotaSplit) {
+      quota = parseFloat(quotaSplit.importo) || 0;
+    } else if (row.querySelector('select')?.value === 'prepagata') {
+      quota = parseFloat(row.querySelector('.scontrino-row-prezzo')?.value || '0') || 0;
+    }
+    if (quota > 0) {
+      scalato += quota;
+      const nome = row.querySelector('.flex-grow-1')?.textContent.trim();
+      if (nome) servizi.push(nome);
+    }
+  });
+
+  scalato = Math.round(scalato * 100) / 100;
+  caricato = Math.round(caricato * 100) / 100;
+  if (scalato <= 0 && caricato <= 0) return;
+
+  // Carta che nasce con questo scontrino: prima non aveva niente.
+  const precedente = attivazione ? 0 : Number(carta.credito_residuo || 0);
+  const residuo = Math.round((precedente + caricato - scalato) * 100) / 100;
+
+  // Intestatario: il titolare della carta, che puo' non essere il cliente
+  // della bozza. Come nel riepilogo di fine scontrino.
+  const cap = window.capitalizeName || (s => s || '');
+  const clientInput = document.getElementById('clientSearchInputCassa');
+  const intestatario = carta.titolare
+    ? cap(carta.titolare)
+    : ((clientInput && clientInput.value.trim()) ? cap(clientInput.value.trim()) : 'Cliente');
+
+  const box = document.createElement('div');
+  box.className = 'bozza-riepilogo-carta';
+  box.style.marginTop = '12px';
+  box.style.minWidth = 'min(320px, 100%)';
+  box.style.textAlign = 'left';
+
+  const titolo = document.createElement('div');
+  titolo.style.fontWeight = '700';
+  titolo.style.marginBottom = '6px';
+  titolo.textContent = 'Riepilogo carta prepagata';
+  const nota = document.createElement('span');
+  nota.style.fontWeight = '400';
+  nota.style.fontSize = '0.85em';
+  nota.style.color = '#666';
+  nota.textContent = ' · da far confermare al cliente prima della stampa';
+  titolo.appendChild(nota);
+  box.appendChild(titolo);
+
+  box.appendChild(window.costruisciRiquadroRiepilogo({
+    intestatario,
+    numeroTessera: carta.numero_tessera || null,
+    creditoPrecedente: precedente,
+    creditoResiduo: residuo,
+    movimenti: movimentiRiepilogoCarta(scalato, caricato, servizi.join(', '),
+                                       attivazione ? 'attivazione' : 'ricarica')
+  }));
+
+  const subtot = card.querySelector('.bozza-subtot');
+  if (subtot && subtot.parentNode) subtot.parentNode.insertBefore(box, subtot.nextSibling);
+  else card.appendChild(box);
+}
+window.aggiornaRiepilogoCartaConferma = aggiornaRiepilogoCartaConferma;
+
 function getCurrentAppointmentIds() {
   const ids = new Set();
   document.querySelectorAll('.scontrino-row').forEach(row => {
@@ -2469,6 +2571,7 @@ function resetScontrino(keepData = false) {
   document.getElementById('totalAmountAll').textContent = 'Totale: € 0.00';
   const anteprima = document.getElementById('anteprima-scontrino');
   if (anteprima) anteprima.remove();
+  document.querySelectorAll('.bozza-riepilogo-carta').forEach(el => el.remove());
   const stampaBtn = document.getElementById('stampa-scontrino-btn');
   if (stampaBtn) stampaBtn.remove();
 
@@ -4400,6 +4503,7 @@ window.apriModalOperatoreRiga = apriModalOperatoreRiga;
     if (label) label.classList.toggle('d-none', !on);
     aggiornaStatoBozze();
     if (typeof window.aggiornaBottoneResto === 'function') window.aggiornaBottoneResto();
+    if (typeof window.aggiornaRiepilogoCartaConferma === 'function') window.aggiornaRiepilogoCartaConferma();
   }
   window.aggiornaStampaVisibile = aggiornaStampaVisibile;
 

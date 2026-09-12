@@ -982,6 +982,8 @@ Chiuso lo scontrino, per <span class="help-strong-dark">ogni carta movimentata</
 
 Il riepilogo esce <span class="help-strong-dark">sempre</span>, anche quando la carta non è collegata a nessun cliente o il cliente non ha il cellulare: è un riepilogo di cassa e serve a far vedere al cliente quanto aveva e quanto resta.
 
+Lo stesso riepilogo compare <span class="help-strong-dark">già quando premi CONFERMA</span>, sotto la bozza: credito attuale, quanto viene scalato, quanto viene caricato e quanto resta. Serve a leggerlo al cliente e ad avere il suo ok prima di stampare. Premendo INDIETRO sparisce; se cambi la bozza e riconfermi, si ricalcola.
+
 <span class="help-strong-dark help-subtitle-pill">▸ IL MESSAGGIO AL CLIENTE</span>
 In fondo al riepilogo, se il <span class="help-strong-dark">modulo opzionale WhatsApp</span> è attivo, viene proposto <span class="help-strong-dark">un solo messaggio per carta</span> con gli stessi movimenti, il credito aggiornato e il sito del centro. Il testo resta modificabile e parte solo alla tua conferma; il destinatario è il <span class="help-strong-dark">titolare della carta</span>, che può non essere il cliente della bozza.
 
