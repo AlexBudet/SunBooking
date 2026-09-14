@@ -672,6 +672,63 @@ def create_app(db_uri: str | None = None, tenant_idx=None, is_demo: bool = False
     DEMO_SEZIONI_APERTE = {'calendar', 'report'}
     DEMO_ENDPOINT_APERTI = {'landing', 'logout', 'static', 'ping', 'healthz'}
 
+    # ---- PROVA GRATUITA: USO E CHIUSURA ----
+    # La prova si chiude dopo sette giorni dal primo accesso OPPURE dopo 48 ore
+    # senza utilizzo (demo_trials.INATTIVITA_ORE). Qui si segna l'uso e si
+    # manda fuori chi arriva a prova finita: senza questo controllo una
+    # sessione rimasta aperta continuerebbe a lavorare nello slot anche dopo
+    # la chiusura, fino alla risemina.
+    #
+    # Il registro si interroga al massimo una volta ogni DEMO_USO_OGNI_S per
+    # slot: la regola si misura in ore, e l'Agenda fa decine di chiamate al
+    # minuto. Il dizionario vive dentro create_app, quindi e' di QUESTO slot.
+    DEMO_USO_OGNI_S = 600
+    _demo_uso_visto = {}          # idx -> istante dell'ultimo controllo andato bene
+
+    @app.before_request
+    def uso_demo():
+        if not current_app.config.get('IS_DEMO'):
+            return None
+        if (request.endpoint or '') in DEMO_ENDPOINT_APERTI or 'user_id' not in session:
+            return None
+
+        idx = current_app.config.get('TENANT_IDX')
+        visto = _demo_uso_visto.get(idx)
+        if visto and time.time() - visto < DEMO_USO_OGNI_S:
+            return None
+
+        # L'owner entra per dare una mano: non allunga la prova di nessuno.
+        try:
+            from .models import User, RuoloUtente
+            utente = db.session.get(User, session.get('user_id'))
+            if utente is not None and utente.ruolo == RuoloUtente.owner:
+                return None
+        except Exception:
+            db.session.rollback()
+
+        try:
+            from .services import demo_trials
+            aperta = demo_trials.segna_uso(int(idx))
+        except Exception:
+            # Registro irraggiungibile: si lascia lavorare. Chiudere una prova
+            # per un guasto nostro sarebbe peggio che tenerla aperta un'ora in piu'.
+            current_app.logger.exception('[prova] controllo uso fallito sullo slot %s', idx)
+            return None
+
+        if aperta:
+            _demo_uso_visto[idx] = time.time()
+            return None
+
+        _demo_uso_visto.pop(idx, None)
+        session.clear()
+        if (request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+                or request.accept_mimetypes.best == 'application/json'
+                or request.content_type == 'application/json'
+                or '/api/' in request.path):
+            return jsonify({'error': 'session_expired',
+                            'message': 'La prova si e\' chiusa.'}), 401
+        return render_template('prova_scaduta.html'), 410
+
     @app.before_request
     def recinto_demo():
         if not current_app.config.get('IS_DEMO'):

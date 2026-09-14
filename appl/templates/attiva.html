@@ -250,7 +250,10 @@
         <div class="fw-semibold mb-2">Servizio sottoscritto</div>
         <div>Tosca Base{% if ctx.modules.web %} + Prenotazioni online{% endif %}{% if ctx.modules.pacchetti %} + Pacchetti{% endif %}{% if ctx.modules.solarium %} + Solarium{% endif %}</div>
         <div class="mt-2">
-          {% if ctx.starter_total is not none %}
+          {% if ctx.launch_offer %}
+            Attivazione: <strong>gratuita</strong> — Offerta di lancio (art. 6-bis del contratto):
+            nessun Periodo Starter, canone dal primo mese<br>
+          {% elif ctx.starter_total is not none %}
             Attivazione: <strong>€ {{ '%.2f'|format(ctx.starter_total) }}</strong> + IVA<br>
           {% endif %}
           {% if ctx.saas_monthly_amount is not none %}

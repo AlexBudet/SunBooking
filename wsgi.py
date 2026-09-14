@@ -546,8 +546,11 @@ def _prova_chiudi_scadute():
         from appl.services import demo_trials
         for finita in demo_trials.da_chiudere():
             uri = demo_pool.get(finita['slot_idx'])
+            # 'inattiva' (48 ore senza uso) e' una prova usata: conta come
+            # fatta, come la scaduta. 'annullata' resta per chi non e' mai
+            # entrato, che puo' richiederla di nuovo.
             demo_trials.chiudi(finita['trial_id'], uri,
-                               stato='scaduta' if finita['motivo'] == 'scaduta'
+                               stato='scaduta' if finita['motivo'] in ('scaduta', 'inattiva')
                                else 'annullata')
             root_app.logger.info("[prova] chiusa %s (%s), slot %s liberato",
                                  finita['trial_id'], finita['motivo'],
@@ -678,7 +681,7 @@ def prova_gratuita():
     # ── Passo 1: si manda il codice di verifica ───────────────────────────
     # Prima di impegnare uno slot si controlla che l'indirizzo esista davvero:
     # gli slot sono tre, e uno assegnato a una e-mail inventata resterebbe
-    # fermo tre giorni prima di tornare libero.
+    # fermo 48 ore prima di tornare libero.
     if not request.form.get('richiesta_id'):
         _prova_segna_richiesta(ip)
         preparata = demo_trials.prepara_codice(valori)
@@ -1159,7 +1162,7 @@ def _contratto_tenant(idx):
                 nostro['etichetta'] = 'database nostro'
                 return nostro
 
-            row = (s.query(Contract.price_plan, Contract.status)
+            row = (s.query(Contract.price_plan, Contract.status, Contract.launch_offer)
                     .join(Tenant, Tenant.id == Contract.tenant_id)
                     .filter(Tenant.idx == idx)
                     .order_by(Contract.id.desc())
@@ -1174,19 +1177,75 @@ def _contratto_tenant(idx):
     status = (row[1] or '').strip().lower() or None
     firmato = (status == 'signed')
     coda = '' if firmato else ' - da firmare'
+    # L'offerta di lancio (art. 6-bis) non cambia i moduli ammessi, cambia i
+    # soldi: niente attivazione e canone dal primo mese. Va scritta accanto al
+    # piano, se no dal pannello un BASE regalato e uno pagato sono uguali.
+    lancio = ' · offerta di lancio' if row[2] else ''
 
     if piano == 'standard':
         return {'piano': 'standard', 'status': status, 'extra_ammessi': False,
-                'extra_da_accendere': False, 'etichetta': 'BASE' + coda}
+                'extra_da_accendere': False, 'etichetta': 'BASE' + lancio + coda}
     if piano in ('premium', 'custom'):
         nome = 'PREMIUM' if piano == 'premium' else 'PREMIUM - prezzo concordato'
         return {'piano': piano, 'status': status, 'extra_ammessi': True,
-                'extra_da_accendere': firmato, 'etichetta': nome + coda}
+                'extra_da_accendere': firmato, 'etichetta': nome + lancio + coda}
 
     fuori = dict(vuoto)
     fuori['status'] = status
     fuori['etichetta'] = 'contratto senza piano'
     return fuori
+
+
+# Art. 6-bis.1 del contratto: l'offerta di lancio vale per i primi 5 contratti.
+OFFERTA_LANCIO_POSTI = 5
+
+
+def _offerte_lancio_impegnate(s):
+    """Quante offerte di lancio sono gia' impegnate, dentro una sessione aperta.
+
+    Contano i contratti FIRMATI con l'offerta piu' quelli ancora in bozza il
+    cui invito e' aperto (non usato e non scaduto). Un invito scaduto senza
+    firma libera il posto da solo: altrimenti un cliente che non risponde
+    terrebbe occupata per sempre una delle cinque offerte.
+    """
+    from datetime import datetime, timezone
+    from appl.registry_models import Contract, OnboardingInvite
+    adesso = datetime.now(timezone.utc)
+    firmati = (s.query(Contract.id)
+                .filter(Contract.launch_offer.is_(True), Contract.status == 'signed')
+                .count())
+    aperti = (s.query(Contract.id)
+               .join(OnboardingInvite, OnboardingInvite.tenant_id == Contract.tenant_id)
+               .filter(Contract.launch_offer.is_(True),
+                       Contract.status.in_(('draft', 'ready')),
+                       OnboardingInvite.used_at.is_(None),
+                       OnboardingInvite.expires_at > adesso)
+               .distinct()
+               .count())
+    return firmati + aperti
+
+
+def _offerta_lancio_tenant(idx):
+    """True se il contratto piu' recente del negozio e' un'offerta di lancio.
+
+    Serve alla scheda Contratto del pannello: senza, i campi dello Starter
+    restano li' da compilare anche per chi lo Starter non ce l'ha.
+    Registro irraggiungibile: False, cioe' la scheda come prima.
+    """
+    if not _registry_on():
+        return False
+    try:
+        from appl.registry_models import registry_session, Tenant, Contract
+        with registry_session() as s:
+            row = (s.query(Contract.launch_offer)
+                    .join(Tenant, Tenant.id == Contract.tenant_id)
+                    .filter(Tenant.idx == idx)
+                    .order_by(Contract.id.desc())
+                    .first())
+        return bool(row and row[0])
+    except Exception:
+        root_app.logger.warning("[registry] offerta di lancio del tenant %s non leggibile", idx)
+        return False
 
 
 def _spegni_invii_automatici():
@@ -2295,6 +2354,7 @@ def owner_billing_get(db_idx):
     billing = _load_billing()
     entry = dict(_billing_entry(billing, db_idx))
     entry['compliance'] = _compliance_status(entry)
+    entry['offerta_lancio'] = _offerta_lancio_tenant(db_idx)
     total_invoiced = sum(float(i.get('amount', 0)) for i in entry.get('invoices', []))
     total_paid = sum(float(p.get('amount', 0)) for p in entry.get('payments', []))
     entry['total_invoiced'] = round(total_invoiced, 2)
@@ -2439,6 +2499,7 @@ def _invite_or_404(token):
             'contract_id': contract.id,
             'business_name': tenant.business_name,
             'starter_total': float(contract.starter_total) if contract.starter_total is not None else None,
+            'launch_offer': bool(contract.launch_offer),
             'saas_monthly_amount': float(contract.saas_monthly_amount) if contract.saas_monthly_amount is not None else None,
             'modules': {
                 'base': bool(contract.module_base),
@@ -2508,9 +2569,22 @@ def owner_setup_invite():
     else:
         return jsonify({'error': 'Piano non valido.'}), 400
 
+    # ── Offerta di lancio (art. 6-bis) ────────────────────────────────────
+    # L'attivazione a zero la impone il server, non il campo del form: con
+    # l'offerta il contratto dice "nessun corrispettivo", e un importo diverso
+    # nel registro sarebbe una contraddizione col documento firmato.
+    launch_offer = bool(data.get('launch_offer'))
+    starter_total = 0.0 if launch_offer else _num(data.get('starter_total'))
+
     token = _secrets.token_urlsafe(32)
     try:
         with registry_session() as s:
+            if launch_offer:
+                impegnate = _offerte_lancio_impegnate(s)
+                if impegnate >= OFFERTA_LANCIO_POSTI:
+                    return jsonify({'error': "Le %d offerte di lancio sono gia' tutte impegnate "
+                                             "(contratti firmati o inviti ancora aperti)."
+                                             % OFFERTA_LANCIO_POSTI}), 400
             tenant = Tenant(business_name=business_name, status='invited')
             s.add(tenant)
             s.flush()
@@ -2518,12 +2592,14 @@ def owner_setup_invite():
             contract = Contract(
                 tenant_id=tenant.id,
                 status='draft',
-                contract_version=os.getenv('CONTRACT_VERSION', '1.0'),
+                # 1.1: aggiunto l'art. 6-bis, offerta di lancio.
+                contract_version=os.getenv('CONTRACT_VERSION', '1.1'),
                 legal_business_name=business_name,
                 email=(data.get('email') or '').strip() or None,
                 # Importi e moduli li decide l'owner adesso: al cliente
                 # arrivano in sola lettura, non e' lui a scegliersi il prezzo.
-                starter_total=_num(data.get('starter_total')),
+                starter_total=starter_total,
+                launch_offer=launch_offer,
                 saas_monthly_amount=canone,
                 price_plan=price_plan,
                 price_note=price_note,
@@ -2543,6 +2619,8 @@ def owner_setup_invite():
                 expires_at=datetime.now(timezone.utc) + timedelta(days=INVITE_TTL_DAYS),
             ))
             tenant_id = tenant.id
+            rimaste = (OFFERTA_LANCIO_POSTI - _offerte_lancio_impegnate(s) - 1
+                       if launch_offer else None)
     except Exception as e:
         root_app.logger.exception("[invito] creazione fallita")
         return jsonify({'error': f'Errore creazione invito: {e}'}), 500
@@ -2554,6 +2632,7 @@ def owner_setup_invite():
         'tenant_id': tenant_id,
         'link': link,
         'scade_il': (datetime.now(timezone.utc) + timedelta(days=INVITE_TTL_DAYS)).date().isoformat(),
+        'offerte_lancio_rimaste': rimaste,
     })
 
 

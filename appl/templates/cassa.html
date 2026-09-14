@@ -1983,7 +1983,7 @@ document.getElementById('btnChiusuraGiornaliera').addEventListener('click', func
   const btn = this;
   const originalText = btn.textContent;
   btn.disabled = true;
-  btn.textContent = 'Invio...';
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Invio...';
 
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 

@@ -5804,10 +5804,44 @@ function deleteAppointment(appointmentId) {
 }
 window.deleteAppointment = deleteAppointment;
 
+// Attesa visibile durante l'invio WhatsApp automatico: /calendar/send-whatsapp-auto
+// aspetta la risposta di Unipile (qualche secondo) e senza un segnale l'operatore
+// riclicca o chiude il modal. L'overlay intercetta i click come quello della domanda.
+function mostraAttesaInvioWhatsapp() {
+  if (document.getElementById('whatsappSendingOverlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'whatsappSendingOverlay';
+  overlay.setAttribute('role', 'status');
+  overlay.setAttribute('aria-live', 'polite');
+  overlay.style.cssText = 'position:fixed; inset:0; background:rgba(255,255,255,0.65); z-index:99998; display:flex; align-items:center; justify-content:center;';
+  ['mousedown', 'mouseup', 'click', 'dblclick', 'pointerdown', 'pointerup',
+   'touchstart', 'touchend', 'contextmenu'].forEach(function(evento) {
+    overlay.addEventListener(evento, function(ev) { ev.stopPropagation(); });
+  });
+  overlay.innerHTML = '<div style="text-align:center;">'
+    + '<div class="spinner-border text-primary" aria-hidden="true"></div>'
+    + '<p style="margin-top:15px; font-size:16px; font-weight:500; color:#333;">Invio WhatsApp in corso...</p>'
+    + '</div>';
+  document.body.appendChild(overlay);
+}
+function nascondiAttesaInvioWhatsapp() {
+  const overlay = document.getElementById('whatsappSendingOverlay');
+  if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+}
+
 async function inviaWhatsappAutoSeRichiesto(appointment, data, csrfToken) {
   if (!isWebModuleEnabled()) {
     return;
   }
+  mostraAttesaInvioWhatsapp();
+  try {
+    return await _inviaWhatsappAutoRichiesta(appointment, data, csrfToken);
+  } finally {
+    nascondiAttesaInvioWhatsapp();
+  }
+}
+
+async function _inviaWhatsappAutoRichiesta(appointment, data, csrfToken) {
   let numero = (appointment && appointment.client_cellulare) ? appointment.client_cellulare : "";
   if (!numero && data && data.client_id) {
     try {

@@ -90,8 +90,11 @@
   <h1>La tua prova è pronta</h1>
   <p class="sotto">
     Sette giorni sull'agenda di un centro di esempio, già piena.
-    Alla scadenza si chiude da sola.
   </p>
+  <div class="avviso">
+    <b>Si chiude dopo sette giorni, o prima se per 48 ore nessuno la apre.</b>
+    In tutti e due i casi il contenuto viene azzerato.
+  </div>
 
   {# Qui c'e' UNA cosa sola da fare: entrare. Indirizzo, utente e password
      stampati accanto a un pulsante che entra da solo facevano leggere tre
@@ -126,8 +129,9 @@
 
   <div class="nota-legale">
     Attive <b>Agenda</b> e <b>Report</b>; il resto è nella versione completa.<br><br>
-    I dati sono inventati: <b>non inserire persone reali</b>. Al settimo giorno tutto
-    viene cancellato, senza copie di sicurezza e senza garanzie.
+    I dati sono inventati: <b>non inserire persone reali</b>. Alla chiusura, dopo sette
+    giorni o dopo 48 ore senza accessi, tutto viene cancellato, senza copie di sicurezza
+    e senza garanzie.
   </div>
 
 {% elif in_coda %}
@@ -229,8 +233,9 @@
     <label class="spunta" for="consenso">
       <input type="checkbox" id="consenso" name="consenso" required>
       <span>Ho letto l'<a href="/prova/informativa" target="_blank">informativa privacy</a> e le
-      <a href="/prova/termini" target="_blank">condizioni della prova</a>. So che alla scadenza
-      i dati inseriti vengono cancellati.</span>
+      <a href="/prova/termini" target="_blank">condizioni della prova</a>. So che la prova si
+      chiude dopo sette giorni, o dopo 48 ore senza accessi, e che i dati inseriti vengono
+      cancellati.</span>
     </label>
 
     <button type="submit" class="invia" id="btnProva">Ricevi il codice</button>

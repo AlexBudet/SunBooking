@@ -169,8 +169,10 @@ window.showChiusuraMancanteModal = function showChiusuraMancanteModal(data) {
   btnAnnulla.addEventListener('click', () => wrap.remove());
 
   btnChiusura.addEventListener('click', async () => {
+    const testoBtnChiusura = btnChiusura.textContent;
     btnChiusura.disabled = true;
     btnAnnulla.disabled = true;
+    btnChiusura.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Chiusura in corso...';
     msg.style.color = '';
     // La stampa parte subito, ma l'esito viene verificato sul contatore Z della
     // stampante: finche' stampa non risponde, quindi l'attesa puo' arrivare a
@@ -196,12 +198,14 @@ window.showChiusuraMancanteModal = function showChiusuraMancanteModal(data) {
       } else {
         msg.style.color = '#dc3545';
         msg.textContent = 'Chiusura non riuscita: ' + ((dd && dd.error) || 'errore stampante') + '. Riprova.';
+        btnChiusura.textContent = testoBtnChiusura;
         btnChiusura.disabled = false;
         btnAnnulla.disabled = false;
       }
     } catch (_) {
       msg.style.color = '#dc3545';
       msg.textContent = 'Errore di rete durante la chiusura. Riprova.';
+      btnChiusura.textContent = testoBtnChiusura;
       btnChiusura.disabled = false;
       btnAnnulla.disabled = false;
     }

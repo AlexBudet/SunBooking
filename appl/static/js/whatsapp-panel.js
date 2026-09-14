@@ -274,7 +274,7 @@ function showWhatsappAutoSendPanel(payload) {
     if (!testoFinale) { textarea.focus(); return; }
     sendBtn.disabled = true;
     cancelBtn.disabled = true;
-    sendBtn.textContent = 'Invio...';
+    sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Invio...';
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
     try {
       const resp = await fetch('/calendar/send-whatsapp-auto', {

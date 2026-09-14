@@ -511,6 +511,14 @@
             </label>
           </div>
           <div id="billing-contract-fields">
+          <!-- Offerta di lancio (art. 6-bis): lo Starter non esiste, i due campi
+               si spengono. Il controllo dei pagamenti non cambia: confronta
+               fatture e incassi, e le fatture qui sono solo di canone. -->
+          <div id="b_offerta_lancio" style="display:none; background:#fdf2f5; border:1px solid #efd9df;
+               border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:.9em; color:#7a2f4b;">
+            🎁 <strong>Offerta di lancio</strong> (art. 6-bis): attivazione gratuita, nessun Periodo
+            Starter, canone dal primo mese. Le fatture da registrare sono solo quelle del canone.
+          </div>
           <div class="billing-grid">
             <div class="billing-field">
               <label>Data attivazione utenza</label>
@@ -707,6 +715,12 @@
       <div class="form-field">
         <label for="inv_starter">Attivazione € (+IVA)</label>
         <input id="inv_starter" type="number" step="0.01" value="599">
+        <label style="font-weight:400; display:block; margin-top:8px;">
+          <input type="checkbox" id="inv_launch_offer" onchange="aggiornaOfferta()">
+          <strong>Offerta di lancio</strong> (art. 6-bis)
+        </label>
+        <div class="hint">Attivazione gratis, nessun Periodo Starter, canone dal primo mese.
+          Solo per i primi 5 contratti: il sesto invito viene rifiutato.</div>
       </div>
       <div class="form-field">
         <label>Canone mensile (+IVA)</label>
@@ -925,6 +939,15 @@
         });
         const ownerCk = document.getElementById('b_is_owner_db');
         if (ownerCk) { ownerCk.checked = !!d.is_owner_db; toggleOwnerDb(ownerCk.checked); }
+        // Offerta di lancio: niente Starter da compilare
+        const lancio = !!d.offerta_lancio;
+        document.getElementById('b_offerta_lancio').style.display = lancio ? 'block' : 'none';
+        ['b_starter_total', 'b_starter_expiry_date'].forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.disabled = lancio;
+          if (lancio) { el.value = ''; el.placeholder = 'non previsto'; }
+        });
         // Fatture
         renderInvoices(d.invoices || []);
         // Pagamenti
@@ -1200,6 +1223,15 @@
 
     document.addEventListener('DOMContentLoaded', aggiornaPiano);
 
+    // Offerta di lancio: l'attivazione e' zero per contratto. Il campo si
+    // blocca a 0 qui per chiarezza, ma e' il server a imporlo davvero.
+    function aggiornaOfferta() {
+      const lancio = document.getElementById('inv_launch_offer').checked;
+      const campo = document.getElementById('inv_starter');
+      campo.value = lancio ? '0' : '599';
+      campo.disabled = lancio;
+    }
+
     async function creaInvito() {
       const business_name = document.getElementById('inv_business_name').value.trim();
       if (!business_name) { setInviteStatus('Nome negozio obbligatorio.', 'error'); return; }
@@ -1225,6 +1257,7 @@
             business_name,
             email: document.getElementById('inv_email').value.trim(),
             starter_total: document.getElementById('inv_starter').value,
+            launch_offer: document.getElementById('inv_launch_offer').checked,
             price_plan: piano,
             price_note: nota,
             saas_monthly_amount: cifra,
@@ -1245,7 +1278,9 @@
         document.getElementById('inviteExpiry').textContent =
           'Il link scade il ' + data.scade_il + ' e vale una volta sola.';
         document.getElementById('inviteResult').style.display = 'block';
-        setInviteStatus('Invito creato.', 'ok');
+        setInviteStatus(data.offerte_lancio_rimaste != null
+          ? 'Invito creato. Offerte di lancio ancora disponibili: ' + data.offerte_lancio_rimaste + ' di 5.'
+          : 'Invito creato.', 'ok');
       } catch (e) {
         setInviteStatus('Nessuna risposta dal server.', 'error');
       }

@@ -149,9 +149,11 @@ def testo_credenziali(referente: str, url: str, utente: str, password: str,
      prenotazioni online, pacchetti e messaggi automatici fanno parte della
      versione completa: dentro il programma trovi un riquadro che ti racconta
      cosa fanno.</p>
+  <p><b>Quando si chiude.</b> La prova dura sette giorni dal primo accesso, e
+     si chiude prima se per <b>48 ore</b> nessuno la apre. In tutti e due i
+     casi il contenuto viene azzerato e non si recupera.</p>
   <p><b>I dati che vedi sono inventati</b>: non inserire nomi o numeri di
-     persone vere. Al settimo giorno la prova si chiude da sola e il contenuto
-     viene cancellato.</p>
+     persone vere.</p>
   <p>Se qualcosa non ti torna, rispondi a questa mail.</p>
 """ % (_html.escape(referente or 'ciao'), _html.escape(link),
        _html.escape(url), _html.escape(url), _html.escape(utente),
@@ -182,7 +184,7 @@ def testo_in_coda(referente: str, posizione: int, data: str) -> tuple[str, str]:
   <p>in questo momento le tre prove disponibili sono tutte in corso: sei il
      <b>%d&ordm;</b> in lista.%s</p>
   <p>Ti scriviamo noi appena si libera un posto, non devi ricontrollare niente.
-     Da quel momento avrai <b>tre giorni</b> per attivarla, poi il posto passa
+     Da quel momento avrai <b>48 ore</b> per entrare, poi il posto passa
      a chi viene dopo.</p>
   <p>Se hai fretta facciamo prima cos&igrave;: mezz'ora insieme, ti mostriamo
      Tosca dal vivo e rispondiamo alle tue domande. Rispondi a questa mail e
@@ -205,8 +207,10 @@ def testo_tocca_a_te(referente: str, url: str, utente: str, password: str,
     Utente: <b>%s</b><br>
     Password: <b>%s</b>
   </p>
-  <p><b>Entra entro tre giorni</b>: dopo, il posto passa al prossimo in lista.
+  <p><b>Entra entro 48 ore</b>: dopo, il posto passa al prossimo in lista.
      I sette giorni di prova partono dal tuo primo accesso, non da oggi.</p>
+  <p>La prova si chiude prima dei sette giorni se per <b>48 ore</b> nessuno la
+     apre. In tutti e due i casi il contenuto viene azzerato.</p>
 """ % (_html.escape(referente or 'ciao'), _html.escape(link),
        _html.escape(url), _html.escape(url), _html.escape(utente),
        _html.escape(password))

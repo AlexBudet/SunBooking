@@ -144,6 +144,7 @@ CREATE TABLE contract (
   module_web            boolean DEFAULT false,
   module_pacchetti      boolean DEFAULT false,
   module_solarium       boolean DEFAULT false,
+  launch_offer          boolean DEFAULT false,   -- Offerta di lancio (art. 6-bis): attivazione 0, canone dal 1° mese
   starter_total         numeric(10,2),
   saas_monthly_amount   numeric(10,2),
   -- SEPA: mai l'IBAN completo
@@ -257,6 +258,7 @@ I due orari sono l'unico motivo per cui oggi `owner_setup_add_tenant()` deve inv
 | Pacchetti e prepagate | `contract.module_pacchetti` → `OWNER.module_pacchetti_enabled` |
 | Strumenti solarium | `contract.module_solarium` → `OWNER.module_solarium_enabled` |
 | Starter 6 mesi (importo) | `contract.starter_total` → registry billing |
+| Offerta di lancio (art. 6-bis) | `contract.launch_offer` — la imposta l'owner all'invito, in sola lettura per il cliente. Con l'offerta: `starter_total` = 0, nessun Periodo Starter, niente rate, primo canone alla sottoscrizione |
 | Canone mensile | `contract.saas_monthly_amount` → registry billing |
 | IBAN per mandato SEPA | **al PSP, non in Tosca**: si salvano solo `sepa_mandate_ref` e `sepa_iban_last4` |
 

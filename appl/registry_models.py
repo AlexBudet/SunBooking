@@ -239,6 +239,11 @@ class Contract(Base):
     # ricorda nessuno — e in caso di contestazione non e' difendibile.
     price_plan          = Column(String(20))
     price_note          = Column(Text)
+    # Offerta di lancio, art. 6-bis del contratto (versione 1.1): attivazione
+    # a zero, nessun Periodo Starter, canone dal primo mese, riservata ai primi
+    # 5 contratti. Colonna aggiunta da registry/05_offerta_lancio.sql.
+    launch_offer        = Column(Boolean, nullable=False, default=False,
+                                 server_default='false')
 
     # SEPA: mai l'IBAN completo in chiaro, solo il riferimento del mandato
     sepa_mandate_ref = Column(String(64))
@@ -445,6 +450,10 @@ class DemoTrial(Base):
     inizio_at     = Column(DateTime(timezone=True))
     scadenza_at   = Column(DateTime(timezone=True))
     chiusa_at     = Column(DateTime(timezone=True))
+    # Ultima volta che chi prova ha usato lo slot (l'owner non conta). Dopo
+    # INATTIVITA_ORE senza utilizzo la prova si chiude anche se i sette giorni
+    # non sono finiti. Colonna aggiunta da registry/04_demo_ultimo_uso.sql.
+    ultimo_uso_at = Column(DateTime(timezone=True))
 
     privacy_versione     = Column(String(20))
     privacy_accettata_at = Column(DateTime(timezone=True))

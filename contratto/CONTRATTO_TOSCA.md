@@ -1,6 +1,6 @@
 # CONTRATTO DI LICENZA D'USO E FORNITURA DEL SERVIZIO "TOSCA"
 
-**Versione 1.0 — «data»**
+**Versione 1.1 — «data»**
 Documento predisposto dal Licenziante ai sensi degli artt. 1341 e 1342 c.c.
 
 > **Nota per il Licenziante (da rimuovere prima dell'uso):** questo è un testo redatto su base
@@ -83,6 +83,8 @@ Licenziante e Cliente congiuntamente le **"Parti"**.
   hardware, firmware e software di collegamento.
 - **Periodo Starter**: i primi 6 (sei) mesi di servizio di cui all'art. 7.
 - **Canone**: il corrispettivo periodico dovuto per il Servizio ai sensi dell'art. 6.
+- **Offerta di lancio**: le condizioni economiche dell'art. 6-bis, riservate ai primi 5
+  (cinque) contratti che le indicano nel modulo di attivazione.
 
 ### Art. 2 — Oggetto del contratto e natura della licenza
 
@@ -227,6 +229,9 @@ costo per singolo modulo. I moduli sottoscritti sono indicati nel modulo di atti
 Il passaggio da STANDARD a PREMIUM può essere richiesto in qualsiasi momento e decorre dal mese
 successivo. Il passaggio inverso segue i termini di preavviso dell'art. 7.4.
 
+**Offerta di lancio.** Per i contratti che la indicano nel modulo di attivazione valgono, in luogo
+della voce «Attivazione e Periodo Starter», le condizioni dell'art. 6-bis.
+
 6.2 Gli importi si intendono al netto di IVA e di ogni altra imposta o onere di legge.
 
 **Natura del corrispettivo di attivazione.** Il corrispettivo di attivazione remunera le
@@ -289,13 +294,58 @@ secondo il piano indicato nell'Allegato C.6. La rateizzazione:
       **decadenza dal beneficio del termine** e l'intero importo residuo diviene immediatamente
       esigibile.
 
+### Art. 6-bis — Offerta di lancio: attivazione senza corrispettivo
+
+6-bis.1 **Ambito.** Il presente articolo si applica esclusivamente ai contratti nei quali il
+modulo di attivazione indica l'**Offerta di lancio**. L'Offerta è riservata ai **primi 5 (cinque)
+contratti** sottoscritti con tale indicazione, secondo l'ordine cronologico di sottoscrizione;
+esauriti i cinque contratti non è più disponibile. Per tali contratti, in caso di contrasto con
+altre clausole del contratto o dei suoi Allegati, prevale il presente articolo.
+
+6-bis.2 **Attivazione senza corrispettivo.** Le attività di cui all'art. 4 — creazione
+dell'ambiente dedicato, configurazione, migrazione dei dati e formazione iniziale — sono eseguite
+dal Licenziante **integralmente e senza corrispettivo**. Non si applicano pertanto: la voce
+«Attivazione e Periodo Starter» della tabella dell'art. 6.1; il capoverso dell'art. 6.2 sulla
+natura del corrispettivo di attivazione; le disposizioni dell'art. 6.4 relative al pagamento del
+corrispettivo di attivazione; l'art. 6.8; l'art. 8.8.
+
+6-bis.3 **Canone dal primo mese.** L'Offerta di lancio **non comprende il Periodo Starter**: il
+canone mensile STANDARD o PREMIUM di cui all'art. 6.1 è dovuto **dal primo mese di servizio**. Non
+si applica l'art. 7.2.
+
+6-bis.4 **Data di efficacia e primo canone.** In deroga all'art. 7.1, il contratto ha efficacia
+dalla **data di ricezione del primo canone**, pagato alla sottoscrizione mediante bonifico bancario
+o addebito SEPA (di seguito "data di efficacia"). La creazione dell'ambiente dedicato di cui
+all'art. 4.2 segue la ricezione di tale pagamento.
+
+6-bis.5 **Durata del primo mese.** In favore del Cliente, il primo canone copre il servizio dalla
+data di efficacia **fino all'ultimo giorno del mese solare nel quale si compie il primo mese**. I
+canoni successivi sono addebitati secondo l'art. 6.5.
+
+> *Esempio.* Data di efficacia 10 gennaio: il primo mese si compie il 10 febbraio e il primo
+> canone copre il servizio fino al 28 febbraio (29 negli anni bisestili). Il canone di marzo è
+> addebitato il penultimo giorno lavorativo di febbraio.
+
+6-bis.6 **Recesso del Cliente.** In deroga all'art. 7.4, il Cliente può recedere **in qualsiasi
+momento**, anche nel corso dei primi mesi, con comunicazione scritta a mezzo PEC e preavviso di
+**30 giorni**. Al Cliente che recede **non è richiesto alcun importo a titolo di attivazione**, né
+la restituzione del valore delle attività eseguite senza corrispettivo: restano dovuti i soli
+canoni maturati fino alla data di efficacia del recesso, e non sono restituiti i canoni già
+maturati.
+
+6-bis.7 **Durata e morosità.** Il contratto è a **tempo indeterminato** dalla data di efficacia,
+con corresponsione del canone secondo l'art. 6.5. Si applicano ai canoni gli artt. 8.1-8.7; la
+riattivazione di cui all'art. 8.7 non comporta alcun corrispettivo di attivazione.
+
 ### Art. 7 — Durata, rinnovo e recesso
 
-7.1 Il contratto ha efficacia **dalla data di ricezione del pagamento** relativo al
+7.1 Salvo quanto previsto all'art. 6-bis.4 per l'Offerta di lancio, il contratto ha efficacia
+**dalla data di ricezione del pagamento** relativo al
 corrispettivo di attivazione o, in caso di rateizzazione ai sensi dell'art. 6.8, **dalla data di
 ricezione della prima rata** (di seguito "data di efficacia").
 
-7.2 **Periodo Starter.** Il corrispettivo di attivazione comprende **6 (sei) mesi di servizio**
+7.2 **Periodo Starter.** Salvo che per l'Offerta di lancio, che non lo prevede (art. 6-bis.3), il
+corrispettivo di attivazione comprende **6 (sei) mesi di servizio**
 decorrenti dalla data di efficacia. **In favore del Cliente**, il Periodo Starter è prorogato
 senza costi aggiuntivi **fino all'ultimo giorno del mese solare nel quale i sei mesi si
 compiono**: il Cliente beneficia quindi di un periodo compreso tra 6 mesi e 6 mesi e 30 giorni,
@@ -311,12 +361,13 @@ ai sensi dell'art. 8 per mancato pagamento: i giorni di disattivazione restano c
 Periodo Starter e non danno luogo a proroga, credito o rimborso. Resta ferma, in favore del
 Cliente, la proroga di fine mese di cui al presente articolo.
 
-7.3 Decorso il Periodo Starter, il contratto prosegue **a tempo indeterminato** con
+7.3 Decorso il Periodo Starter — per l'Offerta di lancio, dalla data di efficacia — il contratto prosegue **a tempo indeterminato** con
 corresponsione del canone mensile di cui all'art. 6.1, secondo la periodicità dell'art. 6.5.
 
 7.4 **Recesso del Cliente.** Il Cliente può recedere in qualsiasi momento successivo al Periodo
 Starter, con comunicazione scritta a mezzo PEC e preavviso di **30 giorni**. Il recesso non dà
-diritto alla restituzione di corrispettivi già maturati, né del corrispettivo di attivazione.
+diritto alla restituzione di corrispettivi già maturati, né del corrispettivo di attivazione. Per
+l'Offerta di lancio il recesso è disciplinato dall'art. 6-bis.6.
 
 7.5 **Recesso del Licenziante.** Il Licenziante può recedere con comunicazione scritta a mezzo
 PEC e preavviso di **90 giorni**, restituendo al Cliente la quota di canone eventualmente
@@ -1191,3 +1242,16 @@ l'attivazione già eseguita. Pagando quanto scaduto il Servizio è riattivato fi
 
 Il PREMIUM comprende **uno, alcuni o tutti** i moduli elencati nell'Allegato A.2 allo stesso
 prezzo: non esiste un costo per singolo modulo.
+
+**Offerta di lancio (art. 6-bis).** Per i primi 5 contratti che la indicano nel modulo di
+attivazione:
+
+| Voce | Importo | Quando |
+|---|---|---|
+| Attivazione — ambiente, migrazione dati, formazione | **€ 0,00** | — |
+| Canone **STANDARD** — solo TOSCA BASE | € 39,00 + IVA | il primo alla sottoscrizione, poi SEPA il penultimo giorno lavorativo del mese precedente |
+| Canone **PREMIUM** — BASE + moduli a scelta | € 59,00 + IVA | come sopra |
+
+Nessun Periodo Starter e nessuna rata: il canone decorre dal primo mese. Il primo canone copre il
+servizio fino all'ultimo giorno del mese solare nel quale si compie il primo mese. Il Cliente può
+recedere in qualsiasi momento con 30 giorni di preavviso via PEC, pagando i soli canoni maturati.

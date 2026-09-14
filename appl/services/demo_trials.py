@@ -37,10 +37,15 @@ from appl.registry_models import (
 
 # ── Regole ─────────────────────────────────────────────────────────────
 PROVA_GIORNI = 7      # durata della prova, dal primo accesso
-CLAIM_GIORNI = 3      # tempo per entrare dopo che lo slot si e' liberato
+# Regola delle 48 ore (13/09/2026): una prova che nessuno usa per 48 ore si
+# chiude e lo slot si risemina, anche prima dei sette giorni. Vale anche per
+# il primo accesso: chi non entra entro 48 ore lascia il posto alla coda.
+# Il testo e' scritto dove la prova si attiva: modulo, e-mail, condizioni.
+INATTIVITA_ORE = 48
+CLAIM_ORE = INATTIVITA_ORE   # tempo per entrare dopo che lo slot e' pronto
 CODA_MAX = 6          # oltre questa lunghezza si offre solo la chiamata
-VERSIONE_TERMINI = '1.0'
-VERSIONE_PRIVACY = '1.0'
+VERSIONE_TERMINI = '1.1'     # 1.1: aggiunta la chiusura dopo 48 ore senza uso
+VERSIONE_PRIVACY = '1.1'     # 1.1: si registra anche l'ultimo utilizzo
 
 # La pagina di prenotazione online di un centro di esempio, quella che vedrebbe
 # una cliente dal telefono. Sta su un tenant SEPARATO dagli slot della prova:
@@ -200,7 +205,7 @@ def puo_richiedere(telefono_norm: str) -> tuple[bool, str]:
 #
 #  Serve a sapere che l'indirizzo e-mail esiste ed e' di chi lo scrive, PRIMA
 #  di bruciare uno slot: gli slot sono tre, e uno assegnato a un indirizzo
-#  inventato resterebbe fermo per tre giorni prima di tornare libero.
+#  inventato resterebbe fermo per 48 ore prima di tornare libero.
 #
 #  Sta in memoria e non nel registro di proposito: e' un dato che vive dieci
 #  minuti e non serve a nessuno il giorno dopo. Il prezzo e' che un riavvio
@@ -342,7 +347,7 @@ def crea_richiesta(business_name: str, referente: str, email: str,
             trial.slot_idx = slot.idx
             trial.stato = 'invitata'
             trial.invitata_at = _adesso()
-            trial.claim_entro = _adesso() + timedelta(days=CLAIM_GIORNI)
+            trial.claim_entro = _adesso() + timedelta(hours=CLAIM_ORE)
             s.add(trial)
             s.flush()
             slot.stato = 'occupato'
@@ -408,7 +413,7 @@ def attiva(trial_id: int, uri_slot: str, owner_user=None,
         trial.stato = 'invitata'
         if not trial.invitata_at:
             trial.invitata_at = _adesso()
-        trial.claim_entro = _adesso() + timedelta(days=CLAIM_GIORNI)
+        trial.claim_entro = _adesso() + timedelta(hours=CLAIM_ORE)
 
     return {'ok': True, 'username': 'demo', 'password': password,
             'token': token, 'email': email, 'seminato': conteggi}
@@ -437,6 +442,37 @@ def _aggiungi_owner(uri_slot: str, username: str, password_hash: str) -> None:
 #  PRIMO ACCESSO E SCADENZA
 # ═══════════════════════════════════════════════════════════════════════
 
+def _finita(t: DemoTrial, adesso) -> str | None:
+    """Perche' una prova non si puo' piu' usare, o None se si puo'.
+
+    Tre motivi: sette giorni passati, 48 ore senza utilizzo, oppure invitata
+    e mai aperta entro il tempo per entrare. Un solo posto che lo decide,
+    usato sia da chi chiude le prove sia da chi controlla l'accesso: se i due
+    controlli fossero scritti a parte, prima o poi direbbero cose diverse.
+    """
+    if t.stato == 'invitata':
+        if t.claim_entro and t.claim_entro <= adesso:
+            return 'mai_iniziata'
+        return None
+    if t.stato != 'attiva':
+        return 'chiusa'
+    if t.scadenza_at and t.scadenza_at <= adesso:
+        return 'scaduta'
+    # Mai usata dopo il primo accesso: si conta da quello.
+    ultimo = t.ultimo_uso_at or t.inizio_at
+    if ultimo and ultimo + timedelta(hours=INATTIVITA_ORE) <= adesso:
+        return 'inattiva'
+    return None
+
+
+def _avvia(t: DemoTrial, adesso) -> None:
+    """Primo accesso: parte il cronometro dei sette giorni."""
+    t.stato = 'attiva'
+    t.inizio_at = adesso
+    t.scadenza_at = adesso + timedelta(days=PROVA_GIORNI)
+    t.ultimo_uso_at = adesso
+
+
 def consuma_token(token: str) -> dict | None:
     """Primo accesso con il link: da qui partono i sette giorni.
 
@@ -445,21 +481,49 @@ def consuma_token(token: str) -> dict | None:
     """
     if not token:
         return None
+    adesso = _adesso()
     with registry_session() as s:
         trial = (s.query(DemoTrial)
                   .filter(DemoTrial.token_hash == _hash(token))
                   .first())
-        if trial is None or trial.stato not in ('invitata', 'attiva'):
+        if trial is None or _finita(trial, adesso):
             return None
         if trial.stato == 'invitata':
-            trial.stato = 'attiva'
-            trial.inizio_at = _adesso()
-            trial.scadenza_at = _adesso() + timedelta(days=PROVA_GIORNI)
-        elif trial.scadenza_at and trial.scadenza_at < _adesso():
-            return None
+            _avvia(trial, adesso)
+        else:
+            trial.ultimo_uso_at = adesso
         return {'trial_id': trial.id, 'slot_idx': trial.slot_idx,
                 'username': trial.username or 'demo',
                 'scadenza': trial.scadenza_at}
+
+
+def segna_uso(slot_idx: int) -> bool:
+    """Chi prova sta usando lo slot: True se la prova e' ancora aperta.
+
+    La chiama l'app dello slot (appl/__init__.py, uso_demo) con un freno di
+    dieci minuti. Se la prova e' aperta aggiorna l'ultimo utilizzo; se e'
+    finita risponde False e chi chiama chiude la sessione. La risemina NON si
+    fa qui: la fa _prova_chiudi_scadute() in wsgi.py, fuori dalla richiesta
+    di chi sta dentro lo slot (azzerare lo schema mentre la sua stessa
+    richiesta tiene aperta una transazione su quel database si bloccherebbe).
+
+    Una prova ancora 'invitata' che viene usata parte qui: succede a chi entra
+    con utente e password dalla pagina di accesso invece che dal link. Prima
+    di questa funzione, in quel caso il cronometro non partiva mai.
+    """
+    adesso = _adesso()
+    with registry_session() as s:
+        slot = s.get(DemoSlot, slot_idx)
+        if slot is None or not slot.trial_id:
+            return False
+        trial = s.get(DemoTrial, slot.trial_id)
+        if trial is None or _finita(trial, adesso):
+            return False
+        if trial.stato == 'invitata':
+            _avvia(trial, adesso)
+        else:
+            trial.ultimo_uso_at = adesso
+        return True
 
 
 def prova_dello_slot(slot_idx: int) -> dict | None:
@@ -486,22 +550,20 @@ def prova_dello_slot(slot_idx: int) -> dict | None:
 
 
 def da_chiudere() -> list[dict]:
-    """Prove finite: scadute, o invitate e mai usate entro il tempo per entrare.
+    """Prove finite: scadute, ferme da 48 ore, o invitate e mai aperte in tempo.
 
     Una prova mai reclamata va chiusa, altrimenti un indirizzo e-mail sbagliato
-    terrebbe occupato uno slot per sempre.
+    terrebbe occupato uno slot per sempre. Il motivo lo decide _finita().
     """
     adesso = _adesso()
     fuori = []
     with registry_session() as s:
         for t in s.query(DemoTrial).filter(
                 DemoTrial.stato.in_(('attiva', 'invitata'))).all():
-            if t.stato == 'attiva' and t.scadenza_at and t.scadenza_at <= adesso:
+            motivo = _finita(t, adesso)
+            if motivo:
                 fuori.append({'trial_id': t.id, 'slot_idx': t.slot_idx,
-                              'motivo': 'scaduta'})
-            elif t.stato == 'invitata' and t.claim_entro and t.claim_entro <= adesso:
-                fuori.append({'trial_id': t.id, 'slot_idx': t.slot_idx,
-                              'motivo': 'mai_iniziata'})
+                              'motivo': motivo})
     return fuori
 
 
@@ -565,7 +627,7 @@ def assegna_slot(trial_id: int, slot_idx: int) -> bool:
         trial.slot_idx = slot_idx
         trial.stato = 'invitata'
         trial.invitata_at = _adesso()
-        trial.claim_entro = _adesso() + timedelta(days=CLAIM_GIORNI)
+        trial.claim_entro = _adesso() + timedelta(hours=CLAIM_ORE)
         slot.stato = 'occupato'
         slot.trial_id = trial.id
         slot.updated_at = _adesso()
