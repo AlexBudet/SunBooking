@@ -3764,8 +3764,10 @@ body.touch-ui .appointment-block.active-popup .client-info-link {
    puntini e al click il nome spariva dal blocco (badge + "..." e basta).
    Solo a blocco attivo la riga diventa una flex row: i badge restano alla
    loro dimensione e la targhetta si restringe troncando il testo AL SUO
-   INTERNO. Fuori da touch-ui e a blocco non attivo nulla cambia. */
-body.touch-ui .appointment-block.active-popup .client-name {
+   INTERNO. Fuori da touch-ui e a blocco non attivo nulla cambia.
+   Esclusi .note-off/.off: sui blocchi OFF la riga del nome (con dentro il
+   titolo) resta nascosta, il titolo lo mostra solo .off-block-title al centro. */
+body.touch-ui .appointment-block.active-popup:not(.note-off):not(.off) .client-name {
   display: flex;
   align-items: center;
   justify-content: center;
