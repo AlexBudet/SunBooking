@@ -521,6 +521,17 @@ def _owner_di_riferimento():
     return None
 
 
+def _chiudi_prova(trial_id, uri_slot=None, stato='scaduta'):
+    """Chiude una prova rimettendo l'owner nello slot appena azzerato.
+
+    Tutte le chiusure passano da qui, cosi' nessuna si dimentica l'owner: il
+    suo utente deve esserci sempre, in tutti i database, demo compresi.
+    """
+    from appl.services import demo_trials
+    return demo_trials.chiudi(trial_id, uri_slot, stato=stato,
+                              owner_user=_owner_di_riferimento())
+
+
 def _utente_demo_id(idx):
     """id dell'utente 'demo' dentro lo slot: lo vuole l'auto-login."""
     child = children.get(idx)
@@ -567,7 +578,7 @@ def _prova_chiudi_scadute_giro():
             # 'inattiva' (48 ore senza uso) e' una prova usata: conta come
             # fatta, come la scaduta. 'annullata' resta per chi non e' mai
             # entrato, che puo' richiederla di nuovo.
-            demo_trials.chiudi(finita['trial_id'], uri,
+            _chiudi_prova(finita['trial_id'], uri,
                                stato='scaduta' if finita['motivo'] in ('scaduta', 'inattiva')
                                else 'annullata')
             root_app.logger.info("[prova] chiusa %s (%s), slot %s liberato",
@@ -599,7 +610,7 @@ def _prova_chiudi_scadute_giro():
                 root_app.logger.exception(
                     "[prova] preparazione dello slot %s per la prova %s fallita",
                     idx_libero, primo['trial_id'])
-                demo_trials.chiudi(primo['trial_id'], demo_pool.get(idx_libero),
+                _chiudi_prova(primo['trial_id'], demo_pool.get(idx_libero),
                                    stato='annullata')
                 break
     except Exception:
@@ -772,7 +783,7 @@ def prova_gratuita():
                                            valori['centro'], valori['referente'])
     except Exception:
         root_app.logger.exception("[prova] attivazione fallita per slot %s", idx)
-        demo_trials.chiudi(esito['trial_id'], uri, stato='annullata')
+        _chiudi_prova(esito['trial_id'], uri, stato='annullata')
         return _rifiuta("Non siamo riusciti a preparare la prova. Riprova fra qualche minuto.")
 
     return render_template(
@@ -920,7 +931,7 @@ def prova_api_verifica():
                                            d.get('centro'), d.get('referente'))
     except Exception:
         root_app.logger.exception("[prova] attivazione dal sito fallita, slot %s", idx)
-        demo_trials.chiudi(esito['trial_id'], demo_pool.get(idx), stato='annullata')
+        _chiudi_prova(esito['trial_id'], demo_pool.get(idx), stato='annullata')
         return _risposta({'ok': False,
                           'errore': 'Non siamo riusciti a preparare la prova. '
                                     'Riprova fra qualche minuto.'}, 500)
@@ -951,7 +962,11 @@ def landing_logout():
 
 @root_app.route('/select-db/<idx>')
 def select_db(idx):
-    if not idx.isdigit() or int(idx) not in pool:
+    # Anche gli slot demo: l'owner e' in tutti i database, demo compresi, e
+    # dalla landing deve poterci entrare. Prima il link c'era ma rimandava
+    # alla landing senza dire niente. Il controllo vero resta quello sotto:
+    # si entra solo dove le credenziali hanno trovato l'utente.
+    if not idx.isdigit() or (int(idx) not in pool and int(idx) not in DEMO_IDX):
         return redirect(url_for('landing_web'))
     idx_int = int(idx)
     # Verifica che l'utente root sia autorizzato a questo negozio
@@ -1699,6 +1714,17 @@ def owner_setup():
                            da_cancellare=_tenant_da_cancellare(),
                            giorni_conservazione=GIORNI_CONSERVAZIONE)
 
+def _nome_slot_demo(idx):
+    """Nome di uno slot della prova nel pannello consumi: demo1, demo2, demo3,
+    cioe' il nome del suo database. Se lo slot e' attivato, il ciclo che lo
+    chiama aggiunge il nome del centro preso da BusinessInfo."""
+    try:
+        nome = (urlparse(demo_pool.get(idx, '')).path or '').strip('/')
+    except Exception:
+        nome = ''
+    return nome or 'demo%d' % (idx - 90)
+
+
 @root_app.route('/owner-setup/monitor')
 def owner_monitor():
     """Pannello consumi: una pagina, i dati arrivano dopo via JSON.
@@ -1747,6 +1773,8 @@ def owner_monitor_dati():
     for idx, uri in {**pool, **demo_pool}.items():
         child = children.get(idx)
         voce = {'idx': idx, 'nome': db_label(uri), 'demo': idx in DEMO_IDX}
+        if voce['demo']:
+            voce['nome'] = _nome_slot_demo(idx)
         if not child:
             voce['errore'] = 'tenant non montato'
             per_tenant.append(voce)
@@ -1756,8 +1784,15 @@ def owner_monitor_dati():
                 from appl.models import BusinessInfo
                 try:
                     bi = BusinessInfo.query.first()
-                    if bi and bi.business_name:
-                        voce['nome'] = bi.business_name
+                    nome_bi = ((bi.business_name or '').strip() if bi else '')
+                    if voce['demo']:
+                        # Slot attivato per una prova: "demo1 - nome del centro".
+                        # Da libero BusinessInfo porta il nome dello slot stesso,
+                        # e allora resta solo "demo1".
+                        if nome_bi and nome_bi.lower() != voce['nome'].lower():
+                            voce['nome'] = '%s - %s' % (voce['nome'], nome_bi)
+                    elif nome_bi:
+                        voce['nome'] = nome_bi
                 except Exception:
                     pass
                 voce.update(usage_monitor.raccogli(giorni=giorni))

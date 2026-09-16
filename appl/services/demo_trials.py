@@ -30,6 +30,7 @@ import hashlib
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 from appl.registry_models import (
     DemoDeroga, DemoSlot, DemoTrial, registry_enabled, registry_session,
@@ -93,6 +94,15 @@ def normalizza_telefono(numero: str | None) -> str | None:
 
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
+def _nome_slot(uri_slot: str | None) -> str:
+    """demo1, demo2, demo3: il nome del database dello slot. E' anche il nome
+    del centro di uno slot libero - mai un nome di fantasia."""
+    try:
+        return (urlparse(uri_slot or '').path or '').strip('/') or 'demo'
+    except Exception:
+        return 'demo'
 
 
 def genera_password(lunghezza: int = 10) -> str:
@@ -393,7 +403,7 @@ def attiva(trial_id: int, uri_slot: str, owner_user=None,
             return {'ok': False, 'errore': 'prova inesistente'}
         if trial.slot_idx is None:
             return {'ok': False, 'errore': 'prova senza slot assegnato'}
-        nome = nome_centro or trial.business_name or 'Centro Estetico Aurora'
+        nome = nome_centro or trial.business_name or _nome_slot(uri_slot)
         email = trial.email
 
     password = genera_password()
@@ -568,7 +578,7 @@ def da_chiudere() -> list[dict]:
 
 
 def chiudi(trial_id: int, uri_slot: str | None = None,
-           stato: str = 'scaduta') -> dict:
+           stato: str = 'scaduta', owner_user=None) -> dict:
     """Chiude la prova e riporta lo slot a 'libero', riseminandolo.
 
     L'ordine conta: prima si segna lo slot come 'da_risemina', poi si semina,
@@ -595,7 +605,14 @@ def chiudi(trial_id: int, uri_slot: str | None = None,
         return {'ok': True, 'slot_idx': slot_idx, 'riseminato': False}
 
     from appl.services.demo_seed import semina
-    semina(uri_slot, reset=True)
+    semina(uri_slot, reset=True, nome_centro=_nome_slot(uri_slot))
+
+    # L'utente owner deve esserci SEMPRE, in tutti i database: la semina azzera
+    # lo schema, quindi va rimesso qui, prima che lo slot torni libero. Prima lo
+    # rimetteva solo attiva(), e fra una prova e l'altra lo slot restava senza
+    # owner (17/09/2026).
+    if owner_user:
+        _aggiungi_owner(uri_slot, owner_user[0], owner_user[1])
 
     with registry_session() as s:
         slot = s.get(DemoSlot, slot_idx)
