@@ -535,13 +535,31 @@ def _utente_demo_id(idx):
         return None
 
 
+_prova_manutenzione_lock = Lock()
+
+
 def _prova_chiudi_scadute():
     """Chiude le prove finite e rimette in circolo gli slot.
 
-    Gira all'apertura della pagina della prova invece che con uno scheduler:
-    e' esattamente il momento in cui serve sapere se c'e' uno slot libero, e
-    non aggiunge un thread che gira a vuoto tutto il giorno.
+    Gira all'apertura della pagina della prova e del pannello owner invece che
+    con uno scheduler: non aggiunge un thread che gira a vuoto tutto il giorno.
+    La sola pagina della prova non bastava: senza visite nessuna prova si
+    chiudeva, e l'owner se le ritrovava nella landing perche' il suo utente
+    resta dentro lo slot fino alla risemina (16/09/2026: due prove scadute
+    l'11/09 ancora aperte).
+
+    Due richieste insieme non devono riseminare lo stesso slot in parallelo:
+    chi arriva secondo salta il giro, il lavoro lo sta gia' facendo il primo.
     """
+    if not _prova_manutenzione_lock.acquire(blocking=False):
+        return
+    try:
+        _prova_chiudi_scadute_giro()
+    finally:
+        _prova_manutenzione_lock.release()
+
+
+def _prova_chiudi_scadute_giro():
     try:
         from appl.services import demo_trials
         for finita in demo_trials.da_chiudere():
@@ -1595,6 +1613,9 @@ def owner_login():
 def owner_setup():
     if not _require_owner_auth():
         return redirect(url_for('landing_web'))
+
+    # Le prove scadute si chiudono anche da qui: vedi _prova_chiudi_scadute.
+    _prova_chiudi_scadute()
 
     tenants = []
     for idx, uri in pool.items():

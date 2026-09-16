@@ -2131,7 +2131,7 @@ Se vedi diversi trattini, il pannello non è rotto — mancano i turni. Inserisc
 
 La ricerca guarda agli <span class="help-strong-dark">ultimi tre mesi</span>, dando la precedenza alle notizie più recenti. Il settore estetico italiano produce poche notizie al giorno: restringere la finestra a pochi giorni avrebbe lasciato il pannello vuoto quasi sempre.
 
-Le notizie vengono cercate <span class="help-strong-dark">automaticamente due volte a settimana</span>, il <span class="help-strong-dark">lunedì</span> e il <span class="help-strong-dark">giovedì</span> mattina, da un assistente automatico che consulta il web e seleziona le fonti affidabili: testate di settore, associazioni di categoria, fonti istituzionali. Restano fuori blog personali, e-commerce e comunicati pubblicitari.
+Le notizie vengono <span class="help-strong-dark">scelte e verificate una per una</span> prima di essere pubblicate: data, fonte e contenuto si controllano sull'articolo originale. Si preferiscono testate di settore, associazioni di categoria e fonti istituzionali; restano fuori blog personali, e-commerce e comunicati pubblicitari.
 
 <span class="help-strong-dark help-subtitle-pill">▸ COME SI LEGGE</span>
 Ogni notizia ha un'etichetta colorata che dice di cosa parla:
@@ -2142,38 +2142,34 @@ Ogni notizia ha un'etichetta colorata che dice di cosa parla:
 
 Il titolo è cliccabile e apre l'articolo originale in una nuova scheda. In fondo al pannello trovi la data dell'ultimo aggiornamento.
 
-<span class="help-strong-dark help-subtitle-pill">▸ AGGIORNARE SUBITO</span>
-Se sei <span class="help-strong-dark">admin o owner</span>, in alto a destra c'è il pulsante con la freccia circolare: fa partire una ricerca immediata senza aspettare lunedì o giovedì. La ricerca può richiedere fino a un minuto.
+<span class="help-strong-dark help-subtitle-pill">▸ PUBBLICARE NOTIZIE NUOVE</span>
+Se sei <span class="help-strong-dark">admin o owner</span>, in alto a destra c'è il pulsante con la matita: apre la pagina <span class="help-strong-dark">Contenuti Report</span>, dove si incollano le notizie. <span class="help-strong-dark">Controlla</span> mostra cosa verrebbe pubblicato senza scrivere niente, <span class="help-strong-dark">Pubblica</span> le mette in pagina.
 
-Ogni ricerca ha un piccolo costo, perché interroga un servizio esterno. Per questo il pulsante <span class="help-strong-dark">non rifà la ricerca se le notizie sono state scaricate da meno di un'ora</span>: te lo dice e basta, senza spendere niente. Se invece il tentativo precedente era fallito, riprova subito — così dopo aver sistemato il problema non devi aspettare.
-
-<span class="help-strong-dark">Aprire la pagina Report non costa mai nulla</span>: le notizie vengono lette dall'archivio, non ricercate.
+Una notizia più vecchia di tre mesi, o senza data, viene scartata da sola: la pagina ti dice quale e perché.
 
 <span class="help-strong-dark help-subtitle-pill">▸ SE IL PANNELLO È VUOTO</span>
-Può capitare che il pannello dica <span class="help-strong-dark">"Nessuna notizia disponibile al momento"</span>. Non c'è niente da fare e niente da segnalare: se dietro c'è un problema tecnico, viene registrato da solo nel <span class="help-strong-dark">riepilogo errori</span> che arriva a chi gestisce il gestionale. Al ricontrollo successivo il pannello si ripopola da sé.
+Può capitare che il pannello dica <span class="help-strong-dark">"Nessuna notizia disponibile al momento"</span>: vuol dire che su questo negozio non è ancora stato pubblicato niente. Non c'è niente da segnalare.
 
-<span class="help-approfondimento-box"><span class="help-approfondimento-label">Approfondimento:</span><span class="help-approfondimento-text"><br>Le notizie sono <span class="help-strong-dark">le stesse per tutti gli istituti</span>: la ricerca viene fatta una volta sola e il risultato viene copiato nel database di ciascuno.<br>Le notizie non sono un parere legale. Prima di prendere decisioni su obblighi o scadenze, verifica sempre sulla fonte originale o con la tua associazione di categoria.</span></span>""",
+<span class="help-approfondimento-box"><span class="help-approfondimento-label">Approfondimento:</span><span class="help-approfondimento-text"><br>Ogni negozio ha il suo archivio: pubblicare da qui aggiorna solo il Report di questo negozio.<br>Le notizie non sono un parere legale. Prima di prendere decisioni su obblighi o scadenze, verifica sempre sulla fonte originale o con la tua associazione di categoria.</span></span>""",
     },
 
     "report_oroscopo": {
         "title": "✨ Report: Oroscopo della settimana",
         "content": """Il pannello <span class="help-strong-dark">OROSCOPO DELLA SETTIMANA</span> è l'unico del Report che non serve a niente, ed è voluto. Dodici segni, tono da rivista in sala d'attesa, battute sul mestiere: la cera, le lampade, la cliente delle tre che arriva alle tre e mezza.
 
-Si rinnova <span class="help-strong-dark">ogni lunedì mattina</span>, così il primo caffè della settimana ha qualcosa da leggere. Scorri l'elenco per trovare il tuo segno.
+Si rinnova <span class="help-strong-dark">una volta a settimana</span>. Scorri l'elenco per trovare il tuo segno.
 
-<span class="help-strong-dark help-subtitle-pill">▸ NESSUN DATO DELLE CLIENTI ESCE DALL'APP</span>
-L'oroscopo è scritto da un assistente automatico, ma <span class="help-strong-dark">non riceve nessun dato dell'anagrafica</span>: né nomi, né numeri, né storico appuntamenti. Conosce solo il nome dell'istituto e la stagione.
+<span class="help-strong-dark help-subtitle-pill">▸ NESSUN DATO DELLE CLIENTI</span>
+L'oroscopo viene scritto <span class="help-strong-dark">fuori dal gestionale</span> e poi pubblicato: nessun dato dell'anagrafica, degli appuntamenti o del negozio viene usato per scriverlo.
 
-Per questo le battute parlano di <span class="help-strong-dark">"la cliente delle tre"</span> o <span class="help-strong-dark">"quella del pacchetto da dieci"</span> e mai di persone vere. Non è una limitazione tecnica, è una scelta: un oroscopo che nomina una cliente in carne e ossa farebbe ridere una persona e sentire osservate tutte le altre.
+Per questo le battute parlano di <span class="help-strong-dark">"la cliente delle tre"</span> o <span class="help-strong-dark">"quella del pacchetto da dieci"</span> e mai di persone vere. È una scelta: un oroscopo che nomina una cliente vera farebbe ridere una persona e sentire osservate tutte le altre.
 
-<span class="help-strong-dark help-subtitle-pill">▸ RISCRIVERLO SUBITO</span>
-Se sei <span class="help-strong-dark">admin o owner</span> hai il pulsante con la freccia circolare: ne scrive uno nuovo senza aspettare lunedì. Come per le notizie, se è stato scritto da <span class="help-strong-dark">meno di un'ora</span> il pulsante non lo rifà — te lo dice e basta, senza spendere nulla.
-
-Aprire il Report invece non costa mai niente: l'oroscopo viene letto dall'archivio, non riscritto.
+<span class="help-strong-dark help-subtitle-pill">▸ PUBBLICARNE UNO NUOVO</span>
+Se sei <span class="help-strong-dark">admin o owner</span> hai il pulsante con la matita: apre la pagina <span class="help-strong-dark">Contenuti Report</span>, dove si incolla l'oroscopo, si controlla e si pubblica.
 
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
-<span class="help-hint-text">Se salta un lunedì (l'app spenta, un problema di rete) il pannello non resta indietro di due settimane: passati otto giorni si riscrive da solo al primo avvio utile, in qualunque giorno.</span>
+<span class="help-hint-text">Se una riga nomina il tuo istituto, la pagina la scarta da sola: lo stesso testo viene letto anche in altri centri.</span>
 </div>""",
     },
 

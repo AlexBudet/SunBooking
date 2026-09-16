@@ -312,12 +312,12 @@ document.addEventListener('DOMContentLoaded', function() {
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
     <span data-bs-toggle="tooltip" data-bs-placement="bottom"
-          title="Notizie su estetica, normativa e solarium raccolte automaticamente due volte a settimana">DAL MONDO BEAUTY</span>
+          title="Notizie su estetica, normativa, solarium e mercato degli ultimi tre mesi">DAL MONDO BEAUTY</span>
     {% if current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
-    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnRefreshNews"
-            data-bs-toggle="tooltip" title="Cerca subito nuove notizie. Di norma si aggiorna da solo il lunedì e il giovedì: se le notizie sono state scaricate da meno di un'ora il pulsante non rifà la ricerca.">
-      <i class="bi bi-arrow-clockwise"></i>
-    </button>
+    <a href="/contenuti-report" class="btn btn-outline-secondary btn-sm"
+       data-bs-toggle="tooltip" title="Pubblica notizie nuove">
+      <i class="bi bi-pencil-square"></i>
+    </a>
     {% endif %}
   </div>
   <div class="news-beauty-list" id="news-beauty-list">
@@ -330,12 +330,12 @@ document.addEventListener('DOMContentLoaded', function() {
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
     <span data-bs-toggle="tooltip" data-bs-placement="bottom"
-          title="L'oroscopo della settimana in versione estetista. Si rinnova ogni lunedì">✨ OROSCOPO DELLA SETTIMANA</span>
+          title="L'oroscopo della settimana in versione estetista">✨ OROSCOPO DELLA SETTIMANA</span>
     {% if current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
-    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnRefreshOroscopo"
-            data-bs-toggle="tooltip" title="Riscrivilo adesso. Di norma si rinnova da solo il lunedì: se è stato scritto da meno di un'ora il pulsante non lo rifà.">
-      <i class="bi bi-arrow-clockwise"></i>
-    </button>
+    <a href="/contenuti-report" class="btn btn-outline-secondary btn-sm"
+       data-bs-toggle="tooltip" title="Pubblica un oroscopo nuovo">
+      <i class="bi bi-pencil-square"></i>
+    </a>
     {% endif %}
   </div>
   <div class="oroscopo-list" id="oroscopo-list">
@@ -5555,10 +5555,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // ---------------------------------------------------------------- TILE 5
-  /* `nota` compare in fondo come riga piccola: serve dopo un refresh manuale
-     non andato a buon fine, per non cancellare le notizie gia' a video solo
-     per dire che non e' stato scaricato niente di nuovo. */
-  function caricaNewsBeauty(nota) {
+  function caricaNewsBeauty() {
     var lista = document.getElementById('news-beauty-list');
     if (!lista) return;
 
@@ -5567,9 +5564,6 @@ document.addEventListener('DOMContentLoaded', function() {
       .then(function (d) {
         var footer = document.getElementById('news-beauty-aggiornato');
         footer.textContent = d.aggiornato ? 'Aggiornato il ' + d.aggiornato : '';
-        if (nota) {
-          footer.textContent = (footer.textContent ? footer.textContent + ' · ' : '') + nota;
-        }
 
         if (!d.rows || !d.rows.length) {
           /* Messaggio neutro per chiunque. Il "dettaglio" tecnico lo manda il
@@ -5606,37 +5600,6 @@ document.addEventListener('DOMContentLoaded', function() {
       })
       .catch(function () {
         lista.innerHTML = '<span class="text-danger">Errore nel caricamento.</span>';
-      });
-  }
-
-  function aggiornaNewsBeauty(btn) {
-    var lista = document.getElementById('news-beauty-list');
-    var iconaOriginale = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-    if (lista) lista.innerHTML = '<span class="text-muted">Ricerca in corso, può richiedere un minuto...</span>';
-
-    var headers = { 'X-Requested-With': 'XMLHttpRequest' };
-    var token = document.querySelector('meta[name="csrf-token"]');
-    if (token) headers['X-CSRFToken'] = token.getAttribute('content');
-
-    fetch('/api/news_beauty/refresh', { method: 'POST', headers: headers })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        /* In ogni caso si ricarica dal database: se lo scan e' andato a buon
-           fine si vedono le notizie nuove, se non e' partito restano quelle di
-           prima. Il motivo finisce come nota piccola in fondo - il pulsante lo
-           vedono solo admin e owner, cioe' chi puo' intervenire. */
-        caricaNewsBeauty(
-          (d && d.ok) ? null : ((d && d.errore) || 'Aggiornamento non riuscito.')
-        );
-      })
-      .catch(function () {
-        caricaNewsBeauty('Aggiornamento non riuscito.');
-      })
-      .finally(function () {
-        btn.disabled = false;
-        btn.innerHTML = iconaOriginale;
       });
   }
 
@@ -5744,7 +5707,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // ---------------------------------------------------------------- TILE 6
-  function caricaOroscopo(nota) {
+  function caricaOroscopo() {
     var lista = document.getElementById('oroscopo-list');
     if (!lista) return;
 
@@ -5753,9 +5716,6 @@ document.addEventListener('DOMContentLoaded', function() {
       .then(function (d) {
         var footer = document.getElementById('oroscopo-aggiornato');
         footer.textContent = d.aggiornato ? 'Settimana del ' + d.aggiornato : '';
-        if (nota) {
-          footer.textContent = (footer.textContent ? footer.textContent + ' · ' : '') + nota;
-        }
 
         if (!d.rows || !d.rows.length) {
           lista.innerHTML = '<span class="text-muted">' +
@@ -5785,31 +5745,6 @@ document.addEventListener('DOMContentLoaded', function() {
       });
   }
 
-  function aggiornaOroscopo(btn) {
-    var lista = document.getElementById('oroscopo-list');
-    var iconaOriginale = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-    if (lista) lista.innerHTML = '<span class="text-muted">Sto consultando le stelle...</span>';
-
-    var headers = { 'X-Requested-With': 'XMLHttpRequest' };
-    var token = document.querySelector('meta[name="csrf-token"]');
-    if (token) headers['X-CSRFToken'] = token.getAttribute('content');
-
-    fetch('/api/oroscopo/refresh', { method: 'POST', headers: headers })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        // Come per le notizie: si ricarica sempre dall'archivio, cosi' un
-        // tentativo a vuoto non cancella l'oroscopo gia' a video.
-        caricaOroscopo((d && d.ok) ? null : ((d && d.errore) || 'Aggiornamento non riuscito.'));
-      })
-      .catch(function () { caricaOroscopo('Aggiornamento non riuscito.'); })
-      .finally(function () {
-        btn.disabled = false;
-        btn.innerHTML = iconaOriginale;
-      });
-  }
-
   // ---------------------------------------------------------------- avvio
   document.addEventListener('DOMContentLoaded', function () {
     collegaPeriodo('#tile-scontrino-medio .btn-scontrino-periodo', caricaScontrinoMedio);
@@ -5826,16 +5761,6 @@ document.addEventListener('DOMContentLoaded', function() {
         caricaAndamentoAnnuale(btn.dataset.test === '1');
       });
     });
-
-    var btnNews = document.getElementById('btnRefreshNews');
-    if (btnNews) {
-      btnNews.addEventListener('click', function () { aggiornaNewsBeauty(btnNews); });
-    }
-
-    var btnOroscopo = document.getElementById('btnRefreshOroscopo');
-    if (btnOroscopo) {
-      btnOroscopo.addEventListener('click', function () { aggiornaOroscopo(btnOroscopo); });
-    }
 
     inizializzaDateNoShow();
 

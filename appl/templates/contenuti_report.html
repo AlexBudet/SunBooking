@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .cr-wrap { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+  .cr-card { background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.08); padding: 20px; margin-bottom: 20px; }
+  .cr-card h2 { font-size: 1.15rem; font-weight: 700; margin: 0 0 4px; }
+  .cr-ultimo { font-size: .85rem; color: #777; margin-bottom: 12px; }
+  .cr-card textarea { width: 100%; min-height: 220px; font-family: Consolas, monospace; font-size: .85rem; }
+  .cr-azioni { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .cr-esito { margin-top: 12px; font-size: .9rem; }
+  .cr-esito ul { margin: 6px 0 0; padding-left: 18px; }
+  .cr-avvisi { color: #9a6700; }
+  .cr-errore { color: #dc3545; }
+  .cr-ok { color: #198754; font-weight: 600; }
+</style>
+
+<div class="cr-wrap">
+  <h1 class="h4 mb-1">Contenuti Report</h1>
+  <p class="text-muted mb-4">
+    Incolla il blocco JSON e premi <strong>Controlla</strong>: vedi cosa verrebbe pubblicato senza scrivere niente.
+    <strong>Pubblica</strong> lo scrive nel database di questo negozio; negli altri negozi va ripetuto.
+  </p>
+
+  <div class="cr-card" data-tipo="news">
+    <h2>📰 Dal mondo beauty</h2>
+    <div class="cr-ultimo">Ultima pubblicazione: {{ ultime_news or 'nessuna' }}</div>
+    <textarea spellcheck="false" placeholder='[{"titolo": "...", "sintesi": "...", "categoria": "normativa", "fonte": "...", "url": "https://...", "data": "AAAA-MM-GG"}]'></textarea>
+    <div class="cr-azioni">
+      <button type="button" class="btn btn-outline-secondary btn-sm cr-controlla">Controlla</button>
+      <button type="button" class="btn btn-primary btn-sm cr-pubblica">Pubblica</button>
+    </div>
+    <div class="cr-esito"></div>
+  </div>
+
+  <div class="cr-card" data-tipo="oroscopo">
+    <h2>✨ Oroscopo della settimana</h2>
+    <div class="cr-ultimo">Ultima pubblicazione: {{ ultimo_oroscopo or 'nessuna' }}</div>
+    <textarea spellcheck="false" placeholder='[{"segno": "Ariete", "testo": "..."}, ...]'></textarea>
+    <div class="cr-azioni">
+      <button type="button" class="btn btn-outline-secondary btn-sm cr-controlla">Controlla</button>
+      <button type="button" class="btn btn-primary btn-sm cr-pubblica">Pubblica</button>
+    </div>
+    <div class="cr-esito"></div>
+  </div>
+
+  <a href="/report" class="btn btn-link px-0">← Torna al Report</a>
+</div>
+
+<script>
+(function () {
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function mostraEsito(card, d, pubblicato) {
+    var box = card.querySelector('.cr-esito');
+    if (!d || !d.ok) {
+      box.innerHTML = '<div class="cr-errore">' + esc((d && d.errore) || 'Operazione non riuscita.') + '</div>';
+      return;
+    }
+    var righe = (d.righe || []).map(function (r) {
+      return r.segno
+        ? '<li><strong>' + esc(r.segno) + '</strong> — ' + esc(r.testo) + '</li>'
+        : '<li><strong>' + esc(r.titolo) + '</strong> · ' + esc(r.categoria) + ' · ' + esc(r.fonte) + ' · ' + esc(r.data) + '</li>';
+    }).join('');
+    var avvisi = (d.avvisi || []).map(function (a) { return '<li>' + esc(a) + '</li>'; }).join('');
+    box.innerHTML =
+      '<div class="cr-ok">' + (pubblicato ? 'Pubblicato (' + esc(d.batch) + ')' : 'Pronto da pubblicare') + ': ' + (d.righe || []).length + ' righe</div>' +
+      '<ul>' + righe + '</ul>' +
+      (avvisi ? '<div class="cr-avvisi mt-2">Avvisi:<ul>' + avvisi + '</ul></div>' : '');
+    if (pubblicato) {
+      card.querySelector('.cr-ultimo').textContent = 'Ultima pubblicazione: adesso';
+    }
+  }
+
+  function invia(card, anteprima, btn) {
+    var headers = { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+    var token = document.querySelector('meta[name="csrf-token"]');
+    if (token) headers['X-CSRFToken'] = token.getAttribute('content');
+    var testoBtn = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = anteprima ? 'Controllo...' : 'Pubblico...';
+    fetch('/api/contenuti-report/pubblica', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({
+        tipo: card.dataset.tipo,
+        testo: card.querySelector('textarea').value,
+        anteprima: anteprima
+      })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { mostraEsito(card, d, !anteprima && d && d.ok); })
+      .catch(function () { mostraEsito(card, null, false); })
+      .finally(function () { btn.disabled = false; btn.textContent = testoBtn; });
+  }
+
+  document.querySelectorAll('.cr-card').forEach(function (card) {
+    var controlla = card.querySelector('.cr-controlla');
+    var pubblica = card.querySelector('.cr-pubblica');
+    controlla.addEventListener('click', function () { invia(card, true, controlla); });
+    pubblica.addEventListener('click', function () { invia(card, false, pubblica); });
+  });
+})();
+</script>
+{% endblock %}

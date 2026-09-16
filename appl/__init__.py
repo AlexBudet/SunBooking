@@ -288,20 +288,12 @@ def create_app(db_uri: str | None = None, tenant_idx=None, is_demo: bool = False
                 db.session.rollback()
                 app.logger.exception("[prepagate] allineamento stato/credito all'avvio fallito")
 
-    # ---- SCAN NOTIZIE BEAUTY (thread interno, due volte a settimana) ----
-    # Il modulo si auto-disattiva se manca ANTHROPIC_API_KEY: in quel caso non
-    # parte nessun thread e non viene fatta nessuna chiamata. Il thread viene
-    # avviato una sola volta dal primo tenant registrato; gli altri si limitano
-    # a registrarsi per ricevere le stesse notizie nel proprio database.
-    # Uno slot demo non si registra: la scansione scriverebbe notizie nel suo
-    # database a ogni giro (connessione + token AI) per un negozio che non
-    # esiste, e sette giorni dopo il database viene comunque azzerato.
-    if not app.config['IS_DEMO']:
-        try:
-            from appl.news_beauty import register_app as _register_news
-            _register_news(app)
-        except Exception:
-            app.logger.exception("[news_beauty] registrazione fallita")
+    # I due pannelli editoriali del Report (notizie dal mondo beauty e oroscopo)
+    # non hanno piu' niente da avviare qui: i contenuti si pubblicano a mano
+    # dalla pagina Contenuti Report. Fino al 16/09/2026 al loro posto partiva un
+    # thread che due volte a settimana interrogava un'API esterna a pagamento e
+    # scriveva in tutti i tenant; l'app non chiama piu' nessun servizio esterno
+    # per questi due pannelli. Vedi appl/contenuti_report.py.
 
     # ---- SECURITY HEADERS ----
     @app.after_request

@@ -1,10 +1,6 @@
 -- ============================================================================
--- beauty_news: notizie dal mondo beauty / estetica / normativa / solarium
--- raccolte due volte a settimana dallo scan automatico (appl/news_beauty.py).
---
--- Le notizie sono identiche per tutti i tenant: lo scan gira UNA sola volta e
--- scrive lo stesso batch nel database di ciascun tenant, cosi' la pagina Report
--- legge sempre e solo dal proprio DB.
+-- beauty_news: notizie dal mondo beauty / estetica / normativa / solarium,
+-- pubblicate a mano dalla pagina Contenuti Report (appl/contenuti_report.py).
 --
 -- Eseguire UNA VOLTA su OGNI database PostgreSQL (suncity, sunexp3, sunbookingdb).
 -- Idempotente: usa IF NOT EXISTS, puoi rilanciarlo senza danni.

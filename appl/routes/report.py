@@ -16,7 +16,6 @@ from collections import defaultdict
 from dotenv import load_dotenv
 
 load_dotenv()
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')  # leggi da .env
 
 def _get_clienti_spesa_aggregato(start, end, limit=None):
     """
@@ -2046,9 +2045,9 @@ def report_saturazione_agenda():
 
 # =============================================================================
 # NOTIZIE DAL MONDO BEAUTY
-# Alimentate dallo scan automatico in appl/news_beauty.py (API di Claude con
-# ricerca web, due volte a settimana). Qui si legge soltanto quanto e' gia'
-# stato salvato in tabella: la pagina Report non chiama mai l'API direttamente.
+# Notizie e oroscopo si pubblicano a mano dalla pagina Contenuti Report
+# (/contenuti-report, solo admin/owner): validazione e scrittura stanno in
+# appl/contenuti_report.py. Qui si legge soltanto quanto e' gia' in tabella.
 # =============================================================================
 
 @report_bp.route('/api/news_beauty')
@@ -2084,17 +2083,7 @@ def api_news_beauty():
     if not ultimo:
         dettaglio = None
         if e_tecnico:
-            try:
-                from appl.news_beauty import stato as news_stato
-                s = news_stato()
-                if not s.get('abilitato'):
-                    dettaglio = 'Scan non attivo: manca ANTHROPIC_API_KEY.'
-                elif s.get('ultimo_errore'):
-                    dettaglio = 'Ultimo tentativo: ' + str(s['ultimo_errore'])
-                else:
-                    dettaglio = 'Scan attivo, nessuna raccolta ancora eseguita.'
-            except Exception:
-                pass
+            dettaglio = 'Nessuna notizia pubblicata: usa la pagina Contenuti Report.'
         return _vuoto(dettaglio)
 
     notizie = (BeautyNews.query
@@ -2253,7 +2242,7 @@ def api_oroscopo():
     """Oroscopo della settimana. Stessa regola delle notizie sui guasti: a
     video un messaggio neutro, il motivo tecnico solo ad admin/owner."""
     from appl.models import Oroscopo
-    from appl.oroscopo import DETTAGLI_SEGNO
+    from appl.contenuti_report import DETTAGLI_SEGNO
 
     user = db.session.get(User, session.get('user_id'))
     e_tecnico = bool(user and getattr(user.ruolo, 'value', None) in ('admin', 'owner'))
@@ -2275,14 +2264,7 @@ def api_oroscopo():
     if not ultimo:
         dettaglio = None
         if e_tecnico:
-            try:
-                from appl.oroscopo import stato as oroscopo_stato
-                s = oroscopo_stato()
-                dettaglio = (s.get('ultimo_errore')
-                             or ('Attivo, non ancora generato.' if s.get('abilitato')
-                                 else 'Non attivo: manca ANTHROPIC_API_KEY.'))
-            except Exception:
-                pass
+            dettaglio = 'Nessun oroscopo pubblicato: usa la pagina Contenuti Report.'
         return _vuoto(dettaglio)
 
     righe = (Oroscopo.query
@@ -2307,35 +2289,76 @@ def api_oroscopo():
     })
 
 
-@report_bp.route('/api/oroscopo/refresh', methods=['POST'])
-def api_oroscopo_refresh():
-    """Rigenera l'oroscopo. Solo admin/owner: ogni chiamata ha un costo."""
+def _e_admin_o_owner():
     user = db.session.get(User, session.get('user_id'))
-    if not user or getattr(user.ruolo, 'value', None) not in ('admin', 'owner'):
+    return bool(user and getattr(user.ruolo, 'value', None) in ('admin', 'owner'))
+
+
+@report_bp.route('/contenuti-report')
+def contenuti_report():
+    """Pagina per pubblicare notizie e oroscopo nel database di questo negozio.
+    Non sta in nessun menu: ci si arriva dal link nei due pannelli del Report,
+    visibile solo ad admin/owner."""
+    if not _e_admin_o_owner():
+        return jsonify({'ok': False, 'errore': 'Non autorizzato'}), 403
+    from appl.models import BeautyNews, Oroscopo
+
+    def _ultimo(modello):
+        try:
+            batch = db.session.query(func.max(modello.scan_batch)).scalar()
+            quando = (db.session.query(func.max(modello.created_at))
+                      .filter(modello.scan_batch == batch).scalar()) if batch else None
+            return quando.strftime('%d/%m/%Y %H:%M') if quando else None
+        except Exception:
+            db.session.rollback()
+            return None
+
+    return render_template('contenuti_report.html',
+                           ultime_news=_ultimo(BeautyNews),
+                           ultimo_oroscopo=_ultimo(Oroscopo))
+
+
+@report_bp.route('/api/contenuti-report/pubblica', methods=['POST'])
+def api_contenuti_report_pubblica():
+    """Valida il blocco incollato e lo scrive come batch nuovo. Con
+    'anteprima': true controlla soltanto e restituisce cosa verrebbe
+    pubblicato, senza scrivere niente."""
+    if not _e_admin_o_owner():
         return jsonify({'ok': False, 'errore': 'Non autorizzato'}), 403
 
-    try:
-        from appl.oroscopo import esegui
-        esito = esegui(force=True)
-    except Exception as exc:
-        current_app.logger.exception("[oroscopo] refresh manuale fallito: %s", exc)
-        return jsonify({'ok': False, 'errore': str(exc)}), 500
+    from appl import contenuti_report as cr
 
-    return jsonify(esito), (200 if esito.get('ok') else 400)
-
-
-@report_bp.route('/api/news_beauty/refresh', methods=['POST'])
-def api_news_beauty_refresh():
-    """Forza uno scan immediato. Solo admin/owner: ogni chiamata ha un costo."""
-    user = db.session.get(User, session.get('user_id'))
-    if not user or getattr(user.ruolo, 'value', None) not in ('admin', 'owner'):
-        return jsonify({'ok': False, 'errore': 'Non autorizzato'}), 403
+    corpo = request.get_json(silent=True) or {}
+    tipo = corpo.get('tipo')
+    anteprima = bool(corpo.get('anteprima'))
 
     try:
-        from appl.news_beauty import esegui_scan
-        esito = esegui_scan(force=True)
-    except Exception as exc:
-        current_app.logger.exception("[news_beauty] refresh manuale fallito: %s", exc)
-        return jsonify({'ok': False, 'errore': str(exc)}), 500
+        dati = cr.carica_json(corpo.get('testo'))
+        if tipo == 'news':
+            elementi, avvisi = cr.valida_notizie(dati)
+            righe = [{'titolo': n['titolo'], 'categoria': n['categoria'],
+                      'fonte': n['fonte'],
+                      'data': n['data_notizia'].strftime('%d/%m/%Y')}
+                     for n in elementi]
+        elif tipo == 'oroscopo':
+            info = BusinessInfo.query.first()
+            elementi, avvisi = cr.valida_oroscopo(
+                dati, info.business_name if info else None)
+            righe = [{'segno': s, 'testo': t} for s, t in elementi]
+        else:
+            return jsonify({'ok': False, 'errore': 'Tipo sconosciuto'}), 400
+    except cr.ContenutoNonValido as exc:
+        return jsonify({'ok': False, 'errore': str(exc)}), 400
 
-    return jsonify(esito), (200 if esito.get('ok') else 400)
+    if anteprima:
+        return jsonify({'ok': True, 'anteprima': True, 'righe': righe, 'avvisi': avvisi})
+
+    try:
+        batch = (cr.pubblica_notizie(elementi) if tipo == 'news'
+                 else cr.pubblica_oroscopo(elementi))
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("[contenuti_report] pubblicazione %s fallita: %s", tipo, exc)
+        return jsonify({'ok': False, 'errore': 'Scrittura nel database non riuscita.'}), 500
+
+    return jsonify({'ok': True, 'batch': batch, 'righe': righe, 'avvisi': avvisi})

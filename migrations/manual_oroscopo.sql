@@ -1,13 +1,9 @@
 -- ============================================================================
--- oroscopo_settimanale: oroscopo in chiave estetista, generato una volta a
--- settimana (il lunedi') dallo stesso thread che raccoglie le notizie.
--- Vedi appl/oroscopo.py.
+-- oroscopo_settimanale: oroscopo in chiave estetista, pubblicato a mano dalla
+-- pagina Contenuti Report (appl/contenuti_report.py).
 --
 -- In tabella c'e' solo il testo per segno: simbolo e periodo dello zodiaco
 -- sono dati fissi e stanno nel codice.
---
--- Come le notizie, e' identico per tutti i tenant: si genera una volta sola e
--- si scrive nel database di ciascuno.
 --
 -- Eseguire UNA VOLTA su OGNI database PostgreSQL (suncity, sunexp3, sunbookingdb).
 -- Idempotente: usa IF NOT EXISTS, puoi rilanciarlo senza danni.

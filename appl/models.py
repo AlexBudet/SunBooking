@@ -913,15 +913,12 @@ class SolariumSession(db.Model):
         return f"<SolariumSession device_id={self.device_id} inizio={self.inizio}>"
 
 class BeautyNews(db.Model):
-    """Notizie dal mondo beauty / estetica / normativa / solarium raccolte due
-    volte a settimana dallo scan automatico (appl/news_beauty.py), che interroga
-    l'API di Claude con la ricerca web attiva.
+    """Notizie dal mondo beauty / estetica / normativa / solarium / mercato,
+    pubblicate a mano dalla pagina Contenuti Report (appl/contenuti_report.py).
+    Ogni tenant ha le sue: la pubblicazione scrive solo nel database del negozio
+    da cui la si fa.
 
-    Le notizie sono le stesse per tutti i tenant: lo scan viene eseguito una
-    sola volta e il risultato viene scritto nel database di ogni tenant, cosi'
-    la pagina Report legge sempre e solo dal proprio DB.
-
-    Ogni scan genera un batch nuovo (scan_batch). Le notizie vecchie restano in
+    Ogni pubblicazione genera un batch nuovo (scan_batch). Le notizie vecchie restano in
     tabella come archivio: il tile mostra soltanto l'ultimo batch."""
     __tablename__ = 'beauty_news'
 
@@ -940,15 +937,11 @@ class BeautyNews(db.Model):
         return f"<BeautyNews {self.scan_batch} {self.titolo[:40]}>"
 
 class Oroscopo(db.Model):
-    """Oroscopo settimanale in chiave estetista, generato una volta a settimana
-    (il lunedi') dallo stesso thread che raccoglie le notizie - vedi
-    appl/oroscopo.py.
+    """Oroscopo settimanale in chiave estetista, pubblicato a mano dalla pagina
+    Contenuti Report (appl/contenuti_report.py).
 
     In tabella finisce solo il testo per segno: simbolo e periodo dello zodiaco
-    sono dati fissi e stanno nel codice, non ha senso salvarli ogni settimana.
-
-    Come le notizie, e' identico per tutti i tenant: si genera una volta sola e
-    si scrive nel database di ciascuno."""
+    sono dati fissi e stanno in appl/contenuti_report.py."""
     __tablename__ = 'oroscopo_settimanale'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
