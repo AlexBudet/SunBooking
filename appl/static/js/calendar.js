@@ -5807,20 +5807,37 @@ window.deleteAppointment = deleteAppointment;
 // Attesa visibile durante l'invio WhatsApp automatico: /calendar/send-whatsapp-auto
 // aspetta la risposta di Unipile (qualche secondo) e senza un segnale l'operatore
 // riclicca o chiude il modal. L'overlay intercetta i click come quello della domanda.
+// Sfondo scuro leggero e riquadro bianco come la domanda che arriva subito dopo:
+// lo schermo bianco pieno con la rotella che gira veniva letto come un errore.
 function mostraAttesaInvioWhatsapp() {
   if (document.getElementById('whatsappSendingOverlay')) return;
+  if (!document.getElementById('whatsappSendingOverlayCss')) {
+    const stile = document.createElement('style');
+    stile.id = 'whatsappSendingOverlayCss';
+    stile.textContent = '@keyframes wsAttesaPunto{0%,80%,100%{opacity:.25;transform:translateY(0)}'
+      + '40%{opacity:1;transform:translateY(-4px)}}'
+      + '#whatsappSendingOverlay .ws-punto{width:9px;height:9px;border-radius:50%;'
+      + 'background:#25D366;display:inline-block;animation:wsAttesaPunto 1.2s ease-in-out infinite;}'
+      + '#whatsappSendingOverlay .ws-punto:nth-child(2){animation-delay:.18s}'
+      + '#whatsappSendingOverlay .ws-punto:nth-child(3){animation-delay:.36s}';
+    document.head.appendChild(stile);
+  }
   const overlay = document.createElement('div');
   overlay.id = 'whatsappSendingOverlay';
   overlay.setAttribute('role', 'status');
   overlay.setAttribute('aria-live', 'polite');
-  overlay.style.cssText = 'position:fixed; inset:0; background:rgba(255,255,255,0.65); z-index:99998; display:flex; align-items:center; justify-content:center;';
+  overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.25); z-index:99998; display:flex; align-items:center; justify-content:center;';
   ['mousedown', 'mouseup', 'click', 'dblclick', 'pointerdown', 'pointerup',
    'touchstart', 'touchend', 'contextmenu'].forEach(function(evento) {
     overlay.addEventListener(evento, function(ev) { ev.stopPropagation(); });
   });
-  overlay.innerHTML = '<div style="text-align:center;">'
-    + '<div class="spinner-border text-primary" aria-hidden="true"></div>'
-    + '<p style="margin-top:15px; font-size:16px; font-weight:500; color:#333;">Invio WhatsApp in corso...</p>'
+  overlay.innerHTML = '<div style="background:#fff; border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,0.25);'
+    + ' padding:26px 34px; max-width:94vw; text-align:center; z-index:99999;">'
+    + '<p style="margin:0; font-size:19px; font-weight:600; color:#222;">Ehi! Aspetta solo un attimo 😊</p>'
+    + '<p style="margin:8px 0 0; font-size:16px; color:#555;">Stiamo inviando il messaggio al cliente. Grazie!</p>'
+    + '<div style="margin-top:16px; display:flex; gap:7px; justify-content:center;" aria-hidden="true">'
+    + '<span class="ws-punto"></span><span class="ws-punto"></span><span class="ws-punto"></span>'
+    + '</div>'
     + '</div>';
   document.body.appendChild(overlay);
 }
