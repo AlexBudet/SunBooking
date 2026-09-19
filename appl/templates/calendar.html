@@ -5294,42 +5294,37 @@ document.addEventListener('DOMContentLoaded', function() {
           </label>
           <div class="cd-section-body" id="cdDateBody"
                style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
-            <!-- Un solo modo di cercare: un intervallo di date. "Giorno" e
-                 "Mese" sono state tolte il 19/09/2026 (mai usate), e "Il prima
-                 possibile" e' diventata un'opzione del campo Da: e' la stessa
-                 cosa (parti da oggi), non un'altra ricerca.
-                 Due spunte speculari: a sinistra apre il Da, a destra chiude
-                 il fino a. Spunta messa = il campo data accanto e' attivo. -->
+            <!-- Un solo modo di cercare: da una data a un'altra. "Giorno" e
+                 "Mese" sono state tolte il 19/09/2026 (mai usate).
+                 Tre comandi in fila, e ognuno dice una cosa sola:
+                   - la spunta "prima disponibilità", tutta a sinistra, dice se
+                     la ricerca ha una FINE. Messa = niente fine, e il campo A
+                     si spegne e si svuota. Non tocca mai il campo Da.
+                   - "Da" e' SEMPRE acceso: da quando cercare.
+                   - "A" si accende cliccandoci sopra (niente casella da
+                     spuntare): al click toglie da sola la spunta di sinistra,
+                     perche' mettere una data di fine e "prima disponibilità"
+                     sono la stessa domanda fatta in due modi opposti. -->
             <div id="cdDateBodyRange" class="cd-date-mode-body"
-                 style="display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <!-- Gruppo "Da + il prima possibile": resta unito su una riga -->
+                 style="display:inline-flex; align-items:center; gap:16px; flex-wrap:wrap;">
+              <div class="form-check form-check-inline mb-0 cd-asap-check"
+                   style="margin:0; padding-left:1.6em;">
+                <input type="checkbox" class="form-check-input"
+                       id="cdDateAsap" checked>
+                <label class="form-check-label cd-sublabel mb-0"
+                       for="cdDateAsap" style="cursor:pointer;">
+                  <i class="bi bi-lightning-charge-fill"></i> prima disponibilità
+                </label>
+              </div>
               <div style="display:inline-flex; align-items:center; gap:6px;
                           flex-wrap:nowrap; white-space:nowrap;">
                 <label class="cd-sublabel mb-0" for="cdDateFrom">Da</label>
-                <div class="form-check form-check-inline mb-0"
-                     style="margin:0; padding-left:1.5em;">
-                  <input type="checkbox" class="form-check-input"
-                         id="cdDateAsap" checked>
-                  <label class="form-check-label cd-sublabel mb-0"
-                         for="cdDateAsap" style="cursor:pointer;">
-                    <i class="bi bi-lightning-charge-fill"></i> il prima possibile
-                  </label>
-                </div>
                 <input type="date" class="form-control form-control-sm"
-                       id="cdDateFrom" style="max-width:160px; flex-shrink:0;" disabled>
-              </div>
-              <!-- Gruppo "fino a + A": resta unito su una riga -->
-              <div style="display:inline-flex; align-items:center; gap:6px;
-                          flex-wrap:nowrap; white-space:nowrap;">
-                <div class="form-check form-check-inline mb-0"
-                     style="margin:0; padding-left:1.5em;">
-                  <input type="checkbox" class="form-check-input"
-                         id="cdDateToEnabled">
-                  <label class="form-check-label cd-sublabel mb-0"
-                         for="cdDateToEnabled" style="cursor:pointer;">fino a</label>
-                </div>
-                <input type="date" class="form-control form-control-sm"
-                       id="cdDateTo" style="max-width:160px; flex-shrink:0;" disabled>
+                       id="cdDateFrom" style="max-width:150px; flex-shrink:0;">
+                <label class="cd-sublabel mb-0" for="cdDateTo">A</label>
+                <input type="date" class="form-control form-control-sm cd-date-spento"
+                       id="cdDateTo" style="max-width:150px; flex-shrink:0;"
+                       title="Clicca per scegliere una data di fine" readonly>
               </div>
             </div>
           </div>
@@ -6016,6 +6011,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 
+/* Campo "A" spento: non disabilitato (un campo disabled non si puo' cliccare,
+   e qui il click e' proprio il modo per accenderlo), ma readonly e in grigio,
+   col cursore che dice "cliccami". Al click si accende e toglie la spunta
+   "prima disponibilità". */
+.cd-date-spento {
+  background: #f3eef1 !important;
+  color: #9b8493 !important;
+  border-style: dashed !important;
+  cursor: pointer;
+}
+.cd-date-spento::-webkit-calendar-picker-indicator { opacity: 0.35; }
+
+/* Spunta "prima disponibilità": e' il comando piu' a sinistra della riga e
+   decide se la ricerca ha una fine. */
+.cd-asap-check .form-check-label { white-space: nowrap; }
+
 /* Intestazione giorno: cliccabile, seleziona/deseleziona l'intera colonna.
    Stesso gesto del nome della fascia sulla riga: una cella ha due soli stati,
    selezionata o no, e header e nome-fascia non fanno altro che applicarlo in
@@ -6699,15 +6710,39 @@ document.addEventListener('DOMContentLoaded', function() {
            String(d.getDate()).padStart(2, '0');
   }
 
-  // "Il prima possibile" spunta: il campo Da si spegne e la ricerca parte da
-  // oggi. Non e' una ricerca diversa, e' solo la data di partenza piu' comune.
+  // La spunta "prima disponibilità" governa SOLO il campo A: messa = la ricerca
+  // non ha una fine, quindi A si svuota e si spegne. Il campo Da resta sempre
+  // acceso e modificabile: "prima disponibilità" vuol dire "il primo posto
+  // libero DA QUELLA DATA in avanti", non per forza da oggi.
   function _cdApplyAsapState() {
-    var asap    = document.getElementById('cdDateAsap');
-    var fromInp = document.getElementById('cdDateFrom');
-    if (!asap || !fromInp) return;
-    fromInp.disabled = asap.checked;
-    fromInp.style.opacity = asap.checked ? '0.5' : '';
-    if (asap.checked) fromInp.value = _cdTodayIso();
+    var asap  = document.getElementById('cdDateAsap');
+    var toInp = document.getElementById('cdDateTo');
+    if (!asap || !toInp) return;
+    if (asap.checked) {
+      toInp.value = '';
+      toInp.readOnly = true;
+      toInp.classList.add('cd-date-spento');
+    } else {
+      toInp.readOnly = false;
+      toInp.classList.remove('cd-date-spento');
+    }
+  }
+
+  // Accende il campo A dal campo stesso (click o fuoco), senza caselle da
+  // spuntare: dare una data di fine e chiedere "prima disponibilità" sono la
+  // stessa domanda in due versi opposti, quindi la spunta si toglie da sola.
+  function _cdAccendiCampoA() {
+    var asap  = document.getElementById('cdDateAsap');
+    var toInp = document.getElementById('cdDateTo');
+    if (!toInp) return;
+    if (asap && asap.checked) {
+      asap.checked = false;
+      _cdApplyAsapState();
+      _cdSyncDateState();
+    }
+    toInp.readOnly = false;
+    toInp.classList.remove('cd-date-spento');
+    try { if (typeof toInp.showPicker === 'function') toInp.showPicker(); } catch (e) {}
   }
 
   function _cdSyncDateState() {
@@ -6717,15 +6752,12 @@ document.addEventListener('DOMContentLoaded', function() {
     var isAsap = !!(asapEl && asapEl.checked);
     var state  = { mode: 'range', asap: isAsap };
 
-    // Da: con "il prima possibile" e' oggi, altrimenti la data scelta.
-    state.from = isAsap
-      ? _cdTodayIso()
-      : (document.getElementById('cdDateFrom').value || '');
-    // Checkbox "fino a": se non tickato, NON includiamo "to" → backend
-    // tratta come "da Da in avanti" (60 giorni dal from).
-    var toEnabled = !!document.getElementById('cdDateToEnabled').checked;
-    state.to      = toEnabled ? (document.getElementById('cdDateTo').value || '') : '';
-    state.to_open = !toEnabled;
+    // Da: sempre quello scritto nel campo (che e' sempre acceso).
+    state.from = document.getElementById('cdDateFrom').value || _cdTodayIso();
+    // A: vale solo se la spunta di sinistra e' tolta. Senza "to" il backend
+    // tratta la ricerca come "da Da in avanti" (60 giorni dal from).
+    state.to      = isAsap ? '' : (document.getElementById('cdDateTo').value || '');
+    state.to_open = !state.to;
     // Niente piu' 'weekdays': i giorni in cui cercare sono UNA cosa sola, le
     // celle spuntate della tabella Orario (vedi _cdSyncOrarioState).
 
@@ -6742,7 +6774,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var st  = window.CD.date || {};
     var out = new Set();
     var i;
-    // "Il prima possibile" o "fino a" non tickato → 60 giorni: ci stanno tutti.
+    // Spunta "prima disponibilità" o campo A vuoto → 60 giorni: ci stanno tutti.
     if (st.asap || !st.to) {
       for (i = 1; i <= 7; i++) out.add(i);
       return out;
@@ -6814,26 +6846,16 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function _cdResetDateSection() {
-    // Default all'apertura del modal: "il prima possibile", senza "fino a".
-    // E' la domanda che si fa davvero al banco ("quando c'e' posto?"); chi
-    // vuole partire da una data toglie la spunta e il campo Da si accende.
-    var today  = _cdTodayIso();
-    var plus14 = _cdDaysFromTodayIso(14);
+    // Default all'apertura del modal: "prima disponibilità" spuntata, Da = oggi,
+    // A vuoto e spento. E' la domanda che si fa davvero al banco ("quando c'e'
+    // posto?"): chi vuole un periodo preciso sposta il Da e clicca sulla A.
+    var today = _cdTodayIso();
 
     document.getElementById('cdDateFrom').value = today;
-    document.getElementById('cdDateTo').value   = plus14;
+    document.getElementById('cdDateTo').value   = '';
 
     var asapRst = document.getElementById('cdDateAsap');
     if (asapRst) asapRst.checked = true;
-
-    // Default: "fino a" NON tickato → ricerca da Da in avanti (open-ended)
-    var toEnabledRst = document.getElementById('cdDateToEnabled');
-    var toInputRst   = document.getElementById('cdDateTo');
-    if (toEnabledRst) toEnabledRst.checked = false;
-    if (toInputRst) {
-      toInputRst.disabled = true;
-      toInputRst.style.opacity = '0.5';
-    }
 
     // Impedisci la selezione di date precedenti a oggi (min attribute).
     // Il browser oscura/rende non cliccabili i giorni passati nel picker.
@@ -7184,7 +7206,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (el) el.addEventListener('change', _cdSyncDateState);
     });
 
-    // Spunta "il prima possibile": spegne il campo Da e parte da oggi
+    // Spunta "prima disponibilità": spegne e svuota SOLO il campo A
     var asapEl = document.getElementById('cdDateAsap');
     if (asapEl) {
       asapEl.addEventListener('change', function() {
@@ -7193,14 +7215,18 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
 
-    // Checkbox "fino a": abilita/disabilita visivamente l'input "A"
-    var toEnabledEl = document.getElementById('cdDateToEnabled');
-    var toInputEl   = document.getElementById('cdDateTo');
-    if (toEnabledEl && toInputEl) {
-      toEnabledEl.addEventListener('change', function() {
-        toInputEl.disabled = !toEnabledEl.checked;
-        toInputEl.style.opacity = toEnabledEl.checked ? '' : '0.5';
-        _cdSyncDateState();
+    // Campo A: si accende cliccandoci sopra (o arrivandoci col tab), non con
+    // una casella da spuntare. Il mousedown precede il focus e vale anche per
+    // il click sull'icona del calendario.
+    var toInputEl = document.getElementById('cdDateTo');
+    if (toInputEl) {
+      ['mousedown', 'focus', 'keydown'].forEach(function(ev) {
+        toInputEl.addEventListener(ev, function(e) {
+          if (!toInputEl.readOnly) return;
+          if (ev === 'keydown' && (e.key === 'Tab' || e.key === 'Shift')) return;
+          e.preventDefault();
+          _cdAccendiCampoA();
+        });
       });
     }
 

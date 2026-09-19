@@ -1653,7 +1653,7 @@ Mostra le configurazioni essenziali del modulo <span class=\"help-strong-dark\">
 
     "calendar_cerca_un_buco": {
     "image": "Agenda_CercaUnBuco.png",
-    "image_caption": "Il pannello <b>Cerca disponibilità</b>: a sinistra cliente, operatore preferito e servizi; a destra l'intervallo di date e la griglia degli orari, dove si spuntano le fasce (Apertura, Mattino, Pausa pranzo, Pomeriggio, Sera, Chiusura) giorno per giorno. Senza spunte cerca in tutti gli orari di apertura.",
+    "image_caption": "Il pannello <b>Cerca disponibilità</b>: a sinistra cliente, operatore preferito e servizi; a destra le date (spunta <b>prima disponibilità</b>, poi <b>Da</b> e <b>A</b>) e la griglia degli orari, dove si spuntano le fasce (Apertura, Mattino, Pausa pranzo, Pomeriggio, Sera, Chiusura) giorno per giorno. Senza spunte cerca in tutti gli orari di apertura.",
     "image_path": "Agenda › badge verde col calendario, in basso a destra",
         "title": "🔍 CERCA UN BUCO: trova subito una disponibilità",
         "content": """Il badge <span class=\"help-strong-dark\">\"Cerca un Buco\"</span> (verde, con icona calendario) si trova nella colonna badge in basso a destra dell'Agenda, sotto al pulsante INFO BOX. Apre il modal <span class=\"help-strong-dark\">Cerca disponibilità</span>: incroci cliente, operatore, servizi, date e fasce orarie e Tosca ti propone gli slot liberi compatibili.
@@ -1673,21 +1673,29 @@ Puoi spuntare uno o più operatori per limitare la ricerca alle loro colonne. Se
 <span class=\"help-strong-dark help-subtitle-pill\">▸ SEZIONE SERVIZIO</span>
 Cerca per nome o tag da 2 caratteri e clicca sui risultati per aggiungerli alla lista. Puoi selezionare <span class=\"help-strong-dark\">fino a 15 servizi</span>: la ricerca propone slot in cui la <span class=\"help-strong-dark\">somma delle durate</span> entra in un buco libero, esattamente come fa il booking web (vedi <span class=\"help-strong-dark\">[[LOGICA SLOT|booking_logica_slot]]</span>).
 
-<span class=\"help-strong-dark help-subtitle-pill\">▸ SEZIONE DATE — 4 modalità</span>
-• <span class=\"help-strong-dark\"><i class=\"bi bi-calendar-day\"></i> Giorno</span>: cerca solo in un giorno specifico
-• <span class=\"help-strong-dark\"><i class=\"bi bi-calendar3\"></i> Mese</span>: scansiona un intero mese
-• <span class=\"help-strong-dark\"><i class=\"bi bi-calendar-range\"></i> Intervallo</span>: imposta \"Da\" e (opzionale) \"fino a\" — utile per finestre lunghe
-• <span class=\"help-strong-dark\"><i class=\"bi bi-lightning-charge-fill\"></i> Il prima possibile</span>: trova la prima disponibilità utile partendo da oggi
+<span class=\"help-strong-dark help-subtitle-pill\">▸ SEZIONE CERCA PRIMA DISPONIBILITÀ</span>
+Tre comandi in fila, da sinistra a destra:
+• <span class=\"help-strong-dark\"><i class=\"bi bi-lightning-charge-fill\"></i> prima disponibilità</span> (la spunta a sinistra): la ricerca <span class=\"help-strong-dark\">non ha una data di fine</span> e ti porta i primi posti liberi che trova. Quando è messa, il campo <span class=\"help-strong-dark\">A</span> è spento e vuoto
+• <span class=\"help-strong-dark\">Da</span>: da quando cercare. È <span class=\"help-strong-dark\">sempre modificabile</span>, anche con la spunta messa: \"prima disponibilità\" vuol dire il primo posto libero <span class=\"help-strong-dark\">da quella data in avanti</span>, e di partenza è oggi
+• <span class=\"help-strong-dark\">A</span>: fino a quando cercare. Si accende <span class=\"help-strong-dark\">cliccandoci sopra</span> — non c'è nessuna casella da spuntare — e al click toglie da sola la spunta di sinistra, perché dare una data di fine e chiedere \"prima disponibilità\" sono la stessa domanda fatta in due modi opposti. Lasciandolo vuoto la ricerca arriva comunque fino a 60 giorni dopo il \"Da\"
+
+Rimettendo la spunta, il campo A si svuota e si spegne; il \"Da\" resta dove l'hai messo.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ SEZIONE ORARIO</span>
-La tabella mostra le fasce orarie (righe) per ogni giorno della settimana (colonne). Spunta solo le caselle delle fasce in cui vuoi cercare. Se <span class=\"help-strong-dark\">non spunti nulla</span>, Tosca cerca in tutto l'orario di apertura del centro. In modalità \"Intervallo\" compare anche una riga di filtri per <span class=\"help-strong-dark\">giorni della settimana</span> (es. solo sabato). Il pulsante <span class=\"help-strong-dark\">Seleziona tutti</span> velocizza l'attivazione di tutte le celle.
+La tabella mostra le fasce orarie (righe) per ogni giorno della settimana (colonne). Ogni casella ha <span class=\"help-strong-dark\">due soli stati</span>: spuntata (ci cerco) o no. Se <span class=\"help-strong-dark\">non spunti nulla</span>, Tosca cerca in tutto l'orario di apertura del centro.
+Per fare prima:
+• click sul <span class=\"help-strong-dark\">nome della fascia</span> (es. Pomeriggio) → spunta o toglie <span class=\"help-strong-dark\">tutta la riga</span>
+• click sul <span class=\"help-strong-dark\">giorno in cima</span> (es. Mar) → spunta o toglie <span class=\"help-strong-dark\">tutta la colonna</span>
+• il pulsante <span class=\"help-strong-dark\">Seleziona tutti</span> accende o spegne l'intera tabella
+Se metti una data nel campo <span class=\"help-strong-dark\">A</span> e il periodo dura meno di una settimana, i giorni che in quel periodo non ci sono proprio restano <span class=\"help-strong-dark\">grigi e non cliccabili</span>: non è una scelta tua, è l'intervallo che non li contiene.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ PRE-COMPILAZIONE DAL NAVIGATOR</span>
-Se nel <span class=\"help-strong-dark\">Navigator Appuntamenti</span> hai già caricato un cliente e uno o più servizi (mini-blocchi), all'apertura del modal vengono <span class=\"help-strong-dark\">pre-compilati</span> automaticamente. Così basta scegliere data e orario per partire.
+Se nel <span class=\"help-strong-dark\">Navigator Appuntamenti</span> hai già caricato un cliente e uno o più servizi, all'apertura del modal vengono <span class=\"help-strong-dark\">pre-compilati</span> automaticamente. Così basta scegliere data e orario per partire.
+Vale anche per i servizi soltanto <span class=\"help-strong-dark\">spuntati nel cerchiolino</span> e non ancora trasformati in mini-blocchi: entrano lo stesso nella ricerca, e restano dove sono — aprire questo pannello non tocca il Navigator. Il badge però <span class=\"help-strong-dark\">lampeggia solo con i mini-blocchi</span> veri: una spunta non confermata non lo fa lampeggiare.
 
 <div class=\"help-hint-box\">
 <span class=\"help-hint-label\">Consiglio:</span>
-<span class=\"help-hint-text\">Per un cliente al telefono che chiede \"il primo posto utile per la ceretta\", usa modalità <span class=\"help-strong-dark\">Il prima possibile</span> con il solo servizio selezionato: in pochi secondi hai la prima slot disponibile. Per appuntamenti ricorrenti (es. solo i sabato) usa <span class=\"help-strong-dark\">Intervallo</span> + filtro giorni della settimana.</span>
+<span class=\"help-hint-text\">Per un cliente al telefono che chiede \"il primo posto utile per la ceretta\", lascia la spunta <span class=\"help-strong-dark\">prima disponibilità</span> e seleziona il solo servizio: in pochi secondi hai la prima slot. Per appuntamenti ricorrenti (es. solo i sabato) clicca sul giorno <span class=\"help-strong-dark\">Sab</span> in cima alla tabella degli orari: selezioni tutte le sue fasce in un colpo.</span>
 </div>""",
     },
 
