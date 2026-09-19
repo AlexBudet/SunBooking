@@ -4176,7 +4176,8 @@ async function inviaWhatsappSolariumInBackground(btn) {
     return;
   }
 
-  const nome = "{{ pacchetto.client_nome|escapejs }}".trim() || 'Cliente';
+  // Solo nome di battesimo nel testo: client_nome e' "Nome Cognome".
+  const nome = "{{ (pacchetto.client_nome_breve or pacchetto.client_nome)|escapejs }}".trim() || 'Cliente';
   const tessera = "{{ pacchetto.numero_tessera|escapejs if pacchetto.numero_tessera else '' }}".trim();
   const residuo = Number({{ pacchetto.credito_residuo or 0 }});
   const sito = (window.BUSINESS_WEBSITE || '').trim();
@@ -4213,8 +4214,9 @@ document.getElementById('btnWhatsapp').addEventListener('click', async function(
   }
 
   
-  // Recupera dati dal pacchetto
-  const clienteNome = "{{ pacchetto.client_nome|escapejs }}";
+  // Recupera dati dal pacchetto. Nel messaggio va SOLO il nome di battesimo:
+  // client_nome sarebbe "Nome Cognome" e il cognome non esce mai su WhatsApp.
+  const clienteNome = "{{ (pacchetto.client_nome_breve or pacchetto.client_nome)|escapejs }}";
   const clienteCellulare = "{{ pacchetto.client_cellulare|escapejs }}";
   const pacchettoNome = "{{ pacchetto.nome|escapejs }}";
   
@@ -4279,7 +4281,8 @@ document.getElementById('btnWhatsapp').addEventListener('click', async function(
   const creditoIniziale = {{ pacchetto.credito_iniziale|default(0, true) }};
   // data_scadenza arriva dalla route gia' formattata come stringa gg/mm/aaaa
   const dataScadenza = "{{ pacchetto.data_scadenza if pacchetto.data_scadenza else '—' }}";
-  const beneficiario = "{{ pacchetto.beneficiario_nome|default(pacchetto.client_nome, true)|escapejs }}";
+  // Anche il beneficiario e' una persona: nel messaggio ci va solo il suo nome.
+  const beneficiario = ("{{ pacchetto.beneficiario_nome|default(pacchetto.client_nome_breve or pacchetto.client_nome, true)|escapejs }}").trim().split(/\s+/)[0] || '';
   const numeroTessera = "{{ pacchetto.numero_tessera|default('', true)|escapejs }}";
   
   const defaultTemplate = isPrepagata 

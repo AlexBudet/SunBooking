@@ -363,6 +363,23 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribut
     }, 120);
   }
 
+  // Contatore delle prenotazioni online (badge sul bottone Web). Si aggiornava
+  // solo ogni 60s e dopo l'associazione: cancellando una prenotazione web il
+  // badge restava col numero vecchio fino al refresh della pagina.
+  // Sta FUORI da scheduleSync apposta: il numero non dipende dal ridisegno dei
+  // blocchi, quindi va rinfrescato anche quando il sync del calendario e'
+  // sospeso. Ritardato di 150ms per contare una volta sola quando si cancellano
+  // piu' blocchi insieme (una prenotazione web e' spesso piu' di un blocco).
+  let badgeWebTimer = null;
+  function scheduleWebBadgeRefresh() {
+    if (badgeWebTimer) clearTimeout(badgeWebTimer);
+    badgeWebTimer = setTimeout(() => {
+      if (typeof window.checkPendingWebAppointments === 'function') {
+        window.checkPendingWebAppointments();
+      }
+    }, 150);
+  }
+
   function isMutationMethod(method) {
     const m = String(method || 'GET').toUpperCase();
     return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE';
@@ -400,6 +417,9 @@ const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribut
       const forzatoAbilitazioni = Boolean(window.__abilRefreshPending) && /\/calendar\/create(?:$|\?)/.test(String(url || ''));
       if ((!syncSuspended || forzatoAbilitazioni) && response && response.ok && isMutationMethod(method) && shouldSyncUrl(url)) {
         scheduleSync();
+      }
+      if (response && response.ok && isMutationMethod(method) && shouldSyncUrl(url)) {
+        scheduleWebBadgeRefresh();
       }
     } catch (_) {}
 
@@ -5899,7 +5919,13 @@ if (!numero) {
   const payload = {
     numero: numero,
     messaggio: "",
-    nome: (appointment && appointment.client_name) || (data && data.client_name) || "",
+    // Solo nome: mai client_name, che e' "Nome Cognome". Il server rilegge
+    // comunque il nome dalla scheda quando arriva client_id (vedi calendar.py,
+    // send-whatsapp-auto): questo e' il primo dei due filtri, non l'unico.
+    nome: (appointment && appointment.client_nome)
+          || (data && data.client_nome)
+          || String((appointment && appointment.client_name) || (data && data.client_name) || "").trim().split(/\s+/)[0]
+          || "",
     client_id: (appointment && appointment.client_id) || (data && data.client_id) || "",
     data: (data && data.data) || (appointment && appointment.appointment_date) || (data && (data.appointment_date || data.date)) || "",
     ora: (data && data.ora) || (appointment && appointment.start_time) || (data && data.start_time) || ""
@@ -9856,7 +9882,10 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
     waBtn.setAttribute('data-appointment-id', appointment.id);
     waBtn.setAttribute('title', 'Invia WhatsApp');
     waBtn.setAttribute('data-bs-toggle', 'tooltip');
-    waBtn.setAttribute('data-client-nome', displayClientName);
+    // Solo il nome di battesimo: da qui esce il {{nome}} del memo WhatsApp.
+    // displayClientName (Nome Cognome) resta per l'etichetta del blocco e
+    // per il link alla scheda, che si leggono in negozio.
+    waBtn.setAttribute('data-client-nome', clientNome || displayClientName);
     waBtn.setAttribute('data-client-cellulare', clientPhone);
     waBtn.setAttribute(
   'data-date',
@@ -14906,6 +14935,10 @@ function checkPendingWebAppointments() {
             console.warn('Check web pending failed', err);
         });
 }
+
+// Esposta esplicitamente: la chiama anche il wrapper di fetch in cima al file
+// (scheduleWebBadgeRefresh), che non puo' contare sullo scope di questa parte.
+window.checkPendingWebAppointments = checkPendingWebAppointments;
 
 // Avvia il controllo al caricamento e poi ogni minuto
 document.addEventListener('DOMContentLoaded', function() {

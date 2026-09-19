@@ -2916,10 +2916,17 @@ def send_whatsapp_auto():
     data_app = data.get('data', '')
     ora = data.get('ora', '')
 
-        # Se nome non è valorizzato, prova a recuperarlo dal DB tramite client_id
-    if not nome and client_id:
+    # NEL MESSAGGIO VA SOLO IL NOME DI BATTESIMO, MAI IL COGNOME.
+    # Il cellulare non e' un recapito verificato (l'OTP della booking va sulla
+    # e-mail): su un numero sbagliato o condiviso - misurati il 19/09/2026: 56
+    # schede su 3648 a Sun City, 437 su 16179 a Sun Express - il cognome dice a
+    # un terzo chi e' il cliente e dove ha un appuntamento. Il nome da solo no.
+    # La scheda cliente vince sempre sul payload: e' esatta (tiene i nomi doppi
+    # tipo "Maria Grazia", che un taglio alla prima parola rovinerebbe) ed e'
+    # l'unico punto che nessuna pagina puo' scavalcare.
+    if client_id:
         client = db.session.get(Client, client_id)
-        if client:
+        if client and (client.cliente_nome or '').strip():
             nome = client.cliente_nome
 
     if not numero:
@@ -4502,15 +4509,19 @@ def api_find_availability():
     if not candidate_operators:
         return jsonify({'results': [], 'count': 0}), 200
 
-    # Cap totale: in ASAP basta mostrare i primi 8 slot trovati (utente
-    # vuole "il prima possibile", non un elenco enorme).
-    _is_asap = (date_state.get('mode') == 'asap')
+    # Cap totale: con "il prima possibile" bastano i primi 8 slot trovati
+    # (l'utente vuole i primi liberi, non un elenco enorme).
+    # Dal 19/09/2026 la UI manda sempre mode='range' con il flag asap: la
+    # vecchia mode='asap' resta letta per non rompere una chiamata vecchia.
+    _legacy_asap = (date_state.get('mode') == 'asap')
+    _is_asap = _legacy_asap or bool(date_state.get('asap'))
     MAX_TOTAL_SLOTS    = 8 if _is_asap else 60
     MAX_PER_COMBO      = 2 if _is_asap else 6
 
-    # In ASAP, ignora il filtro orari (l'utente non sceglie fasce — vogliamo
-    # il primo slot libero qualsiasi ora dello shift)
-    if _is_asap:
+    # Solo la vecchia mode='asap' ignorava le fasce, perche' la sua UI le
+    # disattivava. Ora la tabella Orario resta viva: "il prima possibile, ma
+    # solo di pomeriggio" e' una domanda sensata e va rispettata.
+    if _legacy_asap:
         orari_state = None
 
     # Logging diagnostico per capire perché eventualmente non si trovano slot

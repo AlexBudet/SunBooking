@@ -5294,56 +5294,30 @@ document.addEventListener('DOMContentLoaded', function() {
           </label>
           <div class="cd-section-body" id="cdDateBody"
                style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
-            <!-- 4 pillole: Giorno / Mese / Intervallo / Il prima possibile. -->
-            <div class="btn-group btn-group-sm cd-date-modes" role="group"
-                 aria-label="Modalità di selezione date">
-              <input type="radio" class="btn-check" name="cdDateMode"
-                     id="cdDateModeSingle" value="single">
-              <label class="btn btn-outline-success" for="cdDateModeSingle">
-                <i class="bi bi-calendar-day"></i> Giorno
-              </label>
-
-              <input type="radio" class="btn-check" name="cdDateMode"
-                     id="cdDateModeMonth" value="month">
-              <label class="btn btn-outline-success" for="cdDateModeMonth">
-                <i class="bi bi-calendar3"></i> Mese
-              </label>
-
-              <input type="radio" class="btn-check" name="cdDateMode"
-                     id="cdDateModeRange" value="range" checked>
-              <label class="btn btn-outline-success" for="cdDateModeRange">
-                <i class="bi bi-calendar-range"></i> Intervallo
-              </label>
-
-              <input type="radio" class="btn-check" name="cdDateMode"
-                     id="cdDateModeAsap" value="asap">
-              <label class="btn btn-outline-success" for="cdDateModeAsap">
-                <i class="bi bi-lightning-charge-fill"></i> Il prima possibile
-              </label>
-            </div>
-
-            <!-- Body modalità "single": un singolo date picker -->
-            <div id="cdDateBodySingle" class="cd-date-mode-body"
-                 style="display:none; align-items:center;">
-              <input type="date" class="form-control form-control-sm"
-                     id="cdDateSingle" style="max-width:160px;">
-            </div>
-
-            <!-- Body modalità "month": un month picker -->
-            <div id="cdDateBodyMonth" class="cd-date-mode-body"
-                 style="display:none; align-items:center;">
-              <input type="month" class="form-control form-control-sm"
-                     id="cdDateMonth" style="max-width:160px;">
-            </div>
-
-            <!-- Body modalità "range": Da/A inline + checkbox "fino a".
-                 "fino a" + data "A" sono raggruppati in un wrapper inline-flex
-                 che NON si spezza: restano sempre sulla stessa riga. -->
+            <!-- Un solo modo di cercare: un intervallo di date. "Giorno" e
+                 "Mese" sono state tolte il 19/09/2026 (mai usate), e "Il prima
+                 possibile" e' diventata un'opzione del campo Da: e' la stessa
+                 cosa (parti da oggi), non un'altra ricerca.
+                 Due spunte speculari: a sinistra apre il Da, a destra chiude
+                 il fino a. Spunta messa = il campo data accanto e' attivo. -->
             <div id="cdDateBodyRange" class="cd-date-mode-body"
                  style="display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <label class="cd-sublabel mb-0" for="cdDateFrom">Da</label>
-              <input type="date" class="form-control form-control-sm"
-                     id="cdDateFrom" style="max-width:160px;">
+              <!-- Gruppo "Da + il prima possibile": resta unito su una riga -->
+              <div style="display:inline-flex; align-items:center; gap:6px;
+                          flex-wrap:nowrap; white-space:nowrap;">
+                <label class="cd-sublabel mb-0" for="cdDateFrom">Da</label>
+                <div class="form-check form-check-inline mb-0"
+                     style="margin:0; padding-left:1.5em;">
+                  <input type="checkbox" class="form-check-input"
+                         id="cdDateAsap" checked>
+                  <label class="form-check-label cd-sublabel mb-0"
+                         for="cdDateAsap" style="cursor:pointer;">
+                    <i class="bi bi-lightning-charge-fill"></i> il prima possibile
+                  </label>
+                </div>
+                <input type="date" class="form-control form-control-sm"
+                       id="cdDateFrom" style="max-width:160px; flex-shrink:0;" disabled>
+              </div>
               <!-- Gruppo "fino a + A": resta unito su una riga -->
               <div style="display:inline-flex; align-items:center; gap:6px;
                           flex-wrap:nowrap; white-space:nowrap;">
@@ -5365,7 +5339,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <div class="cd-section">
           <label class="cd-label">
             <i class="bi bi-clock"></i> Orario
-            <span class="cd-label-hint">(tick sui giorni × fasce in cui cercare; orari modificabili)</span>
+            <span class="cd-label-hint">(clicca le celle in cui cercare: giorno × fascia. Il nome della fascia seleziona la riga, il giorno la colonna)</span>
             <button type="button" id="cdOrarioToggleAllBtn"
                     class="btn btn-sm btn-outline-light"
                     style="margin-left:8px; padding:2px 10px; font-size:0.72rem;
@@ -5378,23 +5352,16 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="cd-orario-table-wrap">
               <table class="cd-orario-table" id="cdOrarioTable">
                 <thead>
-                  <!-- Riga filtro giorni-settimana: visibile solo se Date
-                       mode = "Intervallo". Popolata da _cdBuildWeekdayChips. -->
-                  <tr id="cdOrarioFilterRow" class="cd-orario-filter-row"
-                      style="display:none;">
-                    <th colspan="2" class="cd-orario-filter-hint">
-                      <i class="bi bi-funnel"></i> Filtra
-                    </th>
-                    <th data-wd="1"></th><th data-wd="2"></th>
-                    <th data-wd="3"></th><th data-wd="4"></th>
-                    <th data-wd="5"></th><th data-wd="6"></th>
-                    <th data-wd="7"></th>
-                  </tr>
                   <tr>
                     <th class="cd-orario-th-band">Fascia</th>
                     <th class="cd-orario-th-time">Orario</th>
-                    <th>Lun</th><th>Mar</th><th>Mer</th>
-                    <th>Gio</th><th>Ven</th><th>Sab</th><th>Dom</th>
+                    <th class="cd-orario-th-day" data-wd="1">Lun</th>
+                    <th class="cd-orario-th-day" data-wd="2">Mar</th>
+                    <th class="cd-orario-th-day" data-wd="3">Mer</th>
+                    <th class="cd-orario-th-day" data-wd="4">Gio</th>
+                    <th class="cd-orario-th-day" data-wd="5">Ven</th>
+                    <th class="cd-orario-th-day" data-wd="6">Sab</th>
+                    <th class="cd-orario-th-day" data-wd="7">Dom</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -6024,29 +5991,7 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 .cd-wd-chip input { display: none; }
 
-/* Orario "disabilitato" in modalità ASAP (prima disponibilità):
-   l'utente non sceglie fasce, il backend cerca il primo slot libero. */
-.cd-section-body.cd-orario-disabled {
-  opacity: 0.45;
-  pointer-events: none;
-  position: relative;
-}
-.cd-section-body.cd-orario-disabled::after {
-  content: '⚡ Ricerca prima disponibilità — fasce orarie non applicabili';
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(255,255,255,0.95);
-  color: #87647c;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1.5px dashed #b8809d;
-  font-weight: 700;
-  font-size: 0.92rem;
-  pointer-events: none;
-  z-index: 5;
-  white-space: nowrap;
-}
+
 
 /* Tabella Orario */
 .cd-orario-table-wrap {
@@ -6069,49 +6014,19 @@ document.addEventListener('DOMContentLoaded', function() {
   color: #5a3e51;
 }
 
-/* Filter-row: prima riga del thead con i 7 chip "filtra giorni" allineati
-   sopra le colonne giorno della tabella sotto. Visibile solo in mode 'range'. */
-.cd-orario-filter-row th {
-  padding: 4px 3px !important;
-  background: #fbeef3;
-  border-bottom: 2px solid #e9c4d6;
-}
-.cd-orario-filter-row .cd-orario-filter-hint {
-  text-align: right !important;
-  padding-right: 10px !important;
-  color: #87647c;
-  font-style: italic;
-  font-weight: 500;
-  font-size: 0.78rem;
-  white-space: nowrap;
-}
-.cd-orario-filter-row .cd-orario-filter-hint .bi { margin-right: 4px; }
 
-/* Chip filtro giorni-settimana: variante compatta per stare dentro un <th>
-   di larghezza ~60px. Stessa logica click/toggle dei chip originali. */
-.cd-wd-chip-mini {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 4px 0;
-  background: #fff;
-  border: 1px solid #d8c8d0;
-  border-radius: 10px;
+
+/* Intestazione giorno: cliccabile, seleziona/deseleziona l'intera colonna.
+   Stesso gesto del nome della fascia sulla riga: una cella ha due soli stati,
+   selezionata o no, e header e nome-fascia non fanno altro che applicarlo in
+   blocco. (Prima l'header filtrava i giorni e la cella metteva la spunta: due
+   significati diversi sullo stesso giorno.) */
+.cd-orario-th-day {
   cursor: pointer;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #6e4d61;
   user-select: none;
-  transition: background .12s, border-color .12s;
+  transition: background .12s;
 }
-.cd-wd-chip-mini:hover { background: #fce4ec; }
-.cd-wd-chip-mini.cd-wd-checked {
-  background: #87647c;
-  border-color: #5a3e51;
-  color: #fff;
-}
-.cd-wd-chip-mini input { display: none; }
+.cd-orario-th-day:hover { background: #fce4ec; }
 .cd-orario-table th,
 .cd-orario-table td {
   padding: 4px 8px;
@@ -6769,18 +6684,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ── DATE: modalità singolo / intervallo / giorni settimana ────
 
-  // ISO weekday: 1=Lun..7=Dom (come date.weekday()+1 in Python, ma usiamo
-  // il formato isoweekday standard per coerenza con backend Python).
-  var CD_WEEKDAYS = [
-    { n: 1, label: 'Lun' },
-    { n: 2, label: 'Mar' },
-    { n: 3, label: 'Mer' },
-    { n: 4, label: 'Gio' },
-    { n: 5, label: 'Ven' },
-    { n: 6, label: 'Sab' },
-    { n: 7, label: 'Dom' },
-  ];
-
   function _cdTodayIso() {
     var d = new Date();
     return d.getFullYear() + '-' +
@@ -6796,117 +6699,73 @@ document.addEventListener('DOMContentLoaded', function() {
            String(d.getDate()).padStart(2, '0');
   }
 
-  function _cdSetDateMode(mode) {
-    var single = document.getElementById('cdDateBodySingle');
-    var month  = document.getElementById('cdDateBodyMonth');
-    var range  = document.getElementById('cdDateBodyRange');
-    if (single) single.style.display = (mode === 'single') ? 'inline-flex' : 'none';
-    if (month)  month.style.display  = (mode === 'month')  ? 'inline-flex' : 'none';
-    if (range)  range.style.display  = (mode === 'range')  ? 'inline-flex' : 'none';
-    // Filter-row nei thead Orario: visibile in 'range' e 'month'.
-    var filterRow = document.getElementById('cdOrarioFilterRow');
-    if (filterRow) {
-      filterRow.style.display = (mode === 'range' || mode === 'month') ? '' : 'none';
-    }
-    // ASAP: grigia/disabilita TUTTA la sezione Orario (l'utente non sceglie
-    // fasce, parte la ricerca del primo slot libero rispettando solo lo
-    // shift e l'operatore).
-    var orarioBody = document.getElementById('cdOrarioBody');
-    if (orarioBody) {
-      orarioBody.classList.toggle('cd-orario-disabled', mode === 'asap');
-    }
-    _cdSyncDateState();
+  // "Il prima possibile" spunta: il campo Da si spegne e la ricerca parte da
+  // oggi. Non e' una ricerca diversa, e' solo la data di partenza piu' comune.
+  function _cdApplyAsapState() {
+    var asap    = document.getElementById('cdDateAsap');
+    var fromInp = document.getElementById('cdDateFrom');
+    if (!asap || !fromInp) return;
+    fromInp.disabled = asap.checked;
+    fromInp.style.opacity = asap.checked ? '0.5' : '';
+    if (asap.checked) fromInp.value = _cdTodayIso();
   }
 
   function _cdSyncDateState() {
-    // Determina modalità corrente dal radio
-    var checked = document.querySelector('input[name="cdDateMode"]:checked');
-    var mode = checked ? checked.value : 'single';
-    var state = { mode: mode };
+    // Un solo modo: intervallo di date. 'mode' resta nel payload perche' il
+    // backend lo legge, ma non e' piu' una scelta dell'utente.
+    var asapEl = document.getElementById('cdDateAsap');
+    var isAsap = !!(asapEl && asapEl.checked);
+    var state  = { mode: 'range', asap: isAsap };
 
-    // Weekday filter chips (usato in range e month)
-    function _readWeekdayChips() {
-      var nodes = document.querySelectorAll(
-        '#cdOrarioFilterRow .cd-wd-chip-mini.cd-wd-checked'
-      );
-      return Array.prototype.map.call(nodes, function(c) {
-        return parseInt(c.getAttribute('data-wd'), 10);
-      }).sort(function(a, b) { return a - b; });
-    }
+    // Da: con "il prima possibile" e' oggi, altrimenti la data scelta.
+    state.from = isAsap
+      ? _cdTodayIso()
+      : (document.getElementById('cdDateFrom').value || '');
+    // Checkbox "fino a": se non tickato, NON includiamo "to" → backend
+    // tratta come "da Da in avanti" (60 giorni dal from).
+    var toEnabled = !!document.getElementById('cdDateToEnabled').checked;
+    state.to      = toEnabled ? (document.getElementById('cdDateTo').value || '') : '';
+    state.to_open = !toEnabled;
+    // Niente piu' 'weekdays': i giorni in cui cercare sono UNA cosa sola, le
+    // celle spuntate della tabella Orario (vedi _cdSyncOrarioState).
 
-    if (mode === 'single') {
-      state.date = document.getElementById('cdDateSingle').value || '';
-    } else if (mode === 'month') {
-      state.month    = document.getElementById('cdDateMonth').value || '';
-      state.weekdays = _readWeekdayChips();
-    } else if (mode === 'range') {
-      state.from     = document.getElementById('cdDateFrom').value || '';
-      // Checkbox "fino a": se non tickato, NON includiamo "to" → backend
-      // tratta come "da Da in avanti" (60 giorni dal from).
-      var toEnabled  = !!document.getElementById('cdDateToEnabled').checked;
-      state.to       = toEnabled ? (document.getElementById('cdDateTo').value || '') : '';
-      state.to_open  = !toEnabled;
-      state.weekdays = _readWeekdayChips();
-    } else if (mode === 'asap') {
-      // Nessun input data; backend prende oggi → +60gg e ritorna i primi N.
-    }
     window.CD.date = state;
     _cdUpdateOrarioColumnStates();
-  }
-
-  // ISO weekday (1=Lun..7=Dom) di un YYYY-MM-DD; null se invalido
-  function _cdIsoWeekdayOf(iso) {
-    if (!iso || typeof iso !== 'string') return null;
-    var m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (!m) return null;
-    var d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
-    if (isNaN(d.getTime())) return null;
-    var wd = d.getDay(); // 0=Dom..6=Sab
-    return wd === 0 ? 7 : wd;
   }
 
   // Calcola i giorni della settimana attualmente "disponibili" in base allo
   // stato Date corrente: ritorna un Set<int> con valori 1..7.
   function _cdComputeAvailableWeekdays() {
-    var st = window.CD.date || {};
+    // Quali giorni della settimana cadono davvero nell'intervallo scelto.
+    // NON e' una selezione dell'utente: e' un fatto dell'intervallo, e serve a
+    // non far spuntare un giovedi' quando la ricerca copre solo lun-mar.
+    var st  = window.CD.date || {};
     var out = new Set();
-    if (st.mode === 'single') {
-      var wd = _cdIsoWeekdayOf(st.date);
-      if (wd) out.add(wd);
+    var i;
+    // "Il prima possibile" o "fino a" non tickato → 60 giorni: ci stanno tutti.
+    if (st.asap || !st.to) {
+      for (i = 1; i <= 7; i++) out.add(i);
       return out;
     }
-    if (st.mode === 'range' || st.mode === 'month') {
-      // Se l'utente ha selezionato weekdays specifici → solo quelli.
-      if (Array.isArray(st.weekdays) && st.weekdays.length > 0) {
-        st.weekdays.forEach(function(w) { out.add(w); });
-        return out;
-      }
-      // Altrimenti: tutti i 7 giorni sono potenzialmente coperti
-      // (mese = sempre tutti i 7; range ≥7gg = tutti; range <7gg = quelli effettivi)
-      if (st.mode === 'month') {
-        for (var im = 1; im <= 7; im++) out.add(im);
-        return out;
-      }
-      var from = st.from, to = st.to;
-      if (!from || !to) return out;
-      var d1 = new Date(from), d2 = new Date(to);
-      if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return out;
-      if (d2 < d1) { var t = d1; d1 = d2; d2 = t; }
-      var diffDays = Math.round((d2 - d1) / 86400000) + 1;
-      if (diffDays >= 7) {
-        for (var i = 1; i <= 7; i++) out.add(i);
-        return out;
-      }
-      var cur = new Date(d1);
-      while (cur <= d2) {
-        var w = cur.getDay();
-        out.add(w === 0 ? 7 : w);
-        cur.setDate(cur.getDate() + 1);
-      }
+    var from = st.from, to = st.to;
+    if (!from) { for (i = 1; i <= 7; i++) out.add(i); return out; }
+    var d1 = new Date(from), d2 = new Date(to);
+    if (isNaN(d1.getTime()) || isNaN(d2.getTime())) {
+      for (i = 1; i <= 7; i++) out.add(i);
       return out;
     }
-    // Modo sconosciuto: nessun filtro = tutti disponibili
-    for (var k = 1; k <= 7; k++) out.add(k);
+    if (d2 < d1) { var t = d1; d1 = d2; d2 = t; }
+    var diffDays = Math.round((d2 - d1) / 86400000) + 1;
+    if (diffDays >= 7) {
+      for (i = 1; i <= 7; i++) out.add(i);
+      return out;
+    }
+    var cur = new Date(d1);
+    while (cur <= d2) {
+      var w = cur.getDay();
+      out.add(w === 0 ? 7 : w);
+      cur.setDate(cur.getDate() + 1);
+    }
     return out;
   }
 
@@ -6954,49 +6813,19 @@ document.addEventListener('DOMContentLoaded', function() {
     nameCell.classList.toggle('cd-band-all-checked', allChecked);
   }
 
-  function _cdBuildWeekdayChips() {
-    // I chip vivono nella filter-row della tabella Orario (thead) — una <th>
-    // per ogni giorno. Niente <input> interno: lo stato è la classe
-    // .cd-wd-checked sul chip stesso (più robusto, evita il bug "click sullo
-    // span figlio non sempre triggera change sull'input nascosto").
-    var row = document.getElementById('cdOrarioFilterRow');
-    if (!row) return;
-    CD_WEEKDAYS.forEach(function(w) {
-      var th = row.querySelector('th[data-wd="' + w.n + '"]');
-      if (!th) return;
-      th.innerHTML =
-        '<div class="cd-wd-chip-mini" data-wd="' + w.n + '"' +
-        ' role="checkbox" aria-checked="false" tabindex="0">' +
-          '<span>' + w.label + '</span>' +
-        '</div>';
-    });
-    row.querySelectorAll('.cd-wd-chip-mini').forEach(function(chip) {
-      chip.addEventListener('click', function(e) {
-        e.stopPropagation();
-        var isChecked = chip.classList.toggle('cd-wd-checked');
-        chip.setAttribute('aria-checked', isChecked ? 'true' : 'false');
-        _cdSyncDateState();
-      });
-      // Keyboard accessibility: Spazio/Enter toggle (per chi naviga a tastiera)
-      chip.addEventListener('keydown', function(e) {
-        if (e.key === ' ' || e.key === 'Enter') {
-          e.preventDefault();
-          chip.click();
-        }
-      });
-    });
-  }
-
   function _cdResetDateSection() {
-    // Default: modalità "Intervallo" attiva all'apertura del modal, con
-    // range oggi → +14 giorni e TUTTI i 7 giorni della settimana già spuntati
-    // (impostazione di partenza utile: poi l'utente toglie quelli che non vuole).
+    // Default all'apertura del modal: "il prima possibile", senza "fino a".
+    // E' la domanda che si fa davvero al banco ("quando c'e' posto?"); chi
+    // vuole partire da una data toglie la spunta e il campo Da si accende.
     var today  = _cdTodayIso();
     var plus14 = _cdDaysFromTodayIso(14);
 
-    document.getElementById('cdDateSingle').value = today;
-    document.getElementById('cdDateFrom').value   = today;
-    document.getElementById('cdDateTo').value     = plus14;
+    document.getElementById('cdDateFrom').value = today;
+    document.getElementById('cdDateTo').value   = plus14;
+
+    var asapRst = document.getElementById('cdDateAsap');
+    if (asapRst) asapRst.checked = true;
+
     // Default: "fino a" NON tickato → ricerca da Da in avanti (open-ended)
     var toEnabledRst = document.getElementById('cdDateToEnabled');
     var toInputRst   = document.getElementById('cdDateTo');
@@ -7005,33 +6834,16 @@ document.addEventListener('DOMContentLoaded', function() {
       toInputRst.disabled = true;
       toInputRst.style.opacity = '0.5';
     }
-    // Month picker → mese corrente (YYYY-MM)
-    var monthEl = document.getElementById('cdDateMonth');
-    if (monthEl) monthEl.value = today.substring(0, 7);
 
     // Impedisci la selezione di date precedenti a oggi (min attribute).
-    // Il browser oscura/rende non cliccabili i giorni/mesi passati nel picker.
-    var currentMonth = today.substring(0, 7);
-    ['cdDateSingle', 'cdDateFrom', 'cdDateTo'].forEach(function(id) {
+    // Il browser oscura/rende non cliccabili i giorni passati nel picker.
+    ['cdDateFrom', 'cdDateTo'].forEach(function(id) {
       var el = document.getElementById(id);
       if (el) el.min = today;
     });
-    if (monthEl) monthEl.min = currentMonth;
 
-    // Reset radio: intervallo
-    var rangeRadio = document.getElementById('cdDateModeRange');
-    if (rangeRadio) rangeRadio.checked = true;
-
-    // Tutti i chip giorno-settimana checkati (nella filter-row del thead Orario).
-    // Stato = classe .cd-wd-checked, niente più <input> nascosti.
-    document.querySelectorAll('#cdOrarioFilterRow .cd-wd-chip-mini')
-      .forEach(function(chip) {
-        chip.classList.add('cd-wd-checked');
-        chip.setAttribute('aria-checked', 'true');
-      });
-
-    // Mostra il body "range" e la filter-row sopra la tabella
-    _cdSetDateMode('range');
+    _cdApplyAsapState();
+    _cdSyncDateState();
   }
 
   // ── ORARIO: tabella 4 fasce × 7 giorni ────────────────────────
@@ -7186,6 +6998,34 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
 
+    // Wire-up: click sull'intestazione di un giorno → toggle TUTTA la colonna.
+    // Stesso identico stato delle celle (spuntata / non spuntata): l'header non
+    // ha un significato suo, applica in blocco quello che faresti cella per
+    // cella. Si aggancia una volta sola, le <th> non vengono ricostruite.
+    var table = document.getElementById('cdOrarioTable');
+    if (table && !table._cdDayHeadersWired) {
+      table._cdDayHeadersWired = true;
+      table.querySelectorAll('thead th.cd-orario-th-day').forEach(function(th) {
+        th.addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (th.classList.contains('cd-col-disabled')) return;
+          var wd = th.getAttribute('data-wd');
+          var cells = table.querySelectorAll(
+            'tbody td.cd-orario-cell[data-wd="' + wd + '"]:not(.cd-col-disabled)'
+          );
+          if (!cells.length) return;
+          var allChecked = Array.prototype.every.call(cells, function(c) {
+            return c.classList.contains('cd-orario-cell-checked');
+          });
+          cells.forEach(function(c) {
+            c.classList.toggle('cd-orario-cell-checked', !allChecked);
+          });
+          table.querySelectorAll('tbody tr').forEach(_cdUpdateBandAllCheckedClass);
+          _cdSyncOrarioState();
+        });
+      });
+    }
+
     // Applica filtro colonne (in base alla Date corrente) appena costruita
     _cdUpdateOrarioColumnStates();
   }
@@ -7338,23 +7178,20 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     }
 
-    // Date: costruisci chip giorni settimana una volta sola
-    _cdBuildWeekdayChips();
-
-    // Radio modalità date → toggle del body corretto
-    document.querySelectorAll('input[name="cdDateMode"]').forEach(function(r) {
-      r.addEventListener('change', function() {
-        _cdSetDateMode(r.value);
-      });
-    });
-
     // Sync stato sulla modifica di qualunque input data
-    [
-      'cdDateSingle', 'cdDateMonth', 'cdDateFrom', 'cdDateTo'
-    ].forEach(function(id) {
+    ['cdDateFrom', 'cdDateTo'].forEach(function(id) {
       var el = document.getElementById(id);
       if (el) el.addEventListener('change', _cdSyncDateState);
     });
+
+    // Spunta "il prima possibile": spegne il campo Da e parte da oggi
+    var asapEl = document.getElementById('cdDateAsap');
+    if (asapEl) {
+      asapEl.addEventListener('change', function() {
+        _cdApplyAsapState();
+        _cdSyncDateState();
+      });
+    }
 
     // Checkbox "fino a": abilita/disabilita visivamente l'input "A"
     var toEnabledEl = document.getElementById('cdDateToEnabled');
@@ -7999,6 +7836,28 @@ document.addEventListener('DOMContentLoaded', function() {
     };
   }
 
+  // Servizi SPUNTATI nel cerchiolino del Navigator ma non ancora trasformati in
+  // pseudoblocchi (nessun "CREA" premuto). Vivono in una mappa a parte,
+  // _navTickedServicesByContainer, che il click sul cerchiolino tiene
+  // aggiornata e che "CREA (N)" svuota quando li converte.
+  // ⚠️ Deliberatamente NON entrano in _cdReadNavigatorState: quella alimenta il
+  // lampeggio del badge, e una spunta non confermata non deve farlo lampeggiare.
+  // Qui servono solo a riempire il box se l'operatore lo apre lo stesso.
+  function _cdReadTickedServiceIds() {
+    try {
+      if (typeof window._getTickedServiceMap !== 'function') return [];
+      var map = window._getTickedServiceMap('serviceResultsNav');
+      if (!map || !map.size) return [];
+      var out = [];
+      map.forEach(function(svc) {
+        var n = parseInt(svc && svc.id, 10);
+        if (!isNaN(n) && n > 0) out.push(n);
+      });
+      return out;
+    } catch (e) { return []; }
+  }
+  window.CD.readTickedServiceIds = _cdReadTickedServiceIds;
+
   function _cdSetBadgeBlink(on) {
     var badge = document.getElementById('aiSearchAvailBadgeBtn');
     if (!badge) return;
@@ -8098,7 +7957,12 @@ document.addEventListener('DOMContentLoaded', function() {
   // Chiamato dal click sul badge se navigator ha cliente + almeno 1 servizio.
   function _cdPrefillFromNavigator() {
     var st = _cdReadNavigatorState();
-    if (!st.cliente_id || !st.service_ids.length) return false;
+    // Ai servizi gia' diventati pseudoblocchi si sommano quelli solo spuntati:
+    // per chi apre il box sono la stessa intenzione, la differenza e' solo se ha
+    // gia' premuto CREA. Le spunte NON vengono consumate: restano nel Navigator
+    // e diventano pseudoblocchi quando e se l'operatore preme CREA.
+    var idsServizi = st.service_ids.concat(_cdReadTickedServiceIds());
+    if (!st.cliente_id || !idsServizi.length) return false;
 
     // CRITICO: pulisci PRIMA cliente + servizi.
     // Motivo: se l'utente ha già fatto una ricerca precedente, lo state
@@ -8122,7 +7986,7 @@ document.addEventListener('DOMContentLoaded', function() {
       .then(function(rows) {
         var byId = {};
         (rows || []).forEach(function(s) { byId[s.id] = s; });
-        st.service_ids.forEach(function(sid) {
+        idsServizi.forEach(function(sid) {
           var s = byId[sid];
           if (!s) return;
           _cdAddServizio({
@@ -8136,11 +8000,12 @@ document.addEventListener('DOMContentLoaded', function() {
       .catch(function(){});
 
     // Quando il pre-fill arriva dal Navigator, l'intento è "trova subito il
-    // prima slot libero" → seleziono automaticamente il tab ASAP.
-    var asapRadio = document.getElementById('cdDateModeAsap');
-    if (asapRadio) {
-      asapRadio.checked = true;
-      _cdSetDateMode('asap');
+    // primo slot libero" → spunta "il prima possibile" sul campo Da.
+    var asapChk = document.getElementById('cdDateAsap');
+    if (asapChk) {
+      asapChk.checked = true;
+      _cdApplyAsapState();
+      _cdSyncDateState();
     }
     return true;
   }
@@ -8306,7 +8171,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         var n = parseInt(b && b.serviceId, 10);
                         return !isNaN(n) && n > 0;
                       });
-                      return !!(c && hasSvc);
+                      // Anche i soli servizi SPUNTATI (cerchiolino, CREA non
+                      // ancora premuto) valgono come servizi da portare nel box.
+                      // Il badge intanto non lampeggia: quella logica legge
+                      // solo i pseudoblocchi ed e' rimasta com'era.
+                      var hasTicked = !!(window.CD &&
+                        typeof window.CD.readTickedServiceIds === 'function' &&
+                        window.CD.readTickedServiceIds().length > 0);
+                      return !!(c && (hasSvc || hasTicked));
                     })();
     var inst = bootstrap.Modal.getOrCreateInstance(__cdModalEl);
     if (doPrefill) {

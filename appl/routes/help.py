@@ -1310,7 +1310,6 @@ Esempio:
 
 Variabili tipiche:
 • {{nome}}
-• {{cognome}}
 • {{centro}}
 • {{giorni_assenza}}
 • {{totale_visite}}
@@ -2957,7 +2956,6 @@ Per non saturare WhatsApp e ridurre il rischio di blocchi anti-spam, Tosca invia
 <span class="help-strong-dark help-subtitle-pill">▸ VARIABILI DISPONIBILI NEL TEMPLATE</span>
 Nel testo puoi usare:
 • <span class="help-strong-dark">{{nome}}</span> → nome del cliente (capitalizzato)
-• <span class="help-strong-dark">{{cognome}}</span>
 • <span class="help-strong-dark">{{data}}</span> → DD/MM/YYYY
 • <span class="help-strong-dark">{{ora}}</span> → HH:MM del primo blocco
 • <span class="help-strong-dark">{{servizi}}</span> → lista puntata dei servizi del blocco contiguo

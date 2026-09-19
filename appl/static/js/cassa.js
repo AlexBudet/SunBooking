@@ -1891,43 +1891,13 @@ function showPendingModal(key, expectedTotal) {
           nonFiscaleResponse = await res.json();
         }
 
-        // 3. Aggiorna stati appuntamenti
+        // 3. Aggiorna stati appuntamenti: SOLO quelli della bozza stampata
+        //    (vedi apptIdsDaMarcarePagati; le bozze scorporate non si toccano)
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
         const updatePromises = [];
-        const _bozzaRows = (typeof window.getBozzaCorrenteRows === 'function')
-          ? window.getBozzaCorrenteRows()
-          : document.querySelectorAll('.scontrino-row');
-        const _isClonePrint = !!(window.bozzaConfermata && window.bozzaConfermata.classList
-          && window.bozzaConfermata.classList.contains('bozza-clone'));
-        _bozzaRows.forEach(row => {
-          const appointmentId = row.dataset.appointmentId;
-          if (appointmentId) {
-            updatePromises.push(
-              fetch(`/calendar/update_status/${appointmentId}`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(csrf ? { 'X-CSRFToken': csrf } : {})
-                },
-                body: JSON.stringify({ status: 2 })
-              }).catch(()=>{})
-            );
-          }
+        apptIdsDaMarcarePagati().forEach(appointmentId => {
+          updatePromises.push(marcaAppuntamentoPagato(appointmentId, csrf));
         });
-        if (!_isClonePrint && window.originalAppointmentIds && window.originalAppointmentIds.size > 0) {
-          window.originalAppointmentIds.forEach(appointmentId => {
-            updatePromises.push(
-              fetch(`/calendar/update_status/${appointmentId}`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(csrf ? { 'X-CSRFToken': csrf } : {})
-                },
-                body: JSON.stringify({ status: 2 })
-              }).catch(()=>{})
-            );
-          });
-        }
         await Promise.allSettled(updatePromises);
 
         // 4. Pulisci gli ID originali
@@ -2093,38 +2063,13 @@ function showPendingModal(key, expectedTotal) {
     // Il backend marca PAGATO solo se le voci portano appointment_id; quando si modifica
     // la bozza sostituendo un servizio, la nuova voce perde l'apptId originale. Usiamo
     // window.originalAppointmentIds come riferimento autorevole, oltre alle righe correnti.
+    // SOLO la bozza stampata: le altre bozze scorporate restano da pagare.
     // Deve girare PRIMA di resetScontrino, che azzera originalAppointmentIds.
     {
       const _updatePromises = [];
-      document.querySelectorAll('.scontrino-row').forEach(row => {
-        const apptId = row.dataset.appointmentId;
-        if (apptId) {
-          _updatePromises.push(
-            fetch(`/calendar/update_status/${apptId}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-              },
-              body: JSON.stringify({ status: 2 })
-            }).catch(()=>{})
-          );
-        }
+      apptIdsDaMarcarePagati().forEach(apptId => {
+        _updatePromises.push(marcaAppuntamentoPagato(apptId, csrfToken));
       });
-      if (window.originalAppointmentIds && window.originalAppointmentIds.size > 0) {
-        window.originalAppointmentIds.forEach(apptId => {
-          _updatePromises.push(
-            fetch(`/calendar/update_status/${apptId}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-              },
-              body: JSON.stringify({ status: 2 })
-            }).catch(()=>{})
-          );
-        });
-      }
       await Promise.allSettled(_updatePromises);
     }
 
@@ -2277,9 +2222,14 @@ async function proponiWhatsappPrepagata(info, onDone) {
   // Il fetch sotto serve per il numero di telefono e per un nome meglio formattato.
   // MAI usare il nome della carta prepagata come nome cliente.
   const clientInput = document.getElementById('clientSearchInputCassa');
-  let clienteNome = info.titolare
+  // Due nomi diversi apposta: quello COMPLETO resta al riquadro di riepilogo, che
+  // lo legge l'operatore in negozio e deve sapere di chi e' la tessera; nel testo
+  // WhatsApp va SOLO il nome di battesimo (vedi calendar.py, send-whatsapp-auto).
+  const soloNome = v => String(v || '').trim().split(/\s+/)[0] || '';
+  let clienteNomeCompleto = info.titolare
     ? cap(info.titolare)
     : ((clientInput && clientInput.value.trim()) ? cap(clientInput.value.trim()) : 'Cliente');
+  let clienteNome = soloNome(clienteNomeCompleto) || 'Cliente';
   let numero = '';
   if (info.clienteId) {
     try {
@@ -2287,7 +2237,11 @@ async function proponiWhatsappPrepagata(info, onDone) {
       if (res.ok) {
         const data = await res.json();
         if (data && !data.error) {
-          if (data.display_name) clienteNome = data.display_name;
+          // cliente_nome arriva gia' separato dal cognome: niente tagli a mano,
+          // cosi' un "Maria Grazia" resta intero.
+          if (data.display_name) clienteNomeCompleto = data.display_name;
+          if (data.cliente_nome) clienteNome = cap(data.cliente_nome);
+          else if (data.display_name) clienteNome = soloNome(data.display_name);
           numero = data.cliente_cellulare || '';
         }
       }
@@ -2331,7 +2285,7 @@ async function proponiWhatsappPrepagata(info, onDone) {
   const movimenti = movimentiRiepilogoCarta(scalato, caricato, info.descrizione, info.tipo);
 
   const riepilogo = {
-    intestatario: clienteNome,
+    intestatario: clienteNomeCompleto,
     numeroTessera: info.numeroTessera || null,
     creditoPrecedente: residuo + scalato - caricato,
     creditoResiduo: residuo,
@@ -3695,19 +3649,42 @@ function raccogliVociDaRighe(rows) {
   return { voci_fiscali, voci_non_fiscali, hasError };
 }
 
+// Appuntamenti da marcare PAGATO: SOLO quelli della bozza che si sta stampando.
+// Con lo scorporo (DIVIDI) le altre bozze restano nel DOM dentro
+// #bozzeScorporateContainer con le loro righe e i loro data-appointment-id:
+// leggere tutte le .scontrino-row della pagina ingrigirebbe in Agenda anche
+// appuntamenti che nessuno ha pagato (caso misurato il 19/09/2026 su sunexp3).
+function apptIdsDaMarcarePagati() {
+  const ids = new Set();
+  const rows = (typeof window.getBozzaCorrenteRows === 'function')
+    ? window.getBozzaCorrenteRows()
+    : document.querySelectorAll('#scontrinoRowsContainer .scontrino-row');
+  rows.forEach(r => { if (r.dataset.appointmentId) ids.add(String(r.dataset.appointmentId)); });
+  // originalAppointmentIds e' il riferimento autorevole quando una voce viene
+  // sostituita in bozza (la riga nuova perde appointment_id): in Agenda resta
+  // segnato cio' che era PRENOTATO. Vale pero' solo per la bozza originale:
+  // stampando un clone il Set contiene gli appuntamenti rimasti nell'altra.
+  const isClonePrint = !!(window.bozzaConfermata && window.bozzaConfermata.classList
+    && window.bozzaConfermata.classList.contains('bozza-clone'));
+  if (!isClonePrint && window.originalAppointmentIds) {
+    window.originalAppointmentIds.forEach(id => ids.add(String(id)));
+  }
+  return ids;
+}
+
+// Una sola richiesta "questo appuntamento e' pagato" (status 2)
+function marcaAppuntamentoPagato(appointmentId, csrfToken) {
+  return fetch(`/calendar/update_status/${appointmentId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}) },
+    body: JSON.stringify({ status: 2 })
+  }).catch(() => {});
+}
+
 // Aggiorna a "pagato" (status 2) gli appuntamenti della bozza
 async function aggiornaStatiAppuntamentiPagati(csrfToken) {
-  const ids = new Set();
-  document.querySelectorAll('.scontrino-row').forEach(r => { if (r.dataset.appointmentId) ids.add(String(r.dataset.appointmentId)); });
-  if (window.originalAppointmentIds) window.originalAppointmentIds.forEach(id => ids.add(String(id)));
   const proms = [];
-  ids.forEach(id => {
-    proms.push(fetch(`/calendar/update_status/${id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}) },
-      body: JSON.stringify({ status: 2 })
-    }).catch(() => {}));
-  });
+  apptIdsDaMarcarePagati().forEach(id => { proms.push(marcaAppuntamentoPagato(id, csrfToken)); });
   await Promise.allSettled(proms);
 }
 

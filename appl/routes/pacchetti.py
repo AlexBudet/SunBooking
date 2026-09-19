@@ -1102,6 +1102,10 @@ def pacchetto_detail(id):
         'id': pacchetto.id,
         'client_id': pacchetto.client_id,
         'client_nome': f"{capitalize_name(pacchetto.client.cliente_nome)} {capitalize_name(pacchetto.client.cliente_cognome)}" if pacchetto.client else '',
+        # Solo il nome di battesimo, per i messaggi WhatsApp: nel testo che esce
+        # dal negozio il cognome non ci va mai (vedi calendar.py, send-whatsapp-auto).
+        # Preso dal campo del DB e non tagliato a mano, cosi' "Maria Grazia" resta intero.
+        'client_nome_breve': capitalize_name(pacchetto.client.cliente_nome) if pacchetto.client else '',
         'client_cellulare': pacchetto.client.cliente_cellulare if pacchetto.client else '',
         'nome': pacchetto.nome,
         'tipo': pacchetto.tipo.value if pacchetto.tipo else 'Servizi',

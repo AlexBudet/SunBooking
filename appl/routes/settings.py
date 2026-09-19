@@ -4104,7 +4104,10 @@ def marketing_send_whatsapp():
         messaggio = template
         for segnaposto, valore in (
                 ('{{nome}}', client_data.get('nome', '')),
-                ('{{cognome}}', client_data.get('cognome', '')),
+                # Il cognome NON esce su WhatsApp (vedi calendar.py, send-whatsapp-auto):
+                # il segnaposto non e' piu' offerto dalla pagina, e se resta scritto a
+                # mano in un vecchio template sparisce invece di stampare il cognome.
+                ('{{cognome}}', ''),
                 ('{{giorni_assenza}}', str(client_data.get('giorni_assenza', '0'))),
                 ('{{totale_visite}}', str(client_data.get('totale_visite', '0'))),
                 ('{{totale_speso}}', str(client_data.get('totale_speso', '0'))),
