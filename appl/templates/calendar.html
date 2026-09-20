@@ -7672,7 +7672,12 @@ document.addEventListener('DOMContentLoaded', function() {
                   return Promise.resolve(
                     inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfTok)
                   ).then(function() {
-                    try { alert('Messaggio WhatsApp inviato!'); } catch(_) {}
+                    // Restituita, non solo chiamata: il redirect in coda
+                    // (_goToAgenda) deve aspettare la chiusura del riquadro,
+                    // com'era quando qui c'era un alert() bloccante.
+                    if (typeof window.avvisaWhatsappInviato === 'function') {
+                      return window.avvisaWhatsappInviato();
+                    }
                   }).catch(function(){});
                 }
               })

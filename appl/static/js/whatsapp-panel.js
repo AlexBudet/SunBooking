@@ -11,6 +11,82 @@
 //   movimenti        [{ etichetta, importo, verso: '+' | '-' }]
 // Tutto in stili inline, come il resto del pannello: gira su tre pagine
 // diverse (Agenda, Cassa, scheda pacchetto) e non dipende da un CSS suo.
+// Conferma "messaggio inviato": e' lo STESSO riquadro che la Cassa mostra dopo
+// la stampa dello scontrino - riquadro bianco al centro dello schermo, spunta
+// verde, conto alla rovescia e pulsante Ok - cosi' i due esiti si somigliano e
+// compaiono nello stesso punto. Prima era un alert() del browser, che Chrome
+// disegna attaccato al bordo alto della finestra mentre il messaggio di attesa
+// sta al centro: due riquadri per la stessa azione, in due posti diversi.
+// Sulla pagina Cassa delega alla funzione originale (showSuccessPopup di
+// cassa.js), cosi' le due non possono divergere; in Agenda e nella scheda
+// pacchetto, dove cassa.js non e' caricato, disegna lo stesso riquadro.
+function showWhatsappSentPopup(messaggio, onClose) {
+  const testo = messaggio || 'Messaggio WhatsApp inviato!';
+  const DURATA = 5000;
+
+  if (typeof window.showSuccessPopup === 'function') {
+    window.showSuccessPopup(testo, DURATA, onClose || null);
+    return;
+  }
+
+  const esistente = document.getElementById('successPopupOverlay');
+  if (esistente) esistente.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'successPopupOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
+
+  const popup = document.createElement('div');
+  popup.style.cssText = 'background:#fff;padding:30px 50px;border-radius:12px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.3);max-width:400px;';
+
+  const icona = document.createElement('div');
+  icona.innerHTML = '<i class="bi bi-check-circle-fill" style="font-size:48px;color:#28a745;"></i>';
+  popup.appendChild(icona);
+
+  const riga = document.createElement('p');
+  riga.style.cssText = 'margin:15px 0 20px;font-size:18px;font-weight:500;';
+  riga.textContent = testo;
+  popup.appendChild(riga);
+
+  const conto = document.createElement('small');
+  conto.style.cssText = 'color:#888;';
+  conto.textContent = `Chiusura automatica in ${Math.ceil(DURATA / 1000)} secondi...`;
+  popup.appendChild(conto);
+
+  const btnOk = document.createElement('button');
+  btnOk.className = 'btn btn-success mt-3 d-block w-100';
+  btnOk.textContent = 'Ok';
+  popup.appendChild(btnOk);
+
+  overlay.appendChild(popup);
+  // Stesso motivo del pannello qui sotto: l'overlay e' figlio di <body> e senza
+  // questo blocco i click arrivano al calendario sottostante.
+  ['mousedown', 'mouseup', 'click', 'dblclick', 'pointerdown', 'pointerup',
+   'touchstart', 'touchend', 'contextmenu'].forEach(function(evento) {
+    overlay.addEventListener(evento, function(ev) { ev.stopPropagation(); });
+  });
+  document.body.appendChild(overlay);
+
+  let restanti = Math.ceil(DURATA / 1000);
+  const tic = setInterval(function() {
+    restanti--;
+    if (restanti > 0) conto.textContent = `Chiusura automatica in ${restanti} secondi...`;
+    else clearInterval(tic);
+  }, 1000);
+
+  let chiuso = false;
+  function chiudi() {
+    if (chiuso) return;
+    chiuso = true;
+    clearInterval(tic);
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    if (typeof onClose === 'function') onClose();
+  }
+  btnOk.onclick = chiudi;
+  setTimeout(chiudi, DURATA);
+}
+window.showWhatsappSentPopup = showWhatsappSentPopup;
+
 function costruisciRiquadroRiepilogo(dati) {
   const eur = (v) => '€ ' + Number(v || 0).toLocaleString('it-IT', {
     minimumFractionDigits: 2,
@@ -217,7 +293,7 @@ function showWhatsappAutoSendPanel(payload) {
   document.body.appendChild(overlay);
   if (textarea) setTimeout(() => textarea.focus(), 50);
 
-  function cleanup() {
+  function cleanup(opzioni) {
     document.removeEventListener('keydown', onKey);
     // Rimozione differita di un tick: se si toglie l'overlay mentre il click è
     // ancora in corso, chi più avanti nella catena usa elementFromPoint trova
@@ -231,6 +307,10 @@ function showWhatsappAutoSendPanel(payload) {
     // Fires on ANY chiusura del pannello (invio, annulla, invio manuale, Esc): utile a chi
     // ha aperto il pannello per riprendere il proprio flusso solo dopo che l'operatore ha
     // deciso, indipendentemente dall'esito.
+    // Chi ha inviato con successo rimanda l'onClose a dopo la conferma: cosi' il
+    // passo successivo (es. la carta dopo, o il popup dello scontrino in Cassa)
+    // non si apre sopra al riquadro "messaggio inviato".
+    if (opzioni && opzioni.rimandaOnClose) return;
     if (typeof payload.onClose === 'function') payload.onClose();
   }
   function onKey(e) {
@@ -296,9 +376,11 @@ function showWhatsappAutoSendPanel(payload) {
       if (!resp.ok || json.error) {
         throw new Error(json.error || `Errore ${resp.status}`);
       }
-      cleanup();
+      cleanup({ rimandaOnClose: true });
       if (typeof payload.onSent === 'function') payload.onSent();
-      alert('Messaggio WhatsApp inviato.');
+      showWhatsappSentPopup('Messaggio WhatsApp inviato!', function() {
+        if (typeof payload.onClose === 'function') payload.onClose();
+      });
     } catch (err) {
       console.error('Invio WhatsApp automatico fallito', err);
       sendBtn.disabled = false;

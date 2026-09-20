@@ -5861,6 +5861,23 @@ function mostraAttesaInvioWhatsapp() {
     + '</div>';
   document.body.appendChild(overlay);
 }
+// Conferma "inviato": stesso riquadro della Cassa dopo lo scontrino, al centro
+// dello schermo come il messaggio di attesa qui sopra. Si chiude da sola dopo 5
+// secondi o subito col pulsante Ok. Restituisce una Promise cosi' chi la chiama
+// puo' aspettarla con await, com'era con alert(): il codice che segue (redirect,
+// pulizia del Navigator) deve partire dopo che l'operatore ha visto l'esito.
+function avvisaWhatsappInviato(messaggio) {
+  return new Promise(function(risolvi) {
+    if (typeof window.showWhatsappSentPopup === 'function') {
+      window.showWhatsappSentPopup(messaggio || 'Messaggio WhatsApp inviato!', risolvi);
+    } else {
+      alert(messaggio || 'Messaggio WhatsApp inviato!');
+      risolvi();
+    }
+  });
+}
+window.avvisaWhatsappInviato = avvisaWhatsappInviato;
+
 function nascondiAttesaInvioWhatsapp() {
   const overlay = document.getElementById('whatsappSendingOverlay');
   if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
@@ -7413,7 +7430,7 @@ async function _navSessionMaybeAskWhatsapp() {
       ora: sess.firstOra,
       servizi: sess.servizi
     }, csrfToken);
-    alert("Messaggio WhatsApp inviato!");
+    await avvisaWhatsappInviato();
   }
 }
 window._navSessionMaybeAskWhatsapp = _navSessionMaybeAskWhatsapp;
@@ -9074,7 +9091,7 @@ else if (window.pacchettoSelezionato && window.pacchettoSelezionato.sedute_dispo
             ora: oraPerWhatsapp,
             servizi: tuttiServiziCreati
         }, csrfToken);
-        alert("Messaggio WhatsApp inviato!");
+        await avvisaWhatsappInviato();
     }
     // Pulisci gli accumulatori
     window._createdServicesForWhatsapp = [];
@@ -9339,7 +9356,7 @@ return;
                             ora: oraMsg || (('0' + hour).slice(-2) + ':' + ('0' + minute).slice(-2)),
                             servizi: servizi
                         }, csrfToken);
-                        alert("Messaggio WhatsApp inviato!");
+                        await avvisaWhatsappInviato();
                     }
                     window._navSession = null; // già chiesto qui: nessun debito residuo
 
@@ -9603,7 +9620,7 @@ Promise.all(requests)
       ora: oraMsg || (('0' + hour).slice(-2) + ':' + ('0' + minute).slice(-2)),
       servizi: servizi
     }, csrfToken);
-    alert("Messaggio WhatsApp inviato!");
+    await avvisaWhatsappInviato();
   }
   window._navSession = null; // già chiesto qui (e navigator svuotato per intero): nessun debito residuo
 
@@ -14358,19 +14375,19 @@ try {
     try { sendResult = await chiediInvioWhatsappAuto(); } catch { sendResult = false; }
     if (sendResult === true) {
       await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
-      alert('Messaggio WhatsApp inviato!');
+      await avvisaWhatsappInviato();
     } else if (sendResult !== 'back' && typeof chiediInvioWhatsappNavigator === 'function') {
       const navSend = await chiediInvioWhatsappNavigator();
       if (navSend === true) {
         await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
-        alert('Messaggio WhatsApp inviato!');
+        await avvisaWhatsappInviato();
       }
     }
   } else if (typeof chiediInvioWhatsappNavigator === 'function' && typeof inviaWhatsappAutoSeRichiesto === 'function') {
     const navSend = await chiediInvioWhatsappNavigator();
     if (navSend === true) {
       await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
-      alert('Messaggio WhatsApp inviato!');
+      await avvisaWhatsappInviato();
     }
   }
 } catch (whErr) {
@@ -15395,19 +15412,19 @@ async function associaClienteBooking(appointmentId, clientId, bookingData, simil
           try { sendResult = await chiediInvioWhatsappAuto(); } catch { sendResult = false; }
           if (sendResult === true) {
             await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
-            alert('Messaggio WhatsApp inviato!');
+            await avvisaWhatsappInviato();
           } else if (sendResult !== 'back' && typeof chiediInvioWhatsappNavigator === 'function') {
             const navSend = await chiediInvioWhatsappNavigator();
             if (navSend === true) {
               await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
-              alert('Messaggio WhatsApp inviato!');
+              await avvisaWhatsappInviato();
             }
           }
         } else if (typeof chiediInvioWhatsappNavigator === 'function' && typeof inviaWhatsappAutoSeRichiesto === 'function') {
           const navSend = await chiediInvioWhatsappNavigator();
           if (navSend === true) {
             await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
-            alert('Messaggio WhatsApp inviato!');
+            await avvisaWhatsappInviato();
           }
         }
       } catch (whErr) {
@@ -15484,19 +15501,19 @@ async function creaClienteDaBooking(bookingData, appointmentId) {
         try { sendResult = await chiediInvioWhatsappAuto(); } catch { sendResult = false; }
         if (sendResult === true) {
           await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
-          alert('Messaggio WhatsApp inviato!');
+          await avvisaWhatsappInviato();
         } else if (sendResult !== 'back' && typeof chiediInvioWhatsappNavigator === 'function') {
           const navSend = await chiediInvioWhatsappNavigator();
           if (navSend === true) {
             await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
-            alert('Messaggio WhatsApp inviato!');
+            await avvisaWhatsappInviato();
           }
         }
       } else if (typeof chiediInvioWhatsappNavigator === 'function' && typeof inviaWhatsappAutoSeRichiesto === 'function') {
         const navSend = await chiediInvioWhatsappNavigator();
         if (navSend === true) {
           await inviaWhatsappAutoSeRichiesto(null, whatsappData, csrfToken);
-          alert('Messaggio WhatsApp inviato!');
+          await avvisaWhatsappInviato();
         }
       }
     } catch (whErr) {
