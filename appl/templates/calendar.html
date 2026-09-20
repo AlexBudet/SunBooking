@@ -626,7 +626,7 @@
     box-shadow: 0 4px 18px rgba(135, 100, 124, 0.12);
     overflow: hidden;
     /* sopra l'header sticky (20000) e sopra i blocchi che sbordano in
-       orizzontale, ma sotto navigator (23001) e colonna badge (99990) */
+       orizzontale, ma sotto navigator (23001) e colonna badge (24000) */
     z-index: 21000;
   }
 }
@@ -4636,8 +4636,15 @@ document.addEventListener('DOMContentLoaded', function() {
      useranno z-index >= 99997). -->
 <!-- La posizione ORIZZONTALE non e' inline ma nel foglio di stile qui sotto:
      deve seguire il bordo destro dell'agenda, non quello della finestra. -->
+<!-- z-index 24000: sopra l'header sticky (20000), il pannello laterale (21000)
+     e il navigator (23001), ma SOTTO ogni finestra di dialogo (i modal di questa
+     pagina partono da 25000). Prima era 99990 e i badge finivano sopra ai modal:
+     si notava con poche operatrici, dove la colonna e' ancorata al bordo destro
+     dell'agenda e quindi cade in mezzo allo schermo, sopra il modal delle
+     prenotazioni online. I pannelli Info e Monitor lampade restano sopra (99997)
+     come prima, che e' giusto: li apre il badge stesso. -->
 <div id="aiBadgeColumn"
-     style="position:fixed; bottom:24px; z-index:99990;
+     style="position:fixed; bottom:24px; z-index:24000;
             display:flex; flex-direction:column; gap:10px;
             align-items:center;">
 
@@ -8246,6 +8253,30 @@ document.addEventListener('DOMContentLoaded', function() {
     if (__badgeColumn) __badgeColumn.style.display = 'flex';
   });
 });
+
+// Rete di sicurezza per TUTTE le finestre di dialogo: finche' ce n'e' una
+// aperta la colonna badge sparisce. Lo z-index a 24000 basta per i modal di
+// questa pagina, che dichiarano 25000 o piu', ma non per quelli che non
+// dichiarano niente: Bootstrap li mette a 1055, cioe' sotto ai badge.
+// Gli eventi di Bootstrap risalgono fino a document, quindi un solo aggancio
+// copre anche i modal creati dopo.
+// Il contatore serve per i modal aperti uno sopra l'altro: chiudendo quello
+// sopra, i badge devono restare nascosti finche' resta aperto quello sotto.
+(function badgeSempreSottoAiModal() {
+  var aperti = 0;
+  function colonna() { return document.getElementById('aiBadgeColumn'); }
+  document.addEventListener('show.bs.modal', function() {
+    aperti++;
+    var c = colonna();
+    if (c) c.style.display = 'none';
+  });
+  document.addEventListener('hidden.bs.modal', function() {
+    aperti = Math.max(0, aperti - 1);
+    if (aperti > 0) return;
+    var c = colonna();
+    if (c) c.style.display = 'flex';
+  });
+})();
 </script>
 
 {% endblock %}
