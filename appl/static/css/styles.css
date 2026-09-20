@@ -1106,6 +1106,49 @@ td {
     display: none !important;
 }
 
+/* ── BLOCCHI FERMI MENTRE SE NE MUOVE UNO ─────────────────────────────
+   Durante un drag o un resize il mouse passa sopra ad altri blocchi e questi
+   si "svegliano": compare la loro barra popup e i comandi diventano cliccabili,
+   proprio mentre si sta trascinando. Con la classe sul <body> (la mette e la
+   toglie calendar.js, vedi segnalaBloccoInMovimento) le tre regole qui sopra
+   vengono neutralizzate per TUTTI i blocchi finche' dura la pressione.
+
+   I selettori sono gli stessi della rivelazione, con davanti il body: cosi' la
+   specificita' e' piu' alta di una classe e vincono per forza, senza trucchi.
+   Senza !important non basterebbe, perche' le regole che rivelano la barra ce
+   l'hanno: qui pero' e' un foglio di stile, non uno stile inline messo dal JS
+   sulle barre - quella strada aveva rotto l'apertura al primo click in touch. */
+body.blocco-in-movimento .appointment-block:hover:not(.disable-popup):not(.cut-mode-active):not(.note-off):not(.off) .popup-buttons,
+body.blocco-in-movimento .appointment-block.active-popup:not(.cut-mode-active):not(.note-off):not(.off) .popup-buttons,
+body.blocco-in-movimento .appointment-block:not(.cut-mode-active):not(.note-off):not(.off) .popup-buttons:hover {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Il WhatsApp laterale ha regole sue, in due punti diversi del file (una con
+   :not(.status-2) e una senza): vanno ricalcate tutte e quattro, altrimenti
+   resta l'unico pulsante che continua a comparire mentre si trascina. */
+body.blocco-in-movimento .appointment-block:hover:not(.disable-popup):not(.cut-mode-active) .btn-popup.whatsapp-btn,
+body.blocco-in-movimento .appointment-block.active-popup:not(.cut-mode-active) .btn-popup.whatsapp-btn,
+body.blocco-in-movimento .appointment-block:hover:not(.disable-popup):not(.status-2):not(.cut-mode-active) .btn-popup.whatsapp-btn,
+body.blocco-in-movimento .appointment-block.active-popup:not(.status-2):not(.cut-mode-active) .btn-popup.whatsapp-btn {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* Gli altri comandi che vivono sul blocco non si nascondono (sparirebbero a
+   meta' trascinamento), ma smettono di rispondere: un rilascio del mouse
+   finito per caso sopra a uno di essi non deve fare niente. */
+body.blocco-in-movimento .appointment-block .my-spia,
+body.blocco-in-movimento .appointment-block .no-show-button,
+body.blocco-in-movimento .appointment-block .delete-icon,
+body.blocco-in-movimento .appointment-block .client-info-link,
+body.blocco-in-movimento .appointment-block .note-popup {
+  pointer-events: none !important;
+}
+
 /* Aggiunta di una classe per il contenuto centrale non cliccabile */
 .appointment-content {
     flex-grow: 1;

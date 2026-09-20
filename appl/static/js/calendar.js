@@ -1792,6 +1792,27 @@ document.addEventListener('DOMContentLoaded', initPseudoBlockSelection);
 // caricamento della pagina (o dopo l'ultima modifica) arriva secondi dopo,
 // spesso proprio durante il drag - ed e' il caso segnalato.
 // Finche' c'e' un drag o un resize in corso il refresh si mette in coda.
+// Mentre si trascina o si ridimensiona un blocco, gli ALTRI blocchi che il mouse
+// attraversa non devono svegliarsi: niente barra popup che compare, niente
+// comandi cliccabili. Lo spegnimento e' tutto in CSS (styles.css, "blocchi fermi
+// mentre se ne muove uno"): qui si mette e si toglie solo la classe sul <body>.
+// Sul body e non sui singoli blocchi apposta: nessuno stile inline sulle barre,
+// che e' la strada che in passato aveva rotto l'apertura al primo click in touch.
+function segnalaBloccoInMovimento(attivo) {
+  try {
+    document.body.classList.toggle('blocco-in-movimento', !!attivo);
+  } catch (_) {}
+}
+window.segnalaBloccoInMovimento = segnalaBloccoInMovimento;
+
+// Rete di sicurezza: qualunque cosa succeda durante la pressione (un'eccezione,
+// un percorso di uscita che non passa dai punti qui sotto), al rilascio del dito
+// o del mouse i blocchi tornano interattivi. In cattura, cosi' gira comunque
+// prima dei gestori che chiudono drag e resize.
+['mouseup', 'touchend', 'touchcancel'].forEach(function(evento) {
+  document.addEventListener(evento, function() { segnalaBloccoInMovimento(false); }, true);
+});
+
 function calendarRefreshDaRimandare() {
   return !!(window._isDraggingBlock || window._isResizingBlock);
 }
@@ -4208,6 +4229,7 @@ function startCustomDragFromHandle(block, e) {
   if (!block) return;
   customDragging = true;
   window._isDraggingBlock = true;
+  segnalaBloccoInMovimento(true);
   if (typeof window.clearCalendarHighlights === 'function') window.clearCalendarHighlights();
 
   // Se il blocco fa parte di un macro‑blocco, usiamo il contenitore del gruppo
@@ -4315,6 +4337,7 @@ document.addEventListener('mouseup', async function(e) {
   if (!customDragging) return;
   customDragging = false;
   window._isDraggingBlock = false;
+  segnalaBloccoInMovimento(false);
   if (!wasDragged) return;
 
   // Nascondi il blocco trascinato e tutti i blocchi che coprono il cursore,
@@ -5483,6 +5506,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function stopResize() {
     window._isResizingBlock = false;
+    segnalaBloccoInMovimento(false);
     if (!currentBlock) return;
     currentBlock.classList.remove('resizing');
 
@@ -5597,6 +5621,7 @@ document.querySelectorAll('.selectable-cell').forEach(cell => {
       e.stopPropagation();
 
       window._isResizingBlock = true;
+      segnalaBloccoInMovimento(true);
       if (typeof window.clearCalendarHighlights === 'function') window.clearCalendarHighlights();
 
       currentBlock = e.target.parentElement;
