@@ -4245,6 +4245,7 @@ function startCustomDragFromHandle(block, e) {
   }
 
   customDraggedBlock.style.setProperty('z-index', '9999', 'important');
+  portaCellaInPrimoPiano(customDraggedBlock);
   wasDragged = false;
   customDragStartX = e.clientX;
   customDragStartY = e.clientY;
@@ -4338,6 +4339,11 @@ document.addEventListener('mouseup', async function(e) {
   customDragging = false;
   window._isDraggingBlock = false;
   segnalaBloccoInMovimento(false);
+  // Il 9999 e' roba del trascinamento: finisce con lui. Senza, un drop che non
+  // ridisegna la colonna (drag annullato, blocco rimesso dov'era) lascerebbe il
+  // blocco sopra a tutti fino al primo hover successivo.
+  if (customDraggedBlock) customDraggedBlock.style.removeProperty('z-index');
+  rimettiCellaGiu();
   if (!wasDragged) return;
 
   // Nascondi il blocco trascinato e tutti i blocchi che coprono il cursore,
@@ -5507,6 +5513,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function stopResize() {
     window._isResizingBlock = false;
     segnalaBloccoInMovimento(false);
+    rimettiCellaGiu();
     if (!currentBlock) return;
     currentBlock.classList.remove('resizing');
 
@@ -5622,6 +5629,7 @@ document.querySelectorAll('.selectable-cell').forEach(cell => {
 
       window._isResizingBlock = true;
       segnalaBloccoInMovimento(true);
+      portaCellaInPrimoPiano(e.target.parentElement);
       if (typeof window.clearCalendarHighlights === 'function') window.clearCalendarHighlights();
 
       currentBlock = e.target.parentElement;
@@ -6621,6 +6629,10 @@ document.addEventListener('DOMContentLoaded', function() {
   // Desktop: hover apre/chiude i popup
 document.querySelectorAll('.appointment-block').forEach(block => {
   block.addEventListener('mouseenter', function() {
+    // Mentre si trascina o si ridimensiona, l'hover non tocca niente: questo
+    // percorso (Navigator con pseudoblocchi) scrive z-index 11940, che
+    // scavalcherebbe il 9999 del blocco in movimento.
+    if (bloccoInMovimento()) return;
     if (block.hidePopupTimeout) {
       clearTimeout(block.hidePopupTimeout);
       block.hidePopupTimeout = null;
@@ -6659,6 +6671,7 @@ document.querySelectorAll('.appointment-block').forEach(block => {
     }
   });
   block.addEventListener('mouseleave', function(evt) {
+    if (bloccoInMovimento()) return;   // vedi il mouseenter qui sopra
     if (block.hidePopupTimeout) {
       clearTimeout(block.hidePopupTimeout);
       block.hidePopupTimeout = null;
@@ -6788,7 +6801,60 @@ function isNavigatorCutActionButton(btn) {
   return btn.classList.contains('taglia') || btn.classList.contains('sposta') || btn.classList.contains('touch-top-cut');
 }
 
+// Durante un drag o un resize l'hover non deve mettere becco: apriva il popup
+// del blocco sotto al cursore e - solo se in quella cella c'era UN SOLO blocco -
+// gli dava z-index 9999, mentre l'uscita dal blocco precedente glielo toglieva.
+// Il risultato era che il blocco trascinato passava sopra o sotto agli altri a
+// seconda di quanti blocchi ci fossero nella loro cella e di dove fosse entrato
+// il cursore. Qui si spegne la sorgente: mentre si muove qualcosa, lo z-index lo
+// decide solo chi trascina (startCustomDragFromHandle, 9999).
+// "Sempre in primo piano" non si ottiene col numero sul blocco: lo z-index vale
+// solo DENTRO il contesto di impilamento in cui vive l'elemento. I blocchi stanno
+// dentro le celle della tabella, e basta che una cella diventi un contesto suo
+// (o che due blocchi finiscano a pari numero, dove decide l'ordine nel DOM)
+// perche' il 9999 non basti piu'.
+// Qui si alza la CELLA che contiene il blocco trascinato: diventa lei un contesto
+// di impilamento sopra a tutte le altre celle, e tutto quello che c'e' dentro -
+// blocco compreso - passa davanti a qualunque altro blocco della giornata,
+// qualunque numero abbiano. Al rilascio la cella torna com'era.
+var _cellaInPrimoPiano = null;
+function portaCellaInPrimoPiano(elemento) {
+  try {
+    const cella = elemento && elemento.closest ? elemento.closest('td') : null;
+    if (!cella) return;
+    if (_cellaInPrimoPiano && _cellaInPrimoPiano !== cella) rimettiCellaGiu();
+    if (cella.__zPrecedente === undefined) {
+      cella.__zPrecedente = cella.style.zIndex || '';
+    }
+    // 19900: sopra QUALUNQUE numero che l'agenda sa mettere su un blocco o su una
+    // cella - blocchi 1-2, hover da JS 9999, barre popup 10000, taglia/copia
+    // 11940, celle .highlight 19000 e soprattutto il **19500 che il CSS da' al
+    // blocco sotto al cursore** - e sotto l'intestazione sticky delle colonne
+    // (20000), il navigator (23001) e i modal (25000): il blocco trascinato passa
+    // davanti a tutta l'agenda ma non sopra ai pannelli.
+    cella.style.setProperty('z-index', '19900', 'important');
+    _cellaInPrimoPiano = cella;
+  } catch (_) {}
+}
+function rimettiCellaGiu() {
+  try {
+    const cella = _cellaInPrimoPiano;
+    _cellaInPrimoPiano = null;
+    if (!cella) return;
+    if (cella.__zPrecedente) cella.style.setProperty('z-index', cella.__zPrecedente);
+    else cella.style.removeProperty('z-index');
+    delete cella.__zPrecedente;
+  } catch (_) {}
+}
+window.portaCellaInPrimoPiano = portaCellaInPrimoPiano;
+window.rimettiCellaGiu = rimettiCellaGiu;
+
+function bloccoInMovimento() {
+  return !!(window._isDraggingBlock || window._isResizingBlock);
+}
+
 function openDesktopPopupForBlock(block) {
+  if (bloccoInMovimento()) return;
   if (!block || block.classList.contains('disable-popup')) return;
 
   resetAppointmentPopupInlineStyles(block);
@@ -6837,6 +6903,10 @@ function openDesktopPopupForBlock(block) {
 
 function closeDesktopPopupForBlock(block, relatedTarget) {
   if (!block) return;
+  // Stessa ragione di openDesktopPopupForBlock: resetAppointmentPopupInlineStyles
+  // qui sotto fa removeProperty('z-index'), che cancella anche il 9999 del blocco
+  // trascinato (removeProperty toglie pure i valori messi con !important).
+  if (bloccoInMovimento()) return;
 
   if (block.hidePopupTimeout) {
     clearTimeout(block.hidePopupTimeout);
@@ -6880,6 +6950,15 @@ document.addEventListener('mouseout', function(e) {
   const popup = e.target.closest('.popup-buttons');
   const block = popup ? popup.closest('.appointment-block') : e.target.closest('.appointment-block');
   if (!block) return;
+
+  // Simmetrico al mouseover qui sopra: 'mouseout' sale, quindi scatta anche solo
+  // passando dal corpo del blocco a un suo figlio (maniglia, contenuto, barra).
+  // Il mouseover in quel caso esce subito col suo guard, questo invece resettava
+  // tutto - z-index compreso - e non lo rimetteva piu' nessuno. Non e' un'uscita
+  // dal blocco: e' un movimento interno, e va ignorato.
+  const _dentroLoStessoBlocco = e.relatedTarget && e.relatedTarget.closest
+    && e.relatedTarget.closest('.appointment-block') === block;
+  if (_dentroLoStessoBlocco) return;
 
   if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
     const related = e.relatedTarget;

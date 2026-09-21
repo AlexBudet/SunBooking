@@ -986,6 +986,18 @@ td {
     z-index: 19500 !important;
 }
 
+/* ...ma NON mentre si trascina o si ridimensiona un blocco. Il 19500 qui sopra
+   scatta col semplice passaggio del mouse, quindi durante un trascinamento il
+   blocco che passa per caso sotto al cursore scavalcava quello trascinato: da
+   fuori sembrava che il trascinato "perdesse la precedenza" e la riprendesse
+   muovendo ancora. E' CSS puro, per questo nessun guard in JS lo fermava.
+   Mentre qualcosa si muove il comando e' uno solo: la cella del blocco
+   trascinato, alzata da portaCellaInPrimoPiano(). */
+body.blocco-in-movimento .appointment-block:hover:not(.cut-mode-active),
+body.blocco-in-movimento .appointment-block.active-popup:not(.cut-mode-active) {
+    z-index: 1 !important;
+}
+
 /* Variabili e layout della barra popup sopra al blocco */
 .appointment-block {
   position: relative;           /* necessario per top assoluto */
