@@ -2046,14 +2046,16 @@ def report_saturazione_agenda():
 # =============================================================================
 # NOTIZIE DAL MONDO BEAUTY
 # Notizie e oroscopo si pubblicano a mano dalla pagina Contenuti Report
-# (/contenuti-report, solo admin/owner): validazione e scrittura stanno in
-# appl/contenuti_report.py. Qui si legge soltanto quanto e' gia' in tabella.
+# (/contenuti-report, solo owner) UNA VOLTA PER TUTTI i negozi, nel registro
+# centrale: validazione, scrittura e lettura stanno in appl/contenuti_report.py.
+# Le tabelle del negozio sono solo il ripiego se il registro non ha niente.
 # =============================================================================
 
 @report_bp.route('/api/news_beauty')
 def api_news_beauty():
     """
-    Ultimo batch di notizie salvato per questo tenant.
+    Ultimo batch di notizie: quello comune del registro, altrimenti quello
+    rimasto nel database di questo tenant.
 
     Regola sulla comunicazione dei guasti: all'utente finale il tile dice
     soltanto che al momento non ci sono notizie. Credito esaurito, chiave
@@ -2062,6 +2064,22 @@ def api_news_beauty():
     puo' intervenire, nel campo 'dettaglio' visibile solo ad admin/owner.
     """
     from appl.models import BeautyNews
+    from appl.contenuti_report import contenuti_comuni
+
+    comuni = contenuti_comuni('news')
+    if comuni:
+        aggiornato = comuni['aggiornato']
+        return jsonify({
+            'rows': [{
+                'titolo': n['titolo'],
+                'sintesi': n['sintesi'],
+                'categoria': n['categoria'],
+                'fonte': n['fonte'],
+                'url': n['url'],
+                'data': n['data_notizia'].strftime('%d/%m/%Y') if n['data_notizia'] else '',
+            } for n in comuni['righe']],
+            'aggiornato': aggiornato.strftime('%d/%m/%Y %H:%M') if aggiornato else None,
+        })
 
     user = db.session.get(User, session.get('user_id'))
     e_tecnico = bool(user and getattr(user.ruolo, 'value', None) in ('admin', 'owner'))
@@ -2242,7 +2260,20 @@ def api_oroscopo():
     """Oroscopo della settimana. Stessa regola delle notizie sui guasti: a
     video un messaggio neutro, il motivo tecnico solo ad admin/owner."""
     from appl.models import Oroscopo
-    from appl.contenuti_report import DETTAGLI_SEGNO
+    from appl.contenuti_report import DETTAGLI_SEGNO, contenuti_comuni
+
+    def _riga(segno, testo):
+        extra = DETTAGLI_SEGNO.get(segno, {})
+        return {'segno': segno, 'simbolo': extra.get('simbolo', '★'),
+                'periodo': extra.get('periodo', ''), 'testo': testo}
+
+    comuni = contenuti_comuni('oroscopo')
+    if comuni:
+        aggiornato = comuni['aggiornato']
+        return jsonify({
+            'rows': [_riga(r['segno'], r['testo']) for r in comuni['righe']],
+            'aggiornato': aggiornato.strftime('%d/%m/%Y') if aggiornato else None,
+        })
 
     user = db.session.get(User, session.get('user_id'))
     e_tecnico = bool(user and getattr(user.ruolo, 'value', None) in ('admin', 'owner'))
@@ -2272,15 +2303,7 @@ def api_oroscopo():
              .order_by(Oroscopo.ordine.asc(), Oroscopo.id.asc())
              .all())
 
-    rows = []
-    for r in righe:
-        extra = DETTAGLI_SEGNO.get(r.segno, {})
-        rows.append({
-            'segno': r.segno,
-            'simbolo': extra.get('simbolo', '★'),
-            'periodo': extra.get('periodo', ''),
-            'testo': r.testo,
-        })
+    rows = [_riga(r.segno, r.testo) for r in righe]
 
     aggiornato = righe[0].created_at if righe else None
     return jsonify({
@@ -2289,41 +2312,36 @@ def api_oroscopo():
     })
 
 
-def _e_admin_o_owner():
+def _e_owner():
+    """Solo l'owner: quello che si pubblica qui compare in TUTTI i negozi,
+    quindi non puo' deciderlo l'admin di un negozio."""
     user = db.session.get(User, session.get('user_id'))
-    return bool(user and getattr(user.ruolo, 'value', None) in ('admin', 'owner'))
+    return bool(user and getattr(user.ruolo, 'value', None) == 'owner')
 
 
 @report_bp.route('/contenuti-report')
 def contenuti_report():
-    """Pagina per pubblicare notizie e oroscopo nel database di questo negozio.
-    Non sta in nessun menu: ci si arriva dal link nei due pannelli del Report,
-    visibile solo ad admin/owner."""
-    if not _e_admin_o_owner():
+    """Pagina per pubblicare notizie e oroscopo per tutti i negozi, nel
+    registro centrale. Non sta in nessun menu: ci si arriva dal link nei due
+    pannelli del Report, visibile solo all'owner. Da qualunque negozio la si
+    apra, pubblica per tutti."""
+    if not _e_owner():
         return jsonify({'ok': False, 'errore': 'Non autorizzato'}), 403
-    from appl.models import BeautyNews, Oroscopo
+    from appl.contenuti_report import ultime_pubblicazioni
 
-    def _ultimo(modello):
-        try:
-            batch = db.session.query(func.max(modello.scan_batch)).scalar()
-            quando = (db.session.query(func.max(modello.created_at))
-                      .filter(modello.scan_batch == batch).scalar()) if batch else None
-            return quando.strftime('%d/%m/%Y %H:%M') if quando else None
-        except Exception:
-            db.session.rollback()
-            return None
-
+    ultime_news, ultimo_oroscopo, errore_registro = ultime_pubblicazioni()
     return render_template('contenuti_report.html',
-                           ultime_news=_ultimo(BeautyNews),
-                           ultimo_oroscopo=_ultimo(Oroscopo))
+                           ultime_news=ultime_news,
+                           ultimo_oroscopo=ultimo_oroscopo,
+                           errore_registro=errore_registro)
 
 
 @report_bp.route('/api/contenuti-report/pubblica', methods=['POST'])
 def api_contenuti_report_pubblica():
-    """Valida il blocco incollato e lo scrive come batch nuovo. Con
-    'anteprima': true controlla soltanto e restituisce cosa verrebbe
-    pubblicato, senza scrivere niente."""
-    if not _e_admin_o_owner():
+    """Valida il blocco incollato e lo scrive come batch nuovo nel registro,
+    per tutti i negozi. Con 'anteprima': true controlla soltanto e restituisce
+    cosa verrebbe pubblicato, senza scrivere niente."""
+    if not _e_owner():
         return jsonify({'ok': False, 'errore': 'Non autorizzato'}), 403
 
     from appl import contenuti_report as cr
@@ -2341,9 +2359,10 @@ def api_contenuti_report_pubblica():
                       'data': n['data_notizia'].strftime('%d/%m/%Y')}
                      for n in elementi]
         elif tipo == 'oroscopo':
+            # Il testo va in tutti i negozi: non deve nominarne nessuno.
             info = BusinessInfo.query.first()
-            elementi, avvisi = cr.valida_oroscopo(
-                dati, info.business_name if info else None)
+            nomi = cr.nomi_dei_negozi() + ([info.business_name] if info else [])
+            elementi, avvisi = cr.valida_oroscopo(dati, nomi)
             righe = [{'segno': s, 'testo': t} for s, t in elementi]
         else:
             return jsonify({'ok': False, 'errore': 'Tipo sconosciuto'}), 400
@@ -2356,9 +2375,12 @@ def api_contenuti_report_pubblica():
     try:
         batch = (cr.pubblica_notizie(elementi) if tipo == 'news'
                  else cr.pubblica_oroscopo(elementi))
+    except cr.RegistroNonDisponibile as exc:
+        return jsonify({'ok': False, 'errore': str(exc)}), 503
     except Exception as exc:
-        db.session.rollback()
         current_app.logger.exception("[contenuti_report] pubblicazione %s fallita: %s", tipo, exc)
-        return jsonify({'ok': False, 'errore': 'Scrittura nel database non riuscita.'}), 500
+        return jsonify({'ok': False, 'errore': 'Scrittura nel registro centrale non riuscita: '
+                        'niente pubblicato. Le tabelle ci sono? '
+                        '(registry/06_contenuti_report.sql)'}), 500
 
     return jsonify({'ok': True, 'batch': batch, 'righe': righe, 'avvisi': avvisi})

@@ -913,10 +913,11 @@ class SolariumSession(db.Model):
         return f"<SolariumSession device_id={self.device_id} inizio={self.inizio}>"
 
 class BeautyNews(db.Model):
-    """Notizie dal mondo beauty / estetica / normativa / solarium / mercato,
-    pubblicate a mano dalla pagina Contenuti Report (appl/contenuti_report.py).
-    Ogni tenant ha le sue: la pubblicazione scrive solo nel database del negozio
-    da cui la si fa.
+    """Notizie dal mondo beauty / estetica / normativa / solarium / mercato.
+    SOLO RIPIEGO: dal 24/09/2026 le notizie si pubblicano una volta per tutti
+    i negozi nel registro centrale (contenuto_news, appl/contenuti_report.py)
+    e questa tabella non si scrive piu'. Il Report la legge solo se il registro
+    non ha niente o non risponde.
 
     Ogni pubblicazione genera un batch nuovo (scan_batch). Le notizie vecchie restano in
     tabella come archivio: il tile mostra soltanto l'ultimo batch."""
@@ -937,8 +938,8 @@ class BeautyNews(db.Model):
         return f"<BeautyNews {self.scan_batch} {self.titolo[:40]}>"
 
 class Oroscopo(db.Model):
-    """Oroscopo settimanale in chiave estetista, pubblicato a mano dalla pagina
-    Contenuti Report (appl/contenuti_report.py).
+    """Oroscopo settimanale in chiave estetista. SOLO RIPIEGO, come BeautyNews:
+    si pubblica nel registro centrale (contenuto_oroscopo) per tutti i negozi.
 
     In tabella finisce solo il testo per segno: simbolo e periodo dello zodiaco
     sono dati fissi e stanno in appl/contenuti_report.py."""

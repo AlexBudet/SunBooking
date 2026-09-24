@@ -479,3 +479,40 @@ class DemoDeroga(Base):
     concessa_da   = Column(String(80))
     concessa_at   = Column(DateTime(timezone=True), nullable=False,
                            server_default=func.now())
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  CONTENUTI DEL REPORT — notizie beauty e oroscopo
+#
+#  Tabelle create da registry/06_contenuti_report.sql. Sono contenuti UGUALI
+#  PER TUTTI i negozi: si pubblicano una volta sola qui e ogni negozio li
+#  legge da qui (appl/contenuti_report.py). Stesse colonne delle tabelle
+#  beauty_news e oroscopo_settimanale dei negozi, che restano come ripiego.
+# ═══════════════════════════════════════════════════════════════════════
+
+class ContenutoNews(Base):
+    __tablename__ = 'contenuto_news'
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    scan_batch   = Column(String(40), nullable=False, index=True)
+    titolo       = Column(String(300), nullable=False)
+    sintesi      = Column(Text)
+    categoria    = Column(String(50))
+    fonte        = Column(String(200))
+    url          = Column(String(1000))
+    data_notizia = Column(Date)
+    ordine       = Column(Integer, nullable=False, default=0, server_default='0')
+    created_at   = Column(DateTime(timezone=True), nullable=False,
+                          server_default=func.now())
+
+
+class ContenutoOroscopo(Base):
+    __tablename__ = 'contenuto_oroscopo'
+
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    scan_batch = Column(String(40), nullable=False, index=True)
+    segno      = Column(String(30), nullable=False)
+    testo      = Column(Text, nullable=False)
+    ordine     = Column(Integer, nullable=False, default=0, server_default='0')
+    created_at = Column(DateTime(timezone=True), nullable=False,
+                        server_default=func.now())

@@ -18,8 +18,12 @@
   <h1 class="h4 mb-1">Contenuti Report</h1>
   <p class="text-muted mb-4">
     Incolla il blocco JSON e premi <strong>Controlla</strong>: vedi cosa verrebbe pubblicato senza scrivere niente.
-    <strong>Pubblica</strong> lo scrive nel database di questo negozio; negli altri negozi va ripetuto.
+    <strong>Pubblica</strong> lo pubblica una volta sola per <strong>tutti i negozi</strong>, da qualunque negozio apri questa pagina.
+    Gli altri negozi lo vedono entro 5 minuti.
   </p>
+  {% if errore_registro %}
+  <div class="alert alert-danger">{{ errore_registro }}</div>
+  {% endif %}
 
   <div class="cr-card" data-tipo="news">
     <h2>📰 Dal mondo beauty</h2>

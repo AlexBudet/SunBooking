@@ -6,15 +6,19 @@ settimana.
 COME CI FINISCONO DENTRO
 ------------------------
 Li scrive una persona e li pubblica a mano dalla pagina Contenuti Report
-(/contenuti-report, solo admin/owner): si incolla un blocco JSON, l'app lo
-controlla e lo scrive nel database DI QUESTO tenant.
+(/contenuti-report, solo owner): si incolla un blocco JSON, l'app lo controlla
+e lo scrive UNA VOLTA SOLA nel registro centrale (tosca_registry, tabelle
+contenuto_news e contenuto_oroscopo). Tutti i negozi, di qualunque copia
+dell'app, leggono da li': i contenuti sono uguali per tutti.
 
 Prima c'era un thread che due volte a settimana interrogava un'API esterna a
 pagamento e scriveva da solo in tutti i tenant. Quella strada e' stata smontata:
 l'app non chiama piu' nessun servizio esterno per questi due pannelli, non ha
-piu' chiavi da custodire e non ha piu' un costo che cresce con i negozi. La
-conseguenza operativa e' che la pubblicazione va fatta UNA VOLTA PER NEGOZIO,
-perche' ogni tenant ha il suo database.
+piu' chiavi da custodire e non ha piu' un costo che cresce con i negozi.
+
+Le tabelle beauty_news e oroscopo_settimanale dei negozi restano come RIPIEGO:
+il Report le legge solo se il registro non e' configurato, non risponde o non
+ha ancora niente di pubblicato. Non si scrivono piu'.
 
 REGOLE CHE RESTANO, ed e' qui che vanno tenute
 ----------------------------------------------
@@ -29,8 +33,13 @@ REGOLE CHE RESTANO, ed e' qui che vanno tenute
 """
 
 import json
+import logging
 import re
+import time
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Notizie
@@ -68,7 +77,11 @@ MAX_BATCH_OROSCOPO = 8
 
 class ContenutoNonValido(ValueError):
     """Il blocco incollato non e' pubblicabile. Il messaggio va mostrato a chi
-    l'ha incollato: e' admin o owner, cioe' chi puo' correggerlo."""
+    l'ha incollato: e' l'owner, cioe' chi puo' correggerlo."""
+
+
+class RegistroNonDisponibile(RuntimeError):
+    """Il registro centrale non e' configurato: non c'e' dove pubblicare."""
 
 
 # ---------------------------------------------------------------------------
@@ -181,30 +194,35 @@ def valida_notizie(dati, oggi=None):
 # ---------------------------------------------------------------------------
 # Oroscopo: validazione
 # ---------------------------------------------------------------------------
-def _righe_senza_nome(righe, nome_centro):
+def _righe_senza_nome(righe, nomi_centri):
     """Rete di sicurezza al nome dell'istituto.
 
-    Vale anche adesso che i testi li scrive una persona: lo stesso blocco viene
-    incollato in piu' negozi, e una battuta che nomina un centro verrebbe letta
-    dagli altri come un errore. I nomi corti (< 5 caratteri) non si filtrano:
-    sono spesso parole comuni e butterebbero righe innocenti.
+    Vale anche adesso che i testi li scrive una persona: lo stesso testo va in
+    tutti i negozi, e una battuta che nomina un centro verrebbe letta dagli
+    altri come un errore. Per questo si controllano i nomi di TUTTI i negozi,
+    non solo di quello da cui si pubblica. I nomi corti (< 5 caratteri) non si
+    filtrano: sono spesso parole comuni e butterebbero righe innocenti.
     """
-    nome = (nome_centro or '').strip().lower()
-    if len(nome) < 5:
+    if isinstance(nomi_centri, str):
+        nomi_centri = [nomi_centri]
+    nomi = {n.strip().lower() for n in (nomi_centri or []) if n and len(n.strip()) >= 5}
+    if not nomi:
         return righe, []
     tenute, avvisi = [], []
     for segno, testo in righe:
-        if nome in testo.lower():
-            avvisi.append('Riga "%s" scartata: nomina il centro.' % segno)
+        minuscolo = testo.lower()
+        if any(nome in minuscolo for nome in nomi):
+            avvisi.append('Riga "%s" scartata: nomina un centro.' % segno)
             continue
         tenute.append((segno, testo))
     return tenute, avvisi
 
 
-def valida_oroscopo(dati, nome_centro=None):
+def valida_oroscopo(dati, nomi_centri=None):
     """Tiene i segni riconosciuti, li rimette in ordine zodiacale e restituisce
     (righe, avvisi). Sotto MIN_SEGNI non si pubblica: meglio lasciare in pagina
-    l'oroscopo della settimana scorsa che uno a meta'."""
+    l'oroscopo della settimana scorsa che uno a meta'. `nomi_centri` e' un nome
+    o un elenco di nomi di negozi che il testo non deve contenere."""
     per_segno, avvisi = {}, []
 
     for i, elem in enumerate(dati, start=1):
@@ -226,7 +244,7 @@ def valida_oroscopo(dati, nome_centro=None):
         per_segno[segno] = testo[:600]
 
     righe = [(s, per_segno[s]) for s in NOMI_SEGNI if s in per_segno]
-    righe, avvisi_nome = _righe_senza_nome(righe, nome_centro)
+    righe, avvisi_nome = _righe_senza_nome(righe, nomi_centri)
     avvisi.extend(avvisi_nome)
 
     if len(righe) < MIN_SEGNI:
@@ -241,54 +259,179 @@ def valida_oroscopo(dati, nome_centro=None):
 
 
 # ---------------------------------------------------------------------------
-# Scrittura
+# Scrittura: nel registro centrale, una volta per tutti i negozi
 # ---------------------------------------------------------------------------
 def _nuovo_batch():
-    return datetime.now().strftime('%Y%m%dT%H%M')
+    # Con i secondi: una correzione ripubblicata nello stesso minuto non deve
+    # finire nel batch di prima (il Report mostrerebbe vecchie e nuove insieme).
+    return datetime.now().strftime('%Y%m%dT%H%M%S')
 
 
-def _pota(modello, tenere):
+def _svuota_batch(s, modello, batch):
+    """Stesso nome di batch gia' usato (due pubblicazioni nello stesso
+    secondo): vince l'ultima, non si sommano."""
+    (s.query(modello).filter(modello.scan_batch == batch)
+     .delete(synchronize_session=False))
+
+
+def _pota(s, modello, tenere):
     """Elimina i batch piu' vecchi, tenendone `tenere`."""
-    from appl import db
-    vecchi = [b[0] for b in db.session.query(modello.scan_batch)
-              .distinct().order_by(modello.scan_batch.desc())
-              .offset(tenere).all()]
+    vecchi = [b for (b,) in s.query(modello.scan_batch).distinct()
+              .order_by(modello.scan_batch.desc()).offset(tenere).all()]
     if vecchi:
-        (modello.query.filter(modello.scan_batch.in_(vecchi))
+        (s.query(modello).filter(modello.scan_batch.in_(vecchi))
          .delete(synchronize_session=False))
 
 
-def pubblica_notizie(notizie):
-    """Scrive un batch nuovo di notizie nel database del tenant corrente."""
-    from appl import db
-    from appl.models import BeautyNews
+def _registro():
+    from appl.registry_models import registry_enabled
+    if not registry_enabled():
+        raise RegistroNonDisponibile(
+            'Registro centrale non configurato (manca REGISTRY_DATABASE_URI): '
+            'niente pubblicato.')
 
+
+def pubblica_notizie(notizie):
+    """Scrive un batch nuovo di notizie nel registro: lo vedono tutti i negozi."""
+    from appl.registry_models import ContenutoNews, registry_session
+    _registro()
     batch = _nuovo_batch()
-    for i, n in enumerate(notizie):
-        db.session.add(BeautyNews(
-            scan_batch=batch,
-            titolo=n['titolo'],
-            sintesi=n['sintesi'],
-            categoria=n['categoria'],
-            fonte=n['fonte'],
-            url=n['url'],
-            data_notizia=n['data_notizia'],
-            ordine=i,
-        ))
-    _pota(BeautyNews, MAX_BATCH_NEWS)
-    db.session.commit()
+    with registry_session() as s:
+        _svuota_batch(s, ContenutoNews, batch)
+        for i, n in enumerate(notizie):
+            s.add(ContenutoNews(
+                scan_batch=batch,
+                titolo=n['titolo'],
+                sintesi=n['sintesi'],
+                categoria=n['categoria'],
+                fonte=n['fonte'],
+                url=n['url'],
+                data_notizia=n['data_notizia'],
+                ordine=i,
+            ))
+        s.flush()
+        _pota(s, ContenutoNews, MAX_BATCH_NEWS)
+    _cache.pop('news', None)
     return batch
 
 
 def pubblica_oroscopo(righe):
-    """Scrive un batch nuovo di oroscopo nel database del tenant corrente."""
-    from appl import db
-    from appl.models import Oroscopo
-
+    """Scrive un batch nuovo di oroscopo nel registro: lo vedono tutti i negozi."""
+    from appl.registry_models import ContenutoOroscopo, registry_session
+    _registro()
     batch = _nuovo_batch()
-    for i, (segno, testo) in enumerate(righe):
-        db.session.add(Oroscopo(scan_batch=batch, segno=segno,
-                                testo=testo, ordine=i))
-    _pota(Oroscopo, MAX_BATCH_OROSCOPO)
-    db.session.commit()
+    with registry_session() as s:
+        _svuota_batch(s, ContenutoOroscopo, batch)
+        for i, (segno, testo) in enumerate(righe):
+            s.add(ContenutoOroscopo(scan_batch=batch, segno=segno,
+                                    testo=testo, ordine=i))
+        s.flush()
+        _pota(s, ContenutoOroscopo, MAX_BATCH_OROSCOPO)
+    _cache.pop('oroscopo', None)
     return batch
+
+
+def nomi_dei_negozi():
+    """Nomi di tutti i negozi del registro, per il controllo sull'oroscopo.
+    Registro assente o irraggiungibile: lista vuota (il chiamante aggiunge
+    comunque il nome del negozio corrente)."""
+    from appl.registry_models import Tenant, registry_enabled, registry_session
+    if not registry_enabled():
+        return []
+    try:
+        with registry_session() as s:
+            return [n for (n,) in s.query(Tenant.business_name).all() if n]
+    except Exception as exc:
+        log.warning('[contenuti_report] nomi dei negozi non letti: %s', exc)
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Lettura: dal registro, con ripiego sulle tabelle del negozio
+# ---------------------------------------------------------------------------
+# Il Report si apre spesso e in tutti i negozi, il registro ha un pool di 3
+# connessioni per processo e i contenuti cambiano una volta a settimana: ogni
+# processo lo rilegge al massimo ogni CACHE_SECONDI. Chi pubblica svuota la
+# cache del proprio processo; l'altra copia dell'app si allinea entro 5 minuti.
+CACHE_SECONDI = 300
+# Registro che non risponde: si riprova dopo un minuto, non a ogni apertura
+# del Report (pool_timeout del registro = 10 secondi di attesa ciascuna).
+CACHE_GUASTO_SECONDI = 60
+
+_cache = {}     # 'news' | 'oroscopo' -> (scade_alle, contenuto o None)
+
+
+def ora_italiana(momento):
+    """created_at del registro e' con fuso (UTC sul server): a video va l'ora
+    italiana. Le date senza fuso, dalle tabelle del negozio, restano come sono."""
+    if momento is None or momento.tzinfo is None:
+        return momento
+    return momento.astimezone(ZoneInfo('Europe/Rome'))
+
+
+def _leggi_dal_registro(tipo):
+    from appl.registry_models import (
+        ContenutoNews, ContenutoOroscopo, registry_session,
+    )
+    from sqlalchemy import func
+    modello = ContenutoNews if tipo == 'news' else ContenutoOroscopo
+    with registry_session() as s:
+        ultimo = s.query(func.max(modello.scan_batch)).scalar()
+        if not ultimo:
+            return None
+        righe = (s.query(modello).filter(modello.scan_batch == ultimo)
+                 .order_by(modello.ordine.asc(), modello.id.asc()).all())
+        if not righe:
+            return None
+        if tipo == 'news':
+            elenco = [{'titolo': r.titolo, 'sintesi': r.sintesi or '',
+                       'categoria': r.categoria or '', 'fonte': r.fonte or '',
+                       'url': r.url or '', 'data_notizia': r.data_notizia}
+                      for r in righe]
+        else:
+            elenco = [{'segno': r.segno, 'testo': r.testo} for r in righe]
+        return {'batch': ultimo, 'aggiornato': ora_italiana(righe[0].created_at),
+                'righe': elenco}
+
+
+def contenuti_comuni(tipo):
+    """Ultimo batch pubblicato nel registro per `tipo` ('news' o 'oroscopo'):
+    {'batch', 'aggiornato', 'righe'}. None se il registro non e' configurato,
+    non risponde o non ha ancora niente: in quel caso il Report ripiega sulle
+    tabelle del negozio, cosi' non resta mai vuoto per colpa del registro."""
+    adesso = time.monotonic()
+    in_cache = _cache.get(tipo)
+    if in_cache and in_cache[0] > adesso:
+        return in_cache[1]
+
+    from appl.registry_models import registry_enabled
+    if not registry_enabled():
+        return None
+    try:
+        contenuto, durata = _leggi_dal_registro(tipo), CACHE_SECONDI
+    except Exception as exc:
+        # Tabelle non ancora create (registry/06_contenuti_report.sql) o
+        # registro irraggiungibile: si ripiega, senza far fallire il Report.
+        log.warning('[contenuti_report] registro non letto (%s): %s', tipo, exc)
+        contenuto, durata = None, CACHE_GUASTO_SECONDI
+    _cache[tipo] = (adesso + durata, contenuto)
+    return contenuto
+
+
+def ultime_pubblicazioni():
+    """Per la pagina Contenuti Report: quando e' stato pubblicato l'ultimo
+    batch di ciascun tipo nel registro. Letto al momento, senza cache.
+    Restituisce (news, oroscopo, errore): stringhe gg/mm/aaaa hh:mm o None."""
+    from appl.registry_models import registry_enabled
+    if not registry_enabled():
+        return None, None, 'Registro centrale non configurato: non si puo\' pubblicare.'
+    risultati = []
+    for tipo in ('news', 'oroscopo'):
+        try:
+            c = _leggi_dal_registro(tipo)
+        except Exception as exc:
+            log.warning('[contenuti_report] registro non letto (%s): %s', tipo, exc)
+            return None, None, ('Registro centrale non raggiungibile o tabelle '
+                                'mancanti (registry/06_contenuti_report.sql).')
+        risultati.append(c['aggiornato'].strftime('%d/%m/%Y %H:%M') if c else None)
+    return risultati[0], risultati[1], None

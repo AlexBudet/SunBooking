@@ -313,9 +313,9 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
     <span data-bs-toggle="tooltip" data-bs-placement="bottom"
           title="Notizie su estetica, normativa, solarium e mercato degli ultimi tre mesi">DAL MONDO BEAUTY</span>
-    {% if current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
+    {% if current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
     <a href="/contenuti-report" class="btn btn-outline-secondary btn-sm"
-       data-bs-toggle="tooltip" title="Pubblica notizie nuove">
+       data-bs-toggle="tooltip" title="Pubblica notizie nuove per tutti i negozi">
       <i class="bi bi-pencil-square"></i>
     </a>
     {% endif %}
@@ -331,9 +331,9 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
     <span data-bs-toggle="tooltip" data-bs-placement="bottom"
           title="L'oroscopo della settimana in versione estetista">✨ OROSCOPO DELLA SETTIMANA</span>
-    {% if current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
+    {% if current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
     <a href="/contenuti-report" class="btn btn-outline-secondary btn-sm"
-       data-bs-toggle="tooltip" title="Pubblica un oroscopo nuovo">
+       data-bs-toggle="tooltip" title="Pubblica un oroscopo nuovo per tutti i negozi">
       <i class="bi bi-pencil-square"></i>
     </a>
     {% endif %}
