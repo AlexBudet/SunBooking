@@ -12940,6 +12940,18 @@ function copiaPerScorrimento(testo) {
   return JSON.stringify(String(testo || '').replace(/\s+/g, ' ').trim());
 }
 
+// Larghezza utile di un elemento (senza padding e bordi) a frazioni di pixel.
+// clientWidth e scrollWidth arrotondano all'intero: un testo che sforava di
+// meno di 2 px mostrava i puntini ma per quei due numeri "ci stava", e non
+// partiva mai. Il browser mette i puntini appena il testo sfora anche di un
+// soffio, quindi il confronto va fatto con la stessa precisione.
+function spazioInterno(el) {
+  const st = getComputedStyle(el);
+  return el.getBoundingClientRect().width
+    - parseFloat(st.paddingLeft) - parseFloat(st.paddingRight)
+    - parseFloat(st.borderLeftWidth) - parseFloat(st.borderRightWidth);
+}
+
 function scorriTitoloOff(titleEl, stato) {
   // Un'impostaTitoloOff successiva (nota salvata, blocco reinizializzato) ha
   // gia' fatto partire un giro nuovo: questo si ferma.
@@ -12954,8 +12966,10 @@ function scorriTitoloOff(titleEl, stato) {
 
   // Si rimisura a ogni giro: se la colonna si allarga o si stringe
   // (operatori nascosti, finestra ridimensionata) il giro dopo se ne accorge.
-  const larghezza = titleEl.clientWidth;
-  const nonCiSta = larghezza > 0 && titleEl.scrollWidth > larghezza + 1;
+  // Misure a frazioni di pixel (vedi spazioInterno): o il titolo ci sta
+  // intero, o scorre.
+  const spazio = spazioInterno(titleEl);
+  const nonCiSta = spazio > 0 && testo.getBoundingClientRect().width > spazio + 0.01;
   let movimentoRidotto = false;
   try { movimentoRidotto = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) {}
   if (!nonCiSta || movimentoRidotto || typeof testo.animate !== 'function') { prossimoGiro(); return; }
@@ -12987,31 +13001,55 @@ function scorriTitoloOff(titleEl, stato) {
 // si tocca nella struttura: il nome che va in Cassa viene letto dal
 // textContent di .client-name, quindi niente span aggiunti ne' testo
 // duplicato (la copia in coda e' un ::after, che nel textContent non entra).
-// Scorre il text-indent della riga: badge (pacchetto, prepagata) e nome si
-// muovono insieme, e click, tooltip e riscritture del nome (rinomina,
-// assegna cliente) restano quelli di sempre. La copia ripete solo il nome:
-// a fine giro il nome combacia, il badge ricompare al suo posto.
+// Badge (pacchetto, prepagata) e nome scorrono insieme, e click, tooltip e
+// riscritture del nome (rinomina, assegna cliente) restano quelli di sempre.
+// La copia ripete solo il nome: a fine giro il nome combacia, il badge
+// ricompare al suo posto.
+// NIENTE CHE CAMBI LA LARGHEZZA DEL CONTENUTO. Sotto i 1200px l'Agenda e' in
+// table-layout:auto e le colonne si dimensionano sul contenuto delle celle:
+// la prima versione faceva scorrere il text-indent e metteva la copia in
+// linea, e a ogni fotogramma le colonne si ridistribuivano (la scritta
+// sfarfallava invece di scorrere). Per questo il movimento e' un
+// position:relative animato sugli elementi della riga e la copia e' in
+// position:absolute: nessuno dei due entra nel calcolo delle larghezze.
 // Un solo giro di controllo per tutta l'Agenda invece di un timer per blocco:
 // vale anche per i blocchi ricreati dal refresh o incollati, senza agganciarsi
 // ai punti in cui nascono.
 // Col mouse sopra al blocco il nome torna fermo all'inizio, cosi' si clicca
-// senza inseguirlo. In touch, a blocco aperto, la riga diventa la targhetta
-// flex (styles.css) e il text-indent li' non ha effetto.
+// senza inseguirlo. In touch, a blocco aperto (targhetta), resta fermo.
 (function scorrimentoNomiClienti() {
   const GIRO_MS = 250;
 
   function togliCopia(p) {
+    if (p.classList.contains('nome-scorre')) {
+      for (const el of p.children) el.style.position = '';
+    }
     p.classList.remove('nome-scorre');
     p.style.textOverflow = '';
-    p.style.textAlign = '';
     const link = p.querySelector('.client-info-link');
     if (link) link.style.removeProperty('--copia-scorre');
   }
 
   function riposo(p, stato) {
-    if (stato.anim) { try { stato.anim.cancel(); } catch (_) {} stato.anim = null; }
+    stato.anims.forEach(a => { try { a.cancel(); } catch (_) {} });
+    stato.anims = [];
     togliCopia(p);
     stato.fermoDal = performance.now();
+  }
+
+  // Il contenuto della riga (icone + nome) e' piu' largo dello spazio che ha?
+  // A frazioni di pixel, come fa il browser quando decide di mettere i puntini.
+  function sfora(p) {
+    const spazio = spazioInterno(p);
+    if (!(spazio > 0)) return false;
+    let sinistra = Infinity, destra = -Infinity;
+    for (const el of p.children) {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0) continue;          // elementi nascosti: non contano
+      sinistra = Math.min(sinistra, r.left);
+      destra = Math.max(destra, r.right);
+    }
+    return destra - sinistra > spazio + 0.01;
   }
 
   function giro() {
@@ -13023,14 +13061,14 @@ function scorriTitoloOff(titleEl, stato) {
     document.querySelectorAll('.appointment-block:not(.note-off) .appointment-content .client-name').forEach(p => {
       let stato = p._nomeScorre;
       if (!stato) {
-        p._nomeScorre = { fermoDal: adesso, anim: null };
+        p._nomeScorre = { fermoDal: adesso, anims: [] };
         // Copia di un blocco fatta mentre il nome scorreva: riparte da fermo.
         togliCopia(p);
         return;
       }
       const blocco = p.closest('.appointment-block');
       const inUso = !!blocco && (blocco.matches(':hover') || blocco.classList.contains('active-popup'));
-      if (stato.anim) {
+      if (stato.anims.length) {
         if (inUso) riposo(p, stato);
         return;
       }
@@ -13046,40 +13084,40 @@ function scorriTitoloOff(titleEl, stato) {
     daMisurare.forEach(p => {
       const stato = p._nomeScorre;
       const link = p.querySelector('.client-info-link');
-      const larghezza = p.clientWidth;
-      // Ci sta (o la riga e' nascosta, o non e' un nome cliente): si
+      // Ci sta intero (o la riga e' nascosta, o non e' un nome cliente): si
       // ricontrolla fra 2 secondi, cosi' se la colonna si stringe il nome
       // comincia a scorrere da solo.
-      if (!link || !(larghezza > 0 && p.scrollWidth > larghezza + 1) || typeof p.animate !== 'function') {
+      if (!link || typeof link.animate !== 'function' || !sfora(p)) {
         stato.fermoDal = adesso;
         return;
       }
-      partenze.push({ p, link, soloNome: link.getBoundingClientRect().width });
+      partenze.push({ p, link, larghezzaNome: link.getBoundingClientRect().width });
     });
 
     partenze.forEach(({ p, link }) => {
-      // Allineato a sinistra solo mentre scorre: centrato, appena il
-      // text-indent lascia spazio il browser ricentrerebbe il testo e lo
-      // scorrimento rallenterebbe. Da fermo non cambia niente: un testo che
-      // non ci sta parte comunque da sinistra.
       p.style.textOverflow = 'clip';
-      p.style.textAlign = 'left';
+      for (const el of p.children) el.style.position = 'relative';
       link.style.setProperty('--copia-scorre', copiaPerScorrimento(link.textContent));
       p.classList.add('nome-scorre');       // compare la copia in coda
     });
 
-    // La copia sta in fondo al link ed e' larga quanto il nome: la differenza
-    // di larghezza e' il tratto da percorrere perche' prenda il posto del nome.
-    partenze.forEach(m => { m.percorso = m.link.getBoundingClientRect().width - m.soloNome; });
+    // La copia parte dal bordo destro del nome piu' il suo padding-left: e'
+    // il tratto da percorrere perche' prenda esattamente il posto del nome.
+    partenze.forEach(m => {
+      m.percorso = m.larghezzaNome + (parseFloat(getComputedStyle(m.link, '::after').paddingLeft) || 0);
+    });
 
-    partenze.forEach(({ p, percorso }) => {
+    partenze.forEach(({ p, link, percorso }) => {
       const stato = p._nomeScorre;
-      const anim = p.animate([
-        { textIndent: '0px' },
-        { textIndent: `${-percorso}px` }
-      ], { duration: percorso / TITOLO_OFF_VELOCITA_PX_S * 1000, easing: 'linear' });
-      stato.anim = anim;
-      anim.onfinish = () => { if (stato.anim === anim) riposo(p, stato); };
+      const durata = percorso / TITOLO_OFF_VELOCITA_PX_S * 1000;
+      // Icone e nome con la stessa animazione, partite nello stesso istante:
+      // si muovono come un pezzo solo.
+      stato.anims = Array.from(p.children).map(el => el.animate([
+        { left: '0px' },
+        { left: `${-percorso}px` }
+      ], { duration: durata, easing: 'linear' }));
+      const delNome = stato.anims[Array.from(p.children).indexOf(link)];
+      delNome.onfinish = () => { if (stato.anims.includes(delNome)) riposo(p, stato); };
     });
   }
 
