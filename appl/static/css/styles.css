@@ -2294,6 +2294,19 @@ body.quarter-55 .appointment-block:not(.note-off):not(.off)[data-note]:not([data
   font-style: italic;
 }
 
+/* Scorrimento a nastro del titolo OFF e del nome cliente troppo lunghi
+   (calendar.js: scorriTitoloOff e scorrimentoNomiClienti). Mentre il testo
+   scorre, in coda compare una sua copia: l'inizio rientra da destra subito
+   dopo la fine, come nei titoli dei TG, invece che dopo un blocco vuoto.
+   La copia e' DISEGNATA (::after), non e' testo vero: il textContent del
+   nome, che la Cassa legge per sapere chi e' il cliente, resta quello di
+   sempre. padding-left e' lo spazio tra la fine e il nuovo inizio. */
+.appointment-block .off-block-title.scorre .off-block-title-testo::after,
+.appointment-block .client-name.nome-scorre .client-info-link::after {
+  content: var(--copia-scorre);
+  padding-left: 1.5em;
+}
+
 #currentTimeIndicator {
     pointer-events: none !important;
     z-index: 0 !important;

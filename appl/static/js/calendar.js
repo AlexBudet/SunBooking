@@ -10157,8 +10157,6 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
 
   if (isOffBlock) {
     const fullText = String(appointment.note || 'OFF').trim() || 'OFF';
-    const MAX_CHARS = 12;
-    const displayText = fullText.length > MAX_CHARS ? (fullText.slice(0, MAX_CHARS) + '...') : fullText;
 
     let titleEl = block.querySelector('.off-block-title');
     if (!titleEl) {
@@ -10167,7 +10165,8 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
       block.appendChild(titleEl);
     }
 
-    titleEl.textContent = displayText;
+    // Titolo intero: taglio coi puntini e scorrimento, vedi impostaTitoloOff.
+    impostaTitoloOff(titleEl, fullText);
     titleEl.setAttribute('data-full-note', fullText);
     titleEl.setAttribute('title', fullText);
 
@@ -12889,13 +12888,209 @@ function initOffDeleteButton(block) {
   });
 }
 
+// =============================================================
+//   TITOLO DEI BLOCCHI OFF CHE NON CI STA: FERMO 2s, POI SCORRE
+// =============================================================
+// Se il titolo e' piu' largo del blocco resta fermo coi puntini per 2 secondi,
+// poi scorre verso sinistra a nastro: in coda compare una sua copia (disegnata
+// dal CSS, vedi styles.css "Scorrimento a nastro"), che arriva esattamente dove
+// iniziava il titolo; li' si riferma coi puntini, e cosi' via. Lo spazio tra
+// la fine e il nuovo inizio e' il padding-left di quella regola.
+// Prima il taglio era a 12 caratteri fissi, ora dipende
+// dalla larghezza vera del blocco: in una colonna larga il titolo si legge
+// intero e non scorre niente.
+// Cambia SOLO la scritta dentro .off-block-title: il click che apre la nota,
+// data-note, data-full-note e title restano quelli di sempre.
+// I puntini li mette il text-overflow del contenitore, che funziona solo su
+// testo inline, mentre transform sugli inline non si applica: per questo la
+// scritta diventa inline-block solo per il tempo in cui scorre.
+// var e non const: createAppointmentBlockElement, piu' in alto nel file, le
+// usa gia'; con var non c'e' mai il caso "letta prima di essere dichiarata".
+var TITOLO_OFF_PAUSA_MS = 2000;   // vale anche per il nome cliente
+var TITOLO_OFF_VELOCITA_PX_S = 50;
+
+function impostaTitoloOff(titleEl, fullText) {
+  fermaScorrimentoTitoloOff(titleEl);
+  const testo = document.createElement('span');
+  testo.className = 'off-block-title-testo';
+  testo.textContent = fullText;
+  // Il testo della copia in coda; compare solo con la classe .scorre.
+  testo.style.setProperty('--copia-scorre', copiaPerScorrimento(fullText));
+  titleEl.textContent = '';
+  titleEl.appendChild(testo);
+  const stato = { timer: null, anim: null };
+  titleEl._scorrimentoOff = stato;
+  stato.timer = setTimeout(() => scorriTitoloOff(titleEl, stato), TITOLO_OFF_PAUSA_MS);
+}
+
+function fermaScorrimentoTitoloOff(titleEl) {
+  const stato = titleEl._scorrimentoOff;
+  if (!stato) return;
+  titleEl._scorrimentoOff = null;
+  clearTimeout(stato.timer);
+  if (stato.anim) { try { stato.anim.cancel(); } catch (_) {} }
+  titleEl.classList.remove('scorre');
+  titleEl.style.textOverflow = 'ellipsis';
+}
+
+// Stringa CSS per content: la stessa scritta che il browser mostra (spazi e
+// a capo compressi in uno spazio, come fa white-space:nowrap), tra virgolette
+// e con gli eventuali " e \ protetti.
+function copiaPerScorrimento(testo) {
+  return JSON.stringify(String(testo || '').replace(/\s+/g, ' ').trim());
+}
+
+function scorriTitoloOff(titleEl, stato) {
+  // Un'impostaTitoloOff successiva (nota salvata, blocco reinizializzato) ha
+  // gia' fatto partire un giro nuovo: questo si ferma.
+  if (titleEl._scorrimentoOff !== stato) return;
+  // Blocco tolto dalla pagina (refresh dell'Agenda, cancellazione): fine.
+  const testo = titleEl.querySelector('.off-block-title-testo');
+  if (!titleEl.isConnected || !testo) { fermaScorrimentoTitoloOff(titleEl); return; }
+
+  const prossimoGiro = () => {
+    stato.timer = setTimeout(() => scorriTitoloOff(titleEl, stato), TITOLO_OFF_PAUSA_MS);
+  };
+
+  // Si rimisura a ogni giro: se la colonna si allarga o si stringe
+  // (operatori nascosti, finestra ridimensionata) il giro dopo se ne accorge.
+  const larghezza = titleEl.clientWidth;
+  const nonCiSta = larghezza > 0 && titleEl.scrollWidth > larghezza + 1;
+  let movimentoRidotto = false;
+  try { movimentoRidotto = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) {}
+  if (!nonCiSta || movimentoRidotto || typeof testo.animate !== 'function') { prossimoGiro(); return; }
+
+  titleEl.style.textOverflow = 'clip';
+  testo.style.display = 'inline-block';
+  const soloTitolo = testo.getBoundingClientRect().width;
+  titleEl.classList.add('scorre');        // compare la copia in coda
+  // La copia sta in fondo ed e' larga quanto il titolo: la differenza di
+  // larghezza e' proprio il tratto da percorrere perche' prenda il suo posto.
+  const percorso = testo.getBoundingClientRect().width - soloTitolo;
+  stato.anim = testo.animate([
+    { transform: 'translateX(0)' },
+    { transform: `translateX(${-percorso}px)` }
+  ], { duration: percorso / TITOLO_OFF_VELOCITA_PX_S * 1000, easing: 'linear' });
+  stato.anim.onfinish = () => {
+    stato.anim = null;
+    titleEl.classList.remove('scorre');
+    testo.style.display = '';
+    titleEl.style.textOverflow = 'ellipsis';
+    prossimoGiro();
+  };
+}
+
+// =============================================================
+//   NOME CLIENTE CHE NON CI STA: FERMO 2s, POI SCORRE
+// =============================================================
+// Stesso effetto e stessi tempi del titolo OFF, ma qui la riga del nome NON
+// si tocca nella struttura: il nome che va in Cassa viene letto dal
+// textContent di .client-name, quindi niente span aggiunti ne' testo
+// duplicato (la copia in coda e' un ::after, che nel textContent non entra).
+// Scorre il text-indent della riga: badge (pacchetto, prepagata) e nome si
+// muovono insieme, e click, tooltip e riscritture del nome (rinomina,
+// assegna cliente) restano quelli di sempre. La copia ripete solo il nome:
+// a fine giro il nome combacia, il badge ricompare al suo posto.
+// Un solo giro di controllo per tutta l'Agenda invece di un timer per blocco:
+// vale anche per i blocchi ricreati dal refresh o incollati, senza agganciarsi
+// ai punti in cui nascono.
+// Col mouse sopra al blocco il nome torna fermo all'inizio, cosi' si clicca
+// senza inseguirlo. In touch, a blocco aperto, la riga diventa la targhetta
+// flex (styles.css) e il text-indent li' non ha effetto.
+(function scorrimentoNomiClienti() {
+  const GIRO_MS = 250;
+
+  function togliCopia(p) {
+    p.classList.remove('nome-scorre');
+    p.style.textOverflow = '';
+    p.style.textAlign = '';
+    const link = p.querySelector('.client-info-link');
+    if (link) link.style.removeProperty('--copia-scorre');
+  }
+
+  function riposo(p, stato) {
+    if (stato.anim) { try { stato.anim.cancel(); } catch (_) {} stato.anim = null; }
+    togliCopia(p);
+    stato.fermoDal = performance.now();
+  }
+
+  function giro() {
+    let movimentoRidotto = false;
+    try { movimentoRidotto = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) {}
+    const adesso = performance.now();
+    const daMisurare = [];
+
+    document.querySelectorAll('.appointment-block:not(.note-off) .appointment-content .client-name').forEach(p => {
+      let stato = p._nomeScorre;
+      if (!stato) {
+        p._nomeScorre = { fermoDal: adesso, anim: null };
+        // Copia di un blocco fatta mentre il nome scorreva: riparte da fermo.
+        togliCopia(p);
+        return;
+      }
+      const blocco = p.closest('.appointment-block');
+      const inUso = !!blocco && (blocco.matches(':hover') || blocco.classList.contains('active-popup'));
+      if (stato.anim) {
+        if (inUso) riposo(p, stato);
+        return;
+      }
+      if (inUso) { stato.fermoDal = adesso; return; }
+      if (movimentoRidotto || adesso - stato.fermoDal < TITOLO_OFF_PAUSA_MS) return;
+      daMisurare.push(p);
+    });
+
+    // Letture e scritture a blocchi separati (misure, stili, misure,
+    // animazioni): il layout si ricalcola due volte in tutto, non due volte
+    // per ogni nome.
+    const partenze = [];
+    daMisurare.forEach(p => {
+      const stato = p._nomeScorre;
+      const link = p.querySelector('.client-info-link');
+      const larghezza = p.clientWidth;
+      // Ci sta (o la riga e' nascosta, o non e' un nome cliente): si
+      // ricontrolla fra 2 secondi, cosi' se la colonna si stringe il nome
+      // comincia a scorrere da solo.
+      if (!link || !(larghezza > 0 && p.scrollWidth > larghezza + 1) || typeof p.animate !== 'function') {
+        stato.fermoDal = adesso;
+        return;
+      }
+      partenze.push({ p, link, soloNome: link.getBoundingClientRect().width });
+    });
+
+    partenze.forEach(({ p, link }) => {
+      // Allineato a sinistra solo mentre scorre: centrato, appena il
+      // text-indent lascia spazio il browser ricentrerebbe il testo e lo
+      // scorrimento rallenterebbe. Da fermo non cambia niente: un testo che
+      // non ci sta parte comunque da sinistra.
+      p.style.textOverflow = 'clip';
+      p.style.textAlign = 'left';
+      link.style.setProperty('--copia-scorre', copiaPerScorrimento(link.textContent));
+      p.classList.add('nome-scorre');       // compare la copia in coda
+    });
+
+    // La copia sta in fondo al link ed e' larga quanto il nome: la differenza
+    // di larghezza e' il tratto da percorrere perche' prenda il posto del nome.
+    partenze.forEach(m => { m.percorso = m.link.getBoundingClientRect().width - m.soloNome; });
+
+    partenze.forEach(({ p, percorso }) => {
+      const stato = p._nomeScorre;
+      const anim = p.animate([
+        { textIndent: '0px' },
+        { textIndent: `${-percorso}px` }
+      ], { duration: percorso / TITOLO_OFF_VELOCITA_PX_S * 1000, easing: 'linear' });
+      stato.anim = anim;
+      anim.onfinish = () => { if (stato.anim === anim) riposo(p, stato); };
+    });
+  }
+
+  setInterval(giro, GIRO_MS);
+})();
+
 function initOffBlockTitle(block) {
   if (!block || !block.classList || !block.classList.contains('note-off')) return;
 
   try {
     const fullText = String(block.getAttribute('data-note') || block.getAttribute('data-titolo') || 'BLOCCO OFF');
-    const MAX_CHARS = 12;
-    const displayText = fullText.length > MAX_CHARS ? (fullText.slice(0, MAX_CHARS) + '...') : fullText;
 
     let titleEl = block.querySelector('.off-block-title');
     if (!titleEl) {
@@ -12904,7 +13099,7 @@ function initOffBlockTitle(block) {
       block.appendChild(titleEl);
     }
 
-    titleEl.textContent = displayText;
+    impostaTitoloOff(titleEl, fullText);
     titleEl.setAttribute('data-full-note', fullText);
     titleEl.setAttribute('title', fullText);
 
