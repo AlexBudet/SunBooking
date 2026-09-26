@@ -458,12 +458,20 @@ class MarketingTemplate(db.Model):
     nome = db.Column(db.String(100), nullable=False)
     testo = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, server_default=func.now())
-    
+    # Foto allegata al messaggio (JPEG gia' ridimensionato, vedi
+    # services/marketing_images.py). Deferred: l'elenco dei template non deve
+    # tirarsi dietro i byte. immagine_mime e' valorizzato solo se c'e' la foto,
+    # quindi basta lui per sapere se la foto esiste.
+    # Colonne aggiunte a mano il 26/09/2026: migrations/manual_marketing_template_immagine.sql
+    immagine = db.deferred(db.Column(db.LargeBinary, nullable=True))
+    immagine_mime = db.Column(db.String(50), nullable=True)
+
     def to_dict(self):
         return {
             'id': self.id,
             'nome': self.nome,
-            'testo': self.testo
+            'testo': self.testo,
+            'ha_immagine': bool(self.immagine_mime),
         }
 
 class Receipt(db.Model):

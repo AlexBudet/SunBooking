@@ -3590,7 +3590,7 @@ def marketing():
         'marketing.html',
         business_info=business_info,
         services=services,
-        saved_templates=saved_templates,
+        saved_templates=[t.to_dict() for t in saved_templates],
         marketing_message=marketing_message,
         new_client_message=new_client_message,
         default_welcome_message=DEFAULT_WELCOME_MESSAGE,
@@ -3803,7 +3803,45 @@ def marketing_search_clients():
             func.sum(Receipt.total_amount).label('total')
         ).filter(Receipt.cliente_id.in_(client_ids)).group_by(Receipt.cliente_id).all()
         spent_dict = {r.cliente_id: float(r.total or 0) for r in spent_totals}
-        
+
+        # Batch: ultimo servizio fatto e servizio preferito (il piu' frequente,
+        # a parita' il piu' recente). Solo appuntamenti gia' avvenuti: una
+        # prenotazione di domani non e' "l'ultimo servizio" del cliente.
+        filtri_servizi = (
+            Appointment.client_id.in_(client_ids),
+            Appointment.is_cancelled_by_client == False,
+            Appointment.stato != AppointmentStatus.NON_ARRIVATO,
+            Appointment.start_time <= now,
+            Service.servizio_nome != 'dummy',
+        )
+        ultimi_q = db.session.query(
+            Appointment.client_id.label('cid'),
+            Service.servizio_nome.label('nome'),
+            func.row_number().over(
+                partition_by=Appointment.client_id,
+                order_by=Appointment.start_time.desc()).label('rn')
+        ).join(Service, Service.id == Appointment.service_id).filter(*filtri_servizi).subquery()
+        ultimo_servizio_dict = {
+            r.cid: r.nome for r in
+            db.session.query(ultimi_q.c.cid, ultimi_q.c.nome).filter(ultimi_q.c.rn == 1)}
+
+        conteggi_q = db.session.query(
+            Appointment.client_id.label('cid'),
+            Service.servizio_nome.label('nome'),
+            func.count(Appointment.id).label('n'),
+            func.max(Appointment.start_time).label('recente')
+        ).join(Service, Service.id == Appointment.service_id).filter(
+            *filtri_servizi).group_by(Appointment.client_id, Service.servizio_nome).subquery()
+        preferiti_q = db.session.query(
+            conteggi_q.c.cid, conteggi_q.c.nome,
+            func.row_number().over(
+                partition_by=conteggi_q.c.cid,
+                order_by=(conteggi_q.c.n.desc(), conteggi_q.c.recente.desc())).label('rn')
+        ).subquery()
+        preferito_dict = {
+            r.cid: r.nome for r in
+            db.session.query(preferiti_q.c.cid, preferiti_q.c.nome).filter(preferiti_q.c.rn == 1)}
+
         # Costruisci risposta
         clients_data = []
         for client in clients:
@@ -3824,7 +3862,9 @@ def marketing_search_clients():
                 'email': client.cliente_email,
                 'giorni_assenza': giorni_assenza,
                 'totale_visite': visits_dict.get(client.id, 0),
-                'totale_speso': round(spent_dict.get(client.id, 0), 2)
+                'totale_speso': round(spent_dict.get(client.id, 0), 2),
+                'ultimo_servizio': ultimo_servizio_dict.get(client.id, ''),
+                'servizio_preferito': preferito_dict.get(client.id, ''),
             })
         
         return jsonify({'success': True, 'clients': clients_data, 'limited': len(clients) == 30})
@@ -3972,37 +4012,111 @@ def marketing_get_templates():
     templates = MarketingTemplate.query.order_by(MarketingTemplate.nome).all()
     return jsonify([t.to_dict() for t in templates])
 
+def _marketing_dati_richiesta():
+    """I template arrivano in multipart quando c'e' una foto, in JSON quando no."""
+    if request.is_json:
+        return request.get_json(silent=True) or {}
+    return request.form
+
+
+def _marketing_nome_occupato(nome, escludi_id=None):
+    q = MarketingTemplate.query.filter(func.lower(MarketingTemplate.nome) == nome.lower())
+    if escludi_id:
+        q = q.filter(MarketingTemplate.id != escludi_id)
+    return db.session.query(q.exists()).scalar()
+
+
 @settings_bp.route('/api/marketing/templates', methods=['POST'])
 def marketing_create_template():
-    """Crea un nuovo template"""
-    data = request.get_json(silent=True) or {}
+    """Crea un nuovo template, con la foto se c'e'.
+
+    La foto puo' arrivare come file nuovo (`immagine`) oppure essere quella di
+    un template gia' salvato (`copia_immagine_da`): e' il caso di "Salva come
+    nuovo" partendo da un template con foto, senza ricaricarla.
+    """
+    from ..services import marketing_images
+
+    data = _marketing_dati_richiesta()
     nome = (data.get('nome') or '').strip()
     testo = (data.get('testo') or '').strip()
-    
+
     if not nome:
-        return jsonify({'success': False, 'error': 'Nome obbligatorio'}), 400
+        return jsonify({'success': False, 'error': 'Dai un nome al template'}), 400
+    if len(nome) > 100:
+        return jsonify({'success': False, 'error': 'Nome troppo lungo (massimo 100 caratteri)'}), 400
     if not testo:
-        return jsonify({'success': False, 'error': 'Testo obbligatorio'}), 400
-    
+        return jsonify({'success': False, 'error': 'Il messaggio è vuoto'}), 400
+    if _marketing_nome_occupato(nome):
+        return jsonify({'success': False, 'error': f'Esiste già un template chiamato "{nome}": scegli un altro nome'}), 409
+
     template = MarketingTemplate(nome=nome, testo=testo)
+
+    file = request.files.get('immagine')
+    try:
+        if file and file.filename:
+            template.immagine = marketing_images.elabora(file)
+            template.immagine_mime = marketing_images.MIME
+        elif data.get('copia_immagine_da'):
+            origine = db.session.get(MarketingTemplate, int(data.get('copia_immagine_da')))
+            if origine and origine.immagine_mime:
+                template.immagine = origine.immagine
+                template.immagine_mime = origine.immagine_mime
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
     db.session.add(template)
     db.session.commit()
-    
+
     return jsonify({'success': True, 'template': template.to_dict()})
 
 @settings_bp.route('/api/marketing/templates/<int:template_id>', methods=['PUT'])
 def marketing_update_template(template_id):
-    """Aggiorna un template esistente"""
+    """Aggiorna un template esistente: testo, nome e foto (nuova o tolta)."""
+    from ..services import marketing_images
+
     template = MarketingTemplate.query.get_or_404(template_id)
-    data = request.get_json(silent=True) or {}
-    
+    data = _marketing_dati_richiesta()
+
     if 'nome' in data:
-        template.nome = (data['nome'] or '').strip()
+        nome = (data.get('nome') or '').strip()
+        if not nome:
+            return jsonify({'success': False, 'error': 'Dai un nome al template'}), 400
+        if _marketing_nome_occupato(nome, escludi_id=template.id):
+            return jsonify({'success': False, 'error': f'Esiste già un template chiamato "{nome}"'}), 409
+        template.nome = nome
     if 'testo' in data:
-        template.testo = (data['testo'] or '').strip()
-    
+        testo = (data.get('testo') or '').strip()
+        if not testo:
+            return jsonify({'success': False, 'error': 'Il messaggio è vuoto'}), 400
+        template.testo = testo
+
+    file = request.files.get('immagine')
+    if file and file.filename:
+        try:
+            template.immagine = marketing_images.elabora(file)
+            template.immagine_mime = marketing_images.MIME
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
+    elif str(data.get('rimuovi_immagine') or '') in ('1', 'true', 'True'):
+        template.immagine = None
+        template.immagine_mime = None
+
     db.session.commit()
     return jsonify({'success': True, 'template': template.to_dict()})
+
+@settings_bp.route('/api/marketing/templates/<int:template_id>/immagine', methods=['GET'])
+def marketing_template_immagine(template_id):
+    """La foto del template, per l'anteprima nella pagina."""
+    from flask import make_response
+
+    template = MarketingTemplate.query.get_or_404(template_id)
+    if not template.immagine_mime or not template.immagine:
+        abort(404)
+    resp = make_response(bytes(template.immagine))
+    resp.headers['Content-Type'] = template.immagine_mime
+    # La foto di un template cambia senza cambiare indirizzo: niente cache.
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 @settings_bp.route('/api/marketing/templates/<int:template_id>', methods=['DELETE'])
 def marketing_delete_template(template_id):
@@ -4029,10 +4143,19 @@ def marketing_send_whatsapp():
     accodato e' un messaggio impegnato, anche se la sua riga in
     `marketing_invii` nascera' solo quando parte davvero.
     """
+    import json
     from datetime import date
-    from ..services import marketing_queue, usage_monitor
+    from ..services import marketing_queue, marketing_images, usage_monitor
 
-    data = request.get_json()
+    # Con la foto la richiesta e' multipart: i dati viaggiano nel campo
+    # `dati` (JSON) e la foto accanto. Senza foto resta il JSON di sempre.
+    if request.is_json:
+        data = request.get_json(silent=True)
+    else:
+        try:
+            data = json.loads(request.form.get('dati') or 'null')
+        except ValueError:
+            data = None
     if not data:
         return jsonify({'success': False, 'error': 'Dati mancanti'}), 400
 
@@ -4043,6 +4166,23 @@ def marketing_send_whatsapp():
         return jsonify({'success': False, 'error': 'Nessun cliente selezionato'}), 400
     if not template.strip():
         return jsonify({'success': False, 'error': 'Messaggio vuoto'}), 400
+
+    # La foto: o caricata adesso, o quella del template scelto. Si elabora
+    # UNA volta qui e la stessa copia in memoria va a tutti i messaggi.
+    immagine = None
+    file = request.files.get('immagine')
+    try:
+        if file and file.filename:
+            immagine = marketing_images.elabora(file)
+        elif data.get('immagine_template_id'):
+            tpl = db.session.get(MarketingTemplate, int(data.get('immagine_template_id')))
+            if not tpl or not tpl.immagine_mime:
+                return jsonify({'success': False, 'error': 'La foto del template non esiste più: ricarica la pagina'}), 400
+            immagine = bytes(tpl.immagine)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    foto = ({'dati': immagine, 'mime': marketing_images.MIME, 'nome': 'promo.jpg'}
+            if immagine else None)
 
     business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
     if not business_info:
@@ -4108,7 +4248,10 @@ def marketing_send_whatsapp():
                 # il segnaposto non e' piu' offerto dalla pagina, e se resta scritto a
                 # mano in un vecchio template sparisce invece di stampare il cognome.
                 ('{{cognome}}', ''),
-                ('{{giorni_assenza}}', str(client_data.get('giorni_assenza', '0'))),
+                # `or 0` come nell'anteprima: un cliente mai venuto ha
+                # giorni_assenza null, e str(None) finiva nel messaggio.
+                ('{{giorni_assenza}}', str(client_data.get('giorni_assenza') or 0)),
+                ('{{ultimo_servizio}}', client_data.get('ultimo_servizio', '')),
                 ('{{totale_visite}}', str(client_data.get('totale_visite', '0'))),
                 ('{{totale_speso}}', str(client_data.get('totale_speso', '0'))),
                 ('{{servizio_preferito}}', client_data.get('servizio_preferito', '')),
@@ -4120,6 +4263,7 @@ def marketing_send_whatsapp():
             'nome': etichetta,
             'numero': numero,
             'testo': messaggio,
+            'foto': foto,
         })
 
     if not messaggi:

@@ -83,7 +83,8 @@ def stato(chiave):
 def accoda(app, chiave, messaggi, config):
     """Mette in coda i messaggi gia' pronti e, se non sta girando, avvia il
     thread che li manda. `messaggi` e' una lista di dizionari con client_id,
-    nome, numero e testo: la sostituzione delle variabili e la validazione del
+    nome, numero, testo e foto (None o dict dati/mime/nome, la stessa copia
+    condivisa da tutti i messaggi di un invio): la sostituzione delle variabili e la validazione del
     numero sono gia' state fatte dentro la richiesta, dove gli errori si
     possono ancora mostrare all'operatore.
 
@@ -119,8 +120,15 @@ def _invia(messaggio, config):
     e non JSON, `attendees_ids` stringa e non lista, e 202 fra gli esiti buoni.
     Il marketing aveva una forma tutta sua - e infatti non ha mai spedito
     niente (`marketing_invii` vuota su tutti e due i negozi al 02/09/2026).
+
+    Con la foto la richiesta diventa multipart: stessi campi, piu' il file nel
+    campo `attachments`.
     """
     import requests
+    foto = messaggio.get('foto')
+    files = None
+    if foto:
+        files = {'attachments': (foto['nome'], foto['dati'], foto['mime'])}
     resp = requests.post(
         '%s/api/v1/chats' % config['base_url'].rstrip('/'),
         headers={'X-API-KEY': config['token'], 'accept': 'application/json'},
@@ -129,7 +137,8 @@ def _invia(messaggio, config):
             'attendees_ids': '%s@s.whatsapp.net' % messaggio['numero'],
             'text': messaggio['testo'],
         },
-        timeout=30,
+        files=files,
+        timeout=60 if foto else 30,
     )
     if resp.status_code in (200, 201, 202):
         return True, None
@@ -184,7 +193,8 @@ def _lavora(app, chiave):
 
                 db.session.add(MarketingInvio(
                     client_id=messaggio['client_id'],
-                    messaggio=messaggio['testo'][:500],
+                    messaggio=(('[foto] ' if messaggio.get('foto') else '')
+                               + messaggio['testo'])[:500],
                     stato='inviato' if riuscito else 'errore',
                     errore=(errore[:500] if errore else None),
                 ))

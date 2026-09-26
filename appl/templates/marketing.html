@@ -209,27 +209,44 @@
                     <form id="marketingMessageForm">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         
-                        <!-- Template predefiniti e salvati -->
+                        <!-- Template: scelta, salvataggio ed eliminazione sulla stessa riga -->
                         <div class="mb-3">
-                            <label class="form-label">Template</label>
-                            <select class="form-select" id="templatePreset">
-                                <option value="">-- Seleziona template --</option>
-                                    {% for tpl in saved_templates %}
-                                    <option value="saved_{{ tpl.id }}" data-testo="{{ tpl.testo|e }}">📄 {{ tpl.nome }}</option>
-                                    {% endfor %}
-                                </optgroup>
-                                <optgroup label="✨ Predefiniti">
-                                    <option value="riattivazione">🔄 Riattivazione cliente inattivo</option>
-                                    <option value="promo">🎁 Promozione speciale</option>
-                                    <option value="fidelity">⭐ Programma fedeltà</option>
-                                    <option value="novita">🆕 Novità servizi</option>
-                                    <option value="stagionale">🌸 Promo stagionale</option>
-                                </optgroup>
-                            </select>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label mb-0" for="templatePreset">Template</label>
+                                <small id="tplStato" class="text-muted"></small>
+                            </div>
+                            <div class="input-group">
+                                <select class="form-select" id="templatePreset"></select>
+                                <button type="button" class="btn btn-outline-primary" id="btnSaveTemplate"
+                                        data-bs-toggle="tooltip" data-bs-placement="top"
+                                        data-bs-title="Salva testo e foto come template, per riusarli nelle prossime campagne">
+                                    <i class="bi bi-save"></i><span class="d-none d-xl-inline ms-1">Salva</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger" id="btnDeleteTemplate" style="display:none;"
+                                        data-bs-toggle="tooltip" data-bs-placement="top"
+                                        data-bs-title="Elimina questo template">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
                         </div>
 
 <div class="mb-3">
-    <label for="marketing_message" class="form-label">Messaggio WhatsApp</label>
+    <div class="d-flex justify-content-between align-items-end mb-1">
+        <label for="marketing_message" class="form-label mb-0">Messaggio WhatsApp</label>
+        {# Formattazione WhatsApp: *grassetto* e _corsivo_ sono simboli nel testo
+           che WhatsApp mostra formattati; il maiuscolo invece converte il testo. #}
+        <div class="btn-group btn-group-sm" role="group" aria-label="Formattazione testo">
+            <button type="button" class="btn btn-outline-secondary fw-bold btn-formato" data-formato="grassetto"
+                    data-bs-toggle="tooltip" data-bs-html="true"
+                    data-bs-title="<b>Grassetto</b> (Ctrl+B)<br>Seleziona il testo e premi: su WhatsApp arriva in grassetto">G</button>
+            <button type="button" class="btn btn-outline-secondary fst-italic btn-formato" data-formato="corsivo"
+                    data-bs-toggle="tooltip" data-bs-html="true"
+                    data-bs-title="<i>Corsivo</i> (Ctrl+I)<br>Seleziona il testo e premi: su WhatsApp arriva in corsivo">C</button>
+            <button type="button" class="btn btn-outline-secondary btn-formato" data-formato="maiuscolo"
+                    data-bs-toggle="tooltip" data-bs-html="true"
+                    data-bs-title="MAIUSCOLO<br>Seleziona il testo e premi; premi di nuovo per tornare minuscolo">AA</button>
+        </div>
+    </div>
     <textarea class="form-control" id="marketing_message" name="marketing_message" rows="10" placeholder="Scrivi il messaggio...">{{ marketing_message or '' }}</textarea>
     <div class="form-text">
         <div class="fw-semibold mb-1">Variabili disponibili</div>
@@ -245,10 +262,32 @@
     </div>
 </div>
 
+                        <!-- Foto allegata: si sceglie col clic o trascinandola sul riquadro -->
+                        <div class="mb-3">
+                            <label class="form-label">Foto <span class="text-muted small">(facoltativa)</span></label>
+                            <input type="file" id="fotoInput" accept="image/png,image/jpeg" class="d-none">
+                            <div id="fotoVuota" class="foto-drop rounded border p-3 text-center" role="button" tabindex="0">
+                                <i class="bi bi-image fs-4 d-block text-muted"></i>
+                                <span class="fw-semibold">Aggiungi foto</span>
+                                <div class="small text-muted">JPG o PNG fino a 10 MB: la ridimensioniamo noi</div>
+                            </div>
+                            <div id="fotoPiena" class="d-none align-items-center gap-3 rounded border p-2">
+                                <img id="fotoThumb" alt="" class="rounded" style="width:72px;height:72px;object-fit:cover;">
+                                <div class="flex-grow-1 small text-truncate" id="fotoNome"></div>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary" id="btnFotoCambia">Cambia</button>
+                                    <button type="button" class="btn btn-outline-danger" id="btnFotoRimuovi"
+                                            data-bs-toggle="tooltip" data-bs-title="Togli la foto dal messaggio">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Anteprima messaggio -->
                         <div class="mb-3">
-                            <label class="form-label">Anteprima (primo cliente selezionato)</label>
-<div id="messagePreview" class="p-3 bg-success bg-opacity-10 rounded border" style="min-height: 100px; white-space: pre-wrap;"><span class="text-muted">Seleziona almeno un cliente per vedere l'anteprima</span></div>
+                            <label class="form-label" id="previewLabel">Anteprima</label>
+<div id="messagePreview" class="p-3 bg-success bg-opacity-10 rounded border" style="min-height: 100px;"><img id="previewFoto" alt="" class="rounded mb-2" style="display:none;max-width:100%;max-height:260px;"><div id="previewTesto" style="white-space: pre-wrap;"></div></div>
                         </div>
 
                         <!-- Pulsanti azioni -->
@@ -274,14 +313,6 @@
                                 <div class="progress-bar" id="codaBarra" role="progressbar" style="width:0%;"></div>
                               </div>
                               <div class="small text-muted mt-2" id="codaDettaglio"></div>
-                            </div>
-                            <div class="btn-group w-100">
-                                <button type="button" class="btn btn-outline-primary" id="btnSaveTemplate">
-                                    <i class="bi bi-save me-2"></i>Salva come nuovo
-                                </button>
-                                <button type="button" class="btn btn-outline-danger" id="btnDeleteTemplate" style="display:none;">
-                                    <i class="bi bi-trash"></i>
-                                </button>
                             </div>
                         </div>
                     </form>
@@ -479,6 +510,46 @@
    pulsante della SEZIONE 4 (Immagini Marketing). #}
 {% include '_supporto_modal.html' %}
 
+{# Salvataggio template. Se c'e' un template salvato aperto, la scelta
+   predefinita e' aggiornarlo; "nuovo template" chiede solo il nome. #}
+<div class="modal fade" id="modalSalvaTemplate" tabindex="-1" aria-labelledby="modalSalvaTemplateTitolo" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="formSalvaTemplate" novalidate>
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalSalvaTemplateTitolo"><i class="bi bi-save me-2"></i>Salva template</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+        </div>
+        <div class="modal-body">
+          <div id="salvaSceltaModo" class="mb-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="salvaModo" id="salvaModoAggiorna" value="aggiorna" checked>
+              <label class="form-check-label" for="salvaModoAggiorna">Aggiorna <strong id="salvaNomeCorrente"></strong></label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="salvaModo" id="salvaModoNuovo" value="nuovo">
+              <label class="form-check-label" for="salvaModoNuovo">Crea un nuovo template</label>
+            </div>
+          </div>
+          <div id="salvaBloccoNome" class="mb-3">
+            <label for="salvaNome" class="form-label">Nome del template</label>
+            <input type="text" class="form-control" id="salvaNome" maxlength="100" placeholder="es. Promo estate">
+          </div>
+          <div class="d-flex align-items-center gap-2 small text-muted">
+            <img id="salvaThumb" alt="" class="rounded" style="display:none;width:40px;height:40px;object-fit:cover;">
+            <span id="salvaRiepilogo"></span>
+          </div>
+          <div id="salvaErrore" class="alert alert-danger py-2 small mt-3 mb-0" style="display:none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annulla</button>
+          <button type="submit" class="btn btn-primary" id="btnConfermaSalva"><i class="bi bi-save me-1"></i>Salva</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- CSS aggiuntivo -->
 <style>
 /* Override locale: nei card-header i titoli devono restare bianchi e senza ombra */
@@ -506,6 +577,16 @@
 #clientResults .client-item {
     border-bottom: 1px solid #eee;
     padding: 10px;
+}
+.foto-drop {
+    border-style: dashed !important;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+.foto-drop:hover, .foto-drop:focus, .foto-drop.trascina {
+    background-color: #e7f1ff;
+    border-color: #0d6efd !important;
+    outline: none;
 }
 .tooltip code {
     color: #ffacdf !important;
@@ -547,6 +628,63 @@ function insertMarketingVariable(variable) {
 
 function insertNewClientVariable(variable) {
     insertAtCursorById('new_client_message', variable);
+}
+
+// Formattazione WhatsApp della selezione. Grassetto e corsivo mettono (o
+// tolgono, se ci sono gia') i simboli * e _ che WhatsApp interpreta; il
+// maiuscolo converte davvero il testo, lasciando stare le variabili tra
+// doppie graffe (in maiuscolo non verrebbero piu' riconosciute).
+function formattaSelezione(textareaId, formato) {
+    const ta = document.getElementById(textareaId);
+    if (!ta) return;
+    ta.focus();
+    let s = ta.selectionStart, e = ta.selectionEnd;
+    let sel = ta.value.slice(s, e);
+    // WhatsApp non formatta se il simbolo tocca uno spazio: gli spazi ai
+    // bordi della selezione restano fuori.
+    if (sel.trim()) {
+        s += sel.length - sel.replace(/^\s+/, '').length;
+        e -= sel.length - sel.replace(/\s+$/, '').length;
+        sel = ta.value.slice(s, e);
+    }
+
+    let nuovo, da, a;
+    if (formato === 'maiuscolo') {
+        if (!sel) return;
+        const conv = sel === sel.toUpperCase()
+            ? t => t.toLowerCase()
+            : t => t.toUpperCase();
+        nuovo = sel.split(/(\{\{[^}]*\}\})/).map((p, i) => i % 2 ? p : conv(p)).join('');
+        da = 0; a = nuovo.length;
+    } else {
+        const m = formato === 'grassetto' ? '*' : '_';
+        if (sel.length >= 2 && sel.startsWith(m) && sel.endsWith(m)) {
+            nuovo = sel.slice(1, -1); da = 0; a = nuovo.length;
+        } else if (sel && ta.value.charAt(s - 1) === m && ta.value.charAt(e) === m) {
+            s -= 1; e += 1; nuovo = sel; da = 0; a = sel.length;
+        } else {
+            nuovo = m + sel + m; da = 1; a = 1 + sel.length;
+        }
+    }
+
+    ta.setSelectionRange(s, e);
+    // execCommand lascia funzionare Ctrl+Z; se il browser non lo fa, a mano.
+    let fatto = false;
+    try { fatto = document.execCommand('insertText', false, nuovo); } catch (err) {}
+    if (!fatto) ta.setRangeText(nuovo, s, e, 'end');
+    ta.setSelectionRange(s + da, s + a);
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+// Il testo come lo mostra WhatsApp: *grassetto*, _corsivo_, ~barrato~.
+// Si esce dall'HTML PRIMA di formattare, cosi' nel testo (nomi dei clienti
+// compresi) non puo' passare niente di eseguibile.
+function testoWhatsAppHtml(testo) {
+    const esc = testo.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const stile = (t, m, tag) => t.replace(
+        new RegExp('(^|[^\\p{L}\\p{N}' + m + '])' + m + '(?=\\S)([^' + m + '\\n]*?\\S)' + m + '(?![\\p{L}\\p{N}])', 'gu'),
+        '$1<' + tag + '>$2</' + tag + '>');
+    return stile(stile(stile(esc, '\\*', 'strong'), '_', 'em'), '~', 's');
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -642,13 +780,12 @@ document.addEventListener('DOMContentLoaded', function() {
         updatePreview();
     });
 
-    // Template predefiniti e salvati
-    document.getElementById('templatePreset')?.addEventListener('change', function() {
-        const selected = this.value;
-        const deleteBtn = document.getElementById('btnDeleteTemplate');
-        
-        // Template predefiniti hardcoded
-        const presets = {
+    // ---------------------------------------------------------------------
+    // Template e foto.
+    // Un template salvato porta con se' testo e foto: aprirlo li sostituisce
+    // entrambi. I predefiniti sono solo testo e la foto scelta resta.
+    // ---------------------------------------------------------------------
+    const PRESETS = {
             'riattivazione': `Ciao {{'{{nome}}'}}! 👋
 
 Ci manchi! Sono passati {{'{{giorni_assenza}}'}} giorni dalla tua ultima visita da {{'{{centro}}'}}.
@@ -694,30 +831,323 @@ La nuova stagione è arrivata da {{'{{centro}}'}}!
 Scopri i nuovi pacchetti e le offerte dedicate! 
 
 Ti aspettiamo 💆‍♀️`
-        };
-        
-        if (selected.startsWith('saved_')) {
-            // Template salvato: leggi da data-testo
-            const option = this.options[this.selectedIndex];
-            const testo = option.dataset.testo || '';
-            document.getElementById('marketing_message').value = testo;
-            deleteBtn.style.display = 'block';
-            deleteBtn.dataset.templateId = selected.replace('saved_', '');
-        } else if (presets[selected]) {
-            document.getElementById('marketing_message').value = presets[selected];
-            deleteBtn.style.display = 'none';
-        } else {
-            deleteBtn.style.display = 'none';
+    };
+    const PRESET_ETICHETTE = [
+        ['riattivazione', '🔄 Riattivazione cliente inattivo'],
+        ['promo', '🎁 Promozione speciale'],
+        ['fidelity', '⭐ Programma fedeltà'],
+        ['novita', '🆕 Novità servizi'],
+        ['stagionale', '🌸 Promo stagionale'],
+    ];
+    // url_for e non '/settings/...': con wsgi.py l'app sta sotto /s/<idx>.
+    const URL_TEMPLATES = "{{ url_for('settings.marketing_get_templates') }}";
+    const FOTO_MAX_BYTES = 10 * 1024 * 1024;
+    const NOME_CENTRO = {{ (business_info.business_name if business_info and business_info.business_name else 'Centro')|tojson }};
+    // Valori finti per l'anteprima quando non c'e' ancora nessun cliente scelto.
+    const CLIENTE_ESEMPIO = { nome: 'Laura', giorni_assenza: 45, totale_visite: 12, totale_speso: 320 };
+
+    let TEMPLATES = {{ saved_templates|tojson }};
+    let tplCorrente = null;   // template salvato aperto nel riquadro, o null
+    let foto = null;          // null | {tipo:'template', id, url} | {tipo:'file', file, url}
+    let valoreSelect = '';
+
+    const selTemplate = document.getElementById('templatePreset');
+    const txtMessaggio = document.getElementById('marketing_message');
+    const btnSalva = document.getElementById('btnSaveTemplate');
+    const btnElimina = document.getElementById('btnDeleteTemplate');
+    const fotoInput = document.getElementById('fotoInput');
+
+    function csrfToken() {
+        return document.querySelector('#marketingMessageForm input[name="csrf_token"]').value;
+    }
+    function nascondiTooltip(el) {
+        const tt = window.bootstrap && bootstrap.Tooltip.getInstance(el);
+        if (tt) tt.hide();
+    }
+
+    function disegnaSelect(valore) {
+        selTemplate.innerHTML = '';
+        selTemplate.add(new Option('-- Seleziona template --', ''));
+        if (TEMPLATES.length) {
+            const g = document.createElement('optgroup');
+            g.label = '📄 I tuoi template';
+            TEMPLATES.forEach(t => g.appendChild(
+                new Option('📄 ' + t.nome + (t.ha_immagine ? '  🖼️' : ''), 'saved_' + t.id)));
+            selTemplate.appendChild(g);
         }
+        const gp = document.createElement('optgroup');
+        gp.label = '✨ Predefiniti';
+        PRESET_ETICHETTE.forEach(([k, l]) => gp.appendChild(new Option(l, k)));
+        selTemplate.appendChild(gp);
+        selTemplate.value = valore || '';
+        valoreSelect = selTemplate.value;
+    }
+
+    // Ci sono modifiche al template aperto che non sono ancora salvate?
+    function modificato() {
+        if (!tplCorrente) return false;
+        if (txtMessaggio.value.trim() !== (tplCorrente.testo || '').trim()) return true;
+        if (foto && foto.tipo === 'file') return true;
+        if (tplCorrente.ha_immagine && !foto) return true;
+        return false;
+    }
+
+    function aggiornaStatoTemplate() {
+        const stato = document.getElementById('tplStato');
+        const cambiato = modificato();
+        // Il pulsante Salva si accende quando c'e' qualcosa da salvare.
+        btnSalva.classList.toggle('btn-primary', cambiato);
+        btnSalva.classList.toggle('btn-outline-primary', !cambiato);
+        btnElimina.style.display = tplCorrente ? '' : 'none';
+        if (cambiato) {
+            stato.className = 'small text-warning-emphasis';
+            stato.innerHTML = '<i class="bi bi-pencil me-1"></i>Modifiche non salvate';
+        } else if (!stato.dataset.flash) {
+            stato.textContent = '';
+        }
+    }
+
+    function mostraEsito(testo) {
+        const stato = document.getElementById('tplStato');
+        stato.className = 'small text-success';
+        stato.innerHTML = '<i class="bi bi-check-circle me-1"></i>';
+        stato.append(document.createTextNode(testo));
+        stato.dataset.flash = '1';
+        setTimeout(() => {
+            delete stato.dataset.flash;
+            aggiornaStatoTemplate();
+        }, 3500);
+    }
+
+    function fotoDaTemplate(t) {
+        // ?v= perche' la foto di un template puo' cambiare senza cambiare indirizzo
+        return t && t.ha_immagine
+            ? { tipo: 'template', id: t.id, url: `${URL_TEMPLATES}/${t.id}/immagine?v=${Date.now()}` }
+            : null;
+    }
+
+    function impostaFoto(nuova) {
+        if (foto && foto.tipo === 'file' && foto !== nuova) URL.revokeObjectURL(foto.url);
+        foto = nuova;
+        const piena = document.getElementById('fotoPiena');
+        document.getElementById('fotoVuota').classList.toggle('d-none', !!foto);
+        piena.classList.toggle('d-none', !foto);
+        piena.classList.toggle('d-flex', !!foto);
+        if (foto) {
+            document.getElementById('fotoThumb').src = foto.url;
+            document.getElementById('fotoNome').textContent =
+                foto.tipo === 'file' ? foto.file.name : 'Foto del template';
+        }
+        aggiornaStatoTemplate();
         updatePreview();
+    }
+
+    function caricaFileFoto(file) {
+        if (!file) return;
+        if (!/^image\/(png|jpeg)$/.test(file.type)) {
+            alert('La foto deve essere JPG o PNG.');
+            return;
+        }
+        if (file.size > FOTO_MAX_BYTES) {
+            alert(`La foto pesa ${(file.size / 1048576).toFixed(1)} MB: il massimo è 10 MB.`);
+            return;
+        }
+        impostaFoto({ tipo: 'file', file: file, url: URL.createObjectURL(file) });
+    }
+
+    function scegliFoto() {
+        fotoInput.value = '';
+        fotoInput.click();
+    }
+
+    fotoInput.addEventListener('change', () => caricaFileFoto(fotoInput.files[0]));
+    const fotoVuota = document.getElementById('fotoVuota');
+    fotoVuota.addEventListener('click', scegliFoto);
+    fotoVuota.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scegliFoto(); }
+    });
+    document.getElementById('btnFotoCambia').addEventListener('click', scegliFoto);
+    document.getElementById('btnFotoRimuovi').addEventListener('click', function() {
+        nascondiTooltip(this);
+        impostaFoto(null);
+    });
+    // Trascinare la foto sul riquadro (vuoto o pieno) equivale a sceglierla.
+    ['fotoVuota', 'fotoPiena'].forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('trascina'); });
+        el.addEventListener('dragleave', () => el.classList.remove('trascina'));
+        el.addEventListener('drop', e => {
+            e.preventDefault();
+            el.classList.remove('trascina');
+            caricaFileFoto(e.dataTransfer.files && e.dataTransfer.files[0]);
+        });
     });
 
-    // Aggiorna anteprima quando cambia il testo
-    document.getElementById('marketing_message')?.addEventListener('input', updatePreview);
+    selTemplate.addEventListener('change', function() {
+        const scelto = this.value;
+        if (modificato() && !confirm(`Le modifiche a "${tplCorrente.nome}" non sono salvate e andranno perse. Continuare?`)) {
+            this.value = valoreSelect;
+            return;
+        }
+        valoreSelect = scelto;
+        if (scelto.startsWith('saved_')) {
+            const t = TEMPLATES.find(x => 'saved_' + x.id === scelto) || null;
+            tplCorrente = t;
+            txtMessaggio.value = t ? t.testo : '';
+            impostaFoto(fotoDaTemplate(t));
+        } else {
+            tplCorrente = null;
+            if (PRESETS[scelto]) txtMessaggio.value = PRESETS[scelto];
+            aggiornaStatoTemplate();
+            updatePreview();
+        }
+    });
+
+    txtMessaggio.addEventListener('input', () => { updatePreview(); aggiornaStatoTemplate(); });
+
+    document.querySelectorAll('.btn-formato').forEach(btn => {
+        // mousedown: senza, il clic toglie il fuoco al riquadro e la selezione si perde
+        btn.addEventListener('mousedown', e => e.preventDefault());
+        btn.addEventListener('click', function() {
+            nascondiTooltip(this);
+            formattaSelezione('marketing_message', this.dataset.formato);
+        });
+    });
+    txtMessaggio.addEventListener('keydown', e => {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+        const k = e.key.toLowerCase();
+        if (k === 'b' || k === 'i') {
+            e.preventDefault();
+            formattaSelezione('marketing_message', k === 'b' ? 'grassetto' : 'corsivo');
+        }
+    });
     document.getElementById('new_client_message')?.addEventListener('input', updateNewClientPreview);
 
-    // Salva template marketing
-    document.getElementById('btnSaveTemplate')?.addEventListener('click', saveMarketingTemplate);
+    // --- Salvataggio: un modal solo, "aggiorna" o "nuovo" ---
+    const modalSalvaEl = document.getElementById('modalSalvaTemplate');
+    const modalSalva = new bootstrap.Modal(modalSalvaEl);
+    const salvaNome = document.getElementById('salvaNome');
+    const salvaErrore = document.getElementById('salvaErrore');
+    const btnConfermaSalva = document.getElementById('btnConfermaSalva');
+
+    function salvaNuovo() {
+        return document.getElementById('salvaModoNuovo').checked;
+    }
+    function aggiornaModoSalva() {
+        const nuovo = salvaNuovo();
+        document.getElementById('salvaBloccoNome').style.display = nuovo ? '' : 'none';
+        btnConfermaSalva.innerHTML = nuovo
+            ? '<i class="bi bi-plus-lg me-1"></i>Crea template'
+            : '<i class="bi bi-save me-1"></i>Aggiorna';
+        salvaErrore.style.display = 'none';
+        if (nuovo) salvaNome.focus();
+    }
+    document.querySelectorAll('input[name="salvaModo"]').forEach(r => r.addEventListener('change', aggiornaModoSalva));
+    modalSalvaEl.addEventListener('shown.bs.modal', () => { if (salvaNuovo()) salvaNome.focus(); });
+
+    btnSalva.addEventListener('click', function() {
+        nascondiTooltip(this);
+        if (!txtMessaggio.value.trim()) {
+            alert('Scrivi il messaggio prima di salvarlo come template.');
+            txtMessaggio.focus();
+            return;
+        }
+        const aperto = !!tplCorrente;
+        document.getElementById('salvaSceltaModo').style.display = aperto ? '' : 'none';
+        document.getElementById('salvaNomeCorrente').textContent = aperto ? `"${tplCorrente.nome}"` : '';
+        document.getElementById(aperto ? 'salvaModoAggiorna' : 'salvaModoNuovo').checked = true;
+        salvaNome.value = '';
+
+        const thumb = document.getElementById('salvaThumb');
+        thumb.style.display = foto ? '' : 'none';
+        if (foto) thumb.src = foto.url;
+        const car = txtMessaggio.value.trim().length;
+        document.getElementById('salvaRiepilogo').textContent = foto
+            ? `Verranno salvati il testo (${car} caratteri) e la foto.`
+            : `Verrà salvato il testo (${car} caratteri), senza foto.`;
+
+        aggiornaModoSalva();
+        modalSalva.show();
+    });
+
+    document.getElementById('formSalvaTemplate').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const nuovo = salvaNuovo();
+        const nome = salvaNome.value.trim();
+        const errore = msg => { salvaErrore.textContent = msg; salvaErrore.style.display = ''; };
+
+        if (nuovo && !nome) { errore('Dai un nome al template.'); salvaNome.focus(); return; }
+        if (nuovo && TEMPLATES.some(t => t.nome.toLowerCase() === nome.toLowerCase())) {
+            errore(`Esiste già un template chiamato "${nome}": scegli un altro nome, oppure aprilo e aggiornalo.`);
+            salvaNome.focus();
+            return;
+        }
+
+        const fd = new FormData();
+        fd.append('testo', txtMessaggio.value);
+        if (nuovo) fd.append('nome', nome);
+        if (foto && foto.tipo === 'file') {
+            fd.append('immagine', foto.file);
+        } else if (nuovo && foto && foto.tipo === 'template') {
+            fd.append('copia_immagine_da', foto.id);
+        } else if (!nuovo && !foto && tplCorrente.ha_immagine) {
+            fd.append('rimuovi_immagine', '1');
+        }
+
+        const originale = btnConfermaSalva.innerHTML;
+        btnConfermaSalva.disabled = true;
+        btnConfermaSalva.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Salvataggio...';
+
+        fetch(nuovo ? URL_TEMPLATES : `${URL_TEMPLATES}/${tplCorrente.id}`, {
+            method: nuovo ? 'POST' : 'PUT',
+            headers: { 'X-CSRFToken': csrfToken() },
+            body: fd
+        })
+        .then(r => r.json().catch(() => ({ success: false, error: `Errore del server (${r.status})` })))
+        .then(data => {
+            if (!data.success) { errore(data.error || 'Template non salvato.'); return; }
+            const t = data.template;
+            TEMPLATES = TEMPLATES.filter(x => x.id !== t.id).concat([t])
+                .sort((a, b) => a.nome.localeCompare(b.nome, 'it'));
+            tplCorrente = t;
+            txtMessaggio.value = t.testo;
+            disegnaSelect('saved_' + t.id);
+            impostaFoto(fotoDaTemplate(t));
+            modalSalva.hide();
+            mostraEsito(nuovo ? `Template "${t.nome}" creato` : 'Modifiche salvate');
+        })
+        .catch(() => errore('Errore di connessione: template non salvato.'))
+        .finally(() => {
+            btnConfermaSalva.disabled = false;
+            btnConfermaSalva.innerHTML = originale;
+        });
+    });
+
+    btnElimina.addEventListener('click', function() {
+        nascondiTooltip(this);
+        if (!tplCorrente) return;
+        if (!confirm(`Eliminare il template "${tplCorrente.nome}"?`)) return;
+        const t = tplCorrente;
+        fetch(`${URL_TEMPLATES}/${t.id}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrfToken() }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) { alert('Errore: template non eliminato'); return; }
+            TEMPLATES = TEMPLATES.filter(x => x.id !== t.id);
+            tplCorrente = null;
+            // Il testo resta nel riquadro; la foto era del template e sparisce con lui.
+            if (foto && foto.tipo === 'template') impostaFoto(null);
+            disegnaSelect('');
+            aggiornaStatoTemplate();
+            mostraEsito(`Template "${t.nome}" eliminato`);
+        })
+        .catch(() => alert('Errore di connessione: template non eliminato'));
+    });
+
+    disegnaSelect('');
+    impostaFoto(null);
 
     // Salva template nuovo cliente
     document.getElementById('btnSaveNewClientMessage')?.addEventListener('click', saveNewClientMessage);
@@ -813,29 +1243,34 @@ Ti aspettiamo 💆‍♀️`
     }
 
     function updatePreview() {
-        const previewDiv = document.getElementById('messagePreview');
         const message = document.getElementById('marketing_message').value;
         const firstSelected = document.querySelector('.client-checkbox:checked');
-        
-        if (!firstSelected) {
-            previewDiv.innerHTML = '<span class="text-muted">Seleziona almeno un cliente per vedere l\'anteprima</span>';
-            return;
+
+        // Senza clienti scelti si mostra comunque, con un cliente di esempio:
+        // serve mentre si scrive o si prepara un template.
+        let clientData = CLIENTE_ESEMPIO;
+        document.getElementById('previewLabel').textContent = firstSelected
+            ? 'Anteprima (primo cliente selezionato)'
+            : 'Anteprima (cliente di esempio)';
+        if (firstSelected) {
+            clientData = JSON.parse(firstSelected.closest('.client-item').dataset.client || '{}');
         }
-        
-        const clientItem = firstSelected.closest('.client-item');
-        const clientData = JSON.parse(clientItem.dataset.client || '{}');
-        
+
         let preview = message
             .replace(/\{\{nome\}\}/g, clientData.nome || '')
-            .replace(/\{\{cognome\}\}/g, clientData.cognome || '')
+            // come sul server: il cognome su WhatsApp non esce
+            .replace(/\{\{cognome\}\}/g, '')
             .replace(/\{\{giorni_assenza\}\}/g, clientData.giorni_assenza || '0')
             .replace(/\{\{ultimo_servizio\}\}/g, clientData.ultimo_servizio || '')
             .replace(/\{\{totale_visite\}\}/g, clientData.totale_visite || '0')
             .replace(/\{\{totale_speso\}\}/g, clientData.totale_speso || '0')
             .replace(/\{\{servizio_preferito\}\}/g, clientData.servizio_preferito || '')
-            .replace(/\{\{centro\}\}/g, '{{ business_info.business_name if business_info else "Centro" }}');
-        
-        previewDiv.textContent = preview;
+            .replace(/\{\{centro\}\}/g, NOME_CENTRO);
+
+        const img = document.getElementById('previewFoto');
+        img.style.display = foto ? '' : 'none';
+        if (foto && img.getAttribute('src') !== foto.url) img.src = foto.url;
+        document.getElementById('previewTesto').innerHTML = testoWhatsAppHtml(preview);
     }
 
     function updateNewClientPreview() {
@@ -850,69 +1285,6 @@ Ti aspettiamo 💆‍♀️`
         
         previewDiv.textContent = preview;
     }
-
-    function saveMarketingTemplate() {
-        const message = document.getElementById('marketing_message').value;
-        if (!message.trim()) {
-            alert('Inserisci un messaggio prima di salvare');
-            return;
-        }
-        
-        const nome = prompt('Nome del template:', 'Nuovo template');
-        if (!nome || !nome.trim()) return;
-        
-        const token = document.querySelector('#marketingMessageForm input[name="csrf_token"]').value;
-        
-        fetch("{{ url_for('settings.marketing_create_template') }}", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': token
-            },
-            body: JSON.stringify({ nome: nome.trim(), testo: message })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                alert('Template salvato! Ricarico la pagina...');
-                location.reload();
-            } else {
-                alert('Errore: ' + (data.error || 'Errore sconosciuto'));
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            alert('Errore durante il salvataggio');
-        });
-    }
-
-    // Elimina template
-    document.getElementById('btnDeleteTemplate')?.addEventListener('click', function() {
-        const templateId = this.dataset.templateId;
-        if (!templateId) return;
-        
-        if (!confirm('Eliminare questo template?')) return;
-        
-        const token = document.querySelector('#marketingMessageForm input[name="csrf_token"]').value;
-        
-        fetch(`/settings/api/marketing/templates/${templateId}`, {
-            method: 'DELETE',
-            headers: { 'X-CSRFToken': token }
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                alert('Template eliminato!');
-                location.reload();
-            } else {
-                alert('Errore eliminazione');
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            alert('Errore');
-        });
-    });
 
     function saveNewClientSettings() {
         const enabled = document.getElementById('new_client_welcome_enabled').checked;
@@ -985,28 +1357,38 @@ Ti aspettiamo 💆‍♀️`
             return;
         }
         
-        if (!confirm(`Confermi l'invio del messaggio WhatsApp a ${selectedClients.length} clienti?\n\nQuesta operazione non può essere annullata.`)) {
+        const conFoto = foto ? ' con foto' : '';
+        if (!confirm(`Confermi l'invio del messaggio WhatsApp${conFoto} a ${selectedClients.length} clienti?\n\nQuesta operazione non può essere annullata.`)) {
             return;
         }
-        
+
         const token = document.querySelector('#marketingMessageForm input[name="csrf_token"]').value;
         const btn = document.getElementById('btnSendMarketing');
         const originalText = btn.innerHTML;
-        
+
         // Disabilita pulsante e mostra spinner
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Invio in corso...';
-        
+
+        // Foto nuova: multipart con i dati in JSON accanto. Foto del template:
+        // basta l'id, il server la rilegge dal database.
+        const dati = { clients: selectedClients, template: message };
+        const headers = { 'X-CSRFToken': token };
+        let body;
+        if (foto && foto.tipo === 'template') dati.immagine_template_id = foto.id;
+        if (foto && foto.tipo === 'file') {
+            body = new FormData();
+            body.append('dati', JSON.stringify(dati));
+            body.append('immagine', foto.file);
+        } else {
+            headers['Content-Type'] = 'application/json';
+            body = JSON.stringify(dati);
+        }
+
         fetch("{{ url_for('settings.marketing_send_whatsapp') }}", {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': token
-            },
-            body: JSON.stringify({
-                clients: selectedClients,
-                template: message
-            })
+            headers: headers,
+            body: body
         })
         .then(r => r.json())
         .then(data => {
