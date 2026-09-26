@@ -630,6 +630,14 @@ function insertNewClientVariable(variable) {
     insertAtCursorById('new_client_message', variable);
 }
 
+// Nome e cognome con la maiuscola a ogni parola, come capitalizeName() di
+// calendar.js e cassa.js (che questa pagina non carica). \p{L} invece di \w:
+// con \w un'iniziale accentata restava minuscola ("ÉLISE" -> "éLise").
+function capitalizeName(name) {
+    if (!name) return name || '';
+    return String(name).toLowerCase().replace(/(^|[^\p{L}\p{N}])(\p{L})/gu, (m, prima, l) => prima + l.toUpperCase());
+}
+
 // Formattazione WhatsApp della selezione. Grassetto e corsivo mettono (o
 // tolgono, se ci sono gia') i simboli * e _ che WhatsApp interpreta; il
 // maiuscolo converte davvero il testo, lasciando stare le variabili tra
@@ -1185,16 +1193,26 @@ Ti aspettiamo 💆‍♀️`
         .then(r => r.json())
         .then(data => {
             if (data.clients && data.clients.length > 0) {
+                // Tutto quello che viene dal database passa da esc(): un apostrofo
+                // nel cognome (D'Amico) chiudeva l'attributo data-client e il
+                // cliente non si poteva piu' usare, e un nome con dentro HTML
+                // (puo' arrivare dal booking online) veniva eseguito nella pagina.
+                const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                 let html = '';
                 data.clients.forEach(client => {
+                    // Qui e non solo a video: da data-client passano anche
+                    // anteprima e invio, cosi' su WhatsApp arriva "Maria" e non "MARIA".
+                    client.nome = capitalizeName(client.nome);
+                    client.cognome = capitalizeName(client.cognome);
                     html += `
-                        <div class="client-item d-flex align-items-center" data-client='${JSON.stringify(client)}'>
-                            <input type="checkbox" class="form-check-input client-checkbox me-3" 
-                                   value="${client.id}" data-phone="${client.cellulare || ''}">
+                        <div class="client-item d-flex align-items-center" data-client="${esc(JSON.stringify(client))}">
+                            <input type="checkbox" class="form-check-input client-checkbox me-3"
+                                   value="${esc(client.id)}" data-phone="${esc(client.cellulare)}">
                             <div class="flex-grow-1">
-                                <div class="fw-bold">${client.nome} ${client.cognome}</div>
+                                <div class="fw-bold">${esc(client.nome)} ${esc(client.cognome)}</div>
                                 <small class="text-muted">
-                                    📱 ${client.cellulare || 'N/D'}
+                                    📱 ${esc(client.cellulare || 'N/D')}
                                     ${client.giorni_assenza ? ' • 📅 ' + client.giorni_assenza + ' gg fa' : ''}
                                     ${client.totale_visite ? ' • 🔄 ' + client.totale_visite + ' visite' : ''}
                                 </small>
