@@ -6951,15 +6951,13 @@ document.addEventListener('mouseout', function(e) {
   const block = popup ? popup.closest('.appointment-block') : e.target.closest('.appointment-block');
   if (!block) return;
 
-  // Simmetrico al mouseover qui sopra: 'mouseout' sale, quindi scatta anche solo
-  // passando dal corpo del blocco a un suo figlio (maniglia, contenuto, barra).
-  // Il mouseover in quel caso esce subito col suo guard, questo invece resettava
-  // tutto - z-index compreso - e non lo rimetteva piu' nessuno. Non e' un'uscita
-  // dal blocco: e' un movimento interno, e va ignorato.
-  const _dentroLoStessoBlocco = e.relatedTarget && e.relatedTarget.closest
-    && e.relatedTarget.closest('.appointment-block') === block;
-  if (_dentroLoStessoBlocco) return;
-
+  // Navigator pieno (taglia/copia): questo ramo resta PRIMA del guard qui sotto.
+  // Col taglio attivo il blocco ha .cut-mode-active, e con quella classe il CSS
+  // lascia la barra a opacity 0 (styles.css, regole .popup-buttons con
+  // :not(.cut-mode-active)): le forbici diventano visibili solo quando il timeout
+  // qui sotto toglie la classe, cioe' al primo movimento del mouse DENTRO il
+  // blocco. Col guard davanti quel timeout non partiva piu' e le forbici
+  // restavano invisibili finche' il Navigator non si svuotava.
   if (window.pseudoBlocks && window.pseudoBlocks.length > 0) {
     const related = e.relatedTarget;
     if (related) {
@@ -6979,6 +6977,15 @@ document.addEventListener('mouseout', function(e) {
     }, 80);
     return;
   }
+
+  // Simmetrico al mouseover qui sopra: 'mouseout' sale, quindi scatta anche solo
+  // passando dal corpo del blocco a un suo figlio (maniglia, contenuto, barra).
+  // Il mouseover in quel caso esce subito col suo guard, questo invece resettava
+  // tutto - z-index compreso - e non lo rimetteva piu' nessuno. Non e' un'uscita
+  // dal blocco: e' un movimento interno, e va ignorato.
+  const _dentroLoStessoBlocco = e.relatedTarget && e.relatedTarget.closest
+    && e.relatedTarget.closest('.appointment-block') === block;
+  if (_dentroLoStessoBlocco) return;
 
   closeDesktopPopupForBlock(block, e.relatedTarget);
 }, true);
