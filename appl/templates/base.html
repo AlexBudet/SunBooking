@@ -1005,6 +1005,55 @@ document.addEventListener('DOMContentLoaded', function() {
       {% include '_demo_dispositivo_modal.html' %}
     {% endif %}
 
+    {# Pre-caricamento dei pulsanti "Frequenti" della Cassa. Passando da Agenda a
+       Cassa i pulsanti comparivano solo dopo la richiesta al server, che rilegge
+       la classifica dei servizi dagli scontrini. Qui, a pagina finita di
+       caricare, la si chiede in anticipo e la si tiene in sessionStorage: cassa.js
+       la legge e dipinge i pulsanti subito, poi verifica col server che non sia
+       cambiata. La chiave include il prefisso di montaggio (/s/<idx>) perche'
+       tutti i negozi del cloud stanno sulla stessa origine e non devono vedersi
+       i pulsanti a vicenda. Non parte dove la Cassa e' nascosta (prova, moduli). #}
+    {% if not hide_cassa %}
+    <script>
+    (function () {
+      var URL_FREQUENTI = "{{ url_for('cassa.api_services') }}?frequenti=1";
+      var CHIAVE = 'sun.cassaFrequenti:' + {{ (request.script_root or '')|tojson }};
+      window.SUN_FREQUENTI = { url: URL_FREQUENTI, key: CHIAVE };
+
+      // Lettura: null se non c'e', e' vuota o e' piu' vecchia di etaMaxMs.
+      window.sunFrequentiLeggiCache = function (etaMaxMs) {
+        try {
+          var o = JSON.parse(sessionStorage.getItem(CHIAVE) || 'null');
+          if (!o || !Array.isArray(o.dati) || !o.dati.length) return null;
+          if (Date.now() - o.t > etaMaxMs) return null;
+          return o.dati;
+        } catch (e) { return null; }
+      };
+      window.sunFrequentiSalvaCache = function (dati) {
+        try { sessionStorage.setItem(CHIAVE, JSON.stringify({ t: Date.now(), dati: dati })); } catch (e) {}
+      };
+
+      {% if request.endpoint != 'cassa.cassa' %}
+      // Nella Cassa ci pensa cassa.js. Altrove: a pagina caricata, senza
+      // competere con le richieste della pagina stessa.
+      function precarica() {
+        if (window.sunFrequentiLeggiCache(60 * 1000)) return;   // gia' fresco: non si insiste
+        fetch(URL_FREQUENTI, { credentials: 'same-origin' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (dati) { if (Array.isArray(dati)) window.sunFrequentiSalvaCache(dati); })
+          .catch(function () {});
+      }
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          if (window.requestIdleCallback) window.requestIdleCallback(precarica, { timeout: 4000 });
+          else precarica();
+        }, 1000);
+      });
+      {% endif %}
+    })();
+    </script>
+    {% endif %}
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1336,6 +1336,7 @@ Usale con criterio: poche variabili, ma ben scelte, rendono la comunicazione mol
         "content": """Nel modulo marketing puoi costruire campagne usando filtri combinabili.
 
 Esempi di filtri presenti:
+• cerca un cliente (per nome, cognome o cellulare: serve per mandare il messaggio a una sola persona)
 • clienti inattivi
 • top spender
 • utilizzo di un servizio specifico
@@ -1343,6 +1344,8 @@ Esempi di filtri presenti:
 • categoria servizi
 • nuovi clienti
 • genere
+
+Per <span class="help-strong-dark">inviare a una sola persona</span>: attiva "Cerca un cliente", scrivi nome, cognome o parte del cellulare (bastano 2 lettere) e premi Invio. Puoi scrivere anche nome e cognome insieme, in qualsiasi ordine; maiuscole e accenti non contano. Compaiono solo i clienti con un numero di cellulare in anagrafica.
 
 In più puoi:
 • usare template predefiniti

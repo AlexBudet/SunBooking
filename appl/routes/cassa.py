@@ -507,6 +507,72 @@ def api_operators():
         for op in operators
     ])
 
+def _extract_service_id(v):
+    """Estrae l'id servizio da una voce di scontrino, supportando vari nomi/format."""
+    if not isinstance(v, dict):
+        return None
+    for key in ('servizio_id', 'service_id', 'id', 'servizioId', 'servizioID'):
+        if key in v and v[key] not in (None, ''):
+            try:
+                return int(v[key])
+            except Exception:
+                try:
+                    return int(str(v[key]).strip())
+                except Exception:
+                    return None
+    return None
+
+
+def _servizi_in_voci(voci):
+    """Gli id servizio presenti nelle voci di uno scontrino (lista o JSON testuale)."""
+    if not isinstance(voci, list):
+        voci = json.loads(voci or '[]') if voci else []
+    return [sid for sid in (_extract_service_id(v) for v in voci) if sid]
+
+
+# ---- "Frequenti": la classifica dei servizi piu' usati in cassa --------------
+# Prima si rileggevano TUTTI gli scontrini di sempre a ogni apertura della Cassa
+# (Receipt.query.all(): al 29/09/2026 sunexp3 ne aveva ~20.000, 1,4-1,9 s a ogni
+# apertura, e cresce con ogni scontrino emesso). Ora la classifica si ricorda in
+# memoria per negozio e si aggiorna leggendo SOLO gli scontrini nuovi.
+# Si valida con (numero scontrini, id piu' alto): se coincidono non si legge
+# niente; se e' solo salito l'id e il numero e' cresciuto di altrettanti si
+# aggiungono i nuovi; in ogni altro caso (scontrino cancellato, modificato) si
+# ricalcola tutto. Il ricalcolo completo avviene comunque ogni 30 minuti.
+_FREQUENTI_RICALCOLO_S = 30 * 60
+_frequenti_cache = {}   # chiave negozio -> {'n', 'max_id', 'ts', 'cnt'}
+
+
+def _frequenti_top_ids(limite=28):
+    from collections import Counter
+    from appl.services import usage_monitor
+
+    chiave = usage_monitor.chiave_tenant()
+    n_ora, max_ora = db.session.query(func.count(Receipt.id), func.max(Receipt.id)).one()
+    st = _frequenti_cache.get(chiave)
+
+    cnt = None
+    if st and pytime.time() - st['ts'] < _FREQUENTI_RICALCOLO_S:
+        if (n_ora, max_ora) == (st['n'], st['max_id']):
+            cnt = st['cnt']
+        elif max_ora is not None and st['max_id'] is not None and max_ora > st['max_id']:
+            nuovi = db.session.query(Receipt.voci).filter(Receipt.id > st['max_id']).all()
+            if n_ora == st['n'] + len(nuovi):
+                cnt = Counter(st['cnt'])
+                for (voci,) in nuovi:
+                    cnt.update(_servizi_in_voci(voci))
+                _frequenti_cache[chiave] = {'n': n_ora, 'max_id': max_ora, 'ts': st['ts'], 'cnt': cnt}
+
+    if cnt is None:
+        cnt = Counter()
+        for (voci,) in db.session.query(Receipt.voci).all():
+            cnt.update(_servizi_in_voci(voci))
+        _frequenti_cache[chiave] = {'n': n_ora, 'max_id': max_ora, 'ts': pytime.time(), 'cnt': cnt}
+
+    # a parita' di utilizzi, l'id piu' basso: l'ordine non cambia da una chiamata all'altra
+    return [sid for sid, _ in sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0]))[:limite]]
+
+
 @cassa_bp.route('/cassa/api/services')
 def api_services():
     try:
@@ -518,19 +584,7 @@ def api_services():
         sottocategoria = request.args.get('sottocategoria')
 
         # helper: estrae id servizio supportando vari nomi/format
-        def extract_sid(v):
-            if not isinstance(v, dict):
-                return None
-            for key in ('servizio_id', 'service_id', 'id', 'servizioId', 'servizioID'):
-                if key in v and v[key] not in (None, ''):
-                    try:
-                        return int(v[key])
-                    except Exception:
-                        try:
-                            return int(str(v[key]).strip())
-                        except Exception:
-                            return None
-            return None
+        extract_sid = _extract_service_id
 
         # base query (sempre applicata se non viene sovrascritta)
         base_query = Service.query.filter(Service.is_deleted == False)
@@ -566,17 +620,9 @@ def api_services():
             else:
                 services = []
         elif frequenti:
-            # FREQUENTI: conta occorrenze nei receipt e ordina per frequenza
-            from collections import Counter
-            all_receipts = Receipt.query.all()
-            cnt = Counter()
-            for r in all_receipts:
-                voci = r.voci if isinstance(r.voci, list) else (json.loads(r.voci or '[]') if r.voci else [])
-                for v in voci:
-                    sid = extract_sid(v)
-                    if sid:
-                        cnt[sid] += 1
-            top = [sid for sid, _ in cnt.most_common(28)]
+            # FREQUENTI: servizi piu' presenti negli scontrini, in ordine di frequenza
+            # (la classifica e' in memoria, vedi _frequenti_top_ids)
+            top = _frequenti_top_ids()
             if top:
                 db_services = Service.query.filter(Service.id.in_(top), Service.is_deleted == False).all()
                 svc_map = {s.id: s for s in db_services}

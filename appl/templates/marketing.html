@@ -17,6 +17,25 @@
                     <form id="marketingFiltersForm">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         
+                        <!-- Filtro: un cliente per nome, cognome o cellulare (invio singolo) -->
+                        <div class="filter-section mb-4 p-3 bg-light rounded">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input filter-toggle" type="checkbox" id="filter_name" name="filter_name">
+                                <label class="form-check-label fw-bold" for="filter_name">
+                                    <i class="bi bi-person-search me-1"></i>Cerca un cliente
+                                </label>
+                            </div>
+                            <div class="row g-2 filter-options" id="filter_name_options" style="display:none;">
+                                <div class="col-12">
+                                    <input type="text" class="form-control form-control-sm" id="search_text" name="search_text"
+                                           maxlength="80" autocomplete="off" placeholder="Nome, cognome o cellulare">
+                                </div>
+                                <div class="col-12 mt-1">
+                                    <small class="text-muted">Per mandare il messaggio a una sola persona. Premi Invio per cercare; si combina con gli altri filtri attivi.</small>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Filtro: Inattività cliente -->
                         <div class="filter-section mb-4 p-3 bg-light rounded">
                             <div class="form-check form-switch mb-2">
@@ -803,6 +822,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const options = document.getElementById(optionsId);
             if (options) options.style.display = 'none';
         });
+        document.getElementById('search_text').value = '';
         document.getElementById('clientResults').innerHTML = `
             <div class="text-muted text-center py-5">
                 <i class="bi bi-search fs-1 d-block mb-2"></i>
@@ -814,6 +834,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Cerca clienti
     document.getElementById('btnSearchClients')?.addEventListener('click', searchClients);
+
+    // Ricerca di un cliente per nome/cognome/cellulare: Invio cerca (senza
+    // questo il form verrebbe inviato e la pagina ricaricata), e scrivere
+    // qualcosa accende da solo l'interruttore, cosi' non si scrive nel vuoto.
+    const campoRicercaCliente = document.getElementById('search_text');
+    campoRicercaCliente.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const acceso = document.getElementById('filter_name');
+        if (!acceso.checked) { acceso.checked = true; acceso.dispatchEvent(new Event('change')); }
+        searchClients();
+    });
+    campoRicercaCliente.addEventListener('input', () => {
+        const acceso = document.getElementById('filter_name');
+        if (campoRicercaCliente.value.trim() && !acceso.checked) {
+            acceso.checked = true;
+            acceso.dispatchEvent(new Event('change'));
+        }
+    });
+    // Acceso il filtro, il cursore va gia' nel campo.
+    document.getElementById('filter_name').addEventListener('change', function() {
+        if (this.checked) campoRicercaCliente.focus();
+    });
 
     // Seleziona/Deseleziona tutti
     // "Seleziona tutti" salta chi ha gia' ricevuto la promo (checkbox disabilitata):

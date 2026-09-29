@@ -1088,13 +1088,34 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
     }
   });
 
-  // Mostra i servizi frequenti all'apertura della pagina
-fetch('/cassa/api/services?frequenti=1')
-  .then(res => res.json())
-  .then(servizi => {
-    const qNow = (document.getElementById('searchServiceInput')?.value || '').trim();
-    if (qNow.length < 3) popolaPulsantiServizi(servizi);
-  });
+  // Mostra i servizi frequenti all'apertura della pagina.
+  // Le altre pagine (base.html) li hanno gia' chiesti al server e tenuti in
+  // sessionStorage: se ci sono, i pulsanti compaiono SUBITO e la richiesta serve
+  // solo a verificare che la classifica non sia cambiata (ridisegna solo se e'
+  // diversa). Senza pre-caricamento (accesso diretto alla Cassa) va come prima.
+  (function caricaFrequentiIniziali() {
+    const cfg = window.SUN_FREQUENTI || null;
+    const cercaAttiva = () => (document.getElementById('searchServiceInput')?.value || '').trim().length >= 3;
+    let mostrato = null;   // cio' che c'e' a video, per non ridisegnare se non cambia
+    const mostra = servizi => { popolaPulsantiServizi(servizi); mostrato = JSON.stringify(servizi); };
+
+    // 10 minuti: oltre, meglio aspettare il server che mostrare una classifica vecchia.
+    const inCache = cfg && window.sunFrequentiLeggiCache ? window.sunFrequentiLeggiCache(10 * 60 * 1000) : null;
+    if (inCache && !cercaAttiva()) {
+      try { mostra(inCache); } catch (err) { mostrato = null; console.warn('Frequenti da cache non mostrati:', err); }
+    }
+
+    // url_for (base.html) e non il percorso assoluto: sotto /s/<idx> quello e' un 404.
+    fetch(cfg ? cfg.url : '/cassa/api/services?frequenti=1')
+      .then(res => res.json())
+      .then(servizi => {
+        if (!Array.isArray(servizi)) return;   // {"error": ...}: non si tocca quello che c'e'
+        if (cfg && window.sunFrequentiSalvaCache) window.sunFrequentiSalvaCache(servizi);
+        if (cercaAttiva()) return;
+        if (JSON.stringify(servizi) !== mostrato) mostra(servizi);
+      })
+      .catch(err => console.warn('Frequenti non caricati:', err));
+  })();
 
 operatorInput.addEventListener('click', function () {
   fetch('/cassa/api/operators')

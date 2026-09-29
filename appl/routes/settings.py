@@ -3579,6 +3579,22 @@ _MARKETING_CAMPAGNA_RE = re.compile(r'^(tpl:\d{1,9}|preset:[a-z_]{1,40})$')
 MARKETING_MAX_GIA_INVIATI = 100
 
 
+# Ricerca di un cliente senza badare a maiuscole e accenti. `translate` di
+# PostgreSQL al posto dell'estensione unaccent: non richiede nessuna modifica
+# al database dei negozi.
+_MARKETING_ACCENTI_DA = 'àáâãäåèéêëìíîïòóôõöùúûüýÿçñ'
+_MARKETING_ACCENTI_A = 'aaaaaaeeeeiiiiooooouuuuyycn'
+assert len(_MARKETING_ACCENTI_DA) == len(_MARKETING_ACCENTI_A)
+
+
+def _marketing_senza_accenti(testo):
+    return testo.lower().translate(str.maketrans(_MARKETING_ACCENTI_DA, _MARKETING_ACCENTI_A))
+
+
+def _marketing_senza_accenti_sql(colonna):
+    return func.translate(func.lower(colonna), _MARKETING_ACCENTI_DA, _MARKETING_ACCENTI_A)
+
+
 def _marketing_campagna(valore):
     """La chiave della promo se e' ben formata, altrimenti None."""
     if not isinstance(valore, str):
@@ -3675,8 +3691,16 @@ def marketing_search_clients():
         today = datetime.now().date()
         now = datetime.now()
         
+        # Ricerca di una persona per nome, cognome o cellulare (invio singolo).
+        # Sotto i 2 caratteri non conta come filtro: una lettera sola
+        # restituirebbe mezza anagrafica.
+        cerca_testo = str(data.get('search_text') or '').strip() if data.get('filter_name') else ''
+        if len(cerca_testo) < 2:
+            cerca_testo = ''
+
         # Verifica se almeno un filtro è attivo
         any_filter_active = any([
+            cerca_testo,
             data.get('filter_inactivity'),
             data.get('filter_top_spender'),
             data.get('filter_service') and data.get('service_id'),
@@ -3824,7 +3848,28 @@ def marketing_search_clients():
         # FILTRO: Per genere
         if data.get('filter_gender') and data.get('gender'):
             query = query.filter(Client.cliente_sesso == data.get('gender'))
-        
+
+        # FILTRO: cliente per nome, cognome o cellulare. Ogni parola scritta deve
+        # trovarsi in almeno uno dei tre campi, quindi "mario rossi" e "rossi
+        # mario" trovano la stessa persona. Il cellulare si confronta solo sulle
+        # cifre, perche' in anagrafica ha spazi e prefissi diversi ("333 123 4567",
+        # "+39 333...").
+        if cerca_testo:
+            cellulare_cifre = func.regexp_replace(Client.cliente_cellulare, r'[^0-9]', '', 'g')
+            for parola in cerca_testo.split()[:5]:
+                # % e _ scritti dall'operatore valgono come lettere, non come jolly.
+                # Maiuscole e accenti non contano ("frappe" trova "Frappé").
+                esc = (_marketing_senza_accenti(parola)
+                       .replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_'))
+                condizioni = [
+                    _marketing_senza_accenti_sql(Client.cliente_nome).like(f'%{esc}%', escape='\\'),
+                    _marketing_senza_accenti_sql(Client.cliente_cognome).like(f'%{esc}%', escape='\\'),
+                ]
+                cifre = re.sub(r'\D', '', parola)
+                if len(cifre) >= 3:
+                    condizioni.append(cellulare_cifre.like(f'%{cifre}%'))
+                query = query.filter(or_(*condizioni))
+
         # Con una promo scelta, chi l'ha GIA' ricevuta esce dal LIMIT e viene
         # restituito a parte (la pagina lo mostra in grigio). Non e' solo
         # estetica: la query non aveva ORDER BY, quindi dopo un invio a 30
