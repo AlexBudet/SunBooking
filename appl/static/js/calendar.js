@@ -2300,8 +2300,13 @@ function showClientInfoModal(clientId) {
         .then(r => r.ok ? r.json() : Promise.reject('phone update failed'))
         .then(j => {
           phoneField.saveBtn.textContent = j.success ? 'Salvato!' : 'Errore';
+          // Il numero come l'ha scritto il server (toglie gli spazi).
+          const salvato = (j.phone != null) ? String(j.phone) : phoneField.input.value.trim();
           if (j.success && typeof window.applyClientPhoneToBlocks === 'function') {
-            window.applyClientPhoneToBlocks(clientId, phoneField.input.value.trim());
+            window.applyClientPhoneToBlocks(clientId, salvato);
+          }
+          if (j.success && typeof window.aggiornaCellulareNelleCaselle === 'function') {
+            window.aggiornaCellulareNelleCaselle(clientId, salvato);
           }
           setTimeout(()=> phoneField.saveBtn.textContent='Salva',1200);
         })
@@ -2918,7 +2923,9 @@ function handleClientSearch(query) {
 
           item.addEventListener('click', () => {
             if (typeof selectClient === 'function') {
-              selectClient(id, name, String(client.note ?? ''), phone);
+              // Cellulare dal dataset, non dalla ricerca: se lo si cambia dalla
+              // "i" a tendina aperta, aggiornaCellulareNelleCaselle aggiorna questo.
+              selectClient(id, name, String(client.note ?? ''), item.dataset.clientPhone ?? phone);
             } else {
               const input = document.querySelector('#clientSearchInput') || document.querySelector('#clientSearchInputNav');
               const idInput = document.querySelector('#client_id');
@@ -8063,6 +8070,7 @@ function handleClientSearchNav(query) {
 
           item.dataset.clientId = id;
           item.dataset.clientName = name;
+          item.dataset.clientPhone = phone;
 
           const infoBtn = document.createElement('button');
           infoBtn.type = 'button';
@@ -8078,11 +8086,15 @@ function handleClientSearchNav(query) {
           item.appendChild(infoBtn);
 
           item.addEventListener('click', () => {
+            // Cellulare dal dataset, non dalla ricerca: se lo si cambia dalla
+            // "i" a tendina aperta, aggiornaCellulareNelleCaselle aggiorna questo.
+            const tel = item.dataset.clientPhone ?? phone;
+            const etichetta = tel ? `${capitalizeName(name)} - ${tel}` : capitalizeName(name);
             try {
-              if (typeof selectClientNav === 'function') selectClientNav(id, phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name));
+              if (typeof selectClientNav === 'function') selectClientNav(id, etichetta);
               else {
                 const inputNav = document.getElementById('clientSearchInputNav');
-                if (inputNav) inputNav.value = phone ? `${capitalizeName(name)} - ${phone}` : capitalizeName(name);
+                if (inputNav) inputNav.value = etichetta;
               }
             } finally {
               clearResults();
@@ -15010,6 +15022,52 @@ window.applyClientPhoneToBlocks = function (clientId, phone) {
       const wa = block.querySelector('.whatsapp-btn');
       if (wa) wa.setAttribute('data-client-cellulare', phoneVal);
     });
+  } catch (_) {}
+};
+
+// Cellulare salvato dalla "i" (modal desktop, modal mobile, popup info): va
+// riportato SUBITO anche dove il cliente e' gia' scelto o elencato, non solo
+// sui blocchi. Senza questo, chiusa la "i":
+// - la casella del Navigator restava "Nome - numero vecchio" fino al refresh;
+// - le voci della tendina gia' aperta, cliccate, riportavano il numero vecchio;
+// - nei modal Crea/Modifica il cliente scelto teneva il numero vecchio in
+//   #client_id (dataset.clientPhone), e assegnandolo ai blocchi
+//   applyClientPhoneToBlocks lo rimetteva sopra quello nuovo.
+window.aggiornaCellulareNelleCaselle = function (clientId, phone) {
+  try {
+    const id = String(clientId || '').trim();
+    if (!id) return;
+    const tel = String(phone || '').trim();
+    const conTelefono = nome => tel ? `${nome} - ${tel}` : nome;
+
+    // Tendine dei risultati (Navigator e modal): testo mostrato e dato che il
+    // click passa a selectClientNav / selectClient.
+    document.querySelectorAll('#clientResultsNav .dropdown-item, #clientResults .dropdown-item, .results-dropdown .dropdown-item').forEach(item => {
+      if (item.dataset.clientId !== id) return;
+      item.dataset.clientPhone = tel;
+      const txt = item.querySelector('.dropdown-item-text');
+      if (txt) txt.textContent = conTelefono(capitalizeName(item.dataset.clientName || ''));
+    });
+
+    // Cliente gia' scelto nei modal Crea/Modifica appuntamento.
+    document.querySelectorAll('input#client_id').forEach(hidden => {
+      if (String(hidden.value) === id) hidden.dataset.clientPhone = tel;
+    });
+
+    // Cliente scelto nel Navigator: casella, nome memorizzato, pseudo-blocchi.
+    if (String(window.selectedClientIdNav ?? '') !== id) return;
+    const vecchio = String(window.selectedClientNameNav || '').replace(/\s+/g, ' ').trim();
+    const nuovo = conTelefono(vecchio.split(' - ')[0].trim());
+    window.selectedClientNameNav = nuovo;
+    (window.pseudoBlocks || []).forEach(b => {
+      if (String(b.clientId) === id) b.clientName = nuovo;
+    });
+    // Appena scelto la casella mostra "Nome - cellulare", dopo un ripristino
+    // (restoreNavigatorState) solo il nome: si riscrive solo nel primo caso.
+    const input = document.getElementById('clientSearchInputNav');
+    const norm = s => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    if (input && norm(input.value) === norm(vecchio)) input.value = capitalizeName(nuovo);
+    if (typeof saveNavigatorState === 'function') saveNavigatorState();
   } catch (_) {}
 };
 

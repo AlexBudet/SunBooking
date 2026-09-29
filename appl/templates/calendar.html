@@ -3346,6 +3346,13 @@ const placePopup = () => {
         .then(r => r.json())
         .then(data => {
           savePhoneBtn.textContent = data.success ? 'Salvato!' : 'Errore!';
+          // Blocchi, casella del Navigator, tendine e modal aperti: vedi
+          // aggiornaCellulareNelleCaselle in calendar.js.
+          if (data.success) {
+            const salvato = (data.phone != null) ? String(data.phone) : String(phoneInput.value || '').trim();
+            if (window.applyClientPhoneToBlocks) window.applyClientPhoneToBlocks(clientId, salvato);
+            if (window.aggiornaCellulareNelleCaselle) window.aggiornaCellulareNelleCaselle(clientId, salvato);
+          }
           setTimeout(() => savePhoneBtn.textContent = 'Salva', 1200);
         }).catch(() => {
           savePhoneBtn.textContent = 'Errore!';
@@ -4379,6 +4386,14 @@ function configureMobileModalButtons(modal, block) {
           const old = btn.textContent;
           btn.disabled = true;
           btn.textContent = r.ok ? 'Salvato!' : 'Errore!';
+          // Cellulare: stesso aggiornamento immediato della "i" desktop
+          // (aggiornaCellulareNelleCaselle in calendar.js).
+          if (r.ok && field === 'cellulare') {
+            let salvato = String(map.cellulare || '').trim();
+            try { const j = await r.json(); if (j && j.phone != null) salvato = String(j.phone); } catch (_) {}
+            if (window.applyClientPhoneToBlocks) window.applyClientPhoneToBlocks(cid, salvato);
+            if (window.aggiornaCellulareNelleCaselle) window.aggiornaCellulareNelleCaselle(cid, salvato);
+          }
           setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 1000);
         } catch (_) {}
       });
