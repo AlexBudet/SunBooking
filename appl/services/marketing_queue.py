@@ -49,6 +49,9 @@ class _Coda(object):
         self.iniziata = datetime.now(timezone.utc)
         self.finita = None
         self.thread = None
+        # Il messaggio tolto dalla lista ma non ancora scritto in
+        # `marketing_invii`: per un attimo non e' ne' in coda ne' nello storico.
+        self.corrente = None
 
 
 def in_coda(chiave):
@@ -58,6 +61,25 @@ def in_coda(chiave):
     with _lock:
         coda = _code.get(chiave)
         return len(coda.messaggi) if coda else 0
+
+
+def in_coda_campagna(chiave, campagna):
+    """Gli id dei clienti che hanno un messaggio di QUESTA promo ancora da
+    mandare (o in partenza in questo momento). Per lo storico "gia' inviato"
+    vanno contati insieme a `marketing_invii`, che li scrive solo a invio
+    avvenuto: senza, ririselezionare la promo mentre la coda lavora
+    riproporrebbe gli stessi clienti."""
+    if not campagna:
+        return set()
+    with _lock:
+        coda = _code.get(chiave)
+        if coda is None:
+            return set()
+        pendenti = list(coda.messaggi)
+        if coda.corrente is not None:
+            pendenti.append(coda.corrente)
+        return {m['client_id'] for m in pendenti
+                if m.get('campagna') == campagna and m.get('client_id') is not None}
 
 
 def stato(chiave):
@@ -164,6 +186,7 @@ def _lavora(app, chiave):
                 coda.thread = None
                 return
             messaggio = coda.messaggi.pop(0)
+            coda.corrente = messaggio
             config = coda.config
 
         # L'attesa sta FUORI dal lucchetto degli invii. Se un operatore manda
@@ -197,6 +220,7 @@ def _lavora(app, chiave):
                                + messaggio['testo'])[:500],
                     stato='inviato' if riuscito else 'errore',
                     errore=(errore[:500] if errore else None),
+                    campagna=messaggio.get('campagna'),
                 ))
                 db.session.add(UsageEvent(
                     canale='whatsapp', tipo='marketing', origine='crm',
@@ -227,6 +251,8 @@ def _lavora(app, chiave):
             coda = _code.get(chiave)
             if coda is None:
                 return
+            # Ormai e' nello storico (o e' un errore): non e' piu' "in volo".
+            coda.corrente = None
             if riuscito:
                 coda.inviati += 1
             else:

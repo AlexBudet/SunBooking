@@ -741,7 +741,18 @@ class MarketingInvio(db.Model):
     messaggio = db.Column(db.Text, nullable=True)
     stato = db.Column(db.String(20), nullable=False, default='inviato')  # inviato, errore, pending
     errore = db.Column(db.String(500), nullable=True)
-    
+
+    # Storico per promo. `campagna` dice a quale promo apparteneva l'invio:
+    # 'tpl:<id>' per un template salvato, 'preset:<nome>' per un predefinito,
+    # NULL per il testo libero (senza template non c'e' una promo da ricordare).
+    # `azzerato_il` chiude l'edizione: chi ha una riga 'inviato' con questo
+    # campo vuoto ha GIA' ricevuto la promo; dopo l'azzeramento torna
+    # selezionabile. Non si cancella mai la riga: questa tabella e' anche il
+    # contatore del limite giornaliero, e un DELETE lo farebbe scendere.
+    # Colonne aggiunte a mano: migrations/manual_marketing_invii_campagna.sql
+    campagna = db.Column(db.String(60), nullable=True, index=True)
+    azzerato_il = db.Column(db.DateTime, nullable=True)
+
     # Relazioni
     client = db.relationship('Client', backref='marketing_invii')
 

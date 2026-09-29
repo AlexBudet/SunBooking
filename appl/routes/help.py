@@ -1292,6 +1292,14 @@ Flusso corretto:
 <span class="help-strong-dark help-subtitle-pill">▸ COSA SUCCEDE DOPO "INVIA"</span>
 I messaggi <span class="help-strong-dark">non partono tutti insieme</span>: vengono messi in coda e spediti uno ogni 12-20 secondi, perché una raffica di invii ravvicinati porta WhatsApp a sospendere il numero del negozio. Sotto ai pulsanti compare l'avanzamento con quanti ne mancano e il tempo stimato: <span class="help-strong-dark">puoi chiudere la pagina</span>, l'invio va avanti da solo. Il contatore "Oggi: N/M invii" si aggiorna a coda finita, perché conta i messaggi partiti davvero.
 
+<span class="help-strong-dark help-subtitle-pill">▸ CHI HA GIÀ RICEVUTO UNA PROMO</span>
+Quando scegli un template (salvato o predefinito) il programma ricorda a chi l'hai inviato. Sotto il selettore compare "Già inviata a N clienti" con la data dell'ultimo invio. Nei risultati i clienti che hanno già ricevuto quella promo sono <span class="help-strong-dark">in grigio</span>, in fondo all'elenco, con la data di invio, e non si possono selezionare. La ricerca mostra invece i clienti successivi: puoi mandare la stessa promo a gruppi (per esempio di 30 al giorno) senza ripetere le persone.
+
+• <span class="help-strong-dark">Reinvia</span>: sotto il nome di un cliente in grigio, lo rende di nuovo selezionabile. Quando premi "Invia" compare un avviso con i nomi di chi riceverà la promo per la seconda volta.
+• <span class="help-strong-dark">Azzera storico</span>: si trova sotto il selettore del template. Tutti i clienti tornano selezionabili, per esempio per mandare di nuovo la stessa promo l'anno dopo. Gli invii passati restano registrati.
+• Se scegli un altro template, la foto e i clienti in grigio passano a quelli della nuova promo, e l'esito dell'invio precedente sparisce.
+• Se non scegli nessun template e scrivi il messaggio a mano, l'invio non viene ricordato: salva il testo come template per tenere traccia di chi lo ha ricevuto.
+
 ⚠️ Mantieni sempre un uso misurato degli invii per non stressare i clienti e non saturare il canale WhatsApp.
 
 <div class="help-hint-box">

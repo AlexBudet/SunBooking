@@ -3570,6 +3570,65 @@ Le tue 5 stelle ⭐⭐⭐⭐⭐ ci aiutano a crescere!
 
 A presto! 💆‍♀️"""
 
+# ---- Storico degli invii per promo ------------------------------------------
+# Una "promo" e' il template scelto nella pagina: 'tpl:<id>' se salvato,
+# 'preset:<nome>' se predefinito. Senza template (testo libero) non c'e' una
+# promo da ricordare e l'invio non entra nello storico.
+_MARKETING_CAMPAGNA_RE = re.compile(r'^(tpl:\d{1,9}|preset:[a-z_]{1,40})$')
+# Quanti clienti "gia' raggiunti" mostrare in grigio sotto i risultati.
+MARKETING_MAX_GIA_INVIATI = 100
+
+
+def _marketing_campagna(valore):
+    """La chiave della promo se e' ben formata, altrimenti None."""
+    if not isinstance(valore, str):
+        return None
+    valore = valore.strip()
+    return valore if _MARKETING_CAMPAGNA_RE.match(valore) else None
+
+
+def _marketing_storico(campagna, chiave):
+    """Chi ha gia' ricevuto QUESTA promo, nell'edizione in corso.
+
+    Ritorna {client_id: {'ultimo': datetime|None, 'volte': int, 'in_coda': bool}}.
+    Conta gli invii riusciti non ancora azzerati, piu' i messaggi ancora in
+    coda: la riga in `marketing_invii` nasce solo quando il messaggio parte
+    davvero, e nel frattempo il cliente risulterebbe ancora "da raggiungere".
+    Gli invii finiti in errore non contano: il messaggio non e' arrivato.
+    """
+    from ..services import marketing_queue
+    righe = db.session.query(
+        MarketingInvio.client_id,
+        func.max(MarketingInvio.data_invio),
+        func.count(MarketingInvio.id),
+    ).filter(
+        MarketingInvio.campagna == campagna,
+        MarketingInvio.stato == 'inviato',
+        MarketingInvio.azzerato_il.is_(None),
+    ).group_by(MarketingInvio.client_id).all()
+    storico = {cid: {'ultimo': ultimo, 'volte': n, 'in_coda': False}
+               for cid, ultimo, n in righe}
+    for cid in marketing_queue.in_coda_campagna(chiave, campagna):
+        voce = storico.setdefault(cid, {'ultimo': None, 'volte': 0, 'in_coda': True})
+        voce['in_coda'] = True
+    return storico
+
+
+def _marketing_iso_utc(dt):
+    """data_invio nasce da now() del database, che gira in UTC e la salva senza
+    fuso: la 'Z' fa convertire al browser nell'ora locale, altrimenti la data
+    mostrata slitta di 1-2 ore (e a cavallo della mezzanotte di un giorno)."""
+    return dt.isoformat() + 'Z' if dt else None
+
+
+def _marketing_storico_json(voce):
+    return {
+        'ultimo': _marketing_iso_utc(voce['ultimo']),
+        'volte': voce['volte'],
+        'in_coda': voce['in_coda'],
+    }
+
+
 @settings_bp.route('/marketing', methods=['GET'])
 def marketing():
     """Pagina principale Marketing"""
@@ -3766,12 +3825,35 @@ def marketing_search_clients():
         if data.get('filter_gender') and data.get('gender'):
             query = query.filter(Client.cliente_sesso == data.get('gender'))
         
-        # LIMITE 50 risultati per velocità
-        clients = query.distinct().limit(30).all()
-        
-        if not clients:
+        # Con una promo scelta, chi l'ha GIA' ricevuta esce dal LIMIT e viene
+        # restituito a parte (la pagina lo mostra in grigio). Non e' solo
+        # estetica: la query non aveva ORDER BY, quindi dopo un invio a 30
+        # clienti ogni nuova ricerca rida' gli stessi 30 e i successivi non si
+        # raggiungono mai. Senza promo scelta (testo libero) resta com'era.
+        from ..services import usage_monitor
+        campagna = _marketing_campagna(data.get('campagna'))
+        storico = (_marketing_storico(campagna, usage_monitor.chiave_tenant())
+                   if campagna else {})
+        gia_clients, gia_altri = [], 0
+        if storico:
+            ids_storico = list(storico.keys())
+            gia_query = query.filter(Client.id.in_(ids_storico))
+            gia_clients = gia_query.distinct().order_by(Client.id).limit(MARKETING_MAX_GIA_INVIATI).all()
+            gia_totale = gia_query.with_entities(func.count(func.distinct(Client.id))).scalar() or 0
+            gia_altri = max(0, gia_totale - len(gia_clients))
+            query = query.filter(~Client.id.in_(ids_storico))
+
+        # LIMITE 30 risultati per velocità, in ordine stabile (per id)
+        clients = query.distinct().order_by(Client.id).limit(30).all()
+        nuovi_totale = len(clients)
+
+        if not clients and not gia_clients:
             return jsonify({'success': True, 'clients': [], 'message': 'Nessun cliente trovato con questi filtri'})
-        
+
+        # Prima i selezionabili, poi (in fondo) quelli gia' raggiunti, dal piu' recente.
+        gia_clients.sort(key=lambda c: (storico[c.id]['ultimo'] or datetime.max), reverse=True)
+        clients = clients + gia_clients
+
         # Ottimizzazione: query batch per tutti i clienti
         client_ids = [c.id for c in clients]
         
@@ -3854,7 +3936,7 @@ def marketing_search_clients():
                 # deve risultare "1 giorno fa" anche se sono passate poche ore.
                 giorni_assenza = (now.date() - last_time.date()).days
             
-            clients_data.append({
+            dati_cliente = {
                 'id': client.id,
                 'nome': client.cliente_nome,
                 'cognome': client.cliente_cognome,
@@ -3865,9 +3947,14 @@ def marketing_search_clients():
                 'totale_speso': round(spent_dict.get(client.id, 0), 2),
                 'ultimo_servizio': ultimo_servizio_dict.get(client.id, ''),
                 'servizio_preferito': preferito_dict.get(client.id, ''),
-            })
-        
-        return jsonify({'success': True, 'clients': clients_data, 'limited': len(clients) == 30})
+            }
+            if client.id in storico:
+                dati_cliente['gia_inviato'] = _marketing_storico_json(storico[client.id])
+            clients_data.append(dati_cliente)
+
+        return jsonify({'success': True, 'clients': clients_data,
+                        'limited': nuovi_totale == 30,
+                        'gia_inviati_altri': gia_altri})
         
     except Exception as e:
         current_app.logger.exception("Errore ricerca clienti marketing: %s", e)
@@ -4122,6 +4209,13 @@ def marketing_template_immagine(template_id):
 def marketing_delete_template(template_id):
     """Elimina un template"""
     template = MarketingTemplate.query.get_or_404(template_id)
+    # La promo finisce con lui: si chiude la sua edizione (le righe restano,
+    # contano per il limite giornaliero) cosi' un id riusato in futuro non
+    # erediterebbe un elenco di "gia' inviati" che non gli appartiene.
+    MarketingInvio.query.filter(
+        MarketingInvio.campagna == f'tpl:{template.id}',
+        MarketingInvio.azzerato_il.is_(None),
+    ).update({'azzerato_il': func.now()}, synchronize_session=False)
     db.session.delete(template)
     db.session.commit()
     return jsonify({'success': True})
@@ -4161,6 +4255,15 @@ def marketing_send_whatsapp():
 
     clients = data.get('clients', [])
     template = data.get('template', '')
+    # La promo a cui appartiene l'invio (None = testo libero, non tracciato) e
+    # i clienti a cui l'operatore ha CONFERMATO un reinvio.
+    campagna = _marketing_campagna(data.get('campagna'))
+    reinvio_ids = set()
+    for v in (data.get('reinvio_ids') or []):
+        try:
+            reinvio_ids.add(int(v))
+        except (TypeError, ValueError):
+            pass
 
     if not clients:
         return jsonify({'success': False, 'error': 'Nessun cliente selezionato'}), 400
@@ -4225,9 +4328,28 @@ def marketing_send_whatsapp():
         }), 400
 
     centro_nome = business_info.business_name or 'Centro'
-    messaggi, scartati = [], []
+    messaggi, scartati, gia_ricevuto = [], [], []
 
-    for client_data in clients[:disponibili]:
+    # Chi ha gia' ricevuto la promo si scarta QUI, anche se la pagina non lo
+    # segnalava: e' rimasta aperta da prima, o un altro operatore ha mandato
+    # nel frattempo. Passa solo se l'operatore ha confermato il reinvio.
+    # Si toglie prima di applicare il limite giornaliero, cosi' gli scartati
+    # non consumano posti.
+    storico = _marketing_storico(campagna, chiave) if campagna else {}
+    da_inviare = []
+    for client_data in clients:
+        try:
+            cid = int(client_data.get('id'))
+        except (TypeError, ValueError):
+            cid = None
+        if cid in storico and cid not in reinvio_ids:
+            nome_g = (client_data.get('nome') or '?').strip()
+            cognome_g = (client_data.get('cognome') or '').strip()
+            gia_ricevuto.append(f"{(nome_g + ' ' + cognome_g).strip()}: ha già ricevuto questa promo")
+            continue
+        da_inviare.append(client_data)
+
+    for client_data in da_inviare[:disponibili]:
         nome = (client_data.get('nome') or '?').strip()
         cognome = (client_data.get('cognome') or '').strip()
         etichetta = (nome + ' ' + cognome).strip()
@@ -4264,13 +4386,17 @@ def marketing_send_whatsapp():
             'numero': numero,
             'testo': messaggio,
             'foto': foto,
+            'campagna': campagna,
         })
 
     if not messaggi:
+        errore = ('I clienti scelti hanno già ricevuto questa promo: per rimandarla '
+                  'usa «Reinvia» sul cliente, oppure azzera lo storico della promo'
+                  if gia_ricevuto and not scartati else 'Nessun messaggio da inviare')
         return jsonify({
             'success': False,
-            'error': 'Nessun messaggio da inviare',
-            'dettagli_errori': scartati[:5]
+            'error': errore,
+            'dettagli_errori': (scartati + gia_ricevuto)[:5]
         }), 400
 
     accodati = marketing_queue.accoda(
@@ -4286,13 +4412,16 @@ def marketing_send_whatsapp():
            f"WhatsApp del negozio. Puoi chiudere la pagina, l'invio va avanti.")
     if scartati:
         msg += f" {len(scartati)} scartati per numero mancante o non valido."
+    if gia_ricevuto:
+        msg += f" {len(gia_ricevuto)} non inclusi perché hanno già ricevuto questa promo."
 
     return jsonify({
         'success': True,
         'message': msg,
         'accodati': accodati,
         'scartati': len(scartati),
-        'dettagli_errori': scartati[:5],
+        'gia_ricevuto': len(gia_ricevuto),
+        'dettagli_errori': (scartati + gia_ricevuto)[:5],
         'rimanenti_oggi': disponibili - accodati,
         'secondi_stimati': secondi,
     })
@@ -4308,6 +4437,84 @@ def marketing_stato_coda():
     """
     from ..services import marketing_queue, usage_monitor
     return jsonify(marketing_queue.stato(usage_monitor.chiave_tenant()))
+
+
+@settings_bp.route('/api/marketing/storico-promo', methods=['POST'])
+def marketing_storico_promo():
+    """A chi e' gia' stata inviata una promo (edizione in corso).
+
+    Body: {campagna, client_ids?}. La pagina lo chiede quando si sceglie un
+    template e dopo ogni invio: `clients` contiene solo i clienti chiesti che
+    hanno gia' ricevuto la promo, cosi' la risposta resta piccola anche con
+    migliaia di destinatari nello storico.
+    """
+    from ..services import usage_monitor
+
+    data = request.get_json(silent=True) or {}
+    campagna = _marketing_campagna(data.get('campagna'))
+    if not campagna:
+        return jsonify({'success': False, 'error': 'Promo non valida'}), 400
+
+    storico = _marketing_storico(campagna, usage_monitor.chiave_tenant())
+
+    richiesti = set()
+    for v in (data.get('client_ids') or []):
+        try:
+            richiesti.add(int(v))
+        except (TypeError, ValueError):
+            pass
+
+    ultimi = [v['ultimo'] for v in storico.values() if v['ultimo']]
+    # Invii di edizioni precedenti, azzerate: ci sono ancora, e dirlo fa capire
+    # che l'azzeramento non ha cancellato niente.
+    archiviati = db.session.query(func.count(MarketingInvio.id)).filter(
+        MarketingInvio.campagna == campagna,
+        MarketingInvio.stato == 'inviato',
+        MarketingInvio.azzerato_il.isnot(None),
+    ).scalar() or 0
+
+    return jsonify({
+        'success': True,
+        'campagna': campagna,
+        'totale': len(storico),
+        'in_coda': sum(1 for v in storico.values() if v['in_coda']),
+        'ultimo_invio': _marketing_iso_utc(max(ultimi)) if ultimi else None,
+        'archiviati': archiviati,
+        'clients': {str(cid): _marketing_storico_json(v)
+                    for cid, v in storico.items() if cid in richiesti},
+    })
+
+
+@settings_bp.route('/api/marketing/storico-promo/azzera', methods=['POST'])
+def marketing_azzera_storico_promo():
+    """Chiude l'edizione di una promo: tutti i clienti tornano selezionabili.
+
+    Es. "Promo autunno 2026" da rimandare l'anno dopo. NON cancella niente:
+    marca le righe con `azzerato_il`, perche' `marketing_invii` conta anche il
+    limite giornaliero e cancellarle lo farebbe scendere.
+    """
+    from ..services import marketing_queue, usage_monitor
+
+    data = request.get_json(silent=True) or {}
+    campagna = _marketing_campagna(data.get('campagna'))
+    if not campagna:
+        return jsonify({'success': False, 'error': 'Promo non valida'}), 400
+
+    chiave = usage_monitor.chiave_tenant()
+    # Con messaggi ancora in coda si aspetta: partirebbero DOPO l'azzeramento
+    # e ricomincerebbero lo storico da dove non deve.
+    if marketing_queue.in_coda_campagna(chiave, campagna):
+        return jsonify({'success': False,
+                        'error': 'Ci sono ancora messaggi di questa promo in coda: '
+                                 'aspetta che l\'invio finisca, poi azzera lo storico.'}), 409
+
+    clienti = len(_marketing_storico(campagna, chiave))
+    MarketingInvio.query.filter(
+        MarketingInvio.campagna == campagna,
+        MarketingInvio.azzerato_il.is_(None),
+    ).update({'azzerato_il': func.now()}, synchronize_session=False)
+    db.session.commit()
+    return jsonify({'success': True, 'clienti': clienti})
 
 
 def _normalize_phone_for_whatsapp(numero):

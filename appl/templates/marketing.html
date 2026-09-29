@@ -188,6 +188,9 @@
                         </div>
                     </div>
                     
+                    {# Quanti sono selezionabili e quanti hanno gia' ricevuto la promo scelta. #}
+                    <div id="promoRiepilogoRisultati" class="small text-muted mb-2" style="display:none;"></div>
+
                     <div id="clientResults" class="overflow-auto" style="max-height: 600px;">
                         <div class="text-muted text-center py-5">
                             <i class="bi bi-search fs-1 d-block mb-2"></i>
@@ -227,6 +230,21 @@
                                         data-bs-title="Elimina questo template">
                                     <i class="bi bi-trash"></i>
                                 </button>
+                            </div>
+
+                            {# A chi e' gia' stata mandata la promo scelta. Il testo lo scrive
+                               il JS (aggiornaStoricoPromo); senza template scelto resta solo
+                               un suggerimento, perche' senza template non c'e' nessuna promo
+                               da ricordare. #}
+                            <div id="promoStorico" class="small mt-2">
+                                <div class="d-flex justify-content-between align-items-center gap-2">
+                                    <div id="promoStoricoTesto" class="text-muted"></div>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0" id="btnAzzeraStorico" style="display:none;"
+                                            data-bs-toggle="tooltip" data-bs-placement="top"
+                                            data-bs-title="Chiude questa edizione della promo: tutti i clienti tornano selezionabili (es. stessa promo l'anno dopo). Gli invii passati restano registrati.">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>Azzera storico
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -574,6 +592,33 @@
 .client-item.selected {
     background-color: #d1e7dd;
 }
+/* Cliente che ha gia' ricevuto la promo scelta: in grigio e non selezionabile.
+   Con "Reinvia" torna selezionabile, in ambra, per far capire che e' un
+   secondo invio voluto. */
+.client-item.gia-inviato,
+.client-item.gia-inviato:hover {
+    background-color: #f1f3f5;
+    cursor: default;
+}
+.client-item.gia-inviato .fw-bold,
+.client-item.gia-inviato small.text-muted {
+    color: #868e96 !important;
+}
+.client-item.gia-inviato .client-checkbox {
+    opacity: .5;
+}
+.client-item.reinvio,
+.client-item.reinvio.selected {
+    background-color: #fff3cd;
+    box-shadow: inset 3px 0 0 #ffc107;
+}
+.client-item .promo-slot:empty {
+    display: none;
+}
+.client-item .promo-slot .btn-link {
+    font-size: inherit;
+    vertical-align: baseline;
+}
 #clientResults .client-item {
     border-bottom: 1px solid #eee;
     padding: 10px;
@@ -763,6 +808,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <i class="bi bi-search fs-1 d-block mb-2"></i>
                 Usa i filtri per cercare clienti
             </div>`;
+        giaInviatiAltri = 0;
         updateCounts();
     });
 
@@ -770,8 +816,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnSearchClients')?.addEventListener('click', searchClients);
 
     // Seleziona/Deseleziona tutti
+    // "Seleziona tutti" salta chi ha gia' ricevuto la promo (checkbox disabilitata):
+    // per rimandarla serve il "Reinvia" cliente per cliente.
     document.getElementById('btnSelectAll')?.addEventListener('click', function() {
-        document.querySelectorAll('.client-checkbox').forEach(cb => {
+        document.querySelectorAll('.client-checkbox:not(:disabled)').forEach(cb => {
             cb.checked = true;
             cb.closest('.client-item')?.classList.add('selected');
         });
@@ -782,7 +830,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnDeselectAll')?.addEventListener('click', function() {
         document.querySelectorAll('.client-checkbox').forEach(cb => {
             cb.checked = false;
-            cb.closest('.client-item')?.classList.remove('selected');
+            const item = cb.closest('.client-item');
+            item?.classList.remove('selected');
+            if (item?.classList.contains('reinvio')) tornaGrigio(item);
         });
         updateCounts();
         updatePreview();
@@ -849,6 +899,8 @@ Ti aspettiamo 💆‍♀️`
     ];
     // url_for e non '/settings/...': con wsgi.py l'app sta sotto /s/<idx>.
     const URL_TEMPLATES = "{{ url_for('settings.marketing_get_templates') }}";
+    const URL_STORICO = "{{ url_for('settings.marketing_storico_promo') }}";
+    const URL_AZZERA_STORICO = "{{ url_for('settings.marketing_azzera_storico_promo') }}";
     const FOTO_MAX_BYTES = 10 * 1024 * 1024;
     const NOME_CENTRO = {{ (business_info.business_name if business_info and business_info.business_name else 'Centro')|tojson }};
     // Valori finti per l'anteprima quando non c'e' ancora nessun cliente scelto.
@@ -1006,9 +1058,273 @@ Ti aspettiamo 💆‍♀️`
         } else {
             tplCorrente = null;
             if (PRESETS[scelto]) txtMessaggio.value = PRESETS[scelto];
-            aggiornaStatoTemplate();
-            updatePreview();
+            // Un predefinito e' solo testo: la foto del template precedente
+            // non deve restare attaccata a un messaggio che non e' piu' il suo.
+            impostaFoto(null);
         }
+        // Altra promo: cambiano storico, clienti in grigio ed esito dell'ultimo invio.
+        aggiornaStoricoPromo();
+    });
+
+    // ---------------------------------------------------------------------
+    // Storico per promo.
+    // La "promo" e' il template scelto: 'tpl:<id>' se salvato, 'preset:<nome>'
+    // se predefinito, null se non ce n'e' nessuno (testo libero: l'invio non
+    // viene ricordato). Chi l'ha gia' ricevuta si vede in grigio e non si puo'
+    // scegliere; con "Reinvia" si sceglie di rimandarla e il server chiede
+    // conferma alla pressione di "Invia". "Azzera storico" chiude l'edizione.
+    // ---------------------------------------------------------------------
+    let campagnaVista = null;      // la promo di cui la pagina sta mostrando lo storico
+    let richiestaStorico = 0;      // scarta le risposte superate da una richiesta piu' recente
+    let storicoCorrente = null;    // ultima risposta dello storico, per il riquadro
+    let giaInviatiAltri = 0;       // quanti "gia' inviati" la ricerca non ha mostrato
+
+    function campagnaCorrente() {
+        if (valoreSelect.startsWith('saved_')) return 'tpl:' + valoreSelect.slice(6);
+        if (PRESETS[valoreSelect]) return 'preset:' + valoreSelect;
+        return null;
+    }
+
+    function nomePromoCorrente() {
+        const opt = selTemplate.selectedOptions[0];
+        // Senza l'emoji davanti (📄, 🎁...) e senza quella della foto in coda.
+        return opt ? opt.textContent.replace(/^[^\p{L}\p{N}]+/u, '').replace(/[^\p{L}\p{N}.!?)"']+$/u, '').trim() : '';
+    }
+
+    function dataBreve(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        return isNaN(d) ? '' : d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    function nascondiEsitoInvio() {
+        // L'esito dell'invio finito e' della promo precedente. Se la coda sta
+        // ancora lavorando invece e' un fatto in corso e resta a vista.
+        if (timerCodaMarketing) return;
+        const box = document.getElementById('marketingCoda');
+        if (box) box.style.display = 'none';
+    }
+
+    // --- righe dei clienti ---
+    function slotDellaRiga(item) { return item.querySelector('.promo-slot'); }
+
+    function liberaRiga(item) {
+        const cb = item.querySelector('.client-checkbox');
+        const eraBloccata = item.classList.contains('gia-inviato') || item.classList.contains('reinvio');
+        item.classList.remove('gia-inviato', 'reinvio');
+        delete item.dataset.promo;
+        if (eraBloccata) { cb.checked = false; item.classList.remove('selected'); }
+        cb.disabled = false;
+        const slot = slotDellaRiga(item);
+        if (slot) slot.textContent = '';
+    }
+
+    // Il cliente ha gia' ricevuto la promo: grigio, non selezionabile, con "Reinvia".
+    function segnaGiaInviato(item, info) {
+        const cb = item.querySelector('.client-checkbox');
+        item.classList.remove('reinvio');
+        item.classList.add('gia-inviato');
+        item.classList.remove('selected');
+        item.dataset.promo = JSON.stringify(info);
+        cb.checked = false;
+        cb.disabled = true;
+
+        const slot = slotDellaRiga(item);
+        slot.textContent = '';
+        const badge = document.createElement('span');
+        badge.className = 'badge text-bg-secondary fw-normal';
+        if (info.in_coda) {
+            badge.textContent = 'In coda';
+            slot.append(badge);
+            return;
+        }
+        badge.textContent = 'Già inviata' + (info.ultimo ? ' il ' + dataBreve(info.ultimo) : '') +
+            (info.volte > 1 ? ' (×' + info.volte + ')' : '');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-link btn-sm p-0 ms-2 js-reinvia';
+        btn.textContent = 'Reinvia';
+        slot.append(badge, btn);
+    }
+
+    // L'operatore ha scelto di rimandare la promo a chi l'ha gia' ricevuta.
+    function segnaReinvio(item) {
+        const info = JSON.parse(item.dataset.promo || '{}');
+        const cb = item.querySelector('.client-checkbox');
+        item.classList.remove('gia-inviato');
+        item.classList.add('reinvio', 'selected');
+        cb.disabled = false;
+        cb.checked = true;
+
+        const slot = slotDellaRiga(item);
+        slot.textContent = '';
+        const badge = document.createElement('span');
+        badge.className = 'badge text-bg-warning fw-normal';
+        badge.textContent = 'Reinvio' + (info.ultimo ? ' · ricevuta il ' + dataBreve(info.ultimo) : '');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-link btn-sm p-0 ms-2 js-annulla-reinvio';
+        btn.textContent = 'Annulla';
+        slot.append(badge, btn);
+    }
+
+    function tornaGrigio(item) {
+        segnaGiaInviato(item, JSON.parse(item.dataset.promo || '{}'));
+    }
+
+    function righeClienti() {
+        return Array.from(document.querySelectorAll('#clientResults .client-item'));
+    }
+
+    // I "gia' inviati" in fondo alla lista, come li manda il server.
+    function portaInFondoIGrigi() {
+        const contenitore = document.getElementById('clientResults');
+        righeClienti().filter(i => i.classList.contains('gia-inviato'))
+            .forEach(i => contenitore.appendChild(i));
+    }
+
+    function aggiornaRiepilogoRisultati() {
+        const box = document.getElementById('promoRiepilogoRisultati');
+        const righe = righeClienti();
+        const grigi = righe.filter(i => i.classList.contains('gia-inviato')).length;
+        const scelti = righe.length - grigi;
+        if (!grigi && !giaInviatiAltri) { box.style.display = 'none'; return; }
+
+        const totaleGrigi = grigi + giaInviatiAltri;
+        let testo = `${scelti} selezionabili · ${totaleGrigi} hanno già ricevuto questa promo (in grigio)`;
+        if (giaInviatiAltri) testo += `, ne sono mostrati ${grigi}`;
+        testo += '.';
+        if (!scelti) testo += ' Premi «Cerca Clienti» per vedere i successivi.';
+        box.textContent = testo;
+        box.style.display = '';
+    }
+
+    // Applica alle righe gia' in pagina lo storico della promo scelta.
+    function applicaStorico(mappa) {
+        righeClienti().forEach(item => {
+            const id = item.querySelector('.client-checkbox').value;
+            const info = mappa[id];
+            if (info) {
+                // un reinvio scelto dall'operatore resta tale finche' non lo annulla
+                if (!item.classList.contains('reinvio')) segnaGiaInviato(item, info);
+            } else {
+                liberaRiga(item);
+            }
+        });
+        portaInFondoIGrigi();
+        updateCounts();
+        updatePreview();
+    }
+
+    // --- riquadro sotto il selettore del template ---
+    function mostraStoricoPromo(dati) {
+        const testo = document.getElementById('promoStoricoTesto');
+        const btn = document.getElementById('btnAzzeraStorico');
+        testo.textContent = '';
+        storicoCorrente = dati;
+
+        if (!campagnaCorrente()) {
+            testo.textContent = 'Nessun template scelto: l\'invio non viene ricordato. Scegli o salva un template per sapere a chi hai già mandato la promo.';
+            btn.style.display = 'none';
+            return;
+        }
+        if (!dati) {
+            testo.textContent = 'Controllo chi ha già ricevuto questa promo…';
+            btn.style.display = 'none';
+            return;
+        }
+        if (!dati.totale) {
+            testo.textContent = 'Questa promo non è stata ancora inviata a nessuno.';
+            if (dati.archiviati) testo.textContent += ` (${dati.archiviati} invii di edizioni precedenti in archivio)`;
+            btn.style.display = 'none';
+            return;
+        }
+        const forte = document.createElement('strong');
+        forte.textContent = dati.totale + (dati.totale === 1 ? ' cliente' : ' clienti');
+        testo.append('Già inviata a ', forte);
+        if (dati.ultimo_invio) testo.append(' · ultimo invio ' + dataBreve(dati.ultimo_invio));
+        if (dati.in_coda) testo.append(` · ${dati.in_coda} ancora in coda`);
+        if (dati.archiviati) testo.append(` · ${dati.archiviati} invii di edizioni precedenti in archivio`);
+        // Con messaggi ancora in coda l'azzeramento e' rifiutato dal server: non si offre.
+        btn.style.display = dati.in_coda ? 'none' : '';
+    }
+
+    function aggiornaStoricoPromo() {
+        const campagna = campagnaCorrente();
+        const seq = ++richiestaStorico;
+
+        if (campagna !== campagnaVista) {
+            // Altra promo: quello che si vedeva era della precedente.
+            campagnaVista = campagna;
+            righeClienti().forEach(liberaRiga);
+            nascondiEsitoInvio();
+            updateCounts();
+            updatePreview();
+            mostraStoricoPromo(null);
+        }
+        if (!campagna) { mostraStoricoPromo(null); return; }
+
+        const ids = righeClienti().map(i => Number(i.querySelector('.client-checkbox').value));
+        fetch(URL_STORICO, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+            body: JSON.stringify({ campagna: campagna, client_ids: ids })
+        })
+        .then(r => r.json())
+        .then(dati => {
+            if (seq !== richiestaStorico) return;
+            if (!dati.success) throw new Error(dati.error || 'storico non disponibile');
+            mostraStoricoPromo(dati);
+            applicaStorico(dati.clients || {});
+        })
+        // Se la lettura fallisce lo si dice, invece di lasciare "Controllo…" per
+        // sempre. All'invio il server scarta comunque chi ha gia' ricevuto la promo.
+        .catch(() => {
+            if (seq !== richiestaStorico) return;
+            document.getElementById('promoStoricoTesto').textContent =
+                'Non riesco a leggere lo storico di questa promo. All\'invio chi l\'ha già ricevuta viene comunque escluso.';
+            document.getElementById('btnAzzeraStorico').style.display = 'none';
+        });
+    }
+
+    document.getElementById('btnAzzeraStorico').addEventListener('click', function() {
+        nascondiTooltip(this);
+        const campagna = campagnaCorrente();
+        if (!campagna || !storicoCorrente) return;
+        const nome = nomePromoCorrente();
+        const n = storicoCorrente.totale;
+        if (!confirm(`Azzerare lo storico di "${nome}"?\n\n` +
+                     `Adesso risulta inviata a ${n} ${n === 1 ? 'cliente' : 'clienti'}. ` +
+                     `Dopo l'azzeramento tornano tutti selezionabili e la promo si potrà mandare di nuovo a chiunque ` +
+                     `(per esempio la stessa promo dell'anno prossimo).\n\n` +
+                     `Gli invii passati restano registrati, ma da questa pagina non si può tornare indietro.`)) return;
+
+        this.disabled = true;
+        fetch(URL_AZZERA_STORICO, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+            body: JSON.stringify({ campagna: campagna })
+        })
+        .then(r => r.json().catch(() => ({ success: false, error: `Errore del server (${r.status})` })))
+        .then(data => {
+            if (!data.success) { alert('❌ ' + (data.error || 'Storico non azzerato')); return; }
+            mostraEsito(`Storico di "${nome}" azzerato`);
+            giaInviatiAltri = 0;
+            aggiornaStoricoPromo();
+        })
+        .catch(() => alert('❌ Errore di connessione: storico non azzerato'))
+        .finally(() => { this.disabled = false; });
+    });
+
+    // "Reinvia" / "Annulla" sulle righe in grigio (la lista si ridisegna a ogni ricerca).
+    document.getElementById('clientResults').addEventListener('click', function(e) {
+        const bottone = e.target.closest('.js-reinvia, .js-annulla-reinvio');
+        if (!bottone) return;
+        const item = bottone.closest('.client-item');
+        if (bottone.classList.contains('js-reinvia')) segnaReinvio(item);
+        else tornaGrigio(item);
+        updateCounts();
+        updatePreview();
     });
 
     txtMessaggio.addEventListener('input', () => { updatePreview(); aggiornaStatoTemplate(); });
@@ -1121,6 +1437,8 @@ Ti aspettiamo 💆‍♀️`
             txtMessaggio.value = t.testo;
             disegnaSelect('saved_' + t.id);
             impostaFoto(fotoDaTemplate(t));
+            // Un template nuovo e' una promo nuova: storico e clienti in grigio ripartono da zero.
+            aggiornaStoricoPromo();
             modalSalva.hide();
             mostraEsito(nuovo ? `Template "${t.nome}" creato` : 'Modifiche salvate');
         })
@@ -1149,6 +1467,7 @@ Ti aspettiamo 💆‍♀️`
             if (foto && foto.tipo === 'template') impostaFoto(null);
             disegnaSelect('');
             aggiornaStatoTemplate();
+            aggiornaStoricoPromo();
             mostraEsito(`Template "${t.nome}" eliminato`);
         })
         .catch(() => alert('Errore di connessione: template non eliminato'));
@@ -1178,6 +1497,9 @@ Ti aspettiamo 💆‍♀️`
         document.querySelectorAll('.filter-toggle').forEach(toggle => {
             filters[toggle.name] = toggle.checked;
         });
+        // La promo scelta: il server lascia fuori dai 30 risultati chi l'ha gia'
+        // ricevuta e lo restituisce a parte, per mostrarlo in grigio.
+        filters.campagna = campagnaCorrente() || '';
 
         const resultsDiv = document.getElementById('clientResults');
         resultsDiv.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-2">Ricerca in corso...</p></div>';
@@ -1205,8 +1527,11 @@ Ti aspettiamo 💆‍♀️`
                     // anteprima e invio, cosi' su WhatsApp arriva "Maria" e non "MARIA".
                     client.nome = capitalizeName(client.nome);
                     client.cognome = capitalizeName(client.cognome);
+                    // Lo storico della promo non fa parte del cliente: non si porta
+                    // dietro nell'invio (e invecchierebbe al primo cambio di template).
+                    const { gia_inviato, ...datiCliente } = client;
                     html += `
-                        <div class="client-item d-flex align-items-center" data-client="${esc(JSON.stringify(client))}">
+                        <div class="client-item d-flex align-items-center" data-client="${esc(JSON.stringify(datiCliente))}">
                             <input type="checkbox" class="form-check-input client-checkbox me-3"
                                    value="${esc(client.id)}" data-phone="${esc(client.cellulare)}">
                             <div class="flex-grow-1">
@@ -1216,32 +1541,44 @@ Ti aspettiamo 💆‍♀️`
                                     ${client.giorni_assenza ? ' • 📅 ' + client.giorni_assenza + ' gg fa' : ''}
                                     ${client.totale_visite ? ' • 🔄 ' + client.totale_visite + ' visite' : ''}
                                 </small>
+                                <div class="promo-slot small mt-1"></div>
                             </div>
                         </div>`;
                 });
                 resultsDiv.innerHTML = html;
-                
+                giaInviatiAltri = data.gia_inviati_altri || 0;
+
                 // Aggiungi eventi click
                 document.querySelectorAll('.client-checkbox').forEach(cb => {
                     cb.addEventListener('change', function() {
-                        this.closest('.client-item')?.classList.toggle('selected', this.checked);
+                        const item = this.closest('.client-item');
+                        item?.classList.toggle('selected', this.checked);
+                        // Tolta la spunta a un reinvio: il cliente torna in grigio.
+                        if (!this.checked && item?.classList.contains('reinvio')) tornaGrigio(item);
                         updateCounts();
                         updatePreview();
                     });
                 });
-                
+
                 document.querySelectorAll('.client-item').forEach(item => {
                     item.addEventListener('click', function(e) {
-                        if (e.target.type !== 'checkbox') {
-                            const cb = this.querySelector('.client-checkbox');
-                            cb.checked = !cb.checked;
-                            this.classList.toggle('selected', cb.checked);
-                            updateCounts();
-                            updatePreview();
-                        }
+                        // I pulsanti Reinvia/Annulla hanno il loro gestore, e un
+                        // cliente in grigio non si sceglie con un clic sulla riga.
+                        if (e.target.type === 'checkbox' || e.target.closest('.promo-slot')) return;
+                        const cb = this.querySelector('.client-checkbox');
+                        if (cb.disabled) return;
+                        cb.checked = !cb.checked;
+                        cb.dispatchEvent(new Event('change'));
                     });
                 });
+
+                // Chi ha gia' ricevuto la promo scelta: in grigio.
+                const righe = righeClienti();
+                data.clients.forEach((client, i) => {
+                    if (client.gia_inviato) segnaGiaInviato(righe[i], client.gia_inviato);
+                });
             } else {
+                giaInviatiAltri = 0;
                 resultsDiv.innerHTML = '<div class="text-muted text-center py-5"><i class="bi bi-emoji-frown fs-1 d-block mb-2"></i>Nessun cliente trovato</div>';
             }
             document.getElementById('resultsCount').textContent = data.clients ? data.clients.length : 0;
@@ -1258,6 +1595,7 @@ Ti aspettiamo 💆‍♀️`
         document.getElementById('selectedCount').textContent = selected;
         document.getElementById('sendCount').textContent = selected;
         document.getElementById('btnSendMarketing').disabled = selected === 0;
+        aggiornaRiepilogoRisultati();
     }
 
     function updatePreview() {
@@ -1375,8 +1713,28 @@ Ti aspettiamo 💆‍♀️`
             return;
         }
         
+        // Chi ha gia' ricevuto la promo e l'operatore ha scelto di ricontattare:
+        // il server li lascia passare solo se qui li dichiariamo.
+        const campagna = campagnaCorrente();
+        const reinvii = [];
+        document.querySelectorAll('.client-item.reinvio .client-checkbox:checked').forEach(cb => {
+            const c = JSON.parse(cb.closest('.client-item').dataset.client || '{}');
+            const info = JSON.parse(cb.closest('.client-item').dataset.promo || '{}');
+            reinvii.push({
+                id: c.id,
+                etichetta: (c.nome + ' ' + c.cognome).trim() + (info.ultimo ? ' (ricevuta il ' + dataBreve(info.ultimo) + ')' : '')
+            });
+        });
+
         const conFoto = foto ? ' con foto' : '';
-        if (!confirm(`Confermi l'invio del messaggio WhatsApp${conFoto} a ${selectedClients.length} clienti?\n\nQuesta operazione non può essere annullata.`)) {
+        let conferma = `Confermi l'invio del messaggio WhatsApp${conFoto} a ${selectedClients.length} clienti?`;
+        if (reinvii.length) {
+            conferma += `\n\n⚠️ ${reinvii.length === 1 ? '1 cliente ha' : reinvii.length + ' clienti hanno'} GIÀ ricevuto questa promo e la riceverà di nuovo:\n` +
+                reinvii.slice(0, 5).map(r => '• ' + r.etichetta).join('\n') +
+                (reinvii.length > 5 ? `\n… e altri ${reinvii.length - 5}` : '');
+        }
+        conferma += '\n\nQuesta operazione non può essere annullata.';
+        if (!confirm(conferma)) {
             return;
         }
 
@@ -1390,7 +1748,8 @@ Ti aspettiamo 💆‍♀️`
 
         // Foto nuova: multipart con i dati in JSON accanto. Foto del template:
         // basta l'id, il server la rilegge dal database.
-        const dati = { clients: selectedClients, template: message };
+        const dati = { clients: selectedClients, template: message,
+                       campagna: campagna, reinvio_ids: reinvii.map(r => r.id) };
         const headers = { 'X-CSRFToken': token };
         let body;
         if (foto && foto.tipo === 'template') dati.immagine_template_id = foto.id;
@@ -1422,11 +1781,16 @@ Ti aspettiamo 💆‍♀️`
                 
                 // Deseleziona i clienti accodati
                 document.querySelectorAll('.client-checkbox:checked').forEach(cb => {
+                    const item = cb.closest('.client-item');
                     cb.checked = false;
-                    cb.closest('.client-item')?.classList.remove('selected');
+                    item?.classList.remove('selected');
+                    // un reinvio e' partito: la riga si riallinea allo storico qui sotto
+                    if (item?.classList.contains('reinvio')) liberaRiga(item);
                 });
                 updateCounts();
                 seguiCodaMarketing();
+                // I clienti appena accodati risultano subito "In coda" (in grigio).
+                aggiornaStoricoPromo();
             } else {
                 let errMsg = '❌ ' + (data.error || 'Errore sconosciuto');
                 if (data.dettagli_errori && data.dettagli_errori.length > 0) {
@@ -1506,6 +1870,8 @@ Ti aspettiamo 💆‍♀️`
                         clearInterval(timerCodaMarketing);
                         timerCodaMarketing = null;
                         aggiornaLimiteGiornaliero();
+                        // Da "In coda" a "Già inviata il ...", e il riquadro della promo si aggiorna.
+                        aggiornaStoricoPromo();
                     }
                 })
                 .catch(() => {});
@@ -1523,6 +1889,10 @@ Ti aspettiamo 💆‍♀️`
 
     // Inizializza link recensione listener
     document.getElementById('google_review_link')?.addEventListener('input', updateNewClientPreview);
+
+    // Per ultimo: usa timerCodaMarketing, dichiarato qui sopra. Senza template
+    // scelto mostra solo il suggerimento a salvarne uno.
+    aggiornaStoricoPromo();
 });
 
     // Salva limite invii giornalieri (solo owner)
