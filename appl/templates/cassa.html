@@ -1226,6 +1226,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Via url_for e non come path assoluto: l'app puo' essere montata sotto
     // /s/<idx> e una fetch su '/settings/...' finirebbe fuori dal tenant.
     window.apiWhatsappSettingUrl = "{{ url_for('settings.api_whatsapp_setting') }}";
+    // Verifica "cliente nuovo" per il messaggio di benvenuto (Marketing): stesso
+    // motivo, url_for e non un percorso assoluto.
+    window.apiCheckNewClientUrl = "{{ url_for('settings.marketing_check_new_client') }}";
 
     if (operatorName) {
       const operatorInput = document.getElementById('operatorSelectInput');

@@ -123,7 +123,7 @@ I quattro `tools_clienti_servizi_operatori`, `tools_info_azienda_utenti`, `tools
 |---|---|---|
 | **BOOKING** (7) | `booking_setup`, `booking_rules`, `booking_agenda_separazione` | gli altri 4 sono concettuali; `booking1.png`/`booking2.png` esistono già e sono usate altrove |
 | **WHATSAPP** (5 restanti) | `whatsapp_messaggi_template`, `whatsapp_auto`, `whatsapp_operatori`, `whatsapp_memo_clienti_mattino` | tutte sezioni della stessa pagina Tools → WhatsApp: le ritagli nella stessa passata dei due scatti del punto 1 |
-| **MARKETING** (4) | `marketing_send`, `marketing_filtri_template` | `marketing_panorama` e `marketing_variables` sono testuali |
+| **MARKETING** (5) | `marketing_send`, `marketing_filtri_template` | `marketing_panorama`, `marketing_variables` e `marketing_recensioni` sono testuali |
 | **PACCHETTI/PREPAGATE** (6) | `pacchetto_pagamento`, `pacchetto_memo`, `prepagata_uso` | qui i nomi cliente sono ovunque: massima attenzione |
 | **CASSA** (1) | `cassa_strumenti_fiscali_rch` | la colonna strumenti fiscali a destra |
 

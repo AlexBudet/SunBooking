@@ -118,6 +118,41 @@
       </td>
     </tr>
     <tr>
+      <td style="vertical-align: top;"><label for="google_review_link">Link recensioni:</label></td>
+      <td>
+        <div class="copy-field-wrapper">
+          <input type="text" inputmode="url" autocomplete="off" id="google_review_link" name="google_review_link" maxlength="500"
+                 pattern="https?://\S+" title="Un indirizzo web completo, che inizia con https://"
+                 placeholder="https://g.page/r/..."
+                 value="{{ business_info.google_review_link if business_info and business_info.google_review_link else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
+          <button type="button" class="copy-field-btn" data-copy-target="google_review_link" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
+        </div>
+        <small style="display: block; color: #666; margin-top: 4px;">
+          La pagina dove i clienti lasciano la recensione. Nel messaggio di benvenuto ai nuovi clienti
+          (Marketing) il tag <strong>Link recensione</strong> <code>{% raw %}{{link_recensione}}{% endraw %}</code>
+          viene sostituito con questo indirizzo.
+        </small>
+        <details style="margin-top: 6px; font-size: 0.9em;">
+          <summary style="cursor: pointer; color: #215586;">Non so quale link inserire: dove lo trovo?</summary>
+          <div style="margin-top: 6px; padding-left: 12px; border-left: 3px solid #ddd; color: #444;">
+            <p style="margin: 0 0 6px;">Il sito delle recensioni è <strong>Google</strong>: sono le stelle che i clienti vedono quando cercano
+              il centro su Google e su Maps. Serve il <strong>Profilo dell'attività su Google</strong> (gratuito, si gestisce da
+              <strong>business.google.com</strong>). Da computer:</p>
+            <ol style="margin: 0 0 6px; padding-left: 20px;">
+              <li>Vai su <strong>business.google.com</strong> e accedi con l'account Google che gestisce l'attività.</li>
+              <li>Apri il profilo dell'attività e premi <strong>«Leggi recensioni»</strong>.</li>
+              <li>Premi <strong>«Ottieni più recensioni»</strong>.</li>
+              <li>Premi <strong>«Copia»</strong>, poi incolla qui il link e premi <strong>Salva Impostazioni</strong> in fondo alla pagina.</li>
+            </ol>
+            <p style="margin: 0 0 6px;">Il link copiato apre il cliente direttamente sulla finestra per scrivere la recensione
+              (di solito inizia con <code>https://g.page/r/</code>). Provalo aprendolo in una nuova scheda.</p>
+            <p style="margin: 0; color: #666;">Il centro non ha ancora il Profilo su Google? Va creato e verificato da Google prima di poter
+              ricevere recensioni. Il tag funziona anche con il link di un altro sito di recensioni, purché inizi con https://</p>
+          </div>
+        </details>
+      </td>
+    </tr>
+    <tr>
       <td><label for="address">Indirizzo:</label></td>
       <td><input type="text" id="address" name="address" value="{{ business_info.address if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
     </tr>

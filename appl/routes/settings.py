@@ -422,6 +422,18 @@ def set_business_info():
         business_info.mobile = request.form.get('mobile')
         business_info.email = request.form.get('email')
 
+        # Link alla pagina delle recensioni: e' quello che il tag {{link_recensione}}
+        # del messaggio di benvenuto (Marketing) mette nel testo. Un indirizzo che
+        # non sia web non si salva: partirebbe cosi' com'e' su WhatsApp. Il resto
+        # del modulo si salva comunque e il link precedente resta.
+        link_recensioni_scartato = False
+        if 'google_review_link' in request.form:
+            link_recensioni = (request.form.get('google_review_link') or '').strip()
+            if not link_recensioni or re.match(r'^https?://\S+$', link_recensioni, re.I):
+                business_info.google_review_link = link_recensioni[:500] or None
+            else:
+                link_recensioni_scartato = True
+
         vat_percentage = request.form.get('vat_percentage')
         try:
             business_info.vat_percentage = float(vat_percentage)
@@ -458,7 +470,11 @@ def set_business_info():
 
         try:
             db.session.commit()
-            flash("Informazioni aziendali aggiornate con successo!", "success")
+            if link_recensioni_scartato:
+                flash("Informazioni aziendali salvate, ma il link recensioni NON è stato aggiornato: "
+                      "deve essere un indirizzo web completo, che inizia con https://", "error")
+            else:
+                flash("Informazioni aziendali aggiornate con successo!", "success")
         except Exception as e:
             db.session.rollback()
             app.logger.error("Errore durante l'aggiornamento delle info aziendali: %s", str(e))
@@ -4027,19 +4043,21 @@ def marketing_save_template():
 
 @settings_bp.route('/api/marketing/new-client-settings', methods=['POST'])
 def marketing_new_client_settings():
-    """Salva le impostazioni per il messaggio nuovo cliente"""
+    """Attiva o disattiva il messaggio di benvenuto ai nuovi clienti.
+
+    Il link recensioni NON passa piu' di qui: si scrive in Info Azienda, che e'
+    l'unico punto dove si modifica. Questa route tocca solo l'interruttore, cosi'
+    non puo' azzerare per sbaglio il link quando la pagina Marketing lo salva.
+    """
     data = request.get_json(silent=True) or {}
-    
+
     try:
         business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
         if not business_info:
             return jsonify({'success': False, 'error': 'BusinessInfo non trovato'})
-        
-        business_info.new_client_welcome_enabled = data.get('enabled', False)
-        business_info.google_review_link = data.get('google_review_link', '')
-        business_info.new_client_delay_send = data.get('delay_send', False)
-        business_info.new_client_delay_hours = int(data.get('delay_hours', 2))
-        
+
+        business_info.new_client_welcome_enabled = bool(data.get('enabled', False))
+
         db.session.commit()
         
         return jsonify({'success': True})
@@ -4070,45 +4088,108 @@ def marketing_save_new_client_template():
 
 @settings_bp.route('/api/marketing/check-new-client', methods=['GET'])
 def marketing_check_new_client():
-    """API per verificare se mostrare il prompt di benvenuto in cassa"""
-    client_id = request.args.get('client_id')
-    
+    """Cassa: il cliente che sta per pagare e' nuovo? Se si', il messaggio di benvenuto.
+
+    La Cassa lo chiede PRIMA di emettere lo scontrino: a scontrino fatto il cliente
+    ne ha gia' uno e non risulterebbe piu' nuovo. Risponde solo `show_prompt: true`
+    quando il messaggio si puo' davvero mandare (modulo WhatsApp attivo e
+    collegato, cliente vero con un cellulare, link recensioni presente se il testo
+    lo usa). In tutti gli altri casi `show_prompt: false` e in `motivo` il perche':
+    la Cassa non mostra niente e l'incasso prosegue.
+
+    Il testo esce gia' compilato (nome di battesimo, centro, link): la Cassa lo
+    mostra nel pannello WhatsApp, dove l'operatore lo rilegge, lo puo' correggere
+    e lo manda solo premendo Invia.
+    """
+    def nessun_prompt(motivo):
+        return jsonify({'show_prompt': False, 'motivo': motivo})
+
+    client_id = request.args.get('client_id', type=int)
     if not client_id:
-        return jsonify({'show_prompt': False})
-    
+        return nessun_prompt('cliente_mancante')
+
     try:
+        # Stessa regola dell'invio WhatsApp dall'Agenda: senza modulo Web non parte.
+        owner_cfg = OWNER.query.first()
+        if owner_cfg and not owner_cfg.module_web_enabled:
+            return nessun_prompt('modulo_disattivo')
+
         business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
-        if not business_info or not getattr(business_info, 'new_client_welcome_enabled', False):
-            return jsonify({'show_prompt': False})
-        
-        # Verifica se è un nuovo cliente (primo pagamento)
-        receipt_count = Receipt.query.filter(Receipt.cliente_id == int(client_id)).count()
-        
-        if receipt_count == 0:  # Primo pagamento = nuovo cliente
-            client = Client.query.get(int(client_id))
-            if client:
-                template = getattr(business_info, 'new_client_welcome_message', '') or DEFAULT_WELCOME_MESSAGE
-                google_link = getattr(business_info, 'google_review_link', '') or ''
-                
-                message = template.replace('{{nome}}', client.cliente_nome or '')
-                message = message.replace('{{centro}}', business_info.business_name or 'Centro')
-                message = message.replace('{{link_recensione}}', google_link)
-                
-                return jsonify({
-                    'show_prompt': True,
-                    'client_name': f"{client.cliente_nome} {client.cliente_cognome}",
-                    'client_phone': client.cliente_cellulare,
-                    'message': message,
-                    'delay_send': getattr(business_info, 'new_client_delay_send', False),
-                    'delay_hours': getattr(business_info, 'new_client_delay_hours', 2)
-                })
-        
-        return jsonify({'show_prompt': False})
-        
+        if not business_info or not business_info.new_client_welcome_enabled:
+            return nessun_prompt('disattivato')
+        if not (business_info.unipile_account_id or '').strip():
+            return nessun_prompt('whatsapp_non_connesso')
+
+        client = db.session.get(Client, client_id)
+        if not client or client.is_deleted or not _benvenuto_cliente_reale(client):
+            return nessun_prompt('cliente_non_valido')
+        if not _cliente_senza_storico(client.id):
+            return nessun_prompt('cliente_gia_noto')
+
+        template = business_info.new_client_welcome_message or DEFAULT_WELCOME_MESSAGE
+        link = (business_info.google_review_link or '').strip()
+        # Un "lascia una recensione: " senza indirizzo non serve a nessuno.
+        if '{{link_recensione}}' in template and not link:
+            return nessun_prompt('link_recensione_mancante')
+
+        # Sul WhatsApp del negozio va SOLO il nome di battesimo, mai il cognome
+        # (vedi calendar.py, send-whatsapp-auto).
+        nome = ' '.join(w.capitalize() for w in (client.cliente_nome or '').split())
+        message = (template
+                   .replace('{{nome}}', nome)
+                   .replace('{{centro}}', business_info.business_name or 'Centro')
+                   .replace('{{link_recensione}}', link))
+
+        return jsonify({
+            'show_prompt': True,
+            'client_id': client.id,
+            'client_first_name': nome,
+            'client_name': f"{client.cliente_nome} {client.cliente_cognome}".strip(),
+            'client_phone': client.cliente_cellulare,
+            'message': message,
+        })
+
     except Exception as e:
         current_app.logger.exception("Errore check nuovo cliente: %s", e)
-        return jsonify({'show_prompt': False})
-    
+        return nessun_prompt('errore')
+
+
+def _benvenuto_cliente_reale(client):
+    """Un cliente vero, con un cellulare a cui scrivere: niente segnaposto (il
+    cliente "dummy", quello del booking online) e niente numeri finti."""
+    chiave = ((client.cliente_nome or '').strip().lower(),
+              (client.cliente_cognome or '').strip().lower())
+    if chiave in (('dummy', 'dummy'), ('cliente', 'booking')):
+        return False
+    cifre = re.sub(r'\D', '', client.cliente_cellulare or '')
+    return len(cifre) >= 8 and set(cifre) != {'0'}
+
+
+def _cliente_senza_storico(client_id):
+    """True se il cliente e' davvero al primo passaggio.
+
+    Non basta guardare gli scontrini: un cliente storico importato da un altro
+    gestionale ne ha zero in questo database, e il "grazie per il tuo primo
+    trattamento" a chi viene da anni e' il peggior errore possibile. Per questo
+    conta come gia' noto chi ha: uno scontrino, un pacchetto o una carta
+    prepagata, oppure un appuntamento (non disdetto) in un giorno PRECEDENTE a
+    oggi. Quelli di oggi restano fuori: e' la visita che si sta pagando.
+    Nel dubbio si sbaglia per difetto: meglio un benvenuto in meno che uno di troppo.
+    """
+    if Receipt.query.filter(Receipt.cliente_id == client_id).first() is not None:
+        return False
+    if Pacchetto.query.filter(Pacchetto.client_id == client_id).first() is not None:
+        return False
+    inizio_oggi = datetime.now(ZoneInfo('Europe/Rome')).replace(
+        hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    precedente = Appointment.query.filter(
+        Appointment.client_id == client_id,
+        Appointment.is_cancelled_by_client == False,
+        Appointment.start_time < inizio_oggi,
+    ).first()
+    return precedente is None
+
+
 @settings_bp.route('/api/marketing/max-daily-sends', methods=['POST'])
 def marketing_set_max_daily_sends():
     """Imposta il limite massimo di invii giornalieri (solo owner)"""

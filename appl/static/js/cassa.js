@@ -1501,6 +1501,12 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
       : (document.getElementById('operatorSelectInput').dataset.selectedOperator || null);
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
+    // Cliente nuovo? (messaggio di benvenuto, Marketing). Si chiede ORA, prima di
+    // emettere qualsiasi scontrino: a scontrino fatto il cliente ne ha gia' uno e
+    // non risulterebbe piu' nuovo. Il messaggio si propone solo a incasso concluso
+    // (vedi proponiBenvenutiInSequenza in fondo ai due flussi di chiusura).
+    const benvenutoNuovoCliente = await verificaClienteNuovoBenvenuto(cliente_id);
+
     // Carte ricaricate con questo scontrino: sia le ricariche vere e proprie
     // (righe con ricarica_prepagata_id) sia il primo caricamento di una carta appena
     // creata (righe con prepagata_id). Servono per proporre il messaggio WhatsApp
@@ -1979,7 +1985,8 @@ function showPendingModal(key, expectedTotal) {
           ...(prepagataUtilizzoInfo ? [prepagataUtilizzoInfo] : []),
           ...(await costruisciInfoRicariche(prepagateRicaricate))
         ];
-        proponiWhatsappPrepagateInSequenza(infoCarteFiscali, mostraEsitoERedirect);
+        proponiWhatsappPrepagateInSequenza(infoCarteFiscali,
+          () => proponiBenvenutiInSequenza([benvenutoNuovoCliente], mostraEsitoERedirect));
       }
 
       try {
@@ -2119,7 +2126,8 @@ function showPendingModal(key, expectedTotal) {
       ...(prepagataUtilizzoInfo ? [prepagataUtilizzoInfo] : []),
       ...(await costruisciInfoRicariche(prepagateRicaricate))
     ];
-    proponiWhatsappPrepagateInSequenza(infoCarte, completaChiusuraScontrino);
+    proponiWhatsappPrepagateInSequenza(infoCarte,
+      () => proponiBenvenutiInSequenza([benvenutoNuovoCliente], completaChiusuraScontrino));
 
     // Termina qui il flusso non fiscale
     return;
@@ -2233,6 +2241,60 @@ async function proponiWhatsappPrepagateInSequenza(listaInfo, onDone) {
   prossimo();
 }
 window.proponiWhatsappPrepagateInSequenza = proponiWhatsappPrepagateInSequenza;
+
+// ===== Messaggio di benvenuto al cliente nuovo (Marketing > Messaggio di benvenuto) =====
+// Il server decide se il cliente e' davvero nuovo e prepara il testo gia' compilato
+// (nome, centro, link recensioni); qui si chiede PRIMA dello scontrino e si propone
+// DOPO, nello stesso pannello WhatsApp delle carte prepagate: anteprima modificabile,
+// invio solo con "Invia", mai in automatico.
+// Tutto e' a prova di errore: la Cassa non deve MAI bloccarsi ne' mostrare un errore
+// per colpa di un messaggio di cortesia. Se qualcosa non va, semplicemente non compare.
+async function verificaClienteNuovoBenvenuto(clienteId) {
+  if (!clienteId || !window.apiCheckNewClientUrl) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
+  try {
+    const res = await fetch(`${window.apiCheckNewClientUrl}?client_id=${encodeURIComponent(clienteId)}`,
+                            { credentials: 'same-origin', signal: ctrl.signal });
+    if (!res.ok) return null;
+    const info = await res.json();
+    return (info && info.show_prompt && info.client_phone && info.message) ? info : null;
+  } catch (err) {
+    console.warn('Verifica cliente nuovo non riuscita:', err);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Un pannello per ogni cliente nuovo, uno dopo l'altro, poi onDone una volta sola.
+// Di norma e' uno solo: sono di piu' solo quando la bozza contiene piu' clienti.
+function proponiBenvenutiInSequenza(lista, onDone) {
+  const coda = (lista || []).filter(Boolean);
+  const prossimo = () => {
+    const info = coda.shift();
+    if (!info) { onDone(); return; }
+    if (typeof window.showWhatsappAutoSendPanel !== 'function') { prossimo(); return; }
+    // onClose scatta a ogni chiusura del pannello (invio, annulla, Esc): si va
+    // avanti una volta sola anche se dovesse scattare due volte.
+    let passato = false;
+    const avanti = () => { if (passato) return; passato = true; prossimo(); };
+    try {
+      window.showWhatsappAutoSendPanel({
+        numero: info.client_phone,
+        testo: info.message,
+        nome: info.client_first_name,
+        clientId: info.client_id,
+        onClose: avanti
+      });
+    } catch (err) {
+      console.warn('Pannello di benvenuto non aperto:', err);
+      avanti();
+    }
+  };
+  prossimo();
+}
+window.proponiBenvenutiInSequenza = proponiBenvenutiInSequenza;
 
 async function proponiWhatsappPrepagata(info, onDone) {
   const cap = window.capitalizeName || (s => s || '');
@@ -3719,6 +3781,12 @@ async function stampaMultiClienteFlow(releaseLock) {
   }
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
   const operatore_id = document.getElementById('operatorSelectInput')?.dataset.selectedOperator || null;
+  // Chi e' nuovo si stabilisce PRIMA di stampare: appena c'e' uno scontrino il
+  // cliente non lo e' piu'. I messaggi di benvenuto si propongono a fine incasso.
+  const benvenuti = [];
+  for (const g of groups) {
+    benvenuti.push(await verificaClienteNuovoBenvenuto(g.clientId));
+  }
   for (const g of groups) {
     const { voci_fiscali, voci_non_fiscali, hasError } = raccogliVociDaRighe(g.rows);
     if (hasError) { if (releaseLock) releaseLock(); return; }
@@ -3769,11 +3837,13 @@ async function stampaMultiClienteFlow(releaseLock) {
   }
   await aggiornaStatiAppuntamentiPagati(csrfToken);
   if (typeof resetScontrino === 'function') resetScontrino(true);
-  if (typeof showSuccessPopup === 'function') {
-    showSuccessPopup(groups.length + ' scontrini stampati con successo!', 3000, () => { window.location.href = '/cassa'; });
-  } else {
-    window.location.href = '/cassa';
-  }
+  proponiBenvenutiInSequenza(benvenuti, () => {
+    if (typeof showSuccessPopup === 'function') {
+      showSuccessPopup(groups.length + ' scontrini stampati con successo!', 3000, () => { window.location.href = '/cassa'; });
+    } else {
+      window.location.href = '/cassa';
+    }
+  });
 }
 
 // Wiring pulsante "Dividi pagamento" a livello scontrino

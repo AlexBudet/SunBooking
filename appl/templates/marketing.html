@@ -1,18 +1,19 @@
 {% extends "settings.html" %}
 
 {% block settings_content %}
-<div class="container-fluid mt-4" style="max-width: 1400px;">
-    
+<div class="page-wide-90">
+<h3>&nbsp;Marketing</h3>
+
     <!-- SEZIONE 1: INVIO WHATSAPP DI MARKETING -->
-    <div class="card mb-4 shadow-sm">
-        <div class="card-header bg-primary text-white">
-            <h4 class="mb-0"><i class="bi bi-whatsapp me-2"></i>Campagne WhatsApp Marketing</h4>
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-whatsapp"></i> Campagne WhatsApp Marketing</h5>
         </div>
         <div class="card-body">
             <div class="row">
                 <!-- COLONNA FILTRI -->
                 <div class="col-lg-4 border-end">
-                    <h5 class="mb-3"><i class="bi bi-funnel me-2"></i>Filtri Selezione Clienti</h5>
+                    <h6 class="fw-bold mb-3"><i class="bi bi-funnel me-2"></i>Filtri Selezione Clienti</h6>
                     
                     <form id="marketingFiltersForm">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -199,9 +200,9 @@
 
                 <!-- COLONNA RISULTATI -->
                 <div class="col-lg-4 border-end">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="mb-0"><i class="bi bi-people me-2"></i>Risultati <span id="resultsCount" class="badge bg-secondary">0</span></h5>
-                        <div>
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <h6 class="fw-bold mb-0 text-nowrap"><i class="bi bi-people me-2"></i>Risultati <span id="resultsCount" class="badge bg-secondary">0</span></h6>
+                        <div class="text-nowrap">
                             <button type="button" class="btn btn-sm btn-outline-primary" id="btnSelectAll">Seleziona tutti</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary" id="btnDeselectAll">Deseleziona</button>
                         </div>
@@ -226,8 +227,32 @@
 
                 <!-- COLONNA TEMPLATE MESSAGGIO -->
                 <div class="col-lg-4">
-                    <h5 class="mb-3"><i class="bi bi-chat-dots me-2"></i>Template Messaggio</h5>
-                    
+                    {# Contatore degli invii di oggi e avanzamento della coda, in cima alla
+                       colonna: cosi' si vedono appena si apre la pagina, senza scorrere
+                       fin sotto l'anteprima. #}
+                    <div class="small text-muted mb-2">
+                        <i class="bi bi-speedometer2 me-1"></i><span id="dailyStatsInfo">Limite giornaliero: {{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 30 }} invii</span>
+                    </div>
+
+                    {# Avanzamento della coda. L'invio non finisce piu' insieme
+                       alla richiesta: i messaggi partono uno ogni 12-20 secondi
+                       per non far sospendere il numero WhatsApp del negozio, e
+                       senza questo riquadro l'operatore non saprebbe a che punto
+                       e' ne' se puo' chiudere la pagina (puo'). A invio finito la
+                       barra si azzera e resta solo l'esito. #}
+                    <div id="marketingCoda" class="alert alert-info py-2 px-3 mb-3" style="display:none;">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <strong class="small"><i class="bi bi-hourglass-split me-1" id="codaIcona"></i><span id="codaTitolo">Invio in corso</span></strong>
+                        <span class="small" id="codaConteggio">0 / 0</span>
+                      </div>
+                      <div class="progress mt-2" style="height:6px;">
+                        <div class="progress-bar" id="codaBarra" role="progressbar" style="width:0%;"></div>
+                      </div>
+                      <div class="small text-muted mt-2" id="codaDettaglio"></div>
+                    </div>
+
+                    <h6 class="fw-bold mb-3"><i class="bi bi-chat-dots me-2"></i>Template Messaggio</h6>
+
                     <form id="marketingMessageForm">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         
@@ -332,25 +357,6 @@
                             <button type="button" class="btn btn-success btn-lg" id="btnSendMarketing" disabled>
                                 <i class="bi bi-whatsapp me-2"></i>Invia a <span id="sendCount">0</span> clienti
                             </button>
-                            <small class="text-muted d-block text-center mt-2">
-                                <span id="dailyStatsInfo">Limite giornaliero: {{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 30 }} invii</span>
-                            </small>
-
-                            {# Avanzamento della coda. L'invio non finisce piu' insieme
-                               alla richiesta: i messaggi partono uno ogni 12-20 secondi
-                               per non far sospendere il numero WhatsApp del negozio, e
-                               senza questo riquadro l'operatore non saprebbe a che punto
-                               e' ne' se puo' chiudere la pagina (puo'). #}
-                            <div id="marketingCoda" class="alert alert-info py-2 px-3 mt-2 mb-0" style="display:none;">
-                              <div class="d-flex justify-content-between align-items-center">
-                                <strong class="small"><i class="bi bi-hourglass-split me-1"></i>Invio in corso</strong>
-                                <span class="small" id="codaConteggio">0 / 0</span>
-                              </div>
-                              <div class="progress mt-2" style="height:6px;">
-                                <div class="progress-bar" id="codaBarra" role="progressbar" style="width:0%;"></div>
-                              </div>
-                              <div class="small text-muted mt-2" id="codaDettaglio"></div>
-                            </div>
                         </div>
                     </form>
                 </div>
@@ -358,56 +364,52 @@
         </div>
     </div>
 
-    <hr class="my-5">
-
     <!-- SEZIONE 2: MESSAGGIO AUTOMATICO NUOVO CLIENTE -->
-    <div class="card mb-4 shadow-sm">
-        <div class="card-header bg-success text-white">
-            <h4 class="mb-0"><i class="bi bi-person-plus me-2"></i>Messaggio Automatico a Nuovo Cliente</h4>
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-person-plus"></i> Messaggio di Benvenuto ai Nuovi Clienti</h5>
         </div>
         <div class="card-body">
             <div class="row">
                 <div class="col-lg-6">
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle me-2"></i>
-                        Quando un <strong>NUOVO CLIENTE</strong> paga in cassa, verrà mostrato un prompt per inviare un messaggio di benvenuto con richiesta di recensione.
+                        Quando un <strong>cliente nuovo</strong> paga per la prima volta in Cassa, dopo lo scontrino compare questo
+                        messaggio già compilato: lo rileggi, se vuoi lo correggi e lo invii con un clic. Non parte mai da solo.
                     </div>
 
                     <!-- Toggle attivazione -->
                     <div class="form-check form-switch mb-4">
-                        <input class="form-check-input" type="checkbox" role="switch" id="new_client_welcome_enabled" 
+                        <input class="form-check-input" type="checkbox" role="switch" id="new_client_welcome_enabled"
                                {% if business_info and business_info.new_client_welcome_enabled %}checked{% endif %}>
                         <label class="form-check-label fw-bold" for="new_client_welcome_enabled">
-                            Attiva messaggio di benvenuto automatico ai nuovi clienti
+                            Attiva messaggio di benvenuto ai nuovi clienti
                         </label>
                     </div>
 
-                    <!-- Opzioni aggiuntive -->
-                    <div id="newClientOptions" style="{% if not (business_info and business_info.new_client_welcome_enabled) %}display:none;{% endif %}">
-                        
-                        <div class="mb-3">
-                            <label class="form-label">Link Google Reviews (opzionale)</label>
-                            <input type="url" class="form-control" id="google_review_link" name="google_review_link" 
-                                   value="{{ business_info.google_review_link if business_info else '' }}"
-                                   placeholder="https://g.page/r/...">
-                            <div class="form-text">Inserisci il link diretto per lasciare una recensione su Google</div>
+                    {# Il link recensioni si scrive in Info Azienda, che e' l'unico punto dove
+                       si modifica: qui si legge soltanto. Va mostrato come indirizzo cliccabile
+                       solo se e' davvero web (un dato vecchio potrebbe non esserlo). #}
+                    {% set link_recensioni = ((business_info.google_review_link or '')|trim) if business_info else '' %}
+                    <div class="p-3 bg-light rounded">
+                        <div class="fw-bold mb-1"><i class="bi bi-star me-1"></i>Link per le recensioni</div>
+                        <div id="reviewLinkInfo" data-link="{{ link_recensioni }}" class="small text-break">
+                            {% if link_recensioni %}
+                                {% if link_recensioni[:8]|lower == 'https://' or link_recensioni[:7]|lower == 'http://' %}
+                                <a href="{{ link_recensioni }}" target="_blank" rel="noopener noreferrer">{{ link_recensioni }}</a>
+                                {% else %}{{ link_recensioni }}{% endif %}
+                            {% else %}
+                                <span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>Non ancora impostato</span>
+                            {% endif %}
                         </div>
-
-                        <div class="mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="new_client_delay_send" name="new_client_delay_send"
-                                       {% if business_info and business_info.new_client_delay_send %}checked{% endif %}>
-                                <label class="form-check-label" for="new_client_delay_send">
-                                    Invia il messaggio con ritardo (es. dopo 2 ore)
-                                </label>
-                            </div>
+                        <div class="form-text">
+                            Si scrive in <strong>Info Azienda</strong>, dove trovi anche le istruzioni per ricavarlo da Google.
+                            Il tag <strong>Link recensione</strong> (<code>{% raw %}{{link_recensione}}{% endraw %}</code>) lo inserisce nel messaggio.
+                            Finché manca, il messaggio di benvenuto non compare in Cassa.
                         </div>
-
-                        <div class="mb-3" id="delayOptions" style="{% if not (business_info and business_info.new_client_delay_send) %}display:none;{% endif %}">
-                            <label class="form-label">Ritardo invio (ore)</label>
-                            <input type="number" class="form-control" id="new_client_delay_hours" name="new_client_delay_hours" 
-                                   min="1" max="48" value="{{ business_info.new_client_delay_hours if business_info and business_info.new_client_delay_hours else 2 }}">
-                        </div>
+                        <a class="btn btn-sm btn-outline-secondary mt-2" href="{{ url_for('settings.business_info') }}">
+                            <i class="bi bi-pencil me-1"></i>{{ 'Modifica' if link_recensioni else 'Imposta' }} in Info Azienda
+                        </a>
                     </div>
                 </div>
 
@@ -429,7 +431,12 @@
                         <!-- Anteprima -->
                         <div class="mb-3">
                             <label class="form-label">Anteprima messaggio</label>
-<div id="newClientPreview" class="p-3 bg-success bg-opacity-10 rounded border" style="white-space: pre-wrap;">{{ (new_client_message or default_welcome_message)|replace('{{nome}}', 'Maria')|replace('{{centro}}', business_info.business_name if business_info else 'Il tuo Centro')|replace('{{link_recensione}}', 'https://g.page/...')|safe }}</div>
+<div id="newClientPreview" class="p-3 bg-success bg-opacity-10 rounded border" style="white-space: pre-wrap;">{{ (new_client_message or default_welcome_message)|replace('{{nome}}', 'Maria')|replace('{{centro}}', business_info.business_name if business_info else 'Il tuo Centro')|replace('{{link_recensione}}', (business_info.google_review_link if business_info and business_info.google_review_link else 'https://g.page/...')) }}</div>
+                            {# Il tag senza un link salvato lascerebbe il messaggio con l'indirizzo vuoto. #}
+                            <div id="reviewLinkAvviso" class="small text-warning-emphasis mt-2" style="display:none;">
+                                <i class="bi bi-exclamation-triangle me-1"></i>Il messaggio usa il tag «Link recensione» ma il link non è ancora impostato
+                                in Info Azienda: finché manca, il messaggio di benvenuto non compare in Cassa.
+                            </div>
                         </div>
 
                         <button type="button" class="btn btn-success" id="btnSaveNewClientMessage">
@@ -443,9 +450,9 @@
 
         {% if current_user and current_user.ruolo.value == 'owner' %}
     <!-- SEZIONE 3: IMPOSTAZIONI OWNER -->
-    <div class="card mb-4 shadow-sm">
-        <div class="card-header bg-dark text-white">
-            <h4 class="mb-0"><i class="bi bi-gear me-2"></i>Impostazioni Avanzate (Owner)</h4>
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-gear"></i> Impostazioni Avanzate <small class="text-muted fw-normal">(visibile solo a owner)</small></h5>
         </div>
         <div class="card-body">
             <div class="row">
@@ -467,49 +474,45 @@
     {% endif %}
 
     <!-- SEZIONE 4: IMMAGINI MARKETING -->
-    <div class="card mb-4 shadow-sm border-0" style="background: linear-gradient(135deg, #f8f9ff 0%, #fff3f8 100%); border: 1.5px solid #e0d7ff !important;">
-        <div class="card-body p-4">
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-image"></i> Immagini per le campagne</h5>
+        </div>
+        <div class="card-body">
             <div class="row align-items-center g-4">
 
-                <!-- Icona e titolo -->
-                <div class="col-lg-1 text-center d-none d-lg-block">
-                    <div style="font-size: 3rem; line-height:1;">🖼️</div>
-                </div>
-
                 <!-- Testo principale -->
-                <div class="col-lg-7">
-                    <h5 class="fw-bold mb-1" style="color: #5a3fa0;">
-                        Vuoi aggiungere un'immagine alla tua campagna marketing?
-                    </h5>
-                    <p class="text-muted mb-3" style="font-size: 0.95rem;">
+                <div class="col-lg-8">
+                    <p class="fw-semibold mb-1">Vuoi aggiungere un'immagine alla tua campagna marketing?</p>
+                    <p class="text-muted small mb-3">
                         Un'immagine accattivante aumenta l'impatto dei tuoi messaggi WhatsApp e rende le promozioni
                         più riconoscibili. Tosca può supportarti su tre fronti:
                     </p>
                     <div class="row g-2">
                         <div class="col-sm-4">
-                            <div class="d-flex align-items-start gap-2 p-2 bg-white rounded shadow-sm h-100">
-                                <span style="font-size:1.3rem; flex-shrink:0;">📱</span>
+                            <div class="d-flex align-items-start gap-2 p-2 bg-light rounded h-100">
+                                <i class="bi bi-phone fs-5 text-secondary flex-shrink-0"></i>
                                 <div>
-                                    <div class="fw-semibold" style="font-size:0.85rem;">WhatsApp Marketing</div>
-                                    <div class="text-muted" style="font-size:0.78rem;">Integrazione immagine nei messaggi di campagna</div>
+                                    <div class="fw-semibold small">WhatsApp Marketing</div>
+                                    <div class="text-muted small">Integrazione immagine nei messaggi di campagna</div>
                                 </div>
                             </div>
                         </div>
                         <div class="col-sm-4">
-                            <div class="d-flex align-items-start gap-2 p-2 bg-white rounded shadow-sm h-100">
-                                <span style="font-size:1.3rem; flex-shrink:0;">🌐</span>
+                            <div class="d-flex align-items-start gap-2 p-2 bg-light rounded h-100">
+                                <i class="bi bi-globe fs-5 text-secondary flex-shrink-0"></i>
                                 <div>
-                                    <div class="fw-semibold" style="font-size:0.85rem;">Sito Web</div>
-                                    <div class="text-muted" style="font-size:0.78rem;">Banner, slider e promozioni visive sul tuo sito</div>
+                                    <div class="fw-semibold small">Sito Web</div>
+                                    <div class="text-muted small">Banner, slider e promozioni visive sul tuo sito</div>
                                 </div>
                             </div>
                         </div>
                         <div class="col-sm-4">
-                            <div class="d-flex align-items-start gap-2 p-2 bg-white rounded shadow-sm h-100">
-                                <span style="font-size:1.3rem; flex-shrink:0;">📅</span>
+                            <div class="d-flex align-items-start gap-2 p-2 bg-light rounded h-100">
+                                <i class="bi bi-calendar-event fs-5 text-secondary flex-shrink-0"></i>
                                 <div>
-                                    <div class="fw-semibold" style="font-size:0.85rem;">Portale Prenotazioni</div>
-                                    <div class="text-muted" style="font-size:0.78rem;">Promozioni visibili ai clienti durante la prenotazione online</div>
+                                    <div class="fw-semibold small">Portale Prenotazioni</div>
+                                    <div class="text-muted small">Promozioni visibili ai clienti durante la prenotazione online</div>
                                 </div>
                             </div>
                         </div>
@@ -518,7 +521,7 @@
 
                 <!-- CTA -->
                 <div class="col-lg-4 text-center">
-                    <p class="text-muted mb-3" style="font-size: 0.88rem;">
+                    <p class="text-muted small mb-3">
                         Contatta il team Tosca per ricevere una consulenza gratuita e scoprire come integrare
                         le immagini nel tuo marketing digitale.
                     </p>
@@ -527,8 +530,7 @@
                        dall'account del negozio, con l'oggetto gia' compilato. #}
                     <button type="button"
                        onclick="openSupportModal('Richiesta integrazione immagini marketing')"
-                       class="btn btn-lg w-100 fw-semibold mb-2"
-                       style="background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border: none;">
+                       class="btn btn-primary w-100 mb-2">
                         <i class="bi bi-envelope me-2"></i>Richiedi supporto a Tosca
                     </button>
                     <small class="text-muted">
@@ -798,20 +800,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Toggle nuovo cliente - salva automaticamente
     const newClientToggle = document.getElementById('new_client_welcome_enabled');
     if (newClientToggle) {
-        newClientToggle.addEventListener('change', function() {
-            const options = document.getElementById('newClientOptions');
-            options.style.display = this.checked ? 'block' : 'none';
-            saveNewClientSettings();
-        });
-    }
-
-    // Toggle ritardo invio
-    const delayToggle = document.getElementById('new_client_delay_send');
-    if (delayToggle) {
-        delayToggle.addEventListener('change', function() {
-            const options = document.getElementById('delayOptions');
-            options.style.display = this.checked ? 'block' : 'none';
-        });
+        newClientToggle.addEventListener('change', saveNewClientSettings);
     }
 
     // Reset filtri
@@ -1675,7 +1664,7 @@ Ti aspettiamo 💆‍♀️`
     function updateNewClientPreview() {
         const previewDiv = document.getElementById('newClientPreview');
         const message = document.getElementById('new_client_message').value;
-        const link = document.getElementById('google_review_link').value || 'https://g.page/...';
+        const link = linkRecensioni() || 'https://g.page/...';
         
         let preview = message
             .replace(/\{\{nome\}\}/g, 'Maria')
@@ -1683,30 +1672,45 @@ Ti aspettiamo 💆‍♀️`
             .replace(/\{\{link_recensione\}\}/g, link);
         
         previewDiv.textContent = preview;
+        aggiornaAvvisoLink();
+    }
+
+    // Il link recensioni si modifica in Info Azienda: qui si legge soltanto, da
+    // quello che il server ha scritto nel riquadro.
+    function linkRecensioni() {
+        const el = document.getElementById('reviewLinkInfo');
+        return el ? (el.dataset.link || '').trim() : '';
+    }
+
+    // Il messaggio col tag del link ma senza link impostato non compare in Cassa:
+    // lo si dice qui, sotto l'anteprima. La regex evita di scrivere le graffe
+    // doppie per intero, che Jinja leggerebbe come variabile.
+    function aggiornaAvvisoLink() {
+        const avviso = document.getElementById('reviewLinkAvviso');
+        if (!avviso) return;
+        const manca = !linkRecensioni();
+        const usaTag = /\{\{link_recensione\}\}/.test(document.getElementById('new_client_message').value);
+        avviso.style.display = (manca && usaTag) ? '' : 'none';
     }
 
     function saveNewClientSettings() {
         const enabled = document.getElementById('new_client_welcome_enabled').checked;
         const token = document.querySelector('#newClientMessageForm input[name="csrf_token"]').value;
-        
-        fetch("{{ url_for('settings.marketing_new_client_settings') }}", {
+
+        return fetch("{{ url_for('settings.marketing_new_client_settings') }}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': token
             },
-            body: JSON.stringify({ 
-                enabled: enabled,
-                google_review_link: document.getElementById('google_review_link').value,
-                delay_send: document.getElementById('new_client_delay_send').checked,
-                delay_hours: document.getElementById('new_client_delay_hours').value
-            })
+            body: JSON.stringify({ enabled: enabled })
         })
         .then(r => r.json())
         .then(data => {
             console.log('Settings saved:', data);
+            return data;
         })
-        .catch(err => console.error(err));
+        .catch(err => { console.error(err); return null; });
     }
 
     function saveNewClientMessage() {
@@ -1884,9 +1888,14 @@ Ti aspettiamo 💆‍♀️`
         box.classList.toggle('alert-info', !!stato.attiva);
         box.classList.toggle('alert-success', !stato.attiva && !stato.errori);
         box.classList.toggle('alert-warning', !stato.attiva && !!stato.errori);
-        document.getElementById('codaConteggio').textContent = fatti + ' / ' + totale;
+        // A invio finito la barra si azzera e il conteggio sparisce: resta
+        // l'esito scritto sotto, cosi' non sembra un invio ancora in corso.
+        document.getElementById('codaConteggio').textContent = stato.attiva ? fatti + ' / ' + totale : '';
         document.getElementById('codaBarra').style.width =
-            (totale ? Math.round(100 * fatti / totale) : 0) + '%';
+            (stato.attiva && totale ? Math.round(100 * fatti / totale) : 0) + '%';
+        document.getElementById('codaTitolo').textContent = stato.attiva ? 'Invio in corso' : 'Ultimo invio';
+        document.getElementById('codaIcona').className =
+            'bi me-1 ' + (stato.attiva ? 'bi-hourglass-split' : 'bi-check-circle');
 
         let testo;
         if (stato.attiva) {
@@ -1930,8 +1939,7 @@ Ti aspettiamo 💆‍♀️`
         .then(stato => { if (mostraCodaMarketing(stato)) seguiCodaMarketing(); })
         .catch(() => {});
 
-    // Inizializza link recensione listener
-    document.getElementById('google_review_link')?.addEventListener('input', updateNewClientPreview);
+    aggiornaAvvisoLink();
 
     // Per ultimo: usa timerCodaMarketing, dichiarato qui sopra. Senza template
     // scelto mostra solo il suggerimento a salvarne uno.

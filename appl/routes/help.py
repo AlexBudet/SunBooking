@@ -1290,7 +1290,13 @@ Flusso corretto:
 6️⃣ invia
 
 <span class="help-strong-dark help-subtitle-pill">▸ COSA SUCCEDE DOPO "INVIA"</span>
-I messaggi <span class="help-strong-dark">non partono tutti insieme</span>: vengono messi in coda e spediti uno ogni 12-20 secondi, perché una raffica di invii ravvicinati porta WhatsApp a sospendere il numero del negozio. Sotto ai pulsanti compare l'avanzamento con quanti ne mancano e il tempo stimato: <span class="help-strong-dark">puoi chiudere la pagina</span>, l'invio va avanti da solo. Il contatore "Oggi: N/M invii" si aggiorna a coda finita, perché conta i messaggi partiti davvero.
+I messaggi <span class="help-strong-dark">non partono tutti insieme</span>: vengono messi in coda e spediti uno ogni 12-20 secondi, perché una raffica di invii ravvicinati porta WhatsApp a sospendere il numero del negozio.
+
+In cima alla colonna del messaggio, <span class="help-strong-dark">sopra al titolo "Template Messaggio"</span>, hai sempre sott'occhio:
+• il contatore <span class="help-strong-dark">"Oggi: N/M invii | Disponibili: X"</span>, visibile appena apri la pagina, con quanti invii puoi ancora fare oggi. Si aggiorna a coda finita, perché conta i messaggi partiti davvero
+• l'<span class="help-strong-dark">avanzamento dell'invio</span>, mentre la coda lavora: quanti messaggi sono partiti, quanti ne mancano e il tempo stimato. <span class="help-strong-dark">Puoi chiudere la pagina</span>, l'invio va avanti da solo
+
+A invio finito la barra si azzera e resta solo l'esito, per esempio "Invio finito: 12 spediti" (con il numero dei messaggi non riusciti, se ce ne sono). Il riquadro dell'ultimo invio sparisce quando scegli un altro template.
 
 <span class="help-strong-dark help-subtitle-pill">▸ CHI HA GIÀ RICEVUTO UNA PROMO</span>
 Quando scegli un template (salvato o predefinito) il programma ricorda a chi l'hai inviato. Sotto il selettore compare "Già inviata a N clienti" con la data dell'ultimo invio. Nei risultati i clienti che hanno già ricevuto quella promo sono <span class="help-strong-dark">in grigio</span>, in fondo all'elenco, con la data di invio, e non si possono selezionare. La ricerca mostra invece i clienti successivi: puoi mandare la stessa promo a gruppi (per esempio di 30 al giorno) senza ripetere le persone.
@@ -1328,6 +1334,56 @@ Usale con criterio: poche variabili, ma ben scelte, rendono la comunicazione mol
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
 <span class="help-hint-text">Evita template con troppe variabili: se un dato manca, il messaggio rischia di risultare meno naturale. Cliccando uno dei pulsanti-tag, nel punto del cursore compare subito il tag con parentesi graffe, pronto da usare.</span>
+</div>""",
+    },
+
+    "marketing_recensioni": {
+        "title": "⭐ Marketing: messaggio di benvenuto e link recensioni",
+        "content": """In fondo alla pagina Marketing c'è il riquadro <span class="help-strong-dark">Messaggio di Benvenuto ai Nuovi Clienti</span>: quando un cliente nuovo paga per la prima volta in Cassa, subito dopo lo scontrino compare un messaggio WhatsApp già compilato, che lo ringrazia e gli chiede una recensione.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME FUNZIONA IN CASSA</span>
+1️⃣ attivi l'interruttore <span class="help-strong-dark">Attiva messaggio di benvenuto ai nuovi clienti</span>
+2️⃣ in Cassa incassi come sempre
+3️⃣ a scontrino emesso compare il pannello WhatsApp con il testo già pronto (nome del cliente, nome del centro, link recensioni)
+4️⃣ lo rileggi, se vuoi lo correggi e premi <span class="help-strong-dark">Invia</span>; con <span class="help-strong-dark">Annulla</span> non parte niente
+
+Il messaggio <span class="help-strong-dark">non parte mai da solo</span>: serve sempre il tuo clic su Invia. Come per gli altri messaggi WhatsApp, ogni invio ha un costo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ QUANDO COMPARE, E QUANDO NO</span>
+Il programma controlla se il cliente è davvero nuovo <span class="help-strong-dark">prima</span> di emettere lo scontrino. Il messaggio compare solo se il cliente:
+• non ha nessuno scontrino, pacchetto o carta prepagata
+• non ha appuntamenti in giorni precedenti a oggi (quelli di oggi sono la visita che stai pagando)
+• ha un numero di cellulare valido in anagrafica
+
+Nel dubbio non compare: meglio un benvenuto in meno che scrivere "il tuo primo trattamento" a un cliente storico, per esempio uno importato da un altro gestionale. Non compare inoltre se il WhatsApp del negozio non è collegato, e se il testo contiene il tag del link recensioni ma il link non è stato impostato.
+
+Se chiudi il pannello senza inviare, il messaggio non viene riproposto per quel cliente: dall'incasso successivo non risulta più nuovo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ DOVE SI SCRIVE IL LINK RECENSIONI</span>
+Il link si scrive in <span class="help-strong-dark">Info Azienda</span>, nel campo <span class="help-strong-dark">Link recensioni</span>, e si salva con <span class="help-strong-dark">Salva Impostazioni</span>. Nella pagina Marketing lo vedi riportato nel riquadro "Link per le recensioni", con il pulsante per andare a modificarlo.
+
+<span class="help-strong-dark help-subtitle-pill">▸ QUALE SITO E COME SI TROVA IL LINK</span>
+Il sito delle recensioni è <span class="help-strong-dark">Google</span>: sono le stelle che i clienti vedono quando cercano il centro su Google e su Maps. Serve il <span class="help-strong-dark">Profilo dell'attività su Google</span> (gratuito), che si gestisce da business.google.com. Da computer:
+1️⃣ vai su <span class="help-strong-dark">business.google.com</span> e accedi con l'account Google che gestisce l'attività
+2️⃣ apri il profilo dell'attività e premi <span class="help-strong-dark">«Leggi recensioni»</span>
+3️⃣ premi <span class="help-strong-dark">«Ottieni più recensioni»</span>
+4️⃣ premi <span class="help-strong-dark">«Copia»</span>
+5️⃣ in Tosca apri Info Azienda, incolla il link nel campo Link recensioni e premi Salva Impostazioni
+
+Il link copiato porta il cliente direttamente alla finestra per scrivere la recensione e di solito inizia con https://g.page/r/. Provalo aprendolo in una nuova scheda prima di salvarlo. Se non inizia con https:// il programma non lo salva e te lo segnala.
+
+Se il centro non ha ancora il Profilo su Google, va creato e verificato da Google prima di poter ricevere recensioni. Il tag funziona anche con il link di un altro sito di recensioni, purché inizi con https://
+
+<span class="help-strong-dark help-subtitle-pill">▸ COME FUNZIONA IL TAG "LINK RECENSIONE"</span>
+Nel testo del messaggio di benvenuto il pulsante <span class="help-strong-dark">Link recensione</span> inserisce il tag {{link_recensione}}, che al momento dell'invio viene sostituito con il link salvato in Info Azienda. L'anteprima sotto al testo mostra già il link vero.
+
+• se il tag è nel testo ma il link non è impostato, sotto all'anteprima compare un <span class="help-strong-dark">avviso</span>
+• il tag esiste <span class="help-strong-dark">solo nel messaggio di benvenuto</span>: nei messaggi delle campagne marketing non viene sostituito e arriverebbe scritto così com'è, quindi non usarlo lì
+• il testo del messaggio si salva con <span class="help-strong-dark">Salva Template Benvenuto</span>
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Non offrire sconti o omaggi in cambio di una recensione: secondo le regole di Google non è consentito. Meglio chiederla con gentilezza, subito dopo un buon trattamento.</span>
 </div>""",
     },
 
@@ -2510,11 +2566,13 @@ Approfondimenti:
         "content": """Questo tab raccoglie gli strumenti per comunicazioni mass marketing ai clienti.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ PARTI DELLA PAGINA</span>
+• contatore degli invii di oggi e avanzamento dell'invio (in cima alla colonna del messaggio)
 • editor messaggio
 • filtri destinatari
 • variabili dinamiche
 • gestione template salvati
 • pulsanti anteprima/invio
+• messaggio di benvenuto ai nuovi clienti, con il link per le recensioni
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ COSA SI PUÒ FARE</span>
 • preparare messaggi promozionali riutilizzabili
@@ -2526,7 +2584,8 @@ Approfondimenti:
 • <span class=\"help-strong-dark\">[[MARKETING: PANORAMICA|marketing_panorama]]</span>
 • <span class=\"help-strong-dark\">[[MARKETING: INVIO|marketing_send]]</span>
 • <span class=\"help-strong-dark\">[[MARKETING: VARIABILI|marketing_variables]]</span>
-• <span class=\"help-strong-dark\">[[MARKETING: FILTRI E TEMPLATE|marketing_filtri_template]]</span>""",
+• <span class=\"help-strong-dark\">[[MARKETING: FILTRI E TEMPLATE|marketing_filtri_template]]</span>
+• <span class=\"help-strong-dark\">[[MARKETING: BENVENUTO E RECENSIONI|marketing_recensioni]]</span>""",
     },
 
     "tools_tab_info_azienda": {
@@ -2539,6 +2598,9 @@ Qui compili/aggiorni informazioni anagrafiche dell'azienda usate nel gestionale 
 I campi aziendali sono modificabili dagli utenti con ruolo <span class=\"help-strong-dark\">admin</span>. Alcuni dati (es. <span class=\"help-strong-dark\">nome attività</span>, <span class=\"help-strong-dark\">email</span>, <span class=\"help-strong-dark\">sito web</span>) possono comparire anche nei documenti prodotti da Tosca e, se attivo il modulo online, nel sito di Booking Web visibile ai clienti.
 
 Per questo è importante inserire diciture esatte e professionali (evita abbreviazioni casuali o refusi).
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ LINK RECENSIONI</span>
+Nella tabella dei dati trovi il campo <span class=\"help-strong-dark\">Link recensioni</span>: qui si incolla l'indirizzo della pagina dove i clienti lasciano la recensione su Google. È il link che il tag <span class=\"help-strong-dark\">Link recensione</span> inserisce nel messaggio di benvenuto ai nuovi clienti. Sotto al campo c'è "dove lo trovo?", con i passaggi per copiarlo dal Profilo dell'attività su Google. Dettagli: <span class=\"help-strong-dark\">[[MARKETING: BENVENUTO E RECENSIONI|marketing_recensioni]]</span>.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ LOGO NEGOZIO</span>
 In questa sezione puoi caricare/aggiornare il <span class=\"help-strong-dark\">logo del negozio</span>.
@@ -3169,7 +3231,8 @@ def get_topics_by_category():
             "marketing_panorama",
             "marketing_send",
             "marketing_variables",
-            "marketing_filtri_template"
+            "marketing_filtri_template",
+            "marketing_recensioni"
         ],
         "Versione Touch": [
             "agenda_touch_mode"
