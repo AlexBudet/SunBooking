@@ -4515,8 +4515,20 @@ def api_find_availability():
     # vecchia mode='asap' resta letta per non rompere una chiamata vecchia.
     _legacy_asap = (date_state.get('mode') == 'asap')
     _is_asap = _legacy_asap or bool(date_state.get('asap'))
-    MAX_TOTAL_SLOTS    = 8 if _is_asap else 60
+    PAGE_SIZE          = 8 if _is_asap else 60
     MAX_PER_COMBO      = 2 if _is_asap else 6
+    # "Mostra altri": page=N ripete la ricerca con un tetto di N pagine e
+    # restituisce TUTTI gli slot fino a li'. La raccolta e' deterministica,
+    # quindi i primi 8 di page=2 sono gli stessi 8 di page=1 (niente buchi
+    # ne' doppioni tra una pagina e l'altra). Tetto assoluto a 240 slot.
+    HARD_LIMIT = 240
+    try:
+        page = int(data.get('page') or 1)
+    except (TypeError, ValueError):
+        page = 1
+    max_page = max(1, HARD_LIMIT // PAGE_SIZE)
+    page = max(1, min(page, max_page))
+    MAX_TOTAL_SLOTS    = PAGE_SIZE * page
 
     # Solo la vecchia mode='asap' ignorava le fasce, perche' la sua UI le
     # disattivava. Ora la tabella Orario resta viva: "il prima possibile, ma
@@ -4825,11 +4837,16 @@ def api_find_availability():
         len(all_results), len(debug['shift_misses']), debug['per_day'][:3]
     )
 
+    capped = len(all_results) >= MAX_TOTAL_SLOTS
     return jsonify({
-        'results': all_results,
-        'count':   len(all_results),
-        'capped':  len(all_results) >= MAX_TOTAL_SLOTS,
-        'debug':   debug,   # info diagnostica: visibile nella console del browser
+        'results':   all_results,
+        'count':     len(all_results),
+        'capped':    capped,
+        'page':      page,
+        'page_size': PAGE_SIZE,
+        'has_more':  capped and page < max_page,
+        'last_date': dates_to_search[-1].isoformat() if dates_to_search else None,
+        'debug':     debug,   # info diagnostica: visibile nella console del browser
     }), 200
 
 

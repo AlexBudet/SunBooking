@@ -1998,11 +1998,19 @@ body.touch-ui .btn-close-tile {
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
+// Tooltip dentro un modal: vanno agganciati al modal, non a <body>.
+// .tooltip ha z-index 23050 (styles.css) e il modal 24510: appeso a <body>
+// il tooltip finiva SOTTO al modal (es. Excel/PDF dei Corrispettivi).
+function _tipOpts(el) {
+  var modal = el.closest && el.closest('.modal');
+  return modal ? { container: modal } : {};
+}
+
 // Inizializza tutti i tooltip Bootstrap DOPO che il DOM è pronto
 document.addEventListener('DOMContentLoaded', function() {
   var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
   tooltipTriggerList.forEach(function (el) {
-    new bootstrap.Tooltip(el);
+    new bootstrap.Tooltip(el, _tipOpts(el));
   });
 });
 
@@ -2014,10 +2022,17 @@ window.bsTip = function(el, text) {
   if (typeof text === 'string') el.setAttribute('title', text);
   el.setAttribute('data-bs-toggle', 'tooltip');
   if (!window.bootstrap || !bootstrap.Tooltip) return;
+  // Elemento non ancora inserito (icone e "Correggi" della tabella DGFE):
+  // closest('.modal') non lo troverebbe ancora, si crea il tooltip appena
+  // e' in pagina, cosi' finisce nel modal giusto.
+  if (!el.isConnected) {
+    setTimeout(function () { if (el.isConnected) window.bsTip(el); }, 0);
+    return;
+  }
   try {
     var existing = bootstrap.Tooltip.getInstance(el);
     if (existing) existing.dispose();
-    new bootstrap.Tooltip(el);
+    new bootstrap.Tooltip(el, _tipOpts(el));
   } catch (_) {}
 };
 </script>
