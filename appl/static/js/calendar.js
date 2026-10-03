@@ -10690,11 +10690,18 @@ const groupBlocks = Array.from(new Set([...blocksInCell, ...contiguousBlocks]))
     return;
   }
   
+  // Lo stato di arrivo si decide UNA volta, dal blocco cliccato, e vale per tutto
+  // il gruppo. Calcolato blocco per blocco, ognuno si invertiva dal PROPRIO stato:
+  // un blocco disallineato (es. tagliato e incollato con lo stato che aveva al
+  // momento del taglio) restava opposto agli altri a ogni clic, per sempre.
+  // Si manda a tutti anche se nel DOM risultano già allineati: il data-status
+  // al caricamento può venire da sessionStorage e non dal database.
+  const newStatus = (baseStatus !== 1) ? 1 : 0;
+
   // Per ciascun blocco del gruppo, aggiorna lo stato
   groupBlocks.forEach(block => {
-    let currentStatus = parseInt(block.getAttribute('data-status') || '0', 10);
-    let newStatus = (currentStatus !== 1) ? 1 : 0;
-    
+    const currentStatus = parseInt(block.getAttribute('data-status') || '0', 10);
+
     const tooltips = {
       0: "Segna cliente arrivato",
       1: "CLIENTE IN ISTITUTO",
