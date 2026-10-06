@@ -463,10 +463,15 @@ def set_business_info():
         closing_days = request.form.getlist('closing_days')
         business_info.closing_days_list = closing_days
 
-        business_info.operator_whatsapp_notification_enabled = 'operator_whatsapp_notification_enabled' in request.form
-        operator_time_str = request.form.get('operator_whatsapp_notification_time', '20:00')
-        business_info.operator_whatsapp_notification_time = datetime.strptime(operator_time_str, '%H:%M').time()
-        business_info.operator_whatsapp_message_template = request.form.get('operator_whatsapp_message_template', '')
+        # Memo WhatsApp operatrici: si impostano dalla pagina WhatsApp
+        # (whatsapp_per_operatori), il modulo Info Azienda non ha questi campi.
+        # Senza il controllo ogni salvataggio di Info Azienda spegneva l'invio,
+        # rimetteva l'orario alle 20:00 e svuotava il template.
+        if 'operator_whatsapp_notification_time' in request.form:
+            business_info.operator_whatsapp_notification_enabled = 'operator_whatsapp_notification_enabled' in request.form
+            operator_time_str = request.form.get('operator_whatsapp_notification_time') or '20:00'
+            business_info.operator_whatsapp_notification_time = datetime.strptime(operator_time_str, '%H:%M').time()
+            business_info.operator_whatsapp_message_template = request.form.get('operator_whatsapp_message_template', '')
 
         try:
             db.session.commit()
