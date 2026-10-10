@@ -3072,7 +3072,7 @@ document.addEventListener('DOMContentLoaded', function() {
     header.style.background = '#fff5f0';
     const h5 = document.createElement('h5');
     h5.className = 'modal-title';
-    h5.textContent = `Correzione corrispettivi del ${preview.date} — Verifica richiesta`;
+    h5.textContent = `Correzione corrispettivi del ${window.formatDataIT(preview.date)} — Verifica richiesta`;
     const btnClose = document.createElement('button');
     btnClose.type = 'button';
     btnClose.className = 'btn-close';
@@ -5162,7 +5162,9 @@ function caricaTopClienti(periodo) {
       function formatPersonName(str) {
         if (!str) return '';
         const base = String(str).toLowerCase();
-        return base.replace(/(^|[ \-''])(\p{L})/gu, (_, p1, p2) => p1 + p2.toLocaleUpperCase('it-IT'));
+        // Maiuscola dopo qualunque carattere che non sia lettera o cifra: prima
+        // l'elenco era [ -'] e dopo l'apostrofo tipografico (’) restava minuscola.
+        return base.replace(/(^|[^\p{L}\p{N}])(\p{L})/gu, (_, p1, p2) => p1 + p2.toLocaleUpperCase('it-IT'));
       }
       
       data.forEach((c, idx) => {

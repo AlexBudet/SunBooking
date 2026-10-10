@@ -3273,7 +3273,8 @@ const placePopup = () => {
       const h2 = document.createElement('h2');
       h2.style.fontSize = '1.5em';
       h2.style.marginBottom = '6px';
-      h2.textContent = `${escapeHtml(cliente.cliente_nome || '')} ${escapeHtml(cliente.cliente_cognome || '')}`;
+      // textContent non interpreta l'HTML: con escapeHtml qui "D'Angelo" usciva "D&#39;Angelo".
+      h2.textContent = `${window.capitalizeName(cliente.cliente_nome || '')} ${window.capitalizeName(cliente.cliente_cognome || '')}`.trim();
       container.appendChild(h2);
 
       // Telefono
@@ -4296,8 +4297,8 @@ function configureMobileModalButtons(modal, block) {
     const histBox = $('#ciHistoryAppts');
 
     // Prefill da data-* del blocco
-    inNome.value  = block.getAttribute('data-client-nome')      || '';
-    inCogn.value  = block.getAttribute('data-client-cognome')   || '';
+    inNome.value  = window.capitalizeName(block.getAttribute('data-client-nome')    || '');
+    inCogn.value  = window.capitalizeName(block.getAttribute('data-client-cognome') || '');
     inCell.value  = block.getAttribute('data-client-cellulare') || '';
     inEmail.value = block.getAttribute('data-client-email')     || '';
 
@@ -6457,7 +6458,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     var html = '';
     results.forEach(function(c) {
-      var full = ((c.nome || '') + ' ' + (c.cognome || '')).trim();
+      var full = window.capitalizeName(((c.nome || '') + ' ' + (c.cognome || '')).trim());
       var tel  = c.cellulare ? c.cellulare : '';
       html += '<div class="cd-result-item" data-client-id="' + c.id + '">' +
               '<strong>' + _esc(full) + '</strong>' +
@@ -6484,7 +6485,7 @@ document.addEventListener('DOMContentLoaded', function() {
       cognome:   c.cognome || '',
       cellulare: c.cellulare || '',
     };
-    var full = ((c.nome || '') + ' ' + (c.cognome || '')).trim();
+    var full = window.capitalizeName(((c.nome || '') + ' ' + (c.cognome || '')).trim());
     document.getElementById('cdClienteSelectedName').textContent = full;
     document.getElementById('cdClienteSelectedMeta').textContent = c.cellulare || '';
     document.getElementById('cdClienteSelected').style.display = 'flex';
@@ -7645,7 +7646,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var html = '<div class="cd-slot-actions" onclick="event.stopPropagation()">';
     if (hasClient) {
       var c = window.CD.cliente;
-      var full = ((c.nome || '') + ' ' + (c.cognome || '')).trim();
+      var full = window.capitalizeName(((c.nome || '') + ' ' + (c.cognome || '')).trim());
       html += '<div class="cd-slot-client-line">' +
               '<i class="bi bi-person-check-fill"></i> ' + _esc(full) +
               (c.cellulare ? ' <small>· ' + _esc(c.cellulare) + '</small>' : '') +
@@ -7700,7 +7701,7 @@ document.addEventListener('DOMContentLoaded', function() {
             rows.forEach(function(rc) {
               var item = document.createElement('div');
               item.className = 'cd-result-item';
-              var rfull = ((rc.nome || '') + ' ' + (rc.cognome || '')).trim();
+              var rfull = window.capitalizeName(((rc.nome || '') + ' ' + (rc.cognome || '')).trim());
               item.innerHTML = '<strong>' + _esc(rfull) + '</strong>' +
                                (rc.cellulare ? ' <small>· ' + _esc(rc.cellulare) + '</small>' : '');
               item.addEventListener('click', function(e) {

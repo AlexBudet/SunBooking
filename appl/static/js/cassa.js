@@ -24,12 +24,13 @@ const COLORE_RIGA_PREPAGATA_RGB = 'rgb(236, 229, 246)';
    `window.capitalizeName || (s => s || '')` e ricadevano tutti sull'identita',
    quindi i nomi restavano come stanno in anagrafica (spesso TUTTI MAIUSCOLI da
    import). Definendola qui quei cinque punti tornano a funzionare da soli.
-   Il confine \b fa ripartire l'iniziale anche dopo apostrofo e trattino
-   ("d'angelo" -> "D'Angelo"), come il capitalize_name lato server. */
+   L'iniziale riparte anche dopo apostrofo e trattino ("d'angelo" -> "D'Angelo"),
+   come nome_proprio() lato server; \p{L} e non \b\w perche' \w conosce solo le
+   lettere ASCII e un'iniziale accentata restava minuscola ("ÉLISE" -> "éLise"). */
 if (typeof window.capitalizeName !== 'function') {
   window.capitalizeName = function (name) {
     if (!name) return name;
-    return String(name).toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+    return String(name).toLowerCase().replace(/(^|[^\p{L}\p{N}])(\p{L})/gu, (m, prima, l) => prima + l.toUpperCase());
   };
 }
 function eRigaPrepagata(row) {
@@ -334,7 +335,7 @@ function showSuccessPopup(message, timeout = 5000, onClose = null) {
   // Funzione per capitalizzare nome/cognome (prima lettera maiuscola per ogni parola)
   function capitalizeName(name) {
     if (!name) return name || '';
-    return String(name).toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+    return String(name).toLowerCase().replace(/(^|[^\p{L}\p{N}])(\p{L})/gu, (m, prima, l) => prima + l.toUpperCase());
   }
   window.capitalizeName = capitalizeName;
 

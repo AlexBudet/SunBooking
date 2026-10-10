@@ -18,6 +18,7 @@ from appl import create_app, db
 from appl.models import BusinessInfo
 from appl.autologin import issue_token as autologin_issue
 from appl.services.demo_trials import URL_BOOKING_DEMO
+from appl.formati import data_it
 import time as time_mod
 import json
 import uuid
@@ -1104,7 +1105,7 @@ def _tenant_da_cancellare():
                     'id': t.id,
                     'idx': t.idx,
                     'business_name': t.business_name,
-                    'cessato_il': t.terminated_at.date().isoformat(),
+                    'cessato_il': data_it(t.terminated_at.date()),
                     'giorni': giorni,
                 })
         return out

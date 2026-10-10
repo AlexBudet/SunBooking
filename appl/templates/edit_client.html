@@ -8,11 +8,11 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <div class="form-group">
     <label for="client_name">Nome</label>
-    <input type="text" id="client_name" name="client_name" value="{{ client.cliente_nome }}" required>
+    <input type="text" id="client_name" name="client_name" value="{{ client.cliente_nome|nome_proprio }}" required>
 </div>
 <div class="form-group">
     <label for="client_surname">Cognome</label>
-    <input type="text" id="client_surname" name="client_surname" value="{{ client.cliente_cognome }}" required>
+    <input type="text" id="client_surname" name="client_surname" value="{{ client.cliente_cognome|nome_proprio }}" required>
 </div>
 <div class="form-group">
     <label for="client_phone">Telefono</label>

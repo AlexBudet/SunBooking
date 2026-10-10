@@ -251,10 +251,10 @@
           var item = document.createElement('button');
           item.type = 'button';
           item.className = 'list-group-item list-group-item-action';
-          item.innerHTML = '<strong>' + c.name + '</strong>' +
+          item.innerHTML = '<strong>' + window.capitalizeName(c.name) + '</strong>' +
             (c.phone ? ' <span class="text-muted small">' + c.phone + '</span>' : '');
           item.addEventListener('click', function () {
-            searchInput.value = c.name;
+            searchInput.value = window.capitalizeName(c.name);
             nascondiRisultati();
             caricaStorico(c.id);
           });
@@ -301,7 +301,7 @@
         data.forEach(function (r) {
           html += '<tr>' +
             '<td class="text-nowrap">' + (r.client_nome || '-') + '</td>' +
-            '<td class="text-nowrap">' + (r.data || '-') + '</td>' +
+            '<td class="text-nowrap">' + (window.formatDataIT(r.data) || '-') + '</td>' +
             '<td class="text-nowrap">' + (r.ora_inizio || '-') + (r.ora_fine ? (' - ' + r.ora_fine) : '') + '</td>' +
             '<td class="text-nowrap">' + (r.device || '-') + '</td>' +
             '<td class="text-center text-nowrap">' + (r.durata_minuti != null ? (r.durata_minuti + ' min') : '-') + '</td>' +

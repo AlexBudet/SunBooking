@@ -115,7 +115,7 @@ document.getElementById('giornoPicker').addEventListener('change', function() {
       {% if s.is_adjustment is defined and s.is_adjustment %}
         <span class="text-muted">Allineamento totale al DGFE</span>
       {% elif s.cliente %}
-        {{ s.cliente.cliente_nome }} {{ s.cliente.cliente_cognome }}
+        {{ s.cliente.cliente_nome|nome_proprio }} {{ s.cliente.cliente_cognome|nome_proprio }}
       {% else %}
         Generico
       {% endif %}

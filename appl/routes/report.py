@@ -5,6 +5,7 @@ import requests
 from sqlalchemy import func, cast, Date
 from appl.models import Appointment, AppointmentStatus, Operator, OperatorShift, Client, AppointmentSource, BusinessInfo, Receipt, Service, ServiceCategory, Subcategory, User
 from appl import db
+from appl.formati import nome_proprio
 import pandas as pd
 import os
 import re
@@ -824,8 +825,8 @@ def top_clienti_anno():
             continue
         result.append({
             "id": client_id,
-            "nome": getattr(client, "cliente_nome", ""),
-            "cognome": getattr(client, "cliente_cognome", ""),
+            "nome": nome_proprio(getattr(client, "cliente_nome", "")),
+            "cognome": nome_proprio(getattr(client, "cliente_cognome", "")),
             "num_app": num_app,
             "tot_minuti": tot_minuti,
             "totale_speso": totale_speso or 0
@@ -1156,7 +1157,7 @@ def next_appointments():
             "id": appt.id,
             "start_time": appt.start_time.strftime("%H:%M"),
             "date": appt.start_time.strftime("%d/%m/%Y"),
-            "client": "OFF" if is_off else (f"{appt.client.cliente_nome} {appt.client.cliente_cognome}" if appt.client else ""),
+            "client": "OFF" if is_off else (f"{nome_proprio(appt.client.cliente_nome)} {nome_proprio(appt.client.cliente_cognome)}".strip() if appt.client else ""),
             "service": "" if is_off else (appt.service.servizio_nome if appt.service else ""),
             "operator": operator_name,
             "is_off": is_off,
@@ -1192,7 +1193,7 @@ def agenda_data():
             "id": appt.id,
             "start_time": appt.start_time.strftime("%H:%M"),
             "date": appt.start_time.strftime("%d/%m/%Y"),
-            "client": f"{appt.client.cliente_nome} {appt.client.cliente_cognome}" if appt.client else "",
+            "client": f"{nome_proprio(appt.client.cliente_nome)} {nome_proprio(appt.client.cliente_cognome)}".strip() if appt.client else "",
             "service": appt.service.servizio_nome if appt.service else "",
             "operator": operator_name,
             "note": (appt.note or "").strip()
@@ -1508,7 +1509,7 @@ def report_clienti():
 
     rows = []
     for r in results:
-        nome = f"{r.cliente_nome or ''} {r.cliente_cognome or ''}".strip() or "Cliente sconosciuto"
+        nome = f"{nome_proprio(r.cliente_nome)} {nome_proprio(r.cliente_cognome)}".strip() or "Cliente sconosciuto"
         freq, freq_idx = calcola_frequenza(r.passaggi, start, end)
         rows.append({
             'nome': nome,
@@ -1714,7 +1715,7 @@ def top_clienti_spesa():
     
     top10 = []
     for r in results:
-        nome = f"{r.cliente_nome or ''} {r.cliente_cognome or ''}".strip() or "Cliente sconosciuto"
+        nome = f"{nome_proprio(r.cliente_nome)} {nome_proprio(r.cliente_cognome)}".strip() or "Cliente sconosciuto"
         top10.append({
             'id': r.client_id,
             'nome': nome,
@@ -2132,9 +2133,10 @@ def _nome_proprio(testo):
     In anagrafica i nomi entrano come capita - tutto maiuscolo da un import,
     tutto minuscolo da chi scrive di fretta - e in elenco la differenza si vede.
     str.title() va bene anche con apostrofi e trattini ("d'angelo" -> "D'Angelo",
-    "anna-maria" -> "Anna-Maria"), che e' il caso che conta qui.
+    "anna-maria" -> "Anna-Maria"), che e' il caso che conta qui. La regola e'
+    quella unica di appl/formati.py.
     """
-    return ' '.join(p.title() for p in (testo or '').split())
+    return nome_proprio(testo)
 
 
 @report_bp.route('/api/report_no_show')

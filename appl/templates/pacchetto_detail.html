@@ -897,7 +897,7 @@ display: none;
       {% if s.appointment_id %}
         <span data-bs-toggle="tooltip" title="Appuntamento fissato in agenda">📅 {{ s.appointment_start }}</span>
       {% else %}
-        {{ s.data_trattamento|default('—') }}
+        {{ s.data_trattamento|data_it or '—' }}
       {% endif %}
     </td>
     <td>{{ s.service_nome }}</td>
@@ -1047,7 +1047,7 @@ display: none;
   </td>
   <td>
     {% if r.is_pagata and r.data_pagamento %}
-      <span class="text-success fw-bold">{{ r.data_pagamento.strftime('%d/%m/%Y') }}</span>
+      <span class="text-success fw-bold">{{ r.data_pagamento|data_it }}</span>
     {% else %}
       {% set default_date = first_date if loop.index == 1 else '' %}
       {% set is_seduta_ref = r.data_scadenza and r.data_scadenza[:4] == '0001' %}
@@ -1057,8 +1057,8 @@ display: none;
             data-seduta-ref="{{ 'seduta:' ~ seduta_num if is_seduta_ref else '' }}"
             data-bs-toggle="tooltip" data-bs-placement="top" title="Clicca per impostare/collegare a una seduta">
         {% if is_seduta_ref %}{{ seduta_num }}ª SEDUTA
-        {% elif r.data_scadenza %}{{ r.data_scadenza }}
-        {% elif loop.index == 1 and first_date %}{{ first_date }}
+        {% elif r.data_scadenza %}{{ r.data_scadenza|data_it }}
+        {% elif loop.index == 1 and first_date %}{{ first_date|data_it }}
         {% else %}—{% endif %}
       </span>
     {% endif %}

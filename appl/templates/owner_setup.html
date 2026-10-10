@@ -967,7 +967,7 @@
           : '<span style="color:#721c24;">✗ Non pagata</span>';
         tr.innerHTML = `
           <td>${escHtml(inv.number || '—')}</td>
-          <td>${escHtml(inv.date || '—')}</td>
+          <td>${escHtml(fmtDataIT(inv.date) || '—')}</td>
           <td>${escHtml(inv.description || '—')}</td>
           <td><strong>€ ${Number(inv.amount).toFixed(2)}</strong></td>
           <td>
@@ -988,7 +988,7 @@
       payments.forEach(pay => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${escHtml(pay.date || '—')}</td>
+          <td>${escHtml(fmtDataIT(pay.date) || '—')}</td>
           <td><strong>€ ${Number(pay.amount).toFixed(2)}</strong></td>
           <td>${escHtml(pay.method || '—')}</td>
           <td style="font-family:monospace;font-size:0.82em;">${escHtml(pay.reference || '—')}</td>
@@ -1276,7 +1276,7 @@
 
         document.getElementById('inviteLink').value = data.link;
         document.getElementById('inviteExpiry').textContent =
-          'Il link scade il ' + data.scade_il + ' e vale una volta sola.';
+          'Il link scade il ' + fmtDataIT(data.scade_il) + ' e vale una volta sola.';
         document.getElementById('inviteResult').style.display = 'block';
         setInviteStatus(data.offerte_lancio_rimaste != null
           ? 'Invito creato. Offerte di lancio ancora disponibili: ' + data.offerte_lancio_rimaste + ' di 5.'
@@ -1319,6 +1319,15 @@
 
     function escHtml(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Date a video come nel resto dell'app: "2026-10-17" -> "17 OTT 2026".
+    // Questa pagina non eredita base.html, quindi non ha window.formatDataIT.
+    function fmtDataIT(v) {
+      const m = String(v || '').trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return v || '';
+      const mesi = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'];
+      return m[3] + ' ' + (mesi[parseInt(m[2], 10) - 1] || m[2]) + ' ' + m[1];
     }
 
     function addRowToTable(t) {

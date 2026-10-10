@@ -15,6 +15,8 @@ import logging
 import unicodedata
 from datetime import datetime, date
 
+from appl.formati import nome_proprio
+
 logger = logging.getLogger(__name__)
 
 
@@ -85,8 +87,8 @@ def build_client_info(client_id: int) -> dict:
 
     return {
         "id": client.id,
-        "nome": client.cliente_nome or "",
-        "cognome": client.cliente_cognome or "",
+        "nome": nome_proprio(client.cliente_nome),
+        "cognome": nome_proprio(client.cliente_cognome),
         "cellulare": client.cliente_cellulare or "",
         "email": getattr(client, 'cliente_email', "") or "",
         "sesso": getattr(client, 'cliente_sesso', "") or "",
@@ -162,8 +164,8 @@ def find_client_by_text(search: str) -> list:
     exact_matches = [
         {
             "id":        c.id,
-            "nome":      c.cliente_nome or "",
-            "cognome":   c.cliente_cognome or "",
+            "nome":      nome_proprio(c.cliente_nome),
+            "cognome":   nome_proprio(c.cliente_cognome),
             "cellulare": c.cliente_cellulare or "",
             "ref":       f"C{c.id % 9999:04d}",
         }

@@ -9,6 +9,7 @@ from decimal import Decimal
 from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo, Pacchetto, PacchettoTipo, PacchettoStatus, Receipt, SolariumSession, service_operator
 from appl import app
 from appl.services.error_log import log_crm_error
+from appl.formati import nome_proprio
 import random
 import json
 import re
@@ -2057,8 +2058,8 @@ def add_client():
             return jsonify({"error": "cliente_nome, cliente_cognome e cliente_cellulare sono obbligatori"}), 400
 
         # Capitalizza i nomi per uniformità
-        cliente_nome = cliente_nome.capitalize()
-        cliente_cognome = cliente_cognome.capitalize()
+        cliente_nome = nome_proprio(cliente_nome)
+        cliente_cognome = nome_proprio(cliente_cognome)
 
         # Imposta i valori di default per i campi opzionali
         cliente_email = ""
@@ -2650,9 +2651,9 @@ def update_client_info():
         nome = data.get('cliente_nome')
         cognome = data.get('cliente_cognome')
         if nome is not None:
-            client.cliente_nome = nome.strip()
+            client.cliente_nome = nome_proprio(nome)
         if cognome is not None:
-            client.cliente_cognome = cognome.strip()
+            client.cliente_cognome = nome_proprio(cognome)
 
         db.session.commit()
         return jsonify(success=True, cliente_nome=client.cliente_nome, cliente_cognome=client.cliente_cognome), 200
@@ -3107,7 +3108,7 @@ def send_whatsapp_auto():
             messaggio = "Ciao {{nome}}, la tua prenotazione per il {{data}} alle ore {{ora}} è stata registrata! Grazie da Sun Booking."
 
     # Sostituisci i placeholder anche se 'messaggio' è già stato passato dal client
-    nome_fmt = " ".join([w.capitalize() for w in str(nome or "").strip().split()])
+    nome_fmt = nome_proprio(nome)
     messaggio = (
         (messaggio or "")
         .replace("{{nome}}", nome_fmt)
@@ -3415,8 +3416,8 @@ def create_client_from_booking():
         
         # Crea nuovo cliente
         new_client = Client(
-            cliente_nome=nome,
-            cliente_cognome=cognome,
+            cliente_nome=nome_proprio(nome),
+            cliente_cognome=nome_proprio(cognome),
             cliente_cellulare=cellulare,
             cliente_email=email,
             cliente_sesso=deduci_sesso(nome),

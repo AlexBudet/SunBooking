@@ -299,10 +299,13 @@ window.pacchettoSelezionato = null;
 // variabile globale per il gap contiguo (minuti)
 window.CONTIGUOUS_BLOCK_MAX_GAP_MINUTES = window.CONTIGUOUS_BLOCK_MAX_GAP_MINUTES ?? 30;
 
-// Funzione per capitalizzare nome/cognome (prima lettera maiuscola per ogni parola)
+// Funzione per capitalizzare nome/cognome (prima lettera maiuscola per ogni parola,
+// anche dopo apostrofo e trattino). \p{L} e non \b\w: \w conosce solo le lettere
+// ASCII e un'iniziale accentata restava minuscola ("ÉLISE" -> "éLise").
+// Stessa regola di nome_proprio() in appl/formati.py e di base.html.
 function capitalizeName(name) {
   if (!name) return name;
-  return name.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+  return String(name).toLowerCase().replace(/(^|[^\p{L}\p{N}])(\p{L})/gu, (m, prima, l) => prima + l.toUpperCase());
 }
 window.capitalizeName = capitalizeName;
 
@@ -1322,8 +1325,8 @@ function openAddClientModal(callerId) {
         const cognomeInput = addClientForm.querySelector('#cliente_cognome');
         const cellulareInput = addClientForm.querySelector('#cliente_cellulare');
         
-        if (nomeInput && data.nome) nomeInput.value = data.nome;
-        if (cognomeInput && data.cognome) cognomeInput.value = data.cognome;
+        if (nomeInput && data.nome) nomeInput.value = capitalizeName(data.nome);
+        if (cognomeInput && data.cognome) cognomeInput.value = capitalizeName(data.cognome);
         if (cellulareInput && data.cellulare) cellulareInput.value = data.cellulare;
         
         // Non cancellare i dati subito, potrebbero servire se l'utente chiude e riapre
@@ -1338,8 +1341,8 @@ function openAddClientModal(callerId) {
         const fNome = newForm.querySelector('#cliente_nome');
         const fCognome = newForm.querySelector('#cliente_cognome');
         const fCell = newForm.querySelector('#cliente_cellulare');
-        if (fNome && prefill.nome) fNome.value = prefill.nome;
-        if (fCognome && prefill.cognome) fCognome.value = prefill.cognome;
+        if (fNome && prefill.nome) fNome.value = capitalizeName(prefill.nome);
+        if (fCognome && prefill.cognome) fCognome.value = capitalizeName(prefill.cognome);
         if (fCell && prefill.cellulare) fCell.value = prefill.cellulare;
 
         // Il cursore va sul primo campo rimasto vuoto, cosi' si continua a
@@ -4627,7 +4630,7 @@ function openModifyPopup(appointmentId) {
   inputCurrent.type = 'text';
   inputCurrent.id = 'currentClient';
   inputCurrent.className = 'form-control';
-  inputCurrent.value = currentClientName;
+  inputCurrent.value = capitalizeName(currentClientName);
   inputCurrent.disabled = true;
   inputCurrent.style.flex = '1';
   inputCurrent.style.marginRight = '8px';
@@ -10366,7 +10369,7 @@ function openAddServicesModal(block) {
     const cognome = block.getAttribute("data-client-cognome") || "";
 
     // 2) Costruisce il nome completo
-    const clientName = (nome + " " + cognome).trim();
+    const clientName = capitalizeName((nome + " " + cognome).trim());
 
     const originColor = block.getAttribute("data-colore") || "#FFFFFF";
     window.originBlockColor = originColor;
@@ -12274,7 +12277,7 @@ async function copyAsNewPseudoBlock(block, isCut = false) {
   // SELEZIONA il cliente nel Navigator
   try {
     window.selectedClientIdNav = clientId || null;
-    window.selectedClientNameNav = clientName || "";
+    window.selectedClientNameNav = capitalizeName(clientName) || "";
   } catch(_) {}
 
   renderPseudoBlocksList();
@@ -12289,7 +12292,7 @@ async function copyAsNewPseudoBlock(block, isCut = false) {
   if (clientResults) clientResults.style.display = 'block';
   if (serviceResults) serviceResults.style.display = 'block';
   if (selectedServicesList) selectedServicesList.style.display = 'block';
-  if (clientSearchInput) clientSearchInput.value = clientName.trim();
+  if (clientSearchInput) clientSearchInput.value = capitalizeName(clientName.trim());
 }
 
 function addCutSourceHighlight(cell) {
@@ -14342,8 +14345,8 @@ function loadWebAppointments(date, search) {
 
           // Colonna 2: Cliente (nome cognome - cellulare)
           const tdCliente = document.createElement('td');
-          const nome = (session?.nome ?? '').toString();
-          const cognome = (session?.cognome ?? '').toString();
+          const nome = capitalizeName((session?.nome ?? '').toString());
+          const cognome = capitalizeName((session?.cognome ?? '').toString());
           const cell = (session?.cellulare ?? '').toString();
           tdCliente.textContent = `${nome}${nome && cognome ? ' ' : ''}${cognome}${cell ? ' - ' + cell : ''}`;
           tr.appendChild(tdCliente);
@@ -17516,7 +17519,7 @@ function buildSlotCard(slot, isMultiSlot) {
     if (client) {
       const header = document.createElement('div');
       header.style.cssText = 'font-weight:600; font-size:0.9rem; margin-bottom:6px; color:#6c47ff;';
-      header.textContent = `📋 ${esc(client.nome || '')} ${esc(client.cognome || '')}`;
+      header.textContent = `📋 ${esc(capitalizeName(client.nome || ''))} ${esc(capitalizeName(client.cognome || ''))}`;
       if (client.cellulare) {
         const phone = document.createElement('span');
         phone.style.cssText = 'font-weight:400; font-size:0.8rem; color:#555; margin-left:8px;';
@@ -18744,7 +18747,7 @@ if (data.client_resolved && data.client_resolved.id) {
         if (client) {
           var hdr = document.createElement('div');
           hdr.style.cssText = 'font-weight:600; font-size:0.9rem; margin-bottom:6px; color:#6c47ff;';
-          hdr.textContent = '📋 ' + (client.nome || '') + ' ' + (client.cognome || '');
+          hdr.textContent = '📋 ' + capitalizeName(client.nome || '') + ' ' + capitalizeName(client.cognome || '');
           if (client.cellulare) {
             var ph = document.createElement('span');
             ph.style.cssText = 'font-weight:400; font-size:0.8rem; color:#555; margin-left:8px;';
@@ -19808,7 +19811,7 @@ if (a.date) {
   }
 
   function _renderClientCard(c) {
-    var full = ((c.nome || '') + ' ' + (c.cognome || '')).trim();
+    var full = capitalizeName(((c.nome || '') + ' ' + (c.cognome || '')).trim());
     var html = '<div style="font-size:0.86rem;">';
     html += '<div style="font-size:1rem; margin-bottom:4px;"><strong>👤 ' + esc(full) + '</strong></div>';
     if (c.cellulare)               html += '<div><strong>Cellulare:</strong> ' + esc(c.cellulare) + '</div>';

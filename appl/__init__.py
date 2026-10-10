@@ -117,6 +117,11 @@ def create_app(db_uri: str | None = None, tenant_idx=None, is_demo: bool = False
 
     app.jinja_env.filters['escapejs'] = escapejs_filter
 
+    # Nomi di persona e date a video: la regola e' in appl/formati.py.
+    from appl.formati import nome_proprio, data_it
+    app.jinja_env.filters['nome_proprio'] = nome_proprio
+    app.jinja_env.filters['data_it'] = data_it
+
     use_https = os.getenv('USE_HTTPS', 'false').lower() in ('1', 'true', 'yes')
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SECURE'] = use_https   # prima era True fisso

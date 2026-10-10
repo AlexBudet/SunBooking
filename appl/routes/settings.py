@@ -16,6 +16,7 @@ from .. import db
 from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession, PrepagataRicaricaRegola, service_operator, UsageEvent
 from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
 from .calendar import _compute_client_loyalty, LOYALTY_DEFAULT
+from ..formati import nome_proprio
 
 # Blueprint per le rotte delle impostazioni
 settings_bp = Blueprint('settings', __name__, template_folder='../templates')
@@ -30,41 +31,52 @@ PORT = 5050
 def format_name(name):
     """
     Normalizza il nome:
-    - trim
-    - minuscolo globale
-    - capitalizza ogni parola
-    - capitalizza dopo apostrofi tipografici (', ’, ′) e trattini: d’adamo -> D’Adamo, anna-maria -> Anna-Maria
-    - decodifica entità HTML (es. &#39;)
+    - trim e decodifica entità HTML (es. &#39;)
+    - apostrofi tipografici (’, ʼ, ′) unificati all'apostrofo ASCII
+    - maiuscola a ogni parola, anche dopo apostrofo e trattino:
+      maria grazia -> Maria Grazia, d’adamo -> D'Adamo, anna-maria -> Anna-Maria
+
+    La maiuscola la mette nome_proprio (appl/formati.py), la regola unica
+    dell'app. Prima qui la si metteva solo a inizio stringa e dopo apostrofo e
+    trattino, non dopo lo spazio: "Maria Grazia" si salvava "Maria grazia".
     """
     if not name:
         return ""
-    # Decodifica entità HTML e normalizza apostrofi tipografici in apostrofo ASCII
-    try:
-      import html as _html
-      s = _html.unescape(str(name).strip())
-    except Exception:
-      s = str(name).strip()
+    import html as _html
+    s = _html.unescape(str(name).strip())
     # Unifica tutti i tipi di apostrofo al carattere ASCII '
-    s = (s.replace("\u2019", "'")   # ’
-           .replace("\u02BC", "'")  # ʼ
-           .replace("\u2032", "'")) # ′
-    # Porta tutto in minuscolo per poi capitalizzare selettivamente
+    s = (s.replace("’", "'")   # ’
+           .replace("ʼ", "'")  # ʼ
+           .replace("′", "'")) # ′
+    return nome_proprio(s)
+
+
+def format_name_macchinario(name):
+    """
+    Nome di un MACCHINARIO (lampada, lettino...): non e' un nome proprio, quindi
+    resta la vecchia regola di format_name, com'era prima del 10/10/2026:
+    maiuscola solo all'inizio e dopo apostrofo o trattino, il resto minuscolo
+    ("lettino uv" resta "Lettino uv", non diventa "Lettino Uv").
+    """
+    if not name:
+        return ""
+    import html as _html
+    s = _html.unescape(str(name).strip())
+    # Unifica tutti i tipi di apostrofo al carattere ASCII '
+    s = (s.replace("’", "'")   # ’
+           .replace("ʼ", "'")  # ʼ
+           .replace("′", "'")) # ′
     s = s.lower()
-
-    # Regola: rendi maiuscola la prima lettera della stringa, e ogni lettera dopo apostrofo o trattino
-    # (gestisce anche lettere accentate)
     import re as _re
-    def _upper(m):
-        sep, ch = m.group(1), m.group(2)
-        return (sep or "") + ch.upper()
-
     # (^|['-]) -> inizio stringa oppure dopo apostrofo o trattino
-    s = _re.sub(r"(^|['-])([a-zà-öø-ÿ])", _upper, s)
+    return _re.sub(r"(^|['-])([a-zà-öø-ÿ])", lambda m: (m.group(1) or "") + m.group(2).upper(), s)
 
-    # Se vuoi mantenere l’apostrofo tipografico, ricambia l'ASCII in ’:
-    # s = s.replace("'", "’")
 
-    return s
+def format_name_operatore(name, user_tipo):
+    """Persona -> format_name (nome proprio); macchinario -> vecchia regola."""
+    if (user_tipo or '').strip().lower() == 'macchinario':
+        return format_name_macchinario(name)
+    return format_name(name)
 
 # ===================== HOME =====================
 @settings_bp.route('/settings', methods=['GET'])
@@ -546,9 +558,9 @@ def operators():
 def add_operator():
     """Aggiunge un nuovo operatore."""
     try:
-        user_nome = format_name(request.form.get('user_nome'))
-        user_cognome = format_name(request.form.get('user_cognome', ''))  # Campo cognome può essere vuoto
         user_tipo = request.form.get('user_tipo')
+        user_nome = format_name_operatore(request.form.get('user_nome'), user_tipo)
+        user_cognome = format_name_operatore(request.form.get('user_cognome', ''), user_tipo)  # Campo cognome può essere vuoto
         user_cellulare = (request.form.get('user_cellulare') or '').strip()
         if not user_cellulare:
             user_cellulare = '0'
@@ -601,10 +613,10 @@ def edit_operator(operator_id):
 
     if request.method == 'POST':
         # Aggiorna i dati dell'operatore
-        user_nome = format_name(request.form.get('user_nome'))
-        user_cognome = format_name(request.form.get('user_cognome', ''))
-        user_cellulare = (request.form.get('user_cellulare') or '').strip()
         user_tipo = request.form.get('user_tipo')
+        user_nome = format_name_operatore(request.form.get('user_nome'), user_tipo)
+        user_cognome = format_name_operatore(request.form.get('user_cognome', ''), user_tipo)
+        user_cellulare = (request.form.get('user_cellulare') or '').strip()
 
         # Applica le modifiche all'operatore
         operator.user_nome = user_nome
@@ -1089,8 +1101,8 @@ def add_client():
             return jsonify("Attenzione! I campi Nome, Cognome e Cellulare sono obbligatori."), 400
 
         # normalizza nome/cognome
-        client_name = client_name.capitalize()
-        client_surname = client_surname.capitalize()
+        client_name = nome_proprio(client_name)
+        client_surname = nome_proprio(client_surname)
 
         # Se il client_gender non è passato, prova Detector e fallback con eccezioni note
         if not client_gender:
@@ -1197,8 +1209,8 @@ def edit_client(client_id):
                     flash("Formato email non valido. Usa un formato valido o 'None'.", "error")
                     return redirect(url_for('settings.edit_client', client_id=client_id))
 
-            client_name = client_name.capitalize() if client_name else ''
-            client_surname = client_surname.capitalize() if client_surname else ''
+            client_name = nome_proprio(client_name)
+            client_surname = nome_proprio(client_surname)
 
             # Rileva il genere con gestione errori
             client_gender = client.cliente_sesso  # Inizializza con valore corrente
@@ -1323,8 +1335,8 @@ def client_history():
                 "costo": costo,
                 "operatore": operatore_nome,
                 "stato": appt.stato.value if hasattr(appt.stato, 'value') else int(appt.stato),
-                "cliente_nome": f"{client.cliente_nome} {client.cliente_cognome}".strip(),
-                "cliente_cognome": client.cliente_cognome
+                "cliente_nome": f"{nome_proprio(client.cliente_nome)} {nome_proprio(client.cliente_cognome)}".strip(),
+                "cliente_cognome": nome_proprio(client.cliente_cognome)
             })
 
     return jsonify(result)
@@ -1395,7 +1407,7 @@ def service_history(service_id):
         cliente = appt.client
         cliente_nome = ""
         if cliente:
-            cliente_nome = f"{cliente.cliente_nome or ''} {cliente.cliente_cognome or ''}".strip()
+            cliente_nome = f"{nome_proprio(cliente.cliente_nome)} {nome_proprio(cliente.cliente_cognome)}".strip()
 
         items.append({
             "appointment_id": appt.id,
@@ -1457,7 +1469,7 @@ def service_history_month(service_id, year, month):
         cliente = appt.client
         cliente_nome = ""
         if cliente:
-            cliente_nome = f"{cliente.cliente_nome or ''} {cliente.cliente_cognome or ''}".strip()
+            cliente_nome = f"{nome_proprio(cliente.cliente_nome)} {nome_proprio(cliente.cliente_cognome)}".strip()
 
         items.append({
             "appointment_id": appt.id,
@@ -1543,8 +1555,8 @@ def search_clients_settings():
         for c in clients:
             clients_data.append({
                 'id': c.id,
-                'cliente_nome': getattr(c, 'cliente_nome', '') or '',
-                'cliente_cognome': getattr(c, 'cliente_cognome', '') or '',
+                'cliente_nome': nome_proprio(getattr(c, 'cliente_nome', '')),
+                'cliente_cognome': nome_proprio(getattr(c, 'cliente_cognome', '')),
                 'cliente_cellulare': getattr(c, 'cliente_cellulare', '') or '',
                 'cliente_email': getattr(c, 'cliente_email', '') or '',
                 'cliente_data_nascita': (c.cliente_data_nascita.strftime('%d/%m/%Y') if getattr(c, 'cliente_data_nascita', None) else '-'),
@@ -1614,8 +1626,8 @@ def recent_clients():
         clients_data = [
             {
                 'id': client.id,
-                'cliente_nome': client.cliente_nome,
-                'cliente_cognome': client.cliente_cognome,
+                'cliente_nome': nome_proprio(client.cliente_nome),
+                'cliente_cognome': nome_proprio(client.cliente_cognome),
                 'cliente_cellulare': client.cliente_cellulare,
                 'cliente_email': client.cliente_email,
                 'cliente_data_nascita': client.cliente_data_nascita.strftime('%d/%m/%Y') if client.cliente_data_nascita else '-',
@@ -2933,8 +2945,8 @@ def export_clients():
         clients_data = [
             {
                 "id": c.id,
-                "nome": c.cliente_nome or "",
-                "cognome": c.cliente_cognome or "",
+                "nome": nome_proprio(c.cliente_nome),
+                "cognome": nome_proprio(c.cliente_cognome),
                 "cellulare": c.cliente_cellulare or ""
             }
             for c in clients
@@ -2967,9 +2979,9 @@ def whatsapp_per_operatori():
 
         # Distingui submit form (solo template) da submit JS (enabled/time)
         if 'operator_whatsapp_message_template' in request.form:
-            # Submit del form: aggiorna solo il template
+            # Submit del form: aggiorna solo il template (mai vuoto: vuoto = default)
             if op_tpl is not None:
-                business_info.operator_whatsapp_message_template = op_tpl
+                business_info.operator_whatsapp_message_template = op_tpl.strip() and op_tpl or _OPERATOR_TPL_DEFAULT
         else:
             # Submit JS: aggiorna enabled e time
             business_info.operator_whatsapp_notification_enabled = bool(op_enabled)
@@ -4139,7 +4151,7 @@ def marketing_check_new_client():
 
         # Sul WhatsApp del negozio va SOLO il nome di battesimo, mai il cognome
         # (vedi calendar.py, send-whatsapp-auto).
-        nome = ' '.join(w.capitalize() for w in (client.cliente_nome or '').split())
+        nome = nome_proprio(client.cliente_nome)
         message = (template
                    .replace('{{nome}}', nome)
                    .replace('{{centro}}', business_info.business_name or 'Centro')
@@ -4149,7 +4161,7 @@ def marketing_check_new_client():
             'show_prompt': True,
             'client_id': client.id,
             'client_first_name': nome,
-            'client_name': f"{client.cliente_nome} {client.cliente_cognome}".strip(),
+            'client_name': f"{nome_proprio(client.cliente_nome)} {nome_proprio(client.cliente_cognome)}".strip(),
             'client_phone': client.cliente_cellulare,
             'message': message,
         })
@@ -4496,7 +4508,7 @@ def marketing_send_whatsapp():
 
         messaggio = template
         for segnaposto, valore in (
-                ('{{nome}}', client_data.get('nome', '')),
+                ('{{nome}}', nome_proprio(client_data.get('nome', ''))),
                 # Il cognome NON esce su WhatsApp (vedi calendar.py, send-whatsapp-auto):
                 # il segnaposto non e' piu' offerto dalla pagina, e se resta scritto a
                 # mano in un vecchio template sparisce invece di stampare il cognome.
@@ -5860,7 +5872,7 @@ def solarium_timeline_data():
             'in_corso': s.fine is None,
             'durata_minuti': int((riferimento_fine - inizio_loc).total_seconds() // 60),
             'stato_pagamento': solarium_matching.session_payment_status(s),
-            'cliente': (f"{client.cliente_nome} {client.cliente_cognome}" if client else None),
+            'cliente': (f"{nome_proprio(client.cliente_nome)} {nome_proprio(client.cliente_cognome)}".strip() if client else None),
             'scontrino': receipt.numero_progressivo if receipt else None,
             'operatore': (receipt.operatore.user_nome if receipt and receipt.operatore else None),
         })
@@ -5887,7 +5899,7 @@ def solarium_session_candidates(session_id):
         'tipo': 'scontrino',
         'receipt_id': c['receipt'].id,
         'numero_progressivo': c['receipt'].numero_progressivo,
-        'cliente': (f"{c['receipt'].cliente.cliente_nome} {c['receipt'].cliente.cliente_cognome}"
+        'cliente': (f"{nome_proprio(c['receipt'].cliente.cliente_nome)} {nome_proprio(c['receipt'].cliente.cliente_cognome)}".strip()
                     if c['receipt'].cliente else None),
         'operatore': c['receipt'].operatore.user_nome if c['receipt'].operatore else None,
         'orario': c['receipt'].created_at.strftime('%d/%m/%Y %H:%M') if c['receipt'].created_at else None,
@@ -5902,7 +5914,7 @@ def solarium_session_candidates(session_id):
         'tipo': 'appuntamento',
         'appointment_id': c['appointment'].id,
         'numero_progressivo': None,
-        'cliente': (f"{c['appointment'].client.cliente_nome} {c['appointment'].client.cliente_cognome}"
+        'cliente': (f"{nome_proprio(c['appointment'].client.cliente_nome)} {nome_proprio(c['appointment'].client.cliente_cognome)}".strip()
                     if c['appointment'].client else None),
         'operatore': c['appointment'].operator.user_nome if c['appointment'].operator else None,
         'orario': c['appointment'].start_time.strftime('%d/%m/%Y %H:%M') if c['appointment'].start_time else None,
@@ -5968,7 +5980,7 @@ def solarium_client_history():
                 fine_loc = fine_loc.astimezone().replace(tzinfo=None)
 
             result.append({
-                'client_nome': f"{client.cliente_nome} {client.cliente_cognome}",
+                'client_nome': f"{nome_proprio(client.cliente_nome)} {nome_proprio(client.cliente_cognome)}".strip(),
                 'device': s.device.nome if s.device else None,
                 'data': inizio_loc.strftime('%Y-%m-%d') if inizio_loc else None,
                 'ora_inizio': inizio_loc.strftime('%H:%M') if inizio_loc else None,

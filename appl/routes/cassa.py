@@ -6,6 +6,7 @@ import html, re, time as pytime
 from flask import Blueprint, app, render_template, jsonify, request, session, abort, current_app
 from appl.models import Appointment, AppointmentStatus, BusinessInfo, Operator, PrinterModel, Service, ServiceCategory, Client, Receipt, Subcategory, User, Pacchetto, PacchettoRata, PacchettoStatus, db
 from appl.services.error_log import log_crm_error
+from appl.formati import nome_proprio
 from datetime import datetime, date, timedelta
 import requests
 import urllib3
@@ -258,7 +259,7 @@ def cassa():
                 
                 servizi = [{
                     'id': None,
-                    'nome': clean_str(f"Carta Prepagata - {pacchetto.client.cliente_nome} {pacchetto.client.cliente_cognome}"),
+                    'nome': clean_str(f"Carta Prepagata - {nome_proprio(pacchetto.client.cliente_nome)} {nome_proprio(pacchetto.client.cliente_cognome)}"),
                     'prezzo': importo_da_pagare,
                     'categoria': 'Estetica',
                     'is_fiscale': False,
@@ -465,7 +466,7 @@ def cassa():
             cid = int(client_id)
             cli = db.session.get(Client, cid)
             if cli:
-                client_name = f"{cli.cliente_nome or ''} {cli.cliente_cognome or ''}".strip()
+                client_name = f"{nome_proprio(cli.cliente_nome)} {nome_proprio(cli.cliente_cognome)}".strip()
         elif client_name:
             client_name = html.unescape(client_name)
     except Exception:
@@ -1963,7 +1964,7 @@ def api_receipt_detail(receipt_id):
         "created_at": s.created_at.strftime('%d/%m/%Y %H:%M:%S'),
         "is_fiscale": s.is_fiscale,
         "operatore": f"{s.operatore.user_nome} {s.operatore.user_cognome}" if s.operatore else "-",
-        "cliente": f"{s.cliente.cliente_nome} {s.cliente.cliente_cognome}" if s.cliente else "Generico",
+        "cliente": f"{nome_proprio(s.cliente.cliente_nome)} {nome_proprio(s.cliente.cliente_cognome)}".strip() if s.cliente else "Generico",
         "voci": [
             {
                 "nome": v.get('servizio_nome') or v.get('nome', ''),
@@ -2967,8 +2968,8 @@ def api_myspia():
         for (client_id, nome, cognome), apps in gruppi.items():
             result.append({
                 "cliente_id": client_id,
-                "cliente_nome": nome,
-                "cliente_cognome": cognome,
+                "cliente_nome": nome_proprio(nome),
+                "cliente_cognome": nome_proprio(cognome),
                 "ids": [a.id for a in apps],
                 "appuntamenti": [
                     {
@@ -3053,8 +3054,8 @@ def myspia_dettagli():
         result = {
             "success": True,
             "cliente_id": cli.id if cli else None,
-            "cliente_nome": (cli.cliente_nome if cli else "") or "",
-            "cliente_cognome": (cli.cliente_cognome if cli else "") or "",
+            "cliente_nome": nome_proprio(cli.cliente_nome if cli else ""),
+            "cliente_cognome": nome_proprio(cli.cliente_cognome if cli else ""),
             "operatore_id": op.id if op else None,
             "operatore_nome": (op.user_nome if op else "") or "",
             "appuntamenti": []

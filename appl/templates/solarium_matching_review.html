@@ -35,7 +35,7 @@
         {% if row.client %}
         <div class="small" style="color:#14707e;">
           <i class="bi bi-person-check-fill"></i>
-          {{ row.client.cliente_nome }} {{ row.client.cliente_cognome }}
+          {{ row.client.cliente_nome|nome_proprio }} {{ row.client.cliente_cognome|nome_proprio }}
           <span class="text-muted">(da appuntamento — manca solo il pagamento)</span>
         </div>
         {% endif %}
@@ -82,7 +82,7 @@
         {{ s.inizio.strftime('%d/%m/%Y %H:%M') if s.inizio else '—' }}
         → {{ s.fine.strftime('%H:%M') if s.fine else '—' }}
       </td>
-      <td>{{ (row.client.cliente_nome ~ ' ' ~ row.client.cliente_cognome) if row.client else '—' }}</td>
+      <td>{{ (row.client.cliente_nome|nome_proprio ~ ' ' ~ row.client.cliente_cognome|nome_proprio) if row.client else '—' }}</td>
       <td>{{ row.receipt.numero_progressivo if row.receipt else '—' }}</td>
       <td class="text-end">
         <form method="POST" action="{{ url_for('settings.solarium_matching_unlink') }}" class="d-inline"

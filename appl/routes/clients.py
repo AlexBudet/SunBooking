@@ -1,6 +1,7 @@
 #appl/routes/clients.py
 from flask import Blueprint, request, jsonify, abort
 from ..models import db, Client, Appointment, AppointmentStatus
+from ..formati import nome_proprio
 
 # Blueprint per le rotte dei clienti
 clients_bp = Blueprint('clients', __name__)
@@ -20,8 +21,8 @@ def list_clients():
         ).count()
         response.append({
             "id": client.id,
-            "nome": client.cliente_nome,
-            "cognome": client.cliente_cognome,
+            "nome": nome_proprio(client.cliente_nome),
+            "cognome": nome_proprio(client.cliente_cognome),
             "cellulare": client.cliente_cellulare,
             "email": client.cliente_email,
             "data_nascita": client.cliente_data_nascita,
@@ -36,8 +37,8 @@ def create_client():
     data = request.json
 
     new_client = Client(
-        cliente_nome=data['nome'],
-        cliente_cognome=data['cognome'],
+        cliente_nome=nome_proprio(data['nome']),
+        cliente_cognome=nome_proprio(data['cognome']),
         cliente_cellulare=data['cellulare'],
         cliente_email=data.get('email'),  # Campo opzionale
         cliente_data_nascita=data.get('data_nascita')  # Campo opzionale
@@ -56,8 +57,8 @@ def get_client(client_id):
         abort(404)
     response = {
         "id": client.id,
-        "nome": client.cliente_nome,
-        "cognome": client.cliente_cognome,
+        "nome": nome_proprio(client.cliente_nome),
+        "cognome": nome_proprio(client.cliente_cognome),
         "cellulare": client.cliente_cellulare,
         "email": client.cliente_email,
         "data_nascita": client.cliente_data_nascita
@@ -72,8 +73,8 @@ def update_client(client_id):
     if not client:
         abort(404)
 
-    client.cliente_nome = data.get('nome', client.cliente_nome)
-    client.cliente_cognome = data.get('cognome', client.cliente_cognome)
+    client.cliente_nome = nome_proprio(data.get('nome', client.cliente_nome))
+    client.cliente_cognome = nome_proprio(data.get('cognome', client.cliente_cognome))
     client.cliente_cellulare = data.get('cellulare', client.cliente_cellulare)
     client.cliente_email = data.get('email', client.cliente_email)  # Campo opzionale
     client.cliente_data_nascita = data.get('data_nascita', client.cliente_data_nascita)  # Campo opzionale

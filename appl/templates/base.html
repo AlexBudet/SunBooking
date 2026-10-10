@@ -49,6 +49,23 @@
             } catch (err) { /* non bloccare mai il click */ }
           }, true);
         </script>
+        <script>
+          // Nomi di persona e date a video, disponibili a ogni pagina: stessa
+          // regola di nome_proprio() e data_it() in appl/formati.py.
+          // calendar.js e cassa.js ridefiniscono capitalizeName identica.
+          window.capitalizeName = function (name) {
+            if (!name) return name || '';
+            return String(name).toLowerCase().replace(/(^|[^\p{L}\p{N}])(\p{L})/gu, function (m, prima, l) { return prima + l.toUpperCase(); });
+          };
+          // "2025-11-06" (o "2025-11-06T10:30") -> "06 NOV 2025"; altro testo torna com'e'.
+          window.formatDataIT = function (valore) {
+            if (!valore) return '';
+            var m = String(valore).trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (!m) return String(valore);
+            var mesi = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'];
+            return m[3] + ' ' + (mesi[parseInt(m[2], 10) - 1] || m[2]) + ' ' + m[1];
+          };
+        </script>
         <style>
 /* Dentro il pannello laterale la barra di menu e' un doppione: quella buona
    e' del documento principale, che pilota il pannello stesso. L'<header>

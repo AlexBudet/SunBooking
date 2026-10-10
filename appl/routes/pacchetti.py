@@ -11,6 +11,7 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import filetype  # Sostituisce python-magic - nessuna dipendenza di sistema
 import json
+from appl.formati import nome_proprio
 
 def get_current_user():
     """Ritorna l'utente loggato dalla sessione."""
@@ -61,14 +62,18 @@ def compress_pdf(file_data):
 def capitalize_name(name):
     """Normalizza un nome: prima lettera maiuscola, resto minuscolo per ogni parola.
 
-    Si usa title() e non capitalize(): quest'ultimo guarda solo la prima lettera
-    della parola e lasciava "d'angelo" -> "D'angelo", "anna-maria" ->
-    "Anna-maria". Con title() l'iniziale riparte anche dopo apostrofo e trattino,
-    che in un'anagrafica italiana non e' un caso raro.
+    La regola e' quella unica di appl/formati.py (title() per parola, anche
+    dopo apostrofo e trattino). Qui resta il vecchio nome perche' e' chiamata
+    in tanti punti di questo file.
     """
-    if not name:
-        return name
-    return ' '.join(word.title() for word in name.split())
+    return nome_proprio(name)
+
+def nome_operatore(o):
+    """Nome di un operatore a video. Il macchinario non e' un nome proprio:
+    resta scritto com'e' in anagrafica, come prima del 10/10/2026."""
+    if (o.user_tipo or '') == 'macchinario':
+        return f"{o.user_nome}"
+    return capitalize_name(o.user_nome)
 
 pacchetti_bp = Blueprint('pacchetti', __name__)
 
@@ -442,7 +447,7 @@ def api_pacchetti():
             tutte_rate_pagate = all(r.is_pagata for r in p.rate)
         # ✅ MANTIENE TUTTI I CAMPI ORIGINALI
         sedute_info = [{'ordine': s.ordine, 'service_nome': s.service.servizio_nome, 'stato': s.stato} for s in p.sedute]
-        operatori_pref = [f"{o.user_nome}" for o in p.preferred_operators]
+        operatori_pref = [nome_operatore(o) for o in p.preferred_operators]
         result.append({
             'id': p.id,
             'client_id': p.client_id,
@@ -456,7 +461,7 @@ def api_pacchetti():
             'costo_totale_scontato': float(p.costo_totale_scontato) if p.costo_totale_scontato else None,
             'credito_iniziale': float(p.credito_iniziale) if p.credito_iniziale else None,
             'saldo_attuale': float(p.credito_residuo) if p.credito_residuo else None,
-            'beneficiario_nome': p.beneficiario_nome,
+            'beneficiario_nome': capitalize_name(p.beneficiario_nome) or None,
             'numero_tessera': p.numero_tessera,
             'vincoli_utilizzo': p.vincoli_utilizzo,
             'data_scadenza': p.data_scadenza.isoformat() if p.data_scadenza else None,
@@ -997,7 +1002,7 @@ def pacchetto_detail(id):
     operatori_map = {}
     if operatore_ids:
         operatori_db = Operator.query.filter(Operator.id.in_(operatore_ids)).all()
-        operatori_map = {o.id: f"{o.user_nome}" for o in operatori_db}
+        operatori_map = {o.id: nome_operatore(o) for o in operatori_db}
 
     # Costruisci sedute usando i dati già caricati (zero query aggiuntive)
     # Regola di ordinamento:
@@ -1058,9 +1063,9 @@ def pacchetto_detail(id):
     differenza_rate = round(totale_pacchetto - totale_rate, 2)
 
     # Usa i dati già caricati (zero query aggiuntive)
-    operatori = [{'id': o.id, 'nome': f"{o.user_nome}"} for o in pacchetto.preferred_operators]
+    operatori = [{'id': o.id, 'nome': nome_operatore(o)} for o in pacchetto.preferred_operators]
     
-    all_operatori = [{'id': o.id, 'nome': f"{o.user_nome}"} for o in Operator.query.filter(Operator.is_deleted == False, Operator.user_tipo == 'estetista', Operator.is_visible == True).all()]
+    all_operatori = [{'id': o.id, 'nome': capitalize_name(o.user_nome)} for o in Operator.query.filter(Operator.is_deleted == False, Operator.user_tipo == 'estetista', Operator.is_visible == True).all()]
     
     data_fmt = format_data_it(pacchetto.data_sottoscrizione) if pacchetto.data_sottoscrizione else ''
     
@@ -1118,7 +1123,7 @@ def pacchetto_detail(id):
         'credito_iniziale': float(pacchetto.credito_iniziale) if pacchetto.credito_iniziale else None,
         'credito_residuo': float(pacchetto.credito_residuo) if pacchetto.credito_residuo else None,
         'data_scadenza': pacchetto.data_scadenza.strftime('%d/%m/%Y') if pacchetto.data_scadenza else None,
-        'beneficiario_nome': pacchetto.beneficiario_nome,
+        'beneficiario_nome': capitalize_name(pacchetto.beneficiario_nome) or None,
         'numero_tessera': pacchetto.numero_tessera,
         'vincoli_utilizzo': pacchetto.vincoli_utilizzo,
         'movimenti_prepagata': movimenti_prepagata,
@@ -2466,7 +2471,7 @@ def api_prepagate_cliente(client_id):
             'nome': p.nome,
             'credito_residuo': float(p.credito_residuo),
             'data_scadenza': p.data_scadenza.strftime('%d/%m/%Y') if p.data_scadenza else None,
-            'beneficiario': p.beneficiario_nome,
+            'beneficiario': capitalize_name(p.beneficiario_nome) or None,
             'vincoli_utilizzo': p.vincoli_utilizzo,
             'numero_tessera': p.numero_tessera,
             # Titolare della carta: la Cassa deve poter distinguere "carta del cliente
