@@ -2357,6 +2357,15 @@ async function proponiWhatsappPrepagata(info, onDone) {
   } else if (scalato > 0) {
     movimento = ` abbiamo scalato ${eur(scalato)}${perServizio}:`;
   }
+  // Credito corretto a mano dalla scheda carta (vedi apriModalRettificaCredito):
+  // il motivo scritto da chi l'ha modificato va nel messaggio, e' la spiegazione
+  // per il cliente.
+  const conMotivo = info.motivo ? ` (${info.motivo})` : '';
+  if (info.tipo === 'rettifica') {
+    movimento = caricato > 0
+      ? ` ti abbiamo riaccreditato ${eur(caricato)}${conMotivo}:`
+      : ` abbiamo corretto il credito togliendo ${eur(scalato)}${conMotivo}:`;
+  }
 
   const testo = `Ciao *${clienteNome}*, sulla tua Fidelity Card${rigaTessera}${movimento}`
     + ` disponi attualmente di un credito solarium di ${eur(info.creditoResiduo)}${codaSito}`;
@@ -2366,7 +2375,13 @@ async function proponiWhatsappPrepagata(info, onDone) {
   // dello scontrino) e dagli importi movimentati. Vale in ogni caso, attivazione
   // compresa, dove il precedente viene 0.
   const residuo = Number(info.creditoResiduo || 0);
-  const movimenti = movimentiRiepilogoCarta(scalato, caricato, info.descrizione, info.tipo);
+  const movimenti = info.tipo === 'rettifica'
+    ? [{
+        etichetta: info.motivo ? `Rettifica: ${info.motivo}` : 'Rettifica credito',
+        importo: caricato > 0 ? caricato : scalato,
+        verso: caricato > 0 ? '+' : '-'
+      }]
+    : movimentiRiepilogoCarta(scalato, caricato, info.descrizione, info.tipo);
 
   const riepilogo = {
     intestatario: clienteNomeCompleto,
@@ -2386,6 +2401,7 @@ async function proponiWhatsappPrepagata(info, onDone) {
     onClose: onDone
   });
 }
+window.proponiWhatsappPrepagata = proponiWhatsappPrepagata;
 
   // === ANNULLA ULTIMO SCONTRINO ===
   document.getElementById('btnAnnullaScontrino').addEventListener('click', function(e) {
@@ -5543,11 +5559,17 @@ async function creaSchedaRiepilogoPrepagata(prepagataId) {
   // Due colonne affiancate: a sinistra tutte le informazioni, a destra il solo
   // credito residuo. Stando in un blocco suo, il credito puo' essere grande
   // quanto serve senza dover comprimere l'interlinea del resto.
+  // Admin e owner: il credito e' un pulsante che apre "Modifica credito
+  // residuo". Per lo user resta testo, come prima.
+  const credito = `
+        <div class="prep-credito-lbl">Credito residuo${window.CASSA_MODIFICA_CREDITO ? ' <i class="bi bi-pencil-fill"></i>' : ''}</div>
+        <div class="prep-credito-val">€${info.credito_residuo.toFixed(2)}</div>`;
   card.innerHTML = `
     <div class="prep-corpo">
       <div class="prep-credito">
-        <div class="prep-credito-lbl">Credito residuo</div>
-        <div class="prep-credito-val">€${info.credito_residuo.toFixed(2)}</div>
+        ${window.CASSA_MODIFICA_CREDITO
+          ? `<button type="button" class="prep-credito-btn">${credito}</button>`
+          : credito}
       </div>
       <div class="prep-info">
         <div class="prep-header">
@@ -5563,9 +5585,158 @@ async function creaSchedaRiepilogoPrepagata(prepagataId) {
       </div>
     </div>
   `;
+  const btnCredito = card.querySelector('.prep-credito-btn');
+  if (btnCredito) {
+    applyBsTooltip(btnCredito, 'Modifica il credito residuo', { placement: 'bottom', delay: { show: 300, hide: 100 } });
+    btnCredito.addEventListener('click', () => apriModalRettificaCredito(info));
+  }
   wrap.appendChild(card);
   return wrap;
 }
+
+// ============================================================
+// MODIFICA CREDITO RESIDUO (solo admin/owner)
+// Dalla scheda carta: si scrive il credito giusto e il motivo, il server
+// registra un movimento "rettifica" (non una ricarica: nessun incasso). Poi
+// esce lo stesso riepilogo carta di fine scontrino, con il WhatsApp al cliente.
+// ============================================================
+let rettificaCreditoInfo = null;
+
+function _eurIt(v) {
+  return '€ ' + Number(v || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function aggiornaDifferenzaRettifica() {
+  const out = document.getElementById('rettificaCreditoDifferenza');
+  const input = document.getElementById('rettificaCreditoNuovo');
+  if (!out || !input || !rettificaCreditoInfo) return;
+  const nuovo = parseFloat(String(input.value).replace(',', '.'));
+  if (isNaN(nuovo)) { out.textContent = ''; return; }
+  const diff = Math.round((nuovo - Number(rettificaCreditoInfo.credito_residuo || 0)) * 100) / 100;
+  if (diff > 0) {
+    out.style.color = '#1b7f3b';
+    out.textContent = `+ ${_eurIt(diff)} restituiti al cliente`;
+  } else if (diff < 0) {
+    out.style.color = '#b3261e';
+    out.textContent = `− ${_eurIt(-diff)} tolti dalla carta`;
+  } else {
+    out.style.color = '#6c757d';
+    out.textContent = 'Nessuna modifica';
+  }
+}
+
+function apriModalRettificaCredito(info) {
+  const modalEl = document.getElementById('modalRettificaCredito');
+  if (!modalEl || !info) return;
+  rettificaCreditoInfo = info;
+
+  const intestatario = document.getElementById('rettificaCreditoIntestatario');
+  if (intestatario) {
+    intestatario.textContent = [info.numero_tessera ? `Tessera n. ${info.numero_tessera}` : null, info.client_nome || null]
+      .filter(Boolean).join(' · ');
+  }
+  const attuale = document.getElementById('rettificaCreditoAttuale');
+  if (attuale) attuale.textContent = _eurIt(info.credito_residuo);
+  const input = document.getElementById('rettificaCreditoNuovo');
+  if (input) input.value = Number(info.credito_residuo || 0).toFixed(2);
+  const motivo = document.getElementById('rettificaCreditoMotivo');
+  if (motivo) motivo.value = '';
+  const errore = document.getElementById('rettificaCreditoErrore');
+  if (errore) { errore.textContent = ''; errore.style.display = 'none'; }
+  aggiornaDifferenzaRettifica();
+
+  modalEl.addEventListener('shown.bs.modal', () => { input?.focus(); input?.select(); }, { once: true });
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+window.apriModalRettificaCredito = apriModalRettificaCredito;
+
+document.getElementById('rettificaCreditoNuovo')?.addEventListener('input', aggiornaDifferenzaRettifica);
+// L'errore riguarda quello che c'era al clic su Salva: appena si corregge, sparisce.
+['rettificaCreditoNuovo', 'rettificaCreditoMotivo'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', () => {
+    const errore = document.getElementById('rettificaCreditoErrore');
+    if (errore) errore.style.display = 'none';
+  });
+});
+
+document.getElementById('btnSalvaRettificaCredito')?.addEventListener('click', async function () {
+  const btn = this;
+  const info = rettificaCreditoInfo;
+  if (!info) return;
+  const errore = document.getElementById('rettificaCreditoErrore');
+  const mostraErrore = (testo) => {
+    if (!errore) { alert(testo); return; }
+    errore.textContent = testo;
+    errore.style.display = '';
+  };
+
+  const nuovo = parseFloat(String(document.getElementById('rettificaCreditoNuovo')?.value || '').replace(',', '.'));
+  const motivo = (document.getElementById('rettificaCreditoMotivo')?.value || '').trim();
+  if (isNaN(nuovo) || nuovo < 0) { mostraErrore('Scrivi il nuovo credito (0 o più).'); return; }
+  if (Math.abs(nuovo - Number(info.credito_residuo || 0)) < 0.005) { mostraErrore('Il credito è già questo.'); return; }
+  if (!motivo) { mostraErrore('Scrivi il motivo della modifica.'); document.getElementById('rettificaCreditoMotivo')?.focus(); return; }
+
+  btn.disabled = true;
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+  let data;
+  try {
+    const res = await fetch(`/pacchetti/api/prepagata/${info.id}/rettifica-credito`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {}) },
+      body: JSON.stringify({
+        nuovo_credito: Math.round(nuovo * 100) / 100,
+        credito_atteso: Number(info.credito_residuo || 0),
+        motivo
+      })
+    });
+    data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      mostraErrore(data.error || `Errore ${res.status}`);
+      return;
+    }
+  } catch (err) {
+    console.error('Errore modifica credito residuo:', err);
+    mostraErrore('Errore di connessione');
+    return;
+  } finally {
+    btn.disabled = false;
+  }
+
+  bootstrap.Modal.getInstance(document.getElementById('modalRettificaCredito'))?.hide();
+  rettificaCreditoInfo = null;
+
+  // La bozza ragiona sul saldo della carta agganciata: va aggiornato, poi le
+  // righe pagate col credito si rimettono in riga col saldo nuovo.
+  if (window.cartaAttiva && String(window.cartaAttiva.id) === String(data.id)) {
+    window.cartaAttiva.credito_residuo = Number(data.credito_residuo || 0);
+    if (typeof window.riallineaResetCredito === 'function') window.riallineaResetCredito();
+    if (typeof aggiornaRiepilogoCartaConferma === 'function') aggiornaRiepilogoCartaConferma();
+  }
+
+  // Scheda in cima alla griglia: si ridisegna sul posto, il resto non cambia.
+  const vecchia = document.querySelector('#serviceButtonsContainer .prepagata-riepilogo-wrap');
+  if (vecchia) {
+    const nuova = await creaSchedaRiepilogoPrepagata(data.id);
+    if (nuova && vecchia.parentNode) {
+      ripulisciTooltipIn(vecchia);
+      vecchia.replaceWith(nuova);
+    }
+  }
+
+  const diff = Number(data.differenza || 0);
+  if (typeof window.proponiWhatsappPrepagata !== 'function') return;
+  window.proponiWhatsappPrepagata({
+    tipo: 'rettifica',
+    prepagataId: data.id,
+    numeroTessera: data.numero_tessera || null,
+    clienteId: data.client_id || null,
+    titolare: data.client_nome || null,
+    importoCaricato: diff > 0 ? diff : 0,
+    importoScalato: diff < 0 ? -diff : 0,
+    creditoResiduo: Number(data.credito_residuo || 0),
+    motivo: data.motivo || motivo
+  }, () => {});
+});
 
 // ============================================================
 // NUOVA CARTA PREPAGATA DALLA CASSA

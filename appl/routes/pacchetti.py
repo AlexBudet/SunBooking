@@ -2200,6 +2200,96 @@ def api_prepagata_riepilogo(id):
     })
 
 
+@pacchetti_bp.route('/api/prepagata/<int:id>/rettifica-credito', methods=['POST'])
+def api_prepagata_rettifica_credito(id):
+    """Imposta a mano il credito residuo di una carta prepagata (solo admin/owner),
+    dalla scheda carta della Cassa. Caso tipico: seduta scalata e poi non fatta,
+    da riaccreditare.
+
+    Non e' una ricarica: nessun incasso, credito_iniziale invariato. Resta un
+    movimento a se', tipo 'rettifica', con importo CON SEGNO (positivo = credito
+    restituito, negativo = credito tolto) e il motivo nella descrizione.
+
+    credito_atteso e' il saldo che l'operatore aveva a video: se nel frattempo
+    la carta si e' mossa (scalo da un'altra cassa) si rifiuta, invece di
+    sovrascrivere un saldo che nessuno ha visto.
+    """
+    current_user = get_current_user()
+    if not current_user or current_user.ruolo.value not in ['admin', 'owner']:
+        return jsonify({'success': False, 'error': 'Solo admin e owner possono modificare il credito'}), 403
+
+    data = request.get_json() or {}
+    try:
+        nuovo_saldo = Decimal(str(data.get('nuovo_credito'))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    except Exception:
+        return jsonify({'success': False, 'error': 'Credito non valido'}), 400
+    if nuovo_saldo < 0 or nuovo_saldo > Decimal('100000'):
+        return jsonify({'success': False, 'error': 'Il credito deve essere fra 0 e 100.000 €'}), 400
+
+    motivo = (data.get('motivo') or '').strip()
+    if not motivo:
+        return jsonify({'success': False, 'error': 'Scrivi il motivo della modifica'}), 400
+    motivo = motivo[:200]
+
+    pacchetto = (Pacchetto.query.filter_by(id=id).with_for_update().first())
+    if not pacchetto:
+        return jsonify({'success': False, 'error': 'Carta non trovata'}), 404
+    if pacchetto.tipo != PacchettoTipo.Prepagata:
+        return jsonify({'success': False, 'error': 'Questo pacchetto non è una carta prepagata'}), 400
+    if pacchetto.status == PacchettoStatus.Eliminato:
+        return jsonify({'success': False, 'error': 'La carta è eliminata'}), 400
+
+    vecchio_saldo = (pacchetto.credito_residuo or Decimal('0')).quantize(Decimal('0.01'))
+    if data.get('credito_atteso') is not None:
+        try:
+            atteso = Decimal(str(data.get('credito_atteso'))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        except Exception:
+            atteso = None
+        if atteso is not None and atteso != vecchio_saldo:
+            db.session.rollback()
+            return jsonify({
+                'success': False,
+                'error': f'Nel frattempo il credito è cambiato: ora è €{vecchio_saldo:.2f}. Controlla e riprova.',
+                'credito_residuo': float(vecchio_saldo)
+            }), 409
+
+    differenza = nuovo_saldo - vecchio_saldo
+    if differenza == 0:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Il credito è già questo'}), 400
+
+    pacchetto.credito_residuo = nuovo_saldo
+    if nuovo_saldo > 0:
+        riattiva_prepagata_se_ricaricata(pacchetto)
+    elif pacchetto.status == PacchettoStatus.Attivo:
+        pacchetto.status = PacchettoStatus.Completato
+
+    db.session.add(MovimentoPrepagata(
+        pacchetto_id=pacchetto.id,
+        tipo_movimento='rettifica',
+        importo=differenza,
+        saldo_dopo=nuovo_saldo,
+        descrizione=f"Rettifica: {motivo}"[:255]
+    ))
+    aggiungi_history(pacchetto,
+                     f"Rettifica credito €{vecchio_saldo:.2f} → €{nuovo_saldo:.2f} "
+                     f"({differenza:+.2f}) da {current_user.username}: {motivo}")
+    db.session.commit()
+
+    cliente = pacchetto.client
+    return jsonify({
+        'success': True,
+        'id': pacchetto.id,
+        'numero_tessera': pacchetto.numero_tessera,
+        'client_id': pacchetto.client_id,
+        'client_nome': f"{capitalize_name(cliente.cliente_nome)} {capitalize_name(cliente.cliente_cognome)}".strip() if cliente else '',
+        'credito_precedente': float(vecchio_saldo),
+        'credito_residuo': float(nuovo_saldo),
+        'differenza': float(differenza),
+        'motivo': motivo
+    })
+
+
 def _ids_servizi_solarium():
     """Id dei servizi di categoria Solarium (cache per richiesta)."""
     return {s.id for s in Service.query

@@ -765,7 +765,8 @@ display: none;
           </tr>
         </thead>
         <tbody>
-          {% set sedute_scalate = pacchetto.movimenti_prepagata | rejectattr('tipo', 'equalto', 'ricarica') | list %}
+          {# Solo gli scali veri: le rettifiche a mano del credito stanno nello storico completo. #}
+          {% set sedute_scalate = pacchetto.movimenti_prepagata | selectattr('tipo', 'equalto', 'utilizzo') | list %}
           {% for m in sedute_scalate[:5] %}
           <tr class="table-warning">
             <td>{{ m.data }}</td>
@@ -807,17 +808,20 @@ display: none;
         </thead>
         <tbody>
           {% for m in pacchetto.movimenti_prepagata %}
-          <tr class="{% if m.tipo == 'ricarica' %}table-success{% else %}table-warning{% endif %}">
+          {# Rettifica = credito corretto a mano dalla Cassa: importo CON SEGNO. #}
+          <tr class="{% if m.tipo == 'ricarica' %}table-success{% elif m.tipo == 'rettifica' %}table-info{% else %}table-warning{% endif %}">
             <td>{{ m.data }}</td>
             <td>
               {% if m.tipo == 'ricarica' %}
                 <span class="badge bg-success">Ricarica</span>
+              {% elif m.tipo == 'rettifica' %}
+                <span class="badge bg-info text-dark">Rettifica</span>
               {% else %}
                 <span class="badge bg-warning text-dark">Utilizzo</span>
               {% endif %}
             </td>
-            <td class="text-end fw-bold {% if m.tipo == 'ricarica' %}text-success{% else %}text-warning{% endif %}">
-              €{{ '%.2f'|format(m.importo) }}
+            <td class="text-end fw-bold {% if m.tipo == 'ricarica' %}text-success{% elif m.tipo == 'rettifica' %}text-info-emphasis{% else %}text-warning{% endif %}">
+              {% if m.tipo == 'rettifica' %}{{ '+' if m.importo > 0 else '−' }}€{{ '%.2f'|format(m.importo|abs) }}{% else %}€{{ '%.2f'|format(m.importo) }}{% endif %}
             </td>
             <td class="text-end">€{{ '%.2f'|format(m.saldo_dopo) }}</td>
             <td>{{ m.descrizione or '—' }}</td>
