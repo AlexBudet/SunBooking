@@ -2,292 +2,411 @@
 {% extends "settings.html" %}
 
 {% block settings_content %}
-<div class="container page-wide-90">
-<h3>&nbsp;Informazioni Aziendali</h3>
+{% set ruolo = current_user.ruolo.value if current_user and current_user.ruolo else '' %}
+{% set ro = (ruolo == 'user') %}
+{% set mostra_stampante = (ruolo in ['admin', 'owner']) or not config.get('HIDE_PRINTER_IP') %}
+<div class="ia-page">
 
-<!-- Sezione Logo -->
-<div class="logo-section" style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
-    <h4 style="margin-top: 0;">Logo Negozio</h4>
-    
-    <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
-        <!-- Anteprima logo corrente -->
-        <div class="logo-preview" style="min-width: 150px; text-align: center;">
-            {% if business_info and business_info.logo_image %}
-                <img src="{{ url_for('settings.get_logo') }}?t={{ range(1000000) | random }}" 
-                     alt="Logo negozio" 
-                     style="max-height: 100px; max-width: 200px; border: 1px solid #ccc; border-radius: 4px; background: #fff; padding: 5px;">
-                <br>
-                <small style="color: #666;">{{ business_info.logo_filename or 'logo' }}</small>
-            {% else %}
-                <div style="width: 150px; height: 80px; border: 2px dashed #ccc; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #999;">
-                    Nessun logo
-                </div>
-            {% endif %}
-        </div>
-        
-        <!-- Form upload -->
-        {% if current_user.ruolo.value != 'user' %}
-        <div class="logo-upload">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
-                <!-- Form upload -->
-                <form method="POST" action="{{ url_for('settings.upload_logo') }}" enctype="multipart/form-data" id="logoUploadForm" style="display: inline-flex; align-items: center; gap: 10px;">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <label for="logo_file" class="logo-btn logo-btn-primary">
-                        Seleziona file...
-                    </label>
-                    <input type="file" 
-                           name="logo" 
-                           id="logo_file" 
-                           accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-                           style="display: none;">
-                    <span id="selectedFileName" style="color: #333; font-style: italic;"></span>
-                    <button type="submit" id="uploadLogoBtn" class="logo-btn logo-btn-success" style="display: none;">Carica Logo</button>
-                </form>
-                
-                {% if business_info and business_info.logo_image %}
-                <!-- Form elimina -->
-                <form method="POST" action="{{ url_for('settings.delete_logo') }}" style="display: inline;" 
-                      onsubmit="return confirm('Sei sicuro di voler eliminare il logo?');">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="logo-btn logo-btn-danger">Elimina Logo</button>
-                </form>
-                {% endif %}
-            </div>
-            
-            <small style="color: #666; display: block;">
-                Formati: PNG, JPEG, WebP, GIF, SVG • Max: 5MB • Verrà ridimensionato a max 200px di altezza
-            </small>
-            
-            <!-- Checkbox visibilità logo in booking -->
-            <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #ddd;">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="checkbox" 
-                           id="logoVisibleInBooking" 
-                           {% if business_info and business_info.logo_visible_in_booking_page %}checked{% endif %}>
-                    <span>Mostra logo nella pagina di prenotazione online</span>
-                </label>
-                <span id="logoVisibleStatus" style="margin-left: 28px; font-size: 0.85em; color: #666;"></span>
-            </div>
-        </div>
-        {% endif %}
-    </div>
+{% if current_user %}
+<div class="ia-whoami">
+  <span><i class="bi bi-person-circle"></i> Loggato come: <strong>{{ current_user.username }}</strong></span>
+  <span class="ia-whoami-sep" aria-hidden="true">|</span>
+  <span>Ruolo: <span class="ia-role ia-role-{{ ruolo }}">{{ ruolo }}</span></span>
 </div>
+{% endif %}
+
+<div class="ia-head">
+  <span class="ia-head-icon"><i class="bi bi-building"></i></span>
+  <div>
+    <h3 class="ia-title">Informazioni Aziendali</h3>
+    <div class="ia-subtitle">Dati del centro, orari dell'Agenda e impostazioni di questa postazione.</div>
+  </div>
+</div>
+
+{% if ro %}
+<div class="ia-note">
+  <i class="bi bi-lock"></i>
+  <span>Sola lettura: i dati dell'azienda si modificano dagli account <strong>admin</strong> e <strong>owner</strong>.</span>
+</div>
+{% endif %}
 
 <!-- Messaggi di errore/successo -->
 {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-        {% for category, message in messages %}
-            <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-    {% endif %}
+  {% for category, message in messages %}
+    {% set cat = 'danger' if category == 'error' else (category if category in ['success', 'warning', 'info', 'danger'] else 'info') %}
+    <div class="alert alert-{{ cat }} alert-dismissible fade show ia-alert" role="alert">
+      <i class="bi {{ 'bi-check-circle-fill' if cat == 'success' else 'bi-exclamation-triangle-fill' }}"></i>
+      <span>{{ message }}</span>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Chiudi"></button>
+    </div>
+  {% endfor %}
 {% endwith %}
 
-<form method="POST" action="{{ url_for('settings.set_business_info') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-<!-- Modulo per impostare le informazioni aziendali -->
-<table>
-    <tr>
-      <td><label for="business_name">Nome Azienda:</label></td>
-      <td><input type="text" id="business_name" name="business_name" value="{{ business_info.business_name if business_info else '' }}" required {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
-    </tr>
-    <tr>
-      <td><label for="website">Sito internet:</label></td>
-      <td>
-        <div class="copy-field-wrapper">
-          <input type="text" id="website" name="website" value="{{ business_info.website if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-          <button type="button" class="copy-field-btn" data-copy-target="website" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
-        </div>
-      </td>
-    </tr>
-    <tr>
-      <td><label for="web_app">Sito Web App Tosca Online:</label></td>
-      <td>
-        <div class="copy-field-wrapper">
-          <input type="text" id="web_app" name="web_app" value="{{ business_info.web_app if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-          <button type="button" class="copy-field-btn" data-copy-target="web_app" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
-        </div>
-      </td>
-    </tr>
-    <tr>
-      <td><label for="web_booking_page">Sito Booking Online:</label></td>
-      <td>
-        <div class="copy-field-wrapper">
-          <input type="text" id="web_booking_page" name="web_booking_page" value="{{ business_info.web_booking_page if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-          <button type="button" class="copy-field-btn" data-copy-target="web_booking_page" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
-        </div>
-      </td>
-    </tr>
-    <tr>
-      <td style="vertical-align: top;"><label for="google_review_link">Link recensioni:</label></td>
-      <td>
-        <div class="copy-field-wrapper">
-          <input type="text" inputmode="url" autocomplete="off" id="google_review_link" name="google_review_link" maxlength="500"
-                 pattern="https?://\S+" title="Un indirizzo web completo, che inizia con https://"
-                 placeholder="https://g.page/r/..."
-                 value="{{ business_info.google_review_link if business_info and business_info.google_review_link else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-          <button type="button" class="copy-field-btn" data-copy-target="google_review_link" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
-        </div>
-        <small style="display: block; color: #666; margin-top: 4px;">
-          La pagina dove i clienti lasciano la recensione. Nel messaggio di benvenuto ai nuovi clienti
-          (Marketing) il tag <strong>Link recensione</strong> <code>{% raw %}{{link_recensione}}{% endraw %}</code>
-          viene sostituito con questo indirizzo.
-        </small>
-        <details style="margin-top: 6px; font-size: 0.9em;">
-          <summary style="cursor: pointer; color: #215586;">Non so quale link inserire: dove lo trovo?</summary>
-          <div style="margin-top: 6px; padding-left: 12px; border-left: 3px solid #ddd; color: #444;">
-            <p style="margin: 0 0 6px;">Il sito delle recensioni è <strong>Google</strong>: sono le stelle che i clienti vedono quando cercano
-              il centro su Google e su Maps. Serve il <strong>Profilo dell'attività su Google</strong> (gratuito, si gestisce da
-              <strong>business.google.com</strong>). Da computer:</p>
-            <ol style="margin: 0 0 6px; padding-left: 20px;">
-              <li>Vai su <strong>business.google.com</strong> e accedi con l'account Google che gestisce l'attività.</li>
-              <li>Apri il profilo dell'attività e premi <strong>«Leggi recensioni»</strong>.</li>
-              <li>Premi <strong>«Ottieni più recensioni»</strong>.</li>
-              <li>Premi <strong>«Copia»</strong>, poi incolla qui il link e premi <strong>Salva Impostazioni</strong> in fondo alla pagina.</li>
-            </ol>
-            <p style="margin: 0 0 6px;">Il link copiato apre il cliente direttamente sulla finestra per scrivere la recensione
-              (di solito inizia con <code>https://g.page/r/</code>). Provalo aprendolo in una nuova scheda.</p>
-            <p style="margin: 0; color: #666;">Il centro non ha ancora il Profilo su Google? Va creato e verificato da Google prima di poter
-              ricevere recensioni. Il tag funziona anche con il link di un altro sito di recensioni, purché inizi con https://</p>
+<!-- Sezione Logo -->
+<section class="ia-card mb-3">
+  <div class="ia-card-head">
+    <span class="ia-card-icon"><i class="bi bi-image"></i></span>
+    <div>
+      <h5>Logo negozio</h5>
+      <small>Si può mostrare anche nella pagina di prenotazione online.</small>
+    </div>
+  </div>
+  <div class="ia-card-body">
+    <div class="ia-logo">
+      <!-- Anteprima logo corrente -->
+      <div class="ia-logo-preview">
+        {% if business_info and business_info.logo_image %}
+          <div class="ia-logo-frame">
+            <img src="{{ url_for('settings.get_logo') }}?t={{ range(1000000) | random }}" alt="Logo negozio">
           </div>
-        </details>
-      </td>
-    </tr>
-    <tr>
-      <td><label for="address">Indirizzo:</label></td>
-      <td><input type="text" id="address" name="address" value="{{ business_info.address if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
-    </tr>
-    <tr>
-      <td><label for="cap">CAP:</label></td>
-      <td><input type="text" id="cap" name="cap" value="{{ business_info.cap if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
-    </tr>
-    <tr>
-      <td><label for="province">Provincia:</label></td>
-      <td><input type="text" id="province" name="province" value="{{ business_info.province if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
-    </tr>
-    <tr>
-      <td><label for="city">Città:</label></td>
-      <td><input type="text" id="city" name="city" value="{{ business_info.city if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
-    </tr>
-    <tr>
-      <td><label for="vat_code">P.IVA/Codice Fiscale:</label></td>
-      <td>
-        <div class="copy-field-wrapper">
-          <input type="text" id="vat_code" name="vat_code" value="{{ business_info.vat_code if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-          <button type="button" class="copy-field-btn" data-copy-target="vat_code" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
+          <small class="ia-help">{{ business_info.logo_filename or 'logo' }}</small>
+        {% else %}
+          <div class="ia-logo-empty">
+            <i class="bi bi-image"></i>
+            <span>Nessun logo</span>
+          </div>
+        {% endif %}
+      </div>
+
+      {% if not ro %}
+      <div class="ia-logo-actions">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <!-- Form upload -->
+          <form method="POST" action="{{ url_for('settings.upload_logo') }}" enctype="multipart/form-data" id="logoUploadForm" class="d-inline-flex flex-wrap align-items-center gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="logo_file" class="btn btn-outline-primary btn-sm mb-0">
+              <i class="bi bi-folder2-open"></i> Seleziona file...
+            </label>
+            <input type="file"
+                   name="logo"
+                   id="logo_file"
+                   accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                   style="display: none;">
+            <span id="selectedFileName" class="ia-filename"></span>
+            <button type="submit" id="uploadLogoBtn" class="btn btn-success btn-sm" style="display: none;">
+              <i class="bi bi-upload"></i> Carica logo
+            </button>
+          </form>
+
+          {% if business_info and business_info.logo_image %}
+          <!-- Form elimina -->
+          <form method="POST" action="{{ url_for('settings.delete_logo') }}" class="d-inline"
+                onsubmit="return confirm('Sei sicuro di voler eliminare il logo?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Elimina logo</button>
+          </form>
+          {% endif %}
         </div>
-      </td>
-    </tr>
-    <tr>
-      <td><label for="pec_code">PEC/Codice Univoco:</label></td>
-      <td>
-        <div class="copy-field-wrapper">
-          <input type="text" id="pec_code" name="pec_code" value="{{ business_info.pec_code if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-          <button type="button" class="copy-field-btn" data-copy-target="pec_code" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
+
+        <small class="ia-help d-block mt-2">
+          Formati: PNG, JPEG, WebP, GIF, SVG · Max 5 MB · viene ridimensionato a max 200 px di altezza
+        </small>
+
+        <!-- Visibilità logo in booking -->
+        <div class="ia-switch-row mt-3">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="logoVisibleInBooking"
+                   {% if business_info and business_info.logo_visible_in_booking_page %}checked{% endif %}>
+            <label class="form-check-label" for="logoVisibleInBooking">Mostra il logo nella pagina di prenotazione online</label>
+          </div>
+          <span id="logoVisibleStatus" class="ia-status"></span>
         </div>
-      </td>
-    </tr>
-    <tr>
-      <td><label for="phone">Telefono:</label></td>
-      <td><input type="text" id="phone" name="phone" value="{{ business_info.phone if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
-    </tr>
-    <tr>
-      <td><label for="mobile">Cellulare:</label></td>
-      <td><input type="text" id="mobile" name="mobile" value="{{ business_info.mobile if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
-    </tr>
-    <tr>
-      <td><label for="email">E-mail:</label></td>
-      <td><input type="email" id="email" name="email" value="{{ business_info.email if business_info else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
-    </tr>
-    <tr>
-      <td><label for="vat_percentage">IVA (%)</label></td>
-      <td><input type="number" step="0.01" min="0" max="100" id="vat_percentage" name="vat_percentage" value="{{ business_info.vat_percentage or 22.0 }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}></td>
-    </tr>
-{% if current_user and current_user.ruolo.value in ['admin', 'owner'] %}
-    <tr>
-      <td><label for="printer_model">Modello Stampante Fiscale</label></td>
-      <td>
-        <select id="printer_model" name="printer_model" style="min-width: 250px;">
-          <option value="rch_print_rt" {% if business_info and business_info.printer_model == 'rch_print_rt' %}selected{% endif %}>RCH Print 3.0 RT</option>
-          <option value="rch_print_f" {% if business_info and business_info.printer_model == 'rch_print_f' %}selected{% endif %}>RCH Print F</option>
-        </select>
-        <span id="printerModelStatus" style="margin-left:8px; font-size:0.9em; color:#666;"></span>
-      </td>
-    </tr>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<form method="POST" action="{{ url_for('settings.set_business_info') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="row g-3">
+
+    <!-- Dati azienda -->
+    <div class="col-lg-6">
+      <section class="ia-card h-100">
+        <div class="ia-card-head">
+          <span class="ia-card-icon"><i class="bi bi-briefcase"></i></span>
+          <div>
+            <h5>Dati azienda</h5>
+            <small>Ragione sociale e dati fiscali del centro.</small>
+          </div>
+        </div>
+        <div class="ia-card-body">
+          <div class="mb-3">
+            <label for="business_name" class="ia-label">Nome azienda</label>
+            <input type="text" class="form-control" id="business_name" name="business_name" value="{{ business_info.business_name if business_info else '' }}" required {% if ro %}readonly{% endif %}>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="vat_code" class="ia-label">P.IVA / Codice fiscale</label>
+              <div class="input-group copy-field-wrapper">
+                <input type="text" class="form-control" id="vat_code" name="vat_code" value="{{ business_info.vat_code if business_info else '' }}" {% if ro %}readonly{% endif %}>
+                <button type="button" class="btn btn-outline-secondary copy-field-btn" data-copy-target="vat_code" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label for="pec_code" class="ia-label">PEC / Codice univoco</label>
+              <div class="input-group copy-field-wrapper">
+                <input type="text" class="form-control" id="pec_code" name="pec_code" value="{{ business_info.pec_code if business_info else '' }}" {% if ro %}readonly{% endif %}>
+                <button type="button" class="btn btn-outline-secondary copy-field-btn" data-copy-target="pec_code" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <label for="vat_percentage" class="ia-label">IVA</label>
+              <div class="input-group">
+                <input type="number" step="0.01" min="0" max="100" class="form-control" id="vat_percentage" name="vat_percentage" value="{{ business_info.vat_percentage or 22.0 }}" {% if ro %}readonly{% endif %}>
+                <span class="input-group-text">%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Sede e contatti -->
+    <div class="col-lg-6">
+      <section class="ia-card h-100">
+        <div class="ia-card-head">
+          <span class="ia-card-icon"><i class="bi bi-geo-alt"></i></span>
+          <div>
+            <h5>Sede e contatti</h5>
+            <small>Indirizzo del centro e recapiti.</small>
+          </div>
+        </div>
+        <div class="ia-card-body">
+          <div class="mb-3">
+            <label for="address" class="ia-label">Indirizzo</label>
+            <input type="text" class="form-control" id="address" name="address" value="{{ business_info.address if business_info else '' }}" {% if ro %}readonly{% endif %}>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-4 col-md-3">
+              <label for="cap" class="ia-label">CAP</label>
+              <input type="text" class="form-control" id="cap" name="cap" value="{{ business_info.cap if business_info else '' }}" {% if ro %}readonly{% endif %}>
+            </div>
+            <div class="col-8 col-md-6">
+              <label for="city" class="ia-label">Città</label>
+              <input type="text" class="form-control" id="city" name="city" value="{{ business_info.city if business_info else '' }}" {% if ro %}readonly{% endif %}>
+            </div>
+            <div class="col-md-3">
+              <label for="province" class="ia-label">Provincia</label>
+              <input type="text" class="form-control" id="province" name="province" value="{{ business_info.province if business_info else '' }}" {% if ro %}readonly{% endif %}>
+            </div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="phone" class="ia-label">Telefono</label>
+              <input type="text" class="form-control" id="phone" name="phone" value="{{ business_info.phone if business_info else '' }}" {% if ro %}readonly{% endif %}>
+            </div>
+            <div class="col-md-6">
+              <label for="mobile" class="ia-label">Cellulare</label>
+              <input type="text" class="form-control" id="mobile" name="mobile" value="{{ business_info.mobile if business_info else '' }}" {% if ro %}readonly{% endif %}>
+            </div>
+            <div class="col-12">
+              <label for="email" class="ia-label">E-mail</label>
+              <input type="email" class="form-control" id="email" name="email" value="{{ business_info.email if business_info else '' }}" {% if ro %}readonly{% endif %}>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Indirizzi web -->
+    <div class="col-12">
+      <section class="ia-card">
+        <div class="ia-card-head">
+          <span class="ia-card-icon"><i class="bi bi-globe2"></i></span>
+          <div>
+            <h5>Indirizzi web</h5>
+            <small>Con il pulsante accanto a ogni campo copi l'indirizzo.</small>
+          </div>
+        </div>
+        <div class="ia-card-body">
+          <div class="row g-3 mb-3">
+            <div class="col-lg-4">
+              <label for="website" class="ia-label">Sito internet</label>
+              <div class="input-group copy-field-wrapper">
+                <input type="text" class="form-control" id="website" name="website" value="{{ business_info.website if business_info else '' }}" {% if ro %}readonly{% endif %}>
+                <button type="button" class="btn btn-outline-secondary copy-field-btn" data-copy-target="website" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <label for="web_app" class="ia-label">Web App Tosca Online</label>
+              <div class="input-group copy-field-wrapper">
+                <input type="text" class="form-control" id="web_app" name="web_app" value="{{ business_info.web_app if business_info else '' }}" {% if ro %}readonly{% endif %}>
+                <button type="button" class="btn btn-outline-secondary copy-field-btn" data-copy-target="web_app" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <label for="web_booking_page" class="ia-label">Booking online</label>
+              <div class="input-group copy-field-wrapper">
+                <input type="text" class="form-control" id="web_booking_page" name="web_booking_page" value="{{ business_info.web_booking_page if business_info else '' }}" {% if ro %}readonly{% endif %}>
+                <button type="button" class="btn btn-outline-secondary copy-field-btn" data-copy-target="web_booking_page" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
+              </div>
+            </div>
+          </div>
+
+          <label for="google_review_link" class="ia-label">Link recensioni</label>
+          <div class="input-group copy-field-wrapper">
+            <input type="text" inputmode="url" autocomplete="off" class="form-control" id="google_review_link" name="google_review_link" maxlength="500"
+                   pattern="https?://\S+" title="Un indirizzo web completo, che inizia con https://"
+                   placeholder="https://g.page/r/..."
+                   value="{{ business_info.google_review_link if business_info and business_info.google_review_link else '' }}" {% if ro %}readonly{% endif %}>
+            <button type="button" class="btn btn-outline-secondary copy-field-btn" data-copy-target="google_review_link" data-bs-toggle="tooltip" title="Copia"><i class="bi bi-clipboard"></i></button>
+          </div>
+          <small class="ia-help d-block">
+            La pagina dove i clienti lasciano la recensione. Nel messaggio di benvenuto ai nuovi clienti
+            (Marketing) il tag <strong>Link recensione</strong> <code>{% raw %}{{link_recensione}}{% endraw %}</code>
+            viene sostituito con questo indirizzo.
+          </small>
+          <details class="ia-details">
+            <summary><i class="bi bi-question-circle"></i> Non so quale link inserire: dove lo trovo?</summary>
+            <div class="ia-details-body">
+              <p class="mb-2">Il sito delle recensioni è <strong>Google</strong>: sono le stelle che i clienti vedono quando cercano
+                il centro su Google e su Maps. Serve il <strong>Profilo dell'attività su Google</strong> (gratuito, si gestisce da
+                <strong>business.google.com</strong>). Da computer:</p>
+              <ol class="mb-2 ps-4">
+                <li>Vai su <strong>business.google.com</strong> e accedi con l'account Google che gestisce l'attività.</li>
+                <li>Apri il profilo dell'attività e premi <strong>«Leggi recensioni»</strong>.</li>
+                <li>Premi <strong>«Ottieni più recensioni»</strong>.</li>
+                <li>Premi <strong>«Copia»</strong>, poi incolla qui il link e premi <strong>Salva Impostazioni</strong> in fondo alla pagina.</li>
+              </ol>
+              <p class="mb-2">Il link copiato apre il cliente direttamente sulla finestra per scrivere la recensione
+                (di solito inizia con <code>https://g.page/r/</code>). Provalo aprendolo in una nuova scheda.</p>
+              <p class="mb-0 text-muted">Il centro non ha ancora il Profilo su Google? Va creato e verificato da Google prima di poter
+                ricevere recensioni. Il tag funziona anche con il link di un altro sito di recensioni, purché inizi con https://</p>
+            </div>
+          </details>
+        </div>
+      </section>
+    </div>
+
+    <!-- Orari e chiusure -->
+    <div class="{{ 'col-lg-6' if mostra_stampante else 'col-12' }}">
+      <section class="ia-card h-100">
+        <div class="ia-card-head">
+          <span class="ia-card-icon"><i class="bi bi-clock"></i></span>
+          <div>
+            <h5>Orari e chiusure</h5>
+            <small>Le ore mostrate in Agenda e l'orario reale del centro.</small>
+          </div>
+        </div>
+        <div class="ia-card-body">
+          <div class="row g-3 mb-3">
+            <!-- Orari di visualizzazione dell'agenda -->
+            <div class="col-12">
+              <span class="ia-label">Ore visualizzate in Agenda</span>
+              <div class="input-group ia-range">
+                <label class="input-group-text" for="opening_time">Da</label>
+                <input type="time" class="form-control" id="opening_time" name="opening_time" value="{{ business_info.opening_time.strftime('%H:%M') if business_info else '' }}" required {% if ro %}readonly{% endif %}>
+                <label class="input-group-text" for="closing_time">a</label>
+                <input type="time" class="form-control" id="closing_time" name="closing_time" value="{{ business_info.closing_time.strftime('%H:%M') if business_info else '' }}" required {% if ro %}readonly{% endif %}>
+              </div>
+            </div>
+            <!-- Orari di apertura effettiva -->
+            <div class="col-12">
+              <span class="ia-label">Ore di apertura</span>
+              <div class="input-group ia-range">
+                <label class="input-group-text" for="active_opening_time">Da</label>
+                <input type="time" class="form-control" id="active_opening_time" name="active_opening_time" value="{{ business_info.active_opening_time.strftime('%H:%M') if business_info and business_info.active_opening_time else '' }}" required {% if ro %}readonly{% endif %}>
+                <label class="input-group-text" for="active_closing_time">a</label>
+                <input type="time" class="form-control" id="active_closing_time" name="active_closing_time" value="{{ business_info.active_closing_time.strftime('%H:%M') if business_info and business_info.active_closing_time else '' }}" required {% if ro %}readonly{% endif %}>
+              </div>
+            </div>
+          </div>
+
+          <span class="ia-label">Giorni di chiusura</span>
+          {% set giorni_settimana = [
+            ('monday', 'Monday', 'Lunedì'),
+            ('tuesday', 'Tuesday', 'Martedì'),
+            ('wednesday', 'Wednesday', 'Mercoledì'),
+            ('thursday', 'Thursday', 'Giovedì'),
+            ('friday', 'Friday', 'Venerdì'),
+            ('saturday', 'Saturday', 'Sabato'),
+            ('sunday', 'Sunday', 'Domenica'),
+          ] %}
+          <div class="ia-days">
+            {% for giorno_id, giorno_val, giorno_nome in giorni_settimana %}
+              <input type="checkbox" class="btn-check" id="{{ giorno_id }}" name="closing_days" value="{{ giorno_val }}" autocomplete="off"
+                  {% if business_info and giorno_val in business_info.closing_days_list %}checked{% endif %}
+                  {% if ro %}disabled{% endif %}>
+              <label class="ia-day" for="{{ giorno_id }}">{{ giorno_nome }}</label>
+            {% endfor %}
+          </div>
+          <small class="ia-help d-block mt-2">Evidenziati i giorni in cui il centro è chiuso.</small>
+        </div>
+      </section>
+    </div>
+
+    {% if mostra_stampante %}
+    <!-- Stampante fiscale -->
+    <div class="col-lg-6">
+      <section class="ia-card h-100">
+        <div class="ia-card-head">
+          <span class="ia-card-icon"><i class="bi bi-printer"></i></span>
+          <div>
+            <h5>Stampante fiscale</h5>
+            <small>Modello e indirizzo in rete della stampante RCH.</small>
+          </div>
+        </div>
+        <div class="ia-card-body">
+{% if ruolo in ['admin', 'owner'] %}
+          <div class="mb-3">
+            <label for="printer_model" class="ia-label">Modello</label>
+            <select id="printer_model" name="printer_model" class="form-select">
+              <option value="rch_print_rt" {% if business_info and business_info.printer_model == 'rch_print_rt' %}selected{% endif %}>RCH Print 3.0 RT</option>
+              <option value="rch_print_f" {% if business_info and business_info.printer_model == 'rch_print_f' %}selected{% endif %}>RCH Print F</option>
+            </select>
+            <span id="printerModelStatus" class="ia-status d-block mt-1"></span>
+          </div>
 {% endif %}
 {% if not config.get('HIDE_PRINTER_IP') %}
-    <tr>
-      <td><label for="printer_ip">IP Stampante Fiscale</label></td>
-      <td style="display: flex; align-items: center; gap: 8px;">
-        <input type="text" class="form-control" id="printer_ip" name="printer_ip"
-               value="{{ business_info.printer_ip if business_info and business_info.printer_ip else '' }}" {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-        <button type="button" id="pingPrinterButton">Test Connessione RCH</button>
-        <span id="pingPrinterStatus" style="margin-left:8px; font-size:0.9em; color:#666;"></span>
-      </td>
-    </tr>
+          <div>
+            <label for="printer_ip" class="ia-label">Indirizzo IP</label>
+            <div class="input-group">
+              <input type="text" class="form-control" id="printer_ip" name="printer_ip"
+                     value="{{ business_info.printer_ip if business_info and business_info.printer_ip else '' }}" {% if ro %}readonly{% endif %}>
+              <button type="button" id="pingPrinterButton" class="btn btn-outline-secondary">
+                <i class="bi bi-broadcast"></i> Test connessione
+              </button>
+            </div>
+            <span id="pingPrinterStatus" class="ia-status d-block mt-1"></span>
+          </div>
 {% endif %}
-  </table>
-<br>
-    <!-- Orari di visualizzazione dell'agenda -->
-    <h4>Ore Visualizzate</h4>
-    <label for="opening_time">Da:</label>
-    <input type="time" id="opening_time" name="opening_time" value="{{ business_info.opening_time.strftime('%H:%M') if business_info else '' }}" required {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-&nbsp;&nbsp;
-    <label for="closing_time">a:</label>
-    <input type="time" id="closing_time" name="closing_time" value="{{ business_info.closing_time.strftime('%H:%M') if business_info else '' }}" required {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-    <br>
-<br>
-    <!-- Orari di apertura effettiva -->
-    <h4>Ore di Apertura</h4>
-    <label for="active_opening_time">Da:</label>
-    <input type="time" id="active_opening_time" name="active_opening_time" value="{{ business_info.active_opening_time.strftime('%H:%M') if business_info and business_info.active_opening_time else '' }}" required {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-&nbsp;&nbsp;
+        </div>
+      </section>
+    </div>
+    {% endif %}
+  </div>
 
-    <label for="active_closing_time">a:</label>
-    <input type="time" id="active_closing_time" name="active_closing_time" value="{{ business_info.active_closing_time.strftime('%H:%M') if business_info and business_info.active_closing_time else '' }}" required {% if current_user.ruolo.value == 'user' %}readonly{% endif %}>
-    <br>
-<br>
-    <label>Giorni di Chiusura:</label>
-
-    <br>
-
-<input type="checkbox" id="monday" name="closing_days" value="Monday"
-    {% if 'Monday' in business_info.closing_days_list %}checked{% endif %}
-    {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-<label for="monday">Lunedì</label>
-
-<input type="checkbox" id="tuesday" name="closing_days" value="Tuesday"
-    {% if 'Tuesday' in business_info.closing_days_list %}checked{% endif %}
-    {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-<label for="tuesday">Martedì</label>
-
-    <input type="checkbox" id="wednesday" name="closing_days" value="Wednesday" 
-        {% if 'Wednesday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-        <label for="wednesday">Mercoledì</label>
-
-    <input type="checkbox" id="thursday" name="closing_days" value="Thursday" 
-        {% if 'Thursday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-  <label for="thursday">Giovedì</label>
-
-    <input type="checkbox" id="friday" name="closing_days" value="Friday" 
-        {% if 'Friday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-  <label for="friday">Venerdì</label>
-
-    <input type="checkbox" id="saturday" name="closing_days" value="Saturday" 
-        {% if 'Saturday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-  <label for="saturday">Sabato</label>
-
-    <input type="checkbox" id="sunday" name="closing_days" value="Sunday" 
-        {% if 'Sunday' in business_info.closing_days_list %}checked{% endif %} {% if current_user.ruolo.value == 'user' %}disabled{% endif %}>
-        <label for="sunday">Domenica</label>
-
-    <button type="submit">Salva Impostazioni</button>
+  <div class="ia-savebar">
+    <span class="ia-savebar-text">
+      <i class="bi bi-info-circle"></i>
+      Logo, modello della stampante e opzioni di postazione si salvano subito, senza questo pulsante.
+    </span>
+    <button type="submit" class="btn btn-primary ia-save-btn"><i class="bi bi-check2-circle"></i> Salva Impostazioni</button>
+  </div>
 </form>
-<br>
-<div class="desktop-only-setting" style="display: flex; gap: 8px; align-items: center;">
-  <label for="touchUiEnabled">Touch-screen:</label>
-  <input type="checkbox" id="touchUiEnabled">
-  <small style="margin-left:8px; color:#666;">Abilita interfaccia touch per i blocchi agenda (su questo computer)</small>
-</div>
+
+<div class="row g-3 mt-2">
+  <!-- Questa postazione -->
+  <div class="col-lg-6 desktop-only-setting">
+    <section class="ia-card h-100">
+      <div class="ia-card-head">
+        <span class="ia-card-icon"><i class="bi bi-display"></i></span>
+        <div>
+          <h5>Questa postazione</h5>
+          <small>Valgono solo su questo computer.</small>
+        </div>
+      </div>
+      <div class="ia-card-body">
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input" type="checkbox" role="switch" id="touchUiEnabled">
+          <label class="form-check-label" for="touchUiEnabled">
+            <strong>Touch-screen</strong>
+            <span class="ia-help d-block mt-0">Abilita l'interfaccia touch per i blocchi dell'Agenda</span>
+          </label>
+        </div>
 {# ===================================================================
    MODALITA' SCURA AD ALTO CONTRASTO (ipovedenti) - SOSPESA E SGANCIATA
    -------------------------------------------------------------------
@@ -315,18 +434,18 @@
    questo che qui sotto non serve piu' alcuna riga di "spegnimento forzato".
    =================================================================== #}
 {# --- SGANCIO ALTO CONTRASTO (3 di 4): l'interruttore ---
-<br>
-<div style="display: flex; gap: 8px; align-items: center;">
-  <label for="darkA11yEnabled">Modalit&agrave; scura ad alto contrasto:</label>
-  <input type="checkbox" id="darkA11yEnabled">
-  <small style="margin-left:8px; color:#666;">
-    Pensata per <strong>ipovedenti</strong>: fondo scuro, testo chiaro e contrasto
-    minimo 7:1 (WCAG 2.2 AAA). In agenda tutti i blocchi vengono scuriti e i colori
-    troppo chiari non sono pi&ugrave; impostabili (su questo computer)
-  </small>
-</div>
+        <div class="form-check form-switch mt-3 mb-0">
+          <input class="form-check-input" type="checkbox" role="switch" id="darkA11yEnabled">
+          <label class="form-check-label" for="darkA11yEnabled">
+            <strong>Modalit&agrave; scura ad alto contrasto</strong>
+            <span class="ia-help d-block mt-0">
+              Pensata per <strong>ipovedenti</strong>: fondo scuro, testo chiaro e contrasto
+              minimo 7:1 (WCAG 2.2 AAA). In agenda tutti i blocchi vengono scuriti e i colori
+              troppo chiari non sono pi&ugrave; impostabili
+            </span>
+          </label>
+        </div>
 #}
-<br>
 <!-- Zoom Navigator disabilitato permanentemente (non più usato)
 <div class="desktop-only-setting" style="display: flex; gap: 8px; align-items: center;">
   <label for="zoomNavigatorEnabled">Zoom Navigator:</label>
@@ -334,12 +453,6 @@
   <small style="margin-left:8px; color:#666;">Mostra controlli zoom (+/−) nell'agenda (su questo computer)</small>
 </div>
 -->
-<style>
-  @media (max-width: 1200px) {
-    .desktop-only-setting { display: none !important; }
-  }
-</style>
-<br>
 {# Tasto Refresh disabilitato permanentemente (non piu' usato) - mantenuto per eventuale ripristino
 <tr>
   <td><label for="refreshButtonEnabled">Tasto Refresh:</label></td>
@@ -349,49 +462,101 @@
   </td>
 </tr>
 #}
-<br><br><br>
-</div>
-
-<!-- Sezione "Cassa su Web App" — SOLO owner.
-     L'owner puo' abilitare/disabilitare la visibilita' della sezione Cassa
-     quando l'app gira in cloud (wsgi.py). Sul .exe locale la Cassa e' sempre
-     visibile e questo toggle non ha effetto. -->
-{% if current_user and current_user.ruolo and current_user.ruolo.value == 'owner' %}
-<div style="margin-top: 30px; padding: 20px; border: 2px solid #b8809d;
-            border-radius: 8px; background: #faf5f8;">
-  <h5 style="margin-bottom: 6px; color: #723a57;">
-    <i class="bi bi-cash-coin"></i> Cassa su Web App
-    <small style="color:#999; font-weight:normal;">(visibile solo a owner)</small>
-  </h5>
-  <p style="font-size: 0.9em; color:#666; margin-bottom: 12px;">
-    Abilita la sezione <strong>Cassa</strong> quando Tosca gira da Web App (cloud).
-    Sull'eseguibile <strong>.exe locale</strong> la Cassa e' sempre visibile e
-    questo toggle non ha effetto.<br>
-    <span style="color:#a05050;">
-      <i class="bi bi-exclamation-triangle"></i>
-      Nota: la stampante fiscale RCH risponde solo a dispositivi della stessa LAN del salone,
-      quindi dal cloud la stampa non funzionera'. Usa questo toggle per consultazione
-      o setup particolari.
-    </span>
-  </p>
-  <div class="form-check form-switch" style="font-size: 1.05rem;">
-    <input class="form-check-input" type="checkbox" role="switch"
-           id="toggleCassaOnWeb"
-           {% if cassa_enabled_on_web %}checked{% endif %}>
-    <label class="form-check-label" for="toggleCassaOnWeb">
-      <span id="toggleCassaOnWebLabel">
-        {% if cassa_enabled_on_web %}Cassa <strong style="color:#2e7d32;">ABILITATA</strong> da Web App
-        {% else %}Cassa <strong style="color:#c62828;">DISABILITATA</strong> da Web App
-        {% endif %}
-      </span>
-    </label>
+      </div>
+    </section>
   </div>
-  <div id="toggleCassaOnWebStatus" style="margin-top: 8px; font-size:0.85em; color:#666;"></div>
-  <small style="display:block; margin-top:6px; color:#999;">
-    Modifica effettiva dopo il prossimo caricamento di una pagina.
-  </small>
+
+  <!-- Sezione Aggiornamenti (solo istanza locale, non web app) -->
+  {% if not hide_cassa %}
+  <div class="col-lg-6 desktop-only-setting">
+    <section class="ia-card h-100">
+      <div class="ia-card-head">
+        <span class="ia-card-icon"><i class="bi bi-arrow-repeat"></i></span>
+        <div>
+          <h5>Aggiornamenti App</h5>
+          <small id="updateStatus"><span id="currentVersion">Versione attuale: -</span></small>
+        </div>
+      </div>
+      <div class="ia-card-body">
+        <div class="d-flex flex-wrap gap-2">
+          <button type="button" id="btnCheckUpdate" class="btn btn-outline-primary" onclick="checkForUpdates()">
+            Controlla aggiornamenti
+          </button>
+          <!-- Pulsante unico: scarica + installa -->
+          <button type="button" id="btnUpdateNow" class="btn btn-success" style="display:none;" onclick="startUpdate()">
+            Aggiorna ora
+          </button>
+        </div>
+        <!-- Barra di progresso download -->
+        <div id="downloadProgressContainer" style="display:none; margin-top:15px;">
+          <div class="mb-1">
+            <span id="downloadProgressLabel" class="fw-bold">Download: 0%</span>
+          </div>
+          <div class="ia-progress">
+            <div id="downloadProgressBar" class="ia-progress-bar" style="width:0%;"></div>
+          </div>
+        </div>
+        <!-- Info aggiornamento disponibile -->
+        <div id="updateInfo" style="margin-top: 15px; display:none;">
+          <strong>Nuova versione: <span id="remoteVersion"></span></strong>
+          <div id="releaseNotes" class="ia-release-notes"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+  {% endif %}
+
+  <!-- Sezione "Cassa su Web App" — SOLO owner.
+       L'owner puo' abilitare/disabilitare la visibilita' della sezione Cassa
+       quando l'app gira in cloud (wsgi.py). Sul .exe locale la Cassa e' sempre
+       visibile e questo toggle non ha effetto. -->
+  {% if ruolo == 'owner' %}
+  <div class="col-12">
+    <section class="ia-card ia-card-owner">
+      <div class="ia-card-head">
+        <span class="ia-card-icon"><i class="bi bi-cash-coin"></i></span>
+        <div>
+          <h5>Cassa su Web App <span class="ia-role ia-role-owner ms-1">solo owner</span></h5>
+          <small>Abilita la sezione <strong>Cassa</strong> quando Tosca gira da Web App (cloud).</small>
+        </div>
+      </div>
+      <div class="ia-card-body">
+        <p class="ia-help mb-2">
+          Sull'eseguibile <strong>.exe locale</strong> la Cassa è sempre visibile e questo interruttore non ha effetto.
+        </p>
+        <div class="ia-warn mb-3">
+          <i class="bi bi-exclamation-triangle"></i>
+          La stampante fiscale RCH risponde solo ai dispositivi della stessa rete del salone,
+          quindi dal cloud la stampa non funziona. Usa questo interruttore per consultazione
+          o configurazioni particolari.
+        </div>
+        <div class="form-check form-switch" style="font-size: 1.05rem;">
+          <input class="form-check-input" type="checkbox" role="switch"
+                 id="toggleCassaOnWeb"
+                 {% if cassa_enabled_on_web %}checked{% endif %}>
+          <label class="form-check-label" for="toggleCassaOnWeb">
+            <span id="toggleCassaOnWebLabel">
+              {% if cassa_enabled_on_web %}Cassa <strong style="color:#2e7d32;">ABILITATA</strong> da Web App
+              {% else %}Cassa <strong style="color:#c62828;">DISABILITATA</strong> da Web App
+              {% endif %}
+            </span>
+          </label>
+        </div>
+        <div id="toggleCassaOnWebStatus" style="margin-top: 8px; font-size:0.85em; color:#666;"></div>
+        <small class="ia-help d-block mt-1">Modifica effettiva dopo il prossimo caricamento di una pagina.</small>
+      </div>
+    </section>
+  </div>
+  {% endif %}
 </div>
 
+</div>
+<style>
+  @media (max-width: 1200px) {
+    .desktop-only-setting { display: none !important; }
+  }
+</style>
+{% if ruolo == 'owner' %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   var sw = document.getElementById('toggleCassaOnWeb');
@@ -445,37 +610,6 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
-{% endif %}
-
-<!-- Sezione Aggiornamenti (solo istanza locale, non web app) -->
-{% if not hide_cassa %}
-<div class="desktop-only-setting" style="margin-top: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;">
-  <h5 style="margin-bottom: 15px;">Aggiornamenti App</h5>
-  <div id="updateStatus" style="margin-bottom: 15px;">
-    <span id="currentVersion">Versione attuale: -</span>
-  </div>
-  <button type="button" id="btnCheckUpdate" class="btn btn-primary" onclick="checkForUpdates()">
-    Controlla aggiornamenti
-  </button>
-  <!-- Pulsante unico: scarica + installa -->
-  <button type="button" id="btnUpdateNow" class="btn btn-success" style="display:none;" onclick="startUpdate()">
-    Aggiorna ora
-  </button>
-  <!-- Barra di progresso download -->
-  <div id="downloadProgressContainer" style="display:none; margin-top:15px;">
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
-      <span id="downloadProgressLabel" style="font-weight:bold;">Download: 0%</span>
-    </div>
-    <div style="width:100%; background:#e0e0e0; border-radius:6px; height:22px; overflow:hidden;">
-      <div id="downloadProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg,#28a745,#20c997); transition:width 0.2s; border-radius:6px;"></div>
-    </div>
-  </div>
-  <!-- Info aggiornamento disponibile -->
-  <div id="updateInfo" style="margin-top: 15px; display:none;">
-    <strong>Nuova versione: <span id="remoteVersion"></span></strong>
-    <div id="releaseNotes" style="margin-top:10px; padding:10px; background:#fff; border:1px solid #ccc; border-radius:4px; max-height:200px; overflow-y:auto;"></div>
-  </div>
-</div>
 {% endif %}
 
 <script>
@@ -888,99 +1022,325 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <style>
-      /* Stili bottoni logo */
-    .logo-btn {
-        display: inline-block;
-        padding: 8px 16px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: normal;
-        text-decoration: none;
-        line-height: 1.4;
-        vertical-align: middle;
-    }
-    .logo-btn-primary {
-        background: #007bff;
-        color: white;
-    }
-    .logo-btn-primary:hover {
-        background: #0056b3;
-    }
-    .logo-btn-danger {
-        background: #dc3545;
-        color: white;
-    }
-    .logo-btn-danger:hover {
-        background: #c82333;
-    }
-    .logo-btn-success {
-        background: #28a745;
-        color: white;
-    }
-    .logo-btn-success:hover {
-        background: #218838;
-    }
-    
-    table {
-      border-collapse: separate;
-      border-spacing: 8px 4px;
-      width: 90%;
-    }
-    td:first-child {
-      width: 20%;
-      min-width: 120px;
-    }
-    td:nth-child(2) {
-      width: 60%;
-    }
-    td:nth-child(2) input[type="text"],
-    td:nth-child(2) input[type="email"] {
-      width: 98%;
-      max-width: 600px;
-      box-sizing: border-box;
-    }
-    label {
-      font-weight: bold;
+    /* Info Azienda: card nello stile delle altre pagine Tools (Pacchetti, Solarium) */
+    .ia-page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 16px 48px;
     }
 
-    /* Wrapper input + pulsante Copia */
-    .copy-field-wrapper {
+    /* Riga "Loggato come / Ruolo" */
+    .ia-whoami {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 10px;
+      margin: 4px 0 14px;
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #6c7a89;
+    }
+    .ia-whoami strong {
+      color: #2f3b4b;
+      font-size: 0.8rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .ia-whoami-sep { color: #c5ccd6; }
+    .ia-role {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      vertical-align: middle;
+      background: #eceff3;
+      color: #56616f;
+    }
+    .ia-role-owner { background: #fde7ee; color: #c2185b; }
+    .ia-role-admin { background: #e6eef7; color: #215586; }
+
+    /* Intestazione pagina */
+    .ia-head {
       display: flex;
       align-items: center;
-      gap: 6px;
-      width: 100%;
-      max-width: 600px;
+      gap: 14px;
+      margin-bottom: 18px;
     }
-    .copy-field-wrapper input[type="text"] {
-      flex: 1 1 auto;
-      min-width: 0;
-      width: auto !important;
-      max-width: none !important;
-      margin: 0;
-    }
-    .copy-field-btn {
+    .ia-head-icon {
+      width: 46px;
+      height: 46px;
       flex-shrink: 0;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fde7ee;
+      color: #e72c64;
+      font-size: 1.35rem;
+    }
+    .ia-title {
+      margin: 0;
+      font-size: 1.45rem;
+      font-weight: 700;
+    }
+    .ia-subtitle {
+      color: #6c7a89;
+      font-size: 0.9rem;
+    }
+
+    .ia-note {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      padding: 9px 14px;
+      border-radius: 10px;
+      background: #f3f5f9;
+      color: #4a5563;
+      font-size: 0.88rem;
+    }
+    .ia-alert {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 10px;
+    }
+
+    /* Card */
+    .ia-card {
+      background: linear-gradient(180deg, #ffffff 0%, #fbfbfd 100%);
+      border: 1px solid #eef0f4;
+      border-radius: 14px;
+      box-shadow: 2px 2px 8px #e0e0e0, -2px -2px 8px #ffffff;
+    }
+    .ia-card-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid #eef0f4;
+    }
+    .ia-card-head h5 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #2f3b4b;
+    }
+    .ia-card-head small {
+      display: block;
+      margin-top: 1px;
+      font-size: 0.8rem;
+      color: #6c7a89;
+    }
+    .ia-card-icon {
+      width: 34px;
+      height: 34px;
+      flex-shrink: 0;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #eef3f9;
+      color: #215586;
+      font-size: 1.05rem;
+    }
+    .ia-card-body { padding: 16px 18px 18px; }
+
+    .ia-card-owner { border-left: 4px solid #b8809d; }
+    .ia-card-owner .ia-card-icon { background: #faf0f5; color: #723a57; }
+
+    .ia-label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #5b6878;
+    }
+    .ia-help {
+      margin-top: 5px;
+      font-size: 0.8rem;
+      color: #6c7a89;
+    }
+    .ia-status { font-size: 0.85em; color: #666; }
+    .ia-filename { color: #333; font-style: italic; font-size: 0.9rem; }
+
+    /* Campi in sola lettura (ruolo user) */
+    .ia-page .form-control[readonly] {
+      background: #f4f6f9;
+      color: #4a5563;
+      box-shadow: none;
+    }
+
+    /* Logo */
+    .ia-logo {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .ia-logo-preview {
+      min-width: 170px;
+      text-align: center;
+    }
+    .ia-logo-frame {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 34px;
-      height: 34px;
-      padding: 0;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      background: #f8f9fa;
-      color: #495057;
+      padding: 8px;
+      border: 1px solid #e3e7ee;
+      border-radius: 10px;
+      background: #fff;
+    }
+    .ia-logo-frame img {
+      max-height: 100px;
+      max-width: 200px;
+    }
+    .ia-logo-empty {
+      width: 170px;
+      height: 96px;
+      border: 2px dashed #cbd3de;
+      border-radius: 10px;
+      background: #fbfcfe;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      color: #9aa5b1;
+      font-size: 0.85rem;
+    }
+    .ia-logo-empty i { font-size: 1.5rem; }
+    .ia-logo-actions { flex: 1 1 320px; }
+    .ia-switch-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding-top: 12px;
+      border-top: 1px solid #eef0f4;
+    }
+
+    /* Link recensioni: istruzioni */
+    .ia-details { margin-top: 8px; font-size: 0.88rem; }
+    .ia-details summary {
       cursor: pointer;
-      font-size: 16px;
-      line-height: 1;
+      color: #215586;
+      font-weight: 600;
+    }
+    .ia-details-body {
+      margin-top: 8px;
+      padding: 12px 14px;
+      border: 1px solid #e6ebf2;
+      border-radius: 10px;
+      background: #f7f9fc;
+      color: #444;
+    }
+
+    .ia-range { max-width: 360px; }
+
+    /* Giorni di chiusura */
+    .ia-days {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ia-day {
+      margin: 0;
+      padding: 6px 14px;
+      border: 1px solid #d9deea;
+      border-radius: 999px;
+      background: #fff;
+      color: #3f4a59;
+      font-size: 0.88rem;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .ia-day:hover { border-color: #e38fb2; }
+    .btn-check:checked + .ia-day {
+      background: #fde7ee;
+      border-color: #e72c64;
+      color: #c2185b;
+      font-weight: 700;
+    }
+    .btn-check:focus-visible + .ia-day {
+      box-shadow: 0 0 0 0.2rem rgba(231, 44, 100, 0.18);
+    }
+    .btn-check:disabled + .ia-day {
+      cursor: default;
+      opacity: 0.8;
+    }
+    .btn-check:disabled + .ia-day:hover { border-color: #d9deea; }
+    .btn-check:disabled:checked + .ia-day:hover { border-color: #e72c64; }
+
+    /* Barra di salvataggio */
+    .ia-savebar {
+      position: sticky;
+      bottom: 12px;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+      margin-top: 16px;
+      padding: 10px 12px 10px 18px;
+      border: 1px solid #eef0f4;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 6px 22px rgba(26, 48, 74, 0.12);
+    }
+    .ia-savebar-text { font-size: 0.82rem; color: #6c7a89; }
+    .ia-save-btn { font-weight: 600; padding: 8px 20px; }
+
+    .ia-warn {
+      padding: 9px 12px;
+      border-radius: 10px;
+      background: #fdf3f3;
+      color: #a05050;
+      font-size: 0.85rem;
+    }
+
+    /* Aggiornamenti */
+    .ia-progress {
+      width: 100%;
+      height: 22px;
+      overflow: hidden;
+      border-radius: 6px;
+      background: #e0e0e0;
+    }
+    .ia-progress-bar {
+      height: 100%;
+      border-radius: 6px;
+      background: linear-gradient(90deg, #28a745, #20c997);
+      transition: width 0.2s;
+    }
+    .ia-release-notes {
+      margin-top: 10px;
+      padding: 10px;
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #e3e7ee;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    /* Pulsante Copia accanto ai campi */
+    .copy-field-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       transition: background-color 0.15s, color 0.15s, border-color 0.15s;
     }
-    .copy-field-btn:hover {
-      background: #e9ecef;
-    }
-    .copy-field-btn.copied {
+    .copy-field-btn.copied,
+    .copy-field-btn.copied:hover {
       background: #28a745;
       color: #fff;
       border-color: #28a745;

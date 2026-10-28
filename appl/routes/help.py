@@ -2600,7 +2600,7 @@ I campi aziendali sono modificabili dagli utenti con ruolo <span class=\"help-st
 Per questo è importante inserire diciture esatte e professionali (evita abbreviazioni casuali o refusi).
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ LINK RECENSIONI</span>
-Nella tabella dei dati trovi il campo <span class=\"help-strong-dark\">Link recensioni</span>: qui si incolla l'indirizzo della pagina dove i clienti lasciano la recensione su Google. È il link che il tag <span class=\"help-strong-dark\">Link recensione</span> inserisce nel messaggio di benvenuto ai nuovi clienti. Sotto al campo c'è "dove lo trovo?", con i passaggi per copiarlo dal Profilo dell'attività su Google. Dettagli: <span class=\"help-strong-dark\">[[MARKETING: BENVENUTO E RECENSIONI|marketing_recensioni]]</span>.
+Nel riquadro <span class=\"help-strong-dark\">Indirizzi web</span> trovi il campo <span class=\"help-strong-dark\">Link recensioni</span>: qui si incolla l'indirizzo della pagina dove i clienti lasciano la recensione su Google. È il link che il tag <span class=\"help-strong-dark\">Link recensione</span> inserisce nel messaggio di benvenuto ai nuovi clienti. Sotto al campo c'è "dove lo trovo?", con i passaggi per copiarlo dal Profilo dell'attività su Google. Dettagli: <span class=\"help-strong-dark\">[[MARKETING: BENVENUTO E RECENSIONI|marketing_recensioni]]</span>.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ LOGO NEGOZIO</span>
 In questa sezione puoi caricare/aggiornare il <span class=\"help-strong-dark\">logo del negozio</span>.
