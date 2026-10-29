@@ -1360,7 +1360,7 @@ Nel dubbio non compare: meglio un benvenuto in meno che scrivere "il tuo primo t
 Se chiudi il pannello senza inviare, il messaggio non viene riproposto per quel cliente: dall'incasso successivo non risulta più nuovo.
 
 <span class="help-strong-dark help-subtitle-pill">▸ DOVE SI SCRIVE IL LINK RECENSIONI</span>
-Il link si scrive in <span class="help-strong-dark">Info Azienda</span>, nel campo <span class="help-strong-dark">Link recensioni</span>, e si salva con <span class="help-strong-dark">Salva Impostazioni</span>. Nella pagina Marketing lo vedi riportato nel riquadro "Link per le recensioni", con il pulsante per andare a modificarlo.
+Il link si scrive in <span class="help-strong-dark">Info Azienda</span>, nel campo <span class="help-strong-dark">Link recensioni</span>, e si salva con <span class="help-strong-dark">Salva</span>, nella barra che compare in fondo alla pagina quando c'è qualcosa da salvare. Nella pagina Marketing lo vedi riportato nel riquadro "Link per le recensioni", con il pulsante per andare a modificarlo.
 
 <span class="help-strong-dark help-subtitle-pill">▸ QUALE SITO E COME SI TROVA IL LINK</span>
 Il sito delle recensioni è <span class="help-strong-dark">Google</span>: sono le stelle che i clienti vedono quando cercano il centro su Google e su Maps. Serve il <span class="help-strong-dark">Profilo dell'attività su Google</span> (gratuito), che si gestisce da business.google.com. Da computer:
@@ -1368,7 +1368,7 @@ Il sito delle recensioni è <span class="help-strong-dark">Google</span>: sono l
 2️⃣ apri il profilo dell'attività e premi <span class="help-strong-dark">«Leggi recensioni»</span>
 3️⃣ premi <span class="help-strong-dark">«Ottieni più recensioni»</span>
 4️⃣ premi <span class="help-strong-dark">«Copia»</span>
-5️⃣ in Tosca apri Info Azienda, incolla il link nel campo Link recensioni e premi Salva Impostazioni
+5️⃣ in Tosca apri Info Azienda, incolla il link nel campo Link recensioni e premi Salva nella barra in fondo alla pagina
 
 Il link copiato porta il cliente direttamente alla finestra per scrivere la recensione e di solito inizia con https://g.page/r/. Provalo aprendolo in una nuova scheda prima di salvarlo. Se non inizia con https:// il programma non lo salva e te lo segnala.
 
@@ -2601,6 +2601,9 @@ Per questo è importante inserire diciture esatte e professionali (evita abbrevi
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ LINK RECENSIONI</span>
 Nel riquadro <span class=\"help-strong-dark\">Indirizzi web</span> trovi il campo <span class=\"help-strong-dark\">Link recensioni</span>: qui si incolla l'indirizzo della pagina dove i clienti lasciano la recensione su Google. È il link che il tag <span class=\"help-strong-dark\">Link recensione</span> inserisce nel messaggio di benvenuto ai nuovi clienti. Sotto al campo c'è "dove lo trovo?", con i passaggi per copiarlo dal Profilo dell'attività su Google. Dettagli: <span class=\"help-strong-dark\">[[MARKETING: BENVENUTO E RECENSIONI|marketing_recensioni]]</span>.
+
+<span class=\"help-strong-dark help-subtitle-pill\">▸ COME SI SALVA</span>
+Ogni modifica della pagina (campi, giorni di chiusura, interruttori, logo) resta in sospeso finché non premi <span class=\"help-strong-dark\">Salva</span> nella barra che compare in fondo. <span class=\"help-strong-dark\">Annulla</span> rimette tutto com'era; se esci dalla pagina con modifiche in sospeso, Tosca chiede conferma. Lo stesso vale per la scheda cliente che si apre con la "i" in Agenda.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ LOGO NEGOZIO</span>
 In questa sezione puoi caricare/aggiornare il <span class=\"help-strong-dark\">logo del negozio</span>.

@@ -42,6 +42,11 @@
   {% endfor %}
 {% endwith %}
 
+{# Un solo modulo per tutta la pagina: ogni modifica (campi, interruttori, logo)
+   resta in sospeso finche' non si preme Salva nella barra in fondo. #}
+<form id="iaForm" method="POST" action="{{ url_for('settings.set_business_info') }}" enctype="multipart/form-data" data-solo-lettura="{{ '1' if ro else '0' }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
 <!-- Sezione Logo -->
 <section class="ia-card mb-3">
   <div class="ia-card-head">
@@ -53,49 +58,34 @@
   </div>
   <div class="ia-card-body">
     <div class="ia-logo">
-      <!-- Anteprima logo corrente -->
+      <!-- Anteprima: il logo salvato, quello scelto e non ancora salvato, o nessuno -->
+      {% set ha_logo = business_info and business_info.logo_image %}
       <div class="ia-logo-preview">
-        {% if business_info and business_info.logo_image %}
-          <div class="ia-logo-frame">
-            <img src="{{ url_for('settings.get_logo') }}?t={{ range(1000000) | random }}" alt="Logo negozio">
-          </div>
-          <small class="ia-help">{{ business_info.logo_filename or 'logo' }}</small>
-        {% else %}
-          <div class="ia-logo-empty">
-            <i class="bi bi-image"></i>
-            <span>Nessun logo</span>
-          </div>
-        {% endif %}
+        <div class="ia-logo-frame" id="iaLogoFrame" {% if not ha_logo %}hidden{% endif %}>
+          <img id="iaLogoImg" src="{{ (url_for('settings.get_logo') ~ '?t=' ~ (range(1000000) | random)) if ha_logo else '' }}" alt="Logo negozio">
+        </div>
+        <div class="ia-logo-empty" id="iaLogoEmpty" {% if ha_logo %}hidden{% endif %}>
+          <i class="bi bi-image"></i>
+          <span id="iaLogoEmptyText">Nessun logo</span>
+        </div>
+        <small class="ia-help d-block" id="iaLogoName">{{ (business_info.logo_filename or 'logo') if ha_logo else '' }}</small>
       </div>
 
       {% if not ro %}
       <div class="ia-logo-actions">
         <div class="d-flex flex-wrap align-items-center gap-2">
-          <!-- Form upload -->
-          <form method="POST" action="{{ url_for('settings.upload_logo') }}" enctype="multipart/form-data" id="logoUploadForm" class="d-inline-flex flex-wrap align-items-center gap-2">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label for="logo_file" class="btn btn-outline-primary btn-sm mb-0">
-              <i class="bi bi-folder2-open"></i> Seleziona file...
-            </label>
-            <input type="file"
-                   name="logo"
-                   id="logo_file"
-                   accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-                   style="display: none;">
-            <span id="selectedFileName" class="ia-filename"></span>
-            <button type="submit" id="uploadLogoBtn" class="btn btn-success btn-sm" style="display: none;">
-              <i class="bi bi-upload"></i> Carica logo
-            </button>
-          </form>
-
-          {% if business_info and business_info.logo_image %}
-          <!-- Form elimina -->
-          <form method="POST" action="{{ url_for('settings.delete_logo') }}" class="d-inline"
-                onsubmit="return confirm('Sei sicuro di voler eliminare il logo?');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> Elimina logo</button>
-          </form>
-          {% endif %}
+          <label for="logo_file" class="btn btn-outline-primary btn-sm mb-0">
+            <i class="bi bi-folder2-open"></i> Scegli immagine...
+          </label>
+          <input type="file"
+                 name="logo"
+                 id="logo_file"
+                 accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                 style="display: none;">
+          <button type="button" id="iaLogoRemove" class="btn btn-outline-danger btn-sm" {% if not ha_logo %}hidden{% endif %}>
+            <i class="bi bi-trash"></i> Elimina logo
+          </button>
+          <input type="hidden" name="logo_elimina" id="logo_elimina" value="">
         </div>
 
         <small class="ia-help d-block mt-2">
@@ -104,13 +94,13 @@
 
         <!-- Visibilità logo in booking -->
         <div class="ia-switch-row mt-3">
+          <input type="hidden" name="logo_visibile_presente" value="1">
           <div class="form-check form-switch mb-0">
             <input class="form-check-input" type="checkbox" role="switch"
-                   id="logoVisibleInBooking"
+                   id="logoVisibleInBooking" name="logo_visible_in_booking_page" value="1"
                    {% if business_info and business_info.logo_visible_in_booking_page %}checked{% endif %}>
             <label class="form-check-label" for="logoVisibleInBooking">Mostra il logo nella pagina di prenotazione online</label>
           </div>
-          <span id="logoVisibleStatus" class="ia-status"></span>
         </div>
       </div>
       {% endif %}
@@ -118,8 +108,6 @@
   </div>
 </section>
 
-<form method="POST" action="{{ url_for('settings.set_business_info') }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="row g-3">
 
     <!-- Dati azienda -->
@@ -269,7 +257,7 @@
                 <li>Vai su <strong>business.google.com</strong> e accedi con l'account Google che gestisce l'attività.</li>
                 <li>Apri il profilo dell'attività e premi <strong>«Leggi recensioni»</strong>.</li>
                 <li>Premi <strong>«Ottieni più recensioni»</strong>.</li>
-                <li>Premi <strong>«Copia»</strong>, poi incolla qui il link e premi <strong>Salva Impostazioni</strong> in fondo alla pagina.</li>
+                <li>Premi <strong>«Copia»</strong>, poi incolla qui il link e premi <strong>Salva</strong> nella barra che compare in fondo alla pagina.</li>
               </ol>
               <p class="mb-2">Il link copiato apre il cliente direttamente sulla finestra per scrivere la recensione
                 (di solito inizia con <code>https://g.page/r/</code>). Provalo aprendolo in una nuova scheda.</p>
@@ -325,6 +313,9 @@
             ('saturday', 'Saturday', 'Sabato'),
             ('sunday', 'Sunday', 'Domenica'),
           ] %}
+          {# Le caselle non spuntate non viaggiano: il segnaposto dice al server che
+             i giorni di chiusura fanno parte di questo invio (vedi set_business_info). #}
+          <input type="hidden" name="closing_days_presenti" value="1">
           <div class="ia-days">
             {% for giorno_id, giorno_val, giorno_nome in giorni_settimana %}
               <input type="checkbox" class="btn-check" id="{{ giorno_id }}" name="closing_days" value="{{ giorno_val }}" autocomplete="off"
@@ -357,14 +348,13 @@
               <option value="rch_print_rt" {% if business_info and business_info.printer_model == 'rch_print_rt' %}selected{% endif %}>RCH Print 3.0 RT</option>
               <option value="rch_print_f" {% if business_info and business_info.printer_model == 'rch_print_f' %}selected{% endif %}>RCH Print F</option>
             </select>
-            <span id="printerModelStatus" class="ia-status d-block mt-1"></span>
           </div>
 {% endif %}
 {% if not config.get('HIDE_PRINTER_IP') %}
           <div>
             <label for="printer_ip" class="ia-label">Indirizzo IP</label>
             <div class="input-group">
-              <input type="text" class="form-control" id="printer_ip" name="printer_ip"
+              <input type="text" class="form-control" id="printer_ip" name="printer_ip" data-ia-no-track
                      value="{{ business_info.printer_ip if business_info and business_info.printer_ip else '' }}" {% if ro %}readonly{% endif %}>
               <button type="button" id="pingPrinterButton" class="btn btn-outline-secondary">
                 <i class="bi bi-broadcast"></i> Test connessione
@@ -379,15 +369,6 @@
     {% endif %}
   </div>
 
-  <div class="ia-savebar">
-    <span class="ia-savebar-text">
-      <i class="bi bi-info-circle"></i>
-      Logo, modello della stampante e opzioni di postazione si salvano subito, senza questo pulsante.
-    </span>
-    <button type="submit" class="btn btn-primary ia-save-btn"><i class="bi bi-check2-circle"></i> Salva Impostazioni</button>
-  </div>
-</form>
-
 <div class="row g-3 mt-2">
   <!-- Questa postazione -->
   <div class="col-lg-6 desktop-only-setting">
@@ -401,7 +382,7 @@
       </div>
       <div class="ia-card-body">
         <div class="form-check form-switch mb-0">
-          <input class="form-check-input" type="checkbox" role="switch" id="touchUiEnabled">
+          <input class="form-check-input" type="checkbox" role="switch" id="touchUiEnabled" data-ia-local="touch">
           <label class="form-check-label" for="touchUiEnabled">
             <strong>Touch-screen</strong>
             <span class="ia-help d-block mt-0">Abilita l'interfaccia touch per i blocchi dell'Agenda</span>
@@ -530,9 +511,10 @@
           quindi dal cloud la stampa non funziona. Usa questo interruttore per consultazione
           o configurazioni particolari.
         </div>
+        <input type="hidden" name="cassa_web_presente" value="1">
         <div class="form-check form-switch" style="font-size: 1.05rem;">
           <input class="form-check-input" type="checkbox" role="switch"
-                 id="toggleCassaOnWeb"
+                 id="toggleCassaOnWeb" name="cassa_enabled_on_web" value="1"
                  {% if cassa_enabled_on_web %}checked{% endif %}>
           <label class="form-check-label" for="toggleCassaOnWeb">
             <span id="toggleCassaOnWebLabel">
@@ -542,13 +524,22 @@
             </span>
           </label>
         </div>
-        <div id="toggleCassaOnWebStatus" style="margin-top: 8px; font-size:0.85em; color:#666;"></div>
-        <small class="ia-help d-block mt-1">Modifica effettiva dopo il prossimo caricamento di una pagina.</small>
+        <small class="ia-help d-block mt-1">Diventa effettivo con Salva: la pagina si ricarica da sola.</small>
       </div>
     </section>
   </div>
   {% endif %}
 </div>
+
+{# Barra di salvataggio: compare solo quando c'e' qualcosa da salvare. #}
+<div class="ia-savebar" id="iaSaveBar" hidden>
+  <span class="ia-savebar-text" id="iaSaveBarText"></span>
+  <div class="ia-savebar-actions" id="iaSaveBarActions">
+    <button type="button" class="btn btn-outline-secondary" id="iaUndoBtn">Annulla</button>
+    <button type="submit" class="btn btn-primary ia-save-btn" id="iaSaveBtn"><i class="bi bi-check2-circle"></i> Salva</button>
+  </div>
+</div>
+</form>
 
 </div>
 <style>
@@ -556,62 +547,6 @@
     .desktop-only-setting { display: none !important; }
   }
 </style>
-{% if ruolo == 'owner' %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  var sw = document.getElementById('toggleCassaOnWeb');
-  if (!sw) return;
-  var lbl = document.getElementById('toggleCassaOnWebLabel');
-  var status = document.getElementById('toggleCassaOnWebStatus');
-  function setLabel(enabled) {
-    if (!lbl) return;
-    if (enabled) {
-      lbl.innerHTML = 'Cassa <strong style="color:#2e7d32;">ABILITATA</strong> da Web App';
-    } else {
-      lbl.innerHTML = 'Cassa <strong style="color:#c62828;">DISABILITATA</strong> da Web App';
-    }
-  }
-  sw.addEventListener('change', function() {
-    var enabled = sw.checked;
-    sw.disabled = true;
-    status.textContent = 'Salvataggio in corso...';
-    status.style.color = '#666';
-    var csrfToken = document.querySelector('meta[name="csrf-token"]');
-    var headers = { 'Content-Type': 'application/json' };
-    if (csrfToken) headers['X-CSRFToken'] = csrfToken.getAttribute('content');
-    fetch("{{ url_for('settings.api_cassa_on_web') }}", {
-      method: 'POST',
-      headers: headers,
-      credentials: 'same-origin',
-      body: JSON.stringify({ enabled: enabled })
-    })
-    .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, body: j }; }); })
-    .then(function(res) {
-      sw.disabled = false;
-      if (res.ok && res.body && res.body.success) {
-        setLabel(enabled);
-        status.textContent = "Impostazione salvata. Ricarico la pagina...";
-        status.style.color = '#2e7d32';
-        // Refresh automatico: il menu Cassa e' renderizzato server-side dal
-        // context processor, va ricaricato l'HTML per vederlo apparire/sparire.
-        setTimeout(function() { window.location.reload(); }, 700);
-      } else {
-        sw.checked = !enabled; // rollback visivo
-        status.textContent = 'Errore: ' + (res.body && res.body.error ? res.body.error : 'salvataggio non riuscito');
-        status.style.color = '#c62828';
-      }
-    })
-    .catch(function(err) {
-      sw.disabled = false;
-      sw.checked = !enabled;
-      status.textContent = 'Errore di rete: ' + err;
-      status.style.color = '#c62828';
-    });
-  });
-});
-</script>
-{% endif %}
-
 <script>
 {% if not hide_cassa %}
 let updateData = null;
@@ -780,121 +715,335 @@ function applyUpdateAutomatic() {
 }
 {% endif %}
 </script>
-
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    var printerModelSelect = document.getElementById('printer_model');
-    var printerModelStatus = document.getElementById('printerModelStatus');
-    if (printerModelSelect && printerModelStatus) {
-        printerModelSelect.addEventListener('change', function() {
-            var value = printerModelSelect.value;
-            printerModelStatus.style.color = '#666';
-            printerModelStatus.textContent = 'Salvataggio...';
+// =====================================================================
+// SALVATAGGIO UNICO di Info Azienda
+// Ogni modifica (campi, giorni, interruttori, logo, touch) resta in sospeso
+// finche' non si preme Salva nella barra in fondo, che compare solo quando
+// c'e' qualcosa da salvare. Annulla rimette tutto com'era; uscire dalla
+// pagina con modifiche in sospeso chiede conferma.
+// Restano immediati solo i pulsanti-azione: Test connessione, Controlla
+// aggiornamenti, Copia.
+// =====================================================================
+document.addEventListener('DOMContentLoaded', function () {
+  var form = document.getElementById('iaForm');
+  if (!form) return;
+  var bar = document.getElementById('iaSaveBar');
+  var barText = document.getElementById('iaSaveBarText');
+  var barActions = document.getElementById('iaSaveBarActions');
+  var saveBtn = document.getElementById('iaSaveBtn');
+  var undoBtn = document.getElementById('iaUndoBtn');
+  var soloLettura = form.getAttribute('data-solo-lettura') === '1';
+  var ESITO_KEY = 'sun_info_azienda_esito';
+  var inUscita = false;      // true quando siamo noi a ricaricare dopo il salvataggio
+  var timerNascondi = null;
 
-            var token = (document.querySelector('input[name="csrf_token"]') || {}).value || '';
-
-            fetch("{{ url_for('settings.save_printer_model') }}", {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': token
-                },
-                body: JSON.stringify({ printer_model: value })
-            })
-            .then(function(res) { return res.json(); })
-            .then(function(data) {
-                if (data.ok) {
-                    printerModelStatus.style.color = '#28a745';
-                    printerModelStatus.textContent = 'Salvato!';
-                    setTimeout(function() { printerModelStatus.textContent = ''; }, 2000);
-                } else {
-                    printerModelStatus.style.color = '#dc3545';
-                    printerModelStatus.textContent = data.error || 'Errore nel salvataggio';
-                }
-            })
-            .catch(function() {
-                printerModelStatus.style.color = '#dc3545';
-                printerModelStatus.textContent = 'Errore di connessione';
-            });
-        });
+  // --- Touch: preferenza di POSTAZIONE (localStorage), non del negozio ---
+  // 'sun_touch_ui'      = valore effettivo in uso (puo' essere forzato a '1'
+  //                       dall'agenda quando la finestra e' stretta)
+  // 'sun_touch_ui_user' = scelta ESPLICITA fatta qui: e' l'unica autorevole
+  //                       e nessun automatismo la sovrascrive. La casella
+  //                       mostra sempre questa, non il valore forzato.
+  var touchEl = document.getElementById('touchUiEnabled');
+  try {
+    if (touchEl) {
+      var pref = localStorage.getItem('sun_touch_ui_user');
+      touchEl.checked = (pref === '1' || pref === '0')
+        ? (pref === '1')
+        : (localStorage.getItem('sun_touch_ui') === '1');
     }
-});
-</script>
-<script>
-  // Inizializza checkbox da localStorage e salva alla modifica
-  (function(){
-    try {
-      // Touch UI
-      // 'sun_touch_ui'      = valore effettivo in uso (puo' essere forzato a '1'
-      //                       dall'agenda quando la finestra e' stretta)
-      // 'sun_touch_ui_user' = scelta ESPLICITA fatta qui: e' l'unica autorevole
-      //                       e nessun automatismo la sovrascrive. La checkbox
-      //                       mostra sempre questa, non il valore forzato.
-      const key = 'sun_touch_ui';
-      const userKey = 'sun_touch_ui_user';
-      const el = document.getElementById('touchUiEnabled');
-      if (el) {
-        const pref = localStorage.getItem(userKey);
-        el.checked = (pref === '1' || pref === '0')
-          ? (pref === '1')
-          : (localStorage.getItem(key) === '1');
-        el.addEventListener('change', () => {
-          const val = el.checked ? '1' : '0';
-          localStorage.setItem(userKey, val);
-          localStorage.setItem(key, val);
-          // una scelta esplicita annulla qualunque forcing automatico in corso
-          localStorage.removeItem('sun_touch_ui_forced');
-          localStorage.removeItem('sun_touch_ui_prev');
-          alert('Impostazione salvata. Ricarica l\'agenda per applicare la modalità touch.');
-        });
-      }
-      
-      {# === SGANCIO ALTO CONTRASTO (4 di 4) ==========================
-         Lettura/scrittura della preferenza: SOSPESA. Per riattivarla,
-         togliere il commento Jinja che segue.
-         Preferenza di POSTAZIONE, come il touch: chi ha bisogno del tema ad
-         alto contrasto lo vuole sul proprio schermo, non imposto a tutto il
-         negozio. Il reload serve perche' la classe tosca-dark viene messa
-         nel <head>, prima del primo paint.
-         ============================================================== #}
-      {#
-      const darkEl = document.getElementById('darkA11yEnabled');
-      if (darkEl) {
-        darkEl.checked = localStorage.getItem('sun_dark_a11y') === '1';
-        darkEl.addEventListener('change', () => {
-          localStorage.setItem('sun_dark_a11y', darkEl.checked ? '1' : '0');
-          window.location.reload();
-        });
-      }
-      #}
+  } catch (e) {}
 
-      // Zoom Navigator disabilitato permanentemente: forza OFF e mantiene codice legacy commentato
-      localStorage.setItem('sun_zoom_navigator', '0');
-      // const zoomKey = 'sun_zoom_navigator';
-      // const zoomEl = document.getElementById('zoomNavigatorEnabled');
-      // if (zoomEl) {
-      //   const zoomVal = localStorage.getItem(zoomKey);
-      //   zoomEl.checked = (zoomVal === null || zoomVal === '1');
-      //   zoomEl.addEventListener('change', () => {
-      //     localStorage.setItem(zoomKey, zoomEl.checked ? '1' : '0');
-      //     alert('Impostazione salvata. Ricarica l\'agenda per applicare.');
-      //   });
-      // }
-      
-      // Refresh Button disabilitato permanentemente (non piu' usato) - mantenuto per eventuale ripristino
-      // const refreshKey = 'sun_refresh_button';
-      // const refreshEl = document.getElementById('refreshButtonEnabled');
-      // if (refreshEl) {
-      //   const refreshVal = localStorage.getItem(refreshKey);
-      //   refreshEl.checked = (refreshVal === null || refreshVal === '1');
-      //   refreshEl.addEventListener('change', () => {
-      //     localStorage.setItem(refreshKey, refreshEl.checked ? '1' : '0');
-      //     alert('Impostazione salvata. Ricarica la pagina per applicare.');
-      //   });
-      // }
-    } catch(e) {}
-  })();
+  function salvaTouch(attivo) {
+    try {
+      var val = attivo ? '1' : '0';
+      localStorage.setItem('sun_touch_ui_user', val);
+      localStorage.setItem('sun_touch_ui', val);
+      // una scelta esplicita annulla qualunque forcing automatico in corso
+      localStorage.removeItem('sun_touch_ui_forced');
+      localStorage.removeItem('sun_touch_ui_prev');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  {# === SGANCIO ALTO CONTRASTO (4 di 4) ==========================
+     Lettura/scrittura della preferenza: SOSPESA. Per riattivarla,
+     togliere il commento Jinja che segue e dare alla casella
+     data-ia-local="dark": il Salva la scrive come il touch.
+     Preferenza di POSTAZIONE, come il touch: chi ha bisogno del tema ad
+     alto contrasto lo vuole sul proprio schermo, non imposto a tutto il
+     negozio. Il reload serve perche' la classe tosca-dark viene messa
+     nel <head>, prima del primo paint.
+     ============================================================== #}
+  {#
+  var darkEl = document.getElementById('darkA11yEnabled');
+  if (darkEl) {
+    try { darkEl.checked = localStorage.getItem('sun_dark_a11y') === '1'; } catch (e) {}
+  }
+  #}
+
+  // Zoom Navigator disabilitato permanentemente: forza OFF (codice legacy rimosso)
+  try { localStorage.setItem('sun_zoom_navigator', '0'); } catch (e) {}
+
+  // --- Logo: scelto o eliminato qui, scritto solo con Salva ---
+  var fileInput = document.getElementById('logo_file');
+  var eliminaInput = document.getElementById('logo_elimina');
+  var logoFrame = document.getElementById('iaLogoFrame');
+  var logoImg = document.getElementById('iaLogoImg');
+  var logoEmpty = document.getElementById('iaLogoEmpty');
+  var logoEmptyText = document.getElementById('iaLogoEmptyText');
+  var logoName = document.getElementById('iaLogoName');
+  var removeBtn = document.getElementById('iaLogoRemove');
+  var logoIniziale = {
+    presente: !!(logoFrame && !logoFrame.hidden),
+    src: logoImg ? logoImg.getAttribute('src') : '',
+    nome: logoName ? logoName.textContent : ''
+  };
+  var urlAnteprima = null;
+  var MAX_LOGO = 5 * 1024 * 1024;
+
+  function liberaAnteprima() {
+    if (urlAnteprima) { try { URL.revokeObjectURL(urlAnteprima); } catch (e) {} urlAnteprima = null; }
+  }
+  function mostraLogo(src, nome, daSalvare) {
+    if (!logoFrame) return;
+    logoImg.setAttribute('src', src);
+    logoFrame.hidden = false;
+    logoEmpty.hidden = true;
+    logoName.textContent = nome || '';
+    logoName.classList.toggle('ia-da-salvare', !!daSalvare);
+    if (removeBtn) removeBtn.hidden = false;
+  }
+  function mostraNessunLogo(testo, daSalvare) {
+    if (!logoFrame) return;
+    logoFrame.hidden = true;
+    logoEmpty.hidden = false;
+    logoEmptyText.textContent = testo;
+    logoName.textContent = '';
+    logoEmpty.classList.toggle('ia-da-salvare', !!daSalvare);
+    if (removeBtn) removeBtn.hidden = true;
+  }
+  function ripristinaLogo() {
+    liberaAnteprima();
+    if (fileInput) fileInput.value = '';
+    if (eliminaInput) eliminaInput.value = '';
+    if (logoEmpty) logoEmpty.classList.remove('ia-da-salvare');
+    if (logoIniziale.presente) mostraLogo(logoIniziale.src, logoIniziale.nome, false);
+    else mostraNessunLogo('Nessun logo', false);
+  }
+
+  if (fileInput) {
+    fileInput.addEventListener('change', function () {
+      var f = fileInput.files && fileInput.files[0];
+      liberaAnteprima();
+      if (!f) { ripristinaLogo(); aggiornaBarra(); return; }
+      if (f.size > MAX_LOGO) {
+        fileInput.value = '';
+        ripristinaLogo();
+        mostraBarra('errore', 'Il file del logo è troppo grande: massimo 5 MB.');
+        return;
+      }
+      eliminaInput.value = '';
+      urlAnteprima = URL.createObjectURL(f);
+      mostraLogo(urlAnteprima, f.name + ' · da salvare', true);
+      aggiornaBarra();
+    });
+  }
+  if (removeBtn) {
+    removeBtn.addEventListener('click', function () {
+      liberaAnteprima();
+      if (fileInput) fileInput.value = '';
+      if (logoIniziale.presente) {
+        eliminaInput.value = '1';
+        mostraNessunLogo('Logo eliminato · da salvare', true);
+      } else {
+        eliminaInput.value = '';
+        mostraNessunLogo('Nessun logo', false);
+      }
+      aggiornaBarra();
+    });
+  }
+
+  // --- Cassa su Web App: l'etichetta segue l'interruttore ---
+  var cassaSw = document.getElementById('toggleCassaOnWeb');
+  var cassaLbl = document.getElementById('toggleCassaOnWebLabel');
+  function etichettaCassa() {
+    if (!cassaSw || !cassaLbl) return;
+    cassaLbl.innerHTML = cassaSw.checked
+      ? 'Cassa <strong style="color:#2e7d32;">ABILITATA</strong> da Web App'
+      : 'Cassa <strong style="color:#c62828;">DISABILITATA</strong> da Web App';
+  }
+  if (cassaSw) cassaSw.addEventListener('change', etichettaCassa);
+
+  // --- Cosa e' cambiato rispetto a quanto e' salvato ---
+  function controlli() {
+    return Array.prototype.filter.call(form.elements, function (el) {
+      if (!el.id && !el.name) return false;
+      if (el.tagName === 'BUTTON' || el.tagName === 'FIELDSET' || el.tagName === 'OBJECT') return false;
+      if (el.type === 'hidden' || el.type === 'file' || el.type === 'button' || el.type === 'submit') return false;
+      if (el.hasAttribute('data-ia-no-track')) return false;
+      return true;
+    });
+  }
+  function chiave(el) { return el.id || (el.name + '=' + el.value); }
+  function valore(el) { return (el.type === 'checkbox' || el.type === 'radio') ? el.checked : el.value; }
+  var iniziale = {};
+  function fotografa() {
+    iniziale = {};
+    controlli().forEach(function (el) { iniziale[chiave(el)] = valore(el); });
+  }
+  function logoCambiato() {
+    return !!((eliminaInput && eliminaInput.value === '1') || (fileInput && fileInput.files && fileInput.files.length));
+  }
+  function statoModifiche() {
+    var cambiati = controlli().filter(function (el) { return iniziale[chiave(el)] !== valore(el); });
+    var locali = cambiati.filter(function (el) { return el.hasAttribute('data-ia-local'); });
+    var negozio = (cambiati.length > locali.length) || logoCambiato();
+    return { locali: locali, negozio: negozio, sporco: negozio || locali.length > 0 };
+  }
+
+  // --- Barra: modifiche | salvataggio | salvato | avviso | errore ---
+  function mostraBarra(stato, testo) {
+    clearTimeout(timerNascondi);
+    var icone = {
+      modifiche: 'bi-exclamation-circle',
+      salvataggio: 'bi-hourglass-split',
+      salvato: 'bi-check-circle-fill',
+      avviso: 'bi-exclamation-triangle-fill',
+      errore: 'bi-x-octagon-fill'
+    };
+    bar.setAttribute('data-stato', stato);
+    barText.innerHTML = '';
+    var i = document.createElement('i');
+    i.className = 'bi ' + (icone[stato] || icone.modifiche);
+    var t = document.createElement('span');
+    t.textContent = testo || 'Modifiche non salvate';
+    barText.appendChild(i);
+    barText.appendChild(t);
+    var conPulsanti = (stato === 'modifiche' || stato === 'errore' || stato === 'salvataggio');
+    barActions.hidden = !conPulsanti;
+    saveBtn.disabled = undoBtn.disabled = (stato === 'salvataggio');
+    bar.hidden = false;
+    if (stato === 'salvato' || stato === 'avviso') {
+      timerNascondi = setTimeout(function () {
+        if (!statoModifiche().sporco) { bar.hidden = true; bar.removeAttribute('data-stato'); }
+      }, stato === 'avviso' ? 10000 : 3000);
+    }
+  }
+  function aggiornaBarra() {
+    var stato = bar.getAttribute('data-stato');
+    if (stato === 'salvataggio') return;
+    if (statoModifiche().sporco) {
+      mostraBarra('modifiche');
+    } else if (stato === 'modifiche' || stato === 'errore') {
+      bar.hidden = true;
+      bar.removeAttribute('data-stato');
+    }
+  }
+  form.addEventListener('input', aggiornaBarra);
+  form.addEventListener('change', aggiornaBarra);
+
+  // --- Annulla: tutto torna come al caricamento ---
+  undoBtn.addEventListener('click', function () {
+    controlli().forEach(function (el) {
+      var v = iniziale[chiave(el)];
+      if (v === undefined) return;
+      if (el.type === 'checkbox' || el.type === 'radio') el.checked = v; else el.value = v;
+    });
+    ripristinaLogo();
+    etichettaCassa();
+    bar.hidden = true;
+    bar.removeAttribute('data-stato');
+  });
+
+  // --- Salva ---
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    salva();
+  });
+
+  function salva() {
+    var s = statoModifiche();
+    if (!s.sporco) return;
+    if (s.negozio && !soloLettura && !form.reportValidity()) return;
+
+    mostraBarra('salvataggio', 'Salvataggio in corso...');
+
+    // Le preferenze di postazione si scrivono DOPO il negozio: se il server
+    // rifiuta, non resta niente di salvato a meta'.
+    function salvaLocali() {
+      var touchCambiato = false;
+      s.locali.forEach(function (el) {
+        if (el.getAttribute('data-ia-local') === 'touch') touchCambiato = salvaTouch(el.checked);
+      });
+      return touchCambiato;
+    }
+
+    if (!s.negozio || soloLettura) {
+      var touch = salvaLocali();
+      fotografa();
+      mostraBarra('salvato', touch
+        ? 'Modifiche salvate. Ricarica l\'Agenda per applicare la modalità touch.'
+        : 'Modifiche salvate.');
+      return;
+    }
+
+    var token = (form.querySelector('input[name="csrf_token"]') || {}).value || '';
+    fetch(form.action, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'fetch', 'X-CSRFToken': token },
+      body: new FormData(form)
+    })
+    .then(function (r) {
+      return r.json().catch(function () { return null; }).then(function (j) { return { r: r, j: j }; });
+    })
+    .then(function (res) {
+      if (!res.r.ok || !res.j || !res.j.ok) {
+        var msg = (res.j && res.j.message) || ('Salvataggio non riuscito (errore ' + res.r.status + '): niente è stato salvato.');
+        mostraBarra('errore', msg);
+        return;
+      }
+      var touch = salvaLocali();
+      var testo = res.j.message || 'Modifiche salvate.';
+      if (touch) testo += ' Ricarica l\'Agenda per applicare la modalità touch.';
+      // Si ricarica la pagina: mostra quello che ora c'e' davvero nel database
+      // (logo elaborato, menu Cassa aggiornato) e riparte pulita.
+      try {
+        sessionStorage.setItem(ESITO_KEY, JSON.stringify({
+          stato: res.j.avviso ? 'avviso' : 'salvato',
+          testo: testo,
+          scrollY: window.scrollY || 0
+        }));
+      } catch (e) {}
+      inUscita = true;
+      window.location.reload();
+    })
+    .catch(function () {
+      mostraBarra('errore', 'Errore di rete: niente è stato salvato. Riprova.');
+    });
+  }
+
+  // --- Uscire con modifiche in sospeso chiede conferma ---
+  window.addEventListener('beforeunload', function (e) {
+    if (inUscita || !statoModifiche().sporco) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+
+  // Fotografia iniziale, poi l'eventuale esito del salvataggio appena fatto
+  fotografa();
+  try {
+    var esito = JSON.parse(sessionStorage.getItem(ESITO_KEY) || 'null');
+    sessionStorage.removeItem(ESITO_KEY);
+    if (esito && esito.testo) {
+      if (esito.scrollY) window.scrollTo(0, esito.scrollY);
+      mostraBarra(esito.stato === 'avviso' ? 'avviso' : 'salvato', esito.testo);
+    }
+  } catch (e) {}
+});
 </script>
 {% if not config.get('HIDE_PRINTER_IP') %}
 <script>
@@ -961,66 +1110,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endif %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Gestione selezione file logo
-    const fileInput = document.getElementById('logo_file');
-    const uploadBtn = document.getElementById('uploadLogoBtn');
-    const fileNameSpan = document.getElementById('selectedFileName');
-    
-    if (fileInput && uploadBtn && fileNameSpan) {
-        fileInput.addEventListener('change', function() {
-            if (this.files && this.files.length > 0) {
-                const fileName = this.files[0].name;
-                fileNameSpan.textContent = fileName;
-                uploadBtn.style.display = 'inline-block';
-            } else {
-                fileNameSpan.textContent = '';
-                uploadBtn.style.display = 'none';
-            }
-        });
-    }
-    
-    // Gestione checkbox visibilità logo in booking
-    const visibleCheckbox = document.getElementById('logoVisibleInBooking');
-    const visibleStatus = document.getElementById('logoVisibleStatus');
-    
-    if (visibleCheckbox && visibleStatus) {
-        visibleCheckbox.addEventListener('change', function() {
-            const isVisible = this.checked;
-            visibleStatus.style.color = '#666';
-            visibleStatus.textContent = 'Salvataggio...';
-            
-            const token = (document.querySelector('input[name="csrf_token"]')?.value) || '';
-            
-            fetch("{{ url_for('settings.set_logo_visibility') }}", {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': token
-                },
-                body: JSON.stringify({ visible: isVisible })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.ok) {
-                    visibleStatus.style.color = '#28a745';
-                    visibleStatus.textContent = 'Salvato!';
-                    setTimeout(() => { visibleStatus.textContent = ''; }, 2000);
-                } else {
-                    visibleStatus.style.color = '#dc3545';
-                    visibleStatus.textContent = data.error || 'Errore nel salvataggio';
-                }
-            })
-            .catch(() => {
-                visibleStatus.style.color = '#dc3545';
-                visibleStatus.textContent = 'Errore di connessione';
-            });
-        });
-    }
-});
-</script>
 <style>
     /* Info Azienda: card nello stile delle altre pagine Tools (Pacchetti, Solarium) */
     .ia-page {
@@ -1168,7 +1257,6 @@ document.addEventListener('DOMContentLoaded', function() {
       color: #6c7a89;
     }
     .ia-status { font-size: 0.85em; color: #666; }
-    .ia-filename { color: #333; font-style: italic; font-size: 0.9rem; }
 
     /* Campi in sola lettura (ruolo user) */
     .ia-page .form-control[readonly] {
@@ -1297,8 +1385,27 @@ document.addEventListener('DOMContentLoaded', function() {
       backdrop-filter: blur(6px);
       box-shadow: 0 6px 22px rgba(26, 48, 74, 0.12);
     }
-    .ia-savebar-text { font-size: 0.82rem; color: #6c7a89; }
+    .ia-savebar-text {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #a15c00;
+    }
+    .ia-savebar-actions { display: flex; gap: 8px; }
+    .ia-savebar[data-stato="salvataggio"] .ia-savebar-text { color: #6c7a89; }
+    .ia-savebar[data-stato="salvato"] { border-color: #c3e6cb; }
+    .ia-savebar[data-stato="salvato"] .ia-savebar-text { color: #2e7d32; }
+    .ia-savebar[data-stato="errore"] { border-color: #f5c6cb; }
+    .ia-savebar[data-stato="errore"] .ia-savebar-text { color: #c62828; }
+    .ia-savebar[data-stato="avviso"] .ia-savebar-text { color: #a15c00; }
     .ia-save-btn { font-weight: 600; padding: 8px 20px; }
+
+    /* Logo scelto o eliminato ma non ancora salvato */
+    .ia-help.ia-da-salvare,
+    .ia-logo-empty.ia-da-salvare { color: #c2185b; font-weight: 600; }
+    .ia-logo-empty.ia-da-salvare { border-color: #e38fb2; }
 
     .ia-warn {
       padding: 9px 12px;

@@ -2264,6 +2264,33 @@ button.client-info-btn {
   margin-left: auto;
 }
 
+/* "i" cliente (desktop e mobile): piede del Salva unico, vedi
+   creaSalvataggioCliente in calendar.js. Testo di stato a sinistra,
+   pulsanti a destra; il colore del testo segue la fase. */
+.modal-footer.ci-piede {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 14px;
+}
+.ci-piede .ci-piede-testo {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #a15c00;
+}
+.ci-piede .ci-piede-azioni {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.ci-piede .ci-piede-azioni .btn { margin: 0; }
+.ci-piede[data-fase="salvataggio"] .ci-piede-testo { color: #6c7a89; }
+.ci-piede[data-fase="salvato"] .ci-piede-testo { color: #2e7d32; }
+.ci-piede[data-fase="errore"] .ci-piede-testo { color: #c62828; }
+
 /* In compact quarter mode, keep note icon visible only when the appointment has a note. */
 body.quarter-55 .appointment-block .note-indicator {
   display: none !important;

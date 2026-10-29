@@ -1827,25 +1827,21 @@ body.asp-docked-modal-open {
         <div class="ci-section">
           <div class="ci-title">NOME</div>
           <input type="text" class="form-control" id="ciNome" autocomplete="off">
-          <button type="button" class="btn btn-primary ci-save" data-field="nome">Salva</button>
         </div>
 
         <div class="ci-section">
           <div class="ci-title">COGNOME</div>
           <input type="text" class="form-control" id="ciCognome" autocomplete="off">
-          <button type="button" class="btn btn-primary ci-save" data-field="cognome">Salva</button>
         </div>
 
         <div class="ci-section">
           <div class="ci-title">CELL</div>
           <input type="text" class="form-control" id="ciCell" autocomplete="off" inputmode="tel">
-          <button type="button" class="btn btn-primary ci-save" data-field="cellulare">Salva</button>
         </div>
 
         <div class="ci-section">
           <div class="ci-title">E-MAIL</div>
           <input type="email" class="form-control" id="ciEmail" autocomplete="off" inputmode="email">
-          <button type="button" class="btn btn-primary ci-save" data-field="email">Salva</button>
         </div>
 
         <hr class="ci-sep">
@@ -1856,6 +1852,8 @@ body.asp-docked-modal-open {
         <div class="ci-heading">STORICO APPUNTAMENTI</div>
         <div id="ciHistoryAppts" class="ci-list"></div>
       </div>
+      <!-- Piede: Chiudi, oppure Annulla/Salva (lo riempie creaSalvataggioCliente in calendar.js) -->
+      <div class="modal-footer"></div>
     </div>
   </div>
 </div>
@@ -4261,6 +4259,18 @@ function configureMobileModalButtons(modal, block) {
 
     const clientId = block.getAttribute('data-client-id') || '';
     if (!clientId) return;
+
+    // Un solo Salva per tutta la scheda, come nel modal desktop
+    // (creaSalvataggioCliente in calendar.js). Con modifiche in sospeso la
+    // scheda aperta non si sostituisce.
+    const salvataggio = (typeof window.creaSalvataggioCliente === 'function')
+      ? window.creaSalvataggioCliente(modal, modal.querySelector('.modal-footer'))
+      : null;
+    if (salvataggio && modal.classList.contains('show') && salvataggio.haModifiche()) {
+      salvataggio.chiediConferma();
+      return;
+    }
+    if (salvataggio) salvataggio.apri(clientId, {});
     modal.dataset.clientId = clientId;
 
     // Salva visuale corrente (solo mobile)
@@ -4314,6 +4324,20 @@ function configureMobileModalButtons(modal, block) {
       inEmail.value = info?.cliente_email     ?? inEmail.value;
     } catch (_) {}
 
+    // Dopo un cambio di nome salvato: aggiorna i blocchi del cliente in agenda
+    function dopoNome(nome, cognome) {
+      const completo = `${nome} ${cognome}`.trim();
+      document.querySelectorAll(`.appointment-block[data-client-id="${clientId}"]`).forEach(b => {
+        b.setAttribute('data-client-nome', nome);
+        b.setAttribute('data-client-cognome', cognome);
+        const link = b.querySelector('.appointment-content .client-name a');
+        if (link) link.textContent = completo;
+      });
+    }
+    if (salvataggio) {
+      salvataggio.apri(clientId, { nome: inNome, cognome: inCogn, cellulare: inCell, email: inEmail }, dopoNome);
+    }
+
     // Prossimi appuntamenti
     try {
       const next = await fetchJson(`/calendar/api/next-appointments-for-client/${clientId}`);
@@ -4353,53 +4377,6 @@ function configureMobileModalButtons(modal, block) {
         histBox.textContent = 'Nessuna seduta nello storico';
       }
     } catch (_) { histBox.textContent = 'Errore caricamento'; }
-
-    // Bind dei pulsanti "Salva" (una sola volta)
-    if (!modal._saveBound) {
-      modal.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.ci-save');
-        if (!btn) return;
-        const field = btn.getAttribute('data-field');
-        const cid = modal.dataset.clientId || '';
-        if (!cid) return;
-
-        const map = {
-          nome: inNome.value,
-          cognome: inCogn.value,
-          cellulare: inCell.value,
-          email: inEmail.value
-        };
-        let url = '', body = {};
-        if (field === 'nome')      { url = '/settings/api/update_client_name';    body = { client_id: cid, nome: map.nome }; }
-        if (field === 'cognome')   { url = '/settings/api/update_client_surname'; body = { client_id: cid, cognome: map.cognome }; }
-        if (field === 'cellulare') { url = '/settings/api/update_client_phone';   body = { client_id: cid, phone: map.cellulare }; }
-        if (field === 'email')     { url = '/settings/api/update_client_email';   body = { client_id: cid, email: map.email }; }
-        if (!url) return;
-
-        try {
-          const CSRF = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-          const r = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(CSRF ? { 'X-CSRFToken': CSRF } : {}) },
-            credentials: 'same-origin',
-            body: JSON.stringify(body)
-          });
-          const old = btn.textContent;
-          btn.disabled = true;
-          btn.textContent = r.ok ? 'Salvato!' : 'Errore!';
-          // Cellulare: stesso aggiornamento immediato della "i" desktop
-          // (aggiornaCellulareNelleCaselle in calendar.js).
-          if (r.ok && field === 'cellulare') {
-            let salvato = String(map.cellulare || '').trim();
-            try { const j = await r.json(); if (j && j.phone != null) salvato = String(j.phone); } catch (_) {}
-            if (window.applyClientPhoneToBlocks) window.applyClientPhoneToBlocks(cid, salvato);
-            if (window.aggiornaCellulareNelleCaselle) window.aggiornaCellulareNelleCaselle(cid, salvato);
-          }
-          setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 1000);
-        } catch (_) {}
-      });
-      modal._saveBound = true;
-    }
 
     showModal(modal);
   }

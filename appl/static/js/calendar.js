@@ -1992,6 +1992,217 @@ function isFutureAppointmentRow(oraInizio, now) {
 }
 window.isFutureAppointmentRow = isFutureAppointmentRow;
 
+// =============================================================
+// "i" CLIENTE: UN SOLO SALVA (stessa regola di Info Azienda)
+// I campi della scheda restano in sospeso finche' non si preme Salva nel
+// piede del modal, che lo propone solo quando qualcosa e' cambiato. Annulla
+// rimette i valori letti all'apertura; chiudere (X, Esc, clic fuori) con
+// modifiche in sospeso chiede "Esci senza salvare / Salva ed esci".
+// Si chiamano SOLO le rotte dei campi cambiati: un campo non toccato non
+// viene mai riscritto.
+// Usato dal modal desktop (showClientInfoModal) e da quello mobile
+// (ClientInfoMobileModal in calendar.html, via window.creaSalvataggioCliente).
+// =============================================================
+function creaSalvataggioCliente(modal, footer) {
+  if (modal._ciSalva) return modal._ciSalva;
+
+  const leggiCsrf = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+  const stato = { clientId: null, campi: {}, iniziale: {}, fase: 'pulito', forzaChiusura: false, dopoNome: null };
+  let timerPulito = null;
+
+  // Piede: testo a sinistra, pulsanti a destra
+  footer.innerHTML = '';
+  footer.classList.add('ci-piede');
+  const testo = document.createElement('span');
+  testo.className = 'ci-piede-testo';
+  const azioni = document.createElement('div');
+  azioni.className = 'ci-piede-azioni';
+  const pulsante = (classe, etichetta) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn ' + classe;
+    b.textContent = etichetta;
+    return b;
+  };
+  const btnEsci = pulsante('btn-outline-danger', 'Esci senza salvare');
+  const btnAnnulla = pulsante('btn-outline-secondary', 'Annulla');
+  const btnSalva = pulsante('btn-primary', 'Salva');
+  const btnChiudi = pulsante('btn-secondary', 'Chiudi');
+  btnChiudi.setAttribute('data-bs-dismiss', 'modal');
+  azioni.append(btnEsci, btnAnnulla, btnSalva, btnChiudi);
+  footer.append(testo, azioni);
+
+  const valori = () => {
+    const v = {};
+    Object.keys(stato.campi).forEach(k => { v[k] = String(stato.campi[k].value || '').trim(); });
+    return v;
+  };
+  const cambiati = () => {
+    const v = valori();
+    return Object.keys(v).filter(k => v[k] !== stato.iniziale[k]);
+  };
+
+  // pulito | modifiche | conferma | salvataggio | salvato | errore
+  function mostra(fase, messaggio) {
+    clearTimeout(timerPulito);
+    stato.fase = fase;
+    footer.setAttribute('data-fase', fase);
+    const testi = {
+      modifiche: 'Modifiche non salvate',
+      conferma: 'Ci sono modifiche non salvate.',
+      salvataggio: 'Salvataggio in corso...',
+      salvato: 'Modifiche salvate'
+    };
+    testo.textContent = messaggio || testi[fase] || '';
+    btnEsci.hidden = fase !== 'conferma';
+    btnAnnulla.hidden = !(fase === 'modifiche' || fase === 'errore');
+    btnSalva.hidden = !(fase === 'modifiche' || fase === 'errore' || fase === 'conferma' || fase === 'salvataggio');
+    btnSalva.textContent = fase === 'conferma' ? 'Salva ed esci' : 'Salva';
+    btnChiudi.hidden = !(fase === 'pulito' || fase === 'salvato');
+    btnSalva.disabled = btnAnnulla.disabled = (fase === 'salvataggio');
+    if (fase === 'salvato') {
+      timerPulito = setTimeout(() => { if (stato.fase === 'salvato') mostra('pulito'); }, 2500);
+    }
+  }
+
+  function aggiorna() {
+    if (stato.fase === 'salvataggio' || stato.fase === 'conferma') {
+      if (stato.fase === 'conferma' && !cambiati().length) mostra('pulito');
+      return;
+    }
+    mostra(cambiati().length ? 'modifiche' : 'pulito');
+  }
+  modal.addEventListener('input', e => {
+    if (Object.values(stato.campi).includes(e.target)) aggiorna();
+  });
+
+  function ripristina() {
+    Object.keys(stato.campi).forEach(k => { stato.campi[k].value = stato.iniziale[k]; });
+    mostra('pulito');
+  }
+  function chiudi() {
+    stato.forzaChiusura = true;
+    try { bootstrap.Modal.getOrCreateInstance(modal).hide(); } catch (_) {}
+  }
+  btnAnnulla.addEventListener('click', ripristina);
+  btnEsci.addEventListener('click', () => { ripristina(); chiudi(); });
+  btnSalva.addEventListener('click', () => salva(stato.fase === 'conferma'));
+
+  // X, Esc, clic fuori, pulsante Chiudi: con modifiche in sospeso non si chiude
+  modal.addEventListener('hide.bs.modal', e => {
+    if (stato.forzaChiusura) { stato.forzaChiusura = false; return; }
+    if (stato.fase === 'salvataggio') { e.preventDefault(); return; }
+    if (cambiati().length) { e.preventDefault(); mostra('conferma'); }
+  });
+
+  async function invia(url, corpo) {
+    const r = await fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': leggiCsrf() },
+      body: JSON.stringify(corpo)
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j || !j.success) throw new Error('HTTP ' + r.status);
+    return j;
+  }
+
+  async function salva(chiudiDopo) {
+    const diff = cambiati();
+    if (!diff.length) { if (chiudiDopo) chiudi(); return; }
+    const email = stato.campi.email;
+    if (email && diff.includes('email') && email.checkValidity && !email.checkValidity()) {
+      mostra('errore', 'L\'e-mail non è scritta correttamente.');
+      email.focus();
+      return;
+    }
+    mostra('salvataggio');
+    const id = stato.clientId;
+    const v = valori();
+    const falliti = [];
+
+    // Nome e cognome: un'unica rotta, ma solo il campo cambiato viaggia
+    if (diff.includes('nome') || diff.includes('cognome')) {
+      const corpo = { client_id: id };
+      if (diff.includes('nome')) corpo.cliente_nome = v.nome;
+      if (diff.includes('cognome')) corpo.cliente_cognome = v.cognome;
+      try {
+        const j = await invia('/settings/api/update_client_info', corpo);
+        const nome = String(j.cliente_nome ?? v.nome ?? '');
+        const cognome = String(j.cliente_cognome ?? v.cognome ?? '');
+        if (stato.campi.nome) { stato.campi.nome.value = nome; stato.iniziale.nome = nome.trim(); }
+        if (stato.campi.cognome) { stato.campi.cognome.value = cognome; stato.iniziale.cognome = cognome.trim(); }
+        if (typeof stato.dopoNome === 'function') {
+          try { stato.dopoNome(nome, cognome); } catch (err) { console.warn('aggiornamento nome a video non riuscito', err); }
+        }
+      } catch (err) {
+        console.error('update_client_info', err);
+        falliti.push('nome e cognome');
+      }
+    }
+
+    if (diff.includes('cellulare')) {
+      try {
+        const j = await invia('/settings/api/update_client_phone', { client_id: id, phone: v.cellulare });
+        // Il numero come l'ha scritto il server.
+        const salvato = (j.phone != null) ? String(j.phone) : v.cellulare;
+        stato.campi.cellulare.value = salvato;
+        stato.iniziale.cellulare = salvato.trim();
+        if (typeof window.applyClientPhoneToBlocks === 'function') window.applyClientPhoneToBlocks(id, salvato);
+        if (typeof window.aggiornaCellulareNelleCaselle === 'function') window.aggiornaCellulareNelleCaselle(id, salvato);
+      } catch (err) {
+        console.error('update_client_phone', err);
+        falliti.push('cellulare');
+      }
+    }
+
+    if (diff.includes('email')) {
+      try {
+        await invia('/settings/api/update_client_email', { client_id: id, email: v.email });
+        stato.iniziale.email = v.email;
+      } catch (err) {
+        console.error('update_client_email', err);
+        falliti.push('e-mail');
+      }
+    }
+
+    if (diff.includes('note')) {
+      try {
+        await invia('/settings/api/update_client_note', { client_id: id, note: v.note });
+        stato.iniziale.note = v.note;
+        if (typeof window.applyClientNoteToBlocks === 'function') window.applyClientNoteToBlocks(id, v.note);
+      } catch (err) {
+        console.error('update_client_note', err);
+        falliti.push('note');
+      }
+    }
+
+    if (falliti.length) {
+      mostra('errore', 'Non salvato: ' + falliti.join(', ') + '. Riprova.');
+      return;
+    }
+    mostra('salvato');
+    if (chiudiDopo) chiudi();
+  }
+
+  const api = {
+    // campi = { nome, cognome, cellulare, email, note? } (input gia' compilati)
+    apri(clientId, campi, dopoNome) {
+      stato.clientId = clientId;
+      stato.campi = campi || {};
+      stato.dopoNome = dopoNome || null;
+      stato.forzaChiusura = false;
+      stato.iniziale = valori();
+      mostra('pulito');
+    },
+    haModifiche() { return cambiati().length > 0; },
+    chiediConferma() { mostra('conferma'); }
+  };
+  modal._ciSalva = api;
+  return api;
+}
+window.creaSalvataggioCliente = creaSalvataggioCliente;
+
 function showClientInfoModal(clientId) {
   if (!clientId) return;
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
@@ -2042,17 +2253,9 @@ function showClientInfoModal(clientId) {
     body.style.overflow = 'hidden';
     body.style.flex = '1 1 auto'; 
 
-    // footer
+    // footer: lo riempie creaSalvataggioCliente (Chiudi, oppure Annulla/Salva)
     const footer = document.createElement('div');
     footer.className = 'modal-footer';
-    footer.style.padding = '0';
-    footer.style.margin = '0';
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'btn btn-secondary';
-    closeBtn.setAttribute('data-bs-dismiss', 'modal');
-    closeBtn.textContent = 'Chiudi';
-    footer.appendChild(closeBtn);
 
     content.appendChild(header);
     content.appendChild(body);
@@ -2061,6 +2264,16 @@ function showClientInfoModal(clientId) {
     modal.appendChild(dialog);
     document.body.appendChild(modal);
   }
+
+  // Un solo Salva per tutta la scheda (vedi creaSalvataggioCliente). Se la
+  // scheda e' gia' aperta con modifiche in sospeso non la si sostituisce:
+  // prima si sceglie se salvarle o lasciarle.
+  const salvataggio = creaSalvataggioCliente(modal, modal.querySelector('.modal-footer'));
+  if (modal.classList.contains('show') && salvataggio.haModifiche()) {
+    salvataggio.chiediConferma();
+    return;
+  }
+  salvataggio.apri(clientId, {});
 
   // popolamento sicuro: rimuove nodi precedenti
   const body = modal.querySelector('.modal-body');
@@ -2116,7 +2329,7 @@ function showClientInfoModal(clientId) {
       contactGrid.style.gap = '12px';
       contactGrid.style.alignItems = 'start';
 
-      // Helper per creare cella (label + input + save)
+      // Helper per creare cella (label + input); si salva tutto col Salva del piede
       function makeField(labelText, inputType, initialValue, placeholder) {
         const wrap = document.createElement('div');
         wrap.style.display = 'flex';
@@ -2140,17 +2353,10 @@ function showClientInfoModal(clientId) {
         input.style.flex = '1 1 auto';
         input.style.minWidth = '0';
 
-        const saveBtn = document.createElement('button');
-        saveBtn.type = 'button';
-        saveBtn.className = 'btn btn-sm btn-outline-primary';
-        saveBtn.textContent = 'Salva';
-        saveBtn.style.flex = '0 0 auto';
-
         wrap.appendChild(label);
         wrap.appendChild(input);
-        wrap.appendChild(saveBtn);
 
-        return { wrap, input, saveBtn };
+        return { wrap, input };
       }
 
       // NOME / COGNOME row (left = NOME, right = COGNOME)
@@ -2168,33 +2374,9 @@ function showClientInfoModal(clientId) {
       // Append allineato al body
       body.appendChild(contactGrid);
 
-      // Funzione di update generica (usa endpoint unico /settings/api/update_client_info per nome/cognome,
-      // esistenti per telefono/email)
-        function updateNameSurname() {
-        const payload = {
-          client_id: clientId,
-          cliente_nome: nameField.input.value.trim(),
-          cliente_cognome: surnameField.input.value.trim()
-        };
-        nameField.saveBtn.textContent = '...'; surnameField.saveBtn.textContent = '...';
-        fetch('/settings/api/update_client_info', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-          body: JSON.stringify(payload)
-        })
-        .then(r => {
-          if (r.status === 404) throw { type: 'not_found' };
-          if (!r.ok) return r.json().then(j => Promise.reject(j || 'update failed'));
-          return r.json();
-        })
-        .then(j => {
-          const success = !!(j && j.success);
-          nameField.saveBtn.textContent = success ? 'Salvato!' : 'Errore';
-          surnameField.saveBtn.textContent = success ? 'Salvato!' : 'Errore';
-
-          // nuovo nome completo
-          const newNm = payload.cliente_nome || nm;
-          const newSn = payload.cliente_cognome || sn;
+      // Dopo un cambio di nome/cognome salvato (vedi creaSalvataggioCliente):
+      // aggiorna intestazione, Navigator, tendine e blocchi in agenda.
+      function dopoNome(newNm, newSn) {
           const newFull = (`${newNm} ${newSn}`).trim();
 
           // PATCH: Aggiorna input Navigator e rilancia ricerca per aggiornare dropdown e onclick
@@ -2202,7 +2384,7 @@ function showClientInfoModal(clientId) {
           if (navInput) {
               // Aggiorna il testo nel campo di ricerca con il nuovo nome
               navInput.value = newFull;
-              
+
               // Se il cliente era già selezionato, aggiorna anche la variabile globale
               if (String(window.selectedClientIdNav) === String(clientId)) {
                   window.selectedClientNameNav = newFull;
@@ -2273,64 +2455,7 @@ function showClientInfoModal(clientId) {
           } catch (refreshErr) {
             console.warn('refresh after name update failed', refreshErr);
           }
-
-          setTimeout(() => { nameField.saveBtn.textContent = 'Salva'; surnameField.saveBtn.textContent = 'Salva'; }, 1200);
-        })
-        .catch(err => {
-          console.error('update_client_info error', err);
-          if (err && err.type === 'not_found') {
-            alert('Impossibile salvare: endpoint update_client_info non trovato sul server.');
-          } else {
-            alert('Errore salvataggio nome/cognome. Controlla la console.');
-          }
-          nameField.saveBtn.textContent = 'Errore';
-          surnameField.saveBtn.textContent = 'Errore';
-          setTimeout(() => { nameField.saveBtn.textContent = 'Salva'; surnameField.saveBtn.textContent = 'Salva'; }, 1200);
-        });
       }
-
-      nameField.saveBtn.addEventListener('click', updateNameSurname);
-      surnameField.saveBtn.addEventListener('click', updateNameSurname);
-
-      // phone save (usa endpoint esistente)
-      phoneField.saveBtn.addEventListener('click', () => {
-        phoneField.saveBtn.textContent = '...';
-        fetch('/settings/api/update_client_phone', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-          body: JSON.stringify({ client_id: clientId, phone: phoneField.input.value.trim() })
-        })
-        .then(r => r.ok ? r.json() : Promise.reject('phone update failed'))
-        .then(j => {
-          phoneField.saveBtn.textContent = j.success ? 'Salvato!' : 'Errore';
-          // Il numero come l'ha scritto il server (toglie gli spazi).
-          const salvato = (j.phone != null) ? String(j.phone) : phoneField.input.value.trim();
-          if (j.success && typeof window.applyClientPhoneToBlocks === 'function') {
-            window.applyClientPhoneToBlocks(clientId, salvato);
-          }
-          if (j.success && typeof window.aggiornaCellulareNelleCaselle === 'function') {
-            window.aggiornaCellulareNelleCaselle(clientId, salvato);
-          }
-          setTimeout(()=> phoneField.saveBtn.textContent='Salva',1200);
-        })
-        .catch(err => { console.error(err); phoneField.saveBtn.textContent = 'Errore'; setTimeout(()=> phoneField.saveBtn.textContent='Salva',1200); });
-      });
-
-      // email save (usa endpoint esistente)
-      emailField.saveBtn.addEventListener('click', () => {
-        emailField.saveBtn.textContent = '...';
-        fetch('/settings/api/update_client_email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-          body: JSON.stringify({ client_id: clientId, email: emailField.input.value.trim() })
-        })
-        .then(r => {
-          if (!r.ok) return r.text().then(t => Promise.reject({status: r.status, body: t}));
-          return r.json();
-        })
-        .then(j => { emailField.saveBtn.textContent = j.success ? 'Salvato!' : 'Errore'; setTimeout(()=> emailField.saveBtn.textContent='Salva',1200); })
-        .catch(err => { console.error(err); emailField.saveBtn.textContent = 'Errore'; setTimeout(()=> emailField.saveBtn.textContent='Salva',1200); });
-      });
 
       // Campo NOTE CLIENTE (centrato, sopra storico)
       const noteContainer = document.createElement('div');
@@ -2352,34 +2477,18 @@ function showClientInfoModal(clientId) {
       noteTextarea.style.height = '80px';
       noteTextarea.style.maxHeight = '90px';
       noteTextarea.style.margin = '0 auto';  // Centra il textarea orizzontalmente
-      const noteSaveBtn = document.createElement('button');
-      noteSaveBtn.type = 'button';
-      noteSaveBtn.className = 'btn btn-sm btn-outline-primary';
-      noteSaveBtn.textContent = 'Salva';
-      noteSaveBtn.style.marginTop = '2px';
       noteContainer.appendChild(noteLabel);
       noteContainer.appendChild(noteTextarea);
-      noteContainer.appendChild(noteSaveBtn);
       body.appendChild(noteContainer);
 
-      // note save (usa endpoint /settings/api/update_client_note)
-      noteSaveBtn.addEventListener('click', () => {
-        noteSaveBtn.textContent = '...';
-        fetch('/settings/api/update_client_note', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-          body: JSON.stringify({ client_id: clientId, note: noteTextarea.value.trim() })
-        })
-        .then(r => r.ok ? r.json() : Promise.reject('note update failed'))
-        .then(j => {
-          noteSaveBtn.textContent = j.success ? 'Salvato!' : 'Errore';
-          if (j.success && typeof window.applyClientNoteToBlocks === 'function') {
-            window.applyClientNoteToBlocks(clientId, noteTextarea.value.trim());
-          }
-          setTimeout(()=> noteSaveBtn.textContent='Salva',1200);
-        })
-        .catch(err => { console.error(err); noteSaveBtn.textContent = 'Errore'; setTimeout(()=> noteSaveBtn.textContent='Salva',1200); });
-      });
+      // Tutti i campi della scheda passano dal Salva unico del piede
+      salvataggio.apri(clientId, {
+        nome: nameField.input,
+        cognome: surnameField.input,
+        cellulare: phoneField.input,
+        email: emailField.input,
+        note: noteTextarea
+      }, dopoNome);
 
       // FEDELTÀ CLIENTE (badge + statistiche, popolato in modo asincrono)
       const loyaltyContainer = document.createElement('div');

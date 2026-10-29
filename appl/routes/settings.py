@@ -150,16 +150,18 @@ def ping_printer():
 
 
 # ===================== LOGO NEGOZIO =====================
-@settings_bp.route('/settings/upload-logo', methods=['POST'])
-def upload_logo():
+def _elabora_logo(file):
     """
-    Upload e ottimizzazione logo negozio.
+    Controlla e ottimizza il file del logo, senza toccare il database.
     Accetta: PNG, JPEG, WebP, GIF, SVG
-    Salva: PNG (se trasparenza) o WebP (altrimenti), max 200px altezza
+    Ritorna (dati, mime): PNG (se trasparenza) o WebP (altrimenti), max 200px altezza;
+    l'SVG resta com'e'. Un file non accettabile solleva ValueError col messaggio
+    da mostrare; un errore di Pillow risale cosi' com'e'.
+    Usata da upload_logo e dal salvataggio unico di Info Azienda.
     """
     from PIL import Image
     import io
-    
+
     # Limite upload: 5MB
     MAX_UPLOAD_SIZE = 5 * 1024 * 1024
     # Altezza massima output
@@ -168,117 +170,117 @@ def upload_logo():
     MAX_WIDTH = 400
     # Qualità compressione WebP/JPEG
     QUALITY = 85
-    
-    file = request.files.get('logo')
+
     if not file or file.filename == '':
-        flash("Nessun file selezionato.", "error")
-        return redirect(url_for('settings.business_info'))
-    
+        raise ValueError("Nessun file selezionato.")
+
     # Verifica dimensione
     file.seek(0, 2)  # Vai alla fine
     file_size = file.tell()
     file.seek(0)  # Torna all'inizio
-    
+
     if file_size > MAX_UPLOAD_SIZE:
-        flash(f"File troppo grande. Massimo consentito: 5MB.", "error")
-        return redirect(url_for('settings.business_info'))
-    
+        raise ValueError("File troppo grande. Massimo consentito: 5MB.")
+
     # Estensioni ammesse
     allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
     filename = file.filename.lower()
     ext = filename.rsplit('.', 1)[-1] if '.' in filename else ''
-    
+
     if ext not in allowed_extensions:
-        flash(f"Formato non supportato. Formati ammessi: PNG, JPEG, WebP, GIF, SVG.", "error")
-        return redirect(url_for('settings.business_info'))
-    
+        raise ValueError("Formato non supportato. Formati ammessi: PNG, JPEG, WebP, GIF, SVG.")
+
+    # Caso speciale: SVG (salvato as-is)
+    if ext == 'svg':
+        svg_data = file.read()
+        # Verifica che sia effettivamente XML/SVG
+        if b'<svg' not in svg_data.lower():
+            raise ValueError("Il file SVG non sembra valido.")
+        return svg_data, 'image/svg+xml'
+
+    # Immagini raster: elaborazione con Pillow
+    img = Image.open(file)
+
+    # Verifica se ha trasparenza (alpha channel)
+    has_alpha = img.mode in ('RGBA', 'LA', 'PA') or \
+                (img.mode == 'P' and 'transparency' in img.info)
+
+    # Converti in RGBA se necessario per preservare trasparenza
+    if has_alpha and img.mode != 'RGBA':
+        img = img.convert('RGBA')
+    elif not has_alpha and img.mode not in ('RGB',):
+        img = img.convert('RGB')
+
+    # Ridimensiona mantenendo le proporzioni
+    width, height = img.size
+    if height > MAX_HEIGHT or width > MAX_WIDTH:
+        # Calcola ratio per entrambi i limiti
+        ratio_h = MAX_HEIGHT / height
+        ratio_w = MAX_WIDTH / width
+        ratio = min(ratio_h, ratio_w)
+
+        new_width = int(width * ratio)
+        new_height = int(height * ratio)
+        img = img.resize((new_width, new_height), Image.LANCZOS)
+
+    # Salva in memoria
+    output = io.BytesIO()
+
+    if has_alpha:
+        # Con trasparenza: salva come PNG
+        img.save(output, format='PNG', optimize=True)
+        mime_type = 'image/png'
+    else:
+        # Senza trasparenza: salva come WebP (più efficiente)
+        img.save(output, format='WEBP', quality=QUALITY, method=6)
+        mime_type = 'image/webp'
+
+    output.seek(0)
+    image_data = output.read()
+
+    # Verifica peso finale (warning se > 100KB)
+    if len(image_data) > 100 * 1024:
+        current_app.logger.warning(
+            "Logo salvato con peso > 100KB: %d bytes", len(image_data)
+        )
+
+    return image_data, mime_type
+
+
+@settings_bp.route('/settings/upload-logo', methods=['POST'])
+def upload_logo():
+    """
+    Upload e ottimizzazione logo negozio (elaborazione in _elabora_logo).
+    La pagina Info Azienda ora carica il logo col salvataggio unico; questa rotta
+    resta per chi la chiama direttamente.
+    """
+    file = request.files.get('logo')
     try:
-        # Caso speciale: SVG (salvato as-is)
-        if ext == 'svg':
-            svg_data = file.read()
-            # Verifica che sia effettivamente XML/SVG
-            if b'<svg' not in svg_data.lower():
-                flash("Il file SVG non sembra valido.", "error")
-                return redirect(url_for('settings.business_info'))
-            
-            business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
-            if not business_info:
-                business_info = BusinessInfo(business_name="Negozio")
-                db.session.add(business_info)
-            
-            business_info.logo_image = svg_data
-            business_info.logo_mime_type = 'image/svg+xml'
-            business_info.logo_filename = file.filename
-            db.session.commit()
-            
-            flash("Logo SVG caricato con successo!", "success")
-            return redirect(url_for('settings.business_info'))
-        
-        # Immagini raster: elaborazione con Pillow
-        img = Image.open(file)
-        original_format = img.format
-        
-        # Verifica se ha trasparenza (alpha channel)
-        has_alpha = img.mode in ('RGBA', 'LA', 'PA') or \
-                    (img.mode == 'P' and 'transparency' in img.info)
-        
-        # Converti in RGBA se necessario per preservare trasparenza
-        if has_alpha and img.mode != 'RGBA':
-            img = img.convert('RGBA')
-        elif not has_alpha and img.mode not in ('RGB',):
-            img = img.convert('RGB')
-        
-        # Ridimensiona mantenendo le proporzioni
-        width, height = img.size
-        if height > MAX_HEIGHT or width > MAX_WIDTH:
-            # Calcola ratio per entrambi i limiti
-            ratio_h = MAX_HEIGHT / height
-            ratio_w = MAX_WIDTH / width
-            ratio = min(ratio_h, ratio_w)
-            
-            new_width = int(width * ratio)
-            new_height = int(height * ratio)
-            img = img.resize((new_width, new_height), Image.LANCZOS)
-        
-        # Salva in memoria
-        output = io.BytesIO()
-        
-        if has_alpha:
-            # Con trasparenza: salva come PNG
-            img.save(output, format='PNG', optimize=True)
-            mime_type = 'image/png'
-        else:
-            # Senza trasparenza: salva come WebP (più efficiente)
-            img.save(output, format='WEBP', quality=QUALITY, method=6)
-            mime_type = 'image/webp'
-        
-        output.seek(0)
-        image_data = output.read()
-        
-        # Verifica peso finale (warning se > 100KB)
-        if len(image_data) > 100 * 1024:
-            current_app.logger.warning(
-                "Logo salvato con peso > 100KB: %d bytes", len(image_data)
-            )
-        
+        image_data, mime_type = _elabora_logo(file)
+
         # Salva in database
         business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
         if not business_info:
             business_info = BusinessInfo(business_name="Negozio")
             db.session.add(business_info)
-        
+
         business_info.logo_image = image_data
         business_info.logo_mime_type = mime_type
         business_info.logo_filename = file.filename
         db.session.commit()
-        
-        flash("Logo caricato e ottimizzato con successo!", "success")
-        
+
+        if mime_type == 'image/svg+xml':
+            flash("Logo SVG caricato con successo!", "success")
+        else:
+            flash("Logo caricato e ottimizzato con successo!", "success")
+
+    except ValueError as e:
+        flash(str(e), "error")
     except Exception as e:
         db.session.rollback()
         current_app.logger.error("Errore upload logo: %s", str(e))
         flash(f"Errore durante l'elaborazione del logo: {str(e)}", "error")
-    
+
     return redirect(url_for('settings.business_info'))
 
 
@@ -416,23 +418,40 @@ def set_business_info():
     business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
 
     if request.method == 'POST':
+        # La pagina Info Azienda salva tutto insieme con un solo Salva e chiede
+        # la risposta in JSON; un invio classico del modulo riceve ancora
+        # redirect + messaggio flash.
+        da_pagina = request.headers.get('X-Requested-With') == 'fetch'
+
+        def esito(ok, messaggio, codice=200):
+            if da_pagina:
+                return jsonify(ok=ok, message=messaggio), codice
+            flash(messaggio, "success" if ok else "error")
+            return redirect(url_for('settings.business_info'))
+
+        # I dati azienda li modificano solo admin e owner (come il modello
+        # stampante in save_printer_model). Un "user" vede la pagina in sola
+        # lettura: un suo invio azzerava i giorni di chiusura, perche' le
+        # caselle disattivate non viaggiano col modulo.
+        user_id = session.get('user_id')
+        utente = db.session.get(User, user_id) if user_id else None
+        ruolo = utente.ruolo.value if utente and utente.ruolo else ''
+        if ruolo not in ('admin', 'owner'):
+            return esito(False, "Le informazioni aziendali si modificano solo dagli account admin e owner.", 403)
+
         if not business_info:
             business_info = BusinessInfo()
             db.session.add(business_info)
 
-        business_info.business_name = request.form.get('business_name')
-        business_info.website = request.form.get('website')
-        business_info.web_app = request.form.get('web_app')
-        business_info.web_booking_page = request.form.get('web_booking_page')
-        business_info.address = request.form.get('address')
-        business_info.cap = request.form.get('cap')
-        business_info.province = request.form.get('province')
-        business_info.city = request.form.get('city')
-        business_info.vat_code = request.form.get('vat_code')
-        business_info.pec_code = request.form.get('pec_code')
-        business_info.phone = request.form.get('phone')
-        business_info.mobile = request.form.get('mobile')
-        business_info.email = request.form.get('email')
+        # Ogni campo si aggiorna SOLO se arriva col modulo: un campo che manca
+        # (pagina vecchia, ruolo che non lo vede, invio parziale) lascia il
+        # valore che c'e' nel database invece di azzerarlo. Stessa regola gia'
+        # usata qui sotto per i memo WhatsApp delle operatrici.
+        for campo in ('business_name', 'website', 'web_app', 'web_booking_page',
+                      'address', 'cap', 'province', 'city', 'vat_code', 'pec_code',
+                      'phone', 'mobile', 'email'):
+            if campo in request.form:
+                setattr(business_info, campo, request.form.get(campo))
 
         # Link alla pagina delle recensioni: e' quello che il tag {{link_recensione}}
         # del messaggio di benvenuto (Marketing) mette nel testo. Un indirizzo che
@@ -446,34 +465,32 @@ def set_business_info():
             else:
                 link_recensioni_scartato = True
 
-        vat_percentage = request.form.get('vat_percentage')
-        try:
-            business_info.vat_percentage = float(vat_percentage)
-        except (TypeError, ValueError):
-            business_info.vat_percentage = 22.0
+        if 'vat_percentage' in request.form:
+            try:
+                business_info.vat_percentage = float(request.form.get('vat_percentage'))
+            except (TypeError, ValueError):
+                business_info.vat_percentage = 22.0
 
-        business_info.rch_serial = request.form.get('rch_serial')
+        if 'rch_serial' in request.form:
+            business_info.rch_serial = request.form.get('rch_serial')
 
         # Modello stampante fiscale (se presente nel form)
         printer_model_val = request.form.get('printer_model')
         if printer_model_val and printer_model_val in ('rch_print_rt', 'rch_print_f'):
             business_info.printer_model = printer_model_val
 
-        # Orari e giorni di chiusura (se presenti nel form)
-        open_time_str = request.form.get('opening_time', '08:00')
-        business_info.opening_time = datetime.strptime(open_time_str, '%H:%M').time()
+        # Orari: solo se arrivano e sono compilati (un orario vuoto non diventa
+        # piu' 08:00/20:00 di nascosto).
+        for campo in ('opening_time', 'closing_time', 'active_opening_time', 'active_closing_time'):
+            valore = (request.form.get(campo) or '').strip()
+            if valore:
+                setattr(business_info, campo, datetime.strptime(valore[:5], '%H:%M').time())
 
-        close_time_str = request.form.get('closing_time', '20:00')
-        business_info.closing_time = datetime.strptime(close_time_str, '%H:%M').time()
-
-        active_open_str = request.form.get('active_opening_time', '08:00')
-        business_info.active_opening_time = datetime.strptime(active_open_str, '%H:%M').time()
-
-        active_close_str = request.form.get('active_closing_time', '20:00')
-        business_info.active_closing_time = datetime.strptime(active_close_str, '%H:%M').time()
-
-        closing_days = request.form.getlist('closing_days')
-        business_info.closing_days_list = closing_days
+        # Giorni di chiusura: le caselle non spuntate non viaggiano, quindi "nessuna
+        # casella" e "campo assente" si distinguono solo col segnaposto nascosto
+        # closing_days_presenti che la pagina manda sempre.
+        if 'closing_days_presenti' in request.form:
+            business_info.closing_days_list = request.form.getlist('closing_days')
 
         # Memo WhatsApp operatrici: si impostano dalla pagina WhatsApp
         # (whatsapp_per_operatori), il modulo Info Azienda non ha questi campi.
@@ -485,18 +502,57 @@ def set_business_info():
             business_info.operator_whatsapp_notification_time = datetime.strptime(operator_time_str, '%H:%M').time()
             business_info.operator_whatsapp_message_template = request.form.get('operator_whatsapp_message_template', '')
 
+        # Logo: si toglie o si sostituisce insieme al resto, con lo stesso Salva.
+        if request.form.get('logo_elimina') == '1':
+            business_info.logo_image = None
+            business_info.logo_mime_type = None
+            business_info.logo_filename = None
+        else:
+            file_logo = request.files.get('logo')
+            if file_logo and file_logo.filename:
+                try:
+                    dati_logo, mime_logo = _elabora_logo(file_logo)
+                except ValueError as e:
+                    db.session.rollback()
+                    return esito(False, f"Niente è stato salvato: {e}", 400)
+                except Exception as e:
+                    db.session.rollback()
+                    current_app.logger.error("Errore logo in Info Azienda: %s", str(e))
+                    return esito(False, "Niente è stato salvato: il file del logo non è un'immagine leggibile.", 400)
+                business_info.logo_image = dati_logo
+                business_info.logo_mime_type = mime_logo
+                business_info.logo_filename = file_logo.filename
+
+        # Interruttore "mostra logo nella prenotazione online": anche questo e' una
+        # casella, quindi vale solo col segnaposto logo_visibile_presente.
+        if 'logo_visibile_presente' in request.form:
+            business_info.logo_visible_in_booking_page = 'logo_visible_in_booking_page' in request.form
+
+        # Cassa su Web App: solo owner, nella tabella OWNER (vedi api_cassa_on_web).
+        if ruolo == 'owner' and 'cassa_web_presente' in request.form:
+            owner_cfg = OWNER.query.first()
+            if not owner_cfg:
+                owner_cfg = OWNER()
+                db.session.add(owner_cfg)
+            owner_cfg.cassa_enabled_on_web = 'cassa_enabled_on_web' in request.form
+
         try:
             db.session.commit()
-            if link_recensioni_scartato:
-                flash("Informazioni aziendali salvate, ma il link recensioni NON è stato aggiornato: "
-                      "deve essere un indirizzo web completo, che inizia con https://", "error")
-            else:
-                flash("Informazioni aziendali aggiornate con successo!", "success")
         except Exception as e:
             db.session.rollback()
             app.logger.error("Errore durante l'aggiornamento delle info aziendali: %s", str(e))
-            flash("Si è verificato un errore durante il salvataggio. Riprova.", "error")
-            return redirect(url_for('settings.set_business_info'))
+            return esito(False, "Si è verificato un errore durante il salvataggio: niente è stato salvato. Riprova.", 500)
+
+        if link_recensioni_scartato:
+            avviso = ("Informazioni aziendali salvate, ma il link recensioni NON è stato aggiornato: "
+                      "deve essere un indirizzo web completo, che inizia con https://")
+            if da_pagina:
+                # Il resto e' salvato: ok=True, ma col campo da rivedere.
+                return jsonify(ok=True, message=avviso, avviso=True, campo='google_review_link')
+            return esito(False, avviso)
+        if da_pagina:
+            return esito(True, "Modifiche salvate.")
+        flash("Informazioni aziendali aggiornate con successo!", "success")
 
         # Dopo il salvataggio, ricarica la pagina con i dati aggiornati
         return redirect(url_for('settings.business_info'))

@@ -19,6 +19,7 @@ from appl.models import BusinessInfo
 from appl.autologin import issue_token as autologin_issue
 from appl.services.demo_trials import URL_BOOKING_DEMO
 from appl.formati import data_it
+from instradamento_cloud import collega_rotte_cliente, installa_rimando_al_negozio
 import time as time_mod
 import json
 import uuid
@@ -327,81 +328,11 @@ for idx, uri in {**pool, **demo_pool}.items():
 
     creds = unipile_creds_for(idx)
 
-    # Aggiungi la route mancante per client_info ai child
-    @child.route('/settings/api/client_info/<int:client_id>')
-    def client_info_wsgi(client_id):
-        from appl.models import Client
-        client = db.session.get(Client, client_id)
-        if not client:
-            return jsonify({})
-        return jsonify({
-            'cliente_nome': client.cliente_nome,
-            'cliente_cognome': client.cliente_cognome,
-            'cliente_cellulare': client.cliente_cellulare,
-            'cliente_email': client.cliente_email,
-            'note': client.note
-        })
-    
-    @child.route('/settings/api/update_client_info', methods=['POST'])
-    def update_client_info_wsgi():
-        from appl.models import Client
-        data = request.get_json(silent=True) or {}
-        client_id = data.get('client_id')
-        if not client_id:
-            return jsonify(success=False, error="client_id mancante"), 400
-
-        try:
-            client = db.session.get(Client, int(client_id))
-            if not client:
-                return jsonify(success=False, error="cliente non trovato"), 404
-
-            nome = data.get('cliente_nome')
-            cognome = data.get('cliente_cognome')
-            if nome is not None:
-                client.cliente_nome = nome.strip()
-            if cognome is not None:
-                client.cliente_cognome = cognome.strip()
-
-            db.session.commit()
-            return jsonify(success=True, cliente_nome=client.cliente_nome, cliente_cognome=client.cliente_cognome), 200
-
-        except Exception as e:
-            db.session.rollback()
-            child.logger.exception("update_client_info error")
-            return jsonify(success=False, error="errore interno"), 500
-
-    @child.route('/settings/api/update_client_phone', methods=['POST'])
-    def update_client_phone_wsgi():
-        from appl.models import Client
-        data = request.get_json()
-        client = db.session.get(Client, data.get('client_id'))
-        if client:
-            client.cliente_cellulare = data.get('phone', '')
-            db.session.commit()
-            return jsonify(success=True, phone=client.cliente_cellulare)
-        return jsonify(success=False), 404
-
-    @child.route('/settings/api/update_client_email', methods=['POST'])
-    def update_client_email_wsgi():
-        from appl.models import Client
-        data = request.get_json()
-        client = db.session.get(Client, data.get('client_id'))
-        if client:
-            client.cliente_email = data.get('email', '')
-            db.session.commit()
-            return jsonify(success=True, email=client.cliente_email)
-        return jsonify(success=False), 404
-    
-    @child.route('/settings/api/update_client_note', methods=['POST'])
-    def update_client_note_wsgi():
-        from appl.models import Client
-        data = request.get_json()
-        client = db.session.get(Client, data.get('client_id'))
-        if client:
-            client.note = data.get('note', '')
-            db.session.commit()
-            return jsonify(success=True, note=client.note)
-        return jsonify(success=False), 404
+    # Rotte della scheda cliente ("i" in Agenda, cassa, pacchetti): le stesse
+    # funzioni del .exe, collegate a ogni negozio (vedi instradamento_cloud).
+    # Prima qui c'erano 5 copie scritte a mano, che non mettevano la maiuscola
+    # ai nomi come fa il .exe.
+    collega_rotte_cliente(child)
 
     def with_db_cookie(app, idx_local, secure=False):
         def _wrap(environ, start_response):
@@ -422,6 +353,10 @@ for idx, uri in {**pool, **demo_pool}.items():
 
 application = DispatcherMiddleware(root_app, mounts)
 app = application
+# Le pagine dei negozi usano molti indirizzi assoluti ('/calendar/...'): giusti
+# sul .exe, nel cloud arrivavano qui senza /s/<idx> e davano 404. Ora la root
+# li rimanda al negozio da cui parte la richiesta (vedi instradamento_cloud).
+installa_rimando_al_negozio(root_app, mounts)
 
 @root_app.route('/landing-web', methods=['GET', 'POST'])
 def landing_web():
@@ -2238,6 +2173,7 @@ def provision_tenant(uri, business_name, city='', modules=None,
         if not os.getenv('SECRET_KEY'):
             new_child.secret_key = secret
         new_child.config['IS_CLOUD'] = True
+        collega_rotte_cliente(new_child)
 
         @new_child.context_processor
         def _inject_cloud_cassa_flags():
