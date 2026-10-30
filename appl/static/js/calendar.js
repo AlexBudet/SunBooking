@@ -1994,43 +1994,51 @@ window.isFutureAppointmentRow = isFutureAppointmentRow;
 
 // =============================================================
 // "i" CLIENTE: UN SOLO SALVA (stessa regola di Info Azienda)
-// I campi della scheda restano in sospeso finche' non si preme Salva nel
-// piede del modal, che lo propone solo quando qualcosa e' cambiato. Annulla
-// rimette i valori letti all'apertura; chiudere (X, Esc, clic fuori) con
-// modifiche in sospeso chiede "Esci senza salvare / Salva ed esci".
+// I campi della scheda restano in sospeso finche' non si preme Salva nella
+// riga subito sotto i campi (la parte appuntamenti non si modifica). La riga
+// resta sempre al suo posto: Annulla e Salva si accendono solo quando
+// qualcosa e' cambiato, cosi' l'elenco sotto non si sposta a ogni lettera.
+// Annulla rimette i valori letti all'apertura; chiudere (X, Esc, clic fuori,
+// Chiudi) con modifiche in sospeso chiede "Esci senza salvare / Salva ed esci"
+// nella stessa riga.
 // Si chiamano SOLO le rotte dei campi cambiati: un campo non toccato non
 // viene mai riscritto.
 // Usato dal modal desktop (showClientInfoModal) e da quello mobile
 // (ClientInfoMobileModal in calendar.html, via window.creaSalvataggioCliente).
 // =============================================================
-function creaSalvataggioCliente(modal, footer) {
+function creaSalvataggioCliente(modal) {
   if (modal._ciSalva) return modal._ciSalva;
 
   const leggiCsrf = () => document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-  const stato = { clientId: null, campi: {}, iniziale: {}, fase: 'pulito', forzaChiusura: false, dopoNome: null };
+  const stato = { clientId: null, campi: {}, iniziale: {}, fase: 'pulito', forzaChiusura: false, dopoNome: null, ui: null };
   let timerPulito = null;
 
-  // Piede: testo a sinistra, pulsanti a destra
-  footer.innerHTML = '';
-  footer.classList.add('ci-piede');
-  const testo = document.createElement('span');
-  testo.className = 'ci-piede-testo';
-  const azioni = document.createElement('div');
-  azioni.className = 'ci-piede-azioni';
-  const pulsante = (classe, etichetta) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'btn ' + classe;
-    b.textContent = etichetta;
-    return b;
-  };
-  const btnEsci = pulsante('btn-outline-danger', 'Esci senza salvare');
-  const btnAnnulla = pulsante('btn-outline-secondary', 'Annulla');
-  const btnSalva = pulsante('btn-primary', 'Salva');
-  const btnChiudi = pulsante('btn-secondary', 'Chiudi');
-  btnChiudi.setAttribute('data-bs-dismiss', 'modal');
-  azioni.append(btnEsci, btnAnnulla, btnSalva, btnChiudi);
-  footer.append(testo, azioni);
+  // Riga di salvataggio: testo di stato a sinistra, pulsanti a destra.
+  // Si ridisegna a ogni apertura (il modal desktop ricostruisce il corpo).
+  function disegnaRiga(barra) {
+    barra.innerHTML = '';
+    barra.classList.add('ci-barra-salva');
+    const testo = document.createElement('span');
+    testo.className = 'ci-barra-testo';
+    const azioni = document.createElement('div');
+    azioni.className = 'ci-barra-azioni';
+    const pulsante = (classe, etichetta) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn btn-sm ' + classe;
+      b.textContent = etichetta;
+      return b;
+    };
+    const btnEsci = pulsante('btn-outline-danger', 'Esci senza salvare');
+    const btnAnnulla = pulsante('btn-outline-secondary', 'Annulla');
+    const btnSalva = pulsante('btn-primary', 'Salva');
+    azioni.append(btnEsci, btnAnnulla, btnSalva);
+    barra.append(testo, azioni);
+    btnAnnulla.addEventListener('click', ripristina);
+    btnEsci.addEventListener('click', () => { ripristina(); chiudi(); });
+    btnSalva.addEventListener('click', () => salva(stato.fase === 'conferma'));
+    return { barra, testo, btnEsci, btnAnnulla, btnSalva };
+  }
 
   const valori = () => {
     const v = {};
@@ -2046,28 +2054,31 @@ function creaSalvataggioCliente(modal, footer) {
   function mostra(fase, messaggio) {
     clearTimeout(timerPulito);
     stato.fase = fase;
-    footer.setAttribute('data-fase', fase);
+    const ui = stato.ui;
+    if (!ui) return;
+    ui.barra.setAttribute('data-fase', fase);
     const testi = {
       modifiche: 'Modifiche non salvate',
       conferma: 'Ci sono modifiche non salvate.',
       salvataggio: 'Salvataggio in corso...',
       salvato: 'Modifiche salvate'
     };
-    testo.textContent = messaggio || testi[fase] || '';
-    btnEsci.hidden = fase !== 'conferma';
-    btnAnnulla.hidden = !(fase === 'modifiche' || fase === 'errore');
-    btnSalva.hidden = !(fase === 'modifiche' || fase === 'errore' || fase === 'conferma' || fase === 'salvataggio');
-    btnSalva.textContent = fase === 'conferma' ? 'Salva ed esci' : 'Salva';
-    btnChiudi.hidden = !(fase === 'pulito' || fase === 'salvato');
-    btnSalva.disabled = btnAnnulla.disabled = (fase === 'salvataggio');
+    ui.testo.textContent = messaggio || testi[fase] || '';
+    ui.btnEsci.hidden = fase !== 'conferma';
+    ui.btnAnnulla.hidden = fase === 'conferma';
+    ui.btnSalva.textContent = fase === 'conferma' ? 'Salva ed esci' : 'Salva';
+    const acceso = (fase === 'modifiche' || fase === 'errore' || fase === 'conferma');
+    ui.btnSalva.disabled = !acceso;
+    ui.btnAnnulla.disabled = !acceso;
     if (fase === 'salvato') {
       timerPulito = setTimeout(() => { if (stato.fase === 'salvato') mostra('pulito'); }, 2500);
     }
   }
 
   function aggiorna() {
-    if (stato.fase === 'salvataggio' || stato.fase === 'conferma') {
-      if (stato.fase === 'conferma' && !cambiati().length) mostra('pulito');
+    if (stato.fase === 'salvataggio') return;
+    if (stato.fase === 'conferma') {
+      if (!cambiati().length) mostra('pulito');
       return;
     }
     mostra(cambiati().length ? 'modifiche' : 'pulito');
@@ -2084,15 +2095,21 @@ function creaSalvataggioCliente(modal, footer) {
     stato.forzaChiusura = true;
     try { bootstrap.Modal.getOrCreateInstance(modal).hide(); } catch (_) {}
   }
-  btnAnnulla.addEventListener('click', ripristina);
-  btnEsci.addEventListener('click', () => { ripristina(); chiudi(); });
-  btnSalva.addEventListener('click', () => salva(stato.fase === 'conferma'));
+  function chiediConferma() {
+    mostra('conferma');
+    const b = stato.ui && stato.ui.barra;
+    if (!b) return;
+    try { b.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {}
+    b.classList.remove('ci-barra-richiamo');
+    void b.offsetWidth; // riparte l'animazione anche al secondo tentativo
+    b.classList.add('ci-barra-richiamo');
+  }
 
-  // X, Esc, clic fuori, pulsante Chiudi: con modifiche in sospeso non si chiude
+  // X, Esc, clic fuori, Chiudi: con modifiche in sospeso non si chiude
   modal.addEventListener('hide.bs.modal', e => {
     if (stato.forzaChiusura) { stato.forzaChiusura = false; return; }
     if (stato.fase === 'salvataggio') { e.preventDefault(); return; }
-    if (cambiati().length) { e.preventDefault(); mostra('conferma'); }
+    if (cambiati().length) { e.preventDefault(); chiediConferma(); }
   });
 
   async function invia(url, corpo) {
@@ -2186,22 +2203,311 @@ function creaSalvataggioCliente(modal, footer) {
   }
 
   const api = {
-    // campi = { nome, cognome, cellulare, email, note? } (input gia' compilati)
-    apri(clientId, campi, dopoNome) {
+    // campi = { nome, cognome, cellulare, email, note? } (input gia' compilati);
+    // barra = elemento sotto i campi dove disegnare testo e pulsanti
+    apri(clientId, campi, dopoNome, barra) {
       stato.clientId = clientId;
       stato.campi = campi || {};
       stato.dopoNome = dopoNome || null;
       stato.forzaChiusura = false;
       stato.iniziale = valori();
+      stato.ui = barra ? disegnaRiga(barra) : null;
       mostra('pulito');
     },
     haModifiche() { return cambiati().length > 0; },
-    chiediConferma() { mostra('conferma'); }
+    chiediConferma
   };
   modal._ciSalva = api;
   return api;
 }
 window.creaSalvataggioCliente = creaSalvataggioCliente;
+
+// =============================================================
+// "i" CLIENTE: PROSSIMI E STORICO
+// Due schede (Prossimi | Storico); una riga per visita, cioe' i servizi dello
+// stesso giorno insieme; nello storico i mesi fanno da separatori e le visite
+// si mostrano 10 alla volta. Clic su una riga = quel giorno in Agenda.
+// In cima, se c'e' il contenitore, le statistiche del cliente (client-loyalty).
+// Usato dal modal desktop e da quello mobile.
+// =============================================================
+const CI_MESI = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+const CI_MESI_LUNGHI = ['GENNAIO', 'FEBBRAIO', 'MARZO', 'APRILE', 'MAGGIO', 'GIUGNO', 'LUGLIO', 'AGOSTO', 'SETTEMBRE', 'OTTOBRE', 'NOVEMBRE', 'DICEMBRE'];
+const CI_GIORNI = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+const CI_VISITE_PER_VOLTA = 10;
+
+function ciFormattaEuro(n) {
+  return '€ ' + Number(n).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+// righe della rotta -> una visita per giorno
+function ciRaggruppaVisite(righe) {
+  const perGiorno = new Map();
+  (righe || []).forEach(r => {
+    const m = String(r.ora_inizio || '').match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+    if (!m) return;
+    if (!perGiorno.has(m[1])) {
+      perGiorno.set(m[1], { data: m[1], ore: [], servizi: [], operatori: [], durata: 0, totale: 0, conPrezzo: false, pagati: 0, righe: 0 });
+    }
+    const v = perGiorno.get(m[1]);
+    v.righe += 1;
+    v.ore.push(m[2]);
+    const servizio = r.servizio_tag || r.servizio;
+    if (servizio) v.servizi.push(servizio);
+    if (r.operatore && !v.operatori.includes(r.operatore)) v.operatori.push(r.operatore);
+    v.durata += parseInt(r.durata, 10) || 0;
+    const prezzo = parseFloat(String(r.costo ?? '').replace(',', '.'));
+    if (!isNaN(prezzo)) { v.totale += prezzo; v.conPrezzo = true; }
+    if (String(r.stato) === '2' || String(r.stato).toUpperCase() === 'PAGATO') v.pagati += 1;
+  });
+  perGiorno.forEach(v => v.ore.sort());
+  return [...perGiorno.values()];
+}
+
+function ciRigaVisita(v, futura) {
+  const [anno, mese, giorno] = v.data.split('-');
+  const dt = new Date(+anno, +mese - 1, +giorno);
+  const riga = document.createElement('button');
+  riga.type = 'button';
+  riga.className = 'ci-visita';
+
+  const colData = document.createElement('span');
+  colData.className = 'ci-visita-data';
+  const gm = document.createElement('strong');
+  gm.textContent = `${giorno} ${CI_MESI[+mese - 1]}`;
+  const ag = document.createElement('small');
+  ag.textContent = `${anno} · ${CI_GIORNI[dt.getDay()]}`;
+  colData.append(gm, ag);
+
+  const colOra = document.createElement('span');
+  colOra.className = 'ci-visita-ora';
+  colOra.textContent = v.ore[0] || '';
+  if (v.durata) {
+    const d = document.createElement('small');
+    d.textContent = v.durata + ' min';
+    colOra.appendChild(d);
+  }
+
+  const colServizi = document.createElement('span');
+  colServizi.className = 'ci-visita-servizi';
+  v.servizi.forEach(s => {
+    const chip = document.createElement('span');
+    chip.className = 'ci-chip';
+    chip.textContent = s;
+    colServizi.appendChild(chip);
+  });
+  if (futura && v.righe && v.pagati === v.righe) {
+    const pagato = document.createElement('span');
+    pagato.className = 'ci-chip ci-chip-pagato';
+    pagato.textContent = 'Pagato';
+    colServizi.appendChild(pagato);
+  }
+
+  const colOperatore = document.createElement('span');
+  colOperatore.className = 'ci-visita-operatore';
+  colOperatore.textContent = v.operatori.join(', ');
+
+  const colPrezzo = document.createElement('span');
+  colPrezzo.className = 'ci-visita-prezzo';
+  colPrezzo.textContent = v.conPrezzo ? ciFormattaEuro(v.totale) : '—';
+
+  const vai = document.createElement('i');
+  vai.className = 'bi bi-chevron-right ci-visita-vai';
+
+  riga.append(colData, colOra, colServizi, colOperatore, colPrezzo, vai);
+  riga.addEventListener('click', () => {
+    const ora = v.ore[0] || '';
+    if (v.data && ora) window.location.href = `/calendar?date=${v.data}&ora=${ora}`;
+  });
+  return riga;
+}
+
+function ciVuoto(testo, icona) {
+  const d = document.createElement('div');
+  d.className = 'ci-vuoto';
+  const i = document.createElement('i');
+  i.className = 'bi ' + icona;
+  const t = document.createElement('span');
+  t.textContent = testo;
+  d.append(i, t);
+  return d;
+}
+
+function ciDisegnaStatistiche(contenitore, fed) {
+  contenitore.innerHTML = '';
+  contenitore.classList.add('ci-statistiche');
+  if (fed && fed.label) {
+    const colori = {
+      vip: ['#f3e8ff', '#7c3aed', '#c4b5fd'],
+      info: ['#e0f2fe', '#0369a1', '#7dd3fc'],
+      warning: ['#fff3e0', '#c2410c', '#fdba74'],
+      light: ['#f1f5f9', '#475569', '#cbd5e1'],
+      secondary: ['#f1f5f9', '#64748b', '#cbd5e1']
+    };
+    const [bg, fg, bordo] = colori[fed.colore] || colori.light;
+    const badge = document.createElement('span');
+    badge.className = 'ci-fedelta';
+    badge.style.background = bg;
+    badge.style.color = fg;
+    badge.style.borderColor = bordo;
+    badge.textContent = `${fed.icon || ''} ${fed.label || ''}`.trim();
+    contenitore.appendChild(badge);
+  }
+  const tessera = (etichetta, valore) => {
+    if (valore === null || valore === undefined || valore === '') return;
+    const t = document.createElement('div');
+    t.className = 'ci-stat';
+    const e = document.createElement('small');
+    e.textContent = etichetta;
+    const v = document.createElement('strong');
+    v.textContent = valore;
+    t.append(e, v);
+    contenitore.appendChild(t);
+  };
+  if (!fed) return;
+  tessera('Visite', fed.visite_totali ? String(fed.visite_totali) : null);
+  if (fed.cliente_da_giorni) {
+    const anni = Math.floor(fed.cliente_da_giorni / 365);
+    const mesi = Math.floor((fed.cliente_da_giorni % 365) / 30);
+    tessera('Cliente da', anni > 0
+      ? `${anni} ${anni === 1 ? 'anno' : 'anni'}${mesi > 0 ? ` e ${mesi} ${mesi === 1 ? 'mese' : 'mesi'}` : ''}`
+      : (mesi > 0 ? `${mesi} ${mesi === 1 ? 'mese' : 'mesi'}` : 'nuovo cliente'));
+  }
+  if (fed.ultima_visita_giorni_fa !== null && fed.ultima_visita_giorni_fa !== undefined) {
+    const g = fed.ultima_visita_giorni_fa;
+    tessera('Ultima visita', g === 0 ? 'oggi' : (g === 1 ? 'ieri' : `${g} giorni fa`));
+  }
+  tessera('Spesa totale', fed.spesa_totale ? ciFormattaEuro(fed.spesa_totale) : null);
+}
+
+// contenitore: dove disegnare schede ed elenchi; statistiche: facoltativo
+function ciCaricaAppuntamenti(contenitore, clientId, statistiche) {
+  contenitore.innerHTML = '';
+  contenitore.classList.add('ci-appuntamenti');
+  const id = encodeURIComponent(clientId);
+
+  if (statistiche) {
+    fetch(`/calendar/api/client-loyalty/${id}`)
+      .then(r => r.ok ? r.json() : Promise.reject('client_loyalty failed'))
+      .then(fed => ciDisegnaStatistiche(statistiche, fed))
+      .catch(err => { statistiche.innerHTML = ''; console.warn('client-loyalty non disponibile', err); });
+  }
+
+  const schede = document.createElement('div');
+  schede.className = 'ci-schede';
+  schede.setAttribute('role', 'tablist');
+  const pannelli = document.createElement('div');
+  pannelli.className = 'ci-pannelli';
+  contenitore.append(schede, pannelli);
+
+  const crea = (chiave, etichetta) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ci-scheda';
+    b.setAttribute('role', 'tab');
+    b.dataset.scheda = chiave;
+    const t = document.createElement('span');
+    t.textContent = etichetta;
+    const n = document.createElement('span');
+    n.className = 'ci-conta';
+    n.textContent = '…';
+    b.append(t, n);
+    const p = document.createElement('div');
+    p.className = 'ci-pannello';
+    p.setAttribute('role', 'tabpanel');
+    p.hidden = true;
+    p.textContent = 'Caricamento...';
+    schede.appendChild(b);
+    pannelli.appendChild(p);
+    b.addEventListener('click', () => scegli(chiave));
+    return { b, n, p };
+  };
+  const prossimi = crea('prossimi', 'Prossimi');
+  const storico = crea('storico', 'Storico');
+  function scegli(chiave) {
+    [['prossimi', prossimi], ['storico', storico]].forEach(([k, s]) => {
+      const attiva = k === chiave;
+      s.b.classList.toggle('attiva', attiva);
+      s.b.setAttribute('aria-selected', attiva ? 'true' : 'false');
+      s.p.hidden = !attiva;
+    });
+  }
+  scegli('prossimi');
+
+  const caricaProssimi = fetch(`/calendar/api/next-appointments-for-client/${id}`)
+    .then(r => r.ok ? r.json() : Promise.reject('next appointments failed'))
+    .then(righe => {
+      const visite = ciRaggruppaVisite(righe).sort((a, b) => a.data.localeCompare(b.data));
+      prossimi.n.textContent = String(visite.length);
+      prossimi.p.innerHTML = '';
+      if (!visite.length) {
+        prossimi.p.appendChild(ciVuoto('Nessun appuntamento in programma', 'bi-calendar-x'));
+      } else {
+        visite.forEach(v => prossimi.p.appendChild(ciRigaVisita(v, true)));
+      }
+      return visite.length;
+    })
+    .catch(err => {
+      prossimi.n.textContent = '!';
+      prossimi.p.innerHTML = '';
+      prossimi.p.appendChild(ciVuoto('Errore nel caricamento dei prossimi appuntamenti', 'bi-exclamation-triangle'));
+      console.error('next appointments error', err);
+      return 0;
+    });
+
+  const caricaStorico = fetch(`/settings/api/client_history?q=${id}`)
+    .then(r => r.ok ? r.json() : Promise.reject('history failed'))
+    .then(righe => {
+      // Gli appuntamenti futuri (es. pagati in anticipo) stanno in Prossimi
+      const adesso = new Date();
+      const passate = (Array.isArray(righe) ? righe : []).filter(r => !isFutureAppointmentRow(r.ora_inizio, adesso));
+      const visite = ciRaggruppaVisite(passate).sort((a, b) => b.data.localeCompare(a.data));
+      storico.n.textContent = String(visite.length);
+      storico.p.innerHTML = '';
+      if (!visite.length) {
+        storico.p.appendChild(ciVuoto('Nessuna visita nello storico', 'bi-clock-history'));
+        return 0;
+      }
+      let mostrate = 0;
+      let meseCorrente = '';
+      const altre = document.createElement('button');
+      altre.type = 'button';
+      altre.className = 'btn btn-sm btn-outline-secondary ci-altre';
+      const mostraAltre = () => {
+        visite.slice(mostrate, mostrate + CI_VISITE_PER_VOLTA).forEach(v => {
+          const mese = v.data.slice(0, 7);
+          if (mese !== meseCorrente) {
+            meseCorrente = mese;
+            const sep = document.createElement('div');
+            sep.className = 'ci-mese';
+            sep.textContent = `${CI_MESI_LUNGHI[+mese.slice(5, 7) - 1]} ${mese.slice(0, 4)}`;
+            storico.p.insertBefore(sep, altre);
+          }
+          storico.p.insertBefore(ciRigaVisita(v, false), altre);
+        });
+        mostrate = Math.min(visite.length, mostrate + CI_VISITE_PER_VOLTA);
+        const restano = visite.length - mostrate;
+        altre.hidden = restano <= 0;
+        altre.textContent = `Mostra altre ${Math.min(restano, CI_VISITE_PER_VOLTA)} visite (ne restano ${restano})`;
+      };
+      altre.addEventListener('click', mostraAltre);
+      storico.p.appendChild(altre);
+      mostraAltre();
+      return visite.length;
+    })
+    .catch(err => {
+      storico.n.textContent = '!';
+      storico.p.innerHTML = '';
+      storico.p.appendChild(ciVuoto('Errore nel caricamento dello storico', 'bi-exclamation-triangle'));
+      console.error('client_history error', err);
+      return 0;
+    });
+
+  // Senza appuntamenti in programma si apre direttamente lo storico
+  Promise.all([caricaProssimi, caricaStorico]).then(([nProssimi, nStorico]) => {
+    if (!nProssimi && nStorico && prossimi.b.classList.contains('attiva')) scegli('storico');
+  });
+}
+window.ciCaricaAppuntamenti = ciCaricaAppuntamenti;
 
 function showClientInfoModal(clientId) {
   if (!clientId) return;
@@ -2253,9 +2559,15 @@ function showClientInfoModal(clientId) {
     body.style.overflow = 'hidden';
     body.style.flex = '1 1 auto'; 
 
-    // footer: lo riempie creaSalvataggioCliente (Chiudi, oppure Annulla/Salva)
+    // footer: solo Chiudi (Salva e Annulla stanno sotto i campi del cliente)
     const footer = document.createElement('div');
     footer.className = 'modal-footer';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'btn btn-secondary';
+    closeBtn.setAttribute('data-bs-dismiss', 'modal');
+    closeBtn.textContent = 'Chiudi';
+    footer.appendChild(closeBtn);
 
     content.appendChild(header);
     content.appendChild(body);
@@ -2268,7 +2580,7 @@ function showClientInfoModal(clientId) {
   // Un solo Salva per tutta la scheda (vedi creaSalvataggioCliente). Se la
   // scheda e' gia' aperta con modifiche in sospeso non la si sostituisce:
   // prima si sceglie se salvarle o lasciarle.
-  const salvataggio = creaSalvataggioCliente(modal, modal.querySelector('.modal-footer'));
+  const salvataggio = creaSalvataggioCliente(modal);
   if (modal.classList.contains('show') && salvataggio.haModifiche()) {
     salvataggio.chiediConferma();
     return;
@@ -2481,322 +2793,26 @@ function showClientInfoModal(clientId) {
       noteContainer.appendChild(noteTextarea);
       body.appendChild(noteContainer);
 
-      // Tutti i campi della scheda passano dal Salva unico del piede
+      // Riga Salva/Annulla subito sotto i campi: tutta la scheda passa da qui
+      const barraSalva = document.createElement('div');
+      body.appendChild(barraSalva);
       salvataggio.apri(clientId, {
         nome: nameField.input,
         cognome: surnameField.input,
         cellulare: phoneField.input,
         email: emailField.input,
         note: noteTextarea
-      }, dopoNome);
+      }, dopoNome, barraSalva);
 
-      // FEDELTÀ CLIENTE (badge + statistiche, popolato in modo asincrono)
-      const loyaltyContainer = document.createElement('div');
-      loyaltyContainer.style.marginTop = '14px';
-      loyaltyContainer.style.display = 'flex';
-      loyaltyContainer.style.flexWrap = 'wrap';
-      loyaltyContainer.style.alignItems = 'center';
-      loyaltyContainer.style.gap = '10px';
-      body.appendChild(loyaltyContainer);
-
-      const LOYALTY_COLORS = {
-        vip: { bg: '#f3e8ff', fg: '#7c3aed', border: '#c4b5fd' },
-        info: { bg: '#e0f2fe', fg: '#0369a1', border: '#7dd3fc' },
-        warning: { bg: '#fff3e0', fg: '#c2410c', border: '#fdba74' },
-        light: { bg: '#f1f5f9', fg: '#475569', border: '#cbd5e1' },
-        secondary: { bg: '#f1f5f9', fg: '#64748b', border: '#cbd5e1' },
-      };
-
-      fetch(`/calendar/api/client-loyalty/${encodeURIComponent(clientId)}`)
-        .then(r => r.ok ? r.json() : Promise.reject('client_loyalty failed'))
-        .then(fed => {
-          const colors = LOYALTY_COLORS[fed.colore] || LOYALTY_COLORS.light;
-          const badge = document.createElement('span');
-          badge.textContent = `${fed.icon || ''} ${fed.label || ''}`.trim();
-          badge.style.fontWeight = '700';
-          badge.style.fontSize = '0.85em';
-          badge.style.padding = '4px 10px';
-          badge.style.borderRadius = '999px';
-          badge.style.background = colors.bg;
-          badge.style.color = colors.fg;
-          badge.style.border = `1px solid ${colors.border}`;
-          badge.style.whiteSpace = 'nowrap';
-          loyaltyContainer.appendChild(badge);
-
-          const statsParts = [];
-          if (fed.visite_totali) statsParts.push(`${fed.visite_totali} visite totali`);
-          if (fed.cliente_da_giorni) {
-            const anni = Math.floor(fed.cliente_da_giorni / 365);
-            const mesi = Math.floor((fed.cliente_da_giorni % 365) / 30);
-            const tenure = anni > 0
-              ? `cliente da ${anni} ${anni === 1 ? 'anno' : 'anni'}${mesi > 0 ? ` e ${mesi} ${mesi === 1 ? 'mese' : 'mesi'}` : ''}`
-              : mesi > 0 ? `cliente da ${mesi} ${mesi === 1 ? 'mese' : 'mesi'}` : 'nuovo cliente';
-            statsParts.push(tenure);
-          }
-          if (fed.ultima_visita_giorni_fa !== null && fed.ultima_visita_giorni_fa !== undefined) {
-            const g = fed.ultima_visita_giorni_fa;
-            let ultimaVisitaLabel;
-            if (g === 0) ultimaVisitaLabel = 'ultima visita oggi';
-            else if (g === 1) ultimaVisitaLabel = 'ultima visita ieri';
-            else ultimaVisitaLabel = `ultima visita ${g} giorni fa`;
-            statsParts.push(ultimaVisitaLabel);
-          }
-          if (fed.spesa_totale) statsParts.push(`spesa totale €${fed.spesa_totale.toFixed(2)}`);
-
-          if (statsParts.length) {
-            const stats = document.createElement('small');
-            stats.style.opacity = '0.75';
-            stats.textContent = statsParts.join(' · ');
-            loyaltyContainer.appendChild(stats);
-          }
-        })
-        .catch(err => { console.warn('client-loyalty non disponibile', err); });
-
-      const historyAndNextContainer = document.createElement('div');
-      historyAndNextContainer.style.flex = '1 1 0';
-      historyAndNextContainer.style.minHeight = '0';   // necessario per far funzionare lo scroll in flex
-      historyAndNextContainer.style.overflowY = 'auto'; // unico scroll per entrambe le sezioni
-      body.appendChild(historyAndNextContainer);
-
-      // separatore tra dati cliente e storico
-      const separator = document.createElement('hr');
-      separator.style.margin = '14px 0';
-      historyAndNextContainer.appendChild(separator);
-
-      // storico cliente (fetch)
-      const histContainer = document.createElement('div');
-      histContainer.style.marginTop = '6px';
-      // Rimuovi maxHeight e overflowY: ora gestito dal container padre
-      historyAndNextContainer.appendChild(histContainer);
-
-      const histTitle = document.createElement('div');
-      histTitle.textContent = 'STORICO APPUNTAMENTI';
-      histTitle.style.fontWeight = '700';
-      histTitle.style.textTransform = 'uppercase';
-      histTitle.style.marginBottom = '6px';
-      histContainer.appendChild(histTitle);
-
-      const histDivider = document.createElement('div');
-      histDivider.style.height = '1px';
-      histDivider.style.background = '#e0e0e0';
-      histDivider.style.marginBottom = '8px';
-      histContainer.appendChild(histDivider);
-
-      const histContent = document.createElement('div');
-      // garantisce spazio anche se vuoto
-      histContent.style.minHeight = '1.2em';
-      histContainer.appendChild(histContent);
-
-      fetch(`/settings/api/client_history?q=${encodeURIComponent(clientId)}`)
-        .then(r => r.ok ? r.json() : Promise.reject('history failed'))
-        .then(storico => {
-          histContent.innerHTML = '';
-          if (!Array.isArray(storico) || storico.length === 0) {
-            const em = document.createElement('em');
-            em.textContent = 'Nessuna seduta nello storico';
-            histContent.appendChild(em);
-            return;
-          }
-
-          // raggruppa e crea tabelle come nello tooltip (DOM-safe)
-          const groups = (function(arr){ /* reuse grouping logic inline */
-            const now = new Date(); const weekAgo = new Date(now); weekAgo.setDate(now.getDate()-7);
-            const monthAgo = new Date(now); monthAgo.setMonth(now.getMonth()-1);
-            const sixMonthsAgo = new Date(now); sixMonthsAgo.setMonth(now.getMonth()-6);
-            const G = { 'ULTIMA SETTIMANA':[], 'ULTIMO MESE':[], 'ULTIMI 6 MESI':[], 'MENO RECENTI':[] };
-            arr.forEach(row => {
-              // Gli appuntamenti FUTURI (es. pagati in anticipo) non sono storico:
-              // hanno la loro sezione PROSSIMI APPUNTAMENTI qui sotto. Senza questo
-              // filtro finivano tutti in "ULTIMA SETTIMANA" (dt >= weekAgo è vero
-              // anche per le date a venire).
-              if (isFutureAppointmentRow(row.ora_inizio, now)) return;
-              let d = row.ora_inizio && row.ora_inizio.length>10 ? row.ora_inizio.substring(0,10) : row.ora_inizio;
-              const dt = d ? new Date(d) : null;
-              if (dt && dt >= weekAgo) G['ULTIMA SETTIMANA'].push(row);
-              else if (dt && dt >= monthAgo) G['ULTIMO MESE'].push(row);
-              else if (dt && dt >= sixMonthsAgo) G['ULTIMI 6 MESI'].push(row);
-              else G['MENO RECENTI'].push(row);
-            });
-            return G;
-          })(storico);
-
-          const order = ['ULTIMA SETTIMANA','ULTIMO MESE','ULTIMI 6 MESI','MENO RECENTI'];
-          order.forEach(label => {
-            const group = groups[label];
-            if (group && group.length) {
-              const block = document.createElement('div');
-              block.style.marginTop = '10px';
-              const toggle = document.createElement('div');
-              toggle.style.cursor = 'pointer';
-              toggle.style.fontWeight = 'bold';
-              toggle.style.color = '#333';
-              toggle.style.userSelect = 'none';
-              const iconSpan = document.createElement('span');
-              iconSpan.textContent = label === 'ULTIMA SETTIMANA' ? '−' : '+';
-              iconSpan.style.marginRight = '6px';
-              toggle.appendChild(iconSpan);
-              toggle.appendChild(document.createTextNode(' ' + String(label) + ' (' + String(group.length) + ' PASSAGGI)'));
-              block.appendChild(toggle);
-
-              const tableWrapper = document.createElement('div');
-              tableWrapper.style.display = label === 'ULTIMA SETTIMANA' ? '' : 'none';
-              tableWrapper.style.marginTop = '6px';
-
-              const table = document.createElement('table');
-              table.className = 'table table-sm table-bordered mb-0';
-              table.style.fontSize = '0.93em';
-              const thead = document.createElement('thead');
-              const tr = document.createElement('tr');
-              ['Data','Ora','Servizio','Durata','Operatore','Prezzo'].forEach(text => {
-                const th = document.createElement('th');
-                th.textContent = text;
-                tr.appendChild(th);
-              });
-              thead.appendChild(tr);
-              table.appendChild(thead);
-              const tbody = document.createElement('tbody');
-
-              group.forEach(row => {
-                let dataStr = '';
-                let oraStr = '';
-                if (row.ora_inizio) {
-                  const match = String(row.ora_inizio).match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
-                  if (match) { dataStr = match[1]; oraStr = match[2]; } else { oraStr = String(row.ora_inizio); }
-                }
-                const parts = oraStr ? oraStr.split(':') : ['', ''];
-                const tr = document.createElement('tr');
-                tr.className = 'clickable-row';
-                tr.style.cursor = 'pointer';
-                tr.setAttribute('data-date', dataStr);
-                tr.setAttribute('data-hour', parts[0] || '');
-                tr.setAttribute('data-minute', parts[1] || '');
-                const tdData = document.createElement('td');
-                tdData.textContent = (window.formatDateItalian && dataStr)
-                  ? window.formatDateItalian(dataStr)
-                  : dataStr;
-                const tdOra = document.createElement('td'); tdOra.textContent = oraStr;
-                const tdServ = document.createElement('td'); tdServ.textContent = row.servizio_tag || '';
-                const tdDur = document.createElement('td'); tdDur.textContent = row.durata ? (row.durata + ' min') : '';
-                const tdOp  = document.createElement('td'); tdOp.textContent = row.operatore || '';
-                const tdCost= document.createElement('td'); tdCost.textContent = row.costo ? ('€' + row.costo) : '';
-                tr.append(tdData, tdOra, tdServ, tdDur, tdOp, tdCost);
-                tr.addEventListener('click', function() {
-                  const d = this.getAttribute('data-date');
-                  const h = this.getAttribute('data-hour');
-                  const m = this.getAttribute('data-minute');
-                  if (d && h && m) window.location.href = `/calendar?date=${d}&ora=${h}:${m}`;
-                });
-                tbody.appendChild(tr);
-              });
-
-              table.appendChild(tbody);
-              tableWrapper.appendChild(table);
-              block.appendChild(tableWrapper);
-
-              toggle.addEventListener('click', function() {
-                if (tableWrapper.style.display === 'none') {
-                  tableWrapper.style.display = '';
-                  iconSpan.textContent = '−';
-                } else {
-                  tableWrapper.style.display = 'none';
-                  iconSpan.textContent = '+';
-                }
-              });
-
-              histContent.appendChild(block);
-            }
-          });
-
-          // Tutti i passaggi erano appuntamenti futuri: lo storico è vuoto
-          if (!histContent.firstChild) {
-            const em = document.createElement('em');
-            em.textContent = 'Nessuna seduta nello storico';
-            histContent.appendChild(em);
-          }
-        })
-        .catch(err => {
-          histContent.innerHTML = '';
-          const em = document.createElement('em'); em.textContent = 'Errore caricamento storico';
-          histContent.appendChild(em);
-          console.error('client_history error', err);
-        });
-
-      // separatore per prossimi appuntamenti
-      const separator2 = document.createElement('hr');
-      separator2.style.margin = '14px 0';
-      historyAndNextContainer.appendChild(separator2);
-
-      // prossimi appuntamenti
-      const nextContainer = document.createElement('div');
-      nextContainer.style.marginTop = '6px';
-      historyAndNextContainer.appendChild(nextContainer);
-
-      const nextTitle = document.createElement('div');
-      nextTitle.textContent = 'PROSSIMI APPUNTAMENTI';
-      nextTitle.style.fontWeight = '700';
-      nextTitle.style.textTransform = 'uppercase';
-      nextTitle.style.marginBottom = '6px';
-      nextContainer.appendChild(nextTitle);
-
-      const nextDivider = document.createElement('div');
-      nextDivider.style.height = '1px';
-      nextDivider.style.background = '#e0e0e0';
-      nextDivider.style.marginBottom = '8px';
-      nextContainer.appendChild(nextDivider);
-
-      const nextContent = document.createElement('div');
-      nextContent.style.minHeight = '1.2em';
-      nextContainer.appendChild(nextContent);
-
-      fetch(`/calendar/api/next-appointments-for-client/${encodeURIComponent(clientId)}`)
-        .then(r => r.ok ? r.json() : Promise.reject('next appointments failed'))
-        .then(prossimi => {
-          nextContent.innerHTML = '';
-          if (!Array.isArray(prossimi) || prossimi.length === 0) {
-            const em = document.createElement('em'); em.textContent = 'Nessuna seduta prenotata';
-            nextContent.appendChild(em);
-            return;
-          }
-          const table = document.createElement('table');
-          table.className = 'table table-sm table-bordered mb-0';
-          table.style.fontSize = '0.93em';
-          const thead = document.createElement('thead');
-          const trh = document.createElement('tr');
-          ['Data','Ora','Servizio','Durata','Operatore','Prezzo'].forEach(txt=>{ const th=document.createElement('th'); th.textContent=txt; trh.appendChild(th); });
-          thead.appendChild(trh); table.appendChild(thead);
-          const tbody = document.createElement('tbody');
-
-          prossimi.forEach(row => {
-            let dataStr=''; let oraStr='';
-            if (row.ora_inizio) { const m = String(row.ora_inizio).match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/); if (m){dataStr=m[1]; oraStr=m[2];} else oraStr = row.ora_inizio; }
-            const parts = oraStr ? oraStr.split(':') : ['',''];
-            const tr = document.createElement('tr'); tr.style.cursor = 'pointer';
-            const tdData=document.createElement('td');
-            tdData.textContent = (window.formatDateItalian && dataStr)
-              ? window.formatDateItalian(dataStr)
-              : dataStr;
-            const tdOra=document.createElement('td'); tdOra.textContent=oraStr;
-            const tdServ=document.createElement('td'); tdServ.textContent=row.servizio_tag || '';
-            const tdDur=document.createElement('td'); tdDur.textContent=row.durata? (row.durata+' min') : '';
-            const tdOp=document.createElement('td'); tdOp.textContent=row.operatore || '';
-            const tdCost=document.createElement('td'); tdCost.textContent=row.costo ? ('€' + row.costo) : '';
-            tr.append(tdData, tdOra, tdServ, tdDur, tdOp, tdCost);
-            tr.addEventListener('click', function() {
-              const d = this.getAttribute('data-date'); const h = parts[0] || ''; const m = parts[1] || '';
-              if (dataStr && parts[0]) window.location.href = `/calendar?date=${dataStr}&ora=${parts[0]}:${parts[1]}`;
-            });
-            tbody.appendChild(tr);
-          });
-
-          table.appendChild(tbody);
-          nextContent.appendChild(table);
-        })
-        .catch(err => {
-          nextContent.innerHTML = '';
-          const em = document.createElement('em'); em.textContent = 'Errore caricamento prossimi appuntamenti';
-          nextContent.appendChild(em);
-          console.error('next appointments error', err);
-        });
+      // Statistiche del cliente, poi Prossimi | Storico (ciCaricaAppuntamenti):
+      // l'elenco scorre da solo, i campi e la riga Salva restano fermi.
+      const statistiche = document.createElement('div');
+      body.appendChild(statistiche);
+      const appuntamenti = document.createElement('div');
+      appuntamenti.style.flex = '1 1 0';
+      appuntamenti.style.minHeight = '0';
+      body.appendChild(appuntamenti);
+      ciCaricaAppuntamenti(appuntamenti, clientId, statistiche);
 
       // apri modal (già creato)
       try {

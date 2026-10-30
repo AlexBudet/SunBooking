@@ -1356,6 +1356,11 @@ def client_history():
             joinedload(Appointment.service)
         ).filter(Appointment.is_cancelled_by_client == False).order_by(Appointment.start_time.desc()).all()
 
+        # Gli scontrini del cliente si leggono UNA volta: prima la stessa query
+        # (che non dipende dalla visita) ripartiva per ogni visita, e con un
+        # cliente di 155 visite erano 155 letture di tutti i suoi scontrini.
+        receipts = db.session.query(Receipt).filter_by(cliente_id=client.id).order_by(Receipt.created_at.desc()).all()
+
         for appt in appointments:
             service = appt.service
             costo = None
@@ -1366,7 +1371,6 @@ def client_history():
                 op = db.session.get(Operator, appt.operator_id)
                 operatore_nome = (op.user_nome or "").strip() if op else None
 
-            receipts = db.session.query(Receipt).filter_by(cliente_id=client.id).order_by(Receipt.created_at.desc()).all()
             for receipt in receipts:
                 if not receipt.voci:
                     continue

@@ -2264,32 +2264,197 @@ button.client-info-btn {
   margin-left: auto;
 }
 
-/* "i" cliente (desktop e mobile): piede del Salva unico, vedi
-   creaSalvataggioCliente in calendar.js. Testo di stato a sinistra,
-   pulsanti a destra; il colore del testo segue la fase. */
-.modal-footer.ci-piede {
+/* "i" cliente (desktop e mobile): riga Salva/Annulla subito sotto i campi,
+   vedi creaSalvataggioCliente in calendar.js. Resta sempre al suo posto
+   (i pulsanti si accendono solo con modifiche); il colore del testo segue
+   la fase. */
+.ci-barra-salva {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 8px 12px;
-  padding: 10px 14px;
+  gap: 6px 10px;
+  min-height: 34px;
+  margin-top: 8px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 10px;
+  transition: background-color 0.2s, box-shadow 0.2s;
 }
-.ci-piede .ci-piede-testo {
-  font-size: 0.9rem;
+#ClientInfoModal .ci-barra-salva { width: 80%; margin-left: auto; margin-right: auto; }
+#ClientInfoMobileModal .ci-barra-salva { width: 95%; margin-left: auto; margin-right: auto; }
+.ci-barra-salva .ci-barra-testo {
+  margin-right: auto;
+  font-size: 0.88rem;
   font-weight: 600;
   color: #a15c00;
 }
-.ci-piede .ci-piede-azioni {
+.ci-barra-salva .ci-barra-azioni { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.ci-barra-salva .ci-barra-azioni .btn { margin: 0; }
+.ci-barra-salva[data-fase="modifiche"],
+.ci-barra-salva[data-fase="conferma"],
+.ci-barra-salva[data-fase="errore"] { background: #fff8ec; }
+.ci-barra-salva[data-fase="salvataggio"] .ci-barra-testo { color: #6c7a89; }
+.ci-barra-salva[data-fase="salvato"] .ci-barra-testo { color: #2e7d32; }
+.ci-barra-salva[data-fase="errore"] .ci-barra-testo { color: #c62828; }
+/* Tentativo di chiusura con modifiche in sospeso: la riga si fa notare */
+.ci-barra-salva.ci-barra-richiamo { animation: ciRichiamo 0.9s ease-out; }
+@keyframes ciRichiamo {
+  0% { box-shadow: 0 0 0 0 rgba(231, 44, 100, 0.45); }
+  100% { box-shadow: 0 0 0 10px rgba(231, 44, 100, 0); }
+}
+
+/* "i" cliente: statistiche in piccoli riquadri (ciDisegnaStatistiche) */
+.ci-statistiche {
   display: flex;
   flex-wrap: wrap;
+  align-items: stretch;
   gap: 8px;
-  margin-left: auto;
+  margin-top: 14px;
 }
-.ci-piede .ci-piede-azioni .btn { margin: 0; }
-.ci-piede[data-fase="salvataggio"] .ci-piede-testo { color: #6c7a89; }
-.ci-piede[data-fase="salvato"] .ci-piede-testo { color: #2e7d32; }
-.ci-piede[data-fase="errore"] .ci-piede-testo { color: #c62828; }
+.ci-statistiche .ci-fedelta {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.85em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ci-statistiche .ci-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 96px;
+  padding: 5px 12px;
+  border: 1px solid #eceff4;
+  border-radius: 10px;
+  background: #fafbfd;
+  line-height: 1.2;
+}
+.ci-statistiche .ci-stat small {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #6c7a89;
+}
+.ci-statistiche .ci-stat strong { font-size: 0.92rem; color: #2f3b4b; }
+
+/* "i" cliente: Prossimi | Storico (ciCaricaAppuntamenti) */
+.ci-appuntamenti {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 14px;
+}
+.ci-schede {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #e6e9ef;
+}
+.ci-scheda {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  margin-bottom: -1px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: #6c7a89;
+  font-weight: 600;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.ci-scheda:hover { color: #2f3b4b; }
+.ci-scheda.attiva { color: #e72c64; border-bottom-color: #e72c64; }
+.ci-scheda .ci-conta {
+  min-width: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #eef1f5;
+  color: #56616f;
+  font-size: 0.75rem;
+  line-height: 18px;
+  text-align: center;
+}
+.ci-scheda.attiva .ci-conta { background: #fde7ee; color: #c2185b; }
+.ci-pannelli { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-top: 6px; }
+.ci-pannello { color: #6c7a89; font-size: 0.9rem; }
+.ci-mese {
+  margin: 12px 4px 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #8a96a3;
+}
+.ci-mese:first-child { margin-top: 4px; }
+.ci-visita {
+  display: grid;
+  grid-template-columns: 78px 62px minmax(0, 1fr) auto auto 14px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid #f0f2f6;
+  background: none;
+  text-align: left;
+  color: #2f3b4b;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.ci-visita:hover { background: #faf5f8; }
+.ci-visita:hover .ci-visita-vai { color: #e72c64; }
+.ci-visita-data, .ci-visita-ora { display: flex; flex-direction: column; line-height: 1.2; }
+.ci-visita-data strong { font-size: 0.92rem; }
+.ci-visita-data small, .ci-visita-ora small { font-size: 0.72rem; color: #8a96a3; white-space: nowrap; }
+.ci-visita-ora { font-weight: 600; font-size: 0.9rem; }
+.ci-visita-servizi { display: flex; flex-wrap: wrap; gap: 4px; }
+.ci-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f1eef4;
+  color: #4a3f55;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.ci-chip.ci-chip-pagato { background: #e7f5ea; color: #2e7d32; font-weight: 600; }
+.ci-visita-operatore { font-size: 0.85rem; color: #56616f; white-space: nowrap; }
+.ci-visita-prezzo { font-weight: 600; font-size: 0.9rem; white-space: nowrap; text-align: right; }
+.ci-visita-vai { color: #c5ccd6; }
+.ci-altre { display: block; margin: 10px auto 4px; }
+.ci-vuoto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 10px;
+  color: #8a96a3;
+  font-size: 0.9rem;
+}
+.ci-vuoto i { font-size: 1.4rem; }
+
+/* Telefono: data e ora su una colonna, servizi sotto, prezzo a destra */
+#ClientInfoMobileModal .ci-visita {
+  grid-template-columns: 84px minmax(0, 1fr) auto 12px;
+  grid-template-areas:
+    "data servizi prezzo vai"
+    "ora  operatore prezzo vai";
+  row-gap: 2px;
+}
+#ClientInfoMobileModal .ci-visita-data { grid-area: data; }
+#ClientInfoMobileModal .ci-visita-ora { grid-area: ora; flex-direction: row; gap: 4px; font-size: 0.8rem; }
+#ClientInfoMobileModal .ci-visita-servizi { grid-area: servizi; }
+#ClientInfoMobileModal .ci-visita-operatore { grid-area: operatore; font-size: 0.78rem; }
+#ClientInfoMobileModal .ci-visita-prezzo { grid-area: prezzo; }
+#ClientInfoMobileModal .ci-visita-vai { grid-area: vai; }
+#ClientInfoMobileModal #ciStatistiche,
+#ClientInfoMobileModal #ciAppuntamenti { width: 95%; margin-left: auto; margin-right: auto; }
+/* Sul telefono scorre tutto il corpo del modal: l'elenco prende l'altezza del
+   suo contenuto invece di restringersi (il corpo e' una colonna flex). */
+#ClientInfoMobileModal #ciAppuntamenti { flex: 0 0 auto; min-height: auto; }
+#ClientInfoMobileModal .ci-pannelli { overflow: visible; }
 
 /* In compact quarter mode, keep note icon visible only when the appointment has a note. */
 body.quarter-55 .appointment-block .note-indicator {
