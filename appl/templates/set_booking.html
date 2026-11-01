@@ -88,6 +88,24 @@
 </table>
 <button id="save-booking-rules" class="btn btn-primary mt-3">Salva regole</button>
 </div>
+
+<!-- Fuori da #booking-rules-section: quella sparisce sotto i 1100px per la
+     tabella, il messaggio invece si scrive anche da schermi stretti. -->
+<div id="booking-info-section" class="container mt-5">
+  <h2>Messaggio informativo</h2>
+  <p class="text-muted mb-2">
+    Compare in cima alla pagina di prenotazione online, separato dalle regole qui sopra.
+    Scrivi tempi di conferma, disponibilit&agrave;, come prenotare in giornata.
+    Lascia vuoto per non mostrarlo.
+  </p>
+  <textarea id="booking-info-message" class="form-control" rows="4"
+    maxlength="1000"
+    placeholder="Es.: Le prenotazioni online vengono confermate entro 24 ore. Per appuntamenti in giornata chiama il negozio.">{{ business_info.booking_info_message or '' }}</textarea>
+  <div class="d-flex justify-content-between align-items-center mt-2">
+    <button id="save-booking-info" class="btn btn-primary">Salva messaggio</button>
+    <small class="text-muted"><span id="booking-info-count">0</span> / 1000</small>
+  </div>
+</div>
   <br><br><br>
   <h2>Servizi prenotabili online</h2>
   <!-- Qui resta SOLO la visibilita' online, che e' una proprieta' del servizio.
@@ -217,6 +235,25 @@ document.getElementById('save-booking-rules').onclick = function() {
     else { alert('Errore salvataggio regole'); }
   });
 };
+
+(function () {
+  const area = document.getElementById('booking-info-message');
+  const conta = document.getElementById('booking-info-count');
+  const aggiornaConta = () => { conta.textContent = area.value.length; };
+  area.addEventListener('input', aggiornaConta);
+  aggiornaConta();
+
+  document.getElementById('save-booking-info').onclick = function () {
+    fetch('{{ url_for("settings.update_booking_info_message") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')},
+      body: JSON.stringify({message: area.value})
+    }).then(r => r.json()).then(resp => {
+      if (resp.success) { alert(area.value.trim() ? 'Messaggio salvato!' : 'Messaggio rimosso dalla pagina di prenotazione.'); }
+      else { alert(resp.error || 'Errore salvataggio messaggio'); }
+    }).catch(() => alert('Errore salvataggio messaggio'));
+  };
+})();
 
 ['block-durata', 'block-prezzo'].forEach(id => {
   document.getElementById(id).addEventListener('change', function() {

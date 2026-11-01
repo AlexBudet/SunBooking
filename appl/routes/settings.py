@@ -2981,6 +2981,28 @@ def update_booking_rules():
     db.session.commit()
     return jsonify({"success": True})
 
+BOOKING_INFO_MESSAGE_MAX = 1000
+
+@settings_bp.route('/update_booking_info_message', methods=['POST'])
+def update_booking_info_message():
+    """Messaggio informativo della pagina di prenotazione online.
+
+    Scollegato dalle regole durata/prezzo: si salva da solo e un testo vuoto
+    toglie il riquadro dalla pagina pubblica (NULL, non stringa vuota).
+    """
+    data = request.get_json(silent=True) or {}
+    business_info = BusinessInfo.query.first()
+    if not business_info:
+        return jsonify({"success": False, "error": "BusinessInfo non trovato"})
+
+    testo = (data.get('message') or '').replace('\r\n', '\n').strip()
+    if len(testo) > BOOKING_INFO_MESSAGE_MAX:
+        return jsonify({"success": False, "error": f"Massimo {BOOKING_INFO_MESSAGE_MAX} caratteri"}), 400
+
+    business_info.booking_info_message = testo or None
+    db.session.commit()
+    return jsonify({"success": True})
+
 @settings_bp.route('/api/export_clients', methods=['GET'])
 def export_clients():
     try:

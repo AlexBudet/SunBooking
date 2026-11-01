@@ -341,6 +341,10 @@ class BusinessInfo(db.Model):
     booking_max_prezzo = db.Column(db.Float, default=0)
     booking_rule_type_prezzo = db.Column(db.String(20), default="none")
     booking_rule_message_prezzo = db.Column(db.String(255), default="none")
+    # Messaggio informativo libero in cima alla pagina di prenotazione online
+    # (tempi, disponibilita', modalita'). Non e' legato alle regole durata/prezzo:
+    # vuoto/NULL = riquadro non mostrato. Letto anche dal repo booking.
+    booking_info_message = db.Column(db.Text, nullable=True)
     operator_whatsapp_notification_enabled = db.Column(db.Boolean, default=False)
     operator_whatsapp_notification_time = db.Column(db.Time, default=datetime.strptime("20:00", "%H:%M").time())
     operator_whatsapp_message_template = db.Column(db.Text, nullable=True)
