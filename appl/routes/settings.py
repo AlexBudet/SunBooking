@@ -2,6 +2,8 @@
 import re
 import sys
 import tempfile
+from html import escape as html_escape
+from html.parser import HTMLParser
 from sqlalchemy import and_
 from sqlalchemy.orm import joinedload
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -2981,25 +2983,83 @@ def update_booking_rules():
     db.session.commit()
     return jsonify({"success": True})
 
-BOOKING_INFO_MESSAGE_MAX = 1000
+BOOKING_INFO_MESSAGE_MAX = 2000
+
+
+class _PulisciHtmlInfo(HTMLParser):
+    """Tiene solo la formattazione dell'editor (grassetto, corsivo,
+    sottolineato, a capo, link http/mailto/tel) e scarta tutto il resto,
+    attributi compresi. Il messaggio finisce nella pagina PUBBLICA di
+    prenotazione cosi' com'e': uno script salvato qui girerebbe nel browser
+    di ogni cliente."""
+    TAG_OK = {'b', 'strong', 'i', 'em', 'u', 'br', 'div', 'p', 'a'}
+    SENZA_CHIUSURA = {'br'}
+    SALTA_CONTENUTO = {'script', 'style'}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out, self.aperti, self.salta = [], [], 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.SALTA_CONTENUTO:
+            self.salta += 1
+            return
+        if self.salta or tag not in self.TAG_OK:
+            return
+        if tag == 'a':
+            href = (dict(attrs).get('href') or '').strip()
+            if not re.match(r'^(https?:|mailto:|tel:)', href, re.I):
+                return  # link scartato, il testo resta
+            self.out.append('<a href="%s" target="_blank" rel="noopener">' % html_escape(href, quote=True))
+        else:
+            self.out.append('<%s>' % tag)
+        if tag not in self.SENZA_CHIUSURA:
+            self.aperti.append(tag)
+
+    def handle_endtag(self, tag):
+        if tag in self.SALTA_CONTENUTO:
+            self.salta = max(0, self.salta - 1)
+            return
+        if self.salta or tag not in self.aperti:
+            return
+        while self.aperti:
+            t = self.aperti.pop()
+            self.out.append('</%s>' % t)
+            if t == tag:
+                break
+
+    def handle_data(self, data):
+        if not self.salta:
+            self.out.append(html_escape(data, quote=False))
+
+    def risultato(self):
+        self.close()
+        return ''.join(self.out) + ''.join('</%s>' % t for t in reversed(self.aperti))
+
 
 @settings_bp.route('/update_booking_info_message', methods=['POST'])
 def update_booking_info_message():
     """Messaggio informativo della pagina di prenotazione online.
 
-    Scollegato dalle regole durata/prezzo: si salva da solo e un testo vuoto
-    toglie il riquadro dalla pagina pubblica (NULL, non stringa vuota).
+    Scollegato dalle regole durata/prezzo: si salva da solo. E' HTML
+    dell'editor (come la descrizione dei servizi), ripulito da
+    _PulisciHtmlInfo; senza testo visibile si scrive NULL e il riquadro
+    sparisce dalla pagina pubblica.
     """
     data = request.get_json(silent=True) or {}
     business_info = BusinessInfo.query.first()
     if not business_info:
         return jsonify({"success": False, "error": "BusinessInfo non trovato"})
 
-    testo = (data.get('message') or '').replace('\r\n', '\n').strip()
-    if len(testo) > BOOKING_INFO_MESSAGE_MAX:
-        return jsonify({"success": False, "error": f"Massimo {BOOKING_INFO_MESSAGE_MAX} caratteri"}), 400
+    pulitore = _PulisciHtmlInfo()
+    pulitore.feed((data.get('message') or '').strip())
+    html = pulitore.risultato().strip()
+    if len(html) > BOOKING_INFO_MESSAGE_MAX:
+        return jsonify({"success": False,
+                        "error": "Messaggio troppo lungo: %d caratteri contro un massimo di %d. Accorcialo."
+                                 % (len(html), BOOKING_INFO_MESSAGE_MAX)}), 400
 
-    business_info.booking_info_message = testo or None
+    business_info.booking_info_message = None if _html_senza_testo(html) else html
     db.session.commit()
     return jsonify({"success": True})
 

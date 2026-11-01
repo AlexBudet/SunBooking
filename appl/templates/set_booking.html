@@ -94,17 +94,22 @@
 <div id="booking-info-section" class="container mt-5">
   <h2>Messaggio informativo</h2>
   <p class="text-muted mb-2">
-    Compare in cima alla pagina di prenotazione online, separato dalle regole qui sopra.
+    Compare nella pagina di prenotazione online sotto il campo di ricerca, insieme agli
+    avvisi delle regole, e sparisce come loro appena il cliente inizia a prenotare.
     Scrivi tempi di conferma, disponibilit&agrave;, come prenotare in giornata.
     Lascia vuoto per non mostrarlo.
   </p>
-  <textarea id="booking-info-message" class="form-control" rows="4"
-    maxlength="1000"
-    placeholder="Es.: Le prenotazioni online vengono confermate entro 24 ore. Per appuntamenti in giornata chiama il negozio.">{{ business_info.booking_info_message or '' }}</textarea>
-  <div class="d-flex justify-content-between align-items-center mt-2">
-    <button id="save-booking-info" class="btn btn-primary">Salva messaggio</button>
-    <small class="text-muted"><span id="booking-info-count">0</span> / 1000</small>
+  <!-- Stessa barra e stesso comportamento dell'editor descrizione servizi (services.html) -->
+  <div class="btn-group mb-2" id="bookingInfoToolbar" role="group" aria-label="Formattazione messaggio">
+    <button type="button" class="btn btn-outline-secondary" data-cmd="bold" aria-pressed="false"><b>B</b></button>
+    <button type="button" class="btn btn-outline-secondary" data-cmd="italic" aria-pressed="false"><i>I</i></button>
+    <button type="button" class="btn btn-outline-secondary" data-cmd="underline" aria-pressed="false"><u>U</u></button>
+    <button type="button" class="btn btn-outline-secondary" data-cmd="link">Link</button>
   </div>
+  <div id="booking-info-message"
+       contenteditable="true"
+       style="min-height: 140px; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fff;">{{ (business_info.booking_info_message or '')|safe }}</div>
+  <button id="save-booking-info" class="btn btn-primary mt-2">Salva messaggio</button>
 </div>
   <br><br><br>
   <h2>Servizi prenotabili online</h2>
@@ -237,19 +242,59 @@ document.getElementById('save-booking-rules').onclick = function() {
 };
 
 (function () {
-  const area = document.getElementById('booking-info-message');
-  const conta = document.getElementById('booking-info-count');
-  const aggiornaConta = () => { conta.textContent = area.value.length; };
-  area.addEventListener('input', aggiornaConta);
-  aggiornaConta();
+  const editor = document.getElementById('booking-info-message');
+  const pulsanti = document.querySelectorAll('#bookingInfoToolbar [data-cmd]');
+
+  function aggiornaStati() {
+    pulsanti.forEach(b => {
+      if (b.dataset.cmd === 'link') return;
+      const attivo = document.queryCommandState(b.dataset.cmd);
+      b.classList.toggle('active', !!attivo);
+      b.setAttribute('aria-pressed', attivo ? 'true' : 'false');
+    });
+  }
+
+  pulsanti.forEach(b => b.addEventListener('click', function () {
+    if (this.dataset.cmd === 'link') {
+      const url = prompt('Inserisci URL completo (es. https://...)');
+      if (url) document.execCommand('createLink', false, url);
+    } else {
+      document.execCommand(this.dataset.cmd, false, null);
+    }
+    aggiornaStati();
+    editor.focus();
+  }));
+
+  ['keyup', 'mouseup', 'focus'].forEach(ev => editor.addEventListener(ev, aggiornaStati));
+  document.addEventListener('selectionchange', function () {
+    const sel = document.getSelection();
+    if (sel && editor.contains(sel.anchorNode)) aggiornaStati();
+  });
+
+  // Incolla SENZA formattazione, come nella descrizione servizi: da Word o da
+  // una pagina web arriverebbero stili invisibili che il server poi scarta.
+  editor.addEventListener('paste', function (e) {
+    e.preventDefault();
+    const dati = e.clipboardData || window.clipboardData;
+    const testo = dati ? dati.getData('text/plain') : '';
+    if (testo) document.execCommand('insertText', false, testo);
+  });
+
+  // Svuotando il riquadro il browser lascia "<br>": non e' un messaggio.
+  function haTestoVisibile(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html || '';
+    return (d.textContent || '').trim().length > 0;  // trim() toglie anche &nbsp;
+  }
 
   document.getElementById('save-booking-info').onclick = function () {
+    const html = haTestoVisibile(editor.innerHTML) ? editor.innerHTML.trim() : '';
     fetch('{{ url_for("settings.update_booking_info_message") }}', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')},
-      body: JSON.stringify({message: area.value})
+      body: JSON.stringify({message: html})
     }).then(r => r.json()).then(resp => {
-      if (resp.success) { alert(area.value.trim() ? 'Messaggio salvato!' : 'Messaggio rimosso dalla pagina di prenotazione.'); }
+      if (resp.success) { alert(html ? 'Messaggio salvato!' : 'Messaggio rimosso dalla pagina di prenotazione.'); }
       else { alert(resp.error || 'Errore salvataggio messaggio'); }
     }).catch(() => alert('Errore salvataggio messaggio'));
   };
