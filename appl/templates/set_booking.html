@@ -111,6 +111,28 @@
        style="min-height: 140px; border: 1px solid #ddd; padding: 10px; border-radius: 6px; background: #fff;">{{ (business_info.booking_info_message or '')|safe }}</div>
   <button id="save-booking-info" class="btn btn-primary mt-2">Salva messaggio</button>
 </div>
+
+<!-- Sfondo della pagina di prenotazione: si carica e si toglie da solo, come il
+     messaggio sopra. Riduzione e limiti in settings.py, _elabora_sfondo. -->
+{% set ha_sfondo = business_info.booking_background_mime_type %}
+<div id="booking-sfondo-section" class="container mt-5">
+  <h2>Sfondo della pagina di prenotazione</h2>
+  <p class="text-muted mb-2">
+    Immagine dietro al riquadro della prenotazione, solo su schermi grandi (computer):
+    sul telefono la pagina resta com'&egrave;. Meglio una foto orizzontale: viene
+    ridotta e alleggerita da sola. PNG, JPEG o WebP, massimo 15 MB.
+  </p>
+  <div id="booking-sfondo-anteprima" class="mb-2"{% if not ha_sfondo %} hidden{% endif %}>
+    <img src="{% if ha_sfondo %}{{ url_for('settings.get_booking_background') }}{% endif %}" alt="Sfondo attuale"
+         style="width: 100%; max-width: 420px; border: 1px solid #ddd; border-radius: 6px;">
+  </div>
+  <p id="booking-sfondo-nessuno" class="mb-2"{% if ha_sfondo %} hidden{% endif %}><i>Nessuno sfondo: la pagina usa il fondo scuro standard.</i></p>
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <input type="file" id="booking-sfondo-file" class="form-control" accept="image/png,image/jpeg,image/webp" style="max-width: 360px;">
+    <button id="save-booking-sfondo" class="btn btn-primary">Carica sfondo</button>
+    <button id="delete-booking-sfondo" class="btn btn-outline-danger"{% if not ha_sfondo %} hidden{% endif %}>Rimuovi sfondo</button>
+  </div>
+</div>
   <br><br><br>
   <h2>Servizi prenotabili online</h2>
   <!-- Qui resta SOLO la visibilita' online, che e' una proprieta' del servizio.
@@ -297,6 +319,52 @@ document.getElementById('save-booking-rules').onclick = function() {
       if (resp.success) { alert(html ? 'Messaggio salvato!' : 'Messaggio rimosso dalla pagina di prenotazione.'); }
       else { alert(resp.error || 'Errore salvataggio messaggio'); }
     }).catch(() => alert('Errore salvataggio messaggio'));
+  };
+})();
+
+(function () {
+  const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+  const file = document.getElementById('booking-sfondo-file');
+  const btnCarica = document.getElementById('save-booking-sfondo');
+  const btnRimuovi = document.getElementById('delete-booking-sfondo');
+  const anteprima = document.getElementById('booking-sfondo-anteprima');
+  const nessuno = document.getElementById('booking-sfondo-nessuno');
+
+  function mostra(presente) {
+    anteprima.hidden = !presente;
+    nessuno.hidden = presente;
+    btnRimuovi.hidden = !presente;
+    if (presente) {
+      anteprima.querySelector('img').src = '{{ url_for("settings.get_booking_background") }}?t=' + Date.now();
+    }
+  }
+
+  // FormData senza Content-Type: lo mette il browser, con il separatore del multipart
+  function invia(dati, bottone, fatto) {
+    bottone.disabled = true;
+    fetch('{{ url_for("settings.update_booking_background") }}', {
+      method: 'POST',
+      headers: {'X-CSRFToken': csrf},
+      body: dati
+    }).then(r => r.json()).then(resp => {
+      if (resp.success) fatto();
+      else alert(resp.error || 'Errore salvataggio sfondo');
+    }).catch(() => alert('Errore salvataggio sfondo'))
+      .finally(() => { bottone.disabled = false; });
+  }
+
+  btnCarica.onclick = function () {
+    if (!file.files.length) { alert('Scegli prima un\'immagine.'); return; }
+    const dati = new FormData();
+    dati.append('sfondo', file.files[0]);
+    invia(dati, btnCarica, () => { file.value = ''; mostra(true); alert('Sfondo salvato!'); });
+  };
+
+  btnRimuovi.onclick = function () {
+    if (!confirm('Togliere lo sfondo dalla pagina di prenotazione?')) return;
+    const dati = new FormData();
+    dati.append('elimina', '1');
+    invia(dati, btnRimuovi, () => mostra(false));
   };
 })();
 

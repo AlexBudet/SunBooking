@@ -3063,6 +3063,89 @@ def update_booking_info_message():
     db.session.commit()
     return jsonify({"success": True})
 
+
+BOOKING_SFONDO_MAX_UPLOAD = 15 * 1024 * 1024
+BOOKING_SFONDO_LATO_MAX = 1920
+
+
+def _elabora_sfondo(file):
+    """Sfondo della pagina di prenotazione online: (dati WebP, mime).
+
+    Arrivano foto anche pesanti (il PNG del sito Sun Express e' 3,4 MB): si
+    riducono a max 1920px di lato e si salvano in WebP, qualche centinaio di KB,
+    perche' la pagina pubblica le scarica a ogni prima visita. Ruota secondo
+    l'EXIF (foto da telefono) e appiattisce la trasparenza sul fondo scuro della
+    pagina. Un file non accettabile solleva ValueError col messaggio da mostrare;
+    un errore di Pillow risale cosi' com'e'.
+    """
+    from PIL import Image, ImageOps
+    import io
+
+    if not file or file.filename == '':
+        raise ValueError("Nessun file selezionato.")
+    file.seek(0, 2)
+    if file.tell() > BOOKING_SFONDO_MAX_UPLOAD:
+        raise ValueError("File troppo grande: massimo 15 MB.")
+    file.seek(0)
+    ext = file.filename.lower().rsplit('.', 1)[-1] if '.' in file.filename else ''
+    if ext not in ('png', 'jpg', 'jpeg', 'webp'):
+        raise ValueError("Formato non supportato: carica una foto PNG, JPEG o WebP.")
+
+    img = ImageOps.exif_transpose(Image.open(file))
+    if img.mode in ('RGBA', 'LA', 'PA') or (img.mode == 'P' and 'transparency' in img.info):
+        img = img.convert('RGBA')
+        fondo = Image.new('RGB', img.size, (16, 15, 15))  # #100f0f, il fondo della pagina
+        fondo.paste(img, mask=img.getchannel('A'))
+        img = fondo
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+    img.thumbnail((BOOKING_SFONDO_LATO_MAX, BOOKING_SFONDO_LATO_MAX), Image.LANCZOS)
+
+    output = io.BytesIO()
+    img.save(output, format='WEBP', quality=80, method=6)
+    return output.getvalue(), 'image/webp'
+
+
+@settings_bp.route('/update_booking_background', methods=['POST'])
+def update_booking_background():
+    """Carica (file 'sfondo') o toglie (elimina=1) lo sfondo della pagina di
+    prenotazione online. La pagina pubblica (repo booking, serve_sfondo) lo
+    mostra solo su schermi grandi."""
+    business_info = BusinessInfo.query.first()
+    if not business_info:
+        return jsonify({"success": False, "error": "BusinessInfo non trovato"}), 404
+
+    if request.form.get('elimina') == '1':
+        business_info.booking_background_image = None
+        business_info.booking_background_mime_type = None
+    else:
+        try:
+            dati, mime = _elabora_sfondo(request.files.get('sfondo'))
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+        except Exception as e:
+            current_app.logger.error("Errore sfondo prenotazione: %s", str(e))
+            return jsonify({"success": False, "error": "Il file non è un'immagine leggibile."}), 400
+        business_info.booking_background_image = dati
+        business_info.booking_background_mime_type = mime
+
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@settings_bp.route('/booking_background', methods=['GET'])
+def get_booking_background():
+    """Anteprima dello sfondo nella pagina Booking Web del gestionale."""
+    from flask import Response
+    business_info = BusinessInfo.query.first()
+    if not business_info or not business_info.booking_background_mime_type:
+        abort(404)
+    return Response(
+        business_info.booking_background_image,
+        mimetype=business_info.booking_background_mime_type,
+        headers={'Cache-Control': 'no-store'}  # appena sostituito deve vedersi il nuovo
+    )
+
 @settings_bp.route('/api/export_clients', methods=['GET'])
 def export_clients():
     try:
