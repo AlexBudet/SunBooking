@@ -30,6 +30,23 @@ def nome_proprio(testo):
     return ' '.join(parola.title() for parola in html.unescape(str(testo)).split())
 
 
+def nome_servizio(testo):
+    """Nome di un servizio come si salva: prima lettera SEMPRE maiuscola, il
+    resto esattamente come l'ha scritto chi lo inserisce.
+
+    "trattamento esfoliante corpo" -> "Trattamento esfoliante corpo",
+    "ceretta braccia LEI" -> "Ceretta braccia LEI" (le sigle restano).
+
+    Non e' nome_proprio(): il catalogo ha sigle (LEI, LUI, ISHI, LED) e titoli
+    promozionali in maiuscolo che title() rovinerebbe. Regola decisa dal
+    titolare il 03/11/2026. Via anche gli spazi in testa, in coda e doppi.
+    """
+    if not testo:
+        return ''
+    s = ' '.join(str(testo).split())
+    return s[:1].upper() + s[1:]
+
+
 def data_it(valore):
     """Data a video nel formato dell'app: "06 NOV 2025".
 

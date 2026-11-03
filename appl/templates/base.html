@@ -66,6 +66,46 @@
             return m[3] + ' ' + (mesi[parseInt(m[2], 10) - 1] || m[2]) + ' ' + m[1];
           };
         </script>
+        <script>
+          // <form data-invio-unico>: un invio solo. Al primo submit valido il
+          // pulsante si blocca con "Salvataggio..." e ogni altro submit dello
+          // stesso modulo viene ignorato finche' la pagina non cambia. Il 03/11
+          // un servizio e' nato tre volte a forza di ricliccare. Il controllo
+          // vero e' sul server (appl/invio_unico.py); questo evita di mandarli.
+          // Ascolta in bolla sul documento: se lo script del modulo ha gia'
+          // annullato l'invio (validazione), defaultPrevented e non si blocca.
+          document.addEventListener('submit', function (e) {
+            var f = e.target;
+            if (!f || !f.hasAttribute || !f.hasAttribute('data-invio-unico')) return;
+            if (f.getAttribute('data-inviando') === '1') { e.preventDefault(); return; }
+            if (e.defaultPrevented) return;
+            f.setAttribute('data-inviando', '1');
+            // Il pulsante si disabilita dopo che il browser ha raccolto i dati
+            // del modulo: un pulsante disabilitato non verrebbe inviato.
+            setTimeout(function () {
+              f.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function (b) {
+                b.disabled = true;
+                if (b.tagName === 'BUTTON') {
+                  b.setAttribute('data-html-originale', b.innerHTML);
+                  b.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="margin-right:6px;"></span>Salvataggio…';
+                }
+              });
+            }, 0);
+          });
+          // Tornando indietro col browser la pagina puo' riapparire dalla
+          // cache col pulsante ancora bloccato.
+          window.addEventListener('pageshow', function (e) {
+            if (!e.persisted) return;
+            document.querySelectorAll('form[data-inviando="1"]').forEach(function (f) {
+              f.removeAttribute('data-inviando');
+              f.querySelectorAll('[data-html-originale]').forEach(function (b) {
+                b.innerHTML = b.getAttribute('data-html-originale');
+                b.removeAttribute('data-html-originale');
+              });
+              f.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function (b) { b.disabled = false; });
+            });
+          });
+        </script>
         <style>
 /* Dentro il pannello laterale la barra di menu e' un doppione: quella buona
    e' del documento principale, che pilota il pannello stesso. L'<header>

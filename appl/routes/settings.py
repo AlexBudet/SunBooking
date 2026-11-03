@@ -18,7 +18,8 @@ from .. import db
 from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession, PrepagataRicaricaRegola, service_operator, UsageEvent
 from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
 from .calendar import _compute_client_loyalty, LOYALTY_DEFAULT
-from ..formati import nome_proprio
+from ..formati import nome_proprio, nome_servizio
+from .. import invio_unico
 
 # Blueprint per le rotte delle impostazioni
 settings_bp = Blueprint('settings', __name__, template_folder='../templates')
@@ -609,12 +610,21 @@ def operators():
         'operators.html',
         operators=operators,
         appointments_by_operator=appointments_by_operator,
-        current_user=current_user
+        current_user=current_user,
+        invio_id=invio_unico.nuovo_id()
     )
 
 @settings_bp.route('/operators/add', methods=['POST'])
 def add_operator():
     """Aggiunge un nuovo operatore."""
+    # Stesso modulo inviato due volte (doppio clic, Invio ripetuto): il primo
+    # invio crea l'operatore, gli altri tornano alla pagina senza creare niente.
+    # Non c'e' un controllo sul nome: due operatrici possono chiamarsi uguale.
+    invio_id = request.form.get('invio_id')
+    if not invio_unico.prenota(invio_id):
+        app.logger.info("add_operator: invio doppio scartato (invio_id=%s)", invio_id)
+        return redirect(url_for('settings.operators'))
+    riuscito = False
     try:
         user_tipo = request.form.get('user_tipo')
         user_nome = format_name_operatore(request.form.get('user_nome'), user_tipo)
@@ -625,6 +635,7 @@ def add_operator():
 
         # Verifica che i campi obbligatori siano stati compilati
         if not user_nome or not user_tipo:
+            invio_unico.libera(invio_id)
             flash("I campi Nome e Tipo sono obbligatori.", "error")
             return redirect(url_for('settings.operators'))
 
@@ -656,10 +667,14 @@ def add_operator():
             servizio.operators.append(new_operator)
 
         db.session.commit()
+        riuscito = True
     except Exception as e:
         app.logger.error("Errore durante l'aggiunta dell'operatore: %s", str(e))
         flash("Errore durante l'aggiunta dell'operatore. Riprova.", "error")
-    
+    finally:
+        if not riuscito:
+            invio_unico.libera(invio_id)
+
     return redirect(url_for('settings.operators'))
 
 @settings_bp.route('/operators/<int:operator_id>/edit', methods=['GET', 'POST'])
@@ -794,7 +809,8 @@ def services():
         'services.html',
         services=services,
         subcategories=subcategories,
-        current_user=current_user
+        current_user=current_user,
+        invio_id=invio_unico.nuovo_id()
     )
 
 @settings_bp.route('/api/subcategories/<string:category>', methods=['GET'])
@@ -816,8 +832,32 @@ def get_subcategories(category):
 @settings_bp.route('/settings/services', methods=['POST'])
 def add_service():
     """Aggiunge un nuovo servizio."""
+    # La pagina servizi invia con fetch e chiede l'esito in JSON. Prima riceveva
+    # il redirect, e il fetch lo seguiva rigenerando tutta la pagina (poi
+    # ricaricata una seconda volta): un'attesa lunga che faceva ricliccare. E
+    # siccome anche un errore finiva in un redirect 200, a video usciva
+    # comunque "Servizio aggiunto con successo!".
+    vuole_json = request.headers.get('X-Requested-With') == 'fetch'
+
+    def esito(errore=None, stato=400):
+        if vuole_json:
+            if errore:
+                return jsonify({'ok': False, 'errore': errore}), stato
+            return jsonify({'ok': True})
+        if errore:
+            flash(errore, "error")
+        return redirect(url_for('settings.services'))
+
+    # Stesso modulo inviato di nuovo mentre il primo invio e' in corso o gia'
+    # riuscito: non si crea niente (vedi appl/invio_unico.py).
+    invio_id = request.form.get('invio_id')
+    if not invio_unico.prenota(invio_id):
+        app.logger.info("add_service: invio doppio scartato (invio_id=%s)", invio_id)
+        return esito("Servizio già inviato: attendi il salvataggio.", 409)
+
+    riuscito = False
     try:
-        service_name = request.form.get('service_name')
+        service_name = nome_servizio(request.form.get('service_name'))
         service_tag = request.form.get('service_tag')
         service_duration = request.form.get('service_duration')
         service_price = request.form.get('service_price')
@@ -830,7 +870,20 @@ def add_service():
 
         # Validazione: la durata è obbligatoria solo se NON è "prodotti"
         if not service_name or not service_price or not service_category:
-            return redirect(url_for('settings.services'))
+            return esito("Compila nome, prezzo e categoria del servizio.")
+
+        # Un servizio attivo con lo stesso nome nella stessa categoria c'e'
+        # gia': e' un reinvio (pagina ricaricata e modulo rimandato), non un
+        # servizio nuovo. Maiuscole/minuscole non contano.
+        gia_presente = (Service.query
+            .filter(Service.is_deleted == False,
+                    Service.servizio_categoria == service_category,
+                    func.lower(func.trim(Service.servizio_nome)) == service_name.lower())
+            .first())
+        if gia_presente:
+            return esito(
+                f'Esiste già il servizio "{gia_presente.servizio_nome}" '
+                f'in {service_category.value}: non è stato aggiunto di nuovo.', 409)
 
         # Imposta durata e visibilità per prodotti
         is_visible_in_calendar = True
@@ -866,11 +919,16 @@ def add_service():
 
         db.session.add(new_service)
         db.session.commit()
+        riuscito = True
     except Exception as e:
+        db.session.rollback()
         app.logger.error("Errore durante l'aggiunta del servizio: %s", str(e))
-        flash("Errore durante l'aggiunta del servizio. Riprova.", "error")
-    
-    return redirect(url_for('settings.services'))
+        return esito("Errore durante l'aggiunta del servizio. Riprova.", 500)
+    finally:
+        if not riuscito:
+            invio_unico.libera(invio_id)
+
+    return esito()
 
 @settings_bp.route('/settings/services/<int:service_id>/edit', methods=['GET', 'POST'], endpoint='edit_service')
 def edit_service(service_id):
@@ -881,7 +939,7 @@ def edit_service(service_id):
 
     if request.method == 'POST':
         try:
-            service.servizio_nome = request.form.get('service_name')
+            service.servizio_nome = nome_servizio(request.form.get('service_name'))
             service.servizio_tag = request.form.get('service_tag')
             service.servizio_durata = int(request.form.get('service_duration'))
             service.servizio_prezzo = float(request.form.get('service_price'))

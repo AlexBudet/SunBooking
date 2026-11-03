@@ -57,8 +57,9 @@
 </style>
 
 <!-- Form per aggiungere un nuovo operatore -->
-<form method="POST" action="{{ url_for('settings.add_operator') }}" class="mb-4">
+<form method="POST" action="{{ url_for('settings.add_operator') }}" class="mb-4" data-invio-unico>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="invio_id" value="{{ invio_id }}">
     <div class="row align-items-center mb-1">
       <!-- Campo Tipo -->
       <div class="col-md-3">

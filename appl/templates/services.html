@@ -22,6 +22,7 @@
 <!-- Form per aggiungere un nuovo servizio -->
 <form method="POST" action="{{ url_for('settings.add_service') }}" class="mb-4" id="add-service-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="invio_id" value="{{ invio_id }}">
     <!-- Prima riga: Nome Servizio, Abbreviazione, Durata, Prezzo -->
     <div class="row align-items-center mb-2">
         <!-- Campo Nome Servizio -->
@@ -69,7 +70,7 @@
         </div>        
         <!-- Pulsante Aggiungi -->
         <div class="col-md-4">
-            <button type="submit" class="btn btn-primary btn-block">Aggiungi Servizio</button>
+            <button type="submit" class="btn btn-primary btn-block" id="add-service-btn">Aggiungi Servizio</button>
         </div>
     </div>
 </form>
@@ -146,7 +147,7 @@
 <!-- Sezione gestione sottocategorie -->
 <button class="btn btn-secondary mb-3" onclick="toggleSubcategoriesTable()">Gestione Sottocategorie</button>
 <div id="subcategoriesSection" class="hidden">
-    <form method="POST" action="{{ url_for('settings.subcategories') }}" class="mb-4">
+    <form method="POST" action="{{ url_for('settings.subcategories') }}" class="mb-4" data-invio-unico>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="row align-items-center">
             <div class="col-auto">
@@ -588,8 +589,32 @@ document.addEventListener('DOMContentLoaded', function() {
 document.addEventListener('DOMContentLoaded', function() {
     const serviceForm = document.getElementById('add-service-form');
     if (serviceForm) {
+        // Un invio alla volta: dal primo clic valido il pulsante resta bloccato
+        // fino all'esito. Il 03/11/2026 la pagina sembrava ferma, e' stato
+        // ricliccato e il servizio e' nato tre volte. Il server scarta comunque
+        // i doppioni (invio_id), questo evita di mandarli.
+        const addBtn = document.getElementById('add-service-btn');
+        const addBtnHtml = addBtn ? addBtn.innerHTML : '';
+        let inviando = false;
+        const bloccaPulsante = function () {
+            inviando = true;
+            if (!addBtn) return;
+            addBtn.disabled = true;
+            addBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="margin-right:6px;"></span>Salvataggio…';
+        };
+        const sbloccaPulsante = function () {
+            inviando = false;
+            if (!addBtn) return;
+            addBtn.disabled = false;
+            addBtn.innerHTML = addBtnHtml;
+        };
+        // Tornando indietro col browser la pagina puo' riapparire dalla cache
+        // col pulsante ancora bloccato.
+        window.addEventListener('pageshow', function (ev) { if (ev.persisted) sbloccaPulsante(); });
+
         serviceForm.addEventListener('submit', function(event) {
             event.preventDefault();
+            if (inviando) return;
 
             const nameField = document.getElementById('service_name');
             const tagField = document.getElementById('service_tag');
@@ -614,26 +639,31 @@ document.addEventListener('DOMContentLoaded', function() {
             const formData = new FormData(serviceForm);
             const csrfToken = formData.get('csrf_token') || '';
 
+            bloccaPulsante();
             fetch(serviceForm.action, {
                 method: 'POST',
                 headers: {
-                    'X-CSRFToken': csrfToken
+                    'X-CSRFToken': csrfToken,
+                    // il server risponde in JSON invece di rigenerare la pagina
+                    'X-Requested-With': 'fetch'
                 },
                 body: formData,
                 credentials: 'same-origin'
             })
             .then(async response => {
-                if (!response.ok) {
-                    const text = await response.text();
-                    throw new Error(text.replace(/<[^>]*>/g, '').trim() || 'Errore durante l\'aggiunta del servizio');
+                const data = await response.json().catch(() => null);
+                if (!response.ok || !data || !data.ok) {
+                    const msg = (data && data.errore) || 'Errore durante l\'aggiunta del servizio. Riprova.';
+                    throw new Error(msg);
                 }
-                return response;
             })
             .then(() => {
+                // il pulsante resta bloccato fino al ricaricamento
                 alert('Servizio aggiunto con successo!');
                 location.reload();
             })
             .catch(error => {
+                sbloccaPulsante();
                 alert(error.message);
             });
         });
