@@ -180,6 +180,54 @@ html.in-side-pane #reconnectingIndicator { display: none !important; }
   text-underline-offset: 2px;
 }
 
+/* Badge "update" (solo .exe): sul tasto Tools, e nelle pagine Tools sul
+   pulsante Info Azienda. Posizionato sull'angolo, non allarga il pulsante. */
+#mainMenu .menu-link[data-nav="tools"],
+.neo-btn.has-update-badge { position: relative; }
+.update-badge {
+  /* Agganciato al CENTRO della scritta, non al bordo del link: "header nav"
+     ha line-height 70px dentro un header alto 60, quindi il bordo superiore
+     del link sta fuori dalla finestra. Parte dalla fine della scritta e sta
+     appena sopra la riga, senza coprirla. */
+  position: absolute;
+  top: 50%;
+  left: calc(100% - 12px);
+  transform: translateY(calc(-100% - 8px));
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e72c64;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  text-decoration: none !important;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(231, 44, 100, 0.45);
+  animation: update-badge-blink 1.1s ease-in-out infinite;
+}
+.update-badge[hidden] { display: none !important; }
+.neo-btn .update-badge { top: -9px; left: auto; right: -12px; transform: none; }
+@media (max-width: 1200px) {
+  /* Menu a sole icone (styles.css): #mainMenu ha overflow-x:auto e taglierebbe
+     un badge sporgente, quindi qui sta dentro il riquadro, sotto l'icona. */
+  #mainMenu .update-badge {
+    top: auto;
+    bottom: 1px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0 4px;
+    font-size: 0.55rem;
+    line-height: 1.3;
+  }
+}
+@keyframes update-badge-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
 /* ------------------------------------------------------------------
    Badge WhatsApp disconnesso (basso-sx, lampeggiante).
    z-index 24400 = sopra a navigator (23001) e tooltip generici (23050),
@@ -329,6 +377,7 @@ html.in-side-pane #reconnectingIndicator { display: none !important; }
            {% if is_demo %}onclick="apriModalDemo('tools'); return false;"{% endif %}>
             <i class="bi bi-gear menu-icon"></i>
             <span class="menu-label">Tools</span>
+            {% if update_badge_enabled %}<span class="update-badge" id="navUpdateBadge" hidden>update</span>{% endif %}
         </a>
     </li>
     <li class="nav-item">
@@ -1047,7 +1096,7 @@ document.addEventListener('DOMContentLoaded', function() {
     for (const seg of keySegments) {
       const hrefHasSeg = hrefParts.includes(seg);
       const currentHasSeg = currentParts.includes(seg);
-      
+
       if (hrefHasSeg && currentHasSeg) {
         link.classList.add('active');
         return;
@@ -1056,6 +1105,56 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
+
+{# Badge "update": SOLO .exe on-premise (update_badge_enabled e' falso nella
+   web app e nell'avvio da sorgente, e allora qui non arriva niente). La rotta
+   risponde dalla cache del server: GitHub lo interroga lei, al massimo una
+   volta l'ora. Fuori da Tools il badge sta sul tasto Tools; dentro le pagine
+   Tools passa sul pulsante Info Azienda, che porta alla sezione Aggiornamenti. #}
+{% if update_badge_enabled %}
+<script>
+(function () {
+  var URL_STATO = "{{ url_for('settings.update_status') }}";
+  var POLL_MS = 15 * 60 * 1000;
+  var nelPannello = document.documentElement.classList.contains('in-side-pane');
+
+  function applica(dati) {
+    var disponibile = !!(dati && dati.enabled && dati.has_update);
+    var badgeTools = document.getElementById('navUpdateBadge');
+    var badgeInfo = document.querySelector('[data-update-badge="infoazienda"]');
+    if (badgeTools) badgeTools.hidden = !disponibile || !!badgeInfo;
+    if (!badgeInfo) return;
+    badgeInfo.hidden = !disponibile;
+    var link = badgeInfo.closest('a');
+    if (!link) return;
+    if (!link.dataset.hrefBase) link.dataset.hrefBase = link.getAttribute('href');
+    link.setAttribute('href', link.dataset.hrefBase + (disponibile ? '#aggiornamenti' : ''));
+    link.dataset.updateDisponibile = disponibile ? '1' : '0';
+  }
+
+  function controlla() {
+    fetch(URL_STATO, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(applica)
+      .catch(function () { /* niente rete o sessione scaduta: il badge resta com'e' */ });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // Gia' su Info Azienda: il clic non ricarica la pagina, scende alla sezione.
+    document.addEventListener('click', function (ev) {
+      var link = ev.target.closest && ev.target.closest('a');
+      if (!link || link.dataset.updateDisponibile !== '1') return;
+      if (typeof window.sunVaiAggiornamenti !== 'function') return;
+      ev.preventDefault();
+      window.sunVaiAggiornamenti();
+    });
+    setTimeout(controlla, 1500);
+    // Nel pannello laterale c'e' gia' il ticker della finestra principale.
+    if (!nelPannello) setInterval(controlla, POLL_MS);
+  });
+})();
+</script>
+{% endif %}
 
     {% if is_demo %}
       {% include '_demo_upsell_modal.html' %}

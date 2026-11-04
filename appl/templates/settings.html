@@ -22,7 +22,7 @@
 {% if module_web_enabled %}
 <a href="{{ url_for('settings.marketing') }}" class="neo-btn{% if request.endpoint == 'settings.marketing' %} active{% endif %}">Marketing</a>
 {% endif %}
-<a href="{{ url_for('settings.business_info') }}" class="neo-btn{% if request.endpoint == 'settings.business_info' %} active{% endif %}">Info Azienda</a>
+<a href="{{ url_for('settings.business_info') }}" class="neo-btn{% if update_badge_enabled %} has-update-badge{% endif %}{% if request.endpoint == 'settings.business_info' %} active{% endif %}">Info Azienda{% if update_badge_enabled %}<span class="update-badge" data-update-badge="infoazienda" hidden>update</span>{% endif %}</a>
 <a href="{{ url_for('settings.help_page') }}" class="neo-btn{% if request.endpoint == 'settings.help_page' %} active{% endif %}">Centro Assistenza</a>
 {% if not (current_user and current_user.ruolo.value == 'user') %}
   {% if module_web_enabled %}

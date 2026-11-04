@@ -449,7 +449,7 @@
 
   <!-- Sezione Aggiornamenti (solo istanza locale, non web app) -->
   {% if not hide_cassa %}
-  <div class="col-lg-6 desktop-only-setting">
+  <div class="col-lg-6 desktop-only-setting" id="sezioneAggiornamenti">
     <section class="ia-card h-100">
       <div class="ia-card-head">
         <span class="ia-card-icon"><i class="bi bi-arrow-repeat"></i></span>
@@ -546,6 +546,12 @@
   @media (max-width: 1200px) {
     .desktop-only-setting { display: none !important; }
   }
+  /* Arrivo dal badge "update": la card Aggiornamenti si accende due volte. */
+  .ia-card-flash { animation: ia-card-flash 0.9s ease-in-out 2; }
+  @keyframes ia-card-flash {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(231, 44, 100, 0); }
+    50% { box-shadow: 0 0 0 4px rgba(231, 44, 100, 0.55); }
+  }
 </style>
 <script>
 {% if not hide_cassa %}
@@ -591,6 +597,32 @@ function checkForUpdates() {
       btn.textContent = 'Controlla aggiornamenti';
       alert('Errore di connessione: ' + err);
     });
+}
+
+/* Arrivo dal badge "update" (Tools > Info Azienda, solo .exe): si scende alla
+   sezione Aggiornamenti e si lancia il controllo, cosi' compare subito
+   "Aggiorna ora". Lo chiama anche base.html al clic su Info Azienda quando si
+   e' gia' su questa pagina. */
+window.sunVaiAggiornamenti = function () {
+  var col = document.getElementById('sezioneAggiornamenti');
+  if (!col) return;
+  // Sotto i 1200px la sezione e' nascosta: chi arriva dal badge la deve vedere.
+  col.classList.remove('desktop-only-setting');
+  col.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  var card = col.querySelector('.ia-card');
+  if (card) {
+    card.classList.remove('ia-card-flash');
+    void card.offsetWidth;   // riavvia l'animazione a ogni clic
+    card.classList.add('ia-card-flash');
+  }
+  var btnNow = document.getElementById('btnUpdateNow');
+  var btnCheck = document.getElementById('btnCheckUpdate');
+  if (btnNow && btnNow.style.display !== 'none') return;   // controllo gia' fatto
+  if (btnCheck && !btnCheck.disabled) checkForUpdates();
+};
+if (location.hash === '#aggiornamenti') {
+  history.replaceState(null, '', location.pathname + location.search);
+  window.addEventListener('load', function () { window.sunVaiAggiornamenti(); });
 }
 
 /* Flusso unico: conferma -> download con progresso -> installazione automatica -> popup riavvio -> chiusura app */

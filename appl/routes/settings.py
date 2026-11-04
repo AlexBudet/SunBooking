@@ -13,6 +13,8 @@ from flask import current_app as app
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import os, ipaddress, requests
+import threading as _threading
+import time as _time
 from sqlalchemy.sql import func, or_
 from .. import db
 from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession, PrepagataRicaricaRegola, service_operator, UsageEvent
@@ -4998,30 +5000,143 @@ def marketing_daily_stats():
     })
 
 # ===================== AUTO-UPDATE ROUTES =====================
+def _leggi_versione_locale():
+    """Versione installata: dal file .version in AppData (lo riscrive l'updater
+    a fine aggiornamento); se manca, dalla cartella corrente (prima
+    installazione) e la si copia in AppData. None se non si trova."""
+    appdata_dir = os.path.join(os.getenv('LOCALAPPDATA', os.getcwd()), 'SunBooking')
+    os.makedirs(appdata_dir, exist_ok=True)
+    version_file = os.path.join(appdata_dir, '.version')
+
+    if os.path.exists(version_file):
+        with open(version_file, 'r') as f:
+            return f.read().strip()
+
+    fallback_version = os.path.join(os.getcwd(), '.version')
+    if os.path.exists(fallback_version):
+        with open(fallback_version, 'r') as f:
+            local_version = f.read().strip()
+        # Copia in AppData per le prossime volte
+        with open(version_file, 'w') as f:
+            f.write(local_version)
+        return local_version
+    return None
+
+
+def _clean_version(v):
+    """Normalizza: rimuove prefisso 'v'/'V' e spazi per un confronto affidabile."""
+    if not v:
+        return ''
+    v = v.strip()
+    if v.lower().startswith('v'):
+        v = v[1:]
+    return v
+
+
+# ---------- Badge "update" sul menu Tools (SOLO .exe on-premise) ----------
+# Il badge chiede lo stato a /settings/api/update-status ogni 15 minuti: quella
+# rotta NON va su GitHub a ogni chiamata, tiene in memoria l'ultima release e
+# la rinnova al massimo una volta l'ora (dopo un errore, ogni 15 minuti).
+# Senza token GitHub concede 60 richieste l'ora per indirizzo IP; con l'ETag
+# la risposta "non e' cambiato niente" (304) non conta nel limite.
+# Nella web app (wsgi.py, IS_CLOUD) e nell'avvio da sorgente (non frozen) il
+# badge non viene nemmeno disegnato e la rotta risponde enabled=false.
+_UPDATE_TTL_OK = 60 * 60
+_UPDATE_TTL_ERR = 15 * 60
+_update_cache = {'checked_at': 0.0, 'ok': False, 'etag': None, 'release': None}
+_update_lock = _threading.Lock()
+
+
+def _update_badge_abilitato():
+    return bool(getattr(sys, 'frozen', False)) and not current_app.config.get('IS_CLOUD')
+
+
+@settings_bp.app_context_processor
+def _inject_update_badge():
+    try:
+        return {'update_badge_enabled': _update_badge_abilitato()}
+    except Exception:
+        return {'update_badge_enabled': False}
+
+
+def _versione_numerica(v):
+    numeri = re.findall(r'\d+', _clean_version(v))
+    return tuple(int(n) for n in numeri) if numeri else None
+
+
+def _rinnova_cache_aggiornamento():
+    c = _update_cache
+    headers = {'Accept': 'application/vnd.github+json'}
+    if c['etag'] and c['release'] is not None:
+        headers['If-None-Match'] = c['etag']
+    try:
+        resp = requests.get(f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
+                            headers=headers, timeout=6)
+        if resp.status_code == 304:
+            c['ok'] = True
+        elif resp.status_code == 200:
+            c['release'] = resp.json()
+            c['etag'] = resp.headers.get('ETag')
+            c['ok'] = True
+        else:
+            c['ok'] = False
+            current_app.logger.warning("[UPDATE-BADGE] GitHub ha risposto %s", resp.status_code)
+    except Exception as e:
+        # Senza rete si tiene l'ultima release nota: il badge, se c'era, resta.
+        c['ok'] = False
+        current_app.logger.warning("[UPDATE-BADGE] controllo non riuscito: %s", e)
+    c['checked_at'] = _time.time()
+
+
+@settings_bp.route('/api/update-status', methods=['GET'])
+def update_status():
+    """Stato per il badge "update": c'e' una release piu' nuova con Tosca.exe?"""
+    if not _update_badge_abilitato():
+        return jsonify({'enabled': False})
+
+    c = _update_cache
+    ttl = _UPDATE_TTL_OK if c['ok'] else _UPDATE_TTL_ERR
+    # acquire non bloccante: se un'altra richiesta sta gia' chiedendo a GitHub,
+    # questa risponde con quello che c'e' invece di mettersi in coda.
+    if _time.time() - c['checked_at'] >= ttl and _update_lock.acquire(blocking=False):
+        try:
+            _rinnova_cache_aggiornamento()
+        finally:
+            _update_lock.release()
+
+    release = c['release'] or {}
+    remote_version = release.get('tag_name', '')
+    ha_exe = any(a.get('name') == APP_EXE_NAME for a in release.get('assets', []))
+    try:
+        local_version = _leggi_versione_locale()
+    except Exception:
+        local_version = None
+
+    has_update = False
+    if remote_version and ha_exe:
+        loc, rem = _versione_numerica(local_version), _versione_numerica(remote_version)
+        if not local_version:
+            has_update = True   # come "Controlla aggiornamenti": versione ignota = da aggiornare
+        elif loc and rem:
+            has_update = rem > loc   # mai proporre come "update" una versione piu' vecchia
+        else:
+            has_update = _clean_version(local_version) != _clean_version(remote_version)
+
+    return jsonify({
+        'enabled': True,
+        'has_update': has_update,
+        'local_version': local_version,
+        'remote_version': remote_version,
+    })
+
+
 @settings_bp.route('/api/check-update', methods=['GET'])
 def check_update():
     """Controlla se c'è una nuova versione disponibile su GitHub Releases."""
     try:
         # Versione locale (dal file .version in AppData)
-        appdata_dir = os.path.join(os.getenv('LOCALAPPDATA', os.getcwd()), 'SunBooking')
-        os.makedirs(appdata_dir, exist_ok=True)
-        version_file = os.path.join(appdata_dir, '.version')
-        
-        # Se non esiste in AppData, prova nella cartella exe (prima installazione)
-        if not os.path.exists(version_file):
-            fallback_version = os.path.join(os.getcwd(), '.version')
-            if os.path.exists(fallback_version):
-                with open(fallback_version, 'r') as f:
-                    local_version = f.read().strip()
-                # Copia in AppData per le prossime volte
-                with open(version_file, 'w') as f:
-                    f.write(local_version)
-            else:
-                local_version = None
-        else:
-            with open(version_file, 'r') as f:
-                local_version = f.read().strip()
-        
+        local_version = _leggi_versione_locale()
+
         # Ultima release da GitHub
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         resp = requests.get(url, timeout=10)
@@ -5042,15 +5157,6 @@ def check_update():
                 download_url = asset.get("browser_download_url")
                 break
         
-        # Normalizza versioni: rimuovi prefisso 'v'/'V' e spazi per confronto affidabile
-        def _clean_version(v):
-            if not v:
-                return ''
-            v = v.strip()
-            if v.lower().startswith('v'):
-                v = v[1:]
-            return v
-
         local_clean = _clean_version(local_version)
         remote_clean = _clean_version(remote_version)
         has_update = (local_clean != remote_clean) if local_clean else True
