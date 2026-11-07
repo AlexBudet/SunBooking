@@ -60,7 +60,33 @@
           <i class="bi bi-whatsapp"></i> Connetti WhatsApp
         </button>
       </div>
-      
+
+      <!-- Aiuto alla riconnessione: il numero da usare e' quello dell'ACCOUNT
+           WhatsApp Business (letto da Unipile), non quello della SIM del
+           telefono. Il 07/11/2026 su sunexp3 il socio inseriva il cellulare
+           (+39 366...) invece del fisso dell'account (+39 015...) e la pagina
+           Unipile rispondeva "Get Pairing code failed". Unipile non permette di
+           pre-compilare il numero nella sua pagina: lo si mostra qui da copiare.
+           Niente classi d-flex su questo div: hanno display !important e
+           scavalcherebbero il display:none. -->
+      <div id="wa-reconnect-help" class="alert alert-warning mt-3 mb-0" style="display:none;">
+        <div class="d-flex gap-2 align-items-start">
+          <i class="bi bi-exclamation-triangle-fill" style="font-size:1.4rem; line-height:1;"></i>
+          <div>
+            <strong>Per ricollegare usa il numero dell'account WhatsApp Business:</strong>
+            <div class="d-flex align-items-center flex-wrap gap-2 my-2">
+              <span id="wa-reconnect-number" class="fs-5 fw-bold"></span>
+              <button type="button" class="btn btn-sm btn-outline-dark" id="wa-copy-number">Copia</button>
+            </div>
+            <ul class="small mb-0 ps-3">
+              <li>Non è per forza il numero del cellulare su cui è installata l'app: è quello che compare nel profilo di WhatsApp Business.</li>
+              <li>Con <b>Pairing code</b>: incollalo nel campo "Phone number" così com'è. Lo <b>0 dopo +39</b> dei numeri fissi va lasciato, anche se la pagina dice di toglierlo.</li>
+              <li>Se compare "Network Error": apri questa pagina dal PC, scegli <b>Qrcode</b> e inquadralo dal telefono (WhatsApp Business → Impostazioni → Dispositivi collegati → Collega un dispositivo).</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       <!-- Iframe per connessione -->
       <div id="connect-iframe-container" style="display:none;">
         <p class="text-muted mb-2">Scansiona il QR code con WhatsApp sul tuo telefono:</p>
@@ -614,7 +640,62 @@ function insertWaTag(textareaId, value) {
   
   let pollingInterval = null;
   let isShowingIframe = false;
-  
+
+  // ---- Aiuto alla riconnessione: numero dell'account da usare ----
+  // Fonte principale: Unipile, che per un account esistente ma scollegato
+  // restituisce il numero (phone_raw). Di riserva l'ultimo numero visto
+  // connesso, in localStorage: serve se l'account su Unipile e' stato
+  // cancellato. Chiave con l'URL di stato, che contiene il prefisso /s/<idx>:
+  // nel cloud tutti i negozi stanno sulla stessa origine.
+  const helpEl = document.getElementById('wa-reconnect-help');
+  const helpNumberEl = document.getElementById('wa-reconnect-number');
+  const copyNumberBtn = document.getElementById('wa-copy-number');
+  const CHIAVE_NUMERO = 'wa_numero_account:{{ url_for("settings.api_whatsapp_status") }}';
+  let numeroAccount = null;
+  try { numeroAccount = localStorage.getItem(CHIAVE_NUMERO) || null; } catch (e) { /* storage bloccato */ }
+
+  function soloCifre(s) { return String(s || '').replace(/\D/g, ''); }
+
+  function ricordaNumero(raw) {
+    const cifre = soloCifre(raw);
+    if (cifre.length < 8) return;
+    numeroAccount = cifre;
+    try { localStorage.setItem(CHIAVE_NUMERO, cifre); } catch (e) { /* storage bloccato */ }
+  }
+
+  function numeroLeggibile(cifre) {
+    // 390152538296 -> +39 015 253 8296 (stesso taglio di _parse_account_status)
+    if (cifre.length > 10) return `+${cifre.slice(0, 2)} ${cifre.slice(2, 5)} ${cifre.slice(5, 8)} ${cifre.slice(8)}`;
+    return '+' + cifre;
+  }
+
+  function aggiornaAiuto(visibile) {
+    if (!helpEl) return;
+    if (!visibile || !numeroAccount) { helpEl.style.display = 'none'; return; }
+    helpNumberEl.textContent = numeroLeggibile(numeroAccount);
+    helpEl.style.display = 'block';
+  }
+
+  if (copyNumberBtn) {
+    copyNumberBtn.addEventListener('click', async () => {
+      const testo = '+' + (numeroAccount || '');   // senza spazi: va incollato cosi'
+      let ok = false;
+      try {
+        if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(testo); ok = true; }
+      } catch (e) { ok = false; }
+      if (!ok) {
+        const ta = document.createElement('textarea');
+        ta.value = testo; ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed'; ta.style.top = '-1000px';
+        document.body.appendChild(ta); ta.select();
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        ta.remove();
+      }
+      copyNumberBtn.textContent = ok ? 'Copiato ✓' : testo;
+      setTimeout(() => { copyNumberBtn.textContent = 'Copia'; }, 2000);
+    });
+  }
+
   function hideAll() {
     loadingEl.style.display = 'none';
     connectedEl.style.display = 'none';
@@ -622,31 +703,35 @@ function insertWaTag(textareaId, value) {
     iframeContainer.style.display = 'none';
     errorEl.style.display = 'none';
     isShowingIframe = false;
+    aggiornaAiuto(false);
   }
-  
+
   function showConnected(phone) {
     hideAll();
     connectedPhone.textContent = phone ? `Numero: ${phone}` : 'Account WhatsApp Business';
     connectedEl.style.display = 'block';
   }
-  
+
   function showNotConnected() {
     hideAll();
     notConnectedEl.style.display = 'block';
+    aggiornaAiuto(true);
   }
-  
+
   function showIframe(url) {
     hideAll();
     iframe.src = url;
     iframeContainer.style.display = 'block';
     isShowingIframe = true;
+    aggiornaAiuto(true);
     startPolling();
   }
-  
+
   function showError(msg) {
     hideAll();
     errorMessage.textContent = msg;
     errorEl.style.display = 'block';
+    aggiornaAiuto(true);
   }
   
   function checkStatus(duringPolling) {
@@ -657,6 +742,8 @@ function insertWaTag(textareaId, value) {
       .then(r => r.json())
       .then(data => {
         console.log('[WhatsApp Status]', data, 'polling:', duringPolling);
+        // Connesso o scollegato, se Unipile conosce l'account ne da' il numero.
+        if (data.phone_raw) ricordaNumero(data.phone_raw);
         if (data.connected) {
           // Salva account_id nel DB del tenant corrente
           if (data.account_id) {
