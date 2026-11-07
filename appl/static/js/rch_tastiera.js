@@ -1,4 +1,5 @@
-/* Tastiera virtuale RCH - Console Sblocco RCH (solo admin/owner).
+/* Tastiera virtuale RCH - modal #modalTastieraRCH, aperto dalla Console
+ * Sblocco RCH (solo admin/owner).
  *
  * Layout: tastiera 40 tasti del manuale operativo PRINT! F (cap. 1.5).
  * Quello della PRINT! 3.0 RT RCH lo pubblica solo dietro login: finche' non
@@ -12,6 +13,17 @@
  *    c'e' "Funzione n" (=C n, e >C n sulla 3.0 RT);
  *  - uno scontrino chiuso da qui e' un documento fiscale vero, ma Tosca non lo
  *    registra (come succede con la tastiera fisica).
+ *
+ * Display RCH: quello che si digita (cifre, CL, SHIFT, X, PREZZO, messaggi)
+ * viene scritto anche sul display della stampante con =D1 (riga 1) e =D2
+ * (riga 2), in una sola richiesta. Dopo un comando vero (vendita, pagamento,
+ * modalita') il display lo aggiorna la stampante da se'. Il significato di
+ * =D1/=D2/=D3 nell'estratto del manuale non e' spiegato: se le righe finissero
+ * nel posto sbagliato, si cambiano CMD_RIGA1/CMD_RIGA2 qui sotto.
+ *
+ * Tutte le richieste passano da UNA coda: la stampante non accetta comandi in
+ * parallelo. Gli aggiornamenti del display si accorpano: se si digita veloce
+ * parte solo l'ultimo stato.
  *
  * Inserimento numeri come sul registratore (manuale cap. 4.2): le cifre sono
  * centesimi, "5 0 00" = 50,00. La virgola serve per i decimali di quantita' e
@@ -27,6 +39,10 @@
   var root = document.getElementById('rchTastiera');
   if (!root) return;
 
+  var CMD_RIGA1 = '=D1';
+  var CMD_RIGA2 = '=D2';
+  var LARGHEZZA_DISPLAY = 20;
+
   var sendUrl = root.dataset.sendUrl;
   var csrfMeta = document.querySelector('meta[name="csrf-token"]');
   var csrf = csrfMeta ? (csrfMeta.getAttribute('content') || '') : '';
@@ -34,9 +50,14 @@
   var riga1 = document.getElementById('rchTkRiga1');
   var riga2 = document.getElementById('rchTkRiga2');
   var selModello = document.getElementById('rchTkModello');
+  var chkSpecchio = document.getElementById('rchTkSpecchio');
+  var statoSpecchio = document.getElementById('rchTkSpecchioStato');
+  var modalTk = document.getElementById('modalTastieraRCH');
+  var modalConsole = document.getElementById('modalConsoleRCH');
+  var btnApri = document.getElementById('btnRchApriTastiera');
 
   var MODI = ['LOCK', 'REG', 'X', 'Z', 'PRG', 'SRV'];
-  var st = { buf: '', qty: null, prezzo: null, shift: false, modo: null, msg: null, busy: false };
+  var st = { buf: '', qty: null, prezzo: null, shift: false, modo: null, msg: null, busy: false, inviato: false };
 
   // Stesso formato di rchLog() della console, cosi' "Copia" porta tutto insieme.
   function log(testo, tipo) {
@@ -99,8 +120,6 @@
     root.querySelector('.rch-tk-grid').classList.toggle('rch-tk-shift', st.shift);
   }
 
-  // Tasti che hanno senso solo in REG. In X/Z/PRG/SRV i tasti fisici servono a
-  // muoversi nei menu del display, cosa che il protocollo non permette.
   // Un tasto rifiutato butta via quanto digitato: altrimenti le cifre restano
   // nel buffer e si attaccano a quelle digitate dopo ("500" + "906").
   function bloccatoFuoriREG(tipo) {
@@ -113,39 +132,98 @@
     return true;
   }
 
-  async function invia(cmd) {
-    if (st.busy) return null;
+  // ---- Coda unica verso la stampante -------------------------------------
+  var coda = Promise.resolve();
+  function inCoda(fn) {
+    var p = coda.then(fn);
+    coda = p.catch(function () {});
+    return p;
+  }
+
+  async function post(comandi) {
+    var headers = { 'Content-Type': 'application/json' };
+    if (csrf) headers['X-CSRFToken'] = csrf;
+    var corpo = comandi.length === 1 ? { command: comandi[0] } : { commands: comandi };
+    var resp = await fetch(sendUrl, { method: 'POST', headers: headers, body: JSON.stringify(corpo) });
+    return resp.json();
+  }
+
+  function invia(cmd) {
+    st.inviato = true;
+    if (st.busy) return Promise.resolve(null);
     st.busy = true;
     root.classList.add('rch-tk-busy');
     log('Tastiera: ' + cmd + '...');
-    try {
-      var headers = { 'Content-Type': 'application/json' };
-      if (csrf) headers['X-CSRFToken'] = csrf;
-      var resp = await fetch(sendUrl, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({ command: cmd })
-      });
-      var data = await resp.json();
-      log('Tastiera ' + cmd + ':\n' + JSON.stringify(data, null, 2), data.success ? 'success' : 'error');
-      if (data.success) {
-        st.msg = 'OK  ' + (data.command_sent || cmd);
-      } else {
-        var codice = data.error_code !== null && data.error_code !== undefined ? data.error_code : (data.error || '?');
-        st.msg = 'ERR ' + codice + '  ' + (data.command_sent || cmd);
+    return inCoda(async function () {
+      try {
+        var data = await post([cmd]);
+        log('Tastiera ' + cmd + ':\n' + JSON.stringify(data, null, 2), data.success ? 'success' : 'error');
+        if (data.success) {
+          st.msg = 'OK  ' + (data.command_sent || cmd);
+        } else {
+          var codice = data.error_code !== null && data.error_code !== undefined ? data.error_code : (data.error || '?');
+          st.msg = 'ERR ' + codice + '  ' + (data.command_sent || cmd);
+        }
+        return data;
+      } catch (e) {
+        log('Tastiera ' + cmd + ': errore ' + e.message, 'error');
+        st.msg = 'ERRORE DI RETE';
+        return null;
+      } finally {
+        st.busy = false;
+        root.classList.remove('rch-tk-busy');
+        mostra();
       }
-      return data;
-    } catch (e) {
-      log('Tastiera ' + cmd + ': errore ' + e.message, 'error');
-      st.msg = 'ERRORE DI RETE';
-      return null;
-    } finally {
-      st.busy = false;
-      root.classList.remove('rch-tk-busy');
-      mostra();
+    });
+  }
+
+  // ---- Display RCH ---------------------------------------------------------
+  var specchio = { testo: null, accodato: false, esito: null };
+
+  function aggiornaStatoSpecchio(ok, data) {
+    var esito = ok ? 'ok' : 'err';
+    if (ok) {
+      statoSpecchio.textContent = 'display RCH: aggiornato';
+      statoSpecchio.className = 'text-success';
+    } else {
+      var codice = data && data.error_code !== null && data.error_code !== undefined ? data.error_code : ((data && data.error) || '?');
+      statoSpecchio.textContent = 'display RCH: errore ' + codice;
+      statoSpecchio.className = 'text-danger';
+    }
+    // Nel log solo i cambi di stato, non un rigo per ogni cifra digitata.
+    if (esito !== specchio.esito) {
+      log('Display RCH ' + (ok ? 'OK' : 'ERRORE') + ':\n' + JSON.stringify(data, null, 2), ok ? 'success' : 'error');
+      specchio.esito = esito;
     }
   }
 
+  function specchiaDisplay() {
+    if (!chkSpecchio || !chkSpecchio.checked) return;
+    var r1 = riga1.textContent.slice(0, LARGHEZZA_DISPLAY);
+    var r2 = riga2.textContent.slice(-LARGHEZZA_DISPLAY);
+    while (r2.length < LARGHEZZA_DISPLAY) r2 = ' ' + r2;   // a destra, come gli importi sul display
+    specchio.testo = [r1, r2];
+    if (specchio.accodato) return;   // la richiesta in coda prendera' il testo piu' recente
+    specchio.accodato = true;
+    inCoda(async function () {
+      specchio.accodato = false;
+      var t = specchio.testo;
+      specchio.testo = null;
+      if (!t) return;
+      var comandi = [
+        CMD_RIGA1 + '/(' + testoProtocollo(t[0], LARGHEZZA_DISPLAY) + ')',
+        CMD_RIGA2 + '/(' + testoProtocollo(t[1], LARGHEZZA_DISPLAY) + ')'
+      ];
+      try {
+        var data = await post(comandi);
+        aggiornaStatoSpecchio(!!data.success, data);
+      } catch (e) {
+        aggiornaStatoSpecchio(false, { error: e.message });
+      }
+    });
+  }
+
+  // ---- Tasti ---------------------------------------------------------------
   async function pagamento(n) {
     if (bloccatoFuoriREG(n === '1' ? 'menu' : '')) return;
     var cmd = '=T' + n + (st.buf ? '/$' + centesimi(st.buf) : '');
@@ -173,6 +251,7 @@
   async function premi(k, el) {
     if (st.busy) return;
     st.msg = null;
+    st.inviato = false;
     var shift = st.shift;
     // Manuale PRINT! F (1.5.1): SHIFT si azzera alla fine di una sequenza o
     // con un tasto funzione, NON con le cifre (SHIFT, 1 5 0, SCONTO = MAGG.).
@@ -335,6 +414,9 @@
         break;
     }
     mostra();
+    // Dopo un comando vero il display lo aggiorna la stampante da se'; qui si
+    // scrive solo quello che sulla RCH non arriverebbe (digitazione e messaggi).
+    if (!st.inviato) specchiaDisplay();
   }
 
   root.addEventListener('click', function (ev) {
@@ -349,6 +431,12 @@
     mostra();
   });
 
+  if (chkSpecchio) {
+    chkSpecchio.addEventListener('change', function () {
+      if (!chkSpecchio.checked) { statoSpecchio.textContent = ''; specchio.esito = null; }
+    });
+  }
+
   // Ad ogni lettura di Stato Stampante: modello dal server; la modalita' torna
   // "?" perche' i pulsanti della console (CL, Reset, comando manuale) la
   // cambiano senza passare di qui.
@@ -362,6 +450,53 @@
     st.msg = null;
     mostra();
   });
+
+  // ---- Apertura / chiusura del modal ---------------------------------------
+  // base.html carica Bootstrap DOPO il contenuto della pagina: quando questo
+  // file viene eseguito window.bootstrap non c'e' ancora, quindi si aggancia
+  // tutto a DOMContentLoaded.
+  var tooltips = [];
+  var riapriConsole = false;
+
+  function agganciaModal() {
+    if (!window.bootstrap) return;
+    // Tooltip Bootstrap: la console inizializza solo i suoi, questi li fa qui.
+    if (bootstrap.Tooltip) {
+      root.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+        tooltips.push(bootstrap.Tooltip.getOrCreateInstance(el));
+      });
+    }
+    if (!btnApri || !modalTk || !bootstrap.Modal) return;
+    btnApri.addEventListener('click', function () {
+      var mTk = bootstrap.Modal.getOrCreateInstance(modalTk);
+      if (modalConsole && modalConsole.classList.contains('show')) {
+        riapriConsole = true;
+        modalConsole.addEventListener('hidden.bs.modal', function () { mTk.show(); }, { once: true });
+        bootstrap.Modal.getOrCreateInstance(modalConsole).hide();
+      } else {
+        mTk.show();
+      }
+    });
+
+    modalTk.addEventListener('shown.bs.modal', function () {
+      st.msg = null;
+      mostra();
+    });
+
+    modalTk.addEventListener('hide.bs.modal', function () {
+      tooltips.forEach(function (t) { t.hide(); });
+    });
+
+    // Chiusa la tastiera si torna alla console, dove c'e' il log da copiare.
+    modalTk.addEventListener('hidden.bs.modal', function () {
+      if (!riapriConsole || !modalConsole) return;
+      riapriConsole = false;
+      bootstrap.Modal.getOrCreateInstance(modalConsole).show();
+    });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', agganciaModal);
+  else agganciaModal();
 
   applicaModello();
   mostra();

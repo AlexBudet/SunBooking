@@ -4504,47 +4504,58 @@ def rch_console_close_document():
 
 @cassa_bp.route('/cassa/rch-console/send-raw', methods=['POST'])
 def rch_console_send_raw():
-    """Invia comando raw alla stampante"""
+    """Invia comandi raw alla stampante, in UNA sola richiesta HTTP.
+    Corpo: {"command": "..."} oppure {"commands": ["...", ...]} (massimo 5).
+    La forma a lista serve alla tastiera virtuale, che scrive le due righe del
+    display RCH (=D1 e =D2) insieme: due richieste separate potrebbero
+    accavallarsi, e la stampante non accetta comandi in parallelo."""
     data = request.get_json(force=True) or {}
-    command = (data.get("command") or "").strip()
-    
-    if not command:
+    lista = data.get("commands")
+    if not isinstance(lista, list):
+        lista = [data.get("command")]
+    commands = [str(c).strip() for c in lista if c is not None and str(c).strip()]
+
+    if not commands:
         return jsonify({"error": "Comando vuoto"}), 400
-    
-    # Aggiungi = se non presente
-    # Il prefisso > è supportato solo su RCH Print 3.0 RT
+    if len(commands) > 5:
+        return jsonify({"error": "Massimo 5 comandi per richiesta"}), 400
+
     ip, printer_model = _get_printer_config()
     if not ip:
         return jsonify({"error": "IP stampante non configurato"}), 400
-    
-    # Il prefisso > è supportato solo su RCH Print 3.0 RT
-    if printer_model == PrinterModel.RCH_PRINT_RT.value:
-        if not command.startswith("=") and not command.startswith(">"):
-            command = "=" + command
-    else:
-        if not command.startswith("="):
-            command = "=" + command
-    
+
+    # Aggiungi = se non presente. Il prefisso > è supportato solo su RCH Print 3.0 RT
+    def _con_prefisso(command):
+        if printer_model == PrinterModel.RCH_PRINT_RT.value:
+            if not command.startswith("=") and not command.startswith(">"):
+                return "=" + command
+        elif not command.startswith("="):
+            return "=" + command
+        return command
+
+    commands = [_con_prefisso(c) for c in commands]
+
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
     rch_kwargs = _rch_request_kwargs(printer_model)
-    
+
     try:
         # escape: "&", "<", ">" dentro <cmd> (parametri &data, testi liberi della
         # tastiera virtuale, prefisso ">") rendevano l'XML non valido. La
         # stampante decodifica le entita': la chiusura giornaliera manda gia'
         # &gt;C117 e &amp;0.
-        payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{_xml_escape(command)}</cmd></Service>'
+        cmd_xml = ''.join(f'<cmd>{_xml_escape(c)}</cmd>' for c in commands)
+        payload = f'<?xml version="1.0" encoding="UTF-8"?><Service>{cmd_xml}</Service>'
         resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
                              **rch_kwargs)
 
         error_code = _rch_parse_errcode(resp.text)
-        
+
         return jsonify({
             "success": error_code == 0 or error_code is None,
             "error_code": error_code,
             "response": resp.text[:500],
-            "command_sent": command
+            "command_sent": " | ".join(commands)
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

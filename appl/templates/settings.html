@@ -12,7 +12,7 @@
 <a href="{{ url_for('settings.operators') }}" class="neo-btn{% if request.endpoint == 'settings.operators' %} active{% endif %}">Operatori</a>
 <a href="{{ url_for('settings.services') }}" class="neo-btn{% if request.endpoint == 'settings.services' %} active{% endif %}">Servizi</a>
 <a href="{{ url_for('settings.clients') }}" class="neo-btn{% if request.endpoint == 'settings.clients' %} active{% endif %}">Clienti</a>
-<a href="{{ url_for('settings.whatsapp') }}" class="neo-btn marketing-link{% if request.endpoint == 'settings.whatsapp' %} active{% endif %}">WhatsApp</a>
+<a href="{{ url_for('settings.whatsapp') }}" class="neo-btn{% if request.endpoint == 'settings.whatsapp' %} active{% endif %}">WhatsApp</a>
 {% if module_pacchetti_enabled %}
 <a href="{{ url_for('settings.pacchetti_settings') }}" class="neo-btn{% if request.endpoint == 'settings.pacchetti_settings' %} active{% endif %}">Pacchetti</a>
 {% endif %}
@@ -126,12 +126,10 @@
   box-shadow: 0 4px 12px rgba(31, 46, 68, 0.14);
 }
 
-  /* Nascondi Marketing sotto 1200px */
-  @media (max-width: 1199.98px) {
-    .marketing-link {
-      display: none !important;
-    }
-  }
+  /* Qui c'era "Nascondi Marketing sotto 1200px" (.marketing-link), ma la
+     classe era finita sul link WhatsApp (commit 44eeb1c): sotto i 1200px
+     WhatsApp spariva dal menu per tutti, e Marketing restava. Tolta il
+     07/11/2026; Marketing resta visibile come e' sempre stato. */
 </style>
 <!-- Qui verrà inserito il contenuto delle pagine specifiche -->
 <div class="settings-glam">

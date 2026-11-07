@@ -5755,3 +5755,14 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
 #rchTastiera .rch-tk-funz { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; flex-wrap: wrap; }
 #rchTastiera .rch-tk-funz .btn { border: 1px solid #333; background: #f1f1f1; color: #111; padding: 1px 10px; font-weight: 700; }
 #rchTastiera .rch-tk-funz .btn:hover { background: #333; color: #fff; }
+/* Tastiera virtuale nel suo modal (#modalTastieraRCH), al centro dello schermo. */
+.rch-tk-dialog { max-width: 640px; }
+@media (min-width: 576px) { .rch-tk-dialog { width: calc(100% - 2rem); } }
+#rchTastiera .rch-tk-specchio { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 12px; margin-bottom: 4px; }
+#rchTastiera .rch-tk-specchio .form-check-input { cursor: pointer; }
+/* La regola globale ".modal-body { overflow: visible !important; max-height: 70vh }"
+   toglie lo scorrimento: la console RCH (che nel suo HTML chiede overflow-y:auto)
+   e la tastiera non scorrevano piu' su schermi bassi. Si riapre solo qui. */
+#modalConsoleRCH .modal-body { overflow-y: auto !important; }
+#modalTastieraRCH .modal-content { overflow: hidden !important; }
+#modalTastieraRCH .modal-body { overflow-y: auto !important; max-height: none; }
