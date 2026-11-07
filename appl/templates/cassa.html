@@ -421,8 +421,8 @@
       <div class="modal-body py-2">
         <div class="rch-tk-display" aria-live="polite"
              data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
-             title="La tastiera non può leggere in che modalità è la stampante: la sa solo dopo che l'hai scelta da qui (numero + CHIAVE). Per lavorare: 1 + CHIAVE = REG.">
-          <div id="rchTkRiga1">PREMI 1 + CHIAVE</div>
+             title="La tastiera non può leggere in che modalità è la stampante: la sa solo dopo che l'hai scelta dai pulsanti Modalità qui sotto. Per vendere: REG.">
+          <div id="rchTkRiga1">SCEGLI LA MODALITA</div>
           <div id="rchTkRiga2">0,00</div>
         </div>
         <div class="rch-tk-specchio">
@@ -432,8 +432,23 @@
           </div>
           <span id="rchTkSpecchioStato" class="text-muted"></span>
         </div>
-        <div class="rch-tk-modi">
-          Modalità: numero + CHIAVE &nbsp;·&nbsp; 0 LOCK · 1 REG · 2 X · 3 Z · 4 PRG<span class="rch-tk-solo-rt"> · 5 SRV</span>
+        <!-- Modalita' con un clic: sulla RCH si sceglie con numero + CHIAVE
+             (in sequenza), qui basta il pulsante; la sequenza resta valida.
+             Quella attiva resta evidenziata (classe "attivo", da rch_tastiera.js). -->
+        <div class="rch-tk-modi" role="group" aria-label="Modalità della stampante">
+          <span class="rch-tk-modi-label">Modalità</span>
+          <button type="button" class="rch-tk-modo" data-k="MODO" data-modo="0"
+                  data-bs-toggle="tooltip" data-bs-trigger="hover" title="Blocco tastiera (=C0)">LOCK</button>
+          <button type="button" class="rch-tk-modo" data-k="MODO" data-modo="1"
+                  data-bs-toggle="tooltip" data-bs-trigger="hover" title="Registrazione: vendite e scontrini (=C1)">REG</button>
+          <button type="button" class="rch-tk-modo" data-k="MODO" data-modo="2"
+                  data-bs-toggle="tooltip" data-bs-trigger="hover" title="Letture senza azzeramento (=C2)">X</button>
+          <button type="button" class="rch-tk-modo" data-k="MODO" data-modo="3"
+                  data-bs-toggle="tooltip" data-bs-trigger="hover" title="Chiusure e letture fiscali (=C3). Entrare in Z non fa la chiusura">Z</button>
+          <button type="button" class="rch-tk-modo" data-k="MODO" data-modo="4"
+                  data-bs-toggle="tooltip" data-bs-trigger="hover" title="Programmazione (=C4)">PRG</button>
+          <button type="button" class="rch-tk-modo rch-tk-solo-rt" data-k="MODO" data-modo="5"
+                  data-bs-toggle="tooltip" data-bs-trigger="hover" title="Servizio, solo 3.0 RT (=C5)">SRV</button>
         </div>
 
         <div class="rch-tk-grid">
@@ -449,7 +464,7 @@
           <button type="button" class="rch-k k-red k-dual" data-k="ANNULLO"
                   data-bs-toggle="tooltip" data-bs-trigger="hover" title="ANNULLO ultima riga (=a) · SHIFT: annulla lo scontrino in corso (=K)"><span>ANNULLO</span><span>ANN-SCO.</span></button>
           <button type="button" class="rch-k k-light" data-k="CHIAVE"
-                  data-bs-toggle="tooltip" data-bs-trigger="hover" title="Cambia modalità: numero (0-5) + CHIAVE">CHIAVE</button>
+                  data-bs-toggle="tooltip" data-bs-trigger="hover" title="Come sulla RCH: prima il numero (es. 1), poi CHIAVE. Più comodo: i pulsanti Modalità qui sopra">CHIAVE</button>
           <!-- riga 2 -->
           <button type="button" class="rch-k k-num" data-k="7">7</button>
           <button type="button" class="rch-k k-num" data-k="8">8<small>ABC</small></button>
@@ -491,21 +506,37 @@
           <button type="button" class="rch-k k-yellow k-span2" data-k="CONTANTI">CONTANTI</button>
         </div>
 
-        <div class="rch-tk-funz">
-          <span>Funzione: numero +</span>
-          <button type="button" class="btn btn-sm btn-outline-dark py-0" data-k="FUNZ_EQ"
-                  data-bs-toggle="tooltip" data-bs-trigger="hover"
-                  title="Manda =C seguito dal numero digitato (es. 2 CHIAVE, poi 198 =C n)">=C n</button>
-          <button type="button" class="btn btn-sm btn-outline-dark py-0 rch-tk-solo-rt" data-k="FUNZ_GT"
-                  data-bs-toggle="tooltip" data-bs-trigger="hover"
-                  title="Manda >C seguito dal numero digitato (solo 3.0 RT, es. >C906 in SRV)">&gt;C n</button>
+        <!-- Istruzioni per chi non conosce la RCH: gesti concreti, niente gergo
+             di protocollo. I dettagli tecnici (comandi mandati, layout dal
+             manuale PRINT! F, menu non navigabili) stanno in rch_tastiera.js. -->
+        <div class="rch-tk-guida">
+          <strong>Come si usa</strong>
+          <ol class="mb-1">
+            <li>Scegli la modalità qui sopra: per fare uno scontrino, <b>REG</b>.</li>
+            <li>Scrivi l'importo come sulla cassa, senza virgola: <b>5 0 00</b> = 50,00 €. Poi premi il <b>reparto</b>.</li>
+            <li>Chiudi con <b>SUBTOTALE</b> e poi <b>CONTANTI</b> (o un altro pagamento).</li>
+          </ol>
+          <div class="rch-tk-avviso">⚠️ Gli scontrini fatti da qui sono <b>veri</b>, ma <b>non</b> compaiono nel Registro Scontrini di Tosca.</div>
         </div>
-        <small class="text-muted d-block mt-1" style="font-size: 11px;">
-          I tasti mandano il comando di protocollo equivalente, non premono il tasto fisico:
-          scontrini e chiusure fatti da qui sono veri ma Tosca non li registra.
-          I menu X/Z/PRG si scorrono solo sulla stampante: al loro posto c'è "Funzione".
-          Layout del manuale Print! F; quello della 3.0 RT RCH lo pubblica solo dietro login.
-        </small>
+
+        <!-- Comandi per numero (=C n, >C n): servono all'assistenza, non al
+             lavoro di tutti i giorni, quindi stanno chiusi. -->
+        <details class="rch-tk-avanzate">
+          <summary>Comandi avanzati (assistenza)</summary>
+          <div class="rch-tk-funz">
+            <span>Digita il numero della funzione, poi:</span>
+            <button type="button" class="btn btn-sm btn-outline-dark py-0" data-k="FUNZ_EQ"
+                    data-bs-toggle="tooltip" data-bs-trigger="hover"
+                    title="Manda =C seguito dal numero digitato (es. in X: 198)">=C n</button>
+            <button type="button" class="btn btn-sm btn-outline-dark py-0 rch-tk-solo-rt" data-k="FUNZ_GT"
+                    data-bs-toggle="tooltip" data-bs-trigger="hover"
+                    title="Manda >C seguito dal numero digitato (solo 3.0 RT, es. in SRV: 906)">&gt;C n</button>
+          </div>
+          <small class="text-muted d-block mt-1">
+            I menu di X, Z e PRG si scorrono solo sulla stampante: da qui si chiamano per numero.
+            Prima di mandare, Tosca chiede conferma.
+          </small>
+        </details>
       </div>
       <div class="modal-footer py-2">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Torna alla console</button>

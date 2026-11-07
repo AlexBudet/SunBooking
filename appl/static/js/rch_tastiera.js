@@ -58,10 +58,11 @@
 
   var MODI = ['LOCK', 'REG', 'X', 'Z', 'PRG', 'SRV'];
   // La modalita' della stampante non si legge da protocollo: la tastiera la
-  // conosce solo dopo numero + CHIAVE. Finche' non la sa, il display dice cosa
-  // fare invece di "MODO ?", che non spiegava niente (e finiva anche sulla RCH).
-  // Solo ASCII e max 20 caratteri: va anche sul display della stampante.
-  var MODO_IGNOTO = 'PREMI 1 + CHIAVE';
+  // conosce solo dopo averla impostata da qui (pulsanti Modalita', oppure
+  // numero e poi CHIAVE come sulla RCH). Finche' non la sa, il display dice
+  // cosa fare. Solo ASCII e max 20 caratteri: va anche sul display della RCH.
+  var MODO_IGNOTO = 'SCEGLI LA MODALITA';
+  var barraModi = root.querySelector('.rch-tk-modi');
   var st = { buf: '', qty: null, prezzo: null, shift: false, modo: null, msg: null, busy: false, inviato: false };
 
   // Stesso formato di rchLog() della console, cosi' "Copia" porta tutto insieme.
@@ -123,6 +124,31 @@
     riga2.textContent = r2;
 
     root.querySelector('.rch-tk-grid').classList.toggle('rch-tk-shift', st.shift);
+
+    root.querySelectorAll('.rch-tk-modo').forEach(function (b) {
+      var attivo = st.modo !== null && parseInt(b.dataset.modo, 10) === st.modo;
+      b.classList.toggle('attivo', attivo);
+      b.setAttribute('aria-pressed', attivo ? 'true' : 'false');
+    });
+  }
+
+  // Richiama l'occhio sulla barra Modalita' (CHIAVE premuto senza numero).
+  function evidenziaBarraModi() {
+    if (!barraModi) return;
+    barraModi.classList.remove('rch-tk-lampeggia');
+    void barraModi.offsetWidth;   // riavvia l'animazione anche a clic ripetuti
+    barraModi.classList.add('rch-tk-lampeggia');
+  }
+
+  async function impostaModo(m) {
+    var max = isRT() ? 5 : 4;
+    if (m > max) { st.msg = 'SRV solo su 3.0 RT'; return; }
+    azzera();
+    var d = await invia('=C' + m);
+    if (d && d.success) {
+      st.modo = m;
+      st.msg = null;   // il display mostra direttamente la modalita' (es. REG)
+    }
   }
 
   // Un tasto rifiutato butta via quanto digitato: altrimenti le cifre restano
@@ -164,7 +190,8 @@
         var data = await post([cmd]);
         log('Tastiera ' + cmd + ':\n' + JSON.stringify(data, null, 2), data.success ? 'success' : 'error');
         if (data.success) {
-          st.msg = 'OK  ' + (data.command_sent || cmd);
+          // Sul display basta "OK": il comando esatto e' nel log della console.
+          st.msg = 'OK';
         } else {
           var codice = data.error_code !== null && data.error_code !== undefined ? data.error_code : (data.error || '?');
           st.msg = 'ERR ' + codice + '  ' + (data.command_sent || cmd);
@@ -291,19 +318,23 @@
         break;
       }
 
+      // Come sulla RCH: prima il numero, poi CHIAVE (due clic in sequenza).
+      // Senza numero valido si indica la barra Modalita', che fa lo stesso con un clic.
       case 'CHIAVE': {
         var max = isRT() ? 5 : 4;
         if (!/^\d$/.test(st.buf) || parseInt(st.buf, 10) > max) {
           st.buf = '';
-          st.msg = 'Digita 0-' + max + ' + CHIAVE';
+          st.msg = MODO_IGNOTO;
+          evidenziaBarraModi();
           break;
         }
-        var m = parseInt(st.buf, 10);
-        azzera();
-        var d = await invia('=C' + m);
-        if (d && d.success) st.modo = m;
+        await impostaModo(parseInt(st.buf, 10));
         break;
       }
+
+      case 'MODO':
+        await impostaModo(parseInt(el.dataset.modo, 10));
+        break;
 
       case 'R': {
         if (bloccatoFuoriREG('')) break;

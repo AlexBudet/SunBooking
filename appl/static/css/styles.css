@@ -5766,3 +5766,21 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
 #modalConsoleRCH .modal-body { overflow-y: auto !important; }
 #modalTastieraRCH .modal-content { overflow: hidden !important; }
 #modalTastieraRCH .modal-body { overflow-y: auto !important; max-height: none; }
+/* Barra Modalita' della tastiera RCH: un clic imposta la modalita', quella
+   attiva resta evidenziata. Lampeggia se si preme CHIAVE senza numero. */
+#rchTastiera .rch-tk-modi { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 2px 0 6px; padding: 3px; border-radius: 6px; font-size: 12px; color: #444; }
+#rchTastiera .rch-tk-modi-label { font-weight: 600; margin-right: 4px; }
+#rchTastiera .rch-tk-modo { border: 1px solid #999; background: #f4f4f4; color: #222; border-radius: 4px; padding: 2px 10px; font-size: 12px; font-weight: 700; line-height: 1.4; cursor: pointer; }
+#rchTastiera .rch-tk-modo:hover { background: #e2e2e2; }
+#rchTastiera .rch-tk-modo.attivo { background: #1e2a1e; border-color: #1e2a1e; color: #b8f5b0; }
+#rchTastiera .rch-tk-modo[data-modo="3"]:not(.attivo) { border-color: #c77; }
+#rchTastiera .rch-tk-modi.rch-tk-lampeggia { animation: rch-tk-lampo 0.45s ease-in-out 3; }
+@keyframes rch-tk-lampo { 50% { background: #ffe08a; box-shadow: 0 0 0 2px #f0b400; } }
+@media (prefers-reduced-motion: reduce) { #rchTastiera .rch-tk-modi.rch-tk-lampeggia { animation: none; background: #ffe08a; } }
+/* Tastiera RCH: istruzioni semplici e comandi avanzati (chiusi). */
+#rchTastiera .rch-tk-guida { margin-top: 8px; font-size: 12.5px; color: #333; line-height: 1.45; }
+#rchTastiera .rch-tk-guida ol { padding-left: 1.2rem; margin-top: 2px; }
+#rchTastiera .rch-tk-avviso { background: #fff4d6; border: 1px solid #f0c860; border-radius: 6px; padding: 4px 8px; }
+#rchTastiera .rch-tk-avanzate { margin-top: 8px; font-size: 12px; color: #555; }
+#rchTastiera .rch-tk-avanzate > summary { cursor: pointer; font-weight: 600; }
+#rchTastiera .rch-tk-avanzate .rch-tk-funz { margin-top: 4px; }
