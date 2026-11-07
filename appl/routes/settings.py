@@ -5034,17 +5034,63 @@ def _clean_version(v):
 
 
 # ---------- Badge "update" sul menu Tools (SOLO .exe on-premise) ----------
-# Il badge chiede lo stato a /settings/api/update-status ogni 15 minuti: quella
-# rotta NON va su GitHub a ogni chiamata, tiene in memoria l'ultima release e
-# la rinnova al massimo una volta l'ora (dopo un errore, ogni 15 minuti).
-# Senza token GitHub concede 60 richieste l'ora per indirizzo IP; con l'ETag
-# la risposta "non e' cambiato niente" (304) non conta nel limite.
+# E' il "segnale" che una nuova versione e' stata caricata. Il .exe sta dietro
+# il router del negozio e nessuno puo' mandargli niente: e' lui che chiede.
+# Il badge chiede lo stato a /settings/api/update-status ogni 5 minuti; quella
+# rotta rilegge GitHub al massimo una volta ogni 5 minuti.
+#
+# NON si usano le API (api.github.com): senza token concedono 60 richieste
+# l'ora per indirizzo IP, condivise da tutti i PC della rete e dai clic su
+# "Controlla aggiornamenti", e a limite esaurito il badge restava spento e il
+# pulsante diceva "Impossibile contattare GitHub" (07/11/2026, v3.6.8).
+# Si leggono le pagine web, che quel limite non hanno (_ultima_release_dal_sito).
+#
 # Nella web app (wsgi.py, IS_CLOUD) e nell'avvio da sorgente (non frozen) il
 # badge non viene nemmeno disegnato e la rotta risponde enabled=false.
-_UPDATE_TTL_OK = 60 * 60
-_UPDATE_TTL_ERR = 15 * 60
-_update_cache = {'checked_at': 0.0, 'ok': False, 'etag': None, 'release': None}
+_UPDATE_TTL_OK = 5 * 60
+_UPDATE_TTL_ERR = 5 * 60
+_update_cache = {'checked_at': 0.0, 'ok': False, 'release': None}
 _update_lock = _threading.Lock()
+_RELEASES_WEB = f"https://github.com/{GITHUB_REPO}/releases"
+_REDIRECT = (301, 302, 303, 307, 308)
+
+
+def _ultima_release_dal_sito(tag_noto=None, exe_noto=False):
+    """(tag, ha_exe) dell'ultima release, dalle pagine web di GitHub:
+    - /releases/latest risponde con un rimando a /releases/tag/<tag>
+    - /releases/download/<tag>/Tosca.exe risponde con un rimando se il file
+      c'e', 404 finche' la build non l'ha caricato: il badge si accende solo
+      quando l'aggiornamento e' davvero scaricabile.
+    Se il tag e' quello gia' noto e il .exe c'era, la seconda richiesta si salta.
+    Solleva su errore di rete o risposta inattesa."""
+    r = requests.get(f"{_RELEASES_WEB}/latest", allow_redirects=False, timeout=6)
+    loc = r.headers.get('Location', '')
+    m = re.search(r'/releases/tag/([^/?#]+)$', loc)
+    if r.status_code not in _REDIRECT or not m:
+        raise RuntimeError(f"releases/latest: HTTP {r.status_code}, Location={loc!r}")
+    tag = m.group(1)
+    if tag == tag_noto and exe_noto:
+        return tag, True
+    h = requests.head(f"{_RELEASES_WEB}/download/{tag}/{APP_EXE_NAME}",
+                      allow_redirects=False, timeout=6)
+    if h.status_code in _REDIRECT:
+        return tag, True
+    if h.status_code == 404:
+        return tag, False
+    raise RuntimeError(f"download {tag}/{APP_EXE_NAME}: HTTP {h.status_code}")
+
+
+def _msg_github_non_raggiungibile(resp):
+    """Testo per l'utente quando le API GitHub non rispondono 200: il limite
+    orario esaurito (403/429) non e' un problema di rete e va detto."""
+    if resp is not None and resp.status_code in (403, 429) and resp.headers.get('X-RateLimit-Remaining') == '0':
+        try:
+            reset = datetime.fromtimestamp(int(resp.headers.get('X-RateLimit-Reset', '0')),
+                                           ZoneInfo('Europe/Rome'))
+            return f"GitHub ha limitato le richieste da questa rete: riprova dopo le {reset:%H:%M}"
+        except Exception:
+            return "GitHub ha limitato le richieste da questa rete: riprova tra un'ora"
+    return "Impossibile contattare GitHub"
 
 
 def _update_badge_abilitato():
@@ -5066,21 +5112,15 @@ def _versione_numerica(v):
 
 def _rinnova_cache_aggiornamento():
     c = _update_cache
-    headers = {'Accept': 'application/vnd.github+json'}
-    if c['etag'] and c['release'] is not None:
-        headers['If-None-Match'] = c['etag']
+    prima = c['release'] or {}
     try:
-        resp = requests.get(f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
-                            headers=headers, timeout=6)
-        if resp.status_code == 304:
-            c['ok'] = True
-        elif resp.status_code == 200:
-            c['release'] = resp.json()
-            c['etag'] = resp.headers.get('ETag')
-            c['ok'] = True
-        else:
-            c['ok'] = False
-            current_app.logger.warning("[UPDATE-BADGE] GitHub ha risposto %s", resp.status_code)
+        tag, ha_exe = _ultima_release_dal_sito(
+            tag_noto=prima.get('tag_name'),
+            exe_noto=any(a.get('name') == APP_EXE_NAME for a in prima.get('assets', [])),
+        )
+        # Stessa forma della risposta delle API, cosi' update_status non cambia.
+        c['release'] = {'tag_name': tag, 'assets': [{'name': APP_EXE_NAME}] if ha_exe else []}
+        c['ok'] = True
     except Exception as e:
         # Senza rete si tiene l'ultima release nota: il badge, se c'era, resta.
         c['ok'] = False
@@ -5140,11 +5180,30 @@ def check_update():
         # Ultima release da GitHub
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         resp = requests.get(url, timeout=10)
-        
+
         if resp.status_code != 200:
-            return jsonify({"error": "Impossibile contattare GitHub", "status_code": resp.status_code}), 500
-        
-        release_data = resp.json()
+            # Le API servono solo per le note di rilascio: versione e file si
+            # ricavano anche dalle pagine web (stesso controllo del badge).
+            try:
+                tag, ha_exe = _ultima_release_dal_sito()
+            except Exception as e:
+                current_app.logger.warning("[CHECK-UPDATE] API %s e pagine web non raggiungibili: %s",
+                                           resp.status_code, e)
+                return jsonify({"error": _msg_github_non_raggiungibile(resp),
+                                "status_code": resp.status_code}), 500
+            current_app.logger.info("[CHECK-UPDATE] API %s, uso le pagine web: tag=%s exe=%s",
+                                    resp.status_code, tag, ha_exe)
+            release_data = {
+                "tag_name": tag,
+                "name": tag,
+                "body": "Note di rilascio non disponibili adesso (GitHub ha limitato le richieste).",
+                "published_at": "",
+                "assets": ([{"name": APP_EXE_NAME,
+                             "browser_download_url": f"{_RELEASES_WEB}/download/{tag}/{APP_EXE_NAME}"}]
+                           if ha_exe else []),
+            }
+        else:
+            release_data = resp.json()
         remote_version = release_data.get("tag_name", "")
         release_name = release_data.get("name", remote_version)
         release_notes = release_data.get("body", "")

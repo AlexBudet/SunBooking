@@ -1115,7 +1115,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <script>
 (function () {
   var URL_STATO = "{{ url_for('settings.update_status') }}";
-  var POLL_MS = 15 * 60 * 1000;
+  var POLL_MS = 5 * 60 * 1000;  // il server rilegge GitHub al massimo ogni 5 minuti
   var nelPannello = document.documentElement.classList.contains('in-side-pane');
 
   function applica(dati) {
