@@ -57,6 +57,11 @@
   var btnApri = document.getElementById('btnRchApriTastiera');
 
   var MODI = ['LOCK', 'REG', 'X', 'Z', 'PRG', 'SRV'];
+  // La modalita' della stampante non si legge da protocollo: la tastiera la
+  // conosce solo dopo numero + CHIAVE. Finche' non la sa, il display dice cosa
+  // fare invece di "MODO ?", che non spiegava niente (e finiva anche sulla RCH).
+  // Solo ASCII e max 20 caratteri: va anche sul display della stampante.
+  var MODO_IGNOTO = 'PREMI 1 + CHIAVE';
   var st = { buf: '', qty: null, prezzo: null, shift: false, modo: null, msg: null, busy: false, inviato: false };
 
   // Stesso formato di rchLog() della console, cosi' "Copia" porta tutto insieme.
@@ -104,7 +109,7 @@
   function inREG() { return st.modo === null || st.modo === 1; }
 
   function mostra() {
-    var r1 = st.modo === null ? 'MODO ?' : MODI[st.modo];
+    var r1 = st.modo === null ? MODO_IGNOTO : MODI[st.modo];
     if (st.shift) r1 += '  SHIFT';
     if (st.qty) r1 += '  ' + st.qty.replace('.', ',') + 'X';
     if (st.prezzo) r1 += '  PR.REP ' + euro(st.prezzo);
