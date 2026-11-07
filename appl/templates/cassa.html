@@ -363,6 +363,108 @@
                 </small>
               </div>
             </div>
+
+            <!-- TASTIERA VIRTUALE: layout 40 tasti del manuale operativo PRINT! F
+                 (cap. 1.5). Ogni tasto manda il comando di protocollo equivalente:
+                 logica e mappatura in static/js/rch_tastiera.js. -->
+            <div class="card mb-2" id="rchTastiera" data-send-url="{{ url_for('cassa.rch_console_send_raw') }}">
+              <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <strong>⌨️ Tastiera virtuale</strong>
+                <div class="d-flex align-items-center gap-2">
+                  <select id="rchTkModello" class="form-select form-select-sm" style="width: auto;"
+                          data-bs-toggle="tooltip" data-bs-placement="top" data-bs-trigger="hover"
+                          title="Si allinea da solo al modello letto da Stato Stampante">
+                    <option value="rch_print_rt">Print! 3.0 RT</option>
+                    <option value="rch_print_f">Print! F</option>
+                  </select>
+                  <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button"
+                          data-bs-toggle="collapse" data-bs-target="#rchTkBody" aria-expanded="false"
+                          aria-controls="rchTkBody">Mostra</button>
+                </div>
+              </div>
+              <div class="collapse" id="rchTkBody">
+                <div class="card-body py-2">
+                  <div class="rch-tk-display" aria-live="polite">
+                    <div id="rchTkRiga1">MODO ?</div>
+                    <div id="rchTkRiga2">0,00</div>
+                  </div>
+                  <div class="rch-tk-modi">
+                    Modalità: numero + CHIAVE &nbsp;·&nbsp; 0 LOCK · 1 REG · 2 X · 3 Z · 4 PRG<span class="rch-tk-solo-rt"> · 5 SRV</span>
+                  </div>
+
+                  <div class="rch-tk-grid">
+                    <!-- riga 1 -->
+                    <button type="button" class="rch-k k-red" data-k="CL"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Cancella quanto digitato (non manda niente alla stampante)">CL</button>
+                    <button type="button" class="rch-k k-light" data-k="X"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Quantità: es. 3 X/ORA, poi importo + REPARTO">X / ORA</button>
+                    <button type="button" class="rch-k k-light" data-k="SHIFT">SHIFT</button>
+                    <button type="button" class="rch-k k-rep" data-k="R" data-rep="5">REPARTO 5</button>
+                    <button type="button" class="rch-k k-red k-dual" data-k="STORNO"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="STORNO (=s) · SHIFT: RESO M. non disponibile, serve il documento di riferimento"><span>STORNO</span><span>RESO M.</span></button>
+                    <button type="button" class="rch-k k-red k-dual" data-k="ANNULLO"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="ANNULLO ultima riga (=a) · SHIFT: annulla lo scontrino in corso (=K)"><span>ANNULLO</span><span>ANN-SCO.</span></button>
+                    <button type="button" class="rch-k k-light" data-k="CHIAVE"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Cambia modalità: numero (0-5) + CHIAVE">CHIAVE</button>
+                    <!-- riga 2 -->
+                    <button type="button" class="rch-k k-num" data-k="7">7</button>
+                    <button type="button" class="rch-k k-num" data-k="8">8<small>ABC</small></button>
+                    <button type="button" class="rch-k k-num" data-k="9">9<small>DEF</small></button>
+                    <button type="button" class="rch-k k-rep" data-k="R" data-rep="4">REPARTO 4</button>
+                    <button type="button" class="rch-k k-rep" data-k="REP"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Numero reparto + REPARTO (con prezzo preimpostato, o dopo PREZZO REPARTO)">REPARTO</button>
+                    <button type="button" class="rch-k k-rep" data-k="PREZZO"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Importo + PREZZO REPARTO, poi numero reparto + REPARTO">PREZZO REPARTO</button>
+                    <button type="button" class="rch-k k-light k-dual" data-k="COD"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Codice fiscale cliente · SHIFT: riga di testo libero"><span>COD. FISC.</span><span>STR. ALFA</span></button>
+                    <!-- riga 3 -->
+                    <button type="button" class="rch-k k-num" data-k="4">4<small>GHI</small></button>
+                    <button type="button" class="rch-k k-num" data-k="5">5<small>JKL</small></button>
+                    <button type="button" class="rch-k k-num" data-k="6">6<small>MNO</small></button>
+                    <button type="button" class="rch-k k-rep" data-k="R" data-rep="3">REPARTO 3</button>
+                    <button type="button" class="rch-k k-light" data-k="OPERATORE"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Numero operatore + OPERATORE">OPERA&shy;TORE</button>
+                    <button type="button" class="rch-k k-dark k-dual" data-k="ASSEGNI"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Chiusura con assegni (=T3) · SHIFT: PAG. DIV. non disponibile"><span>ASSEGNI</span><span>PAG. DIV.</span></button>
+                    <button type="button" class="rch-k k-light k-dual" data-k="CORR"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Corrispettivo non riscosso (=T2) · SHIFT: carta di credito / elettronico (=T4)"><span>CORR.N.RIS</span><span>C. DI CRED.</span></button>
+                    <!-- riga 4 -->
+                    <button type="button" class="rch-k k-num" data-k="1">1<small>PQRS</small></button>
+                    <button type="button" class="rch-k k-num" data-k="2">2<small>TUV</small></button>
+                    <button type="button" class="rch-k k-num" data-k="3">3<small>WXYZ</small></button>
+                    <button type="button" class="rch-k k-rep" data-k="R" data-rep="2">REPARTO 2</button>
+                    <button type="button" class="rch-k k-light k-dual" data-k="SCONTO"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Importo + SCONTO (=V-) · SHIFT: maggiorazione (=V+)"><span>SCONTO</span><span>MAGG.</span></button>
+                    <button type="button" class="rch-k k-orange k-span2" data-k="SUBTOT">SUBTOTALE</button>
+                    <!-- riga 5 -->
+                    <button type="button" class="rch-k k-num" data-k="0">0</button>
+                    <button type="button" class="rch-k k-num" data-k="00">00</button>
+                    <button type="button" class="rch-k k-num" data-k=","
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Virgola per decimali (quantità e percentuali)">,</button>
+                    <button type="button" class="rch-k k-rep" data-k="R" data-rep="1">REPARTO 1</button>
+                    <button type="button" class="rch-k k-light k-dual" data-k="PERC"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover" title="Percentuale + -% (=%-) · SHIFT: +% (=%+)"><span>- %</span><span>+ %</span></button>
+                    <button type="button" class="rch-k k-yellow k-span2" data-k="CONTANTI">CONTANTI</button>
+                  </div>
+
+                  <div class="rch-tk-funz">
+                    <span>Funzione: numero +</span>
+                    <button type="button" class="btn btn-sm btn-outline-dark py-0" data-k="FUNZ_EQ"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover"
+                            title="Manda =C seguito dal numero digitato (es. 2 CHIAVE, poi 198 =C n)">=C n</button>
+                    <button type="button" class="btn btn-sm btn-outline-dark py-0 rch-tk-solo-rt" data-k="FUNZ_GT"
+                            data-bs-toggle="tooltip" data-bs-trigger="hover"
+                            title="Manda >C seguito dal numero digitato (solo 3.0 RT, es. >C906 in SRV)">&gt;C n</button>
+                  </div>
+                  <small class="text-muted d-block mt-1" style="font-size: 11px;">
+                    I tasti mandano il comando di protocollo equivalente, non premono il tasto fisico:
+                    scontrini e chiusure fatti da qui sono veri ma Tosca non li registra.
+                    I menu X/Z/PRG si scorrono solo sulla stampante: al loro posto c'è "Funzione".
+                    Layout del manuale Print! F; quello della 3.0 RT RCH lo pubblica solo dietro login.
+                  </small>
+                </div>
+              </div>
+            </div>
             
           </div>
           
@@ -371,7 +473,12 @@
             <div class="card h-100">
               <div class="card-header py-2 d-flex justify-content-between align-items-center">
                 <strong>📋 Log</strong>
-                <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="btnRchClearLog">Pulisci</button>
+                <div class="d-flex gap-1">
+                  <button class="btn btn-sm btn-outline-primary py-0 px-2" id="btnRchCopyLog"
+                          data-bs-toggle="tooltip" data-bs-placement="top" data-bs-trigger="hover"
+                          title="Copia tutto il log negli appunti">Copia</button>
+                  <button class="btn btn-sm btn-outline-secondary py-0 px-2" id="btnRchClearLog">Pulisci</button>
+                </div>
               </div>
               <div class="card-body p-2">
                 <pre id="rchLogContainer" style="height: 280px; overflow-y: auto; background: #1e1e1e; color: #0f0; padding: 8px; border-radius: 5px; font-size: 11px; white-space: pre-wrap; margin: 0;">In attesa di comandi...</pre>
@@ -478,6 +585,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       }
       container.innerHTML = statusHtml;
+      // La tastiera virtuale (rch_tastiera.js) prende da qui il modello stampante.
+      document.dispatchEvent(new CustomEvent('rch-status', { detail: data }));
       return data;
     } catch (err) {
       container.innerHTML = '<div class="alert alert-danger py-1 mb-0 small">Errore: ' + err.message + '</div>';
@@ -606,7 +715,9 @@ document.addEventListener('DOMContentLoaded', function() {
       
       this.disabled = true;
       this.textContent = '...';
-      rchLog('Raw: =' + cmd + '...');
+      // Il prefisso lo decide il server (command_sent nella risposta): qui si
+      // scrive solo quello che e' stato digitato, senza aggiungere "=".
+      rchLog('Raw: ' + cmd + '...');
       
       try {
         const resp = await fetch('/cassa/rch-console/send-raw', {
@@ -642,8 +753,49 @@ document.addEventListener('DOMContentLoaded', function() {
       if (logContainer) logContainer.textContent = 'Log pulito...';
     });
   }
+
+  // Copia log negli appunti. navigator.clipboard esiste solo su https/localhost:
+  // altrove (es. .exe raggiunto dall'IP di rete) si ripiega su execCommand.
+  // La textarea d'appoggio va DENTRO il modal: appesa al body perderebbe il
+  // focus per il focus-trap di Bootstrap e la copia uscirebbe vuota.
+  var btnCopy = document.getElementById('btnRchCopyLog');
+  if (btnCopy) {
+    btnCopy.addEventListener('click', async function() {
+      var testo = logContainer ? logContainer.textContent : '';
+      var ok = false;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(testo);
+          ok = true;
+        }
+      } catch (e) { ok = false; }
+      if (!ok) {
+        var ta = document.createElement('textarea');
+        ta.value = testo;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        (document.getElementById('modalConsoleRCH') || document.body).appendChild(ta);
+        ta.select();
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        ta.remove();
+      }
+      if (!ok && logContainer) {
+        // Ultima strada: seleziono il testo, resta solo da premere Ctrl+C.
+        var range = document.createRange();
+        range.selectNodeContents(logContainer);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      var originale = 'Copia';
+      btnCopy.textContent = ok ? 'Copiato ✓' : 'Premi Ctrl+C';
+      setTimeout(function() { btnCopy.textContent = originale; }, 1800);
+    });
+  }
 });
 </script>
+<script src="{{ url_for('static', filename='js/rch_tastiera.js') }}"></script>
 {% endif %}
 
 <!-- Mini-modal selezione operatore per singola riga - ACCESSIBILE A TUTTI -->

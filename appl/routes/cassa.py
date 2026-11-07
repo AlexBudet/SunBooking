@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import html, re, time as pytime
+from xml.sax.saxutils import escape as _xml_escape
 from flask import Blueprint, app, render_template, jsonify, request, session, abort, current_app
 from appl.models import Appointment, AppointmentStatus, BusinessInfo, Operator, PrinterModel, Service, ServiceCategory, Client, Receipt, Subcategory, User, Pacchetto, PacchettoRata, PacchettoStatus, db
 from appl.services.error_log import log_crm_error
@@ -4529,10 +4530,14 @@ def rch_console_send_raw():
     rch_kwargs = _rch_request_kwargs(printer_model)
     
     try:
-        payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{command}</cmd></Service>'
+        # escape: "&", "<", ">" dentro <cmd> (parametri &data, testi liberi della
+        # tastiera virtuale, prefisso ">") rendevano l'XML non valido. La
+        # stampante decodifica le entita': la chiusura giornaliera manda gia'
+        # &gt;C117 e &amp;0.
+        payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{_xml_escape(command)}</cmd></Service>'
         resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
                              **rch_kwargs)
-        
+
         error_code = _rch_parse_errcode(resp.text)
         
         return jsonify({

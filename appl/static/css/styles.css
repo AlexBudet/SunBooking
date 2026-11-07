@@ -5693,3 +5693,65 @@ body:not(.touch-ui) .appointment-block.note-off .popup-buttons .btn-popup {
         min-height: calc(22.5vh + 16px);
     }
 }
+
+/* ===== Console RCH: tastiera virtuale (rch_tastiera.js) =====
+   Colori presi dalla figura della tastiera 40 tasti del manuale PRINT! F. */
+#rchTastiera .rch-tk-display {
+    font-family: Consolas, "Courier New", monospace;
+    background: #1e2a1e;
+    color: #b8f5b0;
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    line-height: 1.3;
+}
+#rchTastiera #rchTkRiga1 { font-size: 13px; min-height: 1.3em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#rchTastiera #rchTkRiga1.rch-tk-msg { color: #ffd35c; }
+#rchTastiera #rchTkRiga2 { font-size: 20px; text-align: right; min-height: 1.3em; }
+#rchTastiera .rch-tk-modi { font-size: 11px; color: #6c757d; margin-bottom: 6px; }
+#rchTastiera.rch-tk-f .rch-tk-solo-rt { display: none; }
+
+#rchTastiera .rch-tk-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr) 1.5fr repeat(3, 1fr);
+    gap: 3px;
+    background: #222;
+    padding: 4px;
+    border-radius: 6px;
+}
+#rchTastiera .rch-k {
+    min-height: 44px;
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.1;
+    padding: 2px 3px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    overflow-wrap: anywhere;
+}
+#rchTastiera .rch-k:active { transform: translateY(1px); filter: brightness(0.85); }
+#rchTastiera .rch-k.k-span2 { grid-column: span 2; font-size: 14px; }
+#rchTastiera .k-num { background: #8c8c8c; color: #111; font-size: 18px; }
+#rchTastiera .k-num small { font-size: 8px; font-weight: 600; align-self: flex-end; }
+#rchTastiera .k-red { background: #e3001b; color: #fff; }
+#rchTastiera .k-red[data-k="CL"] { font-size: 18px; }
+#rchTastiera .k-light { background: #c9c9c9; color: #111; }
+#rchTastiera .k-dark { background: #5a5a5a; color: #111; }
+#rchTastiera .k-rep { background: #333; color: #ffd200; }
+#rchTastiera .k-orange { background: #ff9900; color: #b00000; }
+#rchTastiera .k-yellow { background: #ffcc00; color: #b00000; }
+/* Doppia funzione: sopra la principale, sotto quella con SHIFT. */
+#rchTastiera .k-dual span + span { font-weight: 600; opacity: 0.75; border-top: 1px solid currentColor; margin-top: 2px; padding-top: 1px; }
+#rchTastiera .rch-tk-shift .k-dual span:first-child { opacity: 0.45; }
+#rchTastiera .rch-tk-shift .k-dual span + span { opacity: 1; text-decoration: underline; }
+#rchTastiera .rch-tk-shift .rch-k[data-k="SHIFT"] { background: #0d6efd; color: #fff; }
+#rchTastiera.rch-tk-busy .rch-tk-grid { opacity: 0.6; pointer-events: none; }
+#rchTastiera .rch-tk-funz { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; flex-wrap: wrap; }
+#rchTastiera .rch-tk-funz .btn { border: 1px solid #333; background: #f1f1f1; color: #111; padding: 1px 10px; font-weight: 700; }
+#rchTastiera .rch-tk-funz .btn:hover { background: #333; color: #fff; }
