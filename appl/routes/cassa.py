@@ -196,6 +196,176 @@ def _read_progressivo(url, headers, rch_kwargs, max_attempts=8, sleep_s=0.5):
                     pass
     return None, None
 
+
+# =========================================================================
+# SCONTRINO EMESSO = CONTATORE AVANZATO DI UNO. Nient'altro.
+# =========================================================================
+# errorCode 0 dice solo che la stampante ha ACCETTATO i comandi, non che il
+# documento sia uscito. Misurato su sunexp3 e suncity (09/11/2026): 25
+# scontrini registrati con numero documento 0000 (RCH bloccata che risponde
+# "Z 0, Doc 0", oppure contatore fermo a 0 dopo la Z), e in TUTTI i 12 giorni
+# con lettura DGFE il DGFE ha un documento in meno del registro, per lo stesso
+# identico importo. Erano scontrini mai emessi, registrati come fiscali e poi
+# non stornabili (il reso su un documento che non esiste viene rifiutato).
+#
+# Regola unica, uguale per RCH Print 3.0 RT e Print F: si legge il contatore
+# (=C453/$0) PRIMA di mandare lo scontrino e lo si rilegge DOPO. Si registra
+# solo se e' rimasta la stessa Z e lastDocF e' salito esattamente di uno.
+# Ogni altro esito non scrive niente: lo scontrino resta "da verificare" e si
+# decide con una nuova lettura del contatore, mai indovinando dagli importi.
+
+_RCH_LOCK = __import__('threading').Lock()   # una sola registrazione per volta
+
+
+def _rch_contatori(url, headers, rch_kwargs, timeout=5):
+    """Una lettura di stato (=C453/$0). Ritorna un dict con z (lastZ), doc
+    (lastDocF), i segnali della meccanica e la risposta grezza, oppure None se
+    la stampante non risponde o la risposta non contiene i contatori.
+    Non solleva mai."""
+    payload = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C453/$0</cmd></Service>'
+    try:
+        resp = requests.post(url, data=payload.encode('utf-8'), headers=headers,
+                             timeout=timeout, **rch_kwargs)
+    except Exception:
+        return None
+    return _rch_parse_contatori(resp.text or "")
+
+
+def _rch_parse_contatori(body):
+    """Contatori e segnali della meccanica da una risposta RCH qualsiasi
+    (ogni risposta porta lo stesso blocco <Request>). None se mancano."""
+    body = body or ""
+
+    def _int(tag):
+        m = re.search(rf'<{tag}>(\d+)</{tag}>', body)
+        return int(m.group(1)) if m else None
+
+    z, doc = _int('lastZ'), _int('lastDocF')
+    if z is None or doc is None:
+        return None
+    return {
+        "z": z,
+        "doc": doc,
+        "carta_finita": _int('paperEnd') == 1,
+        "coperchio_aperto": _int('coverOpen') == 1,
+        "errore_meccanico": _int('printerError') == 1,
+        "occupata": _int('busy') == 1,
+        "error_code": _rch_parse_errcode(body),
+        "raw": body[:500],
+    }
+
+
+def _rch_leggi_contatori(url, headers, rch_kwargs, tentativi=3, pausa_s=0.4):
+    """Come _rch_contatori, con qualche tentativo: una stampante appena svegliata
+    puo' non rispondere alla prima richiesta."""
+    for i in range(tentativi):
+        c = _rch_contatori(url, headers, rch_kwargs)
+        if c is not None:
+            return c
+        if i < tentativi - 1:
+            pytime.sleep(pausa_s)
+    return None
+
+
+def _rch_contatori_bloccati(c):
+    """Z 0 e documento 0 insieme: è la risposta della RCH bloccata (misurata a
+    Biella il 10/10/2026 e il 09/11/2026), anche se dice errorCode 0. Una
+    stampante nuova, prima della sua prima Z, risponde allo stesso modo: per
+    questo non si usa per bloccare l'invio, solo per non dichiarare la
+    stampante pronta."""
+    return c is not None and c["z"] == 0 and c["doc"] == 0
+
+
+def _rch_bloccata_prima_dell_invio(c):
+    """Contatori a zero su una stampante che ha gia' una storia nel registro
+    (almeno uno scontrino oltre la prima Z): non e' una stampante nuova, e'
+    la RCH bloccata. Non le si manda niente: dopo il riavvio la numerazione
+    torna quella vera e non ci sarebbe un termine di paragone per dire se lo
+    scontrino e' uscito."""
+    if not _rch_contatori_bloccati(c):
+        return False
+    try:
+        storico = Receipt.query.filter(
+            Receipt.is_fiscale == True,
+            Receipt.numero_progressivo.like('____-____'),
+            ~Receipt.numero_progressivo.like('0001-%'),
+        ).first()
+    except Exception:
+        db.session.rollback()
+        return False
+    return storico is not None
+
+
+MSG_RCH_BLOCCATA_NON_INVIATO = (
+    "La stampante risponde con i contatori a zero (Z 0, documento 0): è bloccata. "
+    "Lo scontrino NON è stato inviato e NON è stato registrato. Se la carta c'è, "
+    "spegni e riaccendi la stampante RCH, poi premi di nuovo Stampa. "
+    "(Se la stampante è nuova o appena sostituita, esegui prima una chiusura Z.)")
+
+
+def _rch_pronta(c):
+    """La lettura descrive una stampante che risponde in modo affidabile e non
+    ha niente in corso (nessun segnale di carta, coperchio, errore, lavoro)."""
+    if c is None or _rch_contatori_bloccati(c):
+        return False
+    if c["carta_finita"] or c["coperchio_aperto"] or c["errore_meccanico"] or c["occupata"]:
+        return False
+    # 2/3/4 = documento aperto (vedi rch_console_status)
+    return c["error_code"] in (None, 0, 20, 99)
+
+
+def _rch_esito(prima, dopo):
+    """Confronta due letture. Ritorna:
+    'emesso'     stessa Z, documento +1: lo scontrino e' uscito
+    'non_emesso' stampante pronta e contatore fermo: non e' uscito niente
+    'incerto'    la stampante risponde ma il contatore non si spiega con un
+                 solo documento (Z cambiata, documento +2 o indietro)
+    'attesa'     la stampante non è (ancora) in grado di dirlo"""
+    if dopo is None or _rch_contatori_bloccati(dopo):
+        return 'attesa'
+    if dopo["z"] == prima["z"] and dopo["doc"] == prima["doc"] + 1:
+        return 'emesso'
+    if dopo["z"] == prima["z"] and dopo["doc"] == prima["doc"]:
+        return 'non_emesso' if _rch_pronta(dopo) else 'attesa'
+    return 'incerto' if _rch_pronta(dopo) else 'attesa'
+
+
+def _rch_attendi_emissione(url, headers, rch_kwargs, prima, budget_s=6.0, passo_s=0.5):
+    """Rilegge il contatore finche' lo scontrino risulta emesso o finisce il
+    tempo. Nel caso normale esce alla prima lettura (mezzo secondo).
+    Ritorna (esito, ultima_lettura)."""
+    scadenza = pytime.monotonic() + budget_s
+    ultima = None
+    while True:
+        pytime.sleep(passo_s)
+        ultima = _rch_contatori(url, headers, rch_kwargs)
+        esito = _rch_esito(prima, ultima)
+        if esito == 'emesso' or pytime.monotonic() >= scadenza:
+            return esito, ultima
+
+
+def _rch_progressivo(c):
+    """Progressivo nel formato del registro: Z in corso (lastZ + 1) - documento."""
+    return f"{c['z'] + 1:04d}-{c['doc']:04d}"
+
+
+def _rch_messaggio_stato(c):
+    """Cosa dire all'operatore guardando una lettura."""
+    if c is None:
+        return ("La stampante non risponde (si sta riavviando? è accesa e collegata?).")
+    if c["carta_finita"]:
+        return "Carta finita: cambia il rotolo."
+    if c["coperchio_aperto"]:
+        return "Coperchio della stampante aperto: chiudilo."
+    if _rch_contatori_bloccati(c) or c["errore_meccanico"]:
+        return ("Stampante bloccata. Se la carta c'è, spegni e riaccendi la stampante RCH.")
+    if c["occupata"]:
+        return "La stampante sta ancora lavorando..."
+    if c["error_code"] in (2, 3, 4):
+        return ("La stampante ha un documento aperto: chiudilo qui sotto oppure "
+                "spegni e riaccendi la stampante RCH.")
+    return "Stampante pronta."
+
 def clean_str(s):
     # Rimuove apostrofi e caratteri HTML problematici
     return str(s).replace("'", "").replace('"', "").replace("&", "").replace(";", "").replace("<", "").replace(">", "")
@@ -1064,6 +1234,120 @@ def _stampa_promemoria_gestionale(voci_zero, cliente_id=None, operatore_id=None)
     return False, "nessuna variante del comando =o accettata (vedi log per le risposte)"
 
 
+def _applica_movimenti_incasso(voci):
+    """Movimenti che seguono un incasso registrato: ricarica e attivazione
+    delle carte prepagate, rate dei pacchetti. Va chiamata UNA volta, solo
+    dopo che lo scontrino e' stato registrato (in send_to_rch, oppure piu'
+    tardi in rch_retry quando la stampante conferma uno scontrino rimasto da
+    verificare). Ritorna (redirect_pacchetto_id, pacchetto_ids_modificati)."""
+    redirect_pacchetto_id = None
+    pacchetto_ids_modificati = set()
+    
+    # Processa TUTTE le voci per prepagata/rate (sia fiscali che non fiscali)
+    for v in voci:
+        # Gestione ricarica carta prepagata
+        ricarica_prepagata_id = v.get('ricarica_prepagata_id')
+        if ricarica_prepagata_id:
+            try:
+                pacchetto = Pacchetto.query.get(int(ricarica_prepagata_id))
+                if pacchetto and pacchetto.tipo.value == 'prepagata':
+                    importo = Decimal(str(v.get('ricarica_importo', 0)))
+                    credito_da_caricare = Decimal(str(v.get('ricarica_credito', importo)))
+                    descrizione = v.get('ricarica_descrizione', 'Ricarica')
+                    
+                    vecchio_saldo = pacchetto.credito_residuo or Decimal('0')
+                    nuovo_saldo = vecchio_saldo + credito_da_caricare
+                    pacchetto.credito_residuo = nuovo_saldo
+
+                    # Torna Attiva se aveva credito a zero (era Completato,
+                    # cioe' grigia in elenco) o se era ancora un Preventivo.
+                    from appl.routes.pacchetti import riattiva_prepagata_se_ricaricata
+                    riattiva_prepagata_se_ricaricata(pacchetto)
+                    
+                    from appl.models import MovimentoPrepagata
+                    movimento = MovimentoPrepagata(
+                        pacchetto_id=pacchetto.id,
+                        tipo_movimento='ricarica',
+                        importo=importo,
+                        saldo_dopo=nuovo_saldo,
+                        descrizione=descrizione
+                    )
+                    db.session.add(movimento)
+                    db.session.commit()
+                    current_app.logger.info(f"Ricarica prepagata {ricarica_prepagata_id}: +€{importo:.2f}, nuovo saldo €{nuovo_saldo:.2f}")
+                    # IMPORTANTE: Salva ID per redirect
+                    redirect_pacchetto_id = int(ricarica_prepagata_id)
+            except Exception as e:
+                current_app.logger.error(f"Errore ricarica prepagata {ricarica_prepagata_id}: {e}")
+
+        # Gestione pagamento carta prepagata (ATTIVAZIONE)
+        prepagata_id = v.get('prepagata_id')
+        if prepagata_id:
+            try:
+                pacchetto = Pacchetto.query.get(int(prepagata_id))
+                if pacchetto and pacchetto.tipo.value == 'prepagata':
+                    credito = Decimal(str(v.get('credito_da_caricare', pacchetto.credito_iniziale)))
+                    
+                    pacchetto.credito_residuo = credito
+                    pacchetto.status = PacchettoStatus.Attivo
+                    
+                    from appl.models import MovimentoPrepagata
+                    movimento = MovimentoPrepagata(
+                        pacchetto_id=pacchetto.id,
+                        tipo_movimento='ricarica',
+                        importo=credito,
+                        saldo_dopo=credito,
+                        descrizione='Caricamento iniziale (pagamento)'
+                    )
+                    db.session.add(movimento)
+                    db.session.commit()
+                    current_app.logger.info(f"Prepagata {prepagata_id} attivata con credito €{credito:.2f}")
+                    # IMPORTANTE: Salva l'ID per redirect
+                    redirect_pacchetto_id = int(prepagata_id)
+            except Exception as e:
+                current_app.logger.error(f"Errore attivazione prepagata {prepagata_id}: {e}")
+
+        # Gestione rate pacchetto
+        rata_id = v.get('rata_id')
+        if rata_id:
+            try:
+                rata = PacchettoRata.query.get(int(rata_id))
+                if rata and not rata.is_pagata:
+                    importo_pagato = float(v.get('prezzo', 0))
+                    importo_originale = float(rata.importo)
+                    importo_modificato = abs(importo_pagato - importo_originale) > 0.01
+                    
+                    if importo_modificato:
+                        rata.importo = importo_pagato
+                        pacchetto_ids_modificati.add(rata.pacchetto_id)
+                    
+                    rata.is_pagata = True
+                    rata.data_pagamento = datetime.now()
+                    
+                    pacchetto = rata.pacchetto
+                    if pacchetto:
+                        rata_num = next((i+1 for i, r in enumerate(pacchetto.rate) if r.id == rata.id), 0)
+                        try:
+                            history = json.loads(pacchetto.history) if pacchetto.history else []
+                        except:
+                            history = []
+                        
+                        if importo_modificato:
+                            history.append({"ts": datetime.now().isoformat(), "azione": f"Pagata rata {rata_num} (importo modificato: €{importo_pagato:.2f})"})
+                        else:
+                            history.append({"ts": datetime.now().isoformat(), "azione": f"Pagata rata {rata_num}"})
+                        pacchetto.history = json.dumps(history)
+                        
+                        if pacchetto.status.value not in ("completato", "eliminato"):
+                            pacchetto.status = PacchettoStatus.Attivo
+                    
+                    db.session.commit()
+                    current_app.logger.info(f"Rata {rata_id} marcata come pagata (importo: €{importo_pagato:.2f})")
+            except Exception as e:
+                current_app.logger.error(f"Errore marcatura rata {rata_id}: {e}")
+
+    return redirect_pacchetto_id, pacchetto_ids_modificati
+
 @cassa_bp.route('/cassa/send-to-rch', methods=['POST'])
 def send_to_rch():
     data = request.get_json(force=True)
@@ -1347,12 +1631,42 @@ def send_to_rch():
         # confronto con la DGFE nel lazy recover.
         expected_line_count = len([v for v in voci_fiscali if float(v.get("prezzo", 0) or 0) > 0])
 
+        # ---------- contatore PRIMA dell'invio ----------
+        # E' il termine di paragone che decide se lo scontrino e' uscito (vedi
+        # _rch_esito). Senza, non si manda niente: meglio uno scontrino non
+        # stampato che uno registrato senza sapere se esiste.
+        contatori_prima = _rch_leggi_contatori(url, headers, rch_kwargs)
+        if contatori_prima is None:
+            log_crm_error(
+                "RCH non risponde prima della stampa: scontrino non inviato",
+                context={"operatore_id": operatore_id, "printer_ip": ip,
+                         "printer_model": printer_model, "expected_total": expected_total},
+                client_id=cliente_id,
+            )
+            return jsonify({"error": "La stampante non risponde: lo scontrino NON è stato "
+                                     "inviato e NON è stato registrato. Controlla che la "
+                                     "stampante sia accesa e collegata, poi premi di nuovo Stampa."}), 502
+        if _rch_bloccata_prima_dell_invio(contatori_prima):
+            log_crm_error(
+                "RCH bloccata prima della stampa (Z 0, Doc 0): scontrino non inviato",
+                context={"operatore_id": operatore_id, "printer_ip": ip,
+                         "printer_model": printer_model, "expected_total": expected_total,
+                         "stato": contatori_prima.get("raw")},
+                client_id=cliente_id,
+            )
+            return jsonify({"error": MSG_RCH_BLOCCATA_NON_INVIATO, "rch_bloccata": True}), 503
+
         def _build_pending_entry():
             return {
                 "payload_xml": payload_vendita,
                 "cliente_id": cliente_id,
                 "operatore_id": operatore_id,
                 "voci": voci_fiscali,
+                # tutte le voci della richiesta: ricariche, attivazioni carta e
+                # rate vanno applicate anche se lo scontrino viene confermato
+                # piu' tardi dalla verifica (rch_retry)
+                "voci_richiesta": voci,
+                "contatori_prima": {"z": contatori_prima["z"], "doc": contatori_prima["doc"]},
                 "created_ts": pytime.time(),
                 "expected_total": expected_total,
                 "giorno": datetime.now().strftime("%Y-%m-%d"),
@@ -1376,7 +1690,8 @@ def send_to_rch():
             # non e' arrivata. Provo prima il lazy recover (legge lastDocF + DGFE).
             current_app.logger.warning("RCH TIMEOUT: tentativo lazy recover... (%s)", str(exc))
             prog = _try_lazy_recover(voci_fiscali, cliente_id, operatore_id,
-                                     expected_total, expected_line_count, ip, printer_model)
+                                     expected_total, expected_line_count, ip, printer_model,
+                                     contatori_prima=contatori_prima)
             if prog:
                 current_app.logger.info("RCH lazy recover OK dopo timeout: progressivo %s", prog)
                 progressivo_completo = prog
@@ -1407,7 +1722,8 @@ def send_to_rch():
         except Exception as exc:
             current_app.logger.warning("RCH non raggiungibile (network): tentativo lazy recover... (%s)", str(exc))
             prog = _try_lazy_recover(voci_fiscali, cliente_id, operatore_id,
-                                     expected_total, expected_line_count, ip, printer_model)
+                                     expected_total, expected_line_count, ip, printer_model,
+                                     contatori_prima=contatori_prima)
             if prog:
                 current_app.logger.info("RCH lazy recover OK dopo network error: progressivo %s", prog)
                 progressivo_completo = prog
@@ -1442,7 +1758,8 @@ def send_to_rch():
             current_app.logger.warning("RCH ha risposto con errore: tentativo lazy recover... (body=%s)",
                                        (resp_vendita.text[:400] if resp_vendita is not None else ""))
             prog = _try_lazy_recover(voci_fiscali, cliente_id, operatore_id,
-                                     expected_total, expected_line_count, ip, printer_model)
+                                     expected_total, expected_line_count, ip, printer_model,
+                                     contatori_prima=contatori_prima)
             if prog:
                 current_app.logger.info("RCH lazy recover OK dopo errore stampante: progressivo %s", prog)
                 progressivo_completo = prog
@@ -1473,36 +1790,38 @@ def send_to_rch():
                 return jsonify({"error": "Stampante in errore. Riprova."}), 502
 
         if not fiscale_recovered:
-            # ---------- lettura progressivo NR DOC (happy path) ----------
-            numero_progressivo = None
-            numero_z = None
-            for cmd in ("=C453/$0", "=DGFE/REG"):
-                payload_prog = f'''<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'''
-                for _ in range(6):
-                    pytime.sleep(0.5)
-                    resp = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=5,
-                                         **rch_kwargs)
-                    m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp.text) or
-                             re.search(r'<C453[^>]*>(\d+)</C453>', resp.text) or
-                             re.search(r'<result>(\d+)</result>', resp.text))
-                    m_z = re.search(r'<lastZ>(\d+)</lastZ>', resp.text)
-                    if m_doc and m_z:
-                        numero_progressivo = int(m_doc.group(1))
-                        numero_z = int(m_z.group(1)) + 1
-                        break
-                if numero_progressivo is not None and numero_z is not None:
-                    break
+            # ---------- lo scontrino e' uscito? lo dice SOLO il contatore ----------
+            # errorCode 0 vuol dire "comandi accettati", non "documento emesso":
+            # la RCH bloccata risponde 0 e poi "Z 0, Doc 0" (vedi _rch_esito).
+            esito, contatori_dopo = _rch_attendi_emissione(url, headers, rch_kwargs, contatori_prima)
 
-            if numero_progressivo is None or numero_z is None:
+            if esito != 'emesso':
+                # NIENTE nel registro. Lo scontrino resta da verificare: la
+                # finestra di attesa in cassa rilegge il contatore (rch_retry)
+                # e lo registra solo se nel frattempo e' uscito.
                 log_crm_error(
-                    "RCH: risposta senza progressivo/lastZ (XML malformato o non letto)",
-                    context={"operatore_id": operatore_id, "printer_ip": ip, "printer_model": printer_model,
-                             "expected_total": expected_total},
+                    "Scontrino non confermato dalla stampante: nulla registrato",
+                    context={"idempotency_key": idempotency_key, "operatore_id": operatore_id,
+                             "printer_ip": ip, "printer_model": printer_model,
+                             "expected_total": expected_total, "esito": esito,
+                             "contatori_prima": {"z": contatori_prima["z"], "doc": contatori_prima["doc"]},
+                             "contatori_dopo": ({"z": contatori_dopo["z"], "doc": contatori_dopo["doc"]}
+                                                if contatori_dopo else None),
+                             "stato_dopo": (contatori_dopo or {}).get("raw"),
+                             "risposta_vendita": (resp_vendita.text[:400] if resp_vendita is not None else "")},
                     client_id=cliente_id,
                 )
-                return jsonify({"error": "La stampante non ha restituito il progressivo"}), 500
+                RCH_PENDING[idempotency_key] = _build_pending_entry()
+                return jsonify({
+                    "pending": True,
+                    "reason": "non_confermato",
+                    "message": _rch_messaggio_stato(contatori_dopo),
+                    "idempotency_key": idempotency_key,
+                    "expected_total": expected_total,
+                    "retry_after": 3
+                }), 202
 
-            progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
+            progressivo_completo = _rch_progressivo(contatori_dopo)
 
             # ---------- persiste Receipt ----------
             nuovo_receipt = Receipt(
@@ -1615,110 +1934,7 @@ def send_to_rch():
     # IMPORTANTE: Gestione prepagata/rate PRIMA di costruire response
     # Deve essere FUORI dai blocchi fiscale/non fiscale perché le prepagate
     # possono essere in entrambi i casi
-    pacchetto_ids_modificati = set()
-    
-    # Processa TUTTE le voci per prepagata/rate (sia fiscali che non fiscali)
-    for v in voci:
-        # Gestione ricarica carta prepagata
-        ricarica_prepagata_id = v.get('ricarica_prepagata_id')
-        if ricarica_prepagata_id:
-            try:
-                pacchetto = Pacchetto.query.get(int(ricarica_prepagata_id))
-                if pacchetto and pacchetto.tipo.value == 'prepagata':
-                    importo = Decimal(str(v.get('ricarica_importo', 0)))
-                    credito_da_caricare = Decimal(str(v.get('ricarica_credito', importo)))
-                    descrizione = v.get('ricarica_descrizione', 'Ricarica')
-                    
-                    vecchio_saldo = pacchetto.credito_residuo or Decimal('0')
-                    nuovo_saldo = vecchio_saldo + credito_da_caricare
-                    pacchetto.credito_residuo = nuovo_saldo
-
-                    # Torna Attiva se aveva credito a zero (era Completato,
-                    # cioe' grigia in elenco) o se era ancora un Preventivo.
-                    from appl.routes.pacchetti import riattiva_prepagata_se_ricaricata
-                    riattiva_prepagata_se_ricaricata(pacchetto)
-                    
-                    from appl.models import MovimentoPrepagata
-                    movimento = MovimentoPrepagata(
-                        pacchetto_id=pacchetto.id,
-                        tipo_movimento='ricarica',
-                        importo=importo,
-                        saldo_dopo=nuovo_saldo,
-                        descrizione=descrizione
-                    )
-                    db.session.add(movimento)
-                    db.session.commit()
-                    current_app.logger.info(f"Ricarica prepagata {ricarica_prepagata_id}: +€{importo:.2f}, nuovo saldo €{nuovo_saldo:.2f}")
-                    # IMPORTANTE: Salva ID per redirect
-                    redirect_pacchetto_id = int(ricarica_prepagata_id)
-            except Exception as e:
-                current_app.logger.error(f"Errore ricarica prepagata {ricarica_prepagata_id}: {e}")
-
-        # Gestione pagamento carta prepagata (ATTIVAZIONE)
-        prepagata_id = v.get('prepagata_id')
-        if prepagata_id:
-            try:
-                pacchetto = Pacchetto.query.get(int(prepagata_id))
-                if pacchetto and pacchetto.tipo.value == 'prepagata':
-                    credito = Decimal(str(v.get('credito_da_caricare', pacchetto.credito_iniziale)))
-                    
-                    pacchetto.credito_residuo = credito
-                    pacchetto.status = PacchettoStatus.Attivo
-                    
-                    from appl.models import MovimentoPrepagata
-                    movimento = MovimentoPrepagata(
-                        pacchetto_id=pacchetto.id,
-                        tipo_movimento='ricarica',
-                        importo=credito,
-                        saldo_dopo=credito,
-                        descrizione='Caricamento iniziale (pagamento)'
-                    )
-                    db.session.add(movimento)
-                    db.session.commit()
-                    current_app.logger.info(f"Prepagata {prepagata_id} attivata con credito €{credito:.2f}")
-                    # IMPORTANTE: Salva l'ID per redirect
-                    redirect_pacchetto_id = int(prepagata_id)
-            except Exception as e:
-                current_app.logger.error(f"Errore attivazione prepagata {prepagata_id}: {e}")
-
-        # Gestione rate pacchetto
-        rata_id = v.get('rata_id')
-        if rata_id:
-            try:
-                rata = PacchettoRata.query.get(int(rata_id))
-                if rata and not rata.is_pagata:
-                    importo_pagato = float(v.get('prezzo', 0))
-                    importo_originale = float(rata.importo)
-                    importo_modificato = abs(importo_pagato - importo_originale) > 0.01
-                    
-                    if importo_modificato:
-                        rata.importo = importo_pagato
-                        pacchetto_ids_modificati.add(rata.pacchetto_id)
-                    
-                    rata.is_pagata = True
-                    rata.data_pagamento = datetime.now()
-                    
-                    pacchetto = rata.pacchetto
-                    if pacchetto:
-                        rata_num = next((i+1 for i, r in enumerate(pacchetto.rate) if r.id == rata.id), 0)
-                        try:
-                            history = json.loads(pacchetto.history) if pacchetto.history else []
-                        except:
-                            history = []
-                        
-                        if importo_modificato:
-                            history.append({"ts": datetime.now().isoformat(), "azione": f"Pagata rata {rata_num} (importo modificato: €{importo_pagato:.2f})"})
-                        else:
-                            history.append({"ts": datetime.now().isoformat(), "azione": f"Pagata rata {rata_num}"})
-                        pacchetto.history = json.dumps(history)
-                        
-                        if pacchetto.status.value not in ("completato", "eliminato"):
-                            pacchetto.status = PacchettoStatus.Attivo
-                    
-                    db.session.commit()
-                    current_app.logger.info(f"Rata {rata_id} marcata come pagata (importo: €{importo_pagato:.2f})")
-            except Exception as e:
-                current_app.logger.error(f"Errore marcatura rata {rata_id}: {e}")
+    redirect_pacchetto_id, pacchetto_ids_modificati = _applica_movimenti_incasso(voci)
 
     # Prepara response con info per redirect a pacchetto se necessario
     response = {"results": results, "reset_voci": True}
@@ -3238,6 +3454,15 @@ def _storna_scontrino_rch(scontrino):
     except Exception:
         return {"error": "Progressivo non valido", "status": 400}
 
+    if documento == 0:
+        # Il documento 0 non esiste: il registratore numera da 1 dopo ogni Z.
+        # Sono gli scontrini registrati senza che la stampante li avesse emessi
+        # (contatore fermo o RCH bloccata, vedi _rch_esito): non c'e' niente da
+        # stornare e il reso verrebbe solo rifiutato (errorCode 1).
+        return {"error": (f"Lo scontrino {progressivo_str} non risulta emesso dalla stampante "
+                          f"(il documento 0 non esiste): non c'è nulla da stornare."),
+                "status": 409}
+
     try:
         importo = float(scontrino.total_amount or 0)
     except Exception:
@@ -3636,73 +3861,61 @@ def _max_progressivo_doc_in_db_today():
             pass
     return max_doc
 
+def _registra_fiscale_confermato(voci, cliente_id, operatore_id, totale, progressivo):
+    """Scrive nel registro uno scontrino fiscale GIA' confermato dal contatore
+    della stampante e marca PAGATO gli appuntamenti delle sue voci.
+    Ritorna True se l'ha scritto, False se quel progressivo c'era gia' (due
+    verifiche arrivate insieme: la seconda non duplica)."""
+    with _RCH_LOCK:
+        if Receipt.query.filter_by(numero_progressivo=progressivo).first():
+            return False
+        db.session.add(Receipt(
+            created_at=datetime.now(),
+            total_amount=round(float(totale), 2),
+            is_fiscale=True,
+            voci=voci or [],
+            cliente_id=cliente_id,
+            operatore_id=operatore_id,
+            numero_progressivo=progressivo
+        ))
+        db.session.commit()
+
+    ids_pagati = [v.get("appointment_id") for v in (voci or []) if v.get("appointment_id")]
+    if ids_pagati:
+        Appointment.query.filter(Appointment.id.in_(ids_pagati)).update(
+            {Appointment.stato: AppointmentStatus.PAGATO}, synchronize_session=False
+        )
+        db.session.commit()
+    return True
+
+
 def _try_lazy_recover(voci, cliente_id, operatore_id, expected_total,
-                      expected_line_count, ip, printer_model):
-    """Tenta di recuperare uno scontrino in caso di risposta ambigua dalla stampante.
-    - Legge lastDocF/lastZ
-    - Se progressivo > max in DB oggi e il DGFE conferma totale (e linee, se disponibili),
-      scrive Receipt in DB, marca Appointment.PAGATO e ritorna progressivo_completo.
-    - Altrimenti ritorna None (il chiamante decidera' se mettere in pending).
+                      expected_line_count, ip, printer_model, contatori_prima=None):
+    """Risposta ambigua della stampante (timeout, rete, errCode): lo scontrino
+    e' uscito lo stesso? Lo dice solo il contatore, confrontato con quello letto
+    PRIMA dell'invio (vedi _rch_esito). Se e' uscito lo registra e ritorna il
+    progressivo, altrimenti None e il chiamante lo lascia da verificare.
     Nessuna ristampa, nessun comando di scrittura inviato alla stampante.
+
+    Prima si decideva con "progressivo nuovo + un documento di pari importo nel
+    DGFE": senza il contatore di partenza un documento qualsiasi dello stesso
+    importo bastava a far registrare uno scontrino mai uscito.
     """
+    if contatori_prima is None:
+        return None
     try:
         url = _rch_url(ip, printer_model)
         headers = _rch_headers(printer_model)
         rch_kwargs = _rch_request_kwargs(printer_model)
 
-        numero_progressivo, numero_z = _read_progressivo(url, headers, rch_kwargs,
-                                                         max_attempts=10, sleep_s=0.5)
-        if numero_progressivo is None or numero_z is None:
+        esito, dopo = _rch_attendi_emissione(url, headers, rch_kwargs, contatori_prima,
+                                             budget_s=5.0)
+        if esito != 'emesso':
             return None
-
-        progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
-
-        # Se gia' presente in DB con questo progressivo, non duplicare
-        if Receipt.query.filter_by(numero_progressivo=progressivo_completo).first():
+        progressivo_completo = _rch_progressivo(dopo)
+        if not _registra_fiscale_confermato(voci, cliente_id, operatore_id,
+                                            expected_total, progressivo_completo):
             return None
-
-        # Verifica che il progressivo letto sia effettivamente "nuovo" rispetto a DB
-        if numero_progressivo <= _max_progressivo_doc_in_db_today():
-            return None
-
-        # Conferma DGFE: stesso totale (e numero linee se disponibile)
-        entries = _dgfe_entries_for_date(ip, date.today())
-        if not entries:
-            return None
-        matched = None
-        try:
-            exp_total = round(float(expected_total), 2)
-        except Exception:
-            return None
-        for e in reversed(entries):
-            if abs(e["totale_float"] - exp_total) < 0.01:
-                if expected_line_count and expected_line_count > 0 and e.get("line_count") is not None:
-                    if e["line_count"] != expected_line_count:
-                        continue
-                matched = e
-                break
-        if not matched:
-            return None
-
-        nuovo_receipt = Receipt(
-            created_at=datetime.now(),
-            total_amount=exp_total,
-            is_fiscale=True,
-            voci=voci or [],
-            cliente_id=cliente_id,
-            operatore_id=operatore_id,
-            numero_progressivo=progressivo_completo
-        )
-        db.session.add(nuovo_receipt)
-        db.session.commit()
-
-        ids_pagati = [v.get("appointment_id") for v in (voci or []) if v.get("appointment_id")]
-        if ids_pagati:
-            Appointment.query.filter(Appointment.id.in_(ids_pagati)).update(
-                {Appointment.stato: AppointmentStatus.PAGATO}, synchronize_session=False
-            )
-            db.session.commit()
-
         return progressivo_completo
     except Exception as exc:
         try:
@@ -4096,133 +4309,122 @@ def reconcile_day(day_date, business_info):
 
 @cassa_bp.route('/cassa/rch-retry', methods=['POST'])
 def rch_retry():
-    """
-    Retry NON ristampa:
-    - Legge tutto l'EJ del giorno (DGFE) senza limiti temporali
-    - Match primario: ultimo scontrino con stesso totale (±0.01) e medesimo numero linee (se disponibile)
-    - Match secondario: ultimo progressivo nuovo non presente nel DB (se il totale non coincide)
-    - Registra il receipt se trovato, altrimenti resta in pending
+    """Verifica di uno scontrino rimasto "da verificare". NON ristampa.
+
+    Rilegge il contatore della stampante e lo confronta con quello letto prima
+    dell'invio (salvato nel pending):
+    - stessa Z, documento +1        -> e' uscito: si registra (esito 'registrato')
+    - stampante pronta, contatore
+      fermo, per due letture        -> non e' uscito: si scarta il pending, NIENTE
+                                       nel registro, la bozza resta (esito 'non_emesso')
+    - contatore che non si spiega
+      con un solo documento         -> non si registra niente, si chiede di
+                                       controllare (esito 'incerto')
+    - stampante bloccata/occupata/
+      senza carta/non raggiungibile -> si aspetta (202, esito 'attesa')
+
+    Prima si cercava nel DGFE un documento di pari importo e, se non c'era, si
+    prendeva l'ULTIMO documento del giorno qualunque fosse: dopo una RCH
+    bloccata e riavviata quel documento era lo scontrino precedente, e il
+    registro si ritrovava uno scontrino in piu' mai emesso.
     """
     data = request.get_json(force=True) or {}
     key = (data.get("idempotency_key") or "").strip()
     if not key:
         return jsonify({"error": "Missing idempotency_key"}), 400
     if key in IDEMPOTENCY_STORE:
-        return jsonify(IDEMPOTENCY_STORE[key]), 200
+        return jsonify({"esito": "registrato", **IDEMPOTENCY_STORE[key]}), 200
 
     pending = RCH_PENDING.get(key)
     if not pending:
-        return jsonify({"error": "Pending non trovato"}), 404
+        return jsonify({
+            "esito": "incerto",
+            "messaggio": ("Questo scontrino non è più in verifica (il gestionale è stato "
+                          "riavviato?). Non è stato registrato: controlla se è uscito "
+                          "dalla stampante prima di ristamparlo.")
+        }), 409
 
-    ip, _ = _get_printer_config()
+    prima = pending.get("contatori_prima")
+    ip, printer_model = _get_printer_config()
     if not ip:
         return jsonify({"error": "IP stampante RCH non configurato"}), 400
-
-    try:
-        expected_total = float(pending.get("expected_total")) \
-            if pending.get("expected_total") is not None \
-            else round(sum(float(v.get("prezzo", 0)) for v in pending.get("voci", [])), 2)
-    except Exception:
-        expected_total = round(sum(float(v.get("prezzo", 0)) for v in pending.get("voci", [])), 2)
-    expected_total = round(expected_total, 2)
-    expected_line_count = int(pending.get("line_count") or len(pending.get("voci", [])) or 0)
-
-    # Leggi EJ completo del giorno
-    entries = _dgfe_entries_for_date(ip, date.today())
-    if not entries:
-        return jsonify({"pending": True, "retry_after": 5}), 202
-
-    # Match primario: stesso totale e (se disponibile) stesso numero linee
-    matched = None
-    for e in reversed(entries):
-        if abs(e["totale_float"] - expected_total) < 0.01:
-            if expected_line_count > 0 and e.get("line_count") is not None:
-                if e["line_count"] != expected_line_count:
-                    continue
-            matched = e
-            break
-
-    # Match secondario: progressivo nuovo (se primario fallito)
-    if not matched:
-        # progressivi già in DB (solo fiscali)
-        today_start = datetime.combine(date.today(), datetime.min.time())
-        today_end = datetime.combine(date.today(), datetime.max.time())
-        receipts_today = Receipt.query.filter(
-            Receipt.created_at >= today_start,
-            Receipt.created_at <= today_end,
-            Receipt.is_fiscale == True
-        ).all()
-        existing_prog = set()
-        for r in receipts_today:
-            try:
-                existing_prog.add(str(r.numero_progressivo).strip())
-            except Exception:
-                pass
-        # prendi l'ultimo blocco con progressivo_raw non vuoto
-        for e in reversed(entries):
-            if e.get("progressivo_raw"):
-                # Non possiamo ricostruire Z qui, usiamo conferma via lastDocF dopo
-                matched = e
-                break
-
-    if not matched:
-        return jsonify({"pending": True, "retry_after": 6}), 202
-
-    # Lettura progressivo ufficiale lastDocF/lastZ
-    ip, printer_model = _get_printer_config()
     url = _rch_url(ip, printer_model)
     headers = _rch_headers(printer_model)
     rch_kwargs = _rch_request_kwargs(printer_model)
-    numero_progressivo = None
-    numero_z = None
-    for cmd in ("=C453/$0", "=DGFE/REG"):
-        payload_prog = f'''<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'''
-        for _ in range(8):
-            pytime.sleep(0.5)
-            try:
-                resp = requests.post(url, data=payload_prog.encode('utf-8'), headers=headers, timeout=6,
-                                     **rch_kwargs)
-            except Exception:
-                continue
-            m_doc = (re.search(r'<lastDocF>(\d+)</lastDocF>', resp.text) or
-                     re.search(r'<C453[^>]*>(\d+)</C453>', resp.text) or
-                     re.search(r'<result>(\d+)</result>', resp.text))
-            m_z = re.search(r'<lastZ>(\d+)</lastZ>', resp.text)
-            if m_doc and m_z:
-                try:
-                    numero_progressivo = int(m_doc.group(1))
-                    numero_z = int(m_z.group(1)) + 1
-                except Exception:
-                    numero_progressivo = None
-                    numero_z = None
-                break
-        if numero_progressivo is not None and numero_z is not None:
-            break
 
-    if numero_progressivo is None or numero_z is None:
-        return jsonify({"pending": True, "retry_after": 8}), 202
+    if not prima:
+        # Pending creato senza contatore di partenza (non dovrebbe piu' succedere):
+        # non c'e' modo di sapere se lo scontrino e' uscito, quindi non si registra.
+        RCH_PENDING.pop(key, None)
+        return jsonify({
+            "esito": "incerto",
+            "messaggio": ("Non è possibile verificare questo scontrino: NON è stato registrato. "
+                          "Controlla se è uscito dalla stampante prima di ristamparlo.")
+        }), 409
 
-    progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
-    total_amount = round(sum(float(v.get("prezzo", 0)) for v in pending.get("voci", [])), 2)
+    dopo = _rch_contatori(url, headers, rch_kwargs)
+    esito = _rch_esito(prima, dopo)
+    if esito == 'non_emesso':
+        # Una lettura sola potrebbe cadere mentre la stampante riparte: si
+        # conferma con una seconda prima di dire "non e' uscito".
+        pytime.sleep(1.5)
+        dopo = _rch_contatori(url, headers, rch_kwargs)
+        esito = _rch_esito(prima, dopo)
 
-    nuovo_receipt = Receipt(
-        created_at         = datetime.now(),
-        total_amount       = total_amount,
-        is_fiscale         = True,
-        voci               = pending.get("voci", []),
-        cliente_id         = pending.get("cliente_id"),
-        operatore_id       = pending.get("operatore_id"),
-        numero_progressivo = progressivo_completo
-    )
-    db.session.add(nuovo_receipt)
-    db.session.commit()
+    if esito == 'attesa':
+        return jsonify({"pending": True, "esito": "attesa",
+                        "messaggio": _rch_messaggio_stato(dopo), "retry_after": 4}), 202
 
-    ids_pagati = [v.get("appointment_id") for v in pending.get("voci", []) if v.get("appointment_id")]
-    if ids_pagati:
-        Appointment.query.filter(Appointment.id.in_(ids_pagati)).update(
-            {Appointment.stato: AppointmentStatus.PAGATO}, synchronize_session=False
+    if esito == 'non_emesso':
+        RCH_PENDING.pop(key, None)
+        current_app.logger.info("rch_retry %s: contatore fermo su %s, scontrino non emesso",
+                                key, _rch_progressivo(dopo))
+        return jsonify({
+            "esito": "non_emesso",
+            "messaggio": ("Lo scontrino NON è uscito e NON è stato registrato. "
+                          "La bozza è ancora in cassa: premi di nuovo Stampa.")
+        }), 409
+
+    if esito == 'incerto':
+        RCH_PENDING.pop(key, None)
+        log_crm_error(
+            "Verifica scontrino: contatore non spiegabile, nulla registrato",
+            context={"idempotency_key": key, "contatori_prima": prima,
+                     "contatori_dopo": {"z": dopo["z"], "doc": dopo["doc"]},
+                     "expected_total": pending.get("expected_total"),
+                     "stato": dopo.get("raw")},
+            client_id=pending.get("cliente_id"),
         )
-        db.session.commit()
+        return jsonify({
+            "esito": "incerto",
+            "messaggio": ("La stampante ha cambiato numerazione in modo inatteso (documento "
+                          f"{_rch_progressivo(dopo)}): lo scontrino NON è stato registrato. "
+                          "Controlla se è uscito prima di ristamparlo.")
+        }), 409
+
+    # ---------- esito 'emesso': lo scontrino e' uscito ----------
+    progressivo_completo = _rch_progressivo(dopo)
+    if RCH_PENDING.pop(key, None) is None:
+        # Un'altra verifica arrivata insieme l'ha gia' presa in carico.
+        if key in IDEMPOTENCY_STORE:
+            return jsonify({"esito": "registrato", **IDEMPOTENCY_STORE[key]}), 200
+        return jsonify({"pending": True, "esito": "attesa",
+                        "messaggio": "Verifica in corso...", "retry_after": 2}), 202
+
+    voci = pending.get("voci", [])
+    try:
+        totale = float(pending.get("expected_total"))
+    except Exception:
+        totale = round(sum(float(v.get("prezzo", 0)) for v in voci), 2)
+    scritto = _registra_fiscale_confermato(voci, pending.get("cliente_id"),
+                                           pending.get("operatore_id"), totale,
+                                           progressivo_completo)
+    if scritto:
+        # Ricariche, attivazioni carta e rate: come nel percorso diretto.
+        try:
+            _applica_movimenti_incasso(pending.get("voci_richiesta") or voci)
+        except Exception:
+            current_app.logger.exception("rch_retry: movimenti carte/rate non applicati")
 
     result = {
         "results": [{
@@ -4232,8 +4434,7 @@ def rch_retry():
         "reset_voci": True
     }
     IDEMPOTENCY_STORE[key] = result
-    RCH_PENDING.pop(key, None)
-    return jsonify(result), 200
+    return jsonify({"esito": "registrato", **result}), 200
 
 # ========================================
 # CONSOLE RCH - Route per sblocco manuale
@@ -4299,7 +4500,15 @@ def rch_console_status():
             result["last_z"] = int(m_z.group(1))
         if m_doc:
             result["last_doc"] = int(m_doc.group(1))
-        
+
+        # errorCode dice solo se il COMANDO e' stato accettato: lo stato della
+        # meccanica sta in campi separati. Con la RCH bloccata (Biella,
+        # 10/10/2026) errorCode era 0 e la Console scriveva "PRONTA".
+        c = _rch_parse_contatori(resp.text)
+        if c is not None and result["status"] == "ok" and not _rch_pronta(c):
+            result["status"] = "warning"
+            result["error_message"] = _rch_messaggio_stato(c)
+
         return jsonify(result)
     except requests.exceptions.Timeout:
         return jsonify({"error": "Timeout - stampante non risponde", "printer_ip": ip}), 504
@@ -4378,7 +4587,29 @@ def rch_console_close_document():
     rch_kwargs = _rch_request_kwargs(printer_model)
     
     results = []
-    
+
+    # Contatore PRIMA della chiusura: e' cio' che decide se lo scontrino esce
+    # davvero (vedi _rch_esito). Il 10/10/2026 a Biella questa chiusura, con la
+    # RCH bloccata, ha avuto errorCode 0 su tutti i comandi e ha registrato lo
+    # scontrino 0001-0000, mai emesso.
+    contatori_prima = None
+    if importo > 0:
+        contatori_prima = _rch_leggi_contatori(url, headers, rch_kwargs)
+        if contatori_prima is None:
+            return jsonify({
+                "success": False, "esito": "attesa", "results": [],
+                "error": ("La stampante non risponde: nessun comando inviato, "
+                          "niente registrato."),
+                "messaggio": _rch_messaggio_stato(None),
+            }), 502
+        if _rch_bloccata_prima_dell_invio(contatori_prima):
+            return jsonify({
+                "success": False, "esito": "attesa", "results": [],
+                "error": "Stampante bloccata: nessun comando inviato, niente registrato.",
+                "messaggio": ("La stampante risponde con i contatori a zero: è bloccata. "
+                              "Se la carta c'è, spegnila e riaccendila."),
+            }), 503
+
     # Determina comando pagamento (tender dipendente dal modello, vedi _tender_code)
     if importo <= 0:
         pay_cmd = "=T5/$0"
@@ -4407,94 +4638,101 @@ def rch_console_close_document():
     receipt_progressivo = None
     db_already_present = False
     used_pending_key = None
+    esito_doc = None
+    contatori_dopo = None
     if all_success and importo > 0:
         try:
-            numero_progressivo, numero_z = _read_progressivo(
-                url, headers, rch_kwargs, max_attempts=8, sleep_s=0.5
+            esito_doc, contatori_dopo = _rch_attendi_emissione(
+                url, headers, rch_kwargs, contatori_prima
             )
-            if numero_progressivo is not None and numero_z is not None:
-                progressivo_completo = f"{numero_z:04d}-{numero_progressivo:04d}"
-                existing = Receipt.query.filter_by(
-                    numero_progressivo=progressivo_completo
-                ).first()
-                if existing:
-                    # Caso raro: send-to-rch ha gia' registrato il Receipt e nessuna
-                    # discrepanza; non duplicare.
-                    db_already_present = True
-                    receipt_progressivo = progressivo_completo
-                else:
-                    # Cerca un RCH_PENDING odierno con totale corrispondente, per
-                    # recuperare voci/cliente/operatore. Prendo il piu' recente.
-                    today_str = datetime.now().strftime("%Y-%m-%d")
-                    matched_key = None
+            if esito_doc != 'emesso':
+                log_crm_error(
+                    "Chiudi documento: comandi accettati ma scontrino non emesso, nulla registrato",
+                    context={"importo": importo, "metodo": metodo, "esito": esito_doc,
+                             "contatori_prima": {"z": contatori_prima["z"], "doc": contatori_prima["doc"]},
+                             "contatori_dopo": ({"z": contatori_dopo["z"], "doc": contatori_dopo["doc"]}
+                                                if contatori_dopo else None),
+                             "stato_dopo": (contatori_dopo or {}).get("raw"),
+                             "printer_ip": ip, "printer_model": printer_model},
+                )
+            else:
+                progressivo_completo = _rch_progressivo(contatori_dopo)
+                # Cerca un RCH_PENDING odierno con totale corrispondente, per
+                # recuperare voci/cliente/operatore. Prendo il piu' recente.
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                matched_key = None
+                matched_pending = None
+                for k, p in list(RCH_PENDING.items()):
+                    if p.get("giorno") != today_str:
+                        continue
+                    try:
+                        ptot = float(p.get("expected_total") or 0)
+                    except Exception:
+                        ptot = 0.0
+                    if abs(ptot - importo) < 0.01:
+                        if (matched_pending is None
+                                or p.get("created_ts", 0) > matched_pending.get("created_ts", 0)):
+                            matched_key = k
+                            matched_pending = p
+
+                # Il pending si toglie PRIMA di scrivere: la verifica automatica
+                # della cassa (rch_retry) potrebbe vedere lo stesso documento
+                # nello stesso istante e registrarlo una seconda volta.
+                if matched_pending is not None and RCH_PENDING.pop(matched_key, None) is None:
                     matched_pending = None
-                    for k, p in RCH_PENDING.items():
-                        if p.get("giorno") != today_str:
-                            continue
-                        try:
-                            ptot = float(p.get("expected_total") or 0)
-                        except Exception:
-                            ptot = 0.0
-                        if abs(ptot - importo) < 0.01:
-                            if (matched_pending is None
-                                    or p.get("created_ts", 0) > matched_pending.get("created_ts", 0)):
-                                matched_key = k
-                                matched_pending = p
 
-                    if matched_pending:
-                        voci = matched_pending.get("voci", []) or []
-                        cliente_id = matched_pending.get("cliente_id")
-                        operatore_id = matched_pending.get("operatore_id")
-                        used_pending_key = matched_key
-                    else:
-                        # Receipt orfano: nessun pending in memoria (es. server riavviato,
-                        # o stampante sbloccata in un momento successivo).
-                        voci = []
-                        cliente_id = None
-                        operatore_id = None
+                if matched_pending:
+                    voci = matched_pending.get("voci", []) or []
+                    cliente_id = matched_pending.get("cliente_id")
+                    operatore_id = matched_pending.get("operatore_id")
+                    used_pending_key = matched_key
+                else:
+                    # Receipt orfano: nessun pending in memoria (es. server riavviato,
+                    # o stampante sbloccata in un momento successivo).
+                    voci = []
+                    cliente_id = None
+                    operatore_id = None
 
-                    nuovo_receipt = Receipt(
-                        created_at=datetime.now(),
-                        total_amount=round(importo, 2),
-                        is_fiscale=True,
-                        voci=voci,
-                        cliente_id=cliente_id,
-                        operatore_id=operatore_id,
-                        numero_progressivo=progressivo_completo
-                    )
-                    db.session.add(nuovo_receipt)
-                    db.session.commit()
+                scritto = _registra_fiscale_confermato(voci, cliente_id, operatore_id,
+                                                       importo, progressivo_completo)
+                if not scritto:
+                    # Gia' registrato (da send-to-rch o dalla verifica in cassa).
+                    db_already_present = True
+                elif matched_pending:
+                    try:
+                        _applica_movimenti_incasso(matched_pending.get("voci_richiesta") or voci)
+                    except Exception:
+                        current_app.logger.exception("close-document: movimenti carte/rate non applicati")
 
-                    ids_pagati = [v.get("appointment_id") for v in voci if v.get("appointment_id")]
-                    if ids_pagati:
-                        Appointment.query.filter(Appointment.id.in_(ids_pagati)).update(
-                            {Appointment.stato: AppointmentStatus.PAGATO},
-                            synchronize_session=False
-                        )
-                        db.session.commit()
+                if used_pending_key:
+                    # Popola IDEMPOTENCY_STORE cosi' la verifica della finestra
+                    # di attesa in cassa chiude da sola.
+                    IDEMPOTENCY_STORE[used_pending_key] = {
+                        "results": [{
+                            "message": f"Scontrino fiscale registrato (progressivo {progressivo_completo})",
+                            "is_fiscale": True
+                        }],
+                        "reset_voci": True,
+                        "closed_via_console": True
+                    }
 
-                    if used_pending_key:
-                        # Popola IDEMPOTENCY_STORE cosi' il polling /cassa/rch-status
-                        # del modal pending (se aperto sul frontend) chiude da solo.
-                        IDEMPOTENCY_STORE[used_pending_key] = {
-                            "results": [{
-                                "message": f"Scontrino fiscale registrato (progressivo {progressivo_completo})",
-                                "is_fiscale": True
-                            }],
-                            "reset_voci": True,
-                            "closed_via_console": True
-                        }
-                        RCH_PENDING.pop(used_pending_key, None)
-
-                    receipt_progressivo = progressivo_completo
+                receipt_progressivo = progressivo_completo
         except Exception as exc:
             current_app.logger.error(
                 "rch_console_close_document: errore scrittura Receipt: %s", str(exc)
             )
             # Non far fallire l'operazione: la stampante e' gia' sbloccata.
 
+    if importo > 0 and all_success:
+        esito_finale = 'emesso' if receipt_progressivo else (esito_doc or 'attesa')
+    else:
+        esito_finale = None
     return jsonify({
         "success": all_success,
+        "esito": esito_finale,
+        "messaggio": (None if esito_finale in (None, 'emesso') else
+                      "La stampante ha accettato i comandi ma lo scontrino NON è uscito: "
+                      "niente registrato. " + _rch_messaggio_stato(contatori_dopo)),
         "results": results,
         "receipt_progressivo": receipt_progressivo,
         "db_already_present": db_already_present,

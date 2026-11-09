@@ -1645,7 +1645,13 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
         idempotency_key: idempotencyKey
       };
 
-      // Modal attesa/retry
+      // Scontrino non confermato dalla stampante: finestra di attesa.
+      // Lo scontrino NON e' nel registro: ci entra solo se il contatore della
+      // stampante conferma che e' uscito (verifica /cassa/rch-retry, che NON
+      // ristampa). Due casi reali, con la stessa spia lampeggiante: carta finita
+      // (cambiato il rotolo lo scontrino esce e si registra da solo) oppure RCH
+      // bloccata con la carta presente (si spegne e riaccende: lo scontrino non
+      // esce, non viene registrato e la bozza resta da ristampare).
 function showPendingModal(key, expectedTotal) {
   // Nascondi lo spinner RCH prima di mostrare il modal
   if (typeof window.hideRchSpinner === 'function') {
@@ -1676,24 +1682,40 @@ function showPendingModal(key, expectedTotal) {
   header.className = 'modal-header';
   const h5 = document.createElement('h5');
   h5.className = 'modal-title';
-  h5.textContent = 'Attesa stampante fiscale';
+  h5.textContent = 'Scontrino non confermato dalla stampante';
   header.appendChild(h5);
 
   const body = document.createElement('div');
   body.className = 'modal-body';
 
   const p = document.createElement('p');
-  p.textContent = 'La stampante è in attesa o ha un documento aperto. '
-    + 'Se la carta è finita o c\'è un errore meccanico, risolvi e premi "Riprova". '
-    + 'Se invece il documento è rimasto aperto, sblocca con il modulo qui sotto.';
+  p.textContent = 'La stampante non ha confermato lo scontrino: per ora NON è registrato. '
+    + 'Viene registrato solo se la stampante lo emette.';
   body.appendChild(p);
+
+  const casi = document.createElement('ul');
+  casi.style.paddingLeft = '18px';
+  [
+    ['Carta finita: ', 'cambia il rotolo. Se lo scontrino esce, viene registrato da solo.'],
+    ['Carta presente ma stampante ferma (spia lampeggiante): ', 'spegni e riaccendi la stampante RCH. '
+      + 'Se dopo il riavvio lo scontrino non è uscito, non viene registrato e la bozza resta in cassa: '
+      + 'potrai ristamparlo.']
+  ].forEach(([titolo, testo]) => {
+    const li = document.createElement('li');
+    const b = document.createElement('strong');
+    b.textContent = titolo;
+    li.appendChild(b);
+    li.appendChild(document.createTextNode(testo));
+    casi.appendChild(li);
+  });
+  body.appendChild(casi);
 
   const flex = document.createElement('div');
   flex.className = 'd-flex align-items-center';
   flex.style.gap = '10px';
 
   const spinner = document.createElement('div');
-  spinner.className = 'spinner-border text-primary';
+  spinner.className = 'spinner-border spinner-border-sm text-primary';
   spinner.setAttribute('role', 'status');
   const vis = document.createElement('span');
   vis.className = 'visually-hidden';
@@ -1702,7 +1724,7 @@ function showPendingModal(key, expectedTotal) {
 
   const msg = document.createElement('span');
   msg.id = 'rchPendingMsg';
-  msg.textContent = 'In attesa...';
+  msg.textContent = 'Controllo la stampante...';
 
   flex.appendChild(spinner);
   flex.appendChild(msg);
@@ -1726,7 +1748,8 @@ function showPendingModal(key, expectedTotal) {
   closeHint.style.fontSize = '12px';
   closeHint.style.color = '#666';
   closeHint.style.marginBottom = '8px';
-  closeHint.textContent = 'Inserisci l\'importo mostrato sul display della stampante e il metodo di pagamento. Lo scontrino verrà completato e registrato.';
+  closeHint.textContent = "Solo se il display della stampante mostra un importo in sospeso: inserisci quell'importo e il metodo di pagamento. "
+    + 'Lo scontrino viene registrato solo se la stampante lo emette davvero.';
   closeBox.appendChild(closeHint);
 
   const row = document.createElement('div');
@@ -1778,7 +1801,7 @@ function showPendingModal(key, expectedTotal) {
   btnRetry.id = 'rchRetryBtn';
   btnRetry.type = 'button';
   btnRetry.className = 'btn btn-primary';
-  btnRetry.textContent = 'Riprova';
+  btnRetry.textContent = 'Verifica adesso';
 
   const btnCancel = document.createElement('button');
   btnCancel.id = 'rchCancelBtn';
@@ -1797,20 +1820,35 @@ function showPendingModal(key, expectedTotal) {
   wrap.appendChild(overlay);
   document.body.appendChild(wrap);
 
-  let pollTimer = setInterval(async () => {
-    try {
-      const r = await fetch(`/cassa/rch-status?idempotency_key=${encodeURIComponent(key)}`);
-      const d = await r.json();
-      if (r.ok && d.done) {
-        clearInterval(pollTimer);
-        wrap.remove();
-        fiscaleOkFinalize();
-      }
-    } catch (_) {}
-  }, 3000);
+  // --- Verifica: una alla volta, ripetuta da sola finche' c'e' un esito ---
+  let finito = false;
+  let inVerifica = false;
+  let timerVerifica = null;
 
-  btnRetry.addEventListener('click', async () => {
-    btnRetry.disabled = true;
+  function chiudiConEsito(testo) {
+    // Esito definitivo senza registrazione: la bozza resta in cassa.
+    finito = true;
+    clearTimeout(timerVerifica);
+    spinner.style.display = 'none';
+    closeBox.style.display = 'none';
+    btnRetry.style.display = 'none';
+    casi.style.display = 'none';
+    p.style.display = 'none';
+    msg.style.fontWeight = '600';
+    msg.textContent = testo;
+    btnCancel.className = 'btn btn-primary';
+  }
+
+  function registrato() {
+    finito = true;
+    clearTimeout(timerVerifica);
+    wrap.remove();
+    fiscaleOkFinalize();
+  }
+
+  async function verifica() {
+    if (finito || inVerifica) return;
+    inVerifica = true;
     try {
       const rr = await fetch('/cassa/rch-retry', {
         method: 'POST',
@@ -1820,19 +1858,31 @@ function showPendingModal(key, expectedTotal) {
         },
         body: JSON.stringify({ idempotency_key: key })
       });
-      const dd = await rr.json();
-      if (rr.ok && dd.results) {
-        clearInterval(pollTimer);
-        wrap.remove();
-        fiscaleOkFinalize();
+      let dd = null;
+      try { dd = await rr.json(); } catch { dd = null; }
+      if (finito) return;
+      if (rr.ok && dd && dd.results) { registrato(); return; }
+      if (dd && (dd.esito === 'non_emesso' || dd.esito === 'incerto')) {
+        chiudiConEsito(dd.messaggio || 'Lo scontrino NON è stato registrato.');
         return;
       }
-      btnRetry.disabled = false;
-      msg.textContent = 'Ancora in attesa della stampante...';
+      msg.textContent = (dd && (dd.messaggio || dd.error)) || 'Controllo la stampante...';
     } catch {
-      btnRetry.disabled = false;
-      msg.textContent = 'Errore rete. Riprova.';
+      if (!finito) msg.textContent = 'Il gestionale non risponde, riprovo...';
+    } finally {
+      inVerifica = false;
+      if (!finito) {
+        clearTimeout(timerVerifica);
+        timerVerifica = setTimeout(verifica, 4000);
+      }
     }
+  }
+  timerVerifica = setTimeout(verifica, 1500);
+
+  btnRetry.addEventListener('click', () => {
+    clearTimeout(timerVerifica);
+    msg.textContent = 'Controllo la stampante...';
+    verifica();
   });
 
   btnClose.addEventListener('click', async () => {
@@ -1856,15 +1906,15 @@ function showPendingModal(key, expectedTotal) {
         body: JSON.stringify({ importo, metodo })
       });
       const dd = await rr.json();
-      if (rr.ok && dd.success) {
-        clearInterval(pollTimer);
-        wrap.remove();
-        fiscaleOkFinalize();
-      } else {
-        btnClose.disabled = false;
-        btnRetry.disabled = false;
-        msg.textContent = 'Chiusura fallita: ' + ((dd && dd.error) || 'errore stampante') + '. Riprova.';
+      // Registrato solo se la stampante ha emesso lo scontrino (contatore +1).
+      if (rr.ok && dd && (dd.receipt_progressivo || dd.db_already_present)) {
+        registrato();
+        return;
       }
+      btnClose.disabled = false;
+      btnRetry.disabled = false;
+      msg.textContent = (dd && (dd.messaggio || dd.error))
+        || 'Chiusura non riuscita: niente registrato.';
     } catch {
       btnClose.disabled = false;
       btnRetry.disabled = false;
@@ -1873,7 +1923,8 @@ function showPendingModal(key, expectedTotal) {
   });
 
   btnCancel.addEventListener('click', () => {
-    clearInterval(pollTimer);
+    finito = true;
+    clearTimeout(timerVerifica);
     wrap.remove();
   });
 }
@@ -3804,6 +3855,16 @@ async function stampaMultiClienteFlow(releaseLock) {
   for (const g of groups) {
     benvenuti.push(await verificaClienteNuovoBenvenuto(g.clientId));
   }
+  const giaEmessi = [];   // clienti il cui scontrino e' gia' uscito in questo giro
+  const avvisoNonConfermato = (nome) => {
+    let t = 'Lo scontrino di ' + (nome || 'questo cliente') + ' NON è stato confermato dalla stampante: NON è registrato.\n\n'
+      + 'Controlla la carta. Se la carta c\'è e la spia lampeggia, spegni e riaccendi la stampante RCH, poi ristampa.';
+    if (giaEmessi.length) {
+      t += '\n\nATTENZIONE: gli scontrini di ' + giaEmessi.join(', ') + ' sono già stati emessi e registrati: '
+        + 'toglili dalla bozza prima di ristampare, altrimenti vengono emessi due volte.';
+    }
+    return t;
+  };
   for (const g of groups) {
     const { voci_fiscali, voci_non_fiscali, hasError } = raccogliVociDaRighe(g.rows);
     if (hasError) { if (releaseLock) releaseLock(); return; }
@@ -3833,14 +3894,20 @@ async function stampaMultiClienteFlow(releaseLock) {
         if (releaseLock) releaseLock();
         const et = (data && typeof data.expected_total === 'number') ? data.expected_total : null;
         if (typeof showPendingModal === 'function') showPendingModal(idem, et);
-        else alert('Stampante in attesa. Riprova.');
+        else alert(avvisoNonConfermato(g.clientNome));
         return;
       }
       if (!res.ok) {
         if (releaseLock) releaseLock();
-        alert((data && data.error) || ('Errore durante la stampa per ' + (g.clientNome || 'cliente')));
+        let t = (data && data.error) || ('Errore durante la stampa per ' + (g.clientNome || 'cliente'));
+        if (giaEmessi.length) {
+          t += '\n\nATTENZIONE: gli scontrini di ' + giaEmessi.join(', ') + ' sono già stati emessi e registrati: '
+            + 'toglili dalla bozza prima di ristampare.';
+        }
+        alert(t);
         return;
       }
+      giaEmessi.push(g.clientNome || 'cliente');
     }
     if (voci_non_fiscali.length) {
       try {

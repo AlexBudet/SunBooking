@@ -743,8 +743,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         const data = await resp.json();
         rchLogJson('Chiusura', data);
-        rchLog(data.success ? 'Chiuso!' : 'Fallito', data.success ? 'success' : 'error');
-        alert(data.success ? '✅ Documento chiuso e stampato!' : '⚠️ Fallito, vedi log');
+        // "success" dice solo che la stampante ha accettato i comandi: se lo
+        // scontrino e' uscito davvero lo dice esito (contatore salito di uno).
+        const emesso = data.success && (data.esito === 'emesso' || data.esito === null);
+        rchLog(emesso ? 'Chiuso!' : 'Fallito', emesso ? 'success' : 'error');
+        if (data.esito === 'emesso') {
+          alert('✅ Scontrino emesso e registrato' + (data.receipt_progressivo ? ' (' + data.receipt_progressivo + ')' : '') + '.');
+        } else if (data.success && data.esito === null) {
+          alert('✅ Documento chiuso.');
+        } else {
+          alert('⚠️ ' + (data.messaggio || data.error || 'Fallito, vedi log'));
+        }
         setTimeout(function() { refreshStatus(false); }, 500);
       } catch (err) {
         rchLog('Errore: ' + err.message, 'error');
