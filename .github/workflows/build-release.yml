@@ -79,6 +79,10 @@ jobs:
       with:
         name: Tosca
         path: dist/Tosca.exe
+        # Copia di servizio: l'exe che scaricano i negozi e' quello allegato
+        # alla Release (passo sotto), che non scade. Tenerla 90 giorni
+        # occupava GB di spazio Actions (tetto 500 MB sui repo privati).
+        retention-days: 1
     
     - name: Upload to Release
       if: github.event_name == 'release'
