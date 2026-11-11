@@ -210,6 +210,10 @@ class Service(db.Model):
     # Nome della risorsa per messaggi più chiari
     # es. "Macchinario Radiofrequenza", "Lettino Pressoterapia"
     resource_name = db.Column(db.String(100), nullable=True, default=None)
+    # Servizio in PROMO: si spunta in Tools > Servizi e si salva al momento.
+    # server_default: le righe gia' presenti e gli INSERT fatti fuori dall'ORM
+    # nascono non in promo.
+    is_promo = db.Column(db.Boolean, nullable=False, server_default='false', default=False)
 
     operators = db.relationship(
     'Operator',

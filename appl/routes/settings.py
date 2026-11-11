@@ -932,6 +932,26 @@ def add_service():
 
     return esito()
 
+@settings_bp.route('/settings/services/<int:service_id>/promo', methods=['POST'])
+def update_service_promo(service_id):
+    """Spunta/toglie PROMO dalla tabella di Tools > Servizi: salva subito."""
+    user_id = session.get('user_id')
+    current_user = db.session.get(User, user_id) if user_id else None
+    if not current_user or current_user.ruolo.value == 'user':
+        return jsonify({'success': False, 'error': 'Permessi insufficienti'}), 403
+    service = db.session.get(Service, service_id)
+    if not service or service.is_deleted:
+        return jsonify({'success': False, 'error': 'Servizio non trovato'}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        service.is_promo = bool(data.get('value'))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("update_service_promo %s: %s", service_id, e)
+        return jsonify({'success': False, 'error': 'Errore nel salvataggio'}), 500
+    return jsonify({'success': True, 'is_promo': service.is_promo})
+
 @settings_bp.route('/settings/services/<int:service_id>/edit', methods=['GET', 'POST'], endpoint='edit_service')
 def edit_service(service_id):
     """Modifica un servizio esistente."""

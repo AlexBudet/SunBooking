@@ -95,6 +95,7 @@
 <th>Sotto-categoria <span class="sort-icons">▲<br>▼</span></th>
 <th class="text-center">Durata (min) <span class="sort-icons">▲<br>▼</span></th>
 <th class="text-center">Prezzo (€) <span class="sort-icons">▲<br>▼</span></th>
+<th class="text-center" data-sort="check">Promo <span class="sort-icons">▲<br>▼</span></th>
 <th class="text-center">Azioni</th>
         </tr>
     </thead>
@@ -107,6 +108,12 @@
             <td>{{ service.servizio_sottocategoria.nome if service.servizio_sottocategoria else '-' }}</td>
             <td class="text-center">{{ service.servizio_durata }}</td>
             <td class="text-center">{{ "%.0f"|format(service.servizio_prezzo) if service.servizio_prezzo == service.servizio_prezzo|int else "%.2f"|format(service.servizio_prezzo) }}</td>
+            <td class="text-center">
+              <input type="checkbox" class="form-check-input promo-toggle"
+                     data-service-id="{{ service.id }}"
+                     {% if service.is_promo %}checked{% endif %}
+                     {% if current_user.ruolo.value == 'user' %}onclick="event.preventDefault(); showNoRightsPopup();"{% endif %}>
+            </td>
 <td class="text-center">
   {% if current_user.ruolo.value == 'user' %}
     <button type="button"
@@ -333,6 +340,35 @@ function showNoRightsPopup() {
         });
     });
     </script>
+<script>
+// PROMO: la spunta si salva subito; se il server non conferma torna com'era.
+document.addEventListener('DOMContentLoaded', function () {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  const csrf = meta ? meta.getAttribute('content') : "{{ csrf_token() }}";
+  const urlPromo = "{{ url_for('settings.update_service_promo', service_id=999999) }}";
+  document.querySelectorAll('#servicesTable .promo-toggle').forEach(function (chk) {
+    chk.addEventListener('change', function () {
+      const valore = chk.checked;
+      chk.disabled = true;
+      fetch(urlPromo.replace('999999', chk.dataset.serviceId), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({value: valore})
+      })
+        .then(r => r.json().catch(() => ({})).then(j => ({ok: r.ok, j})))
+        .then(({ok, j}) => {
+          if (!ok || !j.success) throw new Error(j.error || 'Errore nel salvataggio');
+          chk.checked = !!j.is_promo;
+        })
+        .catch(err => {
+          chk.checked = !valore;
+          alert('PROMO non salvato: ' + err.message);
+        })
+        .finally(() => { chk.disabled = false; });
+    });
+  });
+});
+</script>
     <script>
 document.addEventListener('DOMContentLoaded', function() {
   const subcatSelect = document.getElementById('service_subcategory');
@@ -565,7 +601,11 @@ document.addEventListener('DOMContentLoaded', function() {
       // Ordinamento numerico per durata e prezzo
       const colName = header.textContent.trim().toLowerCase();
       let sortFn;
-      if (colName.includes('prezzo') || colName.includes('durata')) {
+      if (header.dataset.sort === 'check') {
+        // Promo: prima gli spuntati (asc), poi gli altri
+        const spunta = r => { const c = r.children[i].querySelector('input'); return c && c.checked ? 1 : 0; };
+        sortFn = (a, b) => asc ? spunta(b) - spunta(a) : spunta(a) - spunta(b);
+      } else if (colName.includes('prezzo') || colName.includes('durata')) {
         sortFn = (a, b) => {
           const valA = parseFloat(a.children[i].textContent.replace(',', '.')) || 0;
           const valB = parseFloat(b.children[i].textContent.replace(',', '.')) || 0;
