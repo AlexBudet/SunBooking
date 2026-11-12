@@ -102,6 +102,59 @@ def regole(biz):
     }
 
 
+# ------------------------------------------------- messaggio "troppo tardi"
+# Cosa legge il cliente quando clicca "Annulla la prenotazione" nell'e-mail ma
+# mancano meno ore del limite. Si scrive in Tools > Booking Web
+# (business_info.booking_annullo_messaggio); vuoto = il testo qui sotto.
+# Stessa sintassi dei messaggi WhatsApp: {{tag}}.
+MESSAGGIO_ANNULLO_PREDEFINITO = (
+    "Gentile {{nome}} {{cognome}},\n"
+    "la prenotazione del {{data}} alle {{ora}} per {{servizi}} non si può più annullare online: "
+    "mancano meno di {{ore_limite}} ore all'appuntamento.\n\n"
+    "Se non puoi venire, chiama {{nome_istituto}} al numero {{telefono_istituto}} per disdire. "
+    "Avvisarci per tempo ci permette di offrire l'orario a qualcun altro, e la disdetta fatta "
+    "per telefono non viene conteggiata nel tuo storico.\n\n"
+    "Dopo {{soglia}} appuntamenti saltati o annullati all'ultimo momento, le prenotazioni online "
+    "potrebbero essere possibili solo contattando direttamente il centro.\n\n"
+    "Grazie per la collaborazione!"
+)
+
+# (tag, cosa diventa): per i pulsanti e la legenda in Booking Web.
+TAG_ANNULLO = (
+    ('nome', 'nome del cliente'),
+    ('cognome', 'cognome del cliente'),
+    ('data', "data dell'appuntamento"),
+    ('ora', "ora dell'appuntamento"),
+    ('servizi', 'servizi prenotati'),
+    ('nome_istituto', 'nome del centro (Info Azienda)'),
+    ('telefono_istituto', 'telefono del centro (Info Azienda)'),
+    ('ore_limite', 'ore del limite di annullamento'),
+    ('soglia', 'appuntamenti saltati che bloccano le prenotazioni online'),
+)
+
+_RE_TAG = re.compile(r'\{\{\s*(\w+)\s*\}\}')
+
+
+def testo_annullo(biz):
+    """Il messaggio scritto in Booking Web, o quello predefinito se vuoto."""
+    testo = (getattr(biz, 'booking_annullo_messaggio', None) or '').strip()
+    return testo or MESSAGGIO_ANNULLO_PREDEFINITO
+
+
+def compila_testo(testo, valori):
+    """Sostituisce ogni {{tag}} (anche {{ tag }}) con valori[tag]; un tag
+    sconosciuto resta com'e', cosi' chi scrive vede l'errore di battitura."""
+    return _RE_TAG.sub(lambda m: valori.get(m.group(1), m.group(0)), str(testo or ''))
+
+
+def nome_cognome_dalla_nota(nota):
+    """(nome, cognome) dalla nota di una prenotazione online, o (None, None)."""
+    m = _RE_NOTA_NOME.search(html.unescape(str(nota or '')))
+    if not m:
+        return None, None
+    return (m.group(1).strip() or None), (m.group(2).strip() or None)
+
+
 def mesi_fa(quando, mesi):
     """Lo stesso giorno di `mesi` mesi prima (il 31 diventa l'ultimo del mese)."""
     totale = quando.year * 12 + (quando.month - 1) - int(mesi)

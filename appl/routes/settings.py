@@ -2976,6 +2976,9 @@ def set_bookings():
         servizi_tabella=servizi_tabella,
         business_info=business_info,
         regole_noshow=no_show_mod.regole(business_info),
+        messaggio_annullo=no_show_mod.testo_annullo(business_info),
+        messaggio_annullo_predefinito=no_show_mod.MESSAGGIO_ANNULLO_PREDEFINITO,
+        tag_annullo=no_show_mod.TAG_ANNULLO,
     )
 
 
@@ -2983,7 +2986,9 @@ def set_bookings():
 def update_booking_annullamenti():
     """Sezione "Annullamenti e no-show" di Booking Web (regole in
     appl/services/no_show.py). Payload: {annullo_attivo, annullo_ore,
-    noshow_attivo, noshow_soglia, noshow_mesi, noshow_ore_tardivo}."""
+    annullo_messaggio, noshow_attivo, noshow_soglia, noshow_mesi,
+    noshow_ore_tardivo}. Il messaggio vuoto o uguale al predefinito si salva
+    NULL: cosi' resta il predefinito anche se un giorno viene migliorato."""
     if not _risorse_puo_modificare():
         return jsonify({'ok': False, 'errore': 'Permessi insufficienti'}), 403
     biz = db.session.get(BusinessInfo, 1)
@@ -3007,9 +3012,16 @@ def update_booking_annullamenti():
         ore_tardivo = intero('noshow_ore_tardivo', 1, 168, 'Ore dell\'annullamento all\'ultimo')
     except ValueError as e:
         return jsonify({'ok': False, 'errore': str(e)}), 400
+    messaggio = str(data.get('annullo_messaggio') or '').replace('\r\n', '\n').strip()
+    if len(messaggio) > 3000:
+        return jsonify({'ok': False, 'errore': 'Il messaggio è troppo lungo (massimo 3000 caratteri).'}), 400
+    if messaggio == no_show_mod.MESSAGGIO_ANNULLO_PREDEFINITO.strip():
+        messaggio = ''
     try:
         biz.booking_annullo_blocco_attivo = bool(data.get('annullo_attivo'))
         biz.booking_annullo_blocco_ore = annullo_ore
+        if 'annullo_messaggio' in data:
+            biz.booking_annullo_messaggio = messaggio or None
         biz.booking_noshow_blocco_attivo = bool(data.get('noshow_attivo'))
         biz.booking_noshow_soglia = soglia
         biz.booking_noshow_mesi = mesi

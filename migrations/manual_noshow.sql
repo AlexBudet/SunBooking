@@ -1,7 +1,8 @@
 -- ============================================================================
 -- ANNULLAMENTI E NO-SHOW (Tools > Booking Web)
 --
--- business_info  : le impostazioni (tutto spento di partenza)
+-- business_info  : le impostazioni (tutto spento di partenza) e il testo della
+--                  pagina "troppo tardi per annullare" (NULL = predefinito)
 -- appuntamenti   : annullato_il  = quando il cliente ha annullato dal link
 -- clienti        : prenotazioni_online_sblocco_il = sblocco a mano dalla scheda
 -- Regole in appl/services/no_show.py (copiate in booking routes/no_show.py).
@@ -23,6 +24,7 @@ SET lock_timeout = '5s';
 ALTER TABLE business_info
     ADD COLUMN IF NOT EXISTS booking_annullo_blocco_attivo BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS booking_annullo_blocco_ore    INTEGER NOT NULL DEFAULT 24,
+    ADD COLUMN IF NOT EXISTS booking_annullo_messaggio     TEXT NULL,
     ADD COLUMN IF NOT EXISTS booking_noshow_blocco_attivo  BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN IF NOT EXISTS booking_noshow_soglia         INTEGER NOT NULL DEFAULT 2,
     ADD COLUMN IF NOT EXISTS booking_noshow_mesi           INTEGER NOT NULL DEFAULT 12,
@@ -34,11 +36,11 @@ ALTER TABLE appuntamenti
 ALTER TABLE clienti
     ADD COLUMN IF NOT EXISTS prenotazioni_online_sblocco_il TIMESTAMP NULL;
 
--- Verifica: deve rispondere con 8 righe.
+-- Verifica: deve rispondere con 9 righe.
 SELECT table_name, column_name FROM information_schema.columns
 WHERE table_schema = 'public' AND (
       (table_name = 'business_info' AND column_name IN (
-          'booking_annullo_blocco_attivo', 'booking_annullo_blocco_ore',
+          'booking_annullo_blocco_attivo', 'booking_annullo_blocco_ore', 'booking_annullo_messaggio',
           'booking_noshow_blocco_attivo', 'booking_noshow_soglia',
           'booking_noshow_mesi', 'booking_noshow_ore_tardivo'))
    OR (table_name = 'appuntamenti' AND column_name = 'annullato_il')

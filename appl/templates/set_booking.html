@@ -126,12 +126,25 @@
         ore prima dell'appuntamento
       </label>
     </div>
-    <p class="text-muted small mb-0">
-      Il link <b>Annulla la prenotazione</b> dell'e-mail di conferma porta a una pagina che spiega che
-      &egrave; troppo tardi per annullare in automatico e di telefonare al centro
-      {% if business_info.phone %}(<b>{{ business_info.phone }}</b>, da Info Azienda){% else %}<span class="text-danger">(il telefono del centro non &egrave; impostato in Info Azienda: la pagina dir&agrave; solo di telefonare)</span>{% endif %}.
-      Anche l'e-mail di conferma lo scrive.
+    <p class="text-muted small mb-2">
+      Il link <b>Annulla la prenotazione</b> dell'e-mail di conferma porta allora a una pagina con il messaggio
+      qui sotto, al posto della conferma di annullamento. Il numero del centro &egrave; quello di Info Azienda
+      {% set tel_centro = business_info.phone or business_info.mobile %}
+      {% if tel_centro %}(<b>{{ tel_centro }}</b>): sul telefono del cliente si chiama toccandolo.{% else %}<span class="text-danger">: non &egrave; impostato, impostalo prima di attivare la regola.</span>{% endif %}
+      Anche l'e-mail di conferma scrive fino a quando si pu&ograve; annullare online.
     </p>
+    <label class="form-label small fw-bold mb-1" for="annullo-messaggio">Messaggio per chi prova ad annullare troppo tardi</label>
+    <textarea class="form-control" id="annullo-messaggio" rows="9" maxlength="3000">{{ messaggio_annullo }}</textarea>
+    <div class="mt-2 d-flex flex-wrap gap-2">
+      {% for tag, _spiega in tag_annullo %}
+        <button type="button" class="btn btn-outline-secondary btn-sm btn-tag-annullo" data-tag="{{ tag }}">{{ '{{' }}{{ tag }}{{ '}}' }}</button>
+      {% endfor %}
+      <button type="button" class="btn btn-outline-danger btn-sm ms-auto" id="annullo-messaggio-ripristina">Ripristina testo predefinito</button>
+    </div>
+    <div class="form-text">
+      Puoi usare le variabili:
+      {% for tag, spiega in tag_annullo %}<code>{{ '{{' }}{{ tag }}{{ '}}' }}</code> = {{ spiega }}{{ ', ' if not loop.last else '.' }}{% endfor %}
+    </div>
   </div>
 
   <div class="noshow-regola mt-4">
@@ -167,6 +180,24 @@
   #booking-noshow-section .form-check-label { line-height: 2; }
 </style>
 <script>
+// Pulsanti dei tag: inseriscono {{tag}} dove sta il cursore (come in Tools > WhatsApp).
+(function () {
+  const area = document.getElementById('annullo-messaggio');
+  const PREDEFINITO = {{ messaggio_annullo_predefinito|tojson }};
+  document.querySelectorAll('.btn-tag-annullo').forEach(btn => btn.addEventListener('click', function () {
+    const tag = '{' + '{' + btn.dataset.tag + '}' + '}';
+    const ini = area.selectionStart || 0, fine = area.selectionEnd || 0;
+    area.value = area.value.slice(0, ini) + tag + area.value.slice(fine);
+    area.focus();
+    area.selectionStart = area.selectionEnd = ini + tag.length;
+  }));
+  document.getElementById('annullo-messaggio-ripristina').addEventListener('click', function () {
+    if (area.value.trim() && area.value.trim() !== PREDEFINITO.trim() &&
+        !confirm('Sostituire il messaggio con il testo predefinito?')) return;
+    area.value = PREDEFINITO;
+  });
+})();
+
 document.getElementById('save-booking-noshow').addEventListener('click', function () {
   const btn = this;
   const err = document.getElementById('noshow-errore');
@@ -175,6 +206,7 @@ document.getElementById('save-booking-noshow').addEventListener('click', functio
   const corpo = {
     annullo_attivo: document.getElementById('annullo-attivo').checked,
     annullo_ore: valore('annullo-ore'),
+    annullo_messaggio: valore('annullo-messaggio'),
     noshow_attivo: document.getElementById('noshow-attivo').checked,
     noshow_soglia: valore('noshow-soglia'),
     noshow_mesi: valore('noshow-mesi'),
