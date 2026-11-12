@@ -96,14 +96,18 @@
 <th class="text-center">Durata (min) <span class="sort-icons">▲<br>▼</span></th>
 <th class="text-center">Prezzo (€) <span class="sort-icons">▲<br>▼</span></th>
 <th class="text-center" data-sort="check">Promo <span class="sort-icons">▲<br>▼</span></th>
-{% if risorse_attive %}<th>Risorse <span class="sort-icons">▲<br>▼</span></th>{% endif %}
 <th class="text-center">Azioni</th>
         </tr>
     </thead>
     <tbody>
         {% for service in services %}
         <tr>
-            <td>{{ service.servizio_nome }}</td>
+            <td data-nome="{{ service.servizio_nome }}">{{ service.servizio_nome }}
+              {%- if risorse_attive and risorse_per_servizio.get(service.id) %}
+              {%- set n_ris = risorse_per_servizio[service.id]|length %}
+              <a tabindex="0" role="button" class="badge risorsa-badge ms-1" data-service-id="{{ service.id }}"
+                 aria-label="Risorse usate da {{ service.servizio_nome }}">{{ 'risorsa' if n_ris == 1 else n_ris ~ ' risorse' }}</a>
+              {%- endif %}</td>
             <td>{{ service.servizio_tag }}</td>
             <td>{{ service.servizio_categoria.value }}</td>
             <td>{{ service.servizio_sottocategoria.nome if service.servizio_sottocategoria else '-' }}</td>
@@ -115,19 +119,6 @@
                      {% if service.is_promo %}checked{% endif %}
                      {% if current_user.ruolo.value == 'user' %}onclick="event.preventDefault(); showNoRightsPopup();"{% endif %}>
             </td>
-{% if risorse_attive %}
-<td class="risorse-cella">
-  {% for nome_risorsa, tetto in risorse_per_servizio.get(service.id, []) %}
-    <span class="badge bg-info text-dark me-1">{{ nome_risorsa }} &times;{{ tetto }}</span>
-  {% else %}
-    <span class="text-muted">&mdash;</span>
-  {% endfor %}
-  {% if current_user.ruolo.value != 'user' and risorse %}
-    <button type="button" class="btn btn-sm btn-outline-secondary ms-1 btn-risorse-servizio"
-            data-service-id="{{ service.id }}" data-service-name="{{ service.servizio_nome }}">Imposta</button>
-  {% endif %}
-</td>
-{% endif %}
 <td class="text-center">
   {% if current_user.ruolo.value == 'user' %}
     <button type="button"
@@ -221,8 +212,8 @@
 <div id="risorseSection" class="hidden">
     <p class="text-muted mb-2" style="max-width:900px">
       Una <b>risorsa</b> è una postazione, una cabina o un macchinario che più servizi usano insieme
-      (es. <i>Postazione Mani</i>: ne avete 4). Associala ai servizi con il loro <b>tetto</b>
-      (es. Manicure 2, Semipermanente mani 3): in Agenda e nelle prenotazioni online non ci saranno
+      (es. <i>Postazione Mani</i>: ne avete 4). Con il pulsante <b>Servizi</b> della risorsa scegli i servizi
+      che la usano e il loro <b>tetto</b> (es. Manicure 2, Semipermanente mani 3): in Agenda e nelle prenotazioni online non ci saranno
       mai più appuntamenti contemporanei delle postazioni che avete, né più di quelli permessi a ogni servizio.
       I servizi senza risorse funzionano come sempre.
     </p>
@@ -254,8 +245,9 @@
                 <td>{{ r.nome }}</td>
                 <td class="text-center">{{ r.quantita }}</td>
                 <td>
-                  {% set nomi = servizi_per_risorsa.get(r.id, []) %}
-                  {% if nomi %}<span class="text-muted">{{ nomi|length }}:</span> {{ nomi|join(', ') }}{% else %}<span class="text-muted">nessuno</span>{% endif %}
+                  {% if r.servizi %}<span class="text-muted">{{ r.servizi|length }}:</span>
+                    {% for sv in r.servizi %}{{ sv.nome }} <span class="text-muted">&times;{{ sv.tetto }}</span>{{ ', ' if not loop.last }}{% endfor %}
+                  {% else %}<span class="text-muted">nessuno</span>{% endif %}
                 </td>
                 <td>
                   {% if current_user.ruolo.value == 'user' %}
@@ -263,8 +255,8 @@
                   {% else %}
                     <button type="button" class="btn btn-sm btn-primary btn-risorsa-modifica"
                             data-id="{{ r.id }}" data-nome="{{ r.nome }}" data-quantita="{{ r.quantita }}">Modifica</button>
-                    <button type="button" class="btn btn-sm btn-outline-primary btn-risorsa-sottocat"
-                            data-id="{{ r.id }}" data-nome="{{ r.nome }}" data-quantita="{{ r.quantita }}">Associa a una sottocategoria</button>
+                    <button type="button" class="btn btn-sm btn-risorsa-servizi"
+                            data-id="{{ r.id }}" data-nome="{{ r.nome }}">Servizi</button>
                     <button type="button" class="btn btn-sm btn-danger btn-risorsa-elimina"
                             data-id="{{ r.id }}" data-nome="{{ r.nome }}">Elimina</button>
                   {% endif %}
@@ -408,7 +400,7 @@ function showNoRightsPopup() {
             return;
         }
         rows.forEach(row => {
-            const nome = row.children[0].textContent.toLowerCase();
+            const nome = (row.children[0].dataset.nome || row.children[0].textContent).toLowerCase();
             const tag = row.children[1].textContent.toLowerCase();
             if (nome.includes(searchValue) || tag.includes(searchValue)) {
                 row.style.display = '';
@@ -1452,30 +1444,86 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-{% if risorse_attive and current_user.ruolo.value != 'user' %}
-<!-- RISORSE: finestre di Tools › Servizi -->
-<div class="modal fade" id="RisorseServizioModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Risorse di <span id="risorseServizioNome"></span></h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
-      </div>
-      <div class="modal-body">
-        <p class="text-muted small mb-2">Per ogni risorsa scegli il <b>tetto</b>: quanti appuntamenti di questo
-          servizio possono esserci nello stesso momento. Il totale della risorsa vale comunque per tutti i servizi che la usano.</p>
-        <div id="risorseServizioRighe"></div>
-        <button type="button" class="btn btn-sm btn-outline-primary mt-1" id="risorseServizioAggiungi">+ Aggiungi risorsa</button>
-        <div class="text-danger small mt-2" id="risorseServizioErrore"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-        <button type="button" class="btn btn-primary" id="risorseServizioSalva">Salva</button>
-      </div>
-    </div>
-  </div>
-</div>
+{% if risorse_attive %}
+<style>
+  /* Badge "risorsa" accanto al nome del servizio: al clic dice quale risorsa usa. */
+  #servicesTable .risorsa-badge {
+    background: #87647c;
+    color: #fff;
+    font-weight: 500;
+    font-size: .7rem;
+    cursor: pointer;
+    text-decoration: none;
+    vertical-align: middle;
+  }
+  #servicesTable .risorsa-badge:hover,
+  #servicesTable .risorsa-badge:focus {
+    background: #75556a;
+    color: #fff;
+  }
+  .risorsa-popover { max-width: 340px; }
+  .risorsa-popover .ris-info + .ris-info {
+    border-top: 1px solid #dee2e6;
+    margin-top: .5rem;
+    padding-top: .5rem;
+  }
+  /* Pulsante "Servizi" della risorsa: stesso colore del pulsante Servizi di Tools › Operatori. */
+  #risorseTable .btn-risorsa-servizi {
+    background: #87647c;
+    border: 1px solid #87647c;
+    color: #fff;
+  }
+  #risorseTable .btn-risorsa-servizi:hover {
+    background: #75556a;
+    border-color: #75556a;
+    color: #fff;
+  }
+  /* Senza questo l'elenco non scorre: styles.css forza
+     .modal-body { overflow: visible !important; max-height: 70vh }. */
+  #RisorsaServiziModal .modal-body {
+    overflow-y: auto !important;
+    max-height: 72vh;
+  }
+</style>
+<script>
+// Badge "risorsa" nella tabella dei servizi: al clic dice quale risorsa usa il
+// servizio, quante ce ne sono, il tetto e chi altro la usa. Solo informazione,
+// per tutti: si modifica dal pulsante Servizi della sezione Gestione Risorse.
+document.addEventListener('DOMContentLoaded', function () {
+  const RISORSE = {{ risorse|tojson }};
+  const esc = t => String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+  document.querySelectorAll('#servicesTable .risorsa-badge').forEach(function (badge) {
+    const sid = parseInt(badge.dataset.serviceId, 10);
+    const usate = RISORSE.filter(r => (r.servizi || []).some(sv => sv.id === sid));
+    if (!usate.length) return;
+    const contenuto = usate.map(r => {
+      const mio = r.servizi.find(sv => sv.id === sid);
+      const altri = r.servizi.filter(sv => sv.id !== sid);
+      return '<div class="ris-info"><b>' + esc(r.nome) + '</b>: ne avete <b>' + r.quantita + '</b><br>'
+        + 'Al massimo <b>' + mio.tetto + '</b> ' + (mio.tetto === 1 ? 'appuntamento' : 'appuntamenti')
+        + ' di questo servizio nello stesso momento<br>'
+        + '<small class="text-muted">' + (altri.length
+            ? 'La usano anche: ' + altri.map(sv => esc(sv.nome) + ' (' + sv.tetto + ')').join(', ')
+            : 'Nessun altro servizio la usa') + '</small></div>';
+    }).join('');
+    new bootstrap.Popover(badge, {
+      trigger: 'focus',
+      html: true,
+      placement: 'right',
+      container: 'body',
+      customClass: 'risorsa-popover',
+      title: esc(badge.closest('td').dataset.nome || ''),
+      content: contenuto
+    });
+  });
+});
+</script>
+{% endif %}
+
+{% if risorse_attive and current_user.ruolo.value != 'user' %}
+<!-- RISORSE: finestre della sezione Gestione Risorse -->
 <div class="modal fade" id="RisorsaModificaModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -1499,50 +1547,58 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
-<div class="modal fade" id="RisorsaSottocatModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
+<!-- Pulsante "Servizi" di una risorsa: categorie › sottocategorie › servizi,
+     come il pulsante Servizi di Tools › Operatori, con il tetto di ogni servizio. -->
+<div class="modal fade" id="RisorsaServiziModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Associa <span id="risorsaSottocatNome"></span> a una sottocategoria</h5>
+        <h5 class="modal-title">Servizi che usano <span id="risServNome"></span></h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
       </div>
       <div class="modal-body">
-        <label class="form-label" for="risorsaSottocatSelect">Sottocategoria</label>
-        <select class="form-select mb-2" id="risorsaSottocatSelect">
-          <option value="" selected disabled>Scegli...</option>
-          {% for subcategory in subcategories %}
-            <option value="{{ subcategory.id }}">{{ subcategory.nome }} ({{ subcategory.categoria.value }})</option>
-          {% endfor %}
-        </select>
-        <label class="form-label" for="risorsaSottocatQuantita">Tetto per ogni servizio</label>
-        <input type="number" class="form-control" id="risorsaSottocatQuantita" min="1" style="width:120px">
-        <p class="text-muted small mt-2 mb-0">Tutti i servizi di quella sottocategoria useranno questa risorsa con lo
-          stesso tetto; poi puoi cambiarlo servizio per servizio con <b>Imposta</b>.</p>
-        <div class="text-danger small mt-2" id="risorsaSottocatErrore"></div>
+        <div class="alert alert-warning py-2" id="risServSpiega"></div>
+        <p class="text-muted small">
+          Sono elencati solo i servizi che compaiono in agenda: prodotti, crediti
+          e voci a durata zero non occupano postazioni.
+        </p>
+
+        <div class="d-flex align-items-center flex-wrap gap-3 mb-3" id="risServCategorie"></div>
+
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <input type="text" class="form-control form-control-sm" id="risServFiltro"
+                 placeholder="Filtra per nome servizio..." style="max-width:280px;">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="risServTuttiBtn">Spunta tutti</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="risServNessunoBtn">Togli tutti</button>
+          <span class="ms-auto text-muted small" id="risServConteggio"></span>
+        </div>
+
+        <div id="risServElenco"></div>
+        <div class="text-danger small mt-2" id="risServErrore"></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
-        <button type="button" class="btn btn-primary" id="risorsaSottocatSalva">Associa</button>
+        <button type="button" class="btn btn-primary" id="risServSalvaBtn">Salva</button>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-// RISORSE in Tools › Servizi: elenco, modifica, associazione ai servizi.
+// RISORSE in Tools › Servizi: crea, modifica, elimina e servizi che le usano.
 // Dopo ogni salvataggio si ricarica la pagina: e' una pagina di configurazione
-// e la tabella dei servizi si rigenera dal server, gia' aggiornata.
+// e le tabelle si rigenerano dal server, gia' aggiornate.
 document.addEventListener('DOMContentLoaded', function () {
   const meta = document.querySelector('meta[name="csrf-token"]');
   const csrf = meta ? meta.getAttribute('content') : "{{ csrf_token() }}";
-  const RISORSE = {{ risorse|tojson }};
   const URL = {
     crea: "{{ url_for('settings.api_risorse_crea') }}",
     modifica: "{{ url_for('settings.api_risorse_modifica', risorsa_id=999999) }}",
     elimina: "{{ url_for('settings.api_risorse_elimina', risorsa_id=999999) }}",
-    sottocat: "{{ url_for('settings.api_risorse_associa_sottocategoria', risorsa_id=999999) }}",
-    servizio: "{{ url_for('settings.api_servizio_risorse', service_id=999999) }}"
+    servizi: "{{ url_for('settings.api_risorsa_servizi', risorsa_id=999999) }}"
   };
+  const esc = t => String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   function invia(url, corpo) {
     return fetch(url, {
@@ -1596,91 +1652,181 @@ document.addEventListener('DOMContentLoaded', function () {
       .catch(err => alert(err.message));
   }));
 
-  // --- associa a una sottocategoria ---
-  let risorsaSottocat = null;
-  document.querySelectorAll('.btn-risorsa-sottocat').forEach(btn => btn.addEventListener('click', function () {
-    risorsaSottocat = btn.dataset.id;
-    document.getElementById('risorsaSottocatNome').textContent = btn.dataset.nome;
-    const q = document.getElementById('risorsaSottocatQuantita');
-    q.max = btn.dataset.quantita;
-    q.value = btn.dataset.quantita;
-    document.getElementById('risorsaSottocatSelect').value = '';
-    document.getElementById('risorsaSottocatErrore').textContent = '';
-    modale('RisorsaSottocatModal').show();
+  // --- pulsante Servizi della risorsa ---
+  let stato = null;        // risposta del server per la risorsa aperta
+  let risorsaId = null;
+  let scelte = {};         // {service_id: tetto} se la usa, null se no
+  let ultimoTetto = {};    // tetto da rimettere se si toglie e si rimette la spunta
+  const gruppoDi = sv => (sv.categoria || '-') + ' › ' + (sv.sottocategoria || 'senza sottocategoria');
+
+  function massimo() { return (stato && stato.risorsa.quantita) || 1; }
+  function tettoValido(valore) {
+    const n = parseInt(valore, 10);
+    return n >= 1 ? Math.min(n, massimo()) : massimo();
+  }
+  function categorieSelezionate() {
+    return Array.from(document.querySelectorAll('#risServCategorie input:checked')).map(i => i.value);
+  }
+  function visibili() {
+    const categorie = categorieSelezionate();
+    const filtro = (document.getElementById('risServFiltro').value || '').trim().toLowerCase();
+    return (stato.servizi || []).filter(sv =>
+      categorie.indexOf(sv.categoria) !== -1 &&
+      (!filtro || sv.nome.toLowerCase().indexOf(filtro) !== -1));
+  }
+  function metti(sv, usa) {
+    if (usa) scelte[sv.id] = scelte[sv.id] || ultimoTetto[sv.id] || massimo();
+    else { if (scelte[sv.id]) ultimoTetto[sv.id] = scelte[sv.id]; scelte[sv.id] = null; }
+  }
+
+  // Le categorie non sono salvate: filtrano l'elenco. Togliere una categoria
+  // vuol dire "nessun servizio di quella categoria usa questa risorsa", quindi
+  // i suoi servizi spariscono dall'elenco E dalle spunte (come in Operatori).
+  // Rimetterla li fa solo ricomparire, senza spuntarli.
+  function renderCategorie() {
+    const box = document.getElementById('risServCategorie');
+    box.innerHTML = '<span class="fw-bold">Categorie:</span>' +
+      (stato.categorie_disponibili || []).map(c =>
+        '<div class="form-check form-check-inline m-0">' +
+          '<input class="form-check-input ris-serv-categoria" type="checkbox" value="' + esc(c) + '" id="risServCat_' + esc(c) + '"' +
+          ((stato.categorie_attive || []).indexOf(c) !== -1 ? ' checked' : '') + '>' +
+          '<label class="form-check-label" for="risServCat_' + esc(c) + '">' + esc(c) + '</label>' +
+        '</div>').join('');
+    box.querySelectorAll('.ris-serv-categoria').forEach(inp => inp.addEventListener('change', function () {
+      if (!this.checked) (stato.servizi || []).forEach(sv => { if (sv.categoria === this.value) metti(sv, false); });
+      renderServizi();
+    }));
+  }
+
+  function renderServizi() {
+    const box = document.getElementById('risServElenco');
+    const elenco = visibili();
+    const gruppi = {};
+    elenco.forEach(sv => { (gruppi[gruppoDi(sv)] = gruppi[gruppoDi(sv)] || []).push(sv); });
+
+    box.innerHTML = Object.keys(gruppi).map(chiave => {
+      const righe = gruppi[chiave].map(sv => {
+        const usa = !!scelte[sv.id];
+        return '<div class="d-flex align-items-center gap-2 mb-1">' +
+          '<div class="form-check m-0">' +
+            '<input class="form-check-input ris-serv" type="checkbox" id="risSvc_' + sv.id + '"' +
+              ' data-service-id="' + sv.id + '"' + (usa ? ' checked' : '') + '>' +
+            '<label class="form-check-label" for="risSvc_' + sv.id + '">' + esc(sv.nome) + '</label>' +
+          '</div>' +
+          '<input type="number" class="form-control form-control-sm ris-tetto ms-auto" style="width:72px"' +
+            ' min="1" max="' + massimo() + '" data-service-id="' + sv.id + '"' +
+            ' value="' + (scelte[sv.id] || ultimoTetto[sv.id] || massimo()) + '"' + (usa ? '' : ' disabled') +
+            ' aria-label="Quanti appuntamenti di ' + esc(sv.nome) + ' nello stesso momento">' +
+        '</div>';
+      }).join('');
+      return '<div class="mb-3">' +
+        '<div class="d-flex align-items-center gap-2 mb-1">' +
+          '<b>' + esc(chiave) + '</b>' +
+          '<button type="button" class="btn btn-sm btn-link p-0 ris-serv-gruppo" data-gruppo="' + esc(chiave) + '" data-valore="1">tutti</button>' +
+          '<button type="button" class="btn btn-sm btn-link p-0 ris-serv-gruppo" data-gruppo="' + esc(chiave) + '" data-valore="0">nessuno</button>' +
+          '<span class="ms-auto text-muted small">quanti insieme</span>' +
+        '</div>' + righe + '</div>';
+    }).join('') || '<div class="text-muted">Nessun servizio per le categorie selezionate.</div>';
+
+    box.querySelectorAll('.ris-serv').forEach(cb => cb.addEventListener('change', function () {
+      const sid = parseInt(this.dataset.serviceId, 10);
+      const tetto = box.querySelector('.ris-tetto[data-service-id="' + sid + '"]');
+      if (this.checked) {
+        ultimoTetto[sid] = tettoValido(tetto.value);
+        metti({id: sid}, true);
+      } else {
+        metti({id: sid}, false);
+      }
+      tetto.value = scelte[sid] || ultimoTetto[sid] || massimo();
+      tetto.disabled = !this.checked;
+      aggiornaConteggio();
+    }));
+    box.querySelectorAll('.ris-tetto').forEach(inp => {
+      inp.addEventListener('input', function () {
+        const sid = parseInt(this.dataset.serviceId, 10);
+        if (scelte[sid]) scelte[sid] = tettoValido(this.value);
+      });
+      inp.addEventListener('change', function () {
+        const sid = parseInt(this.dataset.serviceId, 10);
+        this.value = tettoValido(this.value);
+        if (scelte[sid]) scelte[sid] = parseInt(this.value, 10);
+      });
+    });
+    box.querySelectorAll('.ris-serv-gruppo').forEach(btn => btn.addEventListener('click', function () {
+      const usa = this.dataset.valore === '1';
+      elenco.forEach(sv => { if (gruppoDi(sv) === this.dataset.gruppo) metti(sv, usa); });
+      renderServizi();
+    }));
+    aggiornaConteggio();
+  }
+
+  function aggiornaConteggio() {
+    const totale = (stato.servizi || []).length;
+    const usano = (stato.servizi || []).filter(sv => scelte[sv.id]).length;
+    document.getElementById('risServConteggio').textContent = usano + ' servizi la usano su ' + totale;
+  }
+
+  document.querySelectorAll('.btn-risorsa-servizi').forEach(btn => btn.addEventListener('click', function () {
+    risorsaId = btn.dataset.id;
+    stato = null;
+    document.getElementById('risServNome').textContent = btn.dataset.nome || '';
+    document.getElementById('risServSpiega').innerHTML = '';
+    document.getElementById('risServCategorie').innerHTML = 'Caricamento...';
+    document.getElementById('risServElenco').innerHTML = '';
+    document.getElementById('risServConteggio').textContent = '';
+    document.getElementById('risServErrore').textContent = '';
+    document.getElementById('risServFiltro').value = '';
+    modale('RisorsaServiziModal').show();
+
+    fetch(URL.servizi.replace('999999', risorsaId), { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(data => {
+        if (!data || !data.ok) throw new Error((data && data.errore) || 'Errore');
+        stato = data;
+        scelte = {};
+        ultimoTetto = {};
+        (data.servizi || []).forEach(sv => { scelte[sv.id] = sv.tetto || null; });
+        const q = data.risorsa.quantita;
+        document.getElementById('risServSpiega').innerHTML =
+          '<b>' + esc(data.risorsa.nome) + '</b>: ne avete <b>' + q + '</b>. Spunta i servizi che la usano. ' +
+          'Il numero accanto a ogni servizio è quanti appuntamenti di quel servizio possono esserci nello ' +
+          'stesso momento (da 1 a ' + q + '): lascia ' + q + ' se per quel servizio non serve un limite in più. ' +
+          'Vale <b>anche per le prenotazioni online</b>; in agenda non blocca nulla, fa comparire un avviso.';
+        renderCategorie();
+        renderServizi();
+      })
+      .catch(err => {
+        document.getElementById('risServCategorie').innerHTML =
+          '<div class="text-danger">Errore nel caricamento: ' + esc(err.message) + '</div>';
+      });
   }));
-  document.getElementById('risorsaSottocatSalva').addEventListener('click', function () {
-    const sottocat = document.getElementById('risorsaSottocatSelect').value;
-    const quantita = parseInt(document.getElementById('risorsaSottocatQuantita').value, 10);
-    if (!sottocat) { document.getElementById('risorsaSottocatErrore').textContent = 'Scegli la sottocategoria.'; return; }
-    invia(URL.sottocat.replace('999999', risorsaSottocat), {subcategory_id: sottocat, quantita: quantita})
-      .then(j => { alert('Associata a ' + j.servizi + ' servizi.'); location.reload(); })
-      .catch(err => { document.getElementById('risorsaSottocatErrore').textContent = err.message; });
+
+  document.getElementById('risServFiltro').addEventListener('input', function () {
+    if (stato) renderServizi();
   });
 
-  // --- risorse di un servizio ---
-  let servizioInModifica = null;
-  const righe = document.getElementById('risorseServizioRighe');
-  function aggiungiRiga(risorsaId, quantita) {
-    const riga = document.createElement('div');
-    riga.className = 'd-flex align-items-center gap-2 mb-2 riga-risorsa';
-    const sel = document.createElement('select');
-    sel.className = 'form-select form-select-sm';
-    RISORSE.forEach(r => {
-      const o = document.createElement('option');
-      o.value = r.id;
-      o.textContent = r.nome + ' (ne avete ' + r.quantita + ')';
-      o.dataset.max = r.quantita;
-      if (String(r.id) === String(risorsaId)) o.selected = true;
-      sel.appendChild(o);
-    });
-    const qta = document.createElement('input');
-    qta.type = 'number';
-    qta.min = '1';
-    qta.className = 'form-control form-control-sm';
-    qta.style.width = '80px';
-    qta.setAttribute('aria-label', 'Tetto: quanti appuntamenti di questo servizio insieme');
-    function aggiornaMax() {
-      const max = parseInt(sel.options[sel.selectedIndex].dataset.max, 10) || 1;
-      qta.max = String(max);
-      if (!(parseInt(qta.value, 10) >= 1) || parseInt(qta.value, 10) > max) qta.value = String(max);
-    }
-    sel.addEventListener('change', aggiornaMax);
-    qta.value = quantita || '';
-    aggiornaMax();
-    const via = document.createElement('button');
-    via.type = 'button';
-    via.className = 'btn btn-sm btn-outline-danger';
-    via.textContent = 'Togli';
-    via.addEventListener('click', () => riga.remove());
-    riga.appendChild(sel);
-    riga.appendChild(qta);
-    riga.appendChild(via);
-    righe.appendChild(riga);
+  // "Spunta tutti"/"Togli tutti" lavorano su cio' che e' a video.
+  function tuttiVisibili(usa) {
+    if (!stato) return;
+    visibili().forEach(sv => metti(sv, usa));
+    renderServizi();
   }
-  document.querySelectorAll('.btn-risorse-servizio').forEach(btn => btn.addEventListener('click', function () {
-    servizioInModifica = btn.dataset.serviceId;
-    document.getElementById('risorseServizioNome').textContent = btn.dataset.serviceName;
-    document.getElementById('risorseServizioErrore').textContent = '';
-    righe.innerHTML = '<div class="text-muted small">Caricamento...</div>';
-    modale('RisorseServizioModal').show();
-    fetch(URL.servizio.replace('999999', servizioInModifica))
-      .then(r => r.json())
-      .then(j => {
-        righe.innerHTML = '';
-        (j.associazioni || []).forEach(a => aggiungiRiga(a.risorsa_id, a.quantita));
-        if (!(j.associazioni || []).length) aggiungiRiga(null, null);
-      })
-      .catch(() => { righe.innerHTML = '<div class="text-danger small">Impossibile leggere le risorse del servizio.</div>'; });
-  }));
-  document.getElementById('risorseServizioAggiungi').addEventListener('click', () => aggiungiRiga(null, null));
-  document.getElementById('risorseServizioSalva').addEventListener('click', function () {
-    const voci = Array.from(righe.querySelectorAll('.riga-risorsa')).map(riga => ({
-      risorsa_id: riga.querySelector('select').value,
-      quantita: parseInt(riga.querySelector('input').value, 10)
-    }));
-    invia(URL.servizio.replace('999999', servizioInModifica), {risorse: voci})
+  document.getElementById('risServTuttiBtn').addEventListener('click', () => tuttiVisibili(true));
+  document.getElementById('risServNessunoBtn').addEventListener('click', () => tuttiVisibili(false));
+
+  document.getElementById('risServSalvaBtn').addEventListener('click', function () {
+    if (!risorsaId || !stato) return;
+    // Si mandano TUTTI i servizi dell'elenco, anche quelli nascosti dal filtro:
+    // le loro spunte sono in "scelte" e devono valere.
+    const servizi = {};
+    (stato.servizi || []).forEach(sv => { servizi[sv.id] = scelte[sv.id] ? tettoValido(scelte[sv.id]) : null; });
+    this.disabled = true;
+    invia(URL.servizi.replace('999999', risorsaId), {servizi: servizi})
       .then(() => location.reload())
-      .catch(err => { document.getElementById('risorseServizioErrore').textContent = err.message; });
+      .catch(err => {
+        document.getElementById('risServErrore').textContent = err.message;
+        this.disabled = false;
+      });
   });
 });
 </script>

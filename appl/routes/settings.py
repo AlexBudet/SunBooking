@@ -807,7 +807,7 @@ def services():
     subcategories = Subcategory.query.filter_by(is_deleted=False).all()
     user_id = session.get('user_id')
     current_user = db.session.get(User, user_id) if user_id else None
-    risorse_attive, risorse, risorse_per_servizio, servizi_per_risorsa = _risorse_per_pagina_servizi()
+    risorse_attive, risorse, risorse_per_servizio = _risorse_per_pagina_servizi()
     return render_template(
         'services.html',
         services=services,
@@ -817,7 +817,6 @@ def services():
         risorse_attive=risorse_attive,
         risorse=risorse,
         risorse_per_servizio=risorse_per_servizio,
-        servizi_per_risorsa=servizi_per_risorsa,
     )
 
 
@@ -844,27 +843,29 @@ def _risorse_tabelle_presenti():
 
 
 def _risorse_per_pagina_servizi():
-    """Per services.html: (attive, [{id, nome, quantita}],
-    {service_id: [(nome risorsa, tetto)]}, {risorsa_id: [nome servizio]})."""
+    """Per services.html: (attive,
+    [{id, nome, quantita, servizi: [{id, nome, tetto}]}],
+    {service_id: [risorsa_id, ...]}  -> il badge accanto al nome del servizio)."""
     if not _risorse_tabelle_presenti():
-        return False, [], {}, {}
+        return False, [], {}
     try:
-        risorse = [{'id': r.id, 'nome': r.nome, 'quantita': r.quantita}
+        risorse = [{'id': r.id, 'nome': r.nome, 'quantita': r.quantita, 'servizi': []}
                    for r in Risorsa.query.filter_by(is_deleted=False).order_by(Risorsa.nome).all()]
+        per_id = {r['id']: r for r in risorse}
         per_servizio = {}
-        servizi_per_risorsa = {}
         for sr, svc in (db.session.query(ServizioRisorsa, Service)
-                        .join(Risorsa, Risorsa.id == ServizioRisorsa.risorsa_id)
                         .join(Service, Service.id == ServizioRisorsa.service_id)
-                        .filter(Risorsa.is_deleted == False, Service.is_deleted == False)
-                        .order_by(Risorsa.nome, Service.servizio_nome).all()):
-            per_servizio.setdefault(sr.service_id, []).append((sr.risorsa.nome, sr.quantita))
-            servizi_per_risorsa.setdefault(sr.risorsa_id, []).append(svc.servizio_nome)
-        return True, risorse, per_servizio, servizi_per_risorsa
+                        .filter(ServizioRisorsa.risorsa_id.in_(list(per_id) or [0]),
+                                Service.is_deleted == False)
+                        .order_by(Service.servizio_nome).all()):
+            per_id[sr.risorsa_id]['servizi'].append(
+                {'id': svc.id, 'nome': svc.servizio_nome, 'tetto': sr.quantita})
+            per_servizio.setdefault(sr.service_id, []).append(sr.risorsa_id)
+        return True, risorse, per_servizio
     except Exception as e:
         db.session.rollback()
         app.logger.error("risorse per pagina servizi: %s", e)
-        return False, [], {}, {}
+        return False, [], {}
 
 
 def _risorse_puo_modificare():
@@ -976,11 +977,64 @@ def api_risorse_elimina(risorsa_id):
     return jsonify({'ok': True})
 
 
-@settings_bp.route('/api/risorse/<int:risorsa_id>/associa-sottocategoria', methods=['POST'])
-def api_risorse_associa_sottocategoria(risorsa_id):
-    """Associa la risorsa, con lo stesso tetto, a tutti i servizi attivi di una
-    sottocategoria (es. "Postazione Mani" a tutte le Mani). Chi l'aveva gia'
-    prende il tetto nuovo; gli altri servizi non si toccano."""
+@settings_bp.route('/api/risorse/<int:risorsa_id>/servizi', methods=['GET'])
+def api_risorsa_servizi(risorsa_id):
+    """Pulsante "Servizi" di una risorsa (sezione Gestione Risorse): stesso
+    elenco categorie › sottocategorie › servizi del pulsante Servizi di
+    Tools › Operatori, con il tetto di chi la usa (None = non la usa).
+
+    Le categorie non sono un dato salvato: una categoria e' attiva se almeno
+    un suo servizio usa la risorsa; se nessuno la usa ancora si mostrano tutte.
+    """
+    if not _risorse_tabelle_presenti():
+        return jsonify({'ok': False, 'errore': MSG_RISORSE_NON_ATTIVE}), 409
+    risorsa = db.session.get(Risorsa, risorsa_id)
+    if not risorsa or risorsa.is_deleted:
+        return jsonify({'ok': False, 'errore': 'Risorsa non trovata.'}), 404
+
+    # Solo i servizi che finiscono in agenda (stesso filtro di Tools › Operatori):
+    # prodotti, crediti e voci a durata zero non occupano postazioni.
+    servizi = (db.session.query(Service)
+               .options(joinedload(Service.servizio_sottocategoria))
+               .filter(Service.is_deleted == False,
+                       Service.is_visible_in_calendar == True)
+               .all())
+    tetti = {sr.service_id: sr.quantita
+             for sr in ServizioRisorsa.query.filter_by(risorsa_id=risorsa.id).all()}
+
+    elenco = []
+    for servizio in servizi:
+        nome = (servizio.servizio_nome or '').strip()
+        if nome.lower() in ('dummy', 'booking online'):
+            continue
+        elenco.append({
+            'id': servizio.id,
+            'nome': nome,
+            'categoria': getattr(servizio.servizio_categoria, 'value', servizio.servizio_categoria) or '',
+            'sottocategoria': servizio.servizio_sottocategoria.nome if servizio.servizio_sottocategoria else '',
+            'tetto': tetti.get(servizio.id),
+        })
+    elenco.sort(key=lambda x: (x['categoria'], (x['sottocategoria'] or '').lower(), x['nome'].lower()))
+
+    categorie_attive = sorted({x['categoria'] for x in elenco if x['tetto'] and x['categoria']})
+    if not categorie_attive:
+        categorie_attive = [c.value for c in ServiceCategory]
+
+    return jsonify({
+        'ok': True,
+        'risorsa': {'id': risorsa.id, 'nome': risorsa.nome, 'quantita': risorsa.quantita},
+        'categorie_disponibili': [c.value for c in ServiceCategory],
+        'categorie_attive': categorie_attive,
+        'servizi': elenco,
+    })
+
+
+@settings_bp.route('/api/risorse/<int:risorsa_id>/servizi', methods=['POST'])
+def api_risorsa_servizi_salva(risorsa_id):
+    """Salva il pulsante "Servizi" di UNA risorsa.
+    Payload: {servizi: {"12": 2, "15": null, ...}} -> tetto = la usa con quel
+    tetto, null/0 = non la usa. Tocca SOLO i servizi mandati e SOLO questa
+    risorsa: le altre risorse di quei servizi restano come sono."""
     if not _risorse_puo_modificare():
         return jsonify({'ok': False, 'errore': 'Permessi insufficienti'}), 403
     if not _risorse_tabelle_presenti():
@@ -988,83 +1042,50 @@ def api_risorse_associa_sottocategoria(risorsa_id):
     risorsa = db.session.get(Risorsa, risorsa_id)
     if not risorsa or risorsa.is_deleted:
         return jsonify({'ok': False, 'errore': 'Risorsa non trovata.'}), 404
-    data = request.get_json(silent=True) or {}
-    try:
-        sottocategoria_id = int(data.get('subcategory_id') or 0)
-    except (TypeError, ValueError):
-        sottocategoria_id = 0
-    quantita = _risorse_quantita(data.get('quantita'), risorsa.quantita)
-    if not sottocategoria_id or not quantita:
-        return jsonify({'ok': False, 'errore': f'Scegli la sottocategoria e un numero da 1 a {risorsa.quantita}.'}), 400
-    servizi = Service.query.filter(Service.servizio_sottocategoria_id == sottocategoria_id,
-                                   Service.is_deleted == False).all()
+    voci = (request.get_json(silent=True) or {}).get('servizi')
+    if not isinstance(voci, dict):
+        return jsonify({'ok': False, 'errore': 'Nessun servizio ricevuto.'}), 400
+
+    richiesti = {}
+    for chiave, valore in voci.items():
+        try:
+            richiesti[int(chiave)] = valore
+        except (TypeError, ValueError):
+            continue
+    validi = {s.id: s for s in Service.query.filter(Service.id.in_(list(richiesti) or [0]),
+                                                     Service.is_deleted == False).all()}
+    nuovi = {}
+    for sid, valore in richiesti.items():
+        if sid not in validi:
+            continue
+        if valore in (None, '', 0):
+            nuovi[sid] = None
+            continue
+        tetto = _risorse_quantita(valore, risorsa.quantita)
+        if not tetto:
+            return jsonify({'ok': False, 'errore': (
+                f'{validi[sid].servizio_nome}: il tetto va da 1 a {risorsa.quantita} '
+                f'(ci sono {risorsa.quantita} {risorsa.nome}).')}), 400
+        nuovi[sid] = tetto
     try:
         esistenti = {sr.service_id: sr for sr in ServizioRisorsa.query.filter(
             ServizioRisorsa.risorsa_id == risorsa.id,
-            ServizioRisorsa.service_id.in_([s.id for s in servizi] or [0])).all()}
-        for svc in servizi:
-            if svc.id in esistenti:
-                esistenti[svc.id].quantita = quantita
+            ServizioRisorsa.service_id.in_(list(nuovi) or [0])).all()}
+        for sid, tetto in nuovi.items():
+            sr = esistenti.get(sid)
+            if tetto is None:
+                if sr:
+                    db.session.delete(sr)
+            elif sr:
+                sr.quantita = tetto
             else:
-                db.session.add(ServizioRisorsa(service_id=svc.id, risorsa_id=risorsa.id, quantita=quantita))
+                db.session.add(ServizioRisorsa(service_id=sid, risorsa_id=risorsa.id, quantita=tetto))
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        app.logger.error("api_risorse_associa_sottocategoria %s: %s", risorsa_id, e)
+        app.logger.error("api_risorsa_servizi_salva %s: %s", risorsa_id, e)
         return jsonify({'ok': False, 'errore': 'Errore nel salvataggio.'}), 500
-    return jsonify({'ok': True, 'servizi': len(servizi)})
-
-
-@settings_bp.route('/api/servizi/<int:service_id>/risorse', methods=['GET'])
-def api_servizio_risorse(service_id):
-    if not _risorse_tabelle_presenti():
-        return jsonify({'attive': False, 'associazioni': []})
-    righe = (db.session.query(ServizioRisorsa, Risorsa)
-             .join(Risorsa, Risorsa.id == ServizioRisorsa.risorsa_id)
-             .filter(ServizioRisorsa.service_id == service_id, Risorsa.is_deleted == False)
-             .order_by(Risorsa.nome).all())
-    return jsonify({'attive': True, 'associazioni': [
-        {'risorsa_id': r.id, 'nome': r.nome, 'quantita_risorsa': r.quantita, 'quantita': sr.quantita}
-        for sr, r in righe]})
-
-
-@settings_bp.route('/api/servizi/<int:service_id>/risorse', methods=['POST'])
-def api_servizio_risorse_salva(service_id):
-    """Sostituisce le risorse del servizio: {risorse: [{risorsa_id, quantita}]}.
-    Lista vuota = il servizio torna senza vincoli."""
-    if not _risorse_puo_modificare():
-        return jsonify({'ok': False, 'errore': 'Permessi insufficienti'}), 403
-    if not _risorse_tabelle_presenti():
-        return jsonify({'ok': False, 'errore': MSG_RISORSE_NON_ATTIVE}), 409
-    servizio = db.session.get(Service, service_id)
-    if not servizio or servizio.is_deleted:
-        return jsonify({'ok': False, 'errore': 'Servizio non trovato.'}), 404
-    data = request.get_json(silent=True) or {}
-    voci = {}
-    for voce in (data.get('risorse') or []):
-        if not isinstance(voce, dict):
-            continue
-        try:
-            rid = int(voce.get('risorsa_id') or 0)
-        except (TypeError, ValueError):
-            continue
-        risorsa = db.session.get(Risorsa, rid) if rid else None
-        if not risorsa or risorsa.is_deleted:
-            continue
-        quantita = _risorse_quantita(voce.get('quantita'), risorsa.quantita)
-        if not quantita:
-            return jsonify({'ok': False, 'errore': f'{risorsa.nome}: scegli un numero da 1 a {risorsa.quantita}.'}), 400
-        voci[rid] = quantita
-    try:
-        ServizioRisorsa.query.filter_by(service_id=servizio.id).delete(synchronize_session=False)
-        for rid, quantita in voci.items():
-            db.session.add(ServizioRisorsa(service_id=servizio.id, risorsa_id=rid, quantita=quantita))
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error("api_servizio_risorse_salva %s: %s", service_id, e)
-        return jsonify({'ok': False, 'errore': 'Errore nel salvataggio.'}), 500
-    return jsonify({'ok': True})
+    return jsonify({'ok': True, 'servizi': sum(1 for t in nuovi.values() if t)})
 
 @settings_bp.route('/api/subcategories/<string:category>', methods=['GET'])
 def get_subcategories(category):
