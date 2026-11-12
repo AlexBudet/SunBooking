@@ -17,7 +17,7 @@ import threading as _threading
 import time as _time
 from sqlalchemy.sql import func, or_
 from .. import db
-from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession, PrepagataRicaricaRegola, service_operator, UsageEvent
+from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pacchetto, Receipt, Service, Client, BusinessInfo, ServiceCategory, Subcategory, WeekDay, User, RuoloUtente, PromoPacchetto, MarketingTemplate, MarketingInvio, OWNER, SolariumDevice, SolariumSession, PrepagataRicaricaRegola, service_operator, UsageEvent, Risorsa, ServizioRisorsa
 from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
 from .calendar import _compute_client_loyalty, LOYALTY_DEFAULT
 from ..formati import nome_proprio, nome_servizio
@@ -807,13 +807,264 @@ def services():
     subcategories = Subcategory.query.filter_by(is_deleted=False).all()
     user_id = session.get('user_id')
     current_user = db.session.get(User, user_id) if user_id else None
+    risorse_attive, risorse, risorse_per_servizio, servizi_per_risorsa = _risorse_per_pagina_servizi()
     return render_template(
         'services.html',
         services=services,
         subcategories=subcategories,
         current_user=current_user,
-        invio_id=invio_unico.nuovo_id()
+        invio_id=invio_unico.nuovo_id(),
+        risorse_attive=risorse_attive,
+        risorse=risorse,
+        risorse_per_servizio=risorse_per_servizio,
+        servizi_per_risorsa=servizi_per_risorsa,
     )
+
+
+# ===================== RISORSE =====================
+# Postazioni, cabine, macchinari condivisi fra piu' servizi (regole in
+# appl/services/risorse.py). Qui solo la configurazione: elenco delle risorse
+# con la loro quantita' e, per ogni servizio, quali usa e con che tetto.
+# Finche' lo script migrations/manual_risorse.sql non e' stato eseguito le
+# tabelle non esistono: la pagina Servizi non mostra niente delle risorse e le
+# rotte rispondono con un messaggio, senza errori.
+
+MSG_RISORSE_NON_ATTIVE = ("Le risorse non sono ancora attive su questo negozio: "
+                          "va eseguito lo script del database.")
+
+
+def _risorse_tabelle_presenti():
+    try:
+        from sqlalchemy import inspect as _sa_inspect
+        ispettore = _sa_inspect(db.session.connection())
+        return ispettore.has_table('risorse') and ispettore.has_table('servizio_risorse')
+    except Exception:
+        db.session.rollback()
+        return False
+
+
+def _risorse_per_pagina_servizi():
+    """Per services.html: (attive, [{id, nome, quantita}],
+    {service_id: [(nome risorsa, tetto)]}, {risorsa_id: [nome servizio]})."""
+    if not _risorse_tabelle_presenti():
+        return False, [], {}, {}
+    try:
+        risorse = [{'id': r.id, 'nome': r.nome, 'quantita': r.quantita}
+                   for r in Risorsa.query.filter_by(is_deleted=False).order_by(Risorsa.nome).all()]
+        per_servizio = {}
+        servizi_per_risorsa = {}
+        for sr, svc in (db.session.query(ServizioRisorsa, Service)
+                        .join(Risorsa, Risorsa.id == ServizioRisorsa.risorsa_id)
+                        .join(Service, Service.id == ServizioRisorsa.service_id)
+                        .filter(Risorsa.is_deleted == False, Service.is_deleted == False)
+                        .order_by(Risorsa.nome, Service.servizio_nome).all()):
+            per_servizio.setdefault(sr.service_id, []).append((sr.risorsa.nome, sr.quantita))
+            servizi_per_risorsa.setdefault(sr.risorsa_id, []).append(svc.servizio_nome)
+        return True, risorse, per_servizio, servizi_per_risorsa
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("risorse per pagina servizi: %s", e)
+        return False, [], {}, {}
+
+
+def _risorse_puo_modificare():
+    user_id = session.get('user_id')
+    utente = db.session.get(User, user_id) if user_id else None
+    return bool(utente) and utente.ruolo.value != 'user'
+
+
+def _risorse_quantita(valore, massimo=None):
+    """Intero >= 1 (e <= massimo se dato) oppure None."""
+    try:
+        n = int(valore)
+    except (TypeError, ValueError):
+        return None
+    if n < 1 or (massimo is not None and n > massimo):
+        return None
+    return n
+
+
+@settings_bp.route('/api/risorse', methods=['GET'])
+def api_risorse_elenco():
+    if not _risorse_tabelle_presenti():
+        return jsonify({'attive': False, 'risorse': []})
+    risorse = Risorsa.query.filter_by(is_deleted=False).order_by(Risorsa.nome).all()
+    servizi_per_risorsa = {}
+    for sr, svc in (db.session.query(ServizioRisorsa, Service)
+                    .join(Service, Service.id == ServizioRisorsa.service_id)
+                    .filter(Service.is_deleted == False).order_by(Service.servizio_nome).all()):
+        servizi_per_risorsa.setdefault(sr.risorsa_id, []).append(
+            {'id': svc.id, 'nome': svc.servizio_nome, 'quantita': sr.quantita})
+    return jsonify({'attive': True, 'risorse': [
+        {'id': r.id, 'nome': r.nome, 'quantita': r.quantita,
+         'servizi': servizi_per_risorsa.get(r.id, [])} for r in risorse]})
+
+
+@settings_bp.route('/api/risorse', methods=['POST'])
+def api_risorse_crea():
+    if not _risorse_puo_modificare():
+        return jsonify({'ok': False, 'errore': 'Permessi insufficienti'}), 403
+    if not _risorse_tabelle_presenti():
+        return jsonify({'ok': False, 'errore': MSG_RISORSE_NON_ATTIVE}), 409
+    data = request.get_json(silent=True) or {}
+    nome = ' '.join(str(data.get('nome') or '').split())[:60]
+    quantita = _risorse_quantita(data.get('quantita'))
+    if not nome or not quantita:
+        return jsonify({'ok': False, 'errore': 'Scrivi il nome e quante ne avete (almeno 1).'}), 400
+    gia = (Risorsa.query.filter(Risorsa.is_deleted == False,
+                                func.lower(Risorsa.nome) == nome.lower()).first())
+    if gia:
+        return jsonify({'ok': False, 'errore': f'Esiste già la risorsa "{gia.nome}".'}), 409
+    try:
+        db.session.add(Risorsa(nome=nome, quantita=quantita))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("api_risorse_crea: %s", e)
+        return jsonify({'ok': False, 'errore': 'Errore nel salvataggio.'}), 500
+    return jsonify({'ok': True})
+
+
+@settings_bp.route('/api/risorse/<int:risorsa_id>', methods=['POST'])
+def api_risorse_modifica(risorsa_id):
+    if not _risorse_puo_modificare():
+        return jsonify({'ok': False, 'errore': 'Permessi insufficienti'}), 403
+    if not _risorse_tabelle_presenti():
+        return jsonify({'ok': False, 'errore': MSG_RISORSE_NON_ATTIVE}), 409
+    risorsa = db.session.get(Risorsa, risorsa_id)
+    if not risorsa or risorsa.is_deleted:
+        return jsonify({'ok': False, 'errore': 'Risorsa non trovata.'}), 404
+    data = request.get_json(silent=True) or {}
+    nome = ' '.join(str(data.get('nome') or risorsa.nome).split())[:60]
+    quantita = _risorse_quantita(data.get('quantita', risorsa.quantita))
+    if not nome or not quantita:
+        return jsonify({'ok': False, 'errore': 'Scrivi il nome e quante ne avete (almeno 1).'}), 400
+    try:
+        risorsa.nome = nome
+        risorsa.quantita = quantita
+        # Un servizio non puo' avere un tetto piu' alto delle risorse che esistono.
+        ServizioRisorsa.query.filter(ServizioRisorsa.risorsa_id == risorsa.id,
+                                     ServizioRisorsa.quantita > quantita) \
+            .update({ServizioRisorsa.quantita: quantita}, synchronize_session=False)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("api_risorse_modifica %s: %s", risorsa_id, e)
+        return jsonify({'ok': False, 'errore': 'Errore nel salvataggio.'}), 500
+    return jsonify({'ok': True})
+
+
+@settings_bp.route('/api/risorse/<int:risorsa_id>/elimina', methods=['POST'])
+def api_risorse_elimina(risorsa_id):
+    """Eliminazione logica della risorsa e via le sue associazioni: i servizi
+    che la usavano tornano senza vincolo."""
+    if not _risorse_puo_modificare():
+        return jsonify({'ok': False, 'errore': 'Permessi insufficienti'}), 403
+    if not _risorse_tabelle_presenti():
+        return jsonify({'ok': False, 'errore': MSG_RISORSE_NON_ATTIVE}), 409
+    risorsa = db.session.get(Risorsa, risorsa_id)
+    if not risorsa or risorsa.is_deleted:
+        return jsonify({'ok': False, 'errore': 'Risorsa non trovata.'}), 404
+    try:
+        ServizioRisorsa.query.filter_by(risorsa_id=risorsa.id).delete(synchronize_session=False)
+        risorsa.is_deleted = True
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("api_risorse_elimina %s: %s", risorsa_id, e)
+        return jsonify({'ok': False, 'errore': 'Errore nel salvataggio.'}), 500
+    return jsonify({'ok': True})
+
+
+@settings_bp.route('/api/risorse/<int:risorsa_id>/associa-sottocategoria', methods=['POST'])
+def api_risorse_associa_sottocategoria(risorsa_id):
+    """Associa la risorsa, con lo stesso tetto, a tutti i servizi attivi di una
+    sottocategoria (es. "Postazione Mani" a tutte le Mani). Chi l'aveva gia'
+    prende il tetto nuovo; gli altri servizi non si toccano."""
+    if not _risorse_puo_modificare():
+        return jsonify({'ok': False, 'errore': 'Permessi insufficienti'}), 403
+    if not _risorse_tabelle_presenti():
+        return jsonify({'ok': False, 'errore': MSG_RISORSE_NON_ATTIVE}), 409
+    risorsa = db.session.get(Risorsa, risorsa_id)
+    if not risorsa or risorsa.is_deleted:
+        return jsonify({'ok': False, 'errore': 'Risorsa non trovata.'}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        sottocategoria_id = int(data.get('subcategory_id') or 0)
+    except (TypeError, ValueError):
+        sottocategoria_id = 0
+    quantita = _risorse_quantita(data.get('quantita'), risorsa.quantita)
+    if not sottocategoria_id or not quantita:
+        return jsonify({'ok': False, 'errore': f'Scegli la sottocategoria e un numero da 1 a {risorsa.quantita}.'}), 400
+    servizi = Service.query.filter(Service.servizio_sottocategoria_id == sottocategoria_id,
+                                   Service.is_deleted == False).all()
+    try:
+        esistenti = {sr.service_id: sr for sr in ServizioRisorsa.query.filter(
+            ServizioRisorsa.risorsa_id == risorsa.id,
+            ServizioRisorsa.service_id.in_([s.id for s in servizi] or [0])).all()}
+        for svc in servizi:
+            if svc.id in esistenti:
+                esistenti[svc.id].quantita = quantita
+            else:
+                db.session.add(ServizioRisorsa(service_id=svc.id, risorsa_id=risorsa.id, quantita=quantita))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("api_risorse_associa_sottocategoria %s: %s", risorsa_id, e)
+        return jsonify({'ok': False, 'errore': 'Errore nel salvataggio.'}), 500
+    return jsonify({'ok': True, 'servizi': len(servizi)})
+
+
+@settings_bp.route('/api/servizi/<int:service_id>/risorse', methods=['GET'])
+def api_servizio_risorse(service_id):
+    if not _risorse_tabelle_presenti():
+        return jsonify({'attive': False, 'associazioni': []})
+    righe = (db.session.query(ServizioRisorsa, Risorsa)
+             .join(Risorsa, Risorsa.id == ServizioRisorsa.risorsa_id)
+             .filter(ServizioRisorsa.service_id == service_id, Risorsa.is_deleted == False)
+             .order_by(Risorsa.nome).all())
+    return jsonify({'attive': True, 'associazioni': [
+        {'risorsa_id': r.id, 'nome': r.nome, 'quantita_risorsa': r.quantita, 'quantita': sr.quantita}
+        for sr, r in righe]})
+
+
+@settings_bp.route('/api/servizi/<int:service_id>/risorse', methods=['POST'])
+def api_servizio_risorse_salva(service_id):
+    """Sostituisce le risorse del servizio: {risorse: [{risorsa_id, quantita}]}.
+    Lista vuota = il servizio torna senza vincoli."""
+    if not _risorse_puo_modificare():
+        return jsonify({'ok': False, 'errore': 'Permessi insufficienti'}), 403
+    if not _risorse_tabelle_presenti():
+        return jsonify({'ok': False, 'errore': MSG_RISORSE_NON_ATTIVE}), 409
+    servizio = db.session.get(Service, service_id)
+    if not servizio or servizio.is_deleted:
+        return jsonify({'ok': False, 'errore': 'Servizio non trovato.'}), 404
+    data = request.get_json(silent=True) or {}
+    voci = {}
+    for voce in (data.get('risorse') or []):
+        if not isinstance(voce, dict):
+            continue
+        try:
+            rid = int(voce.get('risorsa_id') or 0)
+        except (TypeError, ValueError):
+            continue
+        risorsa = db.session.get(Risorsa, rid) if rid else None
+        if not risorsa or risorsa.is_deleted:
+            continue
+        quantita = _risorse_quantita(voce.get('quantita'), risorsa.quantita)
+        if not quantita:
+            return jsonify({'ok': False, 'errore': f'{risorsa.nome}: scegli un numero da 1 a {risorsa.quantita}.'}), 400
+        voci[rid] = quantita
+    try:
+        ServizioRisorsa.query.filter_by(service_id=servizio.id).delete(synchronize_session=False)
+        for rid, quantita in voci.items():
+            db.session.add(ServizioRisorsa(service_id=servizio.id, risorsa_id=rid, quantita=quantita))
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("api_servizio_risorse_salva %s: %s", service_id, e)
+        return jsonify({'ok': False, 'errore': 'Errore nel salvataggio.'}), 500
+    return jsonify({'ok': True})
 
 @settings_bp.route('/api/subcategories/<string:category>', methods=['GET'])
 def get_subcategories(category):

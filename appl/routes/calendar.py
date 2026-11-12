@@ -9,6 +9,7 @@ from decimal import Decimal
 from ..models import OperatorShift, PacchettoSeduta, db, Appointment, AppointmentStatus, AppointmentSource, Operator, Client, Service, BusinessInfo, Pacchetto, PacchettoTipo, PacchettoStatus, Receipt, SolariumSession, service_operator
 from appl import app
 from appl.services.error_log import log_crm_error
+from appl.services import risorse as risorse_mod
 from appl.formati import nome_proprio
 import random
 import json
@@ -3739,6 +3740,103 @@ def servizi_colonna(operator_id):
     return jsonify({'abilitati': abilitati, 'non_abilitati': sorted(non_abilitati)})
 
 
+@calendar_bp.route('/api/check-risorse', methods=['POST'])
+def check_risorse():
+    """RISORSE in Agenda (regole in appl/services/risorse.py): i blocchi che si
+    stanno piazzando trovano posto nelle postazioni, cabine e macchinari che
+    usano? Qui non si blocca niente: la pagina mostra un avviso con "Procedi
+    comunque", come per le abilitazioni. Online invece lo slot non compare.
+
+    Payload: {date: 'YYYY-MM-DD',
+              blocchi: [{service_id, start_time: 'HH:MM', duration}],
+              ignora_appointment_ids: [...]}   (quelli che si stanno spostando)
+    Risposta: {ok, conflitti: [{servizio, risorsa, tipo, limite, orario,
+               messaggio, occupanti: [{orario, servizio, cliente, operatore}]}]}
+    Senza risorse configurate (o senza tabelle) risponde sempre ok.
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+
+    data = request.get_json(silent=True) or {}
+    config = risorse_mod.carica_config(db.session)
+    if not config:
+        return jsonify({'ok': True, 'conflitti': []})
+    try:
+        giorno = datetime.strptime((data.get('date') or '').strip(), '%Y-%m-%d').date()
+    except (TypeError, ValueError):
+        return jsonify({'ok': True, 'conflitti': []})
+
+    blocchi = []
+    for blk in (data.get('blocchi') or []):
+        if not isinstance(blk, dict):
+            continue
+        try:
+            sid = int(blk.get('service_id') or 0)
+            durata = int(blk.get('duration') or 0)
+            ora = datetime.strptime((blk.get('start_time') or '').strip(), '%H:%M').time()
+        except (TypeError, ValueError):
+            continue
+        if not sid or durata <= 0:
+            continue
+        ini = datetime.combine(giorno, ora)
+        blocchi.append({'service_id': sid, 'inizio': ini, 'fine': ini + timedelta(minutes=durata)})
+    if not any(b['service_id'] in config['per_servizio'] for b in blocchi):
+        return jsonify({'ok': True, 'conflitti': []})
+
+    appts = (Appointment.query
+             .filter(Appointment.start_time >= datetime.combine(giorno, time.min),
+                     Appointment.start_time < datetime.combine(giorno + timedelta(days=1), time.min),
+                     Appointment.is_cancelled_by_client == False)
+             .options(selectinload(Appointment.client), selectinload(Appointment.operator),
+                      selectinload(Appointment.service))
+             .all())
+    occupati = risorse_mod.occupati_del_giorno(appts, data.get('ignora_appointment_ids') or [])
+    trovati = risorse_mod.conflitti(config, blocchi, occupati)
+    if not trovati:
+        return jsonify({'ok': True, 'conflitti': []})
+
+    nomi_servizi = {s.id: (s.servizio_nome or '') for s in
+                    Service.query.filter(Service.id.in_({c['service_id'] for c in trovati})).all()}
+
+    def _hhmm(dt):
+        return dt.strftime('%H:%M')
+
+    def _cliente(appt):
+        c = appt.client
+        if not c:
+            return ''
+        nome, cognome = (c.cliente_nome or '').strip(), (c.cliente_cognome or '').strip()
+        if (nome.lower(), cognome.lower()) in (('dummy', 'dummy'), ('cliente', 'booking')):
+            return 'prenotazione online' if nome.lower() == 'cliente' else ''
+        return ' '.join(x for x in (nome_proprio(nome), nome_proprio(cognome)) if x)
+
+    risposta = []
+    for c in trovati:
+        blk = blocchi[c['indice']]
+        orario = f"{_hhmm(blk['inizio'])}–{_hhmm(blk['fine'])}"
+        servizio = nomi_servizi.get(c['service_id'], 'Servizio')
+        if c['tipo'] == 'totale':
+            messaggio = (f"{c['risorsa']}: dalle {_hhmm(blk['inizio'])} alle {_hhmm(blk['fine'])} "
+                         f"sono già tutte occupate ({c['limite']} su {c['limite']}).")
+        else:
+            messaggio = (f"{servizio}: al massimo {c['limite']} alla volta ({c['risorsa']}), "
+                         f"dalle {_hhmm(blk['inizio'])} alle {_hhmm(blk['fine'])} ce ne sono già {c['limite']}.")
+        occupanti = []
+        for o in sorted(c['occupanti'], key=lambda x: x['inizio']):
+            a = o['appt']
+            occupanti.append({
+                'orario': f"{_hhmm(o['inizio'])}–{_hhmm(o['fine'])}",
+                'servizio': (a.service.servizio_nome if a.service else '') or '',
+                'cliente': _cliente(a),
+                # in Agenda delle operatrici si mostra solo il nome
+                'operatore': ((a.operator.user_nome if a.operator else '') or '').strip(),
+            })
+        risposta.append({'servizio': servizio, 'risorsa': c['risorsa'], 'tipo': c['tipo'],
+                         'limite': c['limite'], 'orario': orario, 'messaggio': messaggio,
+                         'occupanti': occupanti})
+    return jsonify({'ok': False, 'conflitti': risposta})
+
+
 @calendar_bp.route('/api/check-abilitazioni', methods=['POST'])
 def check_abilitazioni():
     """Dice se l'operatore della colonna puo' eseguire i servizi che si stanno piazzando.
@@ -4702,6 +4800,11 @@ def api_find_availability():
     SLOT_STEP = 15  # minuti
     now_dt = datetime.now()  # naive, per confronto con slot odierni
 
+    # RISORSE (appl/services/risorse.py): niente orari proposti dove una
+    # postazione/cabina/macchinario dei servizi cercati e' gia' tutta occupata.
+    config_risorse = risorse_mod.carica_config(db.session)
+    durate_servizi = [(svc['id'], svc['duration']) for svc in services_list]
+
     for d in dates_to_search:
         if d.isoweekday() in biz_closed_weekdays:
             continue
@@ -4736,6 +4839,8 @@ def api_find_availability():
         for a in all_appts_today:
             if a.operator_id in candidate_ids_set:
                 appts_by_op.setdefault(a.operator_id, []).append(a)
+        occupati_risorse = (risorse_mod.occupati_del_giorno(all_appts_today)
+                            if config_risorse else [])
 
         # Union dei turni per orari "range generale" (apertura/chiusura combinata)
         iso_wd = d.isoweekday()
@@ -4782,6 +4887,17 @@ def api_find_availability():
                 chain = _find_chain(slot_start_dt, shifts_by_op, appts_by_op)
                 if not chain:
                     continue
+                if config_risorse:
+                    try:
+                        risorsa_piena = bool(risorse_mod.conflitti(
+                            config_risorse,
+                            risorse_mod.blocchi_consecutivi(d, slot_start_dt.time(), durate_servizi),
+                            occupati_risorse))
+                    except Exception:
+                        app.logger.exception("[find-availability] controllo risorse non riuscito")
+                        risorsa_piena = False
+                    if risorsa_piena:
+                        continue
 
                 # Deduplica: uno slot con stessa data+ora può emergere da più
                 # bande orarie sovrapposte — va mostrato UNA volta sola.

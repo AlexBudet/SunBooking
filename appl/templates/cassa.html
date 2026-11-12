@@ -266,7 +266,7 @@
     <div class="spinner-border text-primary" role="status" aria-label="Attendere..."></div>
     <p style="margin-top:15px; font-size:16px; font-weight:500; color:#333;">
       Stampa in corso...<br>
-      <small style="color:#666;">Se la stampante è in attesa (es. cambio carta), risolvere e attendere</small>
+      <small style="color:#666;">Aspetto la conferma della stampante: se entro pochi secondi non arriva, ti dico cosa fare. Non ricaricare la pagina.</small>
     </p>
   </div>
 </div>
@@ -1188,7 +1188,9 @@ document.addEventListener('DOMContentLoaded', function() {
 </style>
 
 <script>
-/* Spinner RCH: mostra dopo 5s se /cassa/send-to-rch non ha ancora risposto.
+/* Spinner RCH: mostra dopo 2,5 s se /cassa/send-to-rch non ha ancora risposto
+   (uno scontrino normale e' gia' confermato; il server risponde comunque
+   entro ~10 s, vedi RCH_*_S in cassa.py).
    Rimane visibile finché non arriva una risposta non-pending, oppure finché
    non si apre il popup di pending (showPendingModal). */
 (function() {
@@ -1216,7 +1218,7 @@ document.addEventListener('DOMContentLoaded', function() {
       return origFetch.apply(this, arguments);
     }
 
-    let timer = setTimeout(() => { showRchSpinner(); }, 5000);
+    let timer = setTimeout(() => { showRchSpinner(); }, 2500);
 
     return origFetch.apply(this, arguments)
       .then(async (resp) => {

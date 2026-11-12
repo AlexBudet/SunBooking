@@ -239,6 +239,43 @@ class Service(db.Model):
             db.session.commit()
         return dummy
 
+
+class Risorsa(db.Model):
+    """Risorsa fisica condivisa fra piu' servizi: postazione, cabina, macchinario.
+    quantita = quante ce ne sono in negozio (es. "Postazione Mani" 4): fra TUTTI
+    i servizi che la usano non ci possono essere piu' appuntamenti contemporanei
+    di cosi'. Regole complete in appl/services/risorse.py.
+    Tabella creata a mano (migrations/manual_risorse.sql); lo stesso modello e'
+    nel repo booking: le due definizioni devono restare uguali."""
+    __tablename__ = 'risorse'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    nome = db.Column(db.String(60), nullable=False)
+    quantita = db.Column(db.Integer, nullable=False, default=1, server_default='1')
+    is_deleted = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    __table_args__ = (db.CheckConstraint('quantita >= 1', name='ck_risorse_quantita'),)
+
+    def __repr__(self):
+        return f"<Risorsa {self.nome} x{self.quantita}>"
+
+
+class ServizioRisorsa(db.Model):
+    """Il servizio usa la risorsa: ogni suo appuntamento ne occupa UNA unita'.
+    quantita = tetto del servizio, cioe' quanti appuntamenti DI QUESTO SERVIZIO
+    al massimo nello stesso momento (es. "Manicure" 2 su 4 postazioni).
+    Nessuna riga per un servizio = nessun vincolo, come prima delle risorse."""
+    __tablename__ = 'servizio_risorse'
+    service_id = db.Column(db.Integer, db.ForeignKey('servizi.id', ondelete='CASCADE'), primary_key=True)
+    risorsa_id = db.Column(db.Integer, db.ForeignKey('risorse.id', ondelete='CASCADE'), primary_key=True,
+                           index=True)
+    quantita = db.Column(db.Integer, nullable=False, default=1, server_default='1')
+    __table_args__ = (db.CheckConstraint('quantita >= 1', name='ck_servizio_risorse_quantita'),)
+
+    risorsa = db.relationship('Risorsa')
+
+    def __repr__(self):
+        return f"<ServizioRisorsa servizio={self.service_id} risorsa={self.risorsa_id} x{self.quantita}>"
+
+
 class Appointment(db.Model):
     __tablename__ = 'appuntamenti'
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)

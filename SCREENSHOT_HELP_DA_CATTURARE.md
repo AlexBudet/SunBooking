@@ -82,6 +82,17 @@ mostrano nome, cognome, cellulare **ed e-mail** di chi ha prenotato.
 
 ---
 
+## 1-ter. Risorse (postazioni, cabine, macchinari) — novembre 2026
+
+| File | Topic | Dove si cattura | Cosa inquadrare |
+|---|---|---|---|
+| `Servizi_Risorse.png` (**già cablata**: compare da sola appena c'è il file) | `service_risorse` | Tools → Servizi → **Gestione Risorse** aperta | la tabella delle risorse (nome, quante, servizi che la usano) e, sopra, qualche riga della tabella servizi con la colonna **Risorse** e i badge |
+| `Agenda_RisorsaOccupata.png` (da cablare nel topic) | `service_risorse` | Agenda → metti un servizio Mani quando le postazioni sono già tutte occupate a quell'ora | la sola finestra **Risorsa occupata** con il messaggio, l'elenco degli appuntamenti e i pulsanti *Procedi comunque* / *Annulla* |
+
+Nomi neutri: la finestra elenca cliente e operatrice degli appuntamenti che occupano la risorsa.
+
+---
+
 ## 2. Le altre 49, in ordine di resa
 
 Una passata per pagina: apri la pagina una volta e ritaglia tutti i pannelli che ti servono.

@@ -96,6 +96,7 @@
 <th class="text-center">Durata (min) <span class="sort-icons">▲<br>▼</span></th>
 <th class="text-center">Prezzo (€) <span class="sort-icons">▲<br>▼</span></th>
 <th class="text-center" data-sort="check">Promo <span class="sort-icons">▲<br>▼</span></th>
+{% if risorse_attive %}<th>Risorse <span class="sort-icons">▲<br>▼</span></th>{% endif %}
 <th class="text-center">Azioni</th>
         </tr>
     </thead>
@@ -114,6 +115,19 @@
                      {% if service.is_promo %}checked{% endif %}
                      {% if current_user.ruolo.value == 'user' %}onclick="event.preventDefault(); showNoRightsPopup();"{% endif %}>
             </td>
+{% if risorse_attive %}
+<td class="risorse-cella">
+  {% for nome_risorsa, tetto in risorse_per_servizio.get(service.id, []) %}
+    <span class="badge bg-info text-dark me-1">{{ nome_risorsa }} &times;{{ tetto }}</span>
+  {% else %}
+    <span class="text-muted">&mdash;</span>
+  {% endfor %}
+  {% if current_user.ruolo.value != 'user' and risorse %}
+    <button type="button" class="btn btn-sm btn-outline-secondary ms-1 btn-risorse-servizio"
+            data-service-id="{{ service.id }}" data-service-name="{{ service.servizio_nome }}">Imposta</button>
+  {% endif %}
+</td>
+{% endif %}
 <td class="text-center">
   {% if current_user.ruolo.value == 'user' %}
     <button type="button"
@@ -200,7 +214,71 @@
     <br><br><br>
 </div>
 
-  
+{% if risorse_attive %}
+<!-- Sezione gestione RISORSE: postazioni, cabine, macchinari condivisi fra piu'
+     servizi. Regole in appl/services/risorse.py. -->
+<button class="btn btn-secondary mb-3 ms-2" type="button" onclick="(function(s){s.classList.toggle('hidden');s.classList.toggle('visible');})(document.getElementById('risorseSection'))">Gestione Risorse</button>
+<div id="risorseSection" class="hidden">
+    <p class="text-muted mb-2" style="max-width:900px">
+      Una <b>risorsa</b> è una postazione, una cabina o un macchinario che più servizi usano insieme
+      (es. <i>Postazione Mani</i>: ne avete 4). Associala ai servizi con il loro <b>tetto</b>
+      (es. Manicure 2, Semipermanente mani 3): in Agenda e nelle prenotazioni online non ci saranno
+      mai più appuntamenti contemporanei delle postazioni che avete, né più di quelli permessi a ogni servizio.
+      I servizi senza risorse funzionano come sempre.
+    </p>
+    {% if current_user.ruolo.value != 'user' %}
+    <div class="row align-items-center mb-3" id="risorsaNuovaForm">
+        <div class="col-auto">
+            <input type="text" class="form-control" id="risorsaNuovaNome" placeholder="Nome risorsa (es. Postazione Mani)" maxlength="60">
+        </div>
+        <div class="col-auto">
+            <input type="number" class="form-control" id="risorsaNuovaQuantita" placeholder="Quante" min="1" max="99" style="width:110px">
+        </div>
+        <div class="col-auto">
+            <button type="button" class="btn btn-primary" id="risorsaNuovaBtn">Aggiungi Risorsa</button>
+        </div>
+    </div>
+    {% endif %}
+    <table class="table" id="risorseTable">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th class="text-center">Quante</th>
+                <th>Servizi che la usano</th>
+                <th>Azioni</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in risorse %}
+            <tr>
+                <td>{{ r.nome }}</td>
+                <td class="text-center">{{ r.quantita }}</td>
+                <td>
+                  {% set nomi = servizi_per_risorsa.get(r.id, []) %}
+                  {% if nomi %}<span class="text-muted">{{ nomi|length }}:</span> {{ nomi|join(', ') }}{% else %}<span class="text-muted">nessuno</span>{% endif %}
+                </td>
+                <td>
+                  {% if current_user.ruolo.value == 'user' %}
+                    <button type="button" class="btn btn-sm btn-primary" onclick="showNoRightsPopup()">Modifica</button>
+                  {% else %}
+                    <button type="button" class="btn btn-sm btn-primary btn-risorsa-modifica"
+                            data-id="{{ r.id }}" data-nome="{{ r.nome }}" data-quantita="{{ r.quantita }}">Modifica</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary btn-risorsa-sottocat"
+                            data-id="{{ r.id }}" data-nome="{{ r.nome }}" data-quantita="{{ r.quantita }}">Associa a una sottocategoria</button>
+                    <button type="button" class="btn btn-sm btn-danger btn-risorsa-elimina"
+                            data-id="{{ r.id }}" data-nome="{{ r.nome }}">Elimina</button>
+                  {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="text-muted">Nessuna risorsa: aggiungi la prima qui sopra.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <br><br><br>
+</div>
+{% endif %}
+
 <!-- Sezione download listino prezzi -->
 <div class="mt-4 mb-4" style="width: 33%;">
     <h4>Scarica Listino Prezzi</h4>
@@ -1373,4 +1451,238 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
+
+{% if risorse_attive and current_user.ruolo.value != 'user' %}
+<!-- RISORSE: finestre di Tools › Servizi -->
+<div class="modal fade" id="RisorseServizioModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Risorse di <span id="risorseServizioNome"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-2">Per ogni risorsa scegli il <b>tetto</b>: quanti appuntamenti di questo
+          servizio possono esserci nello stesso momento. Il totale della risorsa vale comunque per tutti i servizi che la usano.</p>
+        <div id="risorseServizioRighe"></div>
+        <button type="button" class="btn btn-sm btn-outline-primary mt-1" id="risorseServizioAggiungi">+ Aggiungi risorsa</button>
+        <div class="text-danger small mt-2" id="risorseServizioErrore"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" id="risorseServizioSalva">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="RisorsaModificaModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Modifica risorsa</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" for="risorsaModificaNome">Nome</label>
+        <input type="text" class="form-control mb-2" id="risorsaModificaNome" maxlength="60">
+        <label class="form-label" for="risorsaModificaQuantita">Quante ne avete</label>
+        <input type="number" class="form-control" id="risorsaModificaQuantita" min="1" max="99" style="width:120px">
+        <p class="text-muted small mt-2 mb-0">Se abbassi il numero, i servizi con un tetto più alto scendono al nuovo numero.</p>
+        <div class="text-danger small mt-2" id="risorsaModificaErrore"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" id="risorsaModificaSalva">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="RisorsaSottocatModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Associa <span id="risorsaSottocatNome"></span> a una sottocategoria</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" for="risorsaSottocatSelect">Sottocategoria</label>
+        <select class="form-select mb-2" id="risorsaSottocatSelect">
+          <option value="" selected disabled>Scegli...</option>
+          {% for subcategory in subcategories %}
+            <option value="{{ subcategory.id }}">{{ subcategory.nome }} ({{ subcategory.categoria.value }})</option>
+          {% endfor %}
+        </select>
+        <label class="form-label" for="risorsaSottocatQuantita">Tetto per ogni servizio</label>
+        <input type="number" class="form-control" id="risorsaSottocatQuantita" min="1" style="width:120px">
+        <p class="text-muted small mt-2 mb-0">Tutti i servizi di quella sottocategoria useranno questa risorsa con lo
+          stesso tetto; poi puoi cambiarlo servizio per servizio con <b>Imposta</b>.</p>
+        <div class="text-danger small mt-2" id="risorsaSottocatErrore"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" id="risorsaSottocatSalva">Associa</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// RISORSE in Tools › Servizi: elenco, modifica, associazione ai servizi.
+// Dopo ogni salvataggio si ricarica la pagina: e' una pagina di configurazione
+// e la tabella dei servizi si rigenera dal server, gia' aggiornata.
+document.addEventListener('DOMContentLoaded', function () {
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  const csrf = meta ? meta.getAttribute('content') : "{{ csrf_token() }}";
+  const RISORSE = {{ risorse|tojson }};
+  const URL = {
+    crea: "{{ url_for('settings.api_risorse_crea') }}",
+    modifica: "{{ url_for('settings.api_risorse_modifica', risorsa_id=999999) }}",
+    elimina: "{{ url_for('settings.api_risorse_elimina', risorsa_id=999999) }}",
+    sottocat: "{{ url_for('settings.api_risorse_associa_sottocategoria', risorsa_id=999999) }}",
+    servizio: "{{ url_for('settings.api_servizio_risorse', service_id=999999) }}"
+  };
+
+  function invia(url, corpo) {
+    return fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+      body: JSON.stringify(corpo || {})
+    }).then(r => r.json().catch(() => ({})).then(j => {
+      if (!r.ok || !j.ok) throw new Error(j.errore || 'Errore nel salvataggio');
+      return j;
+    }));
+  }
+  function modale(id) {
+    const el = document.getElementById(id);
+    return bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el);
+  }
+
+  // --- nuova risorsa ---
+  const btnNuova = document.getElementById('risorsaNuovaBtn');
+  if (btnNuova) {
+    btnNuova.addEventListener('click', function () {
+      const nome = document.getElementById('risorsaNuovaNome').value.trim();
+      const quantita = parseInt(document.getElementById('risorsaNuovaQuantita').value, 10);
+      if (!nome || !(quantita >= 1)) { alert('Scrivi il nome e quante ne avete (almeno 1).'); return; }
+      btnNuova.disabled = true;
+      invia(URL.crea, {nome: nome, quantita: quantita})
+        .then(() => location.reload())
+        .catch(err => { alert(err.message); btnNuova.disabled = false; });
+    });
+  }
+
+  // --- modifica / elimina risorsa ---
+  let risorsaInModifica = null;
+  document.querySelectorAll('.btn-risorsa-modifica').forEach(btn => btn.addEventListener('click', function () {
+    risorsaInModifica = btn.dataset.id;
+    document.getElementById('risorsaModificaNome').value = btn.dataset.nome;
+    document.getElementById('risorsaModificaQuantita').value = btn.dataset.quantita;
+    document.getElementById('risorsaModificaErrore').textContent = '';
+    modale('RisorsaModificaModal').show();
+  }));
+  document.getElementById('risorsaModificaSalva').addEventListener('click', function () {
+    const nome = document.getElementById('risorsaModificaNome').value.trim();
+    const quantita = parseInt(document.getElementById('risorsaModificaQuantita').value, 10);
+    invia(URL.modifica.replace('999999', risorsaInModifica), {nome: nome, quantita: quantita})
+      .then(() => location.reload())
+      .catch(err => { document.getElementById('risorsaModificaErrore').textContent = err.message; });
+  });
+  document.querySelectorAll('.btn-risorsa-elimina').forEach(btn => btn.addEventListener('click', function () {
+    if (!confirm('Eliminare la risorsa "' + btn.dataset.nome + '"?\n\nI servizi che la usavano tornano senza limite.')) return;
+    invia(URL.elimina.replace('999999', btn.dataset.id))
+      .then(() => location.reload())
+      .catch(err => alert(err.message));
+  }));
+
+  // --- associa a una sottocategoria ---
+  let risorsaSottocat = null;
+  document.querySelectorAll('.btn-risorsa-sottocat').forEach(btn => btn.addEventListener('click', function () {
+    risorsaSottocat = btn.dataset.id;
+    document.getElementById('risorsaSottocatNome').textContent = btn.dataset.nome;
+    const q = document.getElementById('risorsaSottocatQuantita');
+    q.max = btn.dataset.quantita;
+    q.value = btn.dataset.quantita;
+    document.getElementById('risorsaSottocatSelect').value = '';
+    document.getElementById('risorsaSottocatErrore').textContent = '';
+    modale('RisorsaSottocatModal').show();
+  }));
+  document.getElementById('risorsaSottocatSalva').addEventListener('click', function () {
+    const sottocat = document.getElementById('risorsaSottocatSelect').value;
+    const quantita = parseInt(document.getElementById('risorsaSottocatQuantita').value, 10);
+    if (!sottocat) { document.getElementById('risorsaSottocatErrore').textContent = 'Scegli la sottocategoria.'; return; }
+    invia(URL.sottocat.replace('999999', risorsaSottocat), {subcategory_id: sottocat, quantita: quantita})
+      .then(j => { alert('Associata a ' + j.servizi + ' servizi.'); location.reload(); })
+      .catch(err => { document.getElementById('risorsaSottocatErrore').textContent = err.message; });
+  });
+
+  // --- risorse di un servizio ---
+  let servizioInModifica = null;
+  const righe = document.getElementById('risorseServizioRighe');
+  function aggiungiRiga(risorsaId, quantita) {
+    const riga = document.createElement('div');
+    riga.className = 'd-flex align-items-center gap-2 mb-2 riga-risorsa';
+    const sel = document.createElement('select');
+    sel.className = 'form-select form-select-sm';
+    RISORSE.forEach(r => {
+      const o = document.createElement('option');
+      o.value = r.id;
+      o.textContent = r.nome + ' (ne avete ' + r.quantita + ')';
+      o.dataset.max = r.quantita;
+      if (String(r.id) === String(risorsaId)) o.selected = true;
+      sel.appendChild(o);
+    });
+    const qta = document.createElement('input');
+    qta.type = 'number';
+    qta.min = '1';
+    qta.className = 'form-control form-control-sm';
+    qta.style.width = '80px';
+    qta.setAttribute('aria-label', 'Tetto: quanti appuntamenti di questo servizio insieme');
+    function aggiornaMax() {
+      const max = parseInt(sel.options[sel.selectedIndex].dataset.max, 10) || 1;
+      qta.max = String(max);
+      if (!(parseInt(qta.value, 10) >= 1) || parseInt(qta.value, 10) > max) qta.value = String(max);
+    }
+    sel.addEventListener('change', aggiornaMax);
+    qta.value = quantita || '';
+    aggiornaMax();
+    const via = document.createElement('button');
+    via.type = 'button';
+    via.className = 'btn btn-sm btn-outline-danger';
+    via.textContent = 'Togli';
+    via.addEventListener('click', () => riga.remove());
+    riga.appendChild(sel);
+    riga.appendChild(qta);
+    riga.appendChild(via);
+    righe.appendChild(riga);
+  }
+  document.querySelectorAll('.btn-risorse-servizio').forEach(btn => btn.addEventListener('click', function () {
+    servizioInModifica = btn.dataset.serviceId;
+    document.getElementById('risorseServizioNome').textContent = btn.dataset.serviceName;
+    document.getElementById('risorseServizioErrore').textContent = '';
+    righe.innerHTML = '<div class="text-muted small">Caricamento...</div>';
+    modale('RisorseServizioModal').show();
+    fetch(URL.servizio.replace('999999', servizioInModifica))
+      .then(r => r.json())
+      .then(j => {
+        righe.innerHTML = '';
+        (j.associazioni || []).forEach(a => aggiungiRiga(a.risorsa_id, a.quantita));
+        if (!(j.associazioni || []).length) aggiungiRiga(null, null);
+      })
+      .catch(() => { righe.innerHTML = '<div class="text-danger small">Impossibile leggere le risorse del servizio.</div>'; });
+  }));
+  document.getElementById('risorseServizioAggiungi').addEventListener('click', () => aggiungiRiga(null, null));
+  document.getElementById('risorseServizioSalva').addEventListener('click', function () {
+    const voci = Array.from(righe.querySelectorAll('.riga-risorsa')).map(riga => ({
+      risorsa_id: riga.querySelector('select').value,
+      quantita: parseInt(riga.querySelector('input').value, 10)
+    }));
+    invia(URL.servizio.replace('999999', servizioInModifica), {risorse: voci})
+      .then(() => location.reload())
+      .catch(err => { document.getElementById('risorseServizioErrore').textContent = err.message; });
+  });
+});
+</script>
+{% endif %}
 {% endblock %}

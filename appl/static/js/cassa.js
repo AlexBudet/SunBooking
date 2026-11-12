@@ -1647,12 +1647,14 @@ document.getElementById('btnStampaScontrino').addEventListener('click', async ()
 
       // Scontrino non confermato dalla stampante: finestra di attesa.
       // Lo scontrino NON e' nel registro: ci entra solo se il contatore della
-      // stampante conferma che e' uscito (verifica /cassa/rch-retry, che NON
-      // ristampa). Due casi reali, con la stessa spia lampeggiante: carta finita
-      // (cambiato il rotolo lo scontrino esce e si registra da solo) oppure RCH
-      // bloccata con la carta presente (si spegne e riaccende: lo scontrino non
-      // esce, non viene registrato e la bozza resta da ristampare).
-function showPendingModal(key, expectedTotal) {
+      // stampante conferma che e' uscito. La finestra arriva entro ~10 s dalla
+      // pressione di Stampa (RCH_*_S in cassa.py) e da li':
+      // - ricontrolla ogni 2 s (/cassa/rch-retry, non ristampa mai);
+      // - se lo scontrino e' uscito lo registra e chiude da sola;
+      // - se NON e' uscito e la stampante e' pronta offre "Ristampa"
+      //   (/cassa/rch-ristampa: rimanda lo stesso scontrino solo dopo aver
+      //   riletto il contatore, quindi mai due volte).
+function showPendingModal(key, expectedTotal, messaggioIniziale) {
   // Nascondi lo spinner RCH prima di mostrare il modal
   if (typeof window.hideRchSpinner === 'function') {
     window.hideRchSpinner();
@@ -1688,18 +1690,22 @@ function showPendingModal(key, expectedTotal) {
   const body = document.createElement('div');
   body.className = 'modal-body';
 
+  // Cosa e' successo (dal server) + stato attuale (aggiornato a ogni controllo)
+  const motivo = document.createElement('p');
+  motivo.style.fontWeight = '600';
+  motivo.textContent = messaggioIniziale || 'La stampante non ha confermato lo scontrino.';
+  body.appendChild(motivo);
+
   const p = document.createElement('p');
-  p.textContent = 'La stampante non ha confermato lo scontrino: per ora NON è registrato. '
-    + 'Viene registrato solo se la stampante lo emette.';
+  p.textContent = 'Per ora lo scontrino NON è registrato. Lo controllo da solo ogni 2 secondi: '
+    + 'se esce viene registrato, se non è uscito ti propongo la ristampa.';
   body.appendChild(p);
 
   const casi = document.createElement('ul');
   casi.style.paddingLeft = '18px';
   [
-    ['Carta finita: ', 'cambia il rotolo. Se lo scontrino esce, viene registrato da solo.'],
-    ['Carta presente ma stampante ferma (spia lampeggiante): ', 'spegni e riaccendi la stampante RCH. '
-      + 'Se dopo il riavvio lo scontrino non è uscito, non viene registrato e la bozza resta in cassa: '
-      + 'potrai ristamparlo.']
+    ['Carta finita: ', 'cambia il rotolo.'],
+    ['Carta presente ma stampante ferma (spia lampeggiante): ', 'spegni e riaccendi la stampante RCH.']
   ].forEach(([titolo, testo]) => {
     const li = document.createElement('li');
     const b = document.createElement('strong');
@@ -1730,13 +1736,14 @@ function showPendingModal(key, expectedTotal) {
   flex.appendChild(msg);
   body.appendChild(flex);
 
-  // --- Sezione "Sblocca e chiudi" (accessibile a qualunque ruolo) ---
+  // --- "Sblocca documento aperto": compare solo se la stampante lo segnala ---
   const closeBox = document.createElement('div');
   closeBox.style.marginTop = '14px';
   closeBox.style.padding = '10px';
   closeBox.style.border = '1px solid #ddd';
   closeBox.style.borderRadius = '6px';
   closeBox.style.background = '#fafafa';
+  closeBox.style.display = 'none';
 
   const closeTitle = document.createElement('div');
   closeTitle.style.fontWeight = '600';
@@ -1748,7 +1755,7 @@ function showPendingModal(key, expectedTotal) {
   closeHint.style.fontSize = '12px';
   closeHint.style.color = '#666';
   closeHint.style.marginBottom = '8px';
-  closeHint.textContent = "Solo se il display della stampante mostra un importo in sospeso: inserisci quell'importo e il metodo di pagamento. "
+  closeHint.textContent = "Il display della stampante mostra un importo in sospeso: inserisci quell'importo e il metodo di pagamento. "
     + 'Lo scontrino viene registrato solo se la stampante lo emette davvero.';
   closeBox.appendChild(closeHint);
 
@@ -1797,18 +1804,26 @@ function showPendingModal(key, expectedTotal) {
   const footer = document.createElement('div');
   footer.className = 'modal-footer';
 
+  const btnRistampa = document.createElement('button');
+  btnRistampa.id = 'rchRistampaBtn';
+  btnRistampa.type = 'button';
+  btnRistampa.className = 'btn btn-primary';
+  btnRistampa.textContent = 'Ristampa';
+  btnRistampa.style.display = 'none';
+
   const btnRetry = document.createElement('button');
   btnRetry.id = 'rchRetryBtn';
   btnRetry.type = 'button';
-  btnRetry.className = 'btn btn-primary';
-  btnRetry.textContent = 'Verifica adesso';
+  btnRetry.className = 'btn btn-outline-primary';
+  btnRetry.textContent = 'Controlla adesso';
 
   const btnCancel = document.createElement('button');
   btnCancel.id = 'rchCancelBtn';
   btnCancel.type = 'button';
   btnCancel.className = 'btn btn-secondary';
-  btnCancel.textContent = 'Chiudi';
+  btnCancel.textContent = 'Chiudi senza stampare';
 
+  footer.appendChild(btnRistampa);
   footer.appendChild(btnRetry);
   footer.appendChild(btnCancel);
 
@@ -1820,10 +1835,21 @@ function showPendingModal(key, expectedTotal) {
   wrap.appendChild(overlay);
   document.body.appendChild(wrap);
 
-  // --- Verifica: una alla volta, ripetuta da sola finche' c'e' un esito ---
+  // --- Controllo: uno alla volta, ripetuto ogni 2 s finche' c'e' un esito ---
   let finito = false;
-  let inVerifica = false;
+  let occupato = false;          // un controllo o una ristampa in corso
+  let inPausa = false;           // "non uscito": si aspetta la scelta dell'operatrice
   let timerVerifica = null;
+
+  function mostraStato(testo) {
+    msg.textContent = testo;
+    closeBox.style.display = /documento aperto/i.test(testo || '') ? '' : 'none';
+  }
+
+  function prossimoControllo(ms) {
+    clearTimeout(timerVerifica);
+    if (!finito && !inPausa) timerVerifica = setTimeout(verifica, ms);
+  }
 
   function chiudiConEsito(testo) {
     // Esito definitivo senza registrazione: la bozza resta in cassa.
@@ -1832,11 +1858,27 @@ function showPendingModal(key, expectedTotal) {
     spinner.style.display = 'none';
     closeBox.style.display = 'none';
     btnRetry.style.display = 'none';
+    btnRistampa.style.display = 'none';
     casi.style.display = 'none';
     p.style.display = 'none';
+    motivo.style.display = 'none';
     msg.style.fontWeight = '600';
     msg.textContent = testo;
+    btnCancel.textContent = 'Chiudi';
     btnCancel.className = 'btn btn-primary';
+  }
+
+  function nonUscito(testo) {
+    // Stato stabile: la stampante e' pronta e lo scontrino non e' uscito.
+    inPausa = true;
+    clearTimeout(timerVerifica);
+    spinner.style.display = 'none';
+    casi.style.display = 'none';
+    p.style.display = 'none';
+    mostraStato(testo || 'Lo scontrino NON è uscito. La stampante è pronta: premi Ristampa.');
+    msg.style.fontWeight = '600';
+    btnRistampa.style.display = '';
+    btnRistampa.disabled = false;
   }
 
   function registrato() {
@@ -1846,43 +1888,79 @@ function showPendingModal(key, expectedTotal) {
     fiscaleOkFinalize();
   }
 
+  async function chiama(url) {
+    const rr = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+      },
+      body: JSON.stringify({ idempotency_key: key })
+    });
+    let dd = null;
+    try { dd = await rr.json(); } catch { dd = null; }
+    return { rr, dd };
+  }
+
+  // Interpreta la risposta di rch-retry / rch-ristampa. true = esito definitivo.
+  function gestisci(rr, dd) {
+    if (finito) return true;
+    if (rr.ok && dd && dd.results) { registrato(); return true; }
+    if (dd && dd.esito === 'non_emesso') { nonUscito(dd.messaggio); return true; }
+    if (dd && dd.esito === 'incerto') {
+      chiudiConEsito(dd.messaggio || 'Lo scontrino NON è stato registrato.');
+      return true;
+    }
+    mostraStato((dd && (dd.messaggio || dd.error)) || 'Controllo la stampante...');
+    return false;
+  }
+
   async function verifica() {
-    if (finito || inVerifica) return;
-    inVerifica = true;
+    if (finito || occupato) return;
+    occupato = true;
     try {
-      const rr = await fetch('/cassa/rch-retry', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
-        },
-        body: JSON.stringify({ idempotency_key: key })
-      });
-      let dd = null;
-      try { dd = await rr.json(); } catch { dd = null; }
-      if (finito) return;
-      if (rr.ok && dd && dd.results) { registrato(); return; }
-      if (dd && (dd.esito === 'non_emesso' || dd.esito === 'incerto')) {
-        chiudiConEsito(dd.messaggio || 'Lo scontrino NON è stato registrato.');
-        return;
-      }
-      msg.textContent = (dd && (dd.messaggio || dd.error)) || 'Controllo la stampante...';
+      const { rr, dd } = await chiama('/cassa/rch-retry');
+      gestisci(rr, dd);
     } catch {
-      if (!finito) msg.textContent = 'Il gestionale non risponde, riprovo...';
+      if (!finito) mostraStato('Il gestionale non risponde, riprovo...');
     } finally {
-      inVerifica = false;
-      if (!finito) {
-        clearTimeout(timerVerifica);
-        timerVerifica = setTimeout(verifica, 4000);
-      }
+      occupato = false;
+      prossimoControllo(2000);
     }
   }
-  timerVerifica = setTimeout(verifica, 1500);
+  prossimoControllo(1000);
 
   btnRetry.addEventListener('click', () => {
+    if (occupato) return;
+    inPausa = false;
+    btnRistampa.style.display = 'none';
+    spinner.style.display = '';
+    p.style.display = '';
+    msg.style.fontWeight = '';
+    mostraStato('Controllo la stampante...');
     clearTimeout(timerVerifica);
-    msg.textContent = 'Controllo la stampante...';
     verifica();
+  });
+
+  btnRistampa.addEventListener('click', async () => {
+    if (occupato || finito) return;
+    occupato = true;
+    btnRistampa.disabled = true;
+    spinner.style.display = '';
+    msg.style.fontWeight = '';
+    mostraStato('Ristampa in corso...');
+    try {
+      const { rr, dd } = await chiama('/cassa/rch-ristampa');
+      inPausa = false;
+      btnRistampa.style.display = 'none';
+      gestisci(rr, dd);
+    } catch {
+      mostraStato('Il gestionale non risponde. Riprova.');
+      btnRistampa.disabled = false;
+    } finally {
+      occupato = false;
+      prossimoControllo(2000);
+    }
   });
 
   btnClose.addEventListener('click', async () => {
@@ -1895,7 +1973,7 @@ function showPendingModal(key, expectedTotal) {
     if (!confirm(`Chiudere il documento aperto con € ${importo.toFixed(2)} (${metodo})?`)) return;
     btnClose.disabled = true;
     btnRetry.disabled = true;
-    msg.textContent = 'Chiusura in corso...';
+    mostraStato('Chiusura in corso...');
     try {
       const rr = await fetch('/cassa/rch-console/close-document', {
         method: 'POST',
@@ -1913,12 +1991,11 @@ function showPendingModal(key, expectedTotal) {
       }
       btnClose.disabled = false;
       btnRetry.disabled = false;
-      msg.textContent = (dd && (dd.messaggio || dd.error))
-        || 'Chiusura non riuscita: niente registrato.';
+      mostraStato((dd && (dd.messaggio || dd.error)) || 'Chiusura non riuscita: niente registrato.');
     } catch {
       btnClose.disabled = false;
       btnRetry.disabled = false;
-      msg.textContent = 'Errore rete durante la chiusura.';
+      mostraStato('Errore rete durante la chiusura.');
     }
   });
 
@@ -2075,7 +2152,7 @@ function showPendingModal(key, expectedTotal) {
           stampaLock = false;
           const expectedTotal = (data && typeof data.expected_total === 'number')
             ? data.expected_total : null;
-          showPendingModal(idempotencyKey, expectedTotal);
+          showPendingModal(idempotencyKey, expectedTotal, data && data.message);
           return;
         }
 

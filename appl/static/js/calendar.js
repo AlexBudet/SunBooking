@@ -4170,6 +4170,14 @@ if (pseudoContainer) pseudoContainer.style.display = 'none';
             data.spostamenti = esitoAbil.spostamenti;
             abilForzaRidisegno();
           }
+
+          // RISORSE: postazioni/cabine/macchinari condivisi gia' tutti occupati
+          // a quell'ora? Avviso con "Procedi comunque", dentro questo modal.
+          if (typeof verificaRisorse === 'function') {
+            const okRisorse = await verificaRisorse(
+              blocchiAbil, data.appointment_date, data.start_time, null, { inline: true });
+            if (!okRisorse) return;
+          }
         }
 
         // WHATSAPP: si chiede per ULTIMO, quando la destinazione dei blocchi
@@ -5386,6 +5394,180 @@ function abilMostraAvviso(esito, operatorIdCorrente, serviziNelGruppo, opzioni) 
   });
 }
 
+// =============================================================
+//   RISORSE (postazioni, cabine, macchinari condivisi - Tools › Servizi)
+// =============================================================
+// In Agenda non si blocca niente: se i blocchi che si stanno piazzando non
+// trovano posto in una risorsa (es. "Postazione Mani" 4, gia' tutte occupate
+// a quell'ora) compare un avviso con "Procedi comunque", come per le
+// abilitazioni. Online invece quell'orario non viene proprio proposto.
+// Regole in appl/services/risorse.py, controllo in POST /calendar/api/check-risorse.
+
+function risorseDataISO(valore) {
+  const s = String(valore || '');
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function risorseElencoHtml(conflitti) {
+  return conflitti.map(c => {
+    const occ = (c.occupanti || []).map(o => {
+      const chi = [o.cliente, o.operatore ? '(' + o.operatore + ')' : ''].filter(Boolean).join(' ');
+      return '<li>' + abilEsc(o.orario) + ' &middot; ' + abilEsc(o.servizio)
+        + (chi ? ' &middot; ' + abilEsc(chi) : '') + '</li>';
+    }).join('');
+    return '<div class="mb-2"><b>' + abilEsc(c.messaggio) + '</b>'
+      + (occ ? '<ul class="mb-0 small">' + occ + '</ul>' : '') + '</div>';
+  }).join('');
+}
+
+// Risolve true = procedi, false = annulla.
+function risorseMostraAvviso(conflitti, opzioni) {
+  const testo = conflitti.map(c => c.messaggio).join('\n');
+
+  // Creazione da click su cella: la domanda sta DENTRO il modal gia' aperto,
+  // come per le abilitazioni.
+  const modalBody = (opzioni && opzioni.inline) ? abilModalBodyCreazione() : null;
+  if (modalBody) {
+    return new Promise(resolve => {
+      const vecchio = document.getElementById('risorseInlineConfirm');
+      if (vecchio) vecchio.remove();
+      const panel = document.createElement('div');
+      panel.id = 'risorseInlineConfirm';
+      panel.setAttribute('role', 'region');
+      panel.setAttribute('aria-label', 'Risorsa occupata');
+      panel.style.cssText = 'width:100%;box-sizing:border-box;margin-top:12px;padding:12px;'
+        + 'border:1px solid rgba(0,0,0,0.08);border-radius:6px;background:#fff;'
+        + 'box-shadow:0 6px 18px rgba(0,0,0,0.06);font-size:14px;color:#222';
+      panel.innerHTML =
+        '<div style="margin-bottom:8px">&#9888;&#65039; <b>Risorsa occupata</b></div>'
+        + risorseElencoHtml(conflitti)
+        + '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px">'
+          + '<button type="button" class="btn btn-link" id="risorseInlineIndietro" style="margin-right:auto;color:#666">INDIETRO</button>'
+          + '<button type="button" class="btn btn-outline-warning" id="risorseInlineComunque">Procedi comunque</button>'
+        + '</div>';
+      const formEl = modalBody.querySelector('#CreateAppointmentForm') || modalBody.querySelector('form');
+      if (formEl && formEl.parentNode) formEl.insertAdjacentElement('afterend', panel);
+      else modalBody.appendChild(panel);
+      try { panel.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+
+      const modalEl = document.getElementById('CreateAppointmentModal');
+      function cleanup() {
+        const p = document.getElementById('risorseInlineConfirm');
+        if (p && p.parentNode) p.parentNode.removeChild(p);
+        if (modalEl) modalEl.removeEventListener('hidden.bs.modal', onModalHidden);
+        document.removeEventListener('keydown', onKey);
+      }
+      function onModalHidden() { cleanup(); resolve(false); }
+      function onKey(e) { if (e.key === 'Escape') { cleanup(); resolve(false); } }
+      if (modalEl) modalEl.addEventListener('hidden.bs.modal', onModalHidden);
+      document.addEventListener('keydown', onKey);
+      panel.querySelector('#risorseInlineComunque').addEventListener('click', () => { cleanup(); resolve(true); });
+      panel.querySelector('#risorseInlineIndietro').addEventListener('click', (e) => {
+        e.preventDefault(); cleanup(); resolve(false);
+      });
+      setTimeout(() => { const b = panel.querySelector('#risorseInlineComunque'); if (b) b.focus(); }, 50);
+    });
+  }
+
+  if (typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+    return Promise.resolve(confirm('ATTENZIONE! Risorsa occupata.\n\n' + testo
+      + '\n\nOK = procedi comunque\nAnnulla = non fare niente'));
+  }
+
+  return new Promise(resolve => {
+    const vecchio = document.getElementById('risorseWarnModal');
+    if (vecchio) vecchio.remove();
+    // L'agenda usa z-index molto alti: senza questo il modal finirebbe sotto.
+    if (!document.getElementById('risorseWarnStyle')) {
+      const st = document.createElement('style');
+      st.id = 'risorseWarnStyle';
+      st.textContent = '#risorseWarnModal{z-index:25050}'
+        + '.modal-backdrop.risorse-warn-backdrop{z-index:25040}'
+        + '#risorseWarnModal .modal-body{overflow-y:auto !important;max-height:60vh}';
+      document.head.appendChild(st);
+    }
+    const el = document.createElement('div');
+    el.className = 'modal fade';
+    el.id = 'risorseWarnModal';
+    el.tabIndex = -1;
+    el.innerHTML =
+      '<div class="modal-dialog modal-dialog-centered">' +
+        '<div class="modal-content">' +
+          '<div class="modal-header bg-warning">' +
+            '<h5 class="modal-title">&#9888;&#65039; Risorsa occupata</h5>' +
+            '<button type="button" class="btn-close" id="risorseBtnX" aria-label="Chiudi"></button>' +
+          '</div>' +
+          '<div class="modal-body">' + risorseElencoHtml(conflitti) + '</div>' +
+          '<div class="modal-footer d-flex flex-column align-items-stretch gap-2">' +
+            '<button type="button" class="btn btn-outline-warning" id="risorseBtnComunque">Procedi comunque</button>' +
+            '<button type="button" class="btn btn-secondary" id="risorseBtnAnnulla">Annulla</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(el);
+    const modal = new bootstrap.Modal(el, { backdrop: 'static', keyboard: true });
+    let scelta = false;
+    el.querySelector('#risorseBtnComunque').addEventListener('click', () => { scelta = true; modal.hide(); });
+    el.querySelector('#risorseBtnAnnulla').addEventListener('click', () => { scelta = false; modal.hide(); });
+    el.querySelector('#risorseBtnX').addEventListener('click', () => { scelta = false; modal.hide(); });
+    el.addEventListener('shown.bs.modal', () => {
+      const backs = document.querySelectorAll('.modal-backdrop');
+      const ultimo = backs[backs.length - 1];
+      if (ultimo) ultimo.classList.add('risorse-warn-backdrop');
+    }, { once: true });
+    el.addEventListener('hidden.bs.modal', () => { el.remove(); resolve(scelta); }, { once: true });
+    modal.show();
+  });
+}
+
+// Controlla i blocchi che si stanno piazzando (uno dopo l'altro da startHHMM).
+// true = si va avanti, false = annullato. Se il controllo non risponde si va
+// avanti: l'Agenda non si deve fermare per un controllo che non e' riuscito.
+async function verificaRisorse(blocchi, dataISO, startHHMM, ignoraAppointmentIds, opzioni) {
+  try {
+    return await _verificaRisorse(blocchi, dataISO, startHHMM, ignoraAppointmentIds, opzioni);
+  } catch (err) {
+    console.warn('Controllo risorse non riuscito:', err);
+    return true;
+  }
+}
+
+async function _verificaRisorse(blocchi, dataISO, startHHMM, ignoraAppointmentIds, opzioni) {
+  const lista = abilBlocchiConsecutivi(blocchi, startHHMM).filter(b => b.start_time && b.duration > 0);
+  if (!lista.length) return true;
+  let esito = null;
+  // Linea lenta o server che non risponde: dopo 3 secondi si salva come prima,
+  // senza aspettare oltre (normalmente risponde in meno di 0,1 s).
+  const attesaMaxMs = 3000;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), attesaMaxMs);
+  try {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const resp = await fetch(abilCalendarBase() + '/api/check-risorse', {
+      method: 'POST',
+      credentials: 'same-origin',
+      signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({
+        date: risorseDataISO(dataISO),
+        blocchi: lista,
+        ignora_appointment_ids: (ignoraAppointmentIds || []).filter(Boolean)
+      })
+    });
+    if (resp.ok) esito = await resp.json();
+  } catch (err) {
+    console.warn('Controllo risorse non riuscito:', err);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!esito || esito.ok || !Array.isArray(esito.conflitti) || !esito.conflitti.length) return true;
+  return await risorseMostraAvviso(esito.conflitti, opzioni);
+}
+window.verificaRisorse = verificaRisorse;
+
 // I flussi di creazione disegnano i blocchi nella cella cliccata e sospendono
 // il refresh automatico: se pero' qualche blocco e' finito su un'altra colonna,
 // a video sarebbe nel posto sbagliato. Questo flag fa passare comunque il
@@ -5563,6 +5745,23 @@ async function saveDraggedBlockPosition(block, cell, opzioni) {
                                 && String(operatorIdFinale) !== String(operatorId));
   }
 
+  // RISORSE: spostarsi anche solo di orario cambia chi c'e' insieme, quindi qui
+  // si controlla sempre (non solo al cambio di colonna). L'appuntamento che si
+  // sposta non conta come occupante. Annullato = si ridisegna dal database.
+  if (!(opzioni && opzioni.skipAbilitazioni) && serviceIdBlocco
+      && typeof verificaRisorse === 'function') {
+    const okRisorse = await verificaRisorse(
+      [{ service_id: serviceIdBlocco, duration: block.getAttribute('data-duration') }],
+      newDateStr,
+      String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0'),
+      [appointmentId]
+    );
+    if (!okRisorse) {
+      if (typeof fetchCalendarData === 'function') fetchCalendarData();
+      return;
+    }
+  }
+
   // Con linea lenta questa POST puo' durare secondi: finche' e' in volo il
   // refresh di riserva non deve partire, o ridisegnerebbe il blocco nella
   // vecchia posizione (il server non sa ancora che si e' spostato).
@@ -5672,20 +5871,49 @@ document.addEventListener('DOMContentLoaded', () => {
     const newDuration = currentBlock.getAttribute('data-duration');
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-    fetch(`/calendar/adjust-duration/${appointmentId}`, {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken
-        },
-        body: JSON.stringify({ adjustment: parseInt(newDuration, 10) })
-    }).then(response => {
-        if (!response.ok) {
-            console.error('Errore durante il salvataggio della durata.');
-        } else {
-            console.log(`Durata aggiornata: ${newDuration} minuti`);
+    // RISORSE: se il blocco si e' ALLUNGATO puo' finire sopra a una postazione
+    // gia' tutta occupata: avviso con "Procedi comunque". Annullato = torna alla
+    // durata di partenza e non si salva niente. Accorciare non crea conflitti.
+    const bloccoResize = currentBlock;
+    const durataPrima = parseInt(bloccoResize.__durataPrimaResize, 10) || 0;
+    const serviceIdResize = bloccoResize.getAttribute('data-service-id');
+    const cellaResize = bloccoResize.parentElement;
+    (async () => {
+      try {
+        if (serviceIdResize && durataPrima && parseInt(newDuration, 10) > durataPrima
+            && cellaResize && typeof window.verificaRisorse === 'function') {
+          const oraResize = String(cellaResize.getAttribute('data-hour')).padStart(2, '0') + ':'
+            + String(cellaResize.getAttribute('data-minute')).padStart(2, '0');
+          const dataResize = cellaResize.getAttribute('data-date')
+            || (typeof selectedDate !== 'undefined' ? selectedDate : '');
+          const okRisorse = await window.verificaRisorse(
+            [{ service_id: serviceIdResize, duration: newDuration }],
+            dataResize, oraResize, [appointmentId]);
+          if (!okRisorse) {
+            bloccoResize.style.height = `${(durataPrima / 15) * QUARTER_PX}px`;
+            bloccoResize.setAttribute('data-duration', durataPrima);
+            return;
+          }
         }
-    }).catch(err => console.error('Errore di rete:', err));
+      } catch (errRisorse) {
+        // Il controllo non deve mai impedire di salvare la durata.
+        console.warn('Controllo risorse sulla durata non riuscito:', errRisorse);
+      }
+      fetch(`/calendar/adjust-duration/${appointmentId}`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken
+          },
+          body: JSON.stringify({ adjustment: parseInt(newDuration, 10) })
+      }).then(response => {
+          if (!response.ok) {
+              console.error('Errore durante il salvataggio della durata.');
+          } else {
+              console.log(`Durata aggiornata: ${newDuration} minuti`);
+          }
+      }).catch(err => console.error('Errore di rete:', err));
+    })();
 
     document.removeEventListener('mousemove', resizeBlock);
     document.removeEventListener('mouseup', stopResize);
@@ -5770,6 +5998,8 @@ document.querySelectorAll('.selectable-cell').forEach(cell => {
       currentBlock = e.target.parentElement;
       startY       = e.clientY;
       startHeight  = parseInt(window.getComputedStyle(currentBlock).height, 10);
+      // Durata di partenza: se l'avviso RISORSE viene annullato si torna qui.
+      currentBlock.__durataPrimaResize = parseInt(currentBlock.getAttribute('data-duration'), 10) || 0;
 
       document.addEventListener('mousemove', resizeBlock);
       document.addEventListener('mouseup',   stopResize);
@@ -9205,6 +9435,16 @@ if (blocksInCell.length >= 2) {
               operatorId = esitoAbil.operatorId;
               spostamentiAbil = esitoAbil.spostamenti || {};
               if (Object.keys(spostamentiAbil).length) window.abilForzaRidisegno();
+
+              // RISORSE: avviso se postazioni/cabine/macchinari di questi servizi
+              // sono gia' tutti occupati a quell'ora. Vale anche per taglia/incolla
+              // e per lo spostamento dei pagati (gli originali non contano).
+              if (typeof window.verificaRisorse === 'function') {
+                const okRisorse = await window.verificaRisorse(
+                  blocchiAbil, date, minutesToTime(hour * 60 + minute),
+                  blocchiAbil.map(b => b && b._origin_appointment_id).filter(Boolean));
+                if (!okRisorse) { window.isCreatingAppointment = false; return; }
+              }
             }
 
             // SPOSTAMENTO BLOCCHI PAGATI: non si crea nulla, si aggiornano gli

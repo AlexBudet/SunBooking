@@ -86,7 +86,7 @@ def _rch_dgfe_headers(model: str = None) -> dict:
     }
 
 def _rch_request_kwargs(model: str = None) -> dict:
-    """Keyword arguments extra per requests.post() in base al modello.
+    """Keyword arguments extra per _rch_post() in base al modello.
     - RCH Print 3.0 RT: verify=False (HTTPS self-signed)
     - RCH Print F: niente (HTTP puro, nessun verify necessario)
     """
@@ -180,7 +180,7 @@ def _read_progressivo(url, headers, rch_kwargs, max_attempts=8, sleep_s=0.5):
         for _ in range(max_attempts):
             pytime.sleep(sleep_s)
             try:
-                resp = requests.post(url, data=payload.encode('utf-8'), headers=headers,
+                resp = _rch_post(url, data=payload.encode('utf-8'), headers=headers,
                                      timeout=6, **rch_kwargs)
             except Exception:
                 continue
@@ -214,18 +214,89 @@ def _read_progressivo(url, headers, rch_kwargs, max_attempts=8, sleep_s=0.5):
 # Ogni altro esito non scrive niente: lo scontrino resta "da verificare" e si
 # decide con una nuova lettura del contatore, mai indovinando dagli importi.
 
-_RCH_LOCK = __import__('threading').Lock()   # una sola registrazione per volta
+import threading as _threading
+from contextlib import contextmanager as _contextmanager
+import functools as _functools
+
+_RCH_LOCK = _threading.Lock()   # una sola registrazione per volta
+
+# ---------------------------------------------------------------------------
+# TEMPI. La stampante sta nella rete del negozio: risponde in decimi di
+# secondo oppure non risponde affatto. Prima si aspettavano 120 s la risposta
+# allo scontrino: sono i blocchi da 2 minuti misurati in usage_traffic_hourly
+# (8 volte dal 28/08 all'11/11/2026), col cliente davanti al banco. Entro
+# ~10 s l'operatrice deve sapere cosa e' successo e poter ristampare.
+# ---------------------------------------------------------------------------
+RCH_CONNESSIONE_S = 2.5          # se non accetta la connessione in 2,5 s non e' raggiungibile
+RCH_LETTURA_S = 3.0              # risposta a una lettura di stato (=C453)
+RCH_RISPOSTA_SCONTRINO_S = 7.0   # risposta allo scontrino: oltre, decide il contatore
+RCH_CONFERMA_S = 3.0             # quanto si aspetta che il contatore salga dopo un "ok"
+RCH_ATTESA_LIBERA_S = 3.0        # quanto aspetta una richiesta se la stampante e' impegnata
+# Mai dire "non uscito" (e offrire la Ristampa) prima di tanti secondi
+# dall'invio. Il manuale dice "no queue": se la RCH risponde alla lettura del
+# contatore ha finito tutto quello che aveva ricevuto; questo margine copre
+# solo una stampa ancora in corso. Uno scontrino normale e' confermato in <7 s.
+RCH_MIN_PRIMA_DI_RISTAMPA_S = 10.0
+
+# ---------------------------------------------------------------------------
+# UNA CONVERSAZIONE ALLA VOLTA. Manuale RCH (COMANDI RCH PRINT RT 3-0.txt,
+# sez. 31): "no multithreading, no queue, no comandi paralleli". Waitress
+# serve piu' richieste insieme: senza lucchetto, chi ricarica la pagina e
+# ristampa mentre la prima richiesta aspetta ancora la stampante apre una
+# seconda conversazione in parallelo. Ogni chiamata alla RCH passa da
+# _rch_post (che prende il lucchetto); le sequenze di piu' comandi lo tengono
+# per tutta la durata (_rch_in_uso, _rch_esclusivo). RLock: la stessa
+# richiesta lo riprende senza bloccarsi.
+# ---------------------------------------------------------------------------
+_RCH_BUS = _threading.RLock()
 
 
-def _rch_contatori(url, headers, rch_kwargs, timeout=5):
+class RchOccupata(Exception):
+    """La stampante e' impegnata da un'altra richiesta oltre il tempo di attesa."""
+
+
+MSG_RCH_OCCUPATA = ("La stampante sta finendo un'altra operazione (uno scontrino, una "
+                    "verifica o la chiusura). Riprova tra qualche secondo.")
+
+
+@_contextmanager
+def _rch_in_uso(attesa_s=RCH_ATTESA_LIBERA_S):
+    if not _RCH_BUS.acquire(timeout=attesa_s):
+        raise RchOccupata()
+    try:
+        yield
+    finally:
+        _RCH_BUS.release()
+
+
+def _rch_post(url, **kwargs):
+    """requests.post verso la stampante, una richiesta alla volta."""
+    with _rch_in_uso():
+        return requests.post(url, **kwargs)
+
+
+def _rch_esclusivo(f):
+    """Rotta che parla con la stampante: la tiene per tutta la sequenza di
+    comandi. Se e' impegnata oltre RCH_ATTESA_LIBERA_S, RchOccupata -> 409
+    (errorhandler del blueprint)."""
+    @_functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        with _rch_in_uso():
+            return f(*args, **kwargs)
+    return wrapper
+
+
+def _rch_contatori(url, headers, rch_kwargs, timeout=(RCH_CONNESSIONE_S, RCH_LETTURA_S)):
     """Una lettura di stato (=C453/$0). Ritorna un dict con z (lastZ), doc
     (lastDocF), i segnali della meccanica e la risposta grezza, oppure None se
     la stampante non risponde o la risposta non contiene i contatori.
-    Non solleva mai."""
+    Non solleva mai, salvo RchOccupata (stampante impegnata da altri)."""
     payload = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C453/$0</cmd></Service>'
     try:
-        resp = requests.post(url, data=payload.encode('utf-8'), headers=headers,
-                             timeout=timeout, **rch_kwargs)
+        resp = _rch_post(url, data=payload.encode('utf-8'), headers=headers,
+                         timeout=timeout, **rch_kwargs)
+    except RchOccupata:
+        raise
     except Exception:
         return None
     return _rch_parse_contatori(resp.text or "")
@@ -255,9 +326,9 @@ def _rch_parse_contatori(body):
     }
 
 
-def _rch_leggi_contatori(url, headers, rch_kwargs, tentativi=3, pausa_s=0.4):
-    """Come _rch_contatori, con qualche tentativo: una stampante appena svegliata
-    puo' non rispondere alla prima richiesta."""
+def _rch_leggi_contatori(url, headers, rch_kwargs, tentativi=2, pausa_s=0.3):
+    """Come _rch_contatori, con un secondo tentativo: una stampante appena
+    svegliata puo' non rispondere alla prima richiesta. Al peggio ~6 s."""
     for i in range(tentativi):
         c = _rch_contatori(url, headers, rch_kwargs)
         if c is not None:
@@ -330,7 +401,7 @@ def _rch_esito(prima, dopo):
     return 'incerto' if _rch_pronta(dopo) else 'attesa'
 
 
-def _rch_attendi_emissione(url, headers, rch_kwargs, prima, budget_s=6.0, passo_s=0.5):
+def _rch_attendi_emissione(url, headers, rch_kwargs, prima, budget_s=RCH_CONFERMA_S, passo_s=0.5):
     """Rilegge il contatore finche' lo scontrino risulta emesso o finisce il
     tempo. Nel caso normale esce alla prima lettura (mezzo secondo).
     Ritorna (esito, ultima_lettura)."""
@@ -366,11 +437,199 @@ def _rch_messaggio_stato(c):
                 "spegni e riaccendi la stampante RCH.")
     return "Stampante pronta."
 
+
+def _rch_connessione_mai_aperta(exc):
+    """True se la richiesta NON e' mai arrivata alla stampante (connessione
+    rifiutata o non aperta in tempo): niente stampato, ristampare e' sicuro.
+    Una connessione caduta a meta' invece non lo dice: lo scontrino puo' essere
+    arrivato."""
+    if isinstance(exc, requests.exceptions.ConnectTimeout):
+        return True
+    testo = str(exc)
+    return any(s in testo for s in ("NewConnectionError", "Failed to establish a new connection",
+                                    "Connection refused", "actively refused",
+                                    "No route to host", "Network is unreachable"))
+
+
+def _rch_esegui_scontrino(url, headers, rch_kwargs, payload, prima):
+    """Manda lo scontrino e decide dal contatore se e' uscito. Va chiamata con
+    la stampante gia' in uso (_rch_in_uso) e con il contatore letto subito prima.
+
+    Ritorna un dict:
+      esito   'emesso'        stessa Z, documento +1
+              'non_arrivato'  la connessione non si e' mai aperta: niente
+                              stampato, si puo' ristampare subito
+              'da_verificare' la stampante puo' averlo ricevuto: decide solo una
+                              nuova lettura del contatore (rch_retry)
+      motivo  None | 'connessione' | 'nessuna_risposta' | 'connessione_interrotta'
+              | 'risposta_errore' | 'contatore_fermo' | 'errore'
+      dopo, risposta, errcode, invio_ms
+    Al peggio: RCH_RISPOSTA_SCONTRINO_S + una lettura di stato."""
+    out = {"esito": None, "motivo": None, "dopo": None, "risposta": "",
+           "errcode": None, "invio_ms": None}
+    t0 = pytime.monotonic()
+    resp = None
+    try:
+        resp = _rch_post(url, data=payload.encode("UTF-8"), headers=headers,
+                         timeout=(RCH_CONNESSIONE_S, RCH_RISPOSTA_SCONTRINO_S), **rch_kwargs)
+    except RchOccupata:
+        raise
+    except requests.exceptions.ConnectTimeout:
+        out.update(esito='non_arrivato', motivo='connessione')
+    except requests.exceptions.ReadTimeout:
+        out['motivo'] = 'nessuna_risposta'
+    except requests.exceptions.ConnectionError as exc:
+        if _rch_connessione_mai_aperta(exc):
+            out.update(esito='non_arrivato', motivo='connessione')
+        else:
+            out['motivo'] = 'connessione_interrotta'
+            out['risposta'] = str(exc)[:200]
+    except Exception as exc:
+        out['motivo'] = 'errore'
+        out['risposta'] = str(exc)[:200]
+    out['invio_ms'] = int((pytime.monotonic() - t0) * 1000)
+    if out['esito'] == 'non_arrivato':
+        return out
+
+    if resp is not None:
+        out['risposta'] = (resp.text or "")[:400]
+        if _rch_is_success(resp):
+            esito, dopo = _rch_attendi_emissione(url, headers, rch_kwargs, prima)
+            out['dopo'] = dopo
+            if esito == 'emesso':
+                out['esito'] = 'emesso'
+            else:
+                out.update(esito='da_verificare', motivo='contatore_fermo')
+            return out
+        out['motivo'] = 'risposta_errore'
+        out['errcode'] = _rch_parse_errcode(resp.text or "")
+
+    # Nessuna risposta, o risposta d'errore: UNA lettura veloce. Se lo scontrino
+    # e' uscito lo stesso si registra subito, altrimenti decide la verifica.
+    dopo = _rch_contatori(url, headers, rch_kwargs)
+    out['dopo'] = dopo
+    out['esito'] = 'emesso' if _rch_esito(prima, dopo) == 'emesso' else 'da_verificare'
+    return out
+
+
+def _rch_messaggio_motivo(esecuzione):
+    """Prima riga della finestra "Scontrino non confermato": cosa e' successo."""
+    motivo = esecuzione.get("motivo")
+    if motivo == 'nessuna_risposta':
+        testo = (f"La stampante ha ricevuto lo scontrino ma non ha risposto entro "
+                 f"{int(RCH_RISPOSTA_SCONTRINO_S)} secondi.")
+    elif motivo == 'contatore_fermo':
+        testo = "La stampante ha accettato lo scontrino, ma non risulta stampato."
+    elif motivo == 'risposta_errore':
+        testo = f"La stampante ha rifiutato lo scontrino (codice {esecuzione.get('errcode')})."
+    elif motivo == 'connessione_interrotta':
+        testo = "La connessione con la stampante si è interrotta durante l'invio."
+    else:
+        testo = "La stampante non ha confermato lo scontrino."
+    dopo = esecuzione.get("dopo")
+    if not _rch_pronta(dopo):
+        testo += " " + _rch_messaggio_stato(dopo)
+    return testo
+
+
+def _rch_registra_pendente(key, pending, progressivo, come):
+    """Registra lo scontrino di un pending che il contatore ha confermato
+    uscito, con ricariche/attivazioni/rate come nel percorso diretto.
+    Il pending si toglie PRIMA di scrivere: due verifiche arrivate insieme non
+    lo registrano due volte (e _registra_fiscale_confermato non duplica il
+    progressivo). Ritorna il risultato da dare alla cassa."""
+    if RCH_PENDING.pop(key, None) is None and key in IDEMPOTENCY_STORE:
+        return IDEMPOTENCY_STORE[key]
+    voci = pending.get("voci", []) or []
+    try:
+        totale = float(pending.get("expected_total"))
+    except Exception:
+        totale = round(sum(float(v.get("prezzo", 0)) for v in voci), 2)
+    scritto = _registra_fiscale_confermato(voci, pending.get("cliente_id"),
+                                           pending.get("operatore_id"), totale, progressivo)
+    if scritto:
+        try:
+            _applica_movimenti_incasso(pending.get("voci_richiesta") or voci)
+        except Exception:
+            current_app.logger.exception("movimenti carte/rate non applicati (%s)", come)
+        log_crm_error(
+            "Scontrino registrato dopo una mancata conferma della stampante",
+            context={"idempotency_key": key, "progressivo": progressivo, "come": come,
+                     "expected_total": totale, "ristampe": pending.get("ristampe", 0),
+                     "secondi_dal_primo_invio": round(
+                         pytime.time() - pending.get("primo_invio_ts", pending.get("created_ts", pytime.time())), 1)},
+            client_id=pending.get("cliente_id"),
+        )
+    result = {"results": [{"message": f"Scontrino fiscale registrato (progressivo {progressivo})",
+                           "is_fiscale": True}],
+              "reset_voci": True}
+    IDEMPOTENCY_STORE[key] = result
+    return result
+
+
+def _rch_risolvi_pendenti(pre):
+    """UNO SCONTRINO IN SOSPESO ALLA VOLTA. Prima di mandarne uno nuovo si
+    decide la sorte di quelli rimasti da verificare, con la lettura del
+    contatore appena fatta (stampante gia' in uso). Ritorna None se si puo'
+    procedere, altrimenti (corpo, status) da restituire al posto della stampa.
+    - uscito in ritardo           -> registrato; il nuovo NON si stampa: dopo un
+                                     ricarico della pagina e' spesso lo stesso
+    - non uscito, stampante pronta -> scartato, si procede
+    - stampante non pronta        -> non si stampa"""
+    oggi = datetime.now().strftime("%Y-%m-%d")
+    for key, p in sorted(list(RCH_PENDING.items()), key=lambda kv: kv[1].get("created_ts", 0)):
+        prima_p = p.get("contatori_prima")
+        if p.get("giorno") != oggi or not prima_p:
+            RCH_PENDING.pop(key, None)
+            continue
+        esito = _rch_esito(prima_p, pre)
+        ora = datetime.fromtimestamp(p.get("primo_invio_ts", p.get("created_ts", pytime.time()))).strftime("%H:%M")
+        try:
+            tot = f"{float(p.get('expected_total') or 0):.2f}".replace('.', ',')
+        except Exception:
+            tot = "?"
+        if esito == 'emesso':
+            prog = _rch_progressivo(pre)
+            _rch_registra_pendente(key, p, prog, "prima di uno scontrino nuovo")
+            return ({"error": (f"Lo scontrino precedente da € {tot} (ore {ora}) è uscito in "
+                               f"ritardo ed è stato registrato adesso ({prog}). Se stavi "
+                               f"ristampando lo stesso scontrino NON serve: togli le voci dalla "
+                               f"bozza. Se è un'altra vendita, premi di nuovo Stampa."),
+                     "pendente_registrato": True}, 409)
+        if esito == 'non_emesso':
+            if pytime.time() - p.get("created_ts", 0) < RCH_MIN_PRIMA_DI_RISTAMPA_S:
+                return ({"error": "Sto ancora verificando lo scontrino precedente: "
+                                  "riprova tra qualche secondo."}, 409)
+            RCH_PENDING.pop(key, None)     # non uscito: scartato, la bozza e' ancora in cassa
+            continue
+        if esito == 'attesa':
+            return ({"error": (f"C'è uno scontrino precedente da € {tot} (ore {ora}) non "
+                               f"confermato e la stampante non è pronta. "
+                               + _rch_messaggio_stato(pre)),
+                     "pendente_in_attesa": True}, 409)
+        # incerto: non si puo' attribuire il documento, lo si scarta lasciando traccia
+        RCH_PENDING.pop(key, None)
+        log_crm_error(
+            "Scontrino da verificare scartato: contatore non spiegabile",
+            context={"idempotency_key": key, "contatori_prima": prima_p,
+                     "contatori_ora": {"z": pre["z"], "doc": pre["doc"]},
+                     "expected_total": p.get("expected_total")},
+            client_id=p.get("cliente_id"),
+        )
+    return None
+
 def clean_str(s):
     # Rimuove apostrofi e caratteri HTML problematici
     return str(s).replace("'", "").replace('"', "").replace("&", "").replace(";", "").replace("<", "").replace(">", "")
 
 cassa_bp = Blueprint('cassa', __name__)
+
+
+@cassa_bp.errorhandler(RchOccupata)
+def _cassa_rch_occupata(exc):
+    """La stampante e' impegnata da un'altra richiesta: niente e' stato
+    mandato. Piu' specifico di Exception, quindi Flask sceglie questo."""
+    return jsonify({"error": MSG_RCH_OCCUPATA, "rch_occupata": True}), 409
 
 
 @cassa_bp.errorhandler(Exception)
@@ -908,7 +1167,7 @@ def _read_printer_lastz(ip, printer_model):
         headers = _rch_headers(printer_model)
         rch_kwargs = _rch_request_kwargs(printer_model)
         payload = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C453/$0</cmd></Service>'
-        resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=8,
+        resp = _rch_post(url, data=payload.encode('utf-8'), headers=headers, timeout=8,
                              **rch_kwargs)
         m_z = re.search(r'<lastZ>(\d+)</lastZ>', resp.text or "")
         if m_z:
@@ -1135,7 +1394,7 @@ def _rch_clear(ip, printer_model):
     tentativo rifiutato, perche' un documento rimasto aperto blocca ogni stampa
     successiva - fiscale compresa. Non solleva mai."""
     try:
-        requests.post(
+        _rch_post(
             _rch_url(ip, printer_model),
             data='<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=K</cmd></Service>'.encode("UTF-8"),
             headers=_rch_headers(printer_model), timeout=10,
@@ -1192,7 +1451,7 @@ def _stampa_promemoria_gestionale(voci_zero, cliente_id=None, operatore_id=None)
         current_app.logger.debug("PAYLOAD GESTIONALE (%s ... %s):\n%s", apri, chiudi, payload)
 
         try:
-            resp = requests.post(url, data=payload.encode("UTF-8"), headers=headers,
+            resp = _rch_post(url, data=payload.encode("UTF-8"), headers=headers,
                                  timeout=15, **rch_kwargs)
         except Exception as exc:
             # Stampante irraggiungibile o in timeout: le altre varianti
@@ -1631,21 +1890,41 @@ def send_to_rch():
         # confronto con la DGFE nel lazy recover.
         expected_line_count = len([v for v in voci_fiscali if float(v.get("prezzo", 0) or 0) > 0])
 
-        # ---------- contatore PRIMA dell'invio ----------
-        # E' il termine di paragone che decide se lo scontrino e' uscito (vedi
-        # _rch_esito). Senza, non si manda niente: meglio uno scontrino non
-        # stampato che uno registrato senza sapere se esiste.
-        contatori_prima = _rch_leggi_contatori(url, headers, rch_kwargs)
+        # ---------- conversazione con la RCH: UNA alla volta ----------
+        # Dentro il lucchetto: contatore PRIMA dell'invio, sorte degli scontrini
+        # rimasti da verificare, invio, conferma dal contatore. Fuori dal
+        # lucchetto solo le scritture del risultato. Se la stampante e' impegnata
+        # da un'altra richiesta oltre RCH_ATTESA_LIBERA_S: RchOccupata -> 409.
+        # Tempi (RCH_*_S): al peggio ~10 s, poi la cassa sa cosa e' successo.
+        t_inizio = pytime.monotonic()
+        blocco_pendente = None
+        esecuzione = None
+        with _rch_in_uso():
+            # Il contatore PRIMA dell'invio e' il termine di paragone che decide
+            # se lo scontrino e' uscito (vedi _rch_esito). Senza, non si manda
+            # niente: meglio uno scontrino non stampato che uno registrato senza
+            # sapere se esiste.
+            contatori_prima = _rch_leggi_contatori(url, headers, rch_kwargs)
+            if contatori_prima is not None and not _rch_bloccata_prima_dell_invio(contatori_prima):
+                blocco_pendente = _rch_risolvi_pendenti(contatori_prima)
+                if blocco_pendente is None:
+                    esecuzione = _rch_esegui_scontrino(url, headers, rch_kwargs,
+                                                       payload_vendita, contatori_prima)
+        totale_ms = int((pytime.monotonic() - t_inizio) * 1000)
+
         if contatori_prima is None:
             log_crm_error(
                 "RCH non risponde prima della stampa: scontrino non inviato",
                 context={"operatore_id": operatore_id, "printer_ip": ip,
-                         "printer_model": printer_model, "expected_total": expected_total},
+                         "printer_model": printer_model, "expected_total": expected_total,
+                         "attesa_ms": totale_ms},
                 client_id=cliente_id,
             )
             return jsonify({"error": "La stampante non risponde: lo scontrino NON è stato "
-                                     "inviato e NON è stato registrato. Controlla che la "
-                                     "stampante sia accesa e collegata, poi premi di nuovo Stampa."}), 502
+                                     "inviato e NON è stato registrato. Controlla che sia accesa "
+                                     "e col cavo di rete collegato; se lo è, spegnila e "
+                                     "riaccendila. Poi premi di nuovo Stampa.",
+                            "rch_non_risponde": True}), 502
         if _rch_bloccata_prima_dell_invio(contatori_prima):
             log_crm_error(
                 "RCH bloccata prima della stampa (Z 0, Doc 0): scontrino non inviato",
@@ -1655,8 +1934,12 @@ def send_to_rch():
                 client_id=cliente_id,
             )
             return jsonify({"error": MSG_RCH_BLOCCATA_NON_INVIATO, "rch_bloccata": True}), 503
+        if blocco_pendente is not None:
+            corpo, stato_http = blocco_pendente
+            return jsonify(corpo), stato_http
 
         def _build_pending_entry():
+            adesso = pytime.time()
             return {
                 "payload_xml": payload_vendita,
                 "cliente_id": cliente_id,
@@ -1664,10 +1947,11 @@ def send_to_rch():
                 "voci": voci_fiscali,
                 # tutte le voci della richiesta: ricariche, attivazioni carta e
                 # rate vanno applicate anche se lo scontrino viene confermato
-                # piu' tardi dalla verifica (rch_retry)
+                # piu' tardi dalla verifica (rch_retry) o dalla ristampa
                 "voci_richiesta": voci,
                 "contatori_prima": {"z": contatori_prima["z"], "doc": contatori_prima["doc"]},
-                "created_ts": pytime.time(),
+                "created_ts": adesso,          # ultimo invio (si aggiorna a ogni ristampa)
+                "primo_invio_ts": adesso,
                 "expected_total": expected_total,
                 "giorno": datetime.now().strftime("%Y-%m-%d"),
                 "line_count": expected_line_count,
@@ -1675,178 +1959,77 @@ def send_to_rch():
                 "printer_model": printer_model
             }
 
-        fiscale_recovered = False
-        progressivo_completo = None
-        resp_vendita = None
+        contatori_dopo = esecuzione["dopo"]
+        current_app.logger.info(
+            "RCH scontrino: esito=%s motivo=%s prima=%s/%s dopo=%s invio_ms=%s totale_ms=%s",
+            esecuzione["esito"], esecuzione["motivo"], contatori_prima["z"], contatori_prima["doc"],
+            (f"{contatori_dopo['z']}/{contatori_dopo['doc']}" if contatori_dopo else None),
+            esecuzione["invio_ms"], totale_ms)
 
-        try:
-            resp_vendita = requests.post(
-                url, data=payload_vendita.encode("UTF-8"), headers=headers, timeout=120,
-                **rch_kwargs
+        contesto_log = {
+            "idempotency_key": idempotency_key, "operatore_id": operatore_id,
+            "printer_ip": ip, "printer_model": printer_model,
+            "expected_total": expected_total, "motivo": esecuzione["motivo"],
+            "invio_ms": esecuzione["invio_ms"], "totale_ms": totale_ms,
+            "contatori_prima": {"z": contatori_prima["z"], "doc": contatori_prima["doc"]},
+            "contatori_dopo": ({"z": contatori_dopo["z"], "doc": contatori_dopo["doc"]}
+                               if contatori_dopo else None),
+            "stato_dopo": (contatori_dopo or {}).get("raw"),
+            "risposta_vendita": esecuzione["risposta"], "errcode": esecuzione["errcode"],
+        }
+
+        if esecuzione["esito"] == 'non_arrivato':
+            # La connessione non si e' mai aperta: niente e' arrivato alla
+            # stampante, niente stampato. Ristampare e' sicuro.
+            log_crm_error("RCH: scontrino non arrivato alla stampante (connessione non riuscita)",
+                          context=contesto_log, client_id=cliente_id)
+            return jsonify({"error": "Lo scontrino NON è arrivato alla stampante (non risponde in "
+                                     "rete): niente stampato, niente registrato. Controlla che sia "
+                                     "accesa e col cavo collegato, poi premi di nuovo Stampa.",
+                            "rch_non_risponde": True}), 502
+
+        if esecuzione["esito"] != 'emesso':
+            # NIENTE nel registro. Lo scontrino resta da verificare: la finestra
+            # in cassa rilegge il contatore (rch_retry) e lo registra se e'
+            # uscito; se non e' uscito offre la Ristampa (rch_ristampa).
+            log_crm_error("Scontrino non confermato dalla stampante: nulla registrato",
+                          context=contesto_log, client_id=cliente_id)
+            RCH_PENDING[idempotency_key] = _build_pending_entry()
+            return jsonify({
+                "pending": True,
+                "reason": esecuzione["motivo"],
+                "message": _rch_messaggio_motivo(esecuzione),
+                "idempotency_key": idempotency_key,
+                "expected_total": expected_total,
+                "retry_after": 2
+            }), 202
+
+        progressivo_completo = _rch_progressivo(contatori_dopo)
+
+        # ---------- persiste Receipt ----------
+        nuovo_receipt = Receipt(
+            created_at       = datetime.now(),
+            total_amount     = expected_total,
+            is_fiscale       = True,
+            voci             = voci_fiscali,
+            cliente_id       = cliente_id,
+            operatore_id     = operatore_id,
+            numero_progressivo = progressivo_completo  # stringa tipo 1825-0046
+        )
+        db.session.add(nuovo_receipt)
+        db.session.commit()
+
+        ids_pagati = [v.get("appointment_id") for v in voci_fiscali if v.get("appointment_id")]
+        if ids_pagati:
+            Appointment.query.filter(Appointment.id.in_(ids_pagati)).update(
+                {Appointment.stato: AppointmentStatus.PAGATO}, synchronize_session=False
             )
-            current_app.logger.info("RCH risposta: %s", resp_vendita.text[:300] if resp_vendita.text else "(vuoto)")
-        except requests.exceptions.Timeout as exc:
-            # TIMEOUT = la stampante POTREBBE aver gia' chiuso il documento ma la response
-            # non e' arrivata. Provo prima il lazy recover (legge lastDocF + DGFE).
-            current_app.logger.warning("RCH TIMEOUT: tentativo lazy recover... (%s)", str(exc))
-            prog = _try_lazy_recover(voci_fiscali, cliente_id, operatore_id,
-                                     expected_total, expected_line_count, ip, printer_model,
-                                     contatori_prima=contatori_prima)
-            if prog:
-                current_app.logger.info("RCH lazy recover OK dopo timeout: progressivo %s", prog)
-                progressivo_completo = prog
-                fiscale_recovered = True
-                results.append({
-                    "message": f"Scontrino fiscale registrato (progressivo {prog})",
-                    "is_fiscale": True
-                })
-            else:
-                if idempotency_key:
-                    RCH_PENDING[idempotency_key] = _build_pending_entry()
-                    return jsonify({
-                        "pending": True,
-                        "reason": "timeout",
-                        "message": "Stampante in attesa (cambio carta?). Risolvere e riprovare.",
-                        "idempotency_key": idempotency_key,
-                        "expected_total": expected_total,
-                        "retry_after": 3
-                    }), 202
-                log_crm_error(
-                    "RCH timeout invio scontrino fiscale",
-                    context={"idempotency_key": idempotency_key, "operatore_id": operatore_id,
-                             "printer_ip": ip, "printer_model": printer_model,
-                             "expected_total": expected_total, "exception": str(exc)},
-                    client_id=cliente_id,
-                )
-                return jsonify({"error": "Stampante in attesa. Controllare carta e riprovare."}), 502
-        except Exception as exc:
-            current_app.logger.warning("RCH non raggiungibile (network): tentativo lazy recover... (%s)", str(exc))
-            prog = _try_lazy_recover(voci_fiscali, cliente_id, operatore_id,
-                                     expected_total, expected_line_count, ip, printer_model,
-                                     contatori_prima=contatori_prima)
-            if prog:
-                current_app.logger.info("RCH lazy recover OK dopo network error: progressivo %s", prog)
-                progressivo_completo = prog
-                fiscale_recovered = True
-                results.append({
-                    "message": f"Scontrino fiscale registrato (progressivo {prog})",
-                    "is_fiscale": True
-                })
-            else:
-                if idempotency_key:
-                    RCH_PENDING[idempotency_key] = _build_pending_entry()
-                    return jsonify({
-                        "pending": True,
-                        "reason": "network",
-                        "message": "Stampante non raggiungibile. Attendere e riprovare.",
-                        "idempotency_key": idempotency_key,
-                        "expected_total": expected_total,
-                        "retry_after": 3
-                    }), 202
-                log_crm_error(
-                    "RCH non raggiungibile (network) invio scontrino fiscale",
-                    context={"idempotency_key": idempotency_key, "operatore_id": operatore_id,
-                             "printer_ip": ip, "printer_model": printer_model,
-                             "expected_total": expected_total, "exception": str(exc)},
-                    client_id=cliente_id,
-                )
-                return jsonify({"error": "Stampante non raggiungibile. Riprova."}), 502
-
-        # Se la prima POST e' andata ma la risposta non e' "OK" (errCode!=0 da qualche parte),
-        # provo lazy recover prima di dare per fallito.
-        if not fiscale_recovered and not _rch_is_success(resp_vendita):
-            current_app.logger.warning("RCH ha risposto con errore: tentativo lazy recover... (body=%s)",
-                                       (resp_vendita.text[:400] if resp_vendita is not None else ""))
-            prog = _try_lazy_recover(voci_fiscali, cliente_id, operatore_id,
-                                     expected_total, expected_line_count, ip, printer_model,
-                                     contatori_prima=contatori_prima)
-            if prog:
-                current_app.logger.info("RCH lazy recover OK dopo errore stampante: progressivo %s", prog)
-                progressivo_completo = prog
-                fiscale_recovered = True
-                results.append({
-                    "message": f"Scontrino fiscale registrato (progressivo {prog})",
-                    "is_fiscale": True
-                })
-            else:
-                if idempotency_key:
-                    RCH_PENDING[idempotency_key] = _build_pending_entry()
-                    return jsonify({
-                        "pending": True,
-                        "reason": "printer_error",
-                        "message": "Stampante in errore. Attendere (es. cambio carta) e riprovare.",
-                        "idempotency_key": idempotency_key,
-                        "expected_total": expected_total,
-                        "retry_after": 3
-                    }), 202
-                log_crm_error(
-                    "RCH ha risposto con errore (errCode) invio scontrino fiscale",
-                    context={"idempotency_key": idempotency_key, "operatore_id": operatore_id,
-                             "printer_ip": ip, "printer_model": printer_model,
-                             "expected_total": expected_total,
-                             "response_body": (resp_vendita.text[:400] if resp_vendita is not None else "")},
-                    client_id=cliente_id,
-                )
-                return jsonify({"error": "Stampante in errore. Riprova."}), 502
-
-        if not fiscale_recovered:
-            # ---------- lo scontrino e' uscito? lo dice SOLO il contatore ----------
-            # errorCode 0 vuol dire "comandi accettati", non "documento emesso":
-            # la RCH bloccata risponde 0 e poi "Z 0, Doc 0" (vedi _rch_esito).
-            esito, contatori_dopo = _rch_attendi_emissione(url, headers, rch_kwargs, contatori_prima)
-
-            if esito != 'emesso':
-                # NIENTE nel registro. Lo scontrino resta da verificare: la
-                # finestra di attesa in cassa rilegge il contatore (rch_retry)
-                # e lo registra solo se nel frattempo e' uscito.
-                log_crm_error(
-                    "Scontrino non confermato dalla stampante: nulla registrato",
-                    context={"idempotency_key": idempotency_key, "operatore_id": operatore_id,
-                             "printer_ip": ip, "printer_model": printer_model,
-                             "expected_total": expected_total, "esito": esito,
-                             "contatori_prima": {"z": contatori_prima["z"], "doc": contatori_prima["doc"]},
-                             "contatori_dopo": ({"z": contatori_dopo["z"], "doc": contatori_dopo["doc"]}
-                                                if contatori_dopo else None),
-                             "stato_dopo": (contatori_dopo or {}).get("raw"),
-                             "risposta_vendita": (resp_vendita.text[:400] if resp_vendita is not None else "")},
-                    client_id=cliente_id,
-                )
-                RCH_PENDING[idempotency_key] = _build_pending_entry()
-                return jsonify({
-                    "pending": True,
-                    "reason": "non_confermato",
-                    "message": _rch_messaggio_stato(contatori_dopo),
-                    "idempotency_key": idempotency_key,
-                    "expected_total": expected_total,
-                    "retry_after": 3
-                }), 202
-
-            progressivo_completo = _rch_progressivo(contatori_dopo)
-
-            # ---------- persiste Receipt ----------
-            nuovo_receipt = Receipt(
-                created_at       = datetime.now(),
-                total_amount     = expected_total,
-                is_fiscale       = True,
-                voci             = voci_fiscali,
-                cliente_id       = cliente_id,
-                operatore_id     = operatore_id,
-                numero_progressivo = progressivo_completo  # stringa tipo 1825-0046
-            )
-            db.session.add(nuovo_receipt)
             db.session.commit()
 
-            ids_pagati = [v.get("appointment_id") for v in voci_fiscali if v.get("appointment_id")]
-            if ids_pagati:
-                Appointment.query.filter(Appointment.id.in_(ids_pagati)).update(
-                    {Appointment.stato: AppointmentStatus.PAGATO}, synchronize_session=False
-                )
-                db.session.commit()
-
-            results.append({
-                "message": f"Scontrino fiscale registrato (progressivo {progressivo_completo})",
-                "is_fiscale": True
-            })
+        results.append({
+            "message": f"Scontrino fiscale registrato (progressivo {progressivo_completo})",
+            "is_fiscale": True
+        })
 
     # =========================
     # 2. SCONTRINO NON FISCALE
@@ -2999,6 +3182,7 @@ def chiusura_dovuta():
 
 
 @cassa_bp.route('/cassa/chiusura-giornaliera', methods=['POST'])
+@_rch_esclusivo
 def chiusura_giornaliera():
     ip, printer_model = _get_printer_config()
     if not ip:
@@ -3035,7 +3219,7 @@ def chiusura_giornaliera():
         qui: mandarlo mentre la Z e' in corso la interromperebbe a meta'."""
         try:
             unlock = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C1</cmd></Service>'
-            requests.post(url, data=unlock.encode("UTF-8"), headers=headers, timeout=8,
+            _rch_post(url, data=unlock.encode("UTF-8"), headers=headers, timeout=8,
                           **rch_kwargs)
         except Exception:
             pass
@@ -3043,7 +3227,7 @@ def chiusura_giornaliera():
         return jsonify({"error": "Errore di comunicazione con la stampante fiscale."}), 502
 
     try:
-        resp = requests.post(url, data=xml_payload.encode("UTF-8"), headers=headers, timeout=60,
+        resp = _rch_post(url, data=xml_payload.encode("UTF-8"), headers=headers, timeout=60,
                              **rch_kwargs)
         body = resp.text or ""
         masked = re.sub(r'([A-Za-z0-9_\-]{8,})', '[REDACTED]', body)
@@ -3086,6 +3270,7 @@ def chiusura_giornaliera():
 
 
 @cassa_bp.route('/cassa/api/dgfe', methods=['POST'])
+@_rch_esclusivo
 def api_dgfe():
     data = request.get_json(force=True) or {}
     current_app.logger.debug("DEBUG /cassa/api/dgfe: %s", {"date": data.get("date"), "ip": ("[REDACTED]" if data.get("ip") else None)})
@@ -3433,6 +3618,16 @@ def _righe_reso_rch(scontrino, printer_model):
 
 
 def _storna_scontrino_rch(scontrino):
+    """Storno sotto il lucchetto della stampante: lettura del progressivo,
+    annullo/reso e verifica sono una sola conversazione (vedi _RCH_BUS)."""
+    try:
+        with _rch_in_uso():
+            return _storna_scontrino_rch_impl(scontrino)
+    except RchOccupata:
+        return {"error": MSG_RCH_OCCUPATA, "status": 409}
+
+
+def _storna_scontrino_rch_impl(scontrino):
     """Rettifica fiscalmente uno scontrino e registra la riga negativa in DB.
 
     Annullamento se e' l'ultimo documento emesso, altrimenti reso.
@@ -3530,7 +3725,7 @@ def _storna_scontrino_rch(scontrino):
            + "\n".join(cmds) + '\n</Service>')
 
     try:
-        resp = requests.post(url, data=xml.encode("UTF-8"), headers=headers, timeout=30,
+        resp = _rch_post(url, data=xml.encode("UTF-8"), headers=headers, timeout=30,
                              **rch_kwargs)
     except Exception as exc:
         current_app.logger.error("%s: errore di rete verso la stampante: %s", tipo, str(exc))
@@ -3629,6 +3824,21 @@ def rch_status():
     return jsonify({"error": "Not found"}), 404
 
 def _dgfe_entries_with_diag(ip: str, day: date):
+    """Lettura DGFE sotto il lucchetto della stampante: =C3, =C452 e =C1
+    sono una sola sequenza (uno scontrino in mezzo la troverebbe in modo Z).
+    Se la stampante e' impegnata da altri, la lettura risulta fallita come
+    per un errore di rete: nessuno la scambia per un giorno vuoto."""
+    try:
+        with _rch_in_uso():
+            return _dgfe_entries_with_diag_impl(ip, day)
+    except RchOccupata:
+        return [], {"status": "network_error", "http_status": None, "body_len": 0,
+                    "ej_found": False, "blocks": 0, "parsed_entries": 0,
+                    "parse_failures": 0, "error": "stampante impegnata da un'altra operazione",
+                    "body_excerpt": "", "printer_model": None, "url": None}
+
+
+def _dgfe_entries_with_diag_impl(ip: str, day: date):
     """Come _dgfe_entries_for_date ma ritorna (entries, diag) con info diagnostica.
     diag e' un dict con: status, http_status, body_len, ej_found, blocks, parsed_entries,
     parse_failures, error, body_excerpt, printer_model, url.
@@ -3888,41 +4098,6 @@ def _registra_fiscale_confermato(voci, cliente_id, operatore_id, totale, progres
         db.session.commit()
     return True
 
-
-def _try_lazy_recover(voci, cliente_id, operatore_id, expected_total,
-                      expected_line_count, ip, printer_model, contatori_prima=None):
-    """Risposta ambigua della stampante (timeout, rete, errCode): lo scontrino
-    e' uscito lo stesso? Lo dice solo il contatore, confrontato con quello letto
-    PRIMA dell'invio (vedi _rch_esito). Se e' uscito lo registra e ritorna il
-    progressivo, altrimenti None e il chiamante lo lascia da verificare.
-    Nessuna ristampa, nessun comando di scrittura inviato alla stampante.
-
-    Prima si decideva con "progressivo nuovo + un documento di pari importo nel
-    DGFE": senza il contatore di partenza un documento qualsiasi dello stesso
-    importo bastava a far registrare uno scontrino mai uscito.
-    """
-    if contatori_prima is None:
-        return None
-    try:
-        url = _rch_url(ip, printer_model)
-        headers = _rch_headers(printer_model)
-        rch_kwargs = _rch_request_kwargs(printer_model)
-
-        esito, dopo = _rch_attendi_emissione(url, headers, rch_kwargs, contatori_prima,
-                                             budget_s=5.0)
-        if esito != 'emesso':
-            return None
-        progressivo_completo = _rch_progressivo(dopo)
-        if not _registra_fiscale_confermato(voci, cliente_id, operatore_id,
-                                            expected_total, progressivo_completo):
-            return None
-        return progressivo_completo
-    except Exception as exc:
-        try:
-            current_app.logger.warning("_try_lazy_recover: errore %s", str(exc))
-        except Exception:
-            pass
-        return None
 
 # ============================================================
 # RECONCILIATION DGFE <-> DB (persistita IN DATABASE, tabella dgfe_readings)
@@ -4312,21 +4487,20 @@ def rch_retry():
     """Verifica di uno scontrino rimasto "da verificare". NON ristampa.
 
     Rilegge il contatore della stampante e lo confronta con quello letto prima
-    dell'invio (salvato nel pending):
-    - stessa Z, documento +1        -> e' uscito: si registra (esito 'registrato')
-    - stampante pronta, contatore
-      fermo, per due letture        -> non e' uscito: si scarta il pending, NIENTE
-                                       nel registro, la bozza resta (esito 'non_emesso')
+    dell'ultimo invio (salvato nel pending):
+    - stessa Z, documento +1         -> e' uscito: si registra (esito 'registrato')
+    - stampante pronta e contatore
+      fermo per due letture, e almeno
+      RCH_MIN_PRIMA_DI_RISTAMPA_S
+      dall'invio                     -> non e' uscito: NIENTE nel registro, il
+                                        pending resta e la cassa offre la
+                                        Ristampa (esito 'non_emesso')
     - contatore che non si spiega
-      con un solo documento         -> non si registra niente, si chiede di
-                                       controllare (esito 'incerto')
+      con un solo documento          -> non si registra niente (esito 'incerto')
     - stampante bloccata/occupata/
-      senza carta/non raggiungibile -> si aspetta (202, esito 'attesa')
+      senza carta/non raggiungibile  -> si aspetta (202, esito 'attesa')
 
-    Prima si cercava nel DGFE un documento di pari importo e, se non c'era, si
-    prendeva l'ULTIMO documento del giorno qualunque fosse: dopo una RCH
-    bloccata e riavviata quel documento era lo scontrino precedente, e il
-    registro si ritrovava uno scontrino in piu' mai emesso.
+    Una lettura costa al massimo ~3 s; la cassa la ripete ogni 2 s.
     """
     data = request.get_json(force=True) or {}
     key = (data.get("idempotency_key") or "").strip()
@@ -4336,7 +4510,8 @@ def rch_retry():
         return jsonify({"esito": "registrato", **IDEMPOTENCY_STORE[key]}), 200
 
     pending = RCH_PENDING.get(key)
-    if not pending:
+    if not pending or not pending.get("contatori_prima"):
+        RCH_PENDING.pop(key, None)
         return jsonify({
             "esito": "incerto",
             "messaggio": ("Questo scontrino non è più in verifica (il gestionale è stato "
@@ -4344,7 +4519,7 @@ def rch_retry():
                           "dalla stampante prima di ristamparlo.")
         }), 409
 
-    prima = pending.get("contatori_prima")
+    prima = pending["contatori_prima"]
     ip, printer_model = _get_printer_config()
     if not ip:
         return jsonify({"error": "IP stampante RCH non configurato"}), 400
@@ -4352,95 +4527,169 @@ def rch_retry():
     headers = _rch_headers(printer_model)
     rch_kwargs = _rch_request_kwargs(printer_model)
 
-    if not prima:
-        # Pending creato senza contatore di partenza (non dovrebbe piu' succedere):
-        # non c'e' modo di sapere se lo scontrino e' uscito, quindi non si registra.
-        RCH_PENDING.pop(key, None)
-        return jsonify({
-            "esito": "incerto",
-            "messaggio": ("Non è possibile verificare questo scontrino: NON è stato registrato. "
-                          "Controlla se è uscito dalla stampante prima di ristamparlo.")
-        }), 409
-
-    dopo = _rch_contatori(url, headers, rch_kwargs)
-    esito = _rch_esito(prima, dopo)
-    if esito == 'non_emesso':
-        # Una lettura sola potrebbe cadere mentre la stampante riparte: si
-        # conferma con una seconda prima di dire "non e' uscito".
-        pytime.sleep(1.5)
-        dopo = _rch_contatori(url, headers, rch_kwargs)
-        esito = _rch_esito(prima, dopo)
+    try:
+        with _rch_in_uso(attesa_s=1.5):
+            dopo = _rch_contatori(url, headers, rch_kwargs)
+            esito = _rch_esito(prima, dopo)
+            if esito == 'non_emesso':
+                # Una lettura sola potrebbe cadere mentre la stampante finisce o
+                # riparte: si conferma con una seconda prima di dire "non uscito".
+                pytime.sleep(1.5)
+                dopo = _rch_contatori(url, headers, rch_kwargs)
+                esito = _rch_esito(prima, dopo)
+            if esito == 'emesso':
+                result = _rch_registra_pendente(key, pending, _rch_progressivo(dopo),
+                                                "verifica in cassa")
+                return jsonify({"esito": "registrato", **result}), 200
+    except RchOccupata:
+        return jsonify({"pending": True, "esito": "attesa",
+                        "messaggio": MSG_RCH_OCCUPATA, "retry_after": 2}), 202
 
     if esito == 'attesa':
         return jsonify({"pending": True, "esito": "attesa",
-                        "messaggio": _rch_messaggio_stato(dopo), "retry_after": 4}), 202
+                        "messaggio": _rch_messaggio_stato(dopo), "retry_after": 2}), 202
 
     if esito == 'non_emesso':
-        RCH_PENDING.pop(key, None)
-        current_app.logger.info("rch_retry %s: contatore fermo su %s, scontrino non emesso",
-                                key, _rch_progressivo(dopo))
+        if pytime.time() - pending.get("created_ts", 0) < RCH_MIN_PRIMA_DI_RISTAMPA_S:
+            # Troppo presto per escludere che stia ancora finendo di stampare.
+            return jsonify({"pending": True, "esito": "attesa",
+                            "messaggio": "Controllo se lo scontrino è uscito...",
+                            "retry_after": 2}), 202
+        if not pending.get("non_emesso_registrato"):
+            pending["non_emesso_registrato"] = True
+            log_crm_error(
+                "Scontrino non uscito (verificato dal contatore): pronto per la ristampa",
+                context={"idempotency_key": key, "contatori_prima": prima,
+                         "contatori_dopo": {"z": dopo["z"], "doc": dopo["doc"]},
+                         "expected_total": pending.get("expected_total"),
+                         "ristampe": pending.get("ristampe", 0),
+                         "secondi_dall_invio": round(pytime.time() - pending.get("created_ts", 0), 1)},
+                client_id=pending.get("cliente_id"),
+            )
         return jsonify({
             "esito": "non_emesso",
-            "messaggio": ("Lo scontrino NON è uscito e NON è stato registrato. "
-                          "La bozza è ancora in cassa: premi di nuovo Stampa.")
+            "puo_ristampare": True,
+            "messaggio": ("Lo scontrino NON è uscito e NON è registrato. "
+                          "La stampante è pronta: premi Ristampa.")
         }), 409
 
-    if esito == 'incerto':
+    # incerto
+    RCH_PENDING.pop(key, None)
+    log_crm_error(
+        "Verifica scontrino: contatore non spiegabile, nulla registrato",
+        context={"idempotency_key": key, "contatori_prima": prima,
+                 "contatori_dopo": {"z": dopo["z"], "doc": dopo["doc"]},
+                 "expected_total": pending.get("expected_total"),
+                 "stato": dopo.get("raw")},
+        client_id=pending.get("cliente_id"),
+    )
+    return jsonify({
+        "esito": "incerto",
+        "messaggio": ("La stampante ha cambiato numerazione in modo inatteso (documento "
+                      f"{_rch_progressivo(dopo)}): lo scontrino NON è stato registrato. "
+                      "Controlla se è uscito prima di ristamparlo.")
+    }), 409
+
+
+@cassa_bp.route('/cassa/rch-ristampa', methods=['POST'])
+def rch_ristampa():
+    """Ristampa dello scontrino rimasto da verificare, dalla finestra in cassa.
+
+    Non ristampa mai alla cieca: sotto il lucchetto rilegge il contatore e
+    - se il primo invio risulta uscito (documento +1) lo REGISTRA e non manda
+      niente;
+    - se e' fermo e la stampante e' pronta, rimanda LO STESSO scontrino (stesso
+      payload, stesse voci) con la stessa regola del contatore +1;
+    - altrimenti non manda niente e dice perche'.
+    """
+    data = request.get_json(force=True) or {}
+    key = (data.get("idempotency_key") or "").strip()
+    if not key:
+        return jsonify({"error": "Missing idempotency_key"}), 400
+    if key in IDEMPOTENCY_STORE:
+        return jsonify({"esito": "registrato", **IDEMPOTENCY_STORE[key]}), 200
+
+    pending = RCH_PENDING.get(key)
+    if not pending or not pending.get("contatori_prima") or not pending.get("payload_xml"):
         RCH_PENDING.pop(key, None)
-        log_crm_error(
-            "Verifica scontrino: contatore non spiegabile, nulla registrato",
-            context={"idempotency_key": key, "contatori_prima": prima,
-                     "contatori_dopo": {"z": dopo["z"], "doc": dopo["doc"]},
-                     "expected_total": pending.get("expected_total"),
-                     "stato": dopo.get("raw")},
-            client_id=pending.get("cliente_id"),
-        )
         return jsonify({
             "esito": "incerto",
-            "messaggio": ("La stampante ha cambiato numerazione in modo inatteso (documento "
-                          f"{_rch_progressivo(dopo)}): lo scontrino NON è stato registrato. "
-                          "Controlla se è uscito prima di ristamparlo.")
+            "messaggio": ("Questo scontrino non è più in verifica (il gestionale è stato "
+                          "riavviato?). Controlla se è uscito dalla stampante; se no, chiudi "
+                          "e premi di nuovo Stampa.")
         }), 409
-
-    # ---------- esito 'emesso': lo scontrino e' uscito ----------
-    progressivo_completo = _rch_progressivo(dopo)
-    if RCH_PENDING.pop(key, None) is None:
-        # Un'altra verifica arrivata insieme l'ha gia' presa in carico.
-        if key in IDEMPOTENCY_STORE:
-            return jsonify({"esito": "registrato", **IDEMPOTENCY_STORE[key]}), 200
+    if pytime.time() - pending.get("created_ts", 0) < RCH_MIN_PRIMA_DI_RISTAMPA_S:
         return jsonify({"pending": True, "esito": "attesa",
-                        "messaggio": "Verifica in corso...", "retry_after": 2}), 202
+                        "messaggio": "Controllo se lo scontrino è uscito...",
+                        "retry_after": 2}), 202
 
-    voci = pending.get("voci", [])
+    ip, printer_model = _get_printer_config()
+    if not ip:
+        return jsonify({"error": "IP stampante RCH non configurato"}), 400
+    url = _rch_url(ip, printer_model)
+    headers = _rch_headers(printer_model)
+    rch_kwargs = _rch_request_kwargs(printer_model)
+
+    esecuzione = None
     try:
-        totale = float(pending.get("expected_total"))
-    except Exception:
-        totale = round(sum(float(v.get("prezzo", 0)) for v in voci), 2)
-    scritto = _registra_fiscale_confermato(voci, pending.get("cliente_id"),
-                                           pending.get("operatore_id"), totale,
-                                           progressivo_completo)
-    if scritto:
-        # Ricariche, attivazioni carta e rate: come nel percorso diretto.
-        try:
-            _applica_movimenti_incasso(pending.get("voci_richiesta") or voci)
-        except Exception:
-            current_app.logger.exception("rch_retry: movimenti carte/rate non applicati")
+        with _rch_in_uso():
+            pre = _rch_leggi_contatori(url, headers, rch_kwargs)
+            esito_primo = _rch_esito(pending["contatori_prima"], pre)
+            if esito_primo == 'emesso':
+                result = _rch_registra_pendente(key, pending, _rch_progressivo(pre),
+                                                "ristampa: il primo invio era uscito")
+                return jsonify({"esito": "registrato", **result}), 200
+            if esito_primo == 'non_emesso':
+                pending["contatori_prima"] = {"z": pre["z"], "doc": pre["doc"]}
+                pending["created_ts"] = pytime.time()
+                pending["ristampe"] = pending.get("ristampe", 0) + 1
+                pending.pop("non_emesso_registrato", None)
+                esecuzione = _rch_esegui_scontrino(url, headers, rch_kwargs,
+                                                   pending["payload_xml"], pre)
+                if esecuzione["esito"] == 'emesso':
+                    result = _rch_registra_pendente(key, pending,
+                                                    _rch_progressivo(esecuzione["dopo"]), "ristampa")
+                    return jsonify({"esito": "registrato", **result}), 200
+    except RchOccupata:
+        return jsonify({"pending": True, "esito": "attesa",
+                        "messaggio": MSG_RCH_OCCUPATA, "retry_after": 2}), 202
 
-    result = {
-        "results": [{
-            "message": f"Scontrino fiscale registrato (progressivo {progressivo_completo})",
-            "is_fiscale": True
-        }],
-        "reset_voci": True
-    }
-    IDEMPOTENCY_STORE[key] = result
-    return jsonify({"esito": "registrato", **result}), 200
+    if esecuzione is None:
+        # Niente mandato: stampante non pronta o numerazione inattesa.
+        if esito_primo == 'incerto':
+            RCH_PENDING.pop(key, None)
+            return jsonify({"esito": "incerto",
+                            "messaggio": ("La stampante ha cambiato numerazione in modo inatteso: "
+                                          "niente ristampato, niente registrato. Controlla se lo "
+                                          "scontrino è uscito prima di ristamparlo.")}), 409
+        return jsonify({"pending": True, "esito": "attesa",
+                        "messaggio": "Non ristampo: " + _rch_messaggio_stato(pre),
+                        "retry_after": 2}), 202
+
+    log_crm_error(
+        "Ristampa non confermata dalla stampante: nulla registrato",
+        context={"idempotency_key": key, "esito": esecuzione["esito"],
+                 "motivo": esecuzione["motivo"], "invio_ms": esecuzione["invio_ms"],
+                 "ristampe": pending.get("ristampe"),
+                 "contatori_prima": pending.get("contatori_prima"),
+                 "stato_dopo": (esecuzione["dopo"] or {}).get("raw"),
+                 "risposta_vendita": esecuzione["risposta"]},
+        client_id=pending.get("cliente_id"),
+    )
+    if esecuzione["esito"] == 'non_arrivato':
+        messaggio = ("La ristampa NON è arrivata alla stampante (non risponde in rete). "
+                     "Controlla che sia accesa e col cavo collegato.")
+    else:
+        messaggio = _rch_messaggio_motivo(esecuzione)
+    return jsonify({"pending": True, "esito": "attesa", "messaggio": messaggio,
+                    "retry_after": 2}), 202
 
 # ========================================
 # CONSOLE RCH - Route per sblocco manuale
 # ========================================
 
 @cassa_bp.route('/cassa/rch-console/status', methods=['GET'])
+@_rch_esclusivo
 def rch_console_status():
     """Query stato stampante RCH"""
     ip, printer_model = _get_printer_config()
@@ -4460,7 +4709,7 @@ def rch_console_status():
     try:
         # Query stato con C453
         payload = '<?xml version="1.0" encoding="UTF-8"?><Service><cmd>=C453/$0</cmd></Service>'
-        resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=8,
+        resp = _rch_post(url, data=payload.encode('utf-8'), headers=headers, timeout=8,
                              **rch_kwargs)
         
         result = {
@@ -4516,6 +4765,7 @@ def rch_console_status():
         return jsonify({"error": str(e), "printer_ip": ip}), 500
 
 @cassa_bp.route('/cassa/rch-console/send-cl', methods=['POST'])
+@_rch_esclusivo
 def rch_console_send_cl():
     """Invia comando CL (C3 + C1) - equivale a premere tasto CL"""
     ip, printer_model = _get_printer_config()
@@ -4532,7 +4782,7 @@ def rch_console_send_cl():
     for cmd in commands:
         try:
             payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
-            resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=10,
+            resp = _rch_post(url, data=payload.encode('utf-8'), headers=headers, timeout=10,
                                  **rch_kwargs)
             success = _rch_is_success(resp)
             results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
@@ -4544,6 +4794,7 @@ def rch_console_send_cl():
 
 
 @cassa_bp.route('/cassa/rch-console/full-reset', methods=['POST'])
+@_rch_esclusivo
 def rch_console_full_reset():
     """Reset completo: C99 → C10 → C3 → T5/$0 → C3 → C1"""
     ip, printer_model = _get_printer_config()
@@ -4560,7 +4811,7 @@ def rch_console_full_reset():
     for cmd in commands:
         try:
             payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
-            resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
+            resp = _rch_post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
                                  **rch_kwargs)
             success = _rch_is_success(resp)
             results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
@@ -4572,6 +4823,7 @@ def rch_console_full_reset():
 
 
 @cassa_bp.route('/cassa/rch-console/close-document', methods=['POST'])
+@_rch_esclusivo
 def rch_console_close_document():
     """Chiude documento aperto con importo e metodo specificati"""
     data = request.get_json(force=True) or {}
@@ -4622,7 +4874,7 @@ def rch_console_close_document():
     for cmd in commands:
         try:
             payload = f'<?xml version="1.0" encoding="UTF-8"?><Service><cmd>{cmd}</cmd></Service>'
-            resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
+            resp = _rch_post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
                                  **rch_kwargs)
             success = _rch_is_success(resp)
             results.append({"cmd": cmd, "success": success, "response": resp.text[:200]})
@@ -4741,6 +4993,7 @@ def rch_console_close_document():
 
 
 @cassa_bp.route('/cassa/rch-console/send-raw', methods=['POST'])
+@_rch_esclusivo
 def rch_console_send_raw():
     """Invia comandi raw alla stampante, in UNA sola richiesta HTTP.
     Corpo: {"command": "..."} oppure {"commands": ["...", ...]} (massimo 5).
@@ -4784,7 +5037,7 @@ def rch_console_send_raw():
         # &gt;C117 e &amp;0.
         cmd_xml = ''.join(f'<cmd>{_xml_escape(c)}</cmd>' for c in commands)
         payload = f'<?xml version="1.0" encoding="UTF-8"?><Service>{cmd_xml}</Service>'
-        resp = requests.post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
+        resp = _rch_post(url, data=payload.encode('utf-8'), headers=headers, timeout=15,
                              **rch_kwargs)
 
         error_code = _rch_parse_errcode(resp.text)

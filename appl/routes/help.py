@@ -2454,8 +2454,60 @@ Con il pulsante dedicato apri una sezione con:
 • tabella sottocategorie esistenti
 • eliminazione sottocategoria
 
+<span class=\"help-strong-dark help-subtitle-pill\">▸ GESTIONE RISORSE</span>
+Postazioni, cabine e macchinari che più servizi usano insieme (es. 4 postazioni mani): con il pulsante <span class=\"help-strong-dark\">Gestione Risorse</span> le crei, e nella colonna <span class=\"help-strong-dark\">Risorse</span> della tabella le associ ai servizi. Tutto spiegato in <span class=\"help-strong-dark\">[[RISORSE|service_risorse]]</span>.
+
 <span class=\"help-strong-dark help-subtitle-pill\">▸ SCARICA LISTINO PREZZI</span>
 In fondo pagina puoi esportare il listino in TXT/PDF, con opzione per includere le descrizioni.""",
+    },
+
+    "service_risorse": {
+        "title": "🪑 RISORSE: postazioni, cabine e macchinari condivisi",
+        "image": "Servizi_Risorse.png",
+        "image_caption": "Tools › Servizi con la sezione <b>Gestione Risorse</b> aperta: ogni risorsa con quante ne avete e i servizi che la usano; nella tabella dei servizi la colonna <b>Risorse</b> con il tetto di ognuno.",
+        "image_path": "Tools › SERVIZI › Gestione Risorse",
+        "content": """Una <span class="help-strong-dark">risorsa</span> è qualcosa che più servizi usano e di cui hai un numero limitato: le postazioni mani, le cabine, il macchinario della pressoterapia. Associandola ai servizi, Tosca non fa prenotare più appuntamenti contemporanei delle risorse che hai.
+
+<span class="help-strong-dark help-subtitle-pill">▸ UN ESEMPIO</span>
+Hai <span class="help-strong-dark">4 postazioni mani</span> e più estetiste in turno. Crei la risorsa <span class="help-strong-dark">Postazione Mani</span> con quantità 4 e la associ:
+• Manicure → tetto <span class="help-strong-dark">2</span>
+• Semipermanente mani → tetto <span class="help-strong-dark">3</span>
+
+Risultato:
+• mai più di <span class="help-strong-dark">4</span> trattamenti mani nello stesso momento: 3 semipermanente + 1 manicure è pieno, 2 + 2 è pieno;
+• mai più di <span class="help-strong-dark">2 manicure</span> insieme, anche se una postazione è libera;
+• mai più di <span class="help-strong-dark">3 semipermanente</span> insieme.
+
+<span class="help-strong-dark help-subtitle-pill">▸ CREARE UNA RISORSA</span>
+1️⃣ vai in <span class="help-strong-dark">Tools → Servizi</span> e premi <span class="help-strong-dark">Gestione Risorse</span>
+2️⃣ scrivi il nome (es. Postazione Mani) e quante ne avete
+3️⃣ premi <span class="help-strong-dark">Aggiungi Risorsa</span>
+
+Con <span class="help-strong-dark">Modifica</span> cambi nome e quantità; con <span class="help-strong-dark">Elimina</span> la togli, e i servizi che la usavano tornano senza limite.
+
+<span class="help-strong-dark help-subtitle-pill">▸ ASSOCIARLA AI SERVIZI</span>
+• <span class="help-strong-dark">A tutta una sottocategoria</span>: nella riga della risorsa premi <span class="help-strong-dark">Associa a una sottocategoria</span>, scegli la sottocategoria (es. Mani) e il tetto. Vale per tutti i suoi servizi.
+• <span class="help-strong-dark">A un servizio solo</span>: nella tabella dei servizi, colonna <span class="help-strong-dark">Risorse</span>, premi <span class="help-strong-dark">Imposta</span>, aggiungi la risorsa e scegli il tetto.
+
+Il <span class="help-strong-dark">tetto</span> è quanti appuntamenti di <span class="help-strong-dark">quel</span> servizio possono esserci nello stesso momento: non può superare la quantità della risorsa.
+Un servizio può usare <span class="help-strong-dark">più risorse</span>: la Pressoterapia può avere <span class="help-strong-dark">Cabina</span> e <span class="help-strong-dark">Macchinario pressoterapia</span>, e si prenota solo se c'è posto in tutte e due.
+
+<span class="help-strong-dark help-subtitle-pill">▸ IN AGENDA</span>
+Quando metti, sposti o allunghi un appuntamento e la risorsa a quell'ora è già tutta occupata, compare l'avviso <span class="help-strong-dark">Risorsa occupata</span> con gli appuntamenti che la stanno usando. Puoi <span class="help-strong-dark">annullare</span> oppure <span class="help-strong-dark">procedere comunque</span> (per esempio se una cliente sta per finire).
+Anche <span class="help-strong-dark">[[CERCA UN BUCO|calendar_cerca_un_buco]]</span> propone solo orari in cui c'è posto.
+
+<span class="help-strong-dark help-subtitle-pill">▸ NELLE PRENOTAZIONI ONLINE</span>
+L'orario in cui la risorsa sarebbe piena <span class="help-strong-dark">non viene proposto</span> al cliente. Se due clienti prendono l'ultimo posto quasi nello stesso momento, il secondo legge <span class="help-strong-dark">"L'orario scelto non è più disponibile"</span> e ne sceglie un altro.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA NON CAMBIA</span>
+• i servizi senza risorse funzionano come prima;
+• le abilitazioni delle operatrici restano: per prenotare servono un'operatrice abilitata e libera <span class="help-strong-dark">e</span> posto nella risorsa;
+• gli appuntamenti annullati e quelli segnati <span class="help-strong-dark">non arrivato</span> non occupano la risorsa.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Per tenere una postazione riservata a un solo servizio crea una risorsa a parte (es. <span class="help-strong-dark">Postazione Semipermanente</span>, quantità 1) invece di dividere la stessa.</span>
+</div>""",
     },
 
     "tools_tab_clienti": {
@@ -2851,6 +2903,7 @@ Su ogni intervallo di turno il sistema scarta le finestre occupate:
 • <span class="help-strong-dark">blocchi OFF globali</span> (senza operatore) → bloccano tutte le colonne
 • <span class="help-strong-dark">blocchi OFF di un singolo operatore</span> → bloccano solo quella colonna
 • <span class="help-strong-dark">appuntamenti già esistenti</span> sulla colonna dell'operatore
+• <span class="help-strong-dark">risorse piene</span>: postazioni, cabine o macchinari dei servizi scelti già tutti occupati a quell'ora (vedi <span class="help-strong-dark">[[RISORSE|service_risorse]]</span>)
 • <span class="help-strong-dark">appuntamenti cancellati</span> (soft-delete) non bloccano lo slot
 
 <span class="help-strong-dark help-subtitle-pill">▸ SOLO SERVIZI E OPERATORI ABILITATI</span>
@@ -3200,6 +3253,7 @@ def get_topics_by_category():
         "Tools": [
             "tools_tab_operatori",
             "tools_tab_servizi",
+            "service_risorse",
             "tools_tab_clienti",
             "tools_tab_whatsapp",
             "tools_tab_pacchetti",
