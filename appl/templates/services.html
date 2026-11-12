@@ -103,11 +103,10 @@
         {% for service in services %}
         <tr>
             <td data-nome="{{ service.servizio_nome }}">{{ service.servizio_nome }}
-              {%- if risorse_attive and risorse_per_servizio.get(service.id) %}
-              {%- set n_ris = risorse_per_servizio[service.id]|length %}
+              {%- if risorse_attive %}{% for ris in risorse_per_servizio.get(service.id, []) %}
               <a tabindex="0" role="button" class="badge risorsa-badge ms-1" data-service-id="{{ service.id }}"
-                 aria-label="Risorse usate da {{ service.servizio_nome }}">{{ 'risorsa' if n_ris == 1 else n_ris ~ ' risorse' }}</a>
-              {%- endif %}</td>
+                 data-risorsa-id="{{ ris.id }}" aria-label="Risorsa {{ ris.nome }}: dettagli">{{ ris.nome }}</a>
+              {%- endfor %}{% endif %}</td>
             <td>{{ service.servizio_tag }}</td>
             <td>{{ service.servizio_categoria.value }}</td>
             <td>{{ service.servizio_sottocategoria.nome if service.servizio_sottocategoria else '-' }}</td>
@@ -235,8 +234,8 @@
             <tr>
                 <th>Nome</th>
                 <th class="text-center">Quante</th>
-                <th>Servizi che la usano</th>
-                <th>Azioni</th>
+                <th class="text-center ris-col-servizi">Servizi che la usano</th>
+                <th class="ris-col-azioni">Azioni</th>
             </tr>
         </thead>
         <tbody>
@@ -244,12 +243,17 @@
             <tr>
                 <td>{{ r.nome }}</td>
                 <td class="text-center">{{ r.quantita }}</td>
-                <td>
-                  {% if r.servizi %}<span class="text-muted">{{ r.servizi|length }}:</span>
-                    {% for sv in r.servizi %}{{ sv.nome }} <span class="text-muted">&times;{{ sv.tetto }}</span>{{ ', ' if not loop.last }}{% endfor %}
-                  {% else %}<span class="text-muted">nessuno</span>{% endif %}
+                <td class="text-center ris-col-servizi">
+                  {# Solo il numero: al clic si riapre l'elenco con le spunte salvate. #}
+                  {% if current_user.ruolo.value == 'user' %}
+                    {{ r.servizi|length }}
+                  {% else %}
+                    <button type="button" class="btn btn-sm ris-conta-servizi"
+                            data-id="{{ r.id }}" data-nome="{{ r.nome }}"
+                            aria-label="{{ r.servizi|length }} servizi usano {{ r.nome }}: apri l'elenco">{{ r.servizi|length }}</button>
+                  {% endif %}
                 </td>
-                <td>
+                <td class="ris-col-azioni">
                   {% if current_user.ruolo.value == 'user' %}
                     <button type="button" class="btn btn-sm btn-primary" onclick="showNoRightsPopup()">Modifica</button>
                   {% else %}
@@ -1455,6 +1459,12 @@ document.addEventListener('DOMContentLoaded', function() {
     cursor: pointer;
     text-decoration: none;
     vertical-align: middle;
+    /* Nomi lunghi (fino a 60 caratteri) tagliati: per intero nel riquadro al clic. */
+    display: inline-block;
+    max-width: 14em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   #servicesTable .risorsa-badge:hover,
   #servicesTable .risorsa-badge:focus {
@@ -1478,6 +1488,23 @@ document.addEventListener('DOMContentLoaded', function() {
     border-color: #75556a;
     color: #fff;
   }
+  /* Tabella risorse: i tre pulsanti sempre su una riga; il conteggio dei
+     servizi stretto, cliccabile (riapre l'elenco con le spunte salvate). */
+  #risorseTable .ris-col-azioni { width: 1%; white-space: nowrap; min-width: 280px; }
+  #risorseTable .ris-col-servizi { width: 1%; white-space: nowrap; }
+  #risorseTable .ris-conta-servizi {
+    min-width: 2.4em;
+    border: 1px solid #87647c;
+    border-radius: 999px;
+    color: #87647c;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  #risorseTable .ris-conta-servizi:hover,
+  #risorseTable .ris-conta-servizi:focus {
+    background: #87647c;
+    color: #fff;
+  }
   /* Senza questo l'elenco non scorre: styles.css forza
      .modal-body { overflow: visible !important; max-height: 70vh }. */
   #RisorsaServiziModal .modal-body {
@@ -1486,9 +1513,10 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 </style>
 <script>
-// Badge "risorsa" nella tabella dei servizi: al clic dice quale risorsa usa il
-// servizio, quante ce ne sono, il tetto e chi altro la usa. Solo informazione,
-// per tutti: si modifica dal pulsante Servizi della sezione Gestione Risorse.
+// Badge con il nome della risorsa nella tabella dei servizi (uno per ogni
+// risorsa che il servizio usa): al clic dice quante ce ne sono, il tetto di
+// questo servizio e chi altro la usa. Solo informazione, per tutti: si
+// modifica dal pulsante Servizi della sezione Gestione Risorse.
 document.addEventListener('DOMContentLoaded', function () {
   const RISORSE = {{ risorse|tojson }};
   const esc = t => String(t == null ? '' : t)
@@ -1496,25 +1524,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
   document.querySelectorAll('#servicesTable .risorsa-badge').forEach(function (badge) {
     const sid = parseInt(badge.dataset.serviceId, 10);
-    const usate = RISORSE.filter(r => (r.servizi || []).some(sv => sv.id === sid));
-    if (!usate.length) return;
-    const contenuto = usate.map(r => {
-      const mio = r.servizi.find(sv => sv.id === sid);
-      const altri = r.servizi.filter(sv => sv.id !== sid);
-      return '<div class="ris-info"><b>' + esc(r.nome) + '</b>: ne avete <b>' + r.quantita + '</b><br>'
-        + 'Al massimo <b>' + mio.tetto + '</b> ' + (mio.tetto === 1 ? 'appuntamento' : 'appuntamenti')
-        + ' di questo servizio nello stesso momento<br>'
-        + '<small class="text-muted">' + (altri.length
-            ? 'La usano anche: ' + altri.map(sv => esc(sv.nome) + ' (' + sv.tetto + ')').join(', ')
-            : 'Nessun altro servizio la usa') + '</small></div>';
-    }).join('');
+    const r = RISORSE.find(x => String(x.id) === badge.dataset.risorsaId);
+    const mio = r && (r.servizi || []).find(sv => sv.id === sid);
+    if (!mio) return;
+    const servizio = badge.closest('td').dataset.nome || '';
+    const altri = r.servizi.filter(sv => sv.id !== sid);
+    const contenuto = 'Ne avete <b>' + r.quantita + '</b><br>'
+      + 'Al massimo <b>' + mio.tetto + '</b> ' + (mio.tetto === 1 ? 'appuntamento' : 'appuntamenti')
+      + ' di <b>' + esc(servizio) + '</b> nello stesso momento<br>'
+      + '<small class="text-muted">' + (altri.length
+          ? 'La usano anche: ' + altri.map(sv => esc(sv.nome) + ' (' + sv.tetto + ')').join(', ')
+          : 'Nessun altro servizio la usa') + '</small>';
     new bootstrap.Popover(badge, {
       trigger: 'focus',
       html: true,
       placement: 'right',
       container: 'body',
       customClass: 'risorsa-popover',
-      title: esc(badge.closest('td').dataset.nome || ''),
+      title: esc(r.nome),
       content: contenuto
     });
   });
@@ -1766,7 +1793,13 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('risServConteggio').textContent = usano + ' servizi la usano su ' + totale;
   }
 
-  document.querySelectorAll('.btn-risorsa-servizi').forEach(btn => btn.addEventListener('click', function () {
+  // Il numero nella colonna "Servizi che la usano" apre lo stesso elenco.
+  document.querySelectorAll('.ris-conta-servizi').forEach(el => {
+    new bootstrap.Tooltip(el, { title: 'Vedi e cambia i servizi che la usano', placement: 'top', trigger: 'hover' });
+  });
+  document.querySelectorAll('.btn-risorsa-servizi, .ris-conta-servizi').forEach(btn => btn.addEventListener('click', function () {
+    const tip = bootstrap.Tooltip.getInstance(btn);
+    if (tip) tip.hide();
     risorsaId = btn.dataset.id;
     stato = null;
     document.getElementById('risServNome').textContent = btn.dataset.nome || '';

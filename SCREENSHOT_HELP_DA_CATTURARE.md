@@ -86,7 +86,7 @@ mostrano nome, cognome, cellulare **ed e-mail** di chi ha prenotato.
 
 | File | Topic | Dove si cattura | Cosa inquadrare |
 |---|---|---|---|
-| `Servizi_Risorse.png` (**già cablata**: compare da sola appena c'è il file) | `service_risorse` | Tools → Servizi → **Gestione Risorse** aperta | la tabella delle risorse (nome, quante, servizi con il tetto, pulsanti *Modifica / Servizi / Elimina*) e, sopra, qualche riga della tabella servizi con il badge **risorsa** accanto al nome |
+| `Servizi_Risorse.png` (**già cablata**: compare da sola appena c'è il file) | `service_risorse` | Tools → Servizi → **Gestione Risorse** aperta | la tabella delle risorse (nome, quante, numero dei servizi che la usano, pulsanti *Modifica / Servizi / Elimina*) e, sopra, qualche riga della tabella servizi con il badge del nome della risorsa (es. **Postazione Mani**) accanto al nome |
 | `Agenda_RisorsaOccupata.png` (da cablare nel topic) | `service_risorse` | Agenda → metti un servizio Mani quando le postazioni sono già tutte occupate a quell'ora | la sola finestra **Risorsa occupata** con il messaggio, l'elenco degli appuntamenti e i pulsanti *Procedi comunque* / *Annulla* |
 
 Nomi neutri: la finestra elenca cliente e operatrice degli appuntamenti che occupano la risorsa.

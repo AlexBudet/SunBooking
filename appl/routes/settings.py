@@ -845,7 +845,8 @@ def _risorse_tabelle_presenti():
 def _risorse_per_pagina_servizi():
     """Per services.html: (attive,
     [{id, nome, quantita, servizi: [{id, nome, tetto}]}],
-    {service_id: [risorsa_id, ...]}  -> il badge accanto al nome del servizio)."""
+    {service_id: [{id, nome}, ...]}  -> un badge col nome di ogni risorsa
+    accanto al nome del servizio)."""
     if not _risorse_tabelle_presenti():
         return False, [], {}
     try:
@@ -860,7 +861,10 @@ def _risorse_per_pagina_servizi():
                         .order_by(Service.servizio_nome).all()):
             per_id[sr.risorsa_id]['servizi'].append(
                 {'id': svc.id, 'nome': svc.servizio_nome, 'tetto': sr.quantita})
-            per_servizio.setdefault(sr.service_id, []).append(sr.risorsa_id)
+            per_servizio.setdefault(sr.service_id, []).append(
+                {'id': sr.risorsa_id, 'nome': per_id[sr.risorsa_id]['nome']})
+        for elenco in per_servizio.values():
+            elenco.sort(key=lambda r: r['nome'].lower())
         return True, risorse, per_servizio
     except Exception as e:
         db.session.rollback()

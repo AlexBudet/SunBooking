@@ -266,6 +266,26 @@ html.in-side-pane #reconnectingIndicator { display: none !important; }
 }
 .wa-disc-tooltip { z-index: 24450 !important; }
           </style>
+        {% if is_cloud %}
+        <style>
+        /* Web app, versione mobile (sotto 1200 px, lo stesso limite del resto
+           dell'app): la Cassa non compare MAI, nemmeno se abilitata in Info
+           Azienda. L'opzione vale solo per gli schermi larghi. Via la voce del
+           menu e il pulsante euro "Porta in cassa" in Agenda; "Vai al
+           pacchetto" resta. Il .exe dei negozi (is_cloud falso) non e' toccato. */
+        @media (max-width: 1199.98px) {
+          #mainMenu .nav-item-cassa { display: none; }
+          .appointment-block .btn-popup.pagamento:not(.vai-pacchetto),
+          .appointment-block .btn-popup.cassa,
+          .appointment-block .to-cash,
+          .appointment-block .go-cash,
+          .popup-buttons-bottom .btn-popup.pagamento:not(.vai-pacchetto),
+          .popup-buttons-bottom .btn-popup.cassa {
+            display: none !important;
+          }
+        }
+        </style>
+        {% endif %}
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>TOSCA</title>
@@ -338,7 +358,7 @@ html.in-side-pane #reconnectingIndicator { display: none !important; }
         </a>
     </li>
     {% if not hide_cassa %}
-    <li class="nav-item">
+    <li class="nav-item nav-item-cassa">
         <a class="nav-link menu-link" data-nav="cassa" href="{{ url_for('cassa.cassa') }}">
             <i class="bi bi-cash-coin menu-icon"></i>
             <span class="menu-label">Cassa</span>
@@ -347,7 +367,7 @@ html.in-side-pane #reconnectingIndicator { display: none !important; }
     {% elif is_demo %}
     {# Nella prova la voce resta, ma non porta in Cassa: racconta cosa fa. Una
        voce che sparisce non fa venire voglia di niente. #}
-    <li class="nav-item">
+    <li class="nav-item nav-item-cassa">
         <a class="nav-link menu-link" data-nav="cassa" href="#"
            onclick="apriModalDemo('cassa'); return false;">
             <i class="bi bi-cash-coin menu-icon"></i>

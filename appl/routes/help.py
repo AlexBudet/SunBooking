@@ -2455,7 +2455,7 @@ Con il pulsante dedicato apri una sezione con:
 • eliminazione sottocategoria
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ GESTIONE RISORSE</span>
-Postazioni, cabine e macchinari che più servizi usano insieme (es. 4 postazioni mani): con il pulsante <span class=\"help-strong-dark\">Gestione Risorse</span> le crei, e con il pulsante <span class=\"help-strong-dark\">Servizi</span> di ogni risorsa scegli i servizi che la usano. Nella tabella dei servizi il badge <span class=\"help-strong-dark\">risorsa</span> accanto al nome, cliccato, dice quale risorsa usa quel servizio. Tutto spiegato in <span class=\"help-strong-dark\">[[RISORSE|service_risorse]]</span>.
+Postazioni, cabine e macchinari che più servizi usano insieme (es. 4 postazioni mani): con il pulsante <span class=\"help-strong-dark\">Gestione Risorse</span> le crei, e con il pulsante <span class=\"help-strong-dark\">Servizi</span> di ogni risorsa scegli i servizi che la usano. Nella tabella dei servizi, accanto al nome, un badge con il nome della risorsa (es. <span class=\"help-strong-dark\">Postazione Mani</span>): cliccandolo vedi quante ce ne sono e il tetto di quel servizio. Tutto spiegato in <span class=\"help-strong-dark\">[[RISORSE|service_risorse]]</span>.
 
 <span class=\"help-strong-dark help-subtitle-pill\">▸ SCARICA LISTINO PREZZI</span>
 In fondo pagina puoi esportare il listino in TXT/PDF, con opzione per includere le descrizioni.""",
@@ -2464,7 +2464,7 @@ In fondo pagina puoi esportare il listino in TXT/PDF, con opzione per includere 
     "service_risorse": {
         "title": "🪑 RISORSE: postazioni, cabine e macchinari condivisi",
         "image": "Servizi_Risorse.png",
-        "image_caption": "Tools › Servizi con la sezione <b>Gestione Risorse</b> aperta: ogni risorsa con quante ne avete, i servizi che la usano con il loro tetto e il pulsante <b>Servizi</b>; nella tabella dei servizi il badge <b>risorsa</b> accanto al nome.",
+        "image_caption": "Tools › Servizi con la sezione <b>Gestione Risorse</b> aperta: ogni risorsa con quante ne avete, quanti servizi la usano (il numero si clicca) e il pulsante <b>Servizi</b>; nella tabella dei servizi il badge con il nome della risorsa accanto al nome del servizio.",
         "image_path": "Tools › SERVIZI › Gestione Risorse",
         "content": """Una <span class="help-strong-dark">risorsa</span> è qualcosa che più servizi usano e di cui hai un numero limitato: le postazioni mani, le cabine, il macchinario della pressoterapia. Associandola ai servizi, Tosca non fa prenotare più appuntamenti contemporanei delle risorse che hai.
 
@@ -2486,12 +2486,12 @@ Risultato:
 Con <span class="help-strong-dark">Modifica</span> cambi nome e quantità; con <span class="help-strong-dark">Elimina</span> la togli, e i servizi che la usavano tornano senza limite.
 
 <span class="help-strong-dark help-subtitle-pill">▸ ASSOCIARLA AI SERVIZI</span>
-1️⃣ in <span class="help-strong-dark">Gestione Risorse</span>, nella riga della risorsa premi <span class="help-strong-dark">Servizi</span>
+1️⃣ in <span class="help-strong-dark">Gestione Risorse</span>, nella riga della risorsa premi <span class="help-strong-dark">Servizi</span>, oppure il numero nella colonna <span class="help-strong-dark">Servizi che la usano</span>: si riapre l'elenco con le spunte già salvate
 2️⃣ si apre l'elenco dei servizi diviso per categoria e sottocategoria, come il pulsante <span class="help-strong-dark">Servizi</span> di <span class="help-strong-dark">Tools → Operatori</span>: spunta i servizi che usano la risorsa. Con <span class="help-strong-dark">tutti</span> e <span class="help-strong-dark">nessuno</span> spunti o togli una sottocategoria intera (es. tutte le Mani)
 3️⃣ accanto a ogni servizio spuntato, nella casella <span class="help-strong-dark">quanti insieme</span>, scrivi il tetto
 4️⃣ premi <span class="help-strong-dark">Salva</span>
 
-Nella tabella dei servizi, accanto al nome di ogni servizio che usa una risorsa, compare il badge <span class="help-strong-dark">risorsa</span>: cliccandolo vedi quale risorsa usa, quante ce ne sono, il suo tetto e quali altri servizi la usano.
+Nella tabella dei servizi, accanto al nome di ogni servizio che usa una risorsa, compare un badge con il nome della risorsa (es. <span class="help-strong-dark">Postazione Mani</span>), uno per ogni risorsa che usa: cliccandolo vedi quante ce ne sono, il tetto di quel servizio e quali altri servizi la usano.
 
 Il <span class="help-strong-dark">tetto</span> è quanti appuntamenti di <span class="help-strong-dark">quel</span> servizio possono esserci nello stesso momento: non può superare la quantità della risorsa. Se per un servizio non serve un limite in più, lascia il tetto uguale alla quantità.
 Un servizio può usare <span class="help-strong-dark">più risorse</span>: la Pressoterapia può avere <span class="help-strong-dark">Cabina</span> e <span class="help-strong-dark">Macchinario pressoterapia</span>, e si prenota solo se c'è posto in tutte e due.
