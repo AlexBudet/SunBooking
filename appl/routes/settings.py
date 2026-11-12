@@ -21,6 +21,7 @@ from ..models import Appointment, AppointmentStatus, Operator, OperatorShift, Pa
 from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
 from .calendar import _compute_client_loyalty, LOYALTY_DEFAULT
 from ..formati import nome_proprio, nome_servizio
+from ..services import no_show as no_show_mod
 from .. import invio_unico
 
 # Blueprint per le rotte delle impostazioni
@@ -2973,8 +2974,71 @@ def set_bookings():
         'set_booking.html',
         current_user=current_user,
         servizi_tabella=servizi_tabella,
-        business_info=business_info
+        business_info=business_info,
+        regole_noshow=no_show_mod.regole(business_info),
     )
+
+
+@settings_bp.route('/update_booking_annullamenti', methods=['POST'])
+def update_booking_annullamenti():
+    """Sezione "Annullamenti e no-show" di Booking Web (regole in
+    appl/services/no_show.py). Payload: {annullo_attivo, annullo_ore,
+    noshow_attivo, noshow_soglia, noshow_mesi, noshow_ore_tardivo}."""
+    if not _risorse_puo_modificare():
+        return jsonify({'ok': False, 'errore': 'Permessi insufficienti'}), 403
+    biz = db.session.get(BusinessInfo, 1)
+    if not biz:
+        return jsonify({'ok': False, 'errore': 'Info Azienda non trovata.'}), 404
+    data = request.get_json(silent=True) or {}
+
+    def intero(chiave, minimo, massimo, etichetta):
+        try:
+            v = int(data.get(chiave))
+        except (TypeError, ValueError):
+            v = None
+        if v is None or v < minimo or v > massimo:
+            raise ValueError(f'{etichetta}: scrivi un numero da {minimo} a {massimo}.')
+        return v
+
+    try:
+        annullo_ore = intero('annullo_ore', 1, 168, 'Ore prima dell\'appuntamento')
+        soglia = intero('noshow_soglia', 1, 20, 'Numero di salti')
+        mesi = intero('noshow_mesi', 1, 60, 'Mesi')
+        ore_tardivo = intero('noshow_ore_tardivo', 1, 168, 'Ore dell\'annullamento all\'ultimo')
+    except ValueError as e:
+        return jsonify({'ok': False, 'errore': str(e)}), 400
+    try:
+        biz.booking_annullo_blocco_attivo = bool(data.get('annullo_attivo'))
+        biz.booking_annullo_blocco_ore = annullo_ore
+        biz.booking_noshow_blocco_attivo = bool(data.get('noshow_attivo'))
+        biz.booking_noshow_soglia = soglia
+        biz.booking_noshow_mesi = mesi
+        biz.booking_noshow_ore_tardivo = ore_tardivo
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("update_booking_annullamenti: %s", e)
+        return jsonify({'ok': False, 'errore': 'Errore nel salvataggio.'}), 500
+    return jsonify({'ok': True})
+
+
+@settings_bp.route('/api/clienti/<int:client_id>/sblocca-online', methods=['POST'])
+def api_cliente_sblocca_online(client_id):
+    """Sblocca le prenotazioni online di un cliente bloccato per i no-show: da
+    adesso contano solo i salti successivi (appl/services/no_show.py)."""
+    if not _risorse_puo_modificare():
+        return jsonify({'ok': False, 'errore': 'Permessi insufficienti'}), 403
+    cliente = db.session.get(Client, client_id)
+    if not cliente or cliente.is_deleted:
+        return jsonify({'ok': False, 'errore': 'Cliente non trovato.'}), 404
+    try:
+        cliente.prenotazioni_online_sblocco_il = datetime.now(ZoneInfo('Europe/Rome')).replace(tzinfo=None)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("api_cliente_sblocca_online %s: %s", client_id, e)
+        return jsonify({'ok': False, 'errore': 'Errore nel salvataggio.'}), 500
+    return jsonify({'ok': True})
 
 def _operatori_nascosti_associati(service):
     """Operatori NON visibili gia' associati a un servizio.

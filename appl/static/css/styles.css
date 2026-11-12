@@ -2339,6 +2339,40 @@ button.client-info-btn {
   color: #6c7a89;
 }
 .ci-statistiche .ci-stat strong { font-size: 0.92rem; color: #2f3b4b; }
+/* No-show nella "i" cliente (ciDisegnaNoShow): riquadro arancio e, se il
+   cliente non puo' prenotare online, la riga con il pulsante Sblocca. */
+.ci-statistiche .ci-stat.ci-stat-noshow { background: #fff3e0; border-color: #fdba74; }
+.ci-statistiche .ci-stat.ci-stat-noshow small,
+.ci-statistiche .ci-stat.ci-stat-noshow strong { color: #c2410c; }
+.ci-statistiche .ci-noshow-blocco {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid #fca5a5;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.86rem;
+}
+
+/* Avviso no-show sotto il campo cliente (nuovo appuntamento e Navigator) */
+.noshow-avviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 0 6px;
+  padding: 4px 8px;
+  border: 1px solid #fdba74;
+  border-radius: 8px;
+  background: #fff3e0;
+  color: #9a3412;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+.noshow-avviso .bi { flex: 0 0 auto; margin-top: 1px; }
 
 /* "i" cliente: Prossimi | Storico (ciCaricaAppuntamenti) */
 .ci-appuntamenti {

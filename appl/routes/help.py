@@ -2085,24 +2085,28 @@ Alcuni pulsanti sono visibili solo a ruoli abilitati (admin).""",
 
     "report_no_show": {
         "title": "🚫 Report: pannello No-show",
-        "content": """Il pannello <span class="help-strong-dark">NO-SHOW</span> elenca chi aveva un appuntamento e non si è presentato: giorno, ora, servizi saltati e nome del cliente.
+        "content": """Il pannello <span class="help-strong-dark">NO-SHOW</span> mostra chi salta gli appuntamenti. In alto a destra scegli la vista: <span class="help-strong-dark">Classifica</span> o <span class="help-strong-dark">Ultimi</span>.
 
-Di default mostra gli <span class="help-strong-dark">ultimi 10</span>, dal più recente.
+<span class="help-strong-dark help-subtitle-pill">▸ CLASSIFICA</span>
+Chi ha saltato di più nel periodo scelto, dal primo in giù. Per ogni cliente:
+• il numero grande è quanti appuntamenti ha saltato; accanto, <span class="help-strong-dark">su N</span> sono i giorni in cui aveva un appuntamento nel periodo (es. <span class="help-strong-dark">3 su 10</span>);
+• la barra: arancione scuro i no-show, arancione chiaro gli annullamenti online fatti all'ultimo;
+• sotto, la data dell'ultimo;
+• il segno <span class="help-strong-dark">online bloccato</span> se oggi non può prenotare online (vedi <span class="help-strong-dark">[[ANNULLAMENTI E NO-SHOW|booking_annullamenti_no_show]]</span>).
+
+Sopra l'elenco, il totale del periodo: quanti no-show su quante visite, con la percentuale.
+
+<span class="help-strong-dark help-subtitle-pill">▸ IL PERIODO</span>
+Pulsanti <span class="help-strong-dark">30 gg</span>, <span class="help-strong-dark">3 mesi</span>, <span class="help-strong-dark">12 mesi</span>, <span class="help-strong-dark">Sempre</span>, oppure le due caselle <span class="help-strong-dark">dal</span> e <span class="help-strong-dark">al</span>: con tutte e due compilate valgono le date. Il pulsante con la freccia circolare svuota le date.
+
+<span class="help-strong-dark help-subtitle-pill">▸ ULTIMI</span>
+Gli ultimi 10 no-show, dal più recente, con giorno, ora e servizi saltati. Con le date compilate, quelli del periodo.
 
 <span class="help-strong-dark help-subtitle-pill">▸ UNA VISITA, NON UN SERVIZIO</span>
-Chi salta due o tre servizi di fila conta come <span class="help-strong-dark">una assenza sola</span>, non due o tre: gli appuntamenti dello stesso cliente nello stesso giorno vengono raggruppati, con l'orario del primo e l'elenco completo di quello che è saltato. Altrimenti una singola cliente che non si presenta riempirebbe da sola tutto l'elenco.
+Chi salta due o tre servizi lo stesso giorno conta come <span class="help-strong-dark">un'assenza sola</span>.
 
 <span class="help-strong-dark help-subtitle-pill">▸ IL DETTAGLIO SOTTO IL MOUSE</span>
-La riga resta corta per farcene stare dieci. Passandoci sopra compare tutto il resto: <span class="help-strong-dark">numero di telefono</span>, elenco esteso dei servizi, quanto tempo è rimasto libero in agenda e l'eventuale nota dell'appuntamento.
-
-È da lì che parte la telefonata di recupero: hai il numero senza dover cercare la scheda cliente.
-
-<span class="help-strong-dark help-subtitle-pill">▸ CONFRONTARE DUE PERIODI</span>
-In alto nel pannello ci sono due caselle data, <span class="help-strong-dark">dal</span> e <span class="help-strong-dark">al</span>: cliccandole si apre il calendario. Impostandole entrambe l'elenco si limita a quel periodo e l'intestazione dice quanti no-show ci sono stati.
-
-Servono <span class="help-strong-dark">tutte e due</span>: con una sola casella compilata l'intervallo non esiste e resta la vista standard. Il pulsante con la freccia circolare svuota le date e torna agli ultimi 10.
-
-Impostando prima un intervallo e poi un altro si confrontano due periodi qualsiasi — per esempio lo stesso mese di due anni diversi, o i mesi prima e dopo l'introduzione del promemoria WhatsApp.""",
+Passando sopra una riga compare il resto: <span class="help-strong-dark">numero di telefono</span>, quanti no-show e quanti annullamenti all'ultimo, e nella vista Ultimi i servizi e la nota dell'appuntamento. È da lì che parte la telefonata di recupero, senza cercare la scheda cliente.""",
     },
 
     "report_heatmap": {
@@ -2719,6 +2723,7 @@ In home trovi anche:
 <span class=\"help-strong-dark help-subtitle-pill\">▸ PARTI DELLA PAGINA</span>
 • configurazione generale booking online
 • regole e vincoli prenotazione
+• <span class=\"help-strong-dark\">annullamenti e no-show</span>: fino a quando si annulla online e chi può prenotare solo contattando il centro
 • tabella servizi pubblicabili, con l'interruttore <span class=\"help-strong-dark\">visibile online</span> per riga e per sottocategoria
 • controlli stato e salvataggio
 
@@ -2736,6 +2741,7 @@ Queste informazioni si inseriscono/modificano in <span class=\"help-strong-dark\
 Approfondimenti:
 • <span class=\"help-strong-dark\">[[BOOKING WEB: SETUP|booking_setup]]</span>
 • <span class=\"help-strong-dark\">[[BOOKING WEB: REGOLE|booking_rules]]</span>
+• <span class=\"help-strong-dark\">[[ANNULLAMENTI E NO-SHOW|booking_annullamenti_no_show]]</span>
 • <span class=\"help-strong-dark\">[[BOOKING WEB: SERVIZI E OPERATORI|booking_servizi_operatori]]</span>
 &nbsp;""",
     },
@@ -2974,9 +2980,44 @@ Nell'email di conferma il cliente trova un <span class="help-strong-dark">link d
 
 Gli appuntamenti già passati al momento del click non vengono toccati. Se il link è stato già usato o non esiste, il cliente vede "Link non valido o già usato".
 
+Puoi impedire l'annullamento online nelle ultime ore prima dell'appuntamento e bloccare le prenotazioni online di chi salta gli appuntamenti: vedi <span class="help-strong-dark">[[ANNULLAMENTI E NO-SHOW|booking_annullamenti_no_show]]</span>.
+
 <div class="help-hint-box">
 <span class="help-hint-label">Consiglio:</span>
 <span class="help-hint-text">Se un cliente ti dice che non riceve il codice email, fai controllare lo spam e ricorda il cooldown di 5 minuti tra un invio e l'altro. Se l'email è stata digitata male non c'è modo di recuperare: deve ripartire dalla pagina.</span>
+</div>""",
+    },
+
+    "booking_annullamenti_no_show": {
+        "title": "⏰ ANNULLAMENTI E NO-SHOW: limiti per chi salta gli appuntamenti",
+        "content": """In <span class="help-strong-dark">Tools → Booking Web</span>, sezione <span class="help-strong-dark">Annullamenti e no-show</span>, ci sono due regole. Partono spente: le attivi tu, una o tutte e due, e premi <span class="help-strong-dark">Salva</span>.
+
+<span class="help-strong-dark help-subtitle-pill">▸ 1. ANNULLARE ONLINE FINO A UN CERTO MOMENTO</span>
+Scegli quante ore prima dell'appuntamento il link <span class="help-strong-dark">Annulla la prenotazione</span> dell'e-mail smette di funzionare (es. 24).
+Se il cliente lo clicca dopo, legge che è troppo tardi per annullare in automatico e che deve telefonare al centro: il numero è quello di <span class="help-strong-dark">Info Azienda</span>, e dal telefono si chiama toccandolo. L'appuntamento resta in Agenda.
+Quando la regola è attiva, anche l'e-mail di conferma scrive fino a quando si può annullare online.
+
+<span class="help-strong-dark help-subtitle-pill">▸ 2. CHI SALTA, PRENOTA SOLO CONTATTANDO IL CENTRO</span>
+Scegli quanti appuntamenti saltati bastano (es. 2) e in quanti mesi (es. 12). Contano:
+• i <span class="help-strong-dark">no-show</span>: appuntamenti segnati <span class="help-strong-dark">non arrivato</span> in Agenda. Più servizi saltati lo stesso giorno contano come uno;
+• gli <span class="help-strong-dark">annullamenti online all'ultimo</span>: fatti dal link meno di X ore prima dell'appuntamento (X lo scegli tu, es. 24). Contano da quando è attiva questa funzione: prima l'ora dell'annullamento non veniva salvata.
+
+Il cliente si riconosce dal <span class="help-strong-dark">cellulare</span> oppure dall'<span class="help-strong-dark">e-mail</span> con cui prenota: basta che uno dei due corrisponda a una scheda con appuntamenti saltati. Chi è bloccato non riceve il codice di conferma e legge <span class="help-strong-dark">«Per prenotare contatta direttamente il centro»</span>, con il vostro numero. Il motivo non viene scritto: chi scrive il numero di un'altra persona non deve poter sapere se quella persona ha saltato appuntamenti.
+Il blocco si toglie da solo quando gli appuntamenti saltati escono dal periodo scelto.
+
+<span class="help-strong-dark help-subtitle-pill">▸ SBLOCCARE UN CLIENTE</span>
+In Agenda apri la scheda del cliente con il pulsante <span class="help-strong-dark">i</span>: sotto le statistiche c'è la riga rossa <span class="help-strong-dark">Prenotazioni online bloccate</span> con il pulsante <span class="help-strong-dark">Sblocca</span>. Da quel momento contano solo gli appuntamenti saltati dopo lo sblocco; quelli vecchi restano nello storico e nel report.
+
+<span class="help-strong-dark help-subtitle-pill">▸ IN AGENDA</span>
+Quando scegli un cliente (nuovo appuntamento o Navigator) che ha saltato degli appuntamenti, sotto il campo compare un avviso arancione con quanti, l'ultima data e, se c'è, il blocco online. In Agenda non si blocca niente: è un'informazione.
+Nella scheda <span class="help-strong-dark">i</span> trovi gli stessi numeri nei riquadri <span class="help-strong-dark">No-show</span> e <span class="help-strong-dark">Annullati all'ultimo</span>.
+
+<span class="help-strong-dark help-subtitle-pill">▸ NEL REPORT</span>
+Il pannello <span class="help-strong-dark">[[NO-SHOW|report_no_show]]</span> ha la classifica di chi salta di più, con il segno <span class="help-strong-dark">online bloccato</span> accanto a chi non può prenotare online.
+
+<div class="help-hint-box">
+<span class="help-hint-label">Consiglio:</span>
+<span class="help-hint-text">Due schede con lo stesso cellulare (es. madre e figlia) vengono riconosciute come la stessa persona: se una è bloccata, online lo è anche l'altra. In quel caso sblocca dalla scheda e, se serve, correggi il numero della scheda sbagliata.</span>
 </div>""",
     },
 
@@ -3279,6 +3320,7 @@ def get_topics_by_category():
             "booking_rules",
             "booking_servizi_operatori",
             "booking_codice_conferma_e_limiti",
+            "booking_annullamenti_no_show",
             "booking_appuntamenti_in_agenda",
             "booking_agenda_separazione"
         ],

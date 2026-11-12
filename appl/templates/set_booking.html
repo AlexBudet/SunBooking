@@ -112,6 +112,88 @@
   <button id="save-booking-info" class="btn btn-primary mt-2">Salva messaggio</button>
 </div>
 
+<!-- ANNULLAMENTI E NO-SHOW: regole in appl/services/no_show.py (copiate nel
+     sito prenotazioni, routes/no_show.py). Tutto spento di partenza. -->
+<div id="booking-noshow-section" class="container mt-5">
+  <h2>Annullamenti e no-show</h2>
+
+  <div class="noshow-regola">
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="annullo-attivo" {% if regole_noshow.annullo_attivo %}checked{% endif %}>
+      <label class="form-check-label" for="annullo-attivo">
+        Non permettere di annullare online nelle ultime
+        <input type="number" id="annullo-ore" class="form-control form-control-sm d-inline-block noshow-num" min="1" max="168" value="{{ regole_noshow.annullo_ore }}" aria-label="Ore prima dell'appuntamento">
+        ore prima dell'appuntamento
+      </label>
+    </div>
+    <p class="text-muted small mb-0">
+      Il link <b>Annulla la prenotazione</b> dell'e-mail di conferma porta a una pagina che spiega che
+      &egrave; troppo tardi per annullare in automatico e di telefonare al centro
+      {% if business_info.phone %}(<b>{{ business_info.phone }}</b>, da Info Azienda){% else %}<span class="text-danger">(il telefono del centro non &egrave; impostato in Info Azienda: la pagina dir&agrave; solo di telefonare)</span>{% endif %}.
+      Anche l'e-mail di conferma lo scrive.
+    </p>
+  </div>
+
+  <div class="noshow-regola mt-4">
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="noshow-attivo" {% if regole_noshow.blocco_attivo %}checked{% endif %}>
+      <label class="form-check-label" for="noshow-attivo">
+        Chi ha saltato almeno
+        <input type="number" id="noshow-soglia" class="form-control form-control-sm d-inline-block noshow-num" min="1" max="20" value="{{ regole_noshow.soglia }}" aria-label="Numero di appuntamenti saltati">
+        appuntamenti negli ultimi
+        <input type="number" id="noshow-mesi" class="form-control form-control-sm d-inline-block noshow-num" min="1" max="60" value="{{ regole_noshow.mesi }}" aria-label="Mesi">
+        mesi pu&ograve; prenotare solo contattando il centro
+      </label>
+    </div>
+    <div class="small mt-2">
+      Contano i <b>no-show</b> (appuntamenti segnati <i>non arrivato</i> in Agenda; pi&ugrave; servizi nello stesso giorno = uno)
+      e gli <b>annullamenti online fatti meno di
+      <input type="number" id="noshow-ore-tardivo" class="form-control form-control-sm d-inline-block noshow-num" min="1" max="168" value="{{ regole_noshow.ore_tardivo }}" aria-label="Ore dell'annullamento all'ultimo">
+      ore prima</b> dell'appuntamento.
+    </div>
+    <p class="text-muted small mt-2 mb-0">
+      Il cliente si riconosce dal <b>cellulare</b> o dall'<b>e-mail</b> con cui prenota. Chi &egrave; bloccato non riceve il
+      codice di conferma e legge &laquo;Per prenotare contatta direttamente il centro&raquo;: il motivo non viene scritto.
+      Lo sblocchi dalla scheda del cliente in Agenda (pulsante <b>i</b>): da quel momento contano solo i salti successivi.
+      Gli annullamenti online contano da quando &egrave; attiva questa versione: prima l'ora dell'annullamento non veniva salvata.
+    </p>
+  </div>
+
+  <div class="text-danger small mt-2" id="noshow-errore"></div>
+  <button id="save-booking-noshow" class="btn btn-primary mt-3">Salva</button>
+</div>
+<style>
+  #booking-noshow-section .noshow-num { width: 4.6em; margin: 0 .25em; padding: .1rem .35rem; }
+  #booking-noshow-section .form-check-label { line-height: 2; }
+</style>
+<script>
+document.getElementById('save-booking-noshow').addEventListener('click', function () {
+  const btn = this;
+  const err = document.getElementById('noshow-errore');
+  err.textContent = '';
+  const valore = id => document.getElementById(id).value;
+  const corpo = {
+    annullo_attivo: document.getElementById('annullo-attivo').checked,
+    annullo_ore: valore('annullo-ore'),
+    noshow_attivo: document.getElementById('noshow-attivo').checked,
+    noshow_soglia: valore('noshow-soglia'),
+    noshow_mesi: valore('noshow-mesi'),
+    noshow_ore_tardivo: valore('noshow-ore-tardivo')
+  };
+  btn.disabled = true;
+  fetch("{{ url_for('settings.update_booking_annullamenti') }}", {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json',
+              'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').getAttribute('content')},
+    body: JSON.stringify(corpo)
+  }).then(r => r.json().catch(() => ({})).then(j => {
+    if (!r.ok || !j.ok) throw new Error(j.errore || 'Errore nel salvataggio');
+    alert('Impostazioni salvate.');
+  })).catch(e => { err.textContent = e.message; })
+    .finally(() => { btn.disabled = false; });
+});
+</script>
+
 <!-- Sfondo della pagina di prenotazione: si carica e si toglie da solo, come il
      messaggio sopra. Riduzione e limiti in settings.py, _elabora_sfondo. -->
 {% set ha_sfondo = business_info.booking_background_mime_type %}

@@ -2379,6 +2379,136 @@ function ciDisegnaStatistiche(contenitore, fed) {
   tessera('Spesa totale', fed.spesa_totale ? ciFormattaEuro(fed.spesa_totale) : null);
 }
 
+// =============================================================
+//   NO-SHOW: chi salta gli appuntamenti (appl/services/no_show.py)
+//   - avviso sotto il campo cliente quando lo si sceglie (nuovo
+//     appuntamento e Navigator);
+//   - riquadro nella "i" cliente, con "Sblocca" se non puo' prenotare online.
+//   Solo informazione: in Agenda non si blocca niente.
+// =============================================================
+function noShowBase() {
+  // Tutto quello che sta prima di /calendar (con piu' negozi: /s/<idx>).
+  const m = window.location.pathname.match(/^(.*)\/calendar(?:\/|$)/);
+  return m ? m[1] : '';
+}
+
+function noShowCarica(clientId) {
+  return fetch(noShowBase() + '/calendar/api/cliente-no-show/' + encodeURIComponent(clientId),
+               { credentials: 'same-origin' })
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null);
+}
+
+function noShowTesto(d) {
+  const parti = [];
+  if (d.no_show) parti.push(d.no_show + ' no-show');
+  if (d.annullati_tardi) {
+    parti.push(d.annullati_tardi + (d.annullati_tardi === 1 ? ' annullamento' : ' annullamenti') + ' all\'ultimo');
+  }
+  let testo = parti.length ? 'Questo cliente ha ' + parti.join(' e ') : '';
+  if (testo && d.ultimo) testo += ' (l\'ultimo il ' + d.ultimo + ')';
+  return testo;
+}
+
+// Avviso sotto il campo cliente. `input` e' il campo; `idAttuale` restituisce
+// il cliente scelto adesso (se nel frattempo e' cambiato, l'avviso non serve).
+function noShowAvvisoSottoCampo(input, clientId, idAttuale) {
+  if (!input) return;
+  // Nel nuovo appuntamento il campo sta in una riga flex con l'etichetta:
+  // l'avviso va sotto la riga intera, non accanto al campo.
+  const contenitore = input.closest('.client-search-row') ||
+                      input.closest('#clientSearchInputContainer') || input.parentElement;
+  if (!contenitore || !contenitore.parentElement) return;
+  const vecchio = contenitore.parentElement.querySelector(':scope > .noshow-avviso');
+  if (vecchio) vecchio.remove();
+  if (!clientId) return;
+  noShowCarica(clientId).then(d => {
+    if (!d || String(idAttuale()) !== String(clientId)) return;
+    const blocco = d.blocco || {};
+    let testo = noShowTesto(d);
+    if (blocco.bloccato) {
+      testo = (testo ? testo + '. ' : '') + 'Prenotazioni online bloccate';
+    }
+    if (!testo) return;
+    const gia = contenitore.parentElement.querySelector(':scope > .noshow-avviso');
+    if (gia) gia.remove();
+    const avviso = document.createElement('div');
+    avviso.className = 'noshow-avviso';
+    avviso.setAttribute('role', 'status');
+    const icona = document.createElement('i');
+    icona.className = 'bi bi-exclamation-triangle-fill';
+    const t = document.createElement('span');
+    t.textContent = testo + '.';
+    avviso.append(icona, t);
+    contenitore.insertAdjacentElement('afterend', avviso);
+    // Si toglie appena si cambia il testo del campo (si sta cercando un altro cliente).
+    const via = () => { avviso.remove(); input.removeEventListener('input', via); };
+    input.addEventListener('input', via);
+    // Il campo puo' essere svuotato anche dal codice (Navigator ripulito,
+    // finestra riaperta): finche' l'avviso e' a video controlla ogni secondo
+    // che il cliente sia ancora quello.
+    const controllo = setInterval(() => {
+      if (!avviso.isConnected) { clearInterval(controllo); return; }
+      if (String(idAttuale() || '') !== String(clientId) || !input.value.trim()) {
+        avviso.remove();
+        clearInterval(controllo);
+      }
+    }, 1000);
+    const finestra = avviso.closest('.modal');
+    if (finestra) finestra.addEventListener('hidden.bs.modal', () => avviso.remove(), { once: true });
+  });
+}
+window.noShowAvvisoSottoCampo = noShowAvvisoSottoCampo;
+
+// Riquadro nella "i" cliente, in coda alle statistiche.
+function ciDisegnaNoShow(statistiche, clientId) {
+  if (!statistiche || !clientId) return;
+  noShowCarica(clientId).then(d => {
+    if (!d || !statistiche.isConnected) return;
+    statistiche.querySelectorAll('.ci-stat-noshow, .ci-noshow-blocco').forEach(el => el.remove());
+    const blocco = d.blocco || {};
+    if (!d.no_show && !d.annullati_tardi && !blocco.bloccato) return;
+    statistiche.classList.add('ci-statistiche');
+    const tessera = (etichetta, valore) => {
+      const t = document.createElement('div');
+      t.className = 'ci-stat ci-stat-noshow';
+      const e = document.createElement('small');
+      e.textContent = etichetta;
+      const v = document.createElement('strong');
+      v.textContent = valore;
+      t.append(e, v);
+      statistiche.appendChild(t);
+    };
+    if (d.no_show) tessera('No-show', String(d.no_show) + (d.ultimo ? ' · ultimo ' + d.ultimo : ''));
+    if (d.annullati_tardi) tessera('Annullati all\'ultimo', String(d.annullati_tardi));
+    if (!blocco.bloccato) return;
+    const riga = document.createElement('div');
+    riga.className = 'ci-noshow-blocco';
+    const testo = document.createElement('span');
+    testo.textContent = 'Prenotazioni online bloccate: ' + blocco.conteggio + ' appuntamenti saltati negli ultimi '
+      + blocco.mesi + ' mesi (il limite è ' + blocco.soglia + ').';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm btn-outline-danger';
+    btn.textContent = 'Sblocca';
+    btn.addEventListener('click', () => {
+      if (!confirm('Sbloccare le prenotazioni online di questo cliente?\n\n'
+                   + 'Da adesso contano solo gli appuntamenti saltati dopo lo sblocco.')) return;
+      btn.disabled = true;
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+      fetch(noShowBase() + '/settings/api/clienti/' + encodeURIComponent(clientId) + '/sblocca-online', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: '{}'
+      }).then(r => r.json().catch(() => ({})).then(j => {
+        if (!r.ok || !j.ok) throw new Error(j.errore || 'Sblocco non riuscito');
+        riga.textContent = 'Prenotazioni online sbloccate.';
+      })).catch(err => { alert(err.message); btn.disabled = false; });
+    });
+    riga.append(testo, btn);
+    statistiche.appendChild(riga);
+  });
+}
+
 // contenitore: dove disegnare schede ed elenchi; statistiche: facoltativo
 function ciCaricaAppuntamenti(contenitore, clientId, statistiche) {
   contenitore.innerHTML = '';
@@ -2389,7 +2519,9 @@ function ciCaricaAppuntamenti(contenitore, clientId, statistiche) {
     fetch(`/calendar/api/client-loyalty/${id}`)
       .then(r => r.ok ? r.json() : Promise.reject('client_loyalty failed'))
       .then(fed => ciDisegnaStatistiche(statistiche, fed))
-      .catch(err => { statistiche.innerHTML = ''; console.warn('client-loyalty non disponibile', err); });
+      .catch(err => { statistiche.innerHTML = ''; console.warn('client-loyalty non disponibile', err); })
+      // Dopo la fedelta': ciDisegnaStatistiche svuota il contenitore.
+      .finally(() => ciDisegnaNoShow(statistiche, clientId));
   }
 
   const schede = document.createElement('div');
@@ -3189,6 +3321,9 @@ function selectClient(clientId, fullName, clientNote, clientPhone) {
     }
   }
   
+  // Avviso se il cliente ha saltato appuntamenti (solo informazione).
+  noShowAvvisoSottoCampo(input, clientId, () => (hidden ? hidden.value : clientId));
+
   // Ricarica i servizi suggeriti per il cliente selezionato
   if (typeof loadServicesForModal === 'function') loadServicesForModal();
 }
@@ -8040,6 +8175,9 @@ function selectClientNav(clientId, fullName) {
 
   // Icona info accanto al campo Navigator (stessa funzione usata dal ripristino)
   renderNavClientInfoIcon(clientId);
+
+  // Avviso se il cliente ha saltato appuntamenti (solo informazione).
+  noShowAvvisoSottoCampo(input, clientId, () => window.selectedClientIdNav);
 
   saveNavigatorState();
 

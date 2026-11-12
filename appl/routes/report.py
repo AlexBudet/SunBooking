@@ -5,7 +5,8 @@ import requests
 from sqlalchemy import func, cast, Date
 from appl.models import Appointment, AppointmentStatus, Operator, OperatorShift, Client, AppointmentSource, BusinessInfo, Receipt, Service, ServiceCategory, Subcategory, User
 from appl import db
-from appl.formati import nome_proprio
+from appl.formati import nome_proprio, data_it
+from appl.services import no_show as no_show_mod
 import pandas as pd
 import os
 import re
@@ -2222,6 +2223,125 @@ def report_no_show():
         })
 
     return jsonify({'rows': rows, 'periodo': periodo, 'totale': len(rows)})
+
+
+@report_bp.route('/api/report_no_show_classifica')
+def report_no_show_classifica():
+    """Classifica di chi salta gli appuntamenti nel periodo scelto (tile NO-SHOW).
+
+    Un "salto" (appl/services/no_show.py) e' un no-show (stessa persona, stesso
+    giorno = uno solo) oppure un annullamento online fatto all'ultimo. Ogni
+    numero ha il suo denominatore: per il periodo le visite totali, per ogni
+    cliente i giorni in cui aveva appuntamento.
+
+    Periodo: dateFrom/dateTo (YYYY-MM-DD), oppure giorni=30/90/365, oppure
+    giorni=0 = da sempre. Senza niente: ultimi 90 giorni.
+    """
+    adesso = datetime.now(pytz_timezone('Europe/Rome')).replace(tzinfo=None)
+    date_from, date_to = request.args.get('dateFrom'), request.args.get('dateTo')
+    if date_from and date_to:
+        try:
+            dal = datetime.strptime(date_from, "%Y-%m-%d")
+            al = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+        except ValueError:
+            return jsonify({'error': 'Date non valide'}), 400
+        if al <= dal:
+            return jsonify({'error': 'Date non valide'}), 400
+    else:
+        try:
+            giorni = int(request.args.get('giorni', 90))
+        except (TypeError, ValueError):
+            giorni = 90
+        oggi = adesso.replace(hour=0, minute=0, second=0, microsecond=0)
+        al = oggi + timedelta(days=1)
+        dal = None if giorni <= 0 else oggi - timedelta(days=giorni - 1)
+    # Un salto si sa solo dopo: gli appuntamenti futuri non contano ne' sopra ne' sotto.
+    al = min(al, adesso)
+
+    regole = no_show_mod.regole(BusinessInfo.query.first())
+    eventi = no_show_mod.carica_eventi(db.session, regole['ore_tardivo'], dal=dal, al=al)
+
+    # Visite del periodo (cliente + giorno), escluse le voci finte e gli annullati.
+    q_visite = (db.session.query(Appointment.client_id, func.date(Appointment.start_time))
+                .join(Client, Client.id == Appointment.client_id)
+                .filter(Appointment.start_time < al,
+                        Appointment.is_cancelled_by_client.isnot(True),
+                        func.lower(Client.cliente_nome) != 'dummy')
+                .distinct())
+    if dal is not None:
+        q_visite = q_visite.filter(Appointment.start_time >= dal)
+    visite = q_visite.all()
+    visite_per_cliente = defaultdict(int)
+    for cid, _giorno in visite:
+        visite_per_cliente[cid] += 1
+
+    # Stato del blocco online di oggi (impostazioni di Booking Web, non il
+    # periodo scelto qui): stessi eventi che usa il sito prenotazioni.
+    eventi_blocco = sblocchi = None
+    if regole['blocco_attivo']:
+        eventi_blocco = no_show_mod.carica_eventi(
+            db.session, regole['ore_tardivo'], dal=no_show_mod.mesi_fa(adesso, regole['mesi']))
+        sblocchi = no_show_mod.carica_sblocchi(db.session)
+
+    persone = {}
+    for e in eventi:
+        if e['client_id'] is not None:
+            chiave = ('c', e['client_id'])
+        else:
+            chiave = ('r', min(e['cellulari']) if e['cellulari'] else min(e['email']))
+        p = persone.setdefault(chiave, {
+            'client_id': e['client_id'], 'nome': _nome_proprio(e['nome']) or 'Cliente',
+            'cellulari': set(), 'email': set(), 'no_show': 0, 'annullati_tardi': 0,
+            'ultimo': e['quando'],
+        })
+        p['cellulari'] |= e['cellulari']
+        p['email'] |= e['email']
+        p['no_show' if e['tipo'] == no_show_mod.NO_SHOW else 'annullati_tardi'] += 1
+        if e['quando'] > p['ultimo']:
+            p['ultimo'] = e['quando']
+
+    clienti = {c.id: c for c in Client.query.filter(
+        Client.id.in_([p['client_id'] for p in persone.values() if p['client_id']] or [0])).all()}
+    rows = []
+    for p in persone.values():
+        cliente = clienti.get(p['client_id'])
+        cel = no_show_mod.normalizza_cellulare(cliente.cliente_cellulare) if cliente else None
+        mail = no_show_mod.normalizza_email(cliente.cliente_email) if cliente else None
+        if not cliente:
+            cel = min(p['cellulari']) if p['cellulari'] else None
+            mail = min(p['email']) if p['email'] else None
+        bloccato = None
+        if eventi_blocco is not None:
+            bloccato = no_show_mod.valuta(eventi_blocco, sblocchi, cel, mail, regole['soglia'])['bloccato']
+        rows.append({
+            'client_id': p['client_id'],
+            'nome': p['nome'],
+            'cellulare': (cliente.cliente_cellulare or '').strip() if cliente else (cel or ''),
+            'no_show': p['no_show'],
+            'annullati_tardi': p['annullati_tardi'],
+            'salti': p['no_show'] + p['annullati_tardi'],
+            'visite': visite_per_cliente.get(p['client_id']) if p['client_id'] else None,
+            'ultimo': data_it(p['ultimo']),
+            'ultimo_iso': p['ultimo'].isoformat(),
+            'bloccato_online': bloccato,
+        })
+    # Prima chi ha saltato di piu'; a parita', il piu' recente.
+    rows.sort(key=lambda r: (r['salti'], r['ultimo_iso']), reverse=True)
+
+    if dal is None:
+        periodo = 'da sempre'
+    else:
+        periodo = f"{data_it(dal)} - {data_it(al - timedelta(seconds=1))}"
+    return jsonify({
+        'periodo': periodo,
+        'no_show': sum(r['no_show'] for r in rows),
+        'annullati_tardi': sum(r['annullati_tardi'] for r in rows),
+        'visite': len(visite),
+        'persone': len(rows),
+        'rows': rows[:50],
+        'blocco': {'attivo': regole['blocco_attivo'], 'soglia': regole['soglia'],
+                   'mesi': regole['mesi'], 'bloccati': sum(1 for r in rows if r['bloccato_online'])},
+    })
 
 
 @report_bp.route('/api/apri_link_esterno', methods=['POST'])

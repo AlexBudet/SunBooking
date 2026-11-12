@@ -578,23 +578,36 @@ document.addEventListener('DOMContentLoaded', function() {
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
     <span data-bs-toggle="tooltip" data-bs-placement="bottom"
-          title="Chi aveva un appuntamento e non si è presentato. Passa il mouse su una riga per telefono e dettagli">NO-SHOW</span>
+          title="Chi salta gli appuntamenti: no-show (segnati non arrivato) e annullamenti online fatti all'ultimo. Passa il mouse su una riga per telefono e dettagli">NO-SHOW</span>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Vista">
+      <button type="button" class="btn btn-outline-secondary btn-noshow-vista active" data-vista="classifica">Classifica</button>
+      <button type="button" class="btn btn-outline-secondary btn-noshow-vista" data-vista="ultimi">Ultimi</button>
+    </div>
   </div>
   <!-- I due campi data stavano DENTRO l'header: erano l'unico tile a farlo e
        gli sballavano l'altezza rispetto a tutti gli altri. Qui nel corpo hanno
        anche lo spazio per la misura piena, senza comprimersi. Gli id non sono
-       cambiati, il JS li prende con getElementById e non si accorge di nulla. -->
-  <div class="no-show-filtri d-flex align-items-center" style="gap:4px; margin-bottom:8px;">
-    <input type="text" class="form-control form-control-sm no-show-data" id="noShowDal"
-           placeholder="dal" autocomplete="off">
-    <input type="text" class="form-control form-control-sm no-show-data" id="noShowAl"
-           placeholder="al" autocomplete="off">
-    <button type="button" class="btn btn-outline-secondary btn-sm" id="noShowRecenti"
-            data-bs-toggle="tooltip" title="Torna agli ultimi 10">
-      <i class="bi bi-arrow-counterclockwise"></i>
-    </button>
+       cambiati, il JS li prende con getElementById e non si accorge di nulla.
+       Periodo: i pulsanti (solo Classifica) oppure le due date, che vincono. -->
+  <div class="no-show-filtri d-flex align-items-center" style="gap:6px; margin-bottom:6px;">
+    <div class="btn-group btn-group-sm no-show-periodi" role="group" aria-label="Periodo">
+      <button type="button" class="btn btn-outline-secondary btn-noshow-periodo" data-giorni="30">30 gg</button>
+      <button type="button" class="btn btn-outline-secondary btn-noshow-periodo active" data-giorni="90">3 mesi</button>
+      <button type="button" class="btn btn-outline-secondary btn-noshow-periodo" data-giorni="365">12 mesi</button>
+      <button type="button" class="btn btn-outline-secondary btn-noshow-periodo" data-giorni="0">Sempre</button>
+    </div>
+    <div class="d-flex align-items-center no-show-date" style="gap:4px;">
+      <input type="text" class="form-control form-control-sm no-show-data" id="noShowDal"
+             placeholder="dal" autocomplete="off">
+      <input type="text" class="form-control form-control-sm no-show-data" id="noShowAl"
+             placeholder="al" autocomplete="off">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="noShowRecenti"
+              data-bs-toggle="tooltip" title="Togli le date">
+        <i class="bi bi-arrow-counterclockwise"></i>
+      </button>
+    </div>
   </div>
-  <div class="stat-voce mb-1" id="no-show-periodo">ultimi 10 in ordine di tempo</div>
+  <div class="stat-voce mb-1" id="no-show-periodo">&nbsp;</div>
   <div class="tile-lista-scroll" id="no-show-list">
     <span class="text-muted">Caricamento...</span>
   </div>
@@ -1305,6 +1318,58 @@ document.addEventListener('DOMContentLoaded', function() {
    80px bastano per "31/12/2026" perche' qui il corpo del testo e' ridotto;
    se si tocca il font vanno ricontrollati insieme. */
 .no-show-filtri { flex-wrap: nowrap; }
+/* Su uno schermo stretto i pulsanti del periodo vanno sopra e le date sotto,
+   ma le due date restano comunque insieme sulla stessa riga. */
+@media (max-width: 576px) { .no-show-filtri { flex-wrap: wrap; } }
+.no-show-filtri .no-show-date { flex-wrap: nowrap; }
+.no-show-filtri .btn-noshow-periodo { padding: 1px 7px; font-size: 0.78rem; }
+/* Con le date scelte il pulsante attivo non vale: si vede spento. */
+.no-show-filtri .btn-noshow-periodo.active.noshow-spento {
+  background: transparent;
+  color: #6c757d;
+}
+/* Il tile ha l'altezza fissa della griglia: con la riga dei filtri l'elenco
+   scende di qualche pixel, quindi qui e' un po' piu' basso degli altri. */
+#tile-no-show .tile-lista-scroll { max-height: 192px; }
+#tile-no-show #no-show-periodo {
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Classifica NO-SHOW */
+#tile-no-show .noshow-pos {
+  flex: 0 0 1.6em;
+  text-align: right;
+  color: #8a94a6;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+#tile-no-show .noshow-centro { flex: 1 1 auto; min-width: 0; }
+#tile-no-show .noshow-barra {
+  display: flex;
+  height: 6px;
+  margin-top: 3px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: #f1f3f6;
+}
+#tile-no-show .noshow-barra .ns { background: #e8590c; }
+#tile-no-show .noshow-barra .at { background: #f5b971; }
+#tile-no-show .noshow-destra { flex: 0 0 auto; text-align: right; white-space: nowrap; }
+#tile-no-show .noshow-destra b { font-size: 1.05rem; color: #c2410c; }
+#tile-no-show .noshow-destra small { color: #777; }
+#tile-no-show .noshow-bloccato {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 0.68rem;
+  font-weight: 700;
+  vertical-align: 1px;
+}
 .no-show-filtri .no-show-data {
   flex: 0 0 auto;
   width: 80px;
@@ -5621,7 +5686,119 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // ---------------------------------------------------------------- TILE 5
+  /* NO-SHOW. Due viste:
+     - Classifica: chi salta di piu' nel periodo (no-show + annullamenti online
+       all'ultimo, appl/services/no_show.py), ognuno con il suo denominatore;
+     - Ultimi: gli ultimi no-show in ordine di tempo (la vista di prima).
+     Periodo: i pulsanti 30 gg / 3 mesi / 12 mesi / Sempre (solo Classifica),
+     oppure le due date, che vincono sui pulsanti. */
+  var noShowVista = 'classifica';
+
+  function noShowDateScelte() {
+    var dal = document.getElementById('noShowDal');
+    var al = document.getElementById('noShowAl');
+    return (dal && al && dal.value && al.value) ? { dal: dal.value, al: al.value } : null;
+  }
+
   function caricaNoShow() {
+    var periodi = document.querySelector('#tile-no-show .no-show-periodi');
+    // Nascosti ma al loro posto: l'altezza del tile non cambia.
+    if (periodi) periodi.style.visibility = noShowVista === 'classifica' ? '' : 'hidden';
+    var reset = document.getElementById('noShowRecenti');
+    if (reset) {
+      var testo = noShowVista === 'classifica' ? 'Togli le date' : 'Torna agli ultimi 10';
+      reset.setAttribute('aria-label', testo);
+      var tip = window.bootstrap && bootstrap.Tooltip.getInstance(reset);
+      if (tip) tip.setContent({ '.tooltip-inner': testo });
+    }
+    if (noShowVista === 'classifica') caricaNoShowClassifica();
+    else caricaNoShowUltimi();
+  }
+
+  function caricaNoShowClassifica() {
+    var lista = document.getElementById('no-show-list');
+    if (!lista) return;
+    var date = noShowDateScelte();
+    // Con le date scelte i pulsanti del periodo non valgono: si spengono.
+    document.querySelectorAll('#tile-no-show .btn-noshow-periodo').forEach(function (b) {
+      b.classList.toggle('noshow-spento', !!date);
+    });
+    var qs = date
+      ? 'dateFrom=' + date.dal + '&dateTo=' + date.al
+      : 'giorni=' + giorniAttivi('#tile-no-show .btn-noshow-periodo', 90);
+
+    fetch('/api/report_no_show_classifica?' + qs)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var intestazione = document.getElementById('no-show-periodo');
+        if (d.error) {
+          lista.innerHTML = '<span class="text-danger">' + esc(d.error) + '</span>';
+          if (intestazione) intestazione.textContent = '';
+          return;
+        }
+        if (intestazione) {
+          var perc = d.visite ? (d.no_show / d.visite * 100) : 0;
+          var testo = d.no_show + ' no-show su ' + Number(d.visite || 0).toLocaleString('it-IT') +
+            ' visite (' + perc.toFixed(1).replace('.', ',') + '%)';
+          if (d.annullati_tardi) testo += ' · ' + d.annullati_tardi + " annullati all'ultimo";
+          // Il periodo si legge gia' sui pulsanti o nelle date: qui solo nel
+          // suggerimento (Bootstrap), cosi' la riga non va a capo.
+          var tipVecchio = window.bootstrap && bootstrap.Tooltip.getInstance(intestazione);
+          if (tipVecchio) tipVecchio.dispose();
+          bsTip(intestazione, 'Periodo: ' + (d.periodo || ''), { placement: 'bottom' });
+          if (d.blocco && d.blocco.attivo && d.blocco.bloccati) {
+            testo += ' · ' + d.blocco.bloccati + ' bloccati online';
+          }
+          intestazione.textContent = testo;
+        }
+
+        if (!d.rows || !d.rows.length) {
+          lista.innerHTML = '<span class="text-muted">Nessun appuntamento saltato in questo periodo.</span>';
+          return;
+        }
+
+        ripulisciTooltipIn(lista);
+        lista.innerHTML = '';
+        var massimo = d.rows[0].salti || 1;
+        d.rows.forEach(function (n, i) {
+          var riga = document.createElement('div');
+          riga.className = 'riga-lista';
+          var larghezza = Math.max(8, Math.round(n.salti / massimo * 100));
+          var quotaNs = n.salti ? Math.round(n.no_show / n.salti * 100) : 100;
+          riga.innerHTML =
+            '<div class="noshow-pos">' + (i + 1) + '</div>' +
+            '<div class="noshow-centro">' +
+              '<div class="riga-nome">' + esc(n.nome) +
+                (n.bloccato_online ? '<span class="noshow-bloccato">online bloccato</span>' : '') +
+              '</div>' +
+              '<div class="noshow-barra" aria-hidden="true" style="width:' + larghezza + '%;">' +
+                '<span class="ns" style="width:' + quotaNs + '%;"></span>' +
+                '<span class="at" style="width:' + (100 - quotaNs) + '%;"></span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="noshow-destra">' +
+              '<div><b>' + n.salti + '</b>' + (n.visite ? ' <small>su ' + n.visite + '</small>' : '') + '</div>' +
+              '<div class="riga-dettaglio">' + esc(n.ultimo) + '</div>' +
+            '</div>';
+
+          var dettaglio = ['<strong>' + esc(n.nome) + '</strong>'];
+          dettaglio.push(n.cellulare ? '📞 ' + esc(n.cellulare) : 'nessun numero in scheda');
+          dettaglio.push('No-show: ' + n.no_show);
+          if (n.annullati_tardi) dettaglio.push("Annullati online all'ultimo: " + n.annullati_tardi);
+          if (n.visite) dettaglio.push('Giorni con appuntamento nel periodo: ' + n.visite);
+          dettaglio.push("L'ultimo: " + esc(n.ultimo));
+          if (n.bloccato_online) dettaglio.push('Non può prenotare online (si sblocca dalla scheda cliente)');
+          bsTip(riga, dettaglio.join('<br>'), { html: true, placement: 'left' });
+
+          lista.appendChild(riga);
+        });
+      })
+      .catch(function () {
+        lista.innerHTML = '<span class="text-danger">Errore nel caricamento.</span>';
+      });
+  }
+
+  function caricaNoShowUltimi() {
     var lista = document.getElementById('no-show-list');
     if (!lista) return;
 
@@ -5712,15 +5889,36 @@ document.addEventListener('DOMContentLoaded', function() {
       al.addEventListener('change', caricaNoShow);
     }
 
+    function togliDate() {
+      [dal, al].forEach(function (i) {
+        if (i._flatpickr) i._flatpickr.clear(); else i.value = '';
+      });
+    }
+
     var reset = document.getElementById('noShowRecenti');
     if (reset) {
       reset.addEventListener('click', function () {
-        [dal, al].forEach(function (i) {
-          if (i._flatpickr) i._flatpickr.clear(); else i.value = '';
-        });
+        togliDate();
         caricaNoShow();
       });
     }
+
+    // Un pulsante del periodo vale piu' delle date: le toglie.
+    collegaPeriodo('#tile-no-show .btn-noshow-periodo', function () {
+      togliDate();
+      caricaNoShow();
+    });
+
+    document.querySelectorAll('#tile-no-show .btn-noshow-vista').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('#tile-no-show .btn-noshow-vista').forEach(function (b) {
+          b.classList.remove('active');
+        });
+        btn.classList.add('active');
+        noShowVista = btn.dataset.vista;
+        caricaNoShow();
+      });
+    });
   }
 
   // ---------------------------------------------------------------- TILE 6

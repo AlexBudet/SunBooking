@@ -10,7 +10,8 @@ from ..models import OperatorShift, PacchettoSeduta, db, Appointment, Appointmen
 from appl import app
 from appl.services.error_log import log_crm_error
 from appl.services import risorse as risorse_mod
-from appl.formati import nome_proprio
+from appl.services import no_show as no_show_mod
+from appl.formati import nome_proprio, data_it
 import random
 import json
 import re
@@ -3738,6 +3739,54 @@ def servizi_colonna(operator_id):
     abilitati.sort(key=lambda x: (not x['proprio'], (x['name'] or '').lower()))
 
     return jsonify({'abilitati': abilitati, 'non_abilitati': sorted(non_abilitati)})
+
+
+@calendar_bp.route('/api/cliente-no-show/<int:client_id>', methods=['GET'])
+def cliente_no_show(client_id):
+    """No-show e annullamenti all'ultimo di un cliente (appl/services/no_show.py):
+    l'avviso quando lo si sceglie in Agenda e la riga nella scheda "i".
+
+    no_show / annullati_tardi / ultimo: di QUESTA scheda, da sempre.
+    blocco: lo stato delle prenotazioni online come lo vede il sito
+    prenotazioni, cioe' contando cellulare o e-mail (anche su altre schede) nel
+    periodo impostato in Booking Web, dopo l'ultimo sblocco.
+    """
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+    vuoto = {'ok': True, 'no_show': 0, 'annullati_tardi': 0, 'ultimo': '', 'blocco': {'attivo': False}}
+    cliente = db.session.get(Client, client_id)
+    if not cliente or cliente.is_deleted:
+        return jsonify(vuoto)
+    try:
+        r = no_show_mod.regole(BusinessInfo.query.first())
+        propri = no_show_mod.carica_eventi(db.session, r['ore_tardivo'], client_id=client_id)
+        ultimo = max((e['quando'] for e in propri), default=None)
+        risposta = {
+            'ok': True,
+            'no_show': sum(1 for e in propri if e['tipo'] == no_show_mod.NO_SHOW),
+            'annullati_tardi': sum(1 for e in propri if e['tipo'] == no_show_mod.ANNULLATO_TARDI),
+            'ultimo': data_it(ultimo) if ultimo else '',
+            'blocco': {'attivo': r['blocco_attivo']},
+        }
+        if r['blocco_attivo']:
+            adesso = datetime.now(pytz_timezone('Europe/Rome')).replace(tzinfo=None)
+            eventi = no_show_mod.carica_eventi(db.session, r['ore_tardivo'],
+                                               dal=no_show_mod.mesi_fa(adesso, r['mesi']))
+            esito = no_show_mod.valuta(
+                eventi, no_show_mod.carica_sblocchi(db.session),
+                no_show_mod.normalizza_cellulare(cliente.cliente_cellulare),
+                no_show_mod.normalizza_email(cliente.cliente_email), r['soglia'])
+            risposta['blocco'].update({
+                'bloccato': esito['bloccato'], 'conteggio': esito['conteggio'],
+                'soglia': r['soglia'], 'mesi': r['mesi'],
+                'sbloccato_il': data_it(esito['sblocco']) if esito['sblocco'] else '',
+            })
+        return jsonify(risposta)
+    except Exception as e:
+        # Un avviso che non si riesce a calcolare non deve fermare l'Agenda.
+        db.session.rollback()
+        app.logger.warning("cliente-no-show %s: %s", client_id, e)
+        return jsonify(vuoto)
 
 
 @calendar_bp.route('/api/check-risorse', methods=['POST'])

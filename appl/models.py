@@ -143,6 +143,9 @@ class Client(db.Model):
     is_deleted = db.Column(db.Boolean, default=False)
     note = db.Column(db.String(1000), nullable=True)
     created_at = db.Column(db.DateTime, server_default=func.now())
+    # Sblocco a mano delle prenotazioni online (scheda cliente in Agenda): da qui
+    # in poi contano solo i no-show successivi. Ora italiana senza fuso.
+    prenotazioni_online_sblocco_il = db.Column(db.DateTime, nullable=True)
 
     def __repr__(self):
         return f"<Cliente {self.cliente_nome} {self.cliente_cognome}>"
@@ -295,6 +298,10 @@ class Appointment(db.Model):
                       nullable=False)
     booking_session_id = db.Column(db.String(64), nullable=True, index=True) 
     is_cancelled_by_client = db.Column(db.Boolean, default=False)
+    # Quando il cliente ha annullato dal link dell'e-mail (scritta dal repo
+    # booking, ora italiana senza fuso): serve a riconoscere gli annullamenti
+    # all'ultimo. NULL per tutto quello annullato prima che esistesse.
+    annullato_il = db.Column(db.DateTime, nullable=True)
     pacchetto_seduta_id = db.Column(db.Integer, db.ForeignKey('pacchetto_sedute.id'), nullable=True)
     # Data dell'ultimo invio del memo WhatsApp mattutino per QUESTO appuntamento.
     # Colonna scritta/letta dal job mattutino del repo BOOKING (routes/booking.py):
@@ -386,6 +393,18 @@ class BusinessInfo(db.Model):
     # (tempi, disponibilita', modalita'). Non e' legato alle regole durata/prezzo:
     # vuoto/NULL = riquadro non mostrato. Letto anche dal repo booking.
     booking_info_message = db.Column(db.Text, nullable=True)
+    # ANNULLAMENTI E NO-SHOW (Tools > Booking Web; regole in appl/services/no_show.py,
+    # copiate nel repo booking). Tutto spento di partenza.
+    # - annullo: il link "Annulla" dell'e-mail non annulla piu' nelle ultime N ore,
+    #   spiega di telefonare al centro;
+    # - noshow: chi ha almeno `soglia` salti (no-show + annullamenti dal link meno
+    #   di `ore_tardivo` ore prima) negli ultimi `mesi` mesi non prenota online.
+    booking_annullo_blocco_attivo = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    booking_annullo_blocco_ore = db.Column(db.Integer, nullable=False, default=24, server_default='24')
+    booking_noshow_blocco_attivo = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    booking_noshow_soglia = db.Column(db.Integer, nullable=False, default=2, server_default='2')
+    booking_noshow_mesi = db.Column(db.Integer, nullable=False, default=12, server_default='12')
+    booking_noshow_ore_tardivo = db.Column(db.Integer, nullable=False, default=24, server_default='24')
     operator_whatsapp_notification_enabled = db.Column(db.Boolean, default=False)
     operator_whatsapp_notification_time = db.Column(db.Time, default=datetime.strptime("20:00", "%H:%M").time())
     operator_whatsapp_message_template = db.Column(db.Text, nullable=True)
