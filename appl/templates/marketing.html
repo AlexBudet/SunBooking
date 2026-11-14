@@ -1780,6 +1780,24 @@ Ti aspettiamo 💆‍♀️`
                 reinvii.slice(0, 5).map(r => '• ' + r.etichetta).join('\n') +
                 (reinvii.length > 5 ? `\n… e altri ${reinvii.length - 5}` : '');
         }
+        // Cellulari italiani di 9 cifre (es. 335 123456): esistono e partono,
+        // ma spesso e' un numero a cui manca una cifra. Si avvisa, non si blocca.
+        const noveCifre = selectedClients.filter(c => {
+            const grezzo = String(c.cellulare || '').trim();
+            let cifre = grezzo.replace(/\D/g, '');
+            // con prefisso: +39 / 0039, oppure 39 scritto senza + (11 cifre)
+            if (grezzo.startsWith('+') || cifre.startsWith('00') || (cifre.length === 11 && cifre.startsWith('39'))) {
+                cifre = cifre.replace(/^00/, '');
+                if (!cifre.startsWith('39')) return false;
+                cifre = cifre.slice(2);
+            }
+            return cifre.length === 9 && cifre.startsWith('3');
+        });
+        if (noveCifre.length) {
+            conferma += `\n\n⚠️ ${noveCifre.length === 1 ? '1 cliente ha' : noveCifre.length + ' clienti hanno'} un cellulare di 9 cifre invece di 10. Il messaggio parte lo stesso: controlla che non manchi una cifra.\n` +
+                noveCifre.slice(0, 5).map(c => '• ' + ((c.nome || '') + ' ' + (c.cognome || '')).trim() + ' — ' + c.cellulare).join('\n') +
+                (noveCifre.length > 5 ? `\n… e altri ${noveCifre.length - 5}` : '');
+        }
         conferma += '\n\nQuesta operazione non può essere annullata.';
         if (!confirm(conferma)) {
             return;

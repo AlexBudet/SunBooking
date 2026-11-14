@@ -2283,6 +2283,10 @@ def calendar_appointments_by_date():
             "client_id": appt.client_id,
             "service_id": appt.service_id,
             "source": source_val,
+            # Come data-booking_session_id del template: serve anche al no-show
+            # compresso per riconoscere la persona di una prenotazione online
+            # non ancora associata (no_show.intervalli_occupati).
+            "booking_session_id": appt.booking_session_id or "",
             "pacchetto_seduta_id": appt.pacchetto_seduta_id,
             "pacchetto_id": appt.pacchetto_seduta.pacchetto_id if appt.pacchetto_seduta else None,
             "pacchetto_nome": appt.pacchetto_seduta.pacchetto.nome if appt.pacchetto_seduta and appt.pacchetto_seduta.pacchetto else None,
@@ -3238,7 +3242,12 @@ def send_whatsapp_auto():
                     app.logger.error("[WHATSAPP-UNIPILE] send failed http_status=%s body=%s", response.status_code, response.text)
                     registra_uso('whatsapp', tipo='manuale', origine='crm', esito='errore',
                                  errore=f"HTTP {response.status_code}: {response.text[:200]}")
-                    return jsonify({'error': 'Invio fallito', 'http_status': response.status_code, 'details': response.text}), 500
+                    # Numero senza WhatsApp: lo si dice chiaro invece di "Invio fallito".
+                    from appl.services.whatsapp_errori import spiega_errore
+                    spiegazione = spiega_errore(response.text, numero_pulito)
+                    return jsonify({'error': spiegazione or 'Invio fallito',
+                                    'motivo': 'non_su_whatsapp' if spiegazione else None,
+                                    'http_status': response.status_code, 'details': response.text}), 500
 
         except Exception as exc:
             app.logger.exception("[WHATSAPP-UNIPILE] Exception during requests.post")
@@ -3998,17 +4007,20 @@ def check_abilitazioni():
             shifts_by_op.setdefault(sh.operator_id, []).append(
                 (sh.shift_start_time, sh.shift_end_time))
 
-        for appt in (db.session.query(Appointment)
-                     .filter(Appointment.operator_id.in_(altri_ids),
-                             Appointment.is_cancelled_by_client == False,
-                             Appointment.start_time >= datetime.combine(giorno, time.min),
-                             Appointment.start_time < datetime.combine(giorno + timedelta(days=1), time.min))
-                     .all()):
-            if str(appt.id) in ignora_appts:
+        # Il giorno INTERO, tutte le colonne: un no-show occupa solo il primo
+        # quarto d'ora del suo primo servizio, che puo' stare su un'altra
+        # colonna (no_show.intervalli_occupati).
+        del_giorno = [appt for appt in (db.session.query(Appointment)
+                      .filter(Appointment.is_cancelled_by_client == False,
+                              Appointment.start_time >= datetime.combine(giorno, time.min),
+                              Appointment.start_time < datetime.combine(giorno + timedelta(days=1), time.min))
+                      .all())
+                      if str(appt.id) not in ignora_appts]
+        for appt, inizio_appt, fine_appt in no_show_mod.intervalli_occupati(del_giorno):
+            if appt.operator_id not in altri_ids:
                 continue
-            inizio_appt = _naive(appt.start_time)
             appts_by_op.setdefault(appt.operator_id, []).append(
-                (inizio_appt, inizio_appt + timedelta(minutes=int(appt.duration or 0))))
+                (_naive(inizio_appt), _naive(fine_appt)))
 
         biz = BusinessInfo.query.first()
         if biz:
@@ -4786,12 +4798,8 @@ def api_find_availability():
             return False
         s_naive = _to_naive(start_dt)
         e_naive = _to_naive(end_dt)
-        for a in appts_by_op.get(op_id, []):
-            a_start = _to_naive(a.start_time)
-            if a.end_time is not None:
-                a_end = _to_naive(a.end_time)
-            else:
-                a_end = a_start + timedelta(minutes=getattr(a, '_duration', 0) or 30)
+        # (inizio, fine) gia' calcolati da no_show.intervalli_occupati
+        for a_start, a_end in appts_by_op.get(op_id, []):
             if s_naive < a_end and e_naive > a_start:
                 return False
         return True
@@ -4884,10 +4892,13 @@ def api_find_availability():
             Appointment.start_time >= day_start,
             Appointment.start_time <= day_end,
         ).all()
+        # Spazio occupato davvero: un no-show tiene solo il primo quarto d'ora
+        # del suo primo servizio (no_show.intervalli_occupati, giorno intero).
         appts_by_op = {}
-        for a in all_appts_today:
+        for a, a_inizio, a_fine in no_show_mod.intervalli_occupati(all_appts_today):
             if a.operator_id in candidate_ids_set:
-                appts_by_op.setdefault(a.operator_id, []).append(a)
+                appts_by_op.setdefault(a.operator_id, []).append(
+                    (_to_naive(a_inizio), _to_naive(a_fine)))
         occupati_risorse = (risorse_mod.occupati_del_giorno(all_appts_today)
                             if config_risorse else [])
 

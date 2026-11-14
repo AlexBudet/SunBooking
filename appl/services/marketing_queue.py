@@ -258,6 +258,10 @@ def _lavora(app, chiave):
             else:
                 coda.errori += 1
                 if len(coda.dettagli_errori) < 20:
+                    # Numero senza WhatsApp: frase chiara al posto del JSON di
+                    # Unipile. Nello storico resta salvato l'errore originale.
+                    from appl.services.whatsapp_errori import spiega_errore
+                    motivo = (spiega_errore(errore, messaggio.get('numero'), breve=True)
+                              or (errore or 'errore sconosciuto')[:80])
                     coda.dettagli_errori.append(
-                        '%s: %s' % (messaggio.get('nome') or messaggio['client_id'],
-                                    (errore or 'errore sconosciuto')[:80]))
+                        '%s: %s' % (messaggio.get('nome') or messaggio['client_id'], motivo))

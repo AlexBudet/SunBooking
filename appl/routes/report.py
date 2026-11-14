@@ -49,6 +49,36 @@ def _get_clienti_spesa_aggregato(start, end, limit=None):
     
     return query.all()
 
+def _chiave_visita(a):
+    """UN appuntamento = una persona in un giorno, qualunque sia il numero di
+    servizi (decisione del 14/11/2026): Maria Rossi con taglio + colore + piega
+    conta 1, non 3. E' la stessa regola del no-show e del colore del cliente in
+    Agenda.
+
+    La persona e' la SCHEDA cliente (client_id), mai il nome: prima alcuni
+    conteggi raggruppavano per nome di battesimo e due "Maria" diverse nello
+    stesso giorno diventavano una. Le prenotazioni online non ancora associate
+    stanno tutte sulla stessa scheda segnaposto: li' la persona e' la sessione
+    di prenotazione (o il blocco da solo).
+
+    Va caricato Appointment.client (joinedload) per non fare una query a riga."""
+    giorno = a.start_time.date() if a.start_time else None
+    cliente = a.client
+    if cliente is not None and no_show_mod.scheda_segnaposto(cliente.cliente_nome, cliente.cliente_cognome):
+        sessione = a.booking_session_id
+        return (('sessione', sessione) if sessione else ('appuntamento', a.id), giorno)
+    return (('cliente', a.client_id), giorno)
+
+
+def _e_blocco_off(a):
+    """Blocchi OFF (cliente o servizio "dummy"): non sono appuntamenti."""
+    c, s = a.client, a.service
+    return (c is None or s is None
+            or (c.cliente_nome or '').strip().lower() == 'dummy'
+            or (c.cliente_cognome or '').strip().lower() == 'dummy'
+            or (s.servizio_nome or '').strip().lower() == 'dummy')
+
+
 def to_rome(dt):
     if dt is None:
         return None
@@ -580,8 +610,8 @@ def report_day():
                 else:
                     solarium_servizi += prezzo
 
-    # Appuntamenti del giorno (mantieni logica esistente)
-    appuntamenti = Appointment.query.filter(
+    # Appuntamenti del giorno
+    appuntamenti = Appointment.query.options(joinedload(Appointment.client)).filter(
         func.date(Appointment.start_time) == giorno
     ).join(Client, Appointment.client_id == Client.id).join(Service, Appointment.service_id == Service.id).filter(
         Client.cliente_nome.ilike('%dummy%') == False,
@@ -591,17 +621,6 @@ def report_day():
     ).all()
 
     appuntamenti_validi = appuntamenti
-
-    # Gruppi per cliente
-    gruppi = []
-    for key, group in groupby(appuntamenti_validi, key=lambda a: a.client.cliente_nome if a.client else None):
-        gruppi.append(list(group))
-    totali = len(gruppi)
-
-    completati = sum(
-        all(a.stato == AppointmentStatus.PAGATO for a in gruppo)
-        for gruppo in gruppi
-    )
 
     # Incasso stimato
     incasso_stimato_totale = 0.0
@@ -615,24 +634,20 @@ def report_day():
         elif a.service and a.service.servizio_categoria == ServiceCategory.Estetica:
             incasso_stimato_estetica += prezzo
 
-    # Passaggi cassa calendario
-    passaggi_cassa_calendario = len(set(
-        a.client.cliente_nome
-        for a in appuntamenti_validi
-        if a.client and a.stato == AppointmentStatus.PAGATO
-    ))
-
-    # Completati e noshow per cliente
-    completati = 0
-    noshow = 0
-    clienti_unici = set(a.client.cliente_nome for a in appuntamenti_validi if a.client)
-    for nome_cliente in clienti_unici:
-        appuntamenti_cliente = [a for a in appuntamenti_validi if a.client and a.client.cliente_nome == nome_cliente]
-        if all(a.stato == AppointmentStatus.PAGATO for a in appuntamenti_cliente):
-            completati += 1
-        if any(a.stato == AppointmentStatus.NON_ARRIVATO for a in appuntamenti_cliente):
-            noshow += 1
-    totali = len(clienti_unici)
+    # Un appuntamento = una persona nel giorno (_chiave_visita). Prima qui si
+    # raggruppava per NOME DI BATTESIMO: due "Maria" diverse diventavano una
+    # (misurato 14/11/2026: 15 visite perse in 30 giorni a suncity, 28 a sunexp3).
+    visite = defaultdict(list)
+    for a in appuntamenti_validi:
+        visite[_chiave_visita(a)].append(a)
+    totali = len(visite)
+    completati = sum(1 for g in visite.values()
+                     if all(a.stato == AppointmentStatus.PAGATO for a in g))
+    noshow = sum(1 for g in visite.values()
+                 if any(a.stato == AppointmentStatus.NON_ARRIVATO for a in g))
+    # Passaggi cassa da calendario: appuntamenti con almeno un servizio pagato
+    passaggi_cassa_calendario = sum(1 for g in visite.values()
+                                    if any(a.stato == AppointmentStatus.PAGATO for a in g))
 
     # KPI mese (come versione attuale)
     primo_giorno_mese = giorno.replace(day=1)
@@ -653,7 +668,7 @@ def report_day():
     medie_giornaliere_fisse = [600, 500, 700, 800, 900, 1000, 1000, 1000, 900, 700, 500, 800]
     media_giornaliera_riferimento = medie_giornaliere_fisse[giorno.month - 1]
 
-    appuntamenti_mese = Appointment.query.filter(
+    appuntamenti_mese = Appointment.query.options(joinedload(Appointment.client)).filter(
         func.date(Appointment.start_time) >= primo_giorno_mese,
         func.date(Appointment.start_time) <= ultimo_giorno_mese
     ).join(Client, Appointment.client_id == Client.id).join(Service, Appointment.service_id == Service.id).filter(
@@ -663,19 +678,23 @@ def report_day():
         Appointment.is_cancelled_by_client == False
     ).all()
 
+    # Medie del mese con la stessa unita' del giorno: appuntamenti (persona +
+    # giorno), non servizi. Prima i no-show del mese contavano i servizi e il
+    # confronto col giorno ("Media mese") non tornava.
     clienti_serviti_per_giorno = defaultdict(set)
-    noshow_per_giorno = defaultdict(int)
+    noshow_per_giorno = defaultdict(set)
     totali_per_giorno = defaultdict(set)
     for a in appuntamenti_mese:
-        g = a.start_time.date()
-        totali_per_giorno[g].add(a.client_id)
+        chiave = _chiave_visita(a)
+        g = chiave[1]
+        totali_per_giorno[g].add(chiave)
         if a.stato == AppointmentStatus.PAGATO:
-            clienti_serviti_per_giorno[g].add(a.client_id)
+            clienti_serviti_per_giorno[g].add(chiave)
         if a.stato == AppointmentStatus.NON_ARRIVATO:
-            noshow_per_giorno[g] += 1
+            noshow_per_giorno[g].add(chiave)
 
     media_mese_clienti = (sum(len(v) for v in clienti_serviti_per_giorno.values()) / giorni_mese) if giorni_mese else 0
-    media_mese_noshow = (sum(noshow_per_giorno.values()) / giorni_mese) if giorni_mese else 0
+    media_mese_noshow = (sum(len(v) for v in noshow_per_giorno.values()) / giorni_mese) if giorni_mese else 0
     media_mese_completamento = (
         sum(
             (len(clienti_serviti_per_giorno[g]) / len(totali_per_giorno[g]) * 100) if len(totali_per_giorno[g]) > 0 else 0
@@ -1118,51 +1137,62 @@ def heatmap_incassi():
 
 @report_bp.route('/api/next_appointments')
 def next_appointments():
+    """I prossimi 6 APPUNTAMENTI. Un appuntamento = una persona in un giorno
+    (_chiave_visita): prima erano le prossime 6 righe, cioe' 6 servizi, e una
+    cliente con taglio + colore + piega occupava tre righe su sei. Ora e' una
+    riga sola, all'ora del primo servizio, con i servizi elencati."""
+    QUANTI = 6  # Modifica qui il limite se vuoi più/meno appuntamenti
     now = datetime.now()
-    appointments = (
+    righe = (
         Appointment.query
+        .options(joinedload(Appointment.client), joinedload(Appointment.service),
+                 joinedload(Appointment.operator))
         .filter(Appointment.start_time >= now,
                 Appointment.is_cancelled_by_client == False
         )
-        .order_by(Appointment.start_time.asc())
-        .limit(6)  # Modifica qui il limite se vuoi più/meno appuntamenti
+        .order_by(Appointment.start_time.asc(), Appointment.id.asc())
+        # Piu' righe del necessario: dopo il raggruppamento diventano meno.
+        .limit(QUANTI * 15)
         .all()
     )
 
-    # FILTRO IDENTICO AL PDF
-    appointments = [
-        a for a in appointments
-        if a.client is not None and getattr(a.client, "cliente_nome", "").lower() != "dummy"
-        and a.service is not None and getattr(a.service, "servizio_nome", "").lower() != "dummy"
-    ]
+    # FILTRO IDENTICO AL PDF: niente blocchi OFF
+    visite = {}
+    for a in righe:
+        if _e_blocco_off(a):
+            continue
+        chiave = _chiave_visita(a)
+        if chiave not in visite:
+            if len(visite) >= QUANTI:
+                continue
+            visite[chiave] = []
+        visite[chiave].append(a)
+
+    def _nome_operatore(op):
+        if not op:
+            return ""
+        return f"{op.user_nome or ''} {op.user_cognome or ''}".strip()
 
     result = []
-    for appt in appointments:
-        # Rileva blocco OFF (client/service mancanti o "dummy")
-        is_off = (
-            appt.client is None or
-            getattr(appt.client, "cliente_nome", "").lower() in ["dummy"] or
-            getattr(appt.client, "cliente_cognome", "").lower() in ["dummy"] or
-            appt.service is None or
-            getattr(appt.service, "servizio_nome", "").lower() == "dummy"
-        )
-
-        operator_name = ""
-        try:
-            # Se hai nome e cognome disponibili, usa entrambi
-            operator_name = f"{appt.operator.user_nome} {appt.operator.user_cognome}".strip() if appt.operator else ""
-        except Exception:
-            operator_name = appt.operator.user_nome if getattr(appt, "operator", None) else ""
-
+    for gruppo in visite.values():
+        primo = gruppo[0]
+        servizi, operatori = [], []
+        for a in gruppo:
+            nome_servizio = a.service.servizio_nome if a.service else ""
+            if nome_servizio:
+                servizi.append(nome_servizio)
+            nome_op = _nome_operatore(a.operator)
+            if nome_op and nome_op not in operatori:
+                operatori.append(nome_op)
         result.append({
-            "id": appt.id,
-            "start_time": appt.start_time.strftime("%H:%M"),
-            "date": appt.start_time.strftime("%d/%m/%Y"),
-            "client": "OFF" if is_off else (f"{nome_proprio(appt.client.cliente_nome)} {nome_proprio(appt.client.cliente_cognome)}".strip() if appt.client else ""),
-            "service": "" if is_off else (appt.service.servizio_nome if appt.service else ""),
-            "operator": operator_name,
-            "is_off": is_off,
-            "note": (appt.note or "").strip() if is_off else ""   # <--- nota solo se OFF
+            "id": primo.id,
+            "start_time": primo.start_time.strftime("%H:%M"),
+            "date": primo.start_time.strftime("%d/%m/%Y"),
+            "client": f"{nome_proprio(primo.client.cliente_nome)} {nome_proprio(primo.client.cliente_cognome)}".strip() if primo.client else "",
+            "service": ", ".join(servizi),
+            "operator": ", ".join(operatori),
+            "is_off": False,
+            "note": ""
         })
 
     return jsonify(result)
@@ -1217,30 +1247,28 @@ def appuntamenti_presi_giorno():
     
     giorno = datetime.strptime(date_str, "%Y-%m-%d").date()
     
-    # Query per appuntamenti creati in quel giorno specifico
-    appuntamenti_totali = Appointment.query.filter(
-        func.date(Appointment.created_at) == giorno,
-        Appointment.is_cancelled_by_client == False
-    ).count()
-    
-    # Appuntamenti creati manualmente (source è null o vuoto)
-    appuntamenti_gestionale = Appointment.query.filter(
-        func.date(Appointment.created_at) == giorno,
-        Appointment.source == AppointmentSource.gestionale,
-        Appointment.is_cancelled_by_client == False
-    ).count()
-    
-    # Appuntamenti creati via web booking
-    appuntamenti_web = Appointment.query.filter(
-        func.date(Appointment.created_at) == giorno,
-        Appointment.source == AppointmentSource.web,
-        Appointment.is_cancelled_by_client == False
-    ).count()
-    
+    # Servizi inseriti in quel giorno. Prima si contavano le righe, cioe' i
+    # SERVIZI: taglio + colore + piega di Maria Rossi facevano 3 "appuntamenti
+    # presi". Ora un appuntamento = una persona in un giorno (_chiave_visita),
+    # e i blocchi OFF non contano.
+    righe = (Appointment.query
+             .options(joinedload(Appointment.client), joinedload(Appointment.service))
+             .filter(func.date(Appointment.created_at) == giorno,
+                     Appointment.is_cancelled_by_client == False)
+             .all())
+    # chiave -> True se almeno un servizio dell'appuntamento e' arrivato dal sito
+    visite = {}
+    for a in righe:
+        if _e_blocco_off(a):
+            continue
+        chiave = _chiave_visita(a)
+        visite[chiave] = visite.get(chiave, False) or (a.source == AppointmentSource.web)
+    web = sum(1 for dal_sito in visite.values() if dal_sito)
+
     return jsonify({
-        'presi_totale': appuntamenti_totali,
-        'presi_gestionale': appuntamenti_gestionale,
-        'presi_web': appuntamenti_web
+        'presi_totale': len(visite),
+        'presi_gestionale': len(visite) - web,
+        'presi_web': web
     })
 
 @report_bp.route('/api/report_incasso_sottocategorie')
@@ -1678,22 +1706,30 @@ def booking_online_giorno():
     giorno = datetime.strptime(date_str, "%Y-%m-%d").date()
     inizio = datetime.combine(giorno, datetime.min.time())
     fine = datetime.combine(giorno, datetime.max.time())
-    appointments = Appointment.query.filter(
+    appointments = Appointment.query.options(
+        joinedload(Appointment.client), joinedload(Appointment.service)
+    ).filter(
         Appointment.created_at >= inizio,
         Appointment.created_at <= fine,
         Appointment.source == AppointmentSource.web,
         Appointment.is_cancelled_by_client == False
-    ).order_by(Appointment.created_at.asc()).all()
-    result = []
+    ).order_by(Appointment.created_at.asc(), Appointment.id.asc()).all()
+    # Una riga per prenotazione (persona + giorno, _chiave_visita) con i servizi
+    # elencati: prima era una riga per servizio.
+    gruppi = {}
     for a in appointments:
-        nome, cognome = estrai_nome_cognome(a.note or "")
+        gruppi.setdefault(_chiave_visita(a), []).append(a)
+    result = []
+    for gruppo in gruppi.values():
+        primo = gruppo[0]
+        nome, cognome = estrai_nome_cognome(primo.note or "")
         result.append({
-            "id": a.id,
-            "ora": to_rome(a.created_at).strftime("%H:%M"),
+            "id": primo.id,
+            "ora": to_rome(primo.created_at).strftime("%H:%M"),
             "nome_cliente": nome,
             "cognome_cliente": cognome,
-            "servizio": a.service.servizio_nome if a.service else "",
-            "note": a.note or ""
+            "servizio": ", ".join(a.service.servizio_nome for a in gruppo if a.service and a.service.servizio_nome),
+            "note": primo.note or ""
         })
     return jsonify({
         "data": giorno.strftime("%d/%m/%Y"),

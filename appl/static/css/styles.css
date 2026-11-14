@@ -2118,6 +2118,73 @@ body.touch-ui .appointment-block.disable-popup.active-popup .popup-buttons .dele
     background-color: #000 !important;
   }
 
+/* ---------------------------------------------------------------------------
+   NO-SHOW COMPRESSO (calendar.js, applicaCompressioneNoShow - 14/11/2026)
+   I servizi saltati da una persona in un giorno diventano UN riquadro alto un
+   quarto d'ora sul primo servizio; gli altri blocchi restano nel DOM nascosti.
+   L'altezza vera la scrive il JS inline (data-duration), per questo qui serve
+   !important: e' in un foglio di stile, non inline sulle barre popup.
+   Niente overflow:hidden sul blocco: le barre popup stanno FUORI dal blocco
+   (sopra e sotto) e verrebbero tagliate. Si taglia solo il contenuto.
+   --------------------------------------------------------------------------- */
+.appointment-block.noshow-nascosto {
+  display: none !important;
+}
+.appointment-block.noshow-compresso {
+  height: var(--quarter-px, 60px) !important;
+}
+.appointment-block.noshow-compresso .appointment-content {
+  overflow: hidden;
+  min-height: 0;
+}
+/* Il nome del servizio lascia il posto al riepilogo "NO-SHOW · 3 servizi · 3h30" */
+.appointment-block.noshow-compresso .appointment-content > p:not(.client-name):not(.noshow-riepilogo) {
+  display: none;
+}
+.appointment-block .noshow-riepilogo {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.appointment-block .noshow-riepilogo .noshow-elenco {
+  display: none;
+}
+.appointment-block .noshow-riepilogo .noshow-riga {
+  display: block;
+  font-weight: 400;
+}
+/* Il riquadro rappresenta tutto il gruppo: niente trascinamento ne'
+   ridimensionamento, che agirebbero solo sul primo servizio. */
+.appointment-block.noshow-compresso .drag-handle,
+.appointment-block.noshow-compresso .resize-handle {
+  display: none !important;
+}
+.appointment-block.noshow-compresso .popup-buttons-bottom .btn-popup.touch-resize-down,
+.appointment-block.noshow-compresso .popup-buttons-bottom .btn-popup.touch-resize-up {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+/* Touch: al clic il riquadro si allunga e mostra l'elenco dei servizi saltati,
+   insieme alle barre (la barra sotto scende con lui: e' a top:100%). */
+body.touch-ui .appointment-block.noshow-compresso.active-popup {
+  height: auto !important;
+  min-height: var(--quarter-px, 60px);
+}
+body.touch-ui .appointment-block.noshow-compresso.active-popup .appointment-content {
+  overflow: visible;
+}
+body.touch-ui .appointment-block.noshow-compresso.active-popup .noshow-riepilogo {
+  white-space: normal;
+}
+body.touch-ui .appointment-block.noshow-compresso.active-popup .noshow-elenco {
+  display: block;
+  margin: 4px 0 6px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 /* Assicurati che il popup note si attivi normalmente con l'hover */
 .appointment-block:hover .note-popup {
   display: block !important;

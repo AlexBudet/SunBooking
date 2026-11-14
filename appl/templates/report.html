@@ -442,7 +442,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
     <span data-bs-toggle="tooltip" data-bs-placement="bottom"
-          title="Colpo d'occhio sui giorni più pieni di appuntamenti">HEATMAP APPUNTAMENTI</span>
+          title="Colpo d'occhio sui giorni più pieni di servizi">HEATMAP SERVIZI</span>
     <div class="btn-group btn-group-sm" role="group">
       <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-app-periodo active" data-giorni="10">10 gg</button>
       <button type="button" class="btn btn-outline-secondary btn-top-clienti-periodo btn-heatmap-app-periodo" data-giorni="30">30 gg</button>
@@ -3809,7 +3809,7 @@ function caricaHeatmapAppuntamenti(dataRif, giorni = 10) {
                 zmax: res.max_legend,
                 showscale: false,
                 hoverongaps: false,
-                hovertemplate: '<b>%{y}</b> ore %{x}<br>Appuntamenti: %{z}<extra></extra>'
+                hovertemplate: '<b>%{y}</b> ore %{x}<br>Servizi: %{z}<extra></extra>'
             }], {
                 margin: { t: 10, b: 44, l: numGiorni > 40 ? 54 : 76, r: 10 },
                 xaxis: {
@@ -5617,7 +5617,7 @@ document.addEventListener('DOMContentLoaded', function() {
           riga.innerHTML =
             '<div style="min-width:0; flex:0 0 34%;">' +
               '<div class="riga-nome">' + esc(r.operatore) + '</div>' +
-              '<div class="riga-dettaglio">' + r.appuntamenti + ' appuntamenti</div>' +
+              '<div class="riga-dettaglio">' + r.appuntamenti + (r.appuntamenti === 1 ? ' servizio' : ' servizi') + '</div>' +
             '</div>' +
             '<div class="barra-saturazione"><span class="' + classe +
               '" style="width:' + larghezza + '%"></span></div>' +

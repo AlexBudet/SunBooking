@@ -5334,8 +5334,11 @@ def _normalize_phone_for_whatsapp(numero):
     if pulito.startswith('00'):
         pulito = pulito[2:]
     
-    # Se inizia con 3 (numero italiano senza prefisso), aggiungi 39
-    if pulito.startswith('3') and len(pulito) == 10:
+    # Se inizia con 3 (cellulare italiano senza prefisso), aggiungi 39.
+    # Anche a 9 cifre (prefisso + 6, es. 335 123456): sono numeri veri, i
+    # primi cellulari ne avevano 9, e qui venivano scartati come "non validi"
+    # mentre l'Agenda li mandava. La pagina Marketing avvisa prima dell'invio.
+    if pulito.startswith('3') and len(pulito) in (9, 10):
         pulito = '39' + pulito
     
     # Verifica lunghezza minima

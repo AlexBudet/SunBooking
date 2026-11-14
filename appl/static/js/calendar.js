@@ -23,6 +23,190 @@ function applyBsTooltip(el, text, opts) {
   } catch (_) {}
 }
 
+// =====================================================================
+// NO-SHOW COMPRESSO (14/11/2026)
+// Tutti i servizi saltati da una persona in un giorno diventano UN riquadro
+// alto un quarto d'ora, sul primo servizio in ordine di orario (a parita' di
+// orario l'id piu' basso) e nella sua colonna: "NO-SHOW · 3 servizi · 3h30".
+// E' la stessa scelta di intervalli_occupati in appl/services/no_show.py, che
+// lato server libera il resto dell'agenda (Trova un buco, sposta all'operatore
+// abilitato, prenotazione online): le due regole vanno tenute uguali.
+//
+// I dati NON cambiano: data-duration resta quella vera, e gli altri blocchi
+// restano nel DOM nascosti da una classe CSS (servono a getRelevantBlocks per
+// togliere il no-show a tutto il gruppo). Togliendo il no-show le classi
+// spariscono e i blocchi tornano lunghi come prima.
+// Desktop: elenco dei servizi nel tooltip. Touch: al clic, insieme alle barre,
+// il riquadro si allunga e mostra l'elenco (CSS, .noshow-elenco).
+// =====================================================================
+function _noShowMinuti(b) {
+  return (parseInt(b.getAttribute('data-hour'), 10) || 0) * 60 + (parseInt(b.getAttribute('data-minute'), 10) || 0);
+}
+
+function _noShowDurata(minuti) {
+  const h = Math.floor(minuti / 60), m = minuti % 60;
+  if (!h) return m + ' min';
+  return h + 'h' + (m ? String(m).padStart(2, '0') : '');
+}
+
+function _noShowPersona(b) {
+  const nome = String(b.getAttribute('data-client-nome') || '').trim().toLowerCase();
+  const cognome = String(b.getAttribute('data-client-cognome') || '').trim().toLowerCase();
+  const segnaposto = (typeof isGenericBookingPlaceholder === 'function')
+    ? isGenericBookingPlaceholder(nome, cognome)
+    : ((nome === 'booking' && cognome === 'online') || (nome === 'cliente' && cognome === 'booking'));
+  if (segnaposto) {
+    // Prenotazione online non associata: la scheda e' condivisa da tutti,
+    // la persona e' la sessione di prenotazione (o il blocco da solo).
+    const sessione = b.getAttribute('data-booking_session_id') || '';
+    return sessione ? 'sessione:' + sessione : 'appuntamento:' + b.getAttribute('data-appointment-id');
+  }
+  return 'cliente:' + (b.getAttribute('data-client-id') || '');
+}
+
+function _noShowEscape(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function applicaCompressioneNoShow() {
+  const blocchi = Array.from(document.querySelectorAll('.selectable-cell .appointment-block'));
+
+  // Si riparte da zero a ogni giro: lo stato puo' essere cambiato in un senso o nell'altro.
+  blocchi.forEach(b => {
+    if (!b.classList.contains('noshow-compresso') && !b.classList.contains('noshow-nascosto')) return;
+    b.classList.remove('noshow-compresso', 'noshow-nascosto');
+    const vecchio = b.querySelector('.noshow-riepilogo');
+    if (vecchio) {
+      try { const t = window.bootstrap && bootstrap.Tooltip && bootstrap.Tooltip.getInstance(vecchio); if (t) t.dispose(); } catch (_) {}
+      vecchio.remove();
+    }
+    if (b.hasAttribute('data-noshow-draggable')) {
+      b.setAttribute('draggable', b.getAttribute('data-noshow-draggable'));
+      b.removeAttribute('data-noshow-draggable');
+    }
+  });
+
+  const gruppi = new Map();
+  blocchi.forEach(b => {
+    if (String(b.getAttribute('data-status')) !== '3') return;
+    if (b.classList.contains('note-off')) return;
+    const cella = b.closest('.selectable-cell');
+    const giorno = b.getAttribute('data-date') || (cella && cella.getAttribute('data-date')) || '';
+    const chiave = _noShowPersona(b) + '|' + giorno;
+    if (!gruppi.has(chiave)) gruppi.set(chiave, []);
+    gruppi.get(chiave).push(b);
+  });
+
+  gruppi.forEach(lista => {
+    lista.sort((a, b) => (_noShowMinuti(a) - _noShowMinuti(b))
+      || ((parseInt(a.getAttribute('data-appointment-id'), 10) || 0) - (parseInt(b.getAttribute('data-appointment-id'), 10) || 0)));
+    const primo = lista[0];
+    primo.classList.add('noshow-compresso');
+    lista.slice(1).forEach(b => b.classList.add('noshow-nascosto'));
+    // Niente trascinamento del riquadro: sposterebbe solo il primo servizio.
+    if (primo.hasAttribute('draggable')) {
+      primo.setAttribute('data-noshow-draggable', primo.getAttribute('draggable'));
+      primo.setAttribute('draggable', 'false');
+    }
+
+    const totale = lista.reduce((s, b) => s + (parseInt(b.getAttribute('data-duration'), 10) || 0), 0);
+    const quanti = lista.length;
+    const testo = 'NO-SHOW · ' + quanti + (quanti === 1 ? ' servizio' : ' servizi') + ' · ' + _noShowDurata(totale);
+    const righe = lista.map(b => {
+      const m = _noShowMinuti(b);
+      const ora = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+      const grezzo = String(b.getAttribute('data-service-name') || '').trim();
+      const servizio = grezzo ? grezzo.charAt(0).toUpperCase() + grezzo.slice(1).toLowerCase() : 'Servizio';
+      // I blocchi ridisegnati da JS non hanno data-operator-name: lo si legge dalla cella.
+      const cellaOp = b.closest('.selectable-cell');
+      const operatrice = String(b.getAttribute('data-operator-name')
+        || (cellaOp && cellaOp.getAttribute('data-operator-first-name')) || '').trim();
+      return { ora, servizio, durata: _noShowDurata(parseInt(b.getAttribute('data-duration'), 10) || 0), operatrice };
+    });
+
+    const riepilogo = document.createElement('p');
+    riepilogo.className = 'noshow-riepilogo';
+    const titolo = document.createElement('span');
+    titolo.className = 'noshow-titolo';
+    titolo.textContent = testo;
+    riepilogo.appendChild(titolo);
+    const elenco = document.createElement('span');
+    elenco.className = 'noshow-elenco';
+    righe.forEach(r => {
+      const riga = document.createElement('span');
+      riga.className = 'noshow-riga';
+      riga.textContent = r.ora + ' · ' + r.servizio + ' · ' + r.durata + (r.operatrice ? ' · ' + r.operatrice : '');
+      elenco.appendChild(riga);
+    });
+    riepilogo.appendChild(elenco);
+    const contenuto = primo.querySelector('.appointment-content') || primo;
+    contenuto.appendChild(riepilogo);
+
+    // Desktop: l'elenco nel tooltip Bootstrap (applyBsTooltip salta il touch).
+    const html = '<b>' + _noShowEscape(testo) + '</b><br>' + righe.map(r =>
+      _noShowEscape(r.ora + ' · ' + r.servizio + ' · ' + r.durata + (r.operatrice ? ' · ' + r.operatrice : ''))).join('<br>');
+    riepilogo.setAttribute('data-bs-html', 'true');
+    riepilogo.setAttribute('data-bs-placement', 'right');
+    applyBsTooltip(riepilogo, html, { html: true, placement: 'right', fallbackPlacements: ['left'], container: 'body', boundary: 'window' });
+  });
+}
+window.applicaCompressioneNoShow = applicaCompressioneNoShow;
+
+// Dopo un cambio di stato fatto qui (no-show messo o tolto): un giro solo per
+// tutto il gruppo, poi il riallineamento dei blocchi affiancati.
+let _noShowTimer = null;
+function pianificaCompressioneNoShow() {
+  if (_noShowTimer) clearTimeout(_noShowTimer);
+  _noShowTimer = setTimeout(() => {
+    _noShowTimer = null;
+    applicaCompressioneNoShow();
+    if (typeof window.arrangeAllBlocks === 'function') window.arrangeAllBlocks();
+  }, 60);
+}
+window.pianificaCompressioneNoShow = pianificaCompressioneNoShow;
+
+// Togliendo il no-show i blocchi tornano lunghi: se nel frattempo qualcuno ha
+// occupato quello spazio lo si dice (non blocca: i blocchi vengono affiancati).
+function avvisaSpazioOccupatoDopoNoShow(gruppo) {
+  try {
+    const ids = new Set(gruppo.map(b => b.getAttribute('data-appointment-id')));
+    const trovati = new Map();
+    gruppo.forEach(g => {
+      const op = g.getAttribute('data-operator-id');
+      const ini = _noShowMinuti(g);
+      const fine = ini + (parseInt(g.getAttribute('data-duration'), 10) || 15);
+      document.querySelectorAll('.selectable-cell .appointment-block').forEach(o => {
+        const id = o.getAttribute('data-appointment-id');
+        if (ids.has(id) || trovati.has(id)) return;
+        if (o.getAttribute('data-operator-id') !== op) return;
+        if (String(o.getAttribute('data-status')) === '3') return;
+        const oIni = _noShowMinuti(o);
+        const oFine = oIni + (parseInt(o.getAttribute('data-duration'), 10) || 15);
+        if (oIni < fine && ini < oFine) trovati.set(id, o);
+      });
+    });
+    if (!trovati.size) return;
+    const righe = Array.from(trovati.values())
+      .sort((a, b) => _noShowMinuti(a) - _noShowMinuti(b))
+      .map(o => {
+        const m = _noShowMinuti(o);
+        const ora = String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+        if (o.classList.contains('note-off')) return '• ' + ora + ' blocco OFF';
+        const nome = ((o.getAttribute('data-client-nome') || '') + ' ' + (o.getAttribute('data-client-cognome') || '')).trim();
+        return '• ' + ora + ' ' + ((typeof window.capitalizeName === 'function') ? window.capitalizeName(nome) : nome);
+      });
+    alert('Il cliente torna in agenda, ma nel frattempo una parte del suo spazio è stata occupata:\n\n'
+      + righe.join('\n') + '\n\nI blocchi vengono messi affiancati: sposta quello che serve.');
+  } catch (_) {}
+}
+window.avvisaSpazioOccupatoDopoNoShow = avvisaSpazioOccupatoDopoNoShow;
+
+// Primo disegno della pagina (blocchi dal template): prima di ogni altro
+// DOMContentLoaded, cosi' i blocchi lunghi non compaiono nemmeno per un attimo.
+document.addEventListener('DOMContentLoaded', function () {
+  try { applicaCompressioneNoShow(); } catch (e) { console.warn('compressione no-show', e); }
+});
+
 (function(){
     const MOBILE_BP = 1200;
     // S_KEY = valore EFFETTIVO in uso (letto da tutto il resto dell'app).
@@ -1688,8 +1872,14 @@ function refreshOverlapLayout(operatorId, date) {
                 if (blockDate && blockDate !== date) return false;
             }
             if (b.classList.contains('note-off')) return false;
+            // No-show nascosto dentro il riquadro compresso: non occupa spazio.
+            if (b.classList.contains('noshow-nascosto')) return false;
             return true;
         });
+    // Il riquadro no-show compresso occupa solo il suo primo quarto d'ora.
+    const fineVisibile = b => b.classList.contains('noshow-compresso')
+        ? getBlockStartTime(b) + Math.min(15, parseInt(b.getAttribute('data-duration'), 10) || 15)
+        : getBlockEndTime(b);
 
     all.forEach(b => {
         b.querySelectorAll('.btn-popup.whatsapp-btn').forEach(btn => {
@@ -1716,8 +1906,8 @@ function refreshOverlapLayout(operatorId, date) {
     // Applica 50% a ogni coppia (o gruppo) di blocchi con almeno un quarter sovrapposto
     all.forEach(block => {
         const bStart = getBlockStartTime(block);
-        const bEnd   = getBlockEndTime(block);
-        const group  = all.filter(o => getBlockEndTime(o) > bStart && getBlockStartTime(o) < bEnd);
+        const bEnd   = fineVisibile(block);
+        const group  = all.filter(o => fineVisibile(o) > bStart && getBlockStartTime(o) < bEnd);
         if (group.length <= 1) return;
         group.sort((a, b) => {
             const d = getBlockStartTime(a) - getBlockStartTime(b);
@@ -1869,6 +2059,10 @@ function renderAppointmentsFromServer(appointments, date) {
       initOffBlockUI(blockEl);
     }
   });
+
+  // No-show compressi in un quarto d'ora PRIMA dell'affiancamento: i blocchi
+  // nascosti e la parte liberata non devono restringere quelli vicini.
+  try { applicaCompressioneNoShow(); } catch (e) { console.warn('compressione no-show', e); }
 
   touchedCells.forEach(cell => arrangeBlocksInCell(cell));
 }
@@ -6399,7 +6593,16 @@ function mostraAttesaInvioWhatsapp() {
 // secondi o subito col pulsante Ok. Restituisce una Promise cosi' chi la chiama
 // puo' aspettarla con await, com'era con alert(): il codice che segue (redirect,
 // pulizia del Navigator) deve partire dopo che l'operatore ha visto l'esito.
+// Messo a true da inviaWhatsappAutoSeRichiesto quando il server risponde con un
+// errore: i chiamanti fanno sempre invio + avvisaWhatsappInviato(), e senza
+// questo segnale l'operatrice leggeva "inviato!" anche per un numero senza
+// WhatsApp (l'errore finiva solo nella console).
+let _ultimoInvioWhatsappFallito = false;
 function avvisaWhatsappInviato(messaggio) {
+  if (_ultimoInvioWhatsappFallito) {
+    _ultimoInvioWhatsappFallito = false;
+    return Promise.resolve();
+  }
   return new Promise(function(risolvi) {
     if (typeof window.showWhatsappSentPopup === 'function') {
       window.showWhatsappSentPopup(messaggio || 'Messaggio WhatsApp inviato!', risolvi);
@@ -6420,11 +6623,19 @@ async function inviaWhatsappAutoSeRichiesto(appointment, data, csrfToken) {
   if (!isWebModuleEnabled()) {
     return;
   }
+  _ultimoInvioWhatsappFallito = false;
   mostraAttesaInvioWhatsapp();
+  let errore;
   try {
-    return await _inviaWhatsappAutoRichiesta(appointment, data, csrfToken);
+    errore = await _inviaWhatsappAutoRichiesta(appointment, data, csrfToken);
   } finally {
     nascondiAttesaInvioWhatsapp();
+  }
+  // Il server ha risposto con un errore: il messaggio NON e' partito e va detto
+  // (es. "Il numero +39 335 123456 non è su WhatsApp...").
+  if (errore) {
+    _ultimoInvioWhatsappFallito = true;
+    alert('Messaggio WhatsApp NON inviato.\n\n' + errore);
   }
 }
 
@@ -6498,10 +6709,13 @@ if (!numero) {
       body: JSON.stringify(payload)
     });
 
+    // Errore dal server: si restituisce il motivo, che il chiamante mostra.
     if (!resp.ok) {
       const t = await resp.text().catch(() => '');
       console.warn('send-whatsapp-auto non OK:', resp.status, t);
-      return;
+      let motivo = '';
+      try { motivo = (JSON.parse(t) || {}).error || ''; } catch (_) {}
+      return motivo || ('Errore ' + resp.status);
     }
 
     const ct = (resp.headers.get('content-type') || '').toLowerCase();
@@ -6509,6 +6723,7 @@ if (!numero) {
       const resJson = await resp.json().catch(() => ({}));
       if (resJson && resJson.error) {
         console.warn('Errore invio WhatsApp (JSON):', resJson.error);
+        return resJson.error;
       }
     }
     // Se non JSON (204/empty/text/html) lo consideriamo OK
@@ -10419,6 +10634,8 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
   block.setAttribute('data-hour', hour);
   block.setAttribute('data-minute', minute);
   block.setAttribute('data-source', appointment.source || 'gestionale');
+  // Come il template (calendar.html): lo usa anche il no-show compresso.
+  block.setAttribute('data-booking_session_id', appointment.booking_session_id || '');
   if (appointment.note) block.setAttribute('data-note', appointment.note);
   if (pacchettoSedutaId) block.setAttribute('data-pacchetto-seduta-id', pacchettoSedutaId);
   if (pacchettoId) block.setAttribute('data-pacchetto-id', pacchettoId);
@@ -11726,6 +11943,11 @@ document.addEventListener('click', function(e) {
 
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
+  // Si toglie il no-show: i blocchi tornano lunghi, avvisa se lo spazio liberato e' stato occupato.
+  if (String(clickedBlock.getAttribute('data-status')) === '3' && typeof avvisaSpazioOccupatoDopoNoShow === 'function') {
+    avvisaSpazioOccupatoDopoNoShow(blocksToUpdate);
+  }
+
   blocksToUpdate.forEach(appointmentBlock => {
     const appointmentId = appointmentBlock.getAttribute('data-appointment-id');
     if (!appointmentId) return;
@@ -11787,6 +12009,7 @@ document.addEventListener('click', function(e) {
       if (spia) spia.setAttribute('data-status', newStatus);
       sessionStorage.setItem(`app_status_${appointmentId}`, newStatus);
       updateBlinkForBlock(appointmentBlock);
+      if (typeof pianificaCompressioneNoShow === 'function') pianificaCompressioneNoShow();
     })
     .catch(error => {
       console.error("Errore aggiornamento (no-show) per blocco:", appointmentId, error);
@@ -11918,7 +12141,12 @@ function setNoShow(appointmentId) {
   
   // Recupera il CSRF token
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-  
+
+  // Si toglie il no-show: i blocchi tornano lunghi, avvisa se lo spazio liberato e' stato occupato.
+  if (baseStatus === 3 && typeof avvisaSpazioOccupatoDopoNoShow === 'function') {
+    avvisaSpazioOccupatoDopoNoShow(groupBlocks);
+  }
+
   // Per ogni blocco del gruppo, aggiorna l'aspetto e invia la richiesta al backend
   groupBlocks.forEach(function(block) {
     const id = block.getAttribute('data-appointment-id');
@@ -11983,6 +12211,7 @@ function setNoShow(appointmentId) {
       }
       sessionStorage.setItem(`app_status_${id}`, targetStatus);
       updateBlinkForBlock(block);
+      if (typeof pianificaCompressioneNoShow === 'function') pianificaCompressioneNoShow();
     })
     .catch(error => {
       console.error("Errore nell'aggiornamento di no-show per block:", error);

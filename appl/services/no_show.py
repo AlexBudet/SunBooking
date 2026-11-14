@@ -300,3 +300,66 @@ def controlla_prenotazione(sessione, biz, cellulare, email, adesso):
     eventi = carica_eventi(sessione, r['ore_tardivo'], dal=mesi_fa(adesso, r['mesi']))
     esito = valuta(eventi, carica_sblocchi(sessione), tel, mail, r['soglia'])
     return esito if esito['bloccato'] else None
+
+
+# ------------------------------------------------------- spazio in agenda
+# Un no-show NON occupa piu' l'agenda (richiesta del 14/11/2026). Di tutti i
+# servizi saltati da una persona in un giorno resta occupato solo il PRIMO
+# QUARTO D'ORA del primo servizio in ordine di orario (a parita' di orario il
+# primo inserito, cioe' l'id piu' basso), nella colonna di quel servizio: tutto
+# il resto torna prenotabile, in Agenda e online. In Agenda quel quarto d'ora
+# e' il riquadro nero "NO-SHOW · 3 servizi · 3h30": la stessa scelta la fa
+# applicaCompressioneNoShow in calendar.js.
+#
+# I dati NON cambiano: durate e servizi restano quelli prenotati, cosi' i
+# report e la classifica dei no-show continuano a contarli per intero, e
+# togliendo il no-show i blocchi tornano come prima.
+QUARTO_NO_SHOW = 15
+
+
+def e_no_show(appuntamento):
+    stato = getattr(appuntamento, 'stato', None)
+    return getattr(stato, 'name', stato) == 'NON_ARRIVATO'
+
+
+def _persona(appuntamento):
+    """Chi ha saltato. Di norma la scheda cliente; una prenotazione online non
+    ancora associata sta su una scheda segnaposto condivisa da tutti, e li' la
+    persona e' la sessione di prenotazione (o l'appuntamento da solo)."""
+    cliente = getattr(appuntamento, 'client', None)
+    if cliente is not None and scheda_segnaposto(getattr(cliente, 'cliente_nome', ''),
+                                                  getattr(cliente, 'cliente_cognome', '')):
+        sessione = getattr(appuntamento, 'booking_session_id', None)
+        return ('sessione', sessione) if sessione else ('appuntamento', appuntamento.id)
+    return ('cliente', appuntamento.client_id)
+
+
+def intervalli_occupati(appuntamenti):
+    """[(appuntamento, inizio, fine)]: lo spazio che ogni appuntamento occupa
+    davvero in agenda. I no-show che non sono il primo della loro persona non
+    compaiono; il primo occupa al massimo QUARTO_NO_SHOW minuti.
+
+    `appuntamenti` deve essere il giorno INTERO, tutte le colonne: il primo
+    servizio saltato si sceglie fra tutti, anche quelli di altre operatrici.
+    Gli annullati vanno tolti prima, come gia' fa chi chiama."""
+    primi = {}
+    for a in appuntamenti:
+        if a.start_time is None or not e_no_show(a):
+            continue
+        chiave = (_persona(a), a.start_time.date())
+        primo = primi.get(chiave)
+        if primo is None or (a.start_time, a.id or 0) < (primo.start_time, primo.id or 0):
+            primi[chiave] = a
+    primi_ids = {id(a) for a in primi.values()}
+
+    risultato = []
+    for a in appuntamenti:
+        if a.start_time is None:
+            continue
+        durata = int(getattr(a, '_duration', None) or getattr(a, 'duration', None) or 0)
+        if e_no_show(a):
+            if id(a) not in primi_ids:
+                continue
+            durata = min(durata, QUARTO_NO_SHOW) if durata > 0 else QUARTO_NO_SHOW
+        risultato.append((a, a.start_time, a.start_time + timedelta(minutes=durata)))
+    return risultato
