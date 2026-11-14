@@ -656,13 +656,14 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="tile-neumorphic tile-large" id="tile-booking-online">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
-    <span data-bs-toggle="tooltip" data-bs-placement="bottom"
-          title="Le prenotazioni che i clienti hanno FATTO dal sito in questo giorno. L'ora in grassetto è quando il cliente ha prenotato, non l'ora del trattamento">PRENOTAZIONI ONLINE del <span id="tile-booking-online-data"></span></span>
+    {#- tabindex: in modalita' touch il tocco sul titolo gli da' il focus e
+        mostra il suggerimento (trigger "focus" di Bootstrap). #}
+    <span data-bs-toggle="tooltip" data-bs-placement="bottom" tabindex="0" class="bo-titolo"
+          title="Le prenotazioni che i clienti hanno FATTO dal sito in questo giorno. L'ora in grassetto è quando il cliente ha prenotato, NON l'ora del trattamento: giorno e ora dell'appuntamento sono sotto ogni riga">PRENOTAZIONI ONLINE del <span id="tile-booking-online-data"></span></span>
     <button type="button" class="btn btn-outline-secondary btn-sm" id="btnBookingOnlineInfo"
             data-bs-toggle="tooltip" data-bs-placement="bottom"
             title="Tutte le prenotazioni dal sito, anche annullate, con filtri">INFO COMPLETE</button>
   </div>
-  <div class="stat-voce mb-1">Ora in grassetto = quando il cliente <b>ha prenotato</b>. Sotto: giorno e ora dell'appuntamento.</div>
   <div id="booking-online-list" class="booking-online-list-custom">
     <span class="text-muted">Caricamento...</span>
   </div>
@@ -672,8 +673,35 @@ document.addEventListener('DOMContentLoaded', function() {
 <style>
   /* styles.css mette overflow:visible !important a tutti i .modal-body: la
      tabella e' lunga e deve scorrere dentro la finestra. */
-  #modalBookingOnlineStorico .modal-body { overflow-y: auto !important; max-height: none; }
-  #modalBookingOnlineStorico .bos-tabella td { vertical-align: top; }
+  #tile-booking-online .bo-titolo { cursor: help; }
+  #tile-booking-online .bo-titolo:focus { outline: none; }
+  #modalBookingOnlineStorico .modal-body { overflow-y: auto !important; overflow-x: hidden !important; max-height: none; }
+  /* styles.css fissa .modal-dialog a max 700px per tutti i modal (modal-xl
+     compreso): qui serve quasi tutta la finestra, senza scorrimento laterale. */
+  #modalBookingOnlineStorico .modal-dialog { max-width: min(1400px, calc(100vw - 24px)); width: 100%; }
+  /* Tabella a larghezza fissa: le colonne si dividono lo spazio e il testo va
+     a capo (anche e-mail lunghe), invece di allargare la tabella. */
+  #modalBookingOnlineStorico .bos-tabella { table-layout: fixed; width: 100%; }
+  #modalBookingOnlineStorico .bos-tabella th,
+  #modalBookingOnlineStorico .bos-tabella td { vertical-align: top !important; overflow-wrap: anywhere; word-break: normal; }
+  #modalBookingOnlineStorico .bos-tabella th:nth-child(1) { width: 13%; }
+  #modalBookingOnlineStorico .bos-tabella th:nth-child(2) { width: 23%; }
+  #modalBookingOnlineStorico .bos-tabella th:nth-child(3) { width: 29%; }
+  #modalBookingOnlineStorico .bos-tabella th:nth-child(4) { width: 13%; }
+  #modalBookingOnlineStorico .bos-tabella th:nth-child(5) { width: 22%; }
+  /* Telefono: ogni prenotazione diventa una scheda, con l'etichetta della colonna */
+  @media (max-width: 767px) {
+    #modalBookingOnlineStorico .bos-tabella thead { display: none; }
+    #modalBookingOnlineStorico .bos-tabella,
+    #modalBookingOnlineStorico .bos-tabella tbody,
+    #modalBookingOnlineStorico .bos-tabella tr,
+    #modalBookingOnlineStorico .bos-tabella td { display: block; width: 100%; }
+    #modalBookingOnlineStorico .bos-tabella tr { border: 1px solid rgba(135,100,124,.2); border-radius: 10px; margin-bottom: 10px; padding: 6px 8px; }
+    #modalBookingOnlineStorico .bos-tabella td { border: 0; text-align: left !important; padding: 2px 0; }
+    #modalBookingOnlineStorico .bos-tabella td[data-label]::before {
+      content: attr(data-label) ": "; font-weight: 600; color: #87647c;
+    }
+  }
 </style>
 <div class="modal fade" id="modalBookingOnlineStorico" tabindex="-1" aria-labelledby="bosTitolo" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -716,8 +744,8 @@ document.addEventListener('DOMContentLoaded', function() {
           <button type="button" class="btn btn-outline-secondary btn-sm" id="bosUltimi30">Ultimi 30 giorni</button>
         </div>
         <div class="small mb-2" id="bosConteggi">&nbsp;</div>
-        <div class="table-responsive">
-          <table class="table table-sm table-hover align-middle mb-1 bos-tabella">
+        <div>
+          <table class="table table-sm table-hover mb-1 bos-tabella">
             <thead>
               <tr>
                 <th>Prenotata il</th>
@@ -5360,11 +5388,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (r.annullati_in_parte) stato += '<div class="small text-muted">alcuni servizi annullati</div>';
     const contatti = [r.telefono, r.email].filter(Boolean).map(esc).join(' · ');
+    // data-label: su telefono la riga diventa una scheda con l'etichetta davanti
     return '<tr>'
-      + '<td class="text-nowrap"><b>' + esc(r.prenotata_il) + '</b><div class="small">alle ' + esc(r.prenotata_ora) + '</div></td>'
-      + '<td>' + esc(r.cliente) + (contatti ? '<div class="small text-muted">' + contatti + '</div>' : '') + '</td>'
-      + '<td>' + esc(r.servizi) + '</td>'
-      + '<td class="text-nowrap">' + esc(r.appuntamento) + '<div class="small">alle ' + esc(r.appuntamento_ora) + '</div></td>'
+      + '<td data-label="Prenotata il"><b>' + esc(r.prenotata_il) + '</b> <span class="small">alle ' + esc(r.prenotata_ora) + '</span></td>'
+      + '<td data-label="Cliente">' + esc(r.cliente) + (contatti ? '<div class="small text-muted">' + contatti + '</div>' : '') + '</td>'
+      + '<td data-label="Servizi">' + esc(r.servizi) + '</td>'
+      + '<td data-label="Appuntamento">' + esc(r.appuntamento) + ' <span class="small">alle ' + esc(r.appuntamento_ora) + '</span></td>'
       + '<td>' + stato + '</td>'
       + '</tr>';
   }
