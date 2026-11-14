@@ -579,16 +579,27 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
     <span data-bs-toggle="tooltip" data-bs-placement="bottom"
           title="Chi salta gli appuntamenti: no-show (segnati non arrivato) e annullamenti online fatti all'ultimo. Passa il mouse su una riga per telefono e dettagli">NO-SHOW</span>
-    <div class="btn-group btn-group-sm" role="group" aria-label="Vista">
-      <button type="button" class="btn btn-outline-secondary btn-noshow-vista active" data-vista="classifica">Classifica</button>
-      <button type="button" class="btn btn-outline-secondary btn-noshow-vista" data-vista="ultimi">Ultimi</button>
+    <!-- Date di nuovo nell'header (richiesta del 14/11/2026), ma COMPATTE come
+         i pulsanti dell'header (CSS .tile-title .no-show-data): la prima volta
+         erano campi a misura piena e alzavano l'header rispetto a tutti gli
+         altri tile, per questo erano state spostate nel corpo. Gli id non
+         cambiano: il JS li prende con getElementById. -->
+    <div class="d-flex align-items-center no-show-intestazione" style="gap:6px;">
+      <div class="d-flex align-items-center no-show-date" style="gap:3px;">
+        <input type="text" class="form-control form-control-sm no-show-data" id="noShowDal"
+               placeholder="dal" autocomplete="off">
+        <input type="text" class="form-control form-control-sm no-show-data" id="noShowAl"
+               placeholder="al" autocomplete="off">
+      </div>
+      <div class="btn-group btn-group-sm" role="group" aria-label="Vista">
+        <button type="button" class="btn btn-outline-secondary btn-noshow-vista active" data-vista="classifica">Classifica</button>
+        <button type="button" class="btn btn-outline-secondary btn-noshow-vista" data-vista="ultimi">Ultimi</button>
+      </div>
     </div>
   </div>
-  <!-- I due campi data stavano DENTRO l'header: erano l'unico tile a farlo e
-       gli sballavano l'altezza rispetto a tutti gli altri. Qui nel corpo hanno
-       anche lo spazio per la misura piena, senza comprimersi. Gli id non sono
-       cambiati, il JS li prende con getElementById e non si accorge di nulla.
-       Periodo: i pulsanti (solo Classifica) oppure le due date, che vincono. -->
+  <!-- Periodo: i pulsanti (solo Classifica) oppure le due date, che vincono.
+       "Togli le date" sta qui e non nell'header: li' non ci stava insieme al
+       resto quando il tile e' stretto (a 487px il titolo andava a capo). -->
   <div class="no-show-filtri d-flex align-items-center" style="gap:6px; margin-bottom:6px;">
     <div class="btn-group btn-group-sm no-show-periodi" role="group" aria-label="Periodo">
       <button type="button" class="btn btn-outline-secondary btn-noshow-periodo" data-giorni="30">30 gg</button>
@@ -596,16 +607,10 @@ document.addEventListener('DOMContentLoaded', function() {
       <button type="button" class="btn btn-outline-secondary btn-noshow-periodo" data-giorni="365">12 mesi</button>
       <button type="button" class="btn btn-outline-secondary btn-noshow-periodo" data-giorni="0">Sempre</button>
     </div>
-    <div class="d-flex align-items-center no-show-date" style="gap:4px;">
-      <input type="text" class="form-control form-control-sm no-show-data" id="noShowDal"
-             placeholder="dal" autocomplete="off">
-      <input type="text" class="form-control form-control-sm no-show-data" id="noShowAl"
-             placeholder="al" autocomplete="off">
-      <button type="button" class="btn btn-outline-secondary btn-sm" id="noShowRecenti"
-              data-bs-toggle="tooltip" title="Togli le date">
-        <i class="bi bi-arrow-counterclockwise"></i>
-      </button>
-    </div>
+    <button type="button" class="btn btn-outline-secondary btn-sm btn-noshow-periodo-reset" id="noShowRecenti"
+            data-bs-toggle="tooltip" title="Togli le date">
+      <i class="bi bi-arrow-counterclockwise"></i>
+    </button>
   </div>
   <div class="stat-voce mb-1" id="no-show-periodo">&nbsp;</div>
   <div class="tile-lista-scroll" id="no-show-list">
@@ -1370,14 +1375,29 @@ document.addEventListener('DOMContentLoaded', function() {
   font-weight: 700;
   vertical-align: 1px;
 }
-.no-show-filtri .no-show-data {
-  flex: 0 0 auto;
-  width: 80px;
-  font-size: 0.78rem;
-  padding-left: 6px;
-  padding-right: 6px;
+/* Date nell'header del tile NO-SHOW: alte e piccole quanto i pulsanti
+   dell'header (.tile-title .btn), cosi' l'header resta di 36px come tutti gli
+   altri. Il min-height va azzerato: .form-control-sm di Bootstrap ne impone
+   uno piu' alto. Valgono anche per il campo visibile di flatpickr (altInput),
+   che copia le classi dell'originale. */
+.tile-title .no-show-date { flex-wrap: nowrap; }
+/* Il titolo non va mai a capo ("NO-" / "SHOW" alzava l'header di 3px). */
+#tile-no-show .tile-title > span { white-space: nowrap; flex-shrink: 0; }
+.no-show-filtri .btn-noshow-periodo-reset { padding: 1px 7px; font-size: 0.78rem; }
+.tile-title .no-show-data {
+  flex: 0 1 74px;
+  min-width: 66px;           /* "31/12/2026" ci sta ancora */
+  width: 74px;
+  height: 22px;
+  min-height: 0;
+  padding: 0 4px;
+  font-size: 0.7rem;
+  font-style: normal;
+  line-height: 1.35;
   text-align: center;
 }
+/* Telefono: se lo spazio non basta l'header va su due righe invece di uscire dal tile. */
+@media (max-width: 576px) { #tile-no-show .tile-title { flex-wrap: wrap; } }
 
 /* Pulsanti sezione del report (Corrispettivi, Incasso per categoria, ...) e
    ingranaggio dei settaggi.

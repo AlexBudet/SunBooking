@@ -155,6 +155,19 @@ def nome_cognome_dalla_nota(nota):
     return (m.group(1).strip() or None), (m.group(2).strip() or None)
 
 
+def _senza_fuso(quando):
+    """Data e ora senza fuso orario. In PostgreSQL appuntamenti.start_time e'
+    'timestamp with time zone' (ora italiana registrata come +00), mentre
+    annullato_il e prenotazioni_online_sblocco_il sono senza fuso (ora italiana):
+    sottrarre o confrontare le due forme manda Python in errore (TypeError), ed
+    e' successo al primo annullamento dal link (14/11/2026: tile NO-SHOW in
+    errore 500, controllo del blocco online saltato). Tolto il fuso, sono tutte
+    ore italiane e si confrontano fra loro."""
+    if quando is not None and getattr(quando, 'tzinfo', None) is not None:
+        return quando.replace(tzinfo=None)
+    return quando
+
+
 def mesi_fa(quando, mesi):
     """Lo stesso giorno di `mesi` mesi prima (il 31 diventa l'ultimo del mese)."""
     totale = quando.year * 12 + (quando.month - 1) - int(mesi)
@@ -205,7 +218,8 @@ def eventi_da_righe(righe, ore_tardivo):
     limite = timedelta(hours=int(ore_tardivo))
     eventi = {}
     for r in righe:
-        inizio = r.start_time
+        inizio = _senza_fuso(r.start_time)
+        annullato_il = _senza_fuso(r.annullato_il)
         if inizio is None:
             continue
         tel_c = normalizza_cellulare(r.cliente_cellulare)
@@ -222,9 +236,9 @@ def eventi_da_righe(righe, ore_tardivo):
                 continue    # nessun modo di sapere chi fosse
             chiave = (NO_SHOW, chi, inizio.date())
         else:
-            if r.annullato_il is None:
+            if annullato_il is None:
                 continue
-            anticipo = inizio - r.annullato_il
+            anticipo = inizio - annullato_il
             if anticipo < timedelta(0) or anticipo >= limite:
                 continue
             tipo = ANNULLATO_TARDI
@@ -260,7 +274,7 @@ def carica_sblocchi(sessione):
         "FROM clienti WHERE prenotazioni_online_sblocco_il IS NOT NULL "
         "AND is_deleted IS NOT TRUE"
     ).columns(prenotazioni_online_sblocco_il=DateTime)).fetchall()
-    return [(normalizza_cellulare(r[0]), normalizza_email(r[1]), r[2]) for r in righe]
+    return [(normalizza_cellulare(r[0]), normalizza_email(r[1]), _senza_fuso(r[2])) for r in righe]
 
 
 def sblocco_per(sblocchi, cellulare, email):
