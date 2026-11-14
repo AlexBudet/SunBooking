@@ -2,6 +2,11 @@
 
 {% extends "settings.html" %}
 {% block settings_content %}
+{#- Tooltip dell'ingranaggio PROMO: stesso testo che il JS rimette dopo il
+    salvataggio (promoTooltipHtml). -#}
+{% macro promo_tooltip(pr) -%}
+<b>Imposta la promo</b><br>{{ pr.prezzo if pr.prezzo else 'Prezzo di listino' }}<br>{{ pr.condizioni if pr.condizioni else 'Sempre valida' }}{% if pr.fuori == 'no_online' %}<br>Online solo dentro la promo{% endif %}
+{%- endmacro %}
 <div class="page-wide-90">
 <h3>Aggiungi Nuovo Servizio</h3>
 
@@ -112,11 +117,28 @@
             <td>{{ service.servizio_sottocategoria.nome if service.servizio_sottocategoria else '-' }}</td>
             <td class="text-center">{{ service.servizio_durata }}</td>
             <td class="text-center">{{ "%.0f"|format(service.servizio_prezzo) if service.servizio_prezzo == service.servizio_prezzo|int else "%.2f"|format(service.servizio_prezzo) }}</td>
-            <td class="text-center">
-              <input type="checkbox" class="form-check-input promo-toggle"
+            <td class="text-center promo-cella">
+              {%- set pr = promo_per_servizio[service.id] %}
+              <div class="d-inline-flex align-items-center" style="gap:6px;">
+              <input type="checkbox" class="form-check-input promo-toggle m-0"
                      data-service-id="{{ service.id }}"
                      {% if service.is_promo %}checked{% endif %}
                      {% if current_user.ruolo.value == 'user' %}onclick="event.preventDefault(); showNoRightsPopup();"{% endif %}>
+              {%- if current_user.ruolo.value != 'user' %}
+              {#- Ingranaggio: c'e' SOLO con la spunta (il JS lo mostra/nasconde).
+                  Giallo quando la promo ha condizioni o sconto. #}
+              <button type="button"
+                      class="btn btn-sm promo-ingranaggio {{ 'btn-outline-warning' if (pr.condizioni or pr.prezzo or pr.fuori == 'no_online') else 'btn-outline-secondary' }}{{ '' if service.is_promo else ' d-none' }}"
+                      data-service-id="{{ service.id }}"
+                      data-service-name="{{ service.servizio_nome }}"
+                      data-promo="{{ pr|tojson|forceescape }}"
+                      data-bs-toggle="tooltip" data-bs-html="true"
+                      title="{{ promo_tooltip(pr) }}"
+                      aria-label="Imposta la promo di {{ service.servizio_nome }}">
+                <i class="bi bi-gear"></i>
+              </button>
+              {%- endif %}
+              </div>
             </td>
 <td class="text-center">
   {% if current_user.ruolo.value == 'user' %}
@@ -209,13 +231,22 @@
      servizi. Regole in appl/services/risorse.py. -->
 <button class="btn btn-secondary mb-3 ms-2" type="button" onclick="(function(s){s.classList.toggle('hidden');s.classList.toggle('visible');})(document.getElementById('risorseSection'))">Gestione Risorse</button>
 <div id="risorseSection" class="hidden">
-    <p class="text-muted mb-2" style="max-width:900px">
-      Una <b>risorsa</b> è una postazione, una cabina o un macchinario che più servizi usano insieme
-      (es. <i>Postazione Mani</i>: ne avete 4). Con il pulsante <b>Servizi</b> della risorsa scegli i servizi
-      che la usano e il loro <b>tetto</b> (es. Manicure 2, Semipermanente mani 3): in Agenda e nelle prenotazioni online non ci saranno
-      mai più appuntamenti contemporanei delle postazioni che avete, né più di quelli permessi a ogni servizio.
-      I servizi senza risorse funzionano come sempre.
-    </p>
+    <div class="mb-3" style="max-width:900px">
+      <p class="text-muted mb-2">
+        Una <b>risorsa</b> è una postazione, una cabina o un macchinario che più servizi si dividono.
+        Scrivi il nome e <b>quante ne avete</b>, poi con il pulsante <b>Servizi</b> della risorsa scegli quali servizi la usano
+        e, se serve, quanti appuntamenti di ogni servizio possono esserci nello stesso momento (il <b>tetto</b>).
+        I servizi senza risorse funzionano come sempre.
+      </p>
+      <div class="border rounded p-2 small bg-light">
+        <b>ESEMPIO</b> (inventato, solo per spiegare; i nomi e i numeri li decidi tu):
+        un centro ha <b>4</b> postazioni per le mani. Crea la risorsa <i>Postazione Mani</i> con quantità 4,
+        poi in <b>Servizi</b> spunta <i>Manicure</i> con tetto 2 e <i>Semipermanente mani</i> con tetto 3.
+        Risultato: nello stesso momento ci possono essere al massimo 4 appuntamenti mani in tutto,
+        di cui non più di 2 manicure e non più di 3 semipermanenti.
+        In Agenda, oltre quel numero, compare un avviso (puoi procedere comunque); online quell'orario non viene proposto.
+      </div>
+    </div>
     {% if current_user.ruolo.value != 'user' %}
     <div class="row align-items-center mb-3" id="risorsaNuovaForm">
         <div class="col-auto">
@@ -414,12 +445,141 @@ function showNoRightsPopup() {
         });
     });
     </script>
+<!-- PROMO: finestra dell'ingranaggio (condizioni della promo di UN servizio).
+     Regole in appl/services/promo.py, salvataggio in update_service_promo_regole. -->
+<div class="modal fade" id="PromoRegoleModal" tabindex="-1" aria-labelledby="PromoRegoleTitolo" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="PromoRegoleTitolo">Promo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body promo-regole">
+        <p class="text-muted small mb-3">
+          Un appuntamento di questo servizio è <b>in promo</b> quando rispetta <b>tutte</b> le condizioni qui sotto.
+          Lasciando vuota una sezione, quella condizione non c'è (es. nessun giorno scelto = tutti i giorni).
+          Vale uguale in Agenda, nelle prenotazioni online e in Cassa.
+        </p>
+
+        <h6>1. Periodo</h6>
+        <div class="d-flex align-items-center flex-wrap mb-1" style="gap:8px;">
+          <label for="promoDal" class="mb-0">Dal</label>
+          <input type="date" class="form-control form-control-sm" id="promoDal" style="width:160px;">
+          <label for="promoAl" class="mb-0">Al</label>
+          <input type="date" class="form-control form-control-sm" id="promoAl" style="width:160px;">
+        </div>
+        <div class="form-text mb-3">Conta il giorno dell'appuntamento, non il giorno in cui si prenota. Date incluse.</div>
+
+        <h6>2. Giorni della settimana</h6>
+        <div class="btn-group btn-group-sm flex-wrap mb-1" role="group" aria-label="Giorni della settimana" id="promoGiorni">
+          {% for g, nome in [(1,'Lun'),(2,'Mar'),(3,'Mer'),(4,'Gio'),(5,'Ven'),(6,'Sab'),(7,'Dom')] %}
+          <input type="checkbox" class="btn-check" id="promoGiorno{{ g }}" value="{{ g }}" autocomplete="off">
+          <label class="btn btn-outline-primary" for="promoGiorno{{ g }}">{{ nome }}</label>
+          {% endfor %}
+        </div>
+        <div class="form-text mb-3">Nessun giorno scelto = tutti i giorni.</div>
+
+        <h6>3. Fasce orarie</h6>
+        <div id="promoFasce" class="mb-1"></div>
+        <button type="button" class="btn btn-sm btn-outline-secondary mb-1" id="promoAggiungiFascia">
+          <i class="bi bi-plus-lg"></i> Aggiungi fascia
+        </button>
+        <div class="form-text mb-2">Nessuna fascia = tutto il giorno. Al massimo 4 fasce (es. 9:00–13:00 e 14:00–16:00).</div>
+        <div id="promoCriterioBox" class="border rounded p-2 mb-3">
+          <div class="small fw-semibold mb-1">Quando un servizio è dentro la fascia?</div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="promoCriterio" id="promoCriterioInizio" value="inizio">
+            <label class="form-check-label" for="promoCriterioInizio">
+              <b>Conta l'inizio</b> (predefinito): il servizio deve <u>iniziare</u> dentro la fascia.
+              <span class="text-muted">Con 9:00–13:00 un servizio di 60 minuti alle 12:30 è in promo.</span>
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="promoCriterio" id="promoCriterioTutto" value="tutto">
+            <label class="form-check-label" for="promoCriterioTutto">
+              <b>Tutto dentro la fascia</b>: il servizio deve <u>iniziare e finire</u> dentro la fascia.
+              <span class="text-muted">Con 9:00–13:00 un servizio di 60 minuti alle 12:30 NON è in promo (finisce alle 13:30).</span>
+            </label>
+          </div>
+          <div class="form-text">Se il cliente prenota più servizi di seguito, ognuno conta col proprio orario.</div>
+        </div>
+
+        <h6>4. Prezzo in promo</h6>
+        <div class="d-flex align-items-center flex-wrap mb-1" style="gap:8px;">
+          <select class="form-select form-select-sm" id="promoScontoTipo" style="width:auto;">
+            <option value="nessuno">Prezzo di listino (nessuno sconto)</option>
+            <option value="percentuale">Sconto in percentuale</option>
+            <option value="prezzo">Nuovo prezzo</option>
+          </select>
+          <span id="promoPercBox" class="d-inline-flex align-items-center" style="gap:6px;">
+            <input type="number" class="form-control form-control-sm" id="promoPerc" min="1" max="99" step="0.01" style="width:90px;" aria-label="Sconto in percentuale">
+            <span>%</span>
+            <span class="btn-group btn-group-sm" role="group" aria-label="Arrotondamento">
+              <input type="radio" class="btn-check" name="promoArrotonda" id="promoArrNo" value="nessuno" autocomplete="off">
+              <label class="btn btn-outline-secondary" for="promoArrNo" data-bs-toggle="tooltip" title="Nessun arrotondamento: si tengono i centesimi">00,00</label>
+              <input type="radio" class="btn-check" name="promoArrotonda" id="promoArrGiu" value="difetto" autocomplete="off">
+              <label class="btn btn-outline-secondary" for="promoArrGiu" data-bs-toggle="tooltip" title="Arrotonda il prezzo per difetto all'euro">↓</label>
+              <input type="radio" class="btn-check" name="promoArrotonda" id="promoArrSu" value="eccesso" autocomplete="off">
+              <label class="btn btn-outline-secondary" for="promoArrSu" data-bs-toggle="tooltip" title="Arrotonda il prezzo per eccesso all'euro">↑</label>
+            </span>
+          </span>
+          <span id="promoNuovoBox" class="d-inline-flex align-items-center" style="gap:6px;">
+            <span>€</span>
+            <input type="number" class="form-control form-control-sm" id="promoNuovo" min="0" step="0.01" style="width:100px;" aria-label="Nuovo prezzo">
+          </span>
+        </div>
+        <div class="mb-3 small" id="promoAnteprima"></div>
+
+        <h6>5. Fuori dalla promo</h6>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="promoFuori" id="promoFuoriPieno" value="pieno">
+          <label class="form-check-label" for="promoFuoriPieno">
+            <b>Prenotabile a prezzo pieno</b>: negli altri giorni e orari il servizio si prenota normalmente, a prezzo di listino.
+            <span class="text-muted">Adatto a un servizio del listino messo in promo (es. Manicure 30 € invece di 34 € il martedì).</span>
+          </label>
+        </div>
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="radio" name="promoFuori" id="promoFuoriOnline" value="no_online">
+          <label class="form-check-label" for="promoFuoriOnline">
+            <b>Non prenotabile online</b>: online si propongono solo i giorni e gli orari della promo e, finito il periodo,
+            il servizio sparisce dal sito. In Agenda si prenota comunque, con un avviso.
+            <span class="text-muted">Adatto a un servizio creato apposta per la promo.</span>
+          </label>
+        </div>
+
+        <div class="alert alert-danger py-2 mt-3 mb-0 d-none" id="promoErrori" role="alert"></div>
+      </div>
+      <div class="modal-footer">
+        <span class="me-auto small text-muted d-none" id="promoNonSalvato">Modifiche non salvate</span>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+        <button type="button" class="btn btn-primary" id="promoSalva">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+<style>
+  /* styles.css mette overflow:visible !important a tutti i .modal-body: qui il
+     contenuto e' piu' alto della finestra e deve scorrere, se no finisce sotto
+     il piede con Annulla/Salva. */
+  #PromoRegoleModal .modal-body { overflow-y: auto !important; }
+  .promo-regole h6 { font-weight: 600; margin-bottom: .4rem; }
+  .promo-regole .promo-fascia { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .promo-regole .promo-fascia input[type="time"] { width: 120px; }
+  #servicesTable .promo-ingranaggio { padding: 0 6px; line-height: 1.4; }
+</style>
 <script>
 // PROMO: la spunta si salva subito; se il server non conferma torna com'era.
+// Con la spunta compare l'ingranaggio, che apre la finestra delle condizioni.
 document.addEventListener('DOMContentLoaded', function () {
   const meta = document.querySelector('meta[name="csrf-token"]');
   const csrf = meta ? meta.getAttribute('content') : "{{ csrf_token() }}";
   const urlPromo = "{{ url_for('settings.update_service_promo', service_id=999999) }}";
+  const urlRegole = "{{ url_for('settings.update_service_promo_regole', service_id=999999) }}";
+
+  function ingranaggioDi(serviceId) {
+    return document.querySelector('#servicesTable .promo-ingranaggio[data-service-id="' + serviceId + '"]');
+  }
+
   document.querySelectorAll('#servicesTable .promo-toggle').forEach(function (chk) {
     chk.addEventListener('change', function () {
       const valore = chk.checked;
@@ -438,8 +598,214 @@ document.addEventListener('DOMContentLoaded', function () {
           chk.checked = !valore;
           alert('PROMO non salvato: ' + err.message);
         })
-        .finally(() => { chk.disabled = false; });
+        .finally(() => {
+          chk.disabled = false;
+          const btn = ingranaggioDi(chk.dataset.serviceId);
+          if (btn) {
+            btn.classList.toggle('d-none', !chk.checked);
+            if (!chk.checked) {
+              const tip = window.bootstrap && bootstrap.Tooltip.getInstance(btn);
+              if (tip) tip.hide();
+            }
+          }
+        });
     });
+  });
+
+  // ---------------------------------------------------------------- finestra
+  const modalEl = document.getElementById('PromoRegoleModal');
+  if (!modalEl || !window.bootstrap) return;
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  const $ = id => document.getElementById(id);
+  const fasceBox = $('promoFasce');
+  const MAX_FASCE = 4;
+  let btnCorrente = null;     // ingranaggio della riga aperta
+  let listino = 0;
+  let fotoIniziale = '';      // stato del form all'apertura, per "Modifiche non salvate"
+  let chiusuraConfermata = false;
+
+  function escHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function euro(v) {
+    const n = Math.round((Number(v) || 0) * 100) / 100;
+    return '€' + (Number.isInteger(n) ? String(n) : n.toFixed(2).replace('.', ','));
+  }
+
+  function aggiungiFascia(dalle, alle) {
+    if (fasceBox.children.length >= MAX_FASCE) return;
+    const riga = document.createElement('div');
+    riga.className = 'promo-fascia';
+    riga.innerHTML =
+      '<span class="small">dalle</span><input type="time" class="form-control form-control-sm promo-dalle" step="300" aria-label="Dalle">' +
+      '<span class="small">alle</span><input type="time" class="form-control form-control-sm promo-alle" step="300" aria-label="Alle">' +
+      '<button type="button" class="btn btn-sm btn-outline-danger promo-togli-fascia" aria-label="Togli fascia"><i class="bi bi-x-lg"></i></button>';
+    riga.querySelector('.promo-dalle').value = dalle || '';
+    riga.querySelector('.promo-alle').value = (alle === '24:00' ? '23:59' : (alle || ''));
+    riga.querySelector('.promo-togli-fascia').addEventListener('click', function () {
+      riga.remove();
+      aggiornaVista();
+    });
+    fasceBox.appendChild(riga);
+    aggiornaVista();
+  }
+
+  function raccogli() {
+    const giorni = Array.from(document.querySelectorAll('#promoGiorni .btn-check:checked')).map(c => parseInt(c.value, 10));
+    const fasce = Array.from(fasceBox.querySelectorAll('.promo-fascia')).map(r => ({
+      dalle: r.querySelector('.promo-dalle').value,
+      alle: r.querySelector('.promo-alle').value
+    }));
+    const tipo = $('promoScontoTipo').value;
+    const arr = document.querySelector('input[name="promoArrotonda"]:checked');
+    return {
+      dal: $('promoDal').value || '',
+      al: $('promoAl').value || '',
+      giorni: giorni,
+      fasce: fasce,
+      criterio: (document.querySelector('input[name="promoCriterio"]:checked') || {}).value || 'inizio',
+      sconto: {
+        tipo: tipo,
+        valore: tipo === 'percentuale' ? $('promoPerc').value : (tipo === 'prezzo' ? $('promoNuovo').value : null),
+        arrotondamento: tipo === 'percentuale' && arr ? arr.value : 'nessuno'
+      },
+      fuori: (document.querySelector('input[name="promoFuori"]:checked') || {}).value || 'pieno'
+    };
+  }
+
+  // Anteprima del prezzo: stessa regola di promo.prezzo_scontato (solo da
+  // vedere: il prezzo vero lo calcola sempre il server).
+  function anteprima() {
+    const tipo = $('promoScontoTipo').value;
+    const box = $('promoAnteprima');
+    if (tipo === 'nessuno') {
+      box.innerHTML = 'In promo resta il prezzo di listino: <b>' + euro(listino) + '</b>.';
+      return;
+    }
+    let nuovo = null;
+    if (tipo === 'percentuale') {
+      const p = parseFloat(String($('promoPerc').value).replace(',', '.'));
+      if (!(p > 0 && p < 100)) { box.innerHTML = 'Listino ' + euro(listino) + ': scrivi la percentuale (da 1 a 99).'; return; }
+      nuovo = listino * (1 - p / 100);
+      const arr = (document.querySelector('input[name="promoArrotonda"]:checked') || {}).value;
+      if (arr === 'difetto') nuovo = Math.floor(nuovo + 1e-9);
+      else if (arr === 'eccesso') nuovo = Math.ceil(nuovo - 1e-9);
+    } else {
+      nuovo = parseFloat(String($('promoNuovo').value).replace(',', '.'));
+      if (!(nuovo >= 0)) { box.innerHTML = 'Listino ' + euro(listino) + ': scrivi il nuovo prezzo.'; return; }
+    }
+    nuovo = Math.min(Math.max(nuovo, 0), listino);
+    const avviso = nuovo >= listino ? ' <span class="text-danger">(non è più basso del listino)</span>' : '';
+    box.innerHTML = 'Listino ' + euro(listino) + ' → in promo <b>' + euro(nuovo) + '</b>' + avviso;
+  }
+
+  function aggiornaVista() {
+    const tipo = $('promoScontoTipo').value;
+    $('promoPercBox').classList.toggle('d-none', tipo !== 'percentuale');
+    $('promoNuovoBox').classList.toggle('d-none', tipo !== 'prezzo');
+    $('promoCriterioBox').classList.toggle('d-none', fasceBox.children.length === 0);
+    $('promoAggiungiFascia').disabled = fasceBox.children.length >= MAX_FASCE;
+    anteprima();
+    $('promoNonSalvato').classList.toggle('d-none', JSON.stringify(raccogli()) === fotoIniziale);
+  }
+
+  function riempi(regole) {
+    $('promoDal').value = regole.dal || '';
+    $('promoAl').value = regole.al || '';
+    document.querySelectorAll('#promoGiorni .btn-check').forEach(c => {
+      c.checked = (regole.giorni || []).indexOf(parseInt(c.value, 10)) !== -1;
+    });
+    fasceBox.innerHTML = '';
+    (regole.fasce || []).forEach(f => aggiungiFascia(f.dalle, f.alle));
+    (regole.criterio === 'tutto' ? $('promoCriterioTutto') : $('promoCriterioInizio')).checked = true;
+    const sc = regole.sconto || {};
+    $('promoScontoTipo').value = sc.tipo || 'nessuno';
+    $('promoPerc').value = sc.tipo === 'percentuale' && sc.valore != null ? sc.valore : '';
+    $('promoNuovo').value = sc.tipo === 'prezzo' && sc.valore != null ? sc.valore : '';
+    const arrId = {difetto: 'promoArrGiu', eccesso: 'promoArrSu'}[sc.arrotondamento] || 'promoArrNo';
+    $(arrId).checked = true;
+    (regole.fuori === 'no_online' ? $('promoFuoriOnline') : $('promoFuoriPieno')).checked = true;
+    $('promoErrori').classList.add('d-none');
+  }
+
+  function tooltipHtml(pr) {
+    return '<b>Imposta la promo</b><br>' + escHtml(pr.prezzo || 'Prezzo di listino') +
+           '<br>' + escHtml(pr.condizioni || 'Sempre valida') +
+           (pr.fuori === 'no_online' ? '<br>Online solo dentro la promo' : '');
+  }
+
+  document.querySelectorAll('#servicesTable .promo-ingranaggio').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const tip = bootstrap.Tooltip.getInstance(btn);
+      if (tip) tip.hide();
+      let pr = {};
+      try { pr = JSON.parse(btn.dataset.promo || '{}'); } catch (e) { pr = {}; }
+      btnCorrente = btn;
+      listino = Number(pr.listino) || 0;
+      $('PromoRegoleTitolo').textContent = 'Promo: ' + (btn.dataset.serviceName || '') + ' (listino ' + euro(listino) + ')';
+      riempi(pr.regole || {});
+      fotoIniziale = JSON.stringify(raccogli());
+      chiusuraConfermata = false;
+      aggiornaVista();
+      modal.show();
+    });
+  });
+
+  $('promoAggiungiFascia').addEventListener('click', function () {
+    // Proposta per la nuova fascia: dopo l'ultima, altrimenti la mattina.
+    aggiungiFascia(fasceBox.children.length ? '' : '09:00', fasceBox.children.length ? '' : '13:00');
+  });
+  modalEl.querySelector('.modal-body').addEventListener('input', aggiornaVista);
+  modalEl.querySelector('.modal-body').addEventListener('change', aggiornaVista);
+
+  // Chiudere con modifiche non salvate chiede conferma (regola "un solo Salva").
+  modalEl.addEventListener('hide.bs.modal', function (e) {
+    if (chiusuraConfermata || JSON.stringify(raccogli()) === fotoIniziale) return;
+    if (!confirm('Chiudere senza salvare le modifiche alla promo?')) {
+      e.preventDefault();
+      return;
+    }
+    chiusuraConfermata = true;
+  });
+
+  $('promoSalva').addEventListener('click', function () {
+    if (!btnCorrente) return;
+    const salva = $('promoSalva');
+    const errBox = $('promoErrori');
+    errBox.classList.add('d-none');
+    salva.disabled = true;
+    fetch(urlRegole.replace('999999', btnCorrente.dataset.serviceId), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+      body: JSON.stringify(raccogli())
+    })
+      .then(r => r.json().catch(() => ({})).then(j => ({ok: r.ok, j})))
+      .then(({ok, j}) => {
+        if (!ok || !j.success) {
+          const elenco = (j.errori && j.errori.length) ? j.errori : [j.error || 'Errore nel salvataggio'];
+          errBox.innerHTML = '<b>Non salvato:</b><ul class="mb-0">' + elenco.map(x => '<li>' + escHtml(x) + '</li>').join('') + '</ul>';
+          errBox.classList.remove('d-none');
+          errBox.scrollIntoView({block: 'nearest'});
+          return;
+        }
+        const pr = j.promo || {};
+        btnCorrente.dataset.promo = JSON.stringify(pr);
+        const conCondizioni = !!(pr.condizioni || pr.prezzo || pr.fuori === 'no_online');
+        btnCorrente.classList.toggle('btn-outline-warning', conCondizioni);
+        btnCorrente.classList.toggle('btn-outline-secondary', !conCondizioni);
+        const html = tooltipHtml(pr);
+        btnCorrente.setAttribute('data-bs-original-title', html);
+        const tip = bootstrap.Tooltip.getInstance(btnCorrente);
+        if (tip && tip.setContent) tip.setContent({'.tooltip-inner': html});
+        fotoIniziale = JSON.stringify(raccogli());
+        chiusuraConfermata = true;
+        modal.hide();
+      })
+      .catch(err => {
+        errBox.innerHTML = '<b>Non salvato:</b> ' + escHtml(err.message || 'errore di rete');
+        errBox.classList.remove('d-none');
+      })
+      .finally(() => { salva.disabled = false; });
   });
 });
 </script>

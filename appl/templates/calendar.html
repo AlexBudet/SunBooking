@@ -283,7 +283,8 @@
                       data-operator-name="{{ operator.user_nome }}"
                       data-hour="{{ hour }}" 
                       data-minute="{{ quarter * 15 }}"
-                      data-source="{{ appt.source.value }}" 
+                      data-source="{{ appt.source.value }}"
+                      {% if appt.promo_prezzo is not none %} data-promo-prezzo="{{ appt.promo_prezzo }}" {% endif %}
                       {% if appt.note %} data-note="{{ appt.note|e }}" {% endif %}
                       {% if appt.pacchetto_seduta %}
                       data-pacchetto-seduta-id="{{ appt.pacchetto_seduta.id }}"

@@ -217,6 +217,12 @@ class Service(db.Model):
     # server_default: le righe gia' presenti e gli INSERT fatti fuori dall'ORM
     # nascono non in promo.
     is_promo = db.Column(db.Boolean, nullable=False, server_default='false', default=False)
+    # Condizioni della promo (ingranaggio accanto alla spunta PROMO): periodo,
+    # giorni, fasce orarie, criterio, sconto, cosa succede fuori promo. JSON in
+    # TEXT, letto e scritto SOLO da appl/services/promo.py (stesse regole nel
+    # repo booking). NULL = promo sempre valida e senza sconto.
+    # Resta salvata anche togliendo la spunta: rimettendola torna com'era.
+    promo_regole = db.Column(db.Text, nullable=True)
 
     operators = db.relationship(
     'Operator',

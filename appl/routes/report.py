@@ -2,7 +2,7 @@ import json
 from flask import Blueprint, current_app, request, jsonify, render_template, send_file, session
 from sqlalchemy.orm import joinedload
 import requests
-from sqlalchemy import func, cast, Date
+from sqlalchemy import func, cast, Date, DateTime, text
 from appl.models import Appointment, AppointmentStatus, Operator, OperatorShift, Client, AppointmentSource, BusinessInfo, Receipt, Service, ServiceCategory, Subcategory, User
 from appl import db
 from appl.formati import nome_proprio, data_it
@@ -1723,9 +1723,14 @@ def booking_online_giorno():
     for gruppo in gruppi.values():
         primo = gruppo[0]
         nome, cognome = estrai_nome_cognome(primo.note or "")
+        inizio = min((a.start_time for a in gruppo if a.start_time), default=None)
         result.append({
             "id": primo.id,
+            # "ora" = quando il cliente HA PRENOTATO (created_at), non l'ora del
+            # trattamento: quella e' in appuntamento_data/appuntamento_ora.
             "ora": to_rome(primo.created_at).strftime("%H:%M"),
+            "appuntamento_data": data_it(inizio) if inizio else "",
+            "appuntamento_ora": inizio.strftime("%H:%M") if inizio else "",
             "nome_cliente": nome,
             "cognome_cliente": cognome,
             "servizio": ", ".join(a.service.servizio_nome for a in gruppo if a.service and a.service.servizio_nome),
@@ -1735,6 +1740,212 @@ def booking_online_giorno():
         "data": giorno.strftime("%d/%m/%Y"),
         "prenotazioni": result
     })
+
+
+# Tetto di appuntamenti letti per una richiesta dello storico: oltre, la
+# risposta lo dice (troncato) e chiede di stringere il periodo.
+STORICO_ONLINE_MAX_APPUNTAMENTI = 5000
+
+
+@report_bp.route('/api/booking_online_storico')
+def booking_online_storico():
+    """Storico delle prenotazioni arrivate dal sito (tasto INFO COMPLETE del tile
+    PRENOTAZIONI ONLINE), comprese quelle annullate dal cliente.
+
+    Una riga = una prenotazione (una sessione del sito: piu' servizi prenotati
+    insieme = una riga). Parametri:
+      dal, al      YYYY-MM-DD, inclusi (predefinito: ultimi 30 giorni)
+      riferimento  'prenotazione' (quando il cliente ha prenotato, predefinito)
+                   oppure 'appuntamento' (giorno del trattamento)
+      stato        tutte | in_programma | annullate | non_arrivate | passate
+      q            testo libero su cliente, telefono, e-mail, servizi
+
+    Le prenotazioni cancellate in Agenda non ci sono: la cancellazione da
+    Agenda elimina l'appuntamento senza lasciare traccia.
+    """
+    oggi = datetime.now(pytz_timezone('Europe/Rome')).replace(tzinfo=None)
+    try:
+        al = datetime.strptime(request.args.get('al') or oggi.strftime('%Y-%m-%d'), '%Y-%m-%d')
+        dal = datetime.strptime(request.args.get('dal') or (al - timedelta(days=29)).strftime('%Y-%m-%d'),
+                                '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'error': 'Date non valide'}), 400
+    if al < dal:
+        return jsonify({'error': 'La data "al" viene prima della data "dal"'}), 400
+    fine = al + timedelta(days=1)
+    riferimento = 'appuntamento' if request.args.get('riferimento') == 'appuntamento' else 'prenotazione'
+    stato_filtro = (request.args.get('stato') or 'tutte').strip()
+    cerca = (request.args.get('q') or '').strip().lower()
+
+    colonna = Appointment.start_time if riferimento == 'appuntamento' else Appointment.created_at
+    appuntamenti = (Appointment.query
+                    .options(joinedload(Appointment.client), joinedload(Appointment.service))
+                    .filter(Appointment.source == AppointmentSource.web,
+                            colonna >= dal, colonna < fine)
+                    .order_by(Appointment.created_at.desc(), Appointment.id.desc())
+                    .limit(STORICO_ONLINE_MAX_APPUNTAMENTI + 1)
+                    .all())
+    troncato = len(appuntamenti) > STORICO_ONLINE_MAX_APPUNTAMENTI
+    appuntamenti = appuntamenti[:STORICO_ONLINE_MAX_APPUNTAMENTI]
+
+    ore_tardivo = no_show_mod.regole(BusinessInfo.query.first())['ore_tardivo']
+    gruppi = {}
+    for a in appuntamenti:
+        gruppi.setdefault(a.booking_session_id or f"id-{a.id}", []).append(a)
+
+    righe = []
+    for gruppo in gruppi.values():
+        gruppo.sort(key=lambda a: (a.start_time or datetime.min, a.id))
+        primo = gruppo[0]
+        inizio = no_show_mod._senza_fuso(primo.start_time)
+        prenotata = to_rome(min((a.created_at for a in gruppo if a.created_at), default=None))
+
+        # Chi ha prenotato: la scheda cliente se la prenotazione e' stata
+        # associata, altrimenti i dati scritti dal cliente nella nota.
+        cel_n, mail_n, nome_n = no_show_mod.recapiti_dalla_nota(primo.note)
+        cliente = primo.client
+        if cliente is not None and not no_show_mod.scheda_segnaposto(cliente.cliente_nome, cliente.cliente_cognome):
+            nome = f"{nome_proprio(cliente.cliente_nome)} {nome_proprio(cliente.cliente_cognome)}".strip()
+            telefono = (cliente.cliente_cellulare or '').strip() or (cel_n or '')
+            associata = True
+        else:
+            nome = ' '.join(nome_proprio(p) for p in (nome_n or '').split()) or 'Cliente online'
+            telefono = cel_n or ''
+            associata = False
+
+        annullati = [a for a in gruppo if a.is_cancelled_by_client]
+        attivi = [a for a in gruppo if not a.is_cancelled_by_client]
+        annullata_il = ore_prima = None
+        if attivi:
+            stati = {a.stato for a in attivi}
+            if AppointmentStatus.NON_ARRIVATO in stati:
+                stato = 'non_arrivata'
+            elif AppointmentStatus.PAGATO in stati:
+                stato = 'pagata'
+            elif inizio and inizio >= oggi:
+                stato = 'in_programma'
+            else:
+                stato = 'passata'
+        else:
+            stato = 'annullata'
+            date_annullo = [no_show_mod._senza_fuso(a.annullato_il) for a in annullati if a.annullato_il]
+            if date_annullo:
+                annullata_il = max(date_annullo)
+                if inizio:
+                    ore_prima = (inizio - annullata_il).total_seconds() / 3600
+
+        servizi = [a.service.servizio_nome for a in gruppo if a.service and a.service.servizio_nome]
+        righe.append({
+            'prenotata_il': data_it(prenotata) if prenotata else '',
+            'prenotata_ora': prenotata.strftime('%H:%M') if prenotata else '',
+            'prenotata_iso': prenotata.isoformat() if prenotata else '',
+            'appuntamento': data_it(inizio) if inizio else '',
+            'appuntamento_ora': inizio.strftime('%H:%M') if inizio else '',
+            'appuntamento_iso': inizio.isoformat() if inizio else '',
+            'cliente': nome,
+            'telefono': telefono,
+            # Prenotazione associata: vince la scheda; altrimenti quella scritta online
+            'email': ((cliente.cliente_email or '').strip() or (mail_n or '')) if associata else (mail_n or ''),
+            'associata': associata,
+            'servizi': ', '.join(servizi),
+            'n_servizi': len(gruppo),
+            'stato': stato,
+            'annullati_in_parte': bool(annullati and attivi),
+            'annullata_il': data_it(annullata_il) if annullata_il else '',
+            'annullata_ora': annullata_il.strftime('%H:%M') if annullata_il else '',
+            'ore_prima': round(ore_prima, 1) if ore_prima is not None else None,
+            'all_ultimo': ore_prima is not None and ore_prima < ore_tardivo,
+        })
+
+    # Conteggi del periodo PRIMA dei filtri di stato e di testo: sono il
+    # denominatore di quello che si vede.
+    conteggi = {
+        'totale': len(righe),
+        'in_programma': sum(1 for r in righe if r['stato'] == 'in_programma'),
+        'passate': sum(1 for r in righe if r['stato'] in ('passata', 'pagata')),
+        'non_arrivate': sum(1 for r in righe if r['stato'] == 'non_arrivata'),
+        'annullate': sum(1 for r in righe if r['stato'] == 'annullata'),
+        'annullate_ultimo': sum(1 for r in righe if r['stato'] == 'annullata' and r['all_ultimo']),
+    }
+    filtri_stato = {
+        'in_programma': lambda r: r['stato'] == 'in_programma',
+        'passate': lambda r: r['stato'] in ('passata', 'pagata'),
+        'non_arrivate': lambda r: r['stato'] == 'non_arrivata',
+        'annullate': lambda r: r['stato'] == 'annullata',
+    }
+    if stato_filtro in filtri_stato:
+        righe = [r for r in righe if filtri_stato[stato_filtro](r)]
+    if cerca:
+        righe = [r for r in righe if cerca in ' '.join(
+            (r['cliente'], r['telefono'], r['email'], r['servizi'])).lower()]
+    chiave = 'appuntamento_iso' if riferimento == 'appuntamento' else 'prenotata_iso'
+    righe.sort(key=lambda r: r[chiave], reverse=True)
+
+    return jsonify({
+        'dal': dal.strftime('%Y-%m-%d'),
+        'al': al.strftime('%Y-%m-%d'),
+        'periodo': f"{data_it(dal)} - {data_it(al)}",
+        'riferimento': riferimento,
+        'ore_tardivo': ore_tardivo,
+        'conteggi': conteggi,
+        'righe': righe,
+        'troncato': troncato,
+    })
+
+
+def _annullamenti_online(dal, al, ore_tardivo):
+    """Prenotazioni annullate dal cliente col link dell'e-mail, con l'annullamento
+    fatto in [dal, al) (dal None = da sempre). Una prenotazione con piu' servizi
+    conta una volta. "All'ultimo" = meno di `ore_tardivo` ore prima dell'inizio
+    (Tools > Booking Web), come nel conteggio dei salti.
+
+    Solo gli annullamenti col link: le cancellazioni fatte in Agenda eliminano
+    l'appuntamento e non lasciano traccia. Contano da quando esiste
+    appuntamenti.annullato_il (12/11/2026): prima l'ora non si sapeva."""
+    filtri = ["a.is_cancelled_by_client = true", "a.annullato_il IS NOT NULL", "a.annullato_il < :al"]
+    parametri = {'al': al}
+    if dal is not None:
+        filtri.append("a.annullato_il >= :dal")
+        parametri['dal'] = dal
+    righe = db.session.execute(text(
+        "SELECT a.id, a.client_id, a.start_time, a.annullato_il, a.booking_session_id, a.note, "
+        "       c.cliente_nome, c.cliente_cognome "
+        "FROM appuntamenti a LEFT JOIN clienti c ON c.id = a.client_id "
+        "WHERE " + " AND ".join(filtri)
+    ).columns(start_time=DateTime, annullato_il=DateTime), parametri).fetchall()
+
+    prenotazioni = {}
+    for r in righe:
+        chiave = r.booking_session_id or f"id-{r.id}"
+        inizio = no_show_mod._senza_fuso(r.start_time)
+        annullato = no_show_mod._senza_fuso(r.annullato_il)
+        p = prenotazioni.setdefault(chiave, {'inizio': inizio, 'annullato': annullato, 'persona': None})
+        if inizio and (p['inizio'] is None or inizio < p['inizio']):
+            p['inizio'] = inizio
+        if p['persona'] is None:
+            if r.client_id is not None and not no_show_mod.scheda_segnaposto(r.cliente_nome, r.cliente_cognome):
+                p['persona'] = ('c', r.client_id)
+            else:
+                cel, mail, _nome = no_show_mod.recapiti_dalla_nota(r.note)   # gia' normalizzati
+                p['persona'] = ('r', cel or mail or chiave)
+
+    ultimo = sum(1 for p in prenotazioni.values()
+                 if p['inizio'] and p['annullato']
+                 and (p['inizio'] - p['annullato']).total_seconds() < ore_tardivo * 3600)
+    # Denominatore: prenotazioni ricevute dal sito nello stesso periodo.
+    q_ricevute = (db.session.query(func.count(func.distinct(
+                      func.coalesce(Appointment.booking_session_id, cast(Appointment.id, db.String)))))
+                  .filter(Appointment.source == AppointmentSource.web, Appointment.created_at < al))
+    if dal is not None:
+        q_ricevute = q_ricevute.filter(Appointment.created_at >= dal)
+    return {
+        'totale': len(prenotazioni),
+        'all_ultimo': ultimo,
+        'in_tempo': len(prenotazioni) - ultimo,
+        'clienti': len({p['persona'] for p in prenotazioni.values()}),
+        'ore_tardivo': ore_tardivo,
+        'ricevute': q_ricevute.scalar() or 0,
+    }
 
 @report_bp.route('/api/top_clienti_spesa')
 def top_clienti_spesa():
@@ -2377,6 +2588,8 @@ def report_no_show_classifica():
         'rows': rows[:50],
         'blocco': {'attivo': regole['blocco_attivo'], 'soglia': regole['soglia'],
                    'mesi': regole['mesi'], 'bloccati': sum(1 for r in rows if r['bloccato_online'])},
+        # Prenotazioni annullate dal link nel periodo (data dell'annullamento)
+        'annullate': _annullamenti_online(dal, al, regole['ore_tardivo']),
     })
 
 

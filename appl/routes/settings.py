@@ -22,6 +22,7 @@ from .help import HELP_IMAGES, get_help, get_all_topics, get_topics_by_category
 from .calendar import _compute_client_loyalty, LOYALTY_DEFAULT
 from ..formati import nome_proprio, nome_servizio
 from ..services import no_show as no_show_mod
+from ..services import promo as promo_mod
 from .. import invio_unico
 
 # Blueprint per le rotte delle impostazioni
@@ -809,6 +810,9 @@ def services():
     user_id = session.get('user_id')
     current_user = db.session.get(User, user_id) if user_id else None
     risorse_attive, risorse, risorse_per_servizio = _risorse_per_pagina_servizi()
+    # Condizioni promo di ogni servizio, gia' lette: servono alla finestra
+    # dell'ingranaggio e al suo tooltip (regole in appl/services/promo.py).
+    promo_per_servizio = {s.id: _promo_per_pagina(s) for s in services}
     return render_template(
         'services.html',
         services=services,
@@ -818,7 +822,20 @@ def services():
         risorse_attive=risorse_attive,
         risorse=risorse,
         risorse_per_servizio=risorse_per_servizio,
+        promo_per_servizio=promo_per_servizio,
     )
+
+
+def _promo_per_pagina(service):
+    """Regole promo del servizio + testi pronti per Tools > Servizi."""
+    regole = promo_mod.leggi(service.promo_regole)
+    return {
+        'regole': promo_mod.per_pagina(regole),
+        'condizioni': promo_mod.testo_condizioni(regole),
+        'prezzo': promo_mod.testo_prezzo(regole, service.servizio_prezzo),
+        'fuori': regole['fuori'],
+        'listino': float(service.servizio_prezzo or 0),
+    }
 
 
 # ===================== RISORSE =====================
@@ -1228,6 +1245,33 @@ def update_service_promo(service_id):
         app.logger.error("update_service_promo %s: %s", service_id, e)
         return jsonify({'success': False, 'error': 'Errore nel salvataggio'}), 500
     return jsonify({'success': True, 'is_promo': service.is_promo})
+
+
+@settings_bp.route('/settings/services/<int:service_id>/promo-regole', methods=['POST'])
+def update_service_promo_regole(service_id):
+    """Condizioni della promo, dalla finestra dell'ingranaggio di Tools > Servizi.
+
+    Payload: le regole come le restituisce promo.per_pagina() (dal, al, giorni,
+    fasce, criterio, sconto, fuori). Si controllano tutte prima di salvare: un
+    errore = niente salvato e l'elenco dei problemi torna alla finestra."""
+    user_id = session.get('user_id')
+    current_user = db.session.get(User, user_id) if user_id else None
+    if not current_user or current_user.ruolo.value == 'user':
+        return jsonify({'success': False, 'error': 'Permessi insufficienti'}), 403
+    service = db.session.get(Service, service_id)
+    if not service or service.is_deleted:
+        return jsonify({'success': False, 'error': 'Servizio non trovato'}), 404
+    regole, errori = promo_mod.valida(request.get_json(silent=True) or {}, service.servizio_prezzo)
+    if errori:
+        return jsonify({'success': False, 'errori': errori}), 400
+    try:
+        service.promo_regole = promo_mod.serializza(regole)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error("update_service_promo_regole %s: %s", service_id, e)
+        return jsonify({'success': False, 'error': 'Errore nel salvataggio'}), 500
+    return jsonify({'success': True, 'promo': _promo_per_pagina(service)})
 
 @settings_bp.route('/settings/services/<int:service_id>/edit', methods=['GET', 'POST'], endpoint='edit_service')
 def edit_service(service_id):

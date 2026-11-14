@@ -613,6 +613,9 @@ document.addEventListener('DOMContentLoaded', function() {
     </button>
   </div>
   <div class="stat-voce mb-1" id="no-show-periodo">&nbsp;</div>
+  <!-- Prenotazioni annullate dal cliente col link dell'e-mail nel periodo
+       (_annullamenti_online in report.py). Solo nella vista Classifica. -->
+  <div class="stat-voce mb-1" id="no-show-annullate">&nbsp;</div>
   <div class="tile-lista-scroll" id="no-show-list">
     <span class="text-muted">Caricamento...</span>
   </div>
@@ -652,12 +655,87 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <div class="tile-neumorphic tile-large" id="tile-booking-online">
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
-  <div class="tile-title" data-bs-toggle="tooltip" data-bs-placement="bottom"
-       title="Le prenotazioni arrivate dal sito di booking online">
-    PRENOTAZIONI ONLINE del <span id="tile-booking-online-data"></span>
+  <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
+    <span data-bs-toggle="tooltip" data-bs-placement="bottom"
+          title="Le prenotazioni che i clienti hanno FATTO dal sito in questo giorno. L'ora in grassetto è quando il cliente ha prenotato, non l'ora del trattamento">PRENOTAZIONI ONLINE del <span id="tile-booking-online-data"></span></span>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnBookingOnlineInfo"
+            data-bs-toggle="tooltip" data-bs-placement="bottom"
+            title="Tutte le prenotazioni dal sito, anche annullate, con filtri">INFO COMPLETE</button>
   </div>
+  <div class="stat-voce mb-1">Ora in grassetto = quando il cliente <b>ha prenotato</b>. Sotto: giorno e ora dell'appuntamento.</div>
   <div id="booking-online-list" class="booking-online-list-custom">
     <span class="text-muted">Caricamento...</span>
+  </div>
+</div>
+
+<!-- Storico delle prenotazioni online (INFO COMPLETE): /api/booking_online_storico -->
+<style>
+  /* styles.css mette overflow:visible !important a tutti i .modal-body: la
+     tabella e' lunga e deve scorrere dentro la finestra. */
+  #modalBookingOnlineStorico .modal-body { overflow-y: auto !important; max-height: none; }
+  #modalBookingOnlineStorico .bos-tabella td { vertical-align: top; }
+</style>
+<div class="modal fade" id="modalBookingOnlineStorico" tabindex="-1" aria-labelledby="bosTitolo" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="bosTitolo">Prenotazioni online: storico</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex flex-wrap align-items-end mb-2 bos-filtri" style="gap:10px;">
+          <div>
+            <label class="form-label small mb-0" for="bosRiferimento">Le date si riferiscono a</label>
+            <select class="form-select form-select-sm" id="bosRiferimento">
+              <option value="prenotazione">quando il cliente ha prenotato</option>
+              <option value="appuntamento">il giorno dell'appuntamento</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label small mb-0" for="bosDal">Dal</label>
+            <input type="date" class="form-control form-control-sm" id="bosDal">
+          </div>
+          <div>
+            <label class="form-label small mb-0" for="bosAl">Al</label>
+            <input type="date" class="form-control form-control-sm" id="bosAl">
+          </div>
+          <div>
+            <label class="form-label small mb-0" for="bosStato">Stato</label>
+            <select class="form-select form-select-sm" id="bosStato">
+              <option value="tutte">Tutte</option>
+              <option value="in_programma">In programma</option>
+              <option value="passate">Passate</option>
+              <option value="non_arrivate">Non arrivate</option>
+              <option value="annullate">Annullate</option>
+            </select>
+          </div>
+          <div style="flex:1 1 180px;">
+            <label class="form-label small mb-0" for="bosCerca">Cerca</label>
+            <input type="search" class="form-control form-control-sm" id="bosCerca" placeholder="Cliente, telefono, e-mail o servizio">
+          </div>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="bosUltimi30">Ultimi 30 giorni</button>
+        </div>
+        <div class="small mb-2" id="bosConteggi">&nbsp;</div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle mb-1 bos-tabella">
+            <thead>
+              <tr>
+                <th>Prenotata il</th>
+                <th>Cliente</th>
+                <th>Servizi</th>
+                <th>Appuntamento</th>
+                <th>Stato</th>
+              </tr>
+            </thead>
+            <tbody id="bosRighe"><tr><td colspan="5" class="text-muted">Caricamento...</td></tr></tbody>
+          </table>
+        </div>
+        <div class="small text-muted mt-2">
+          Le prenotazioni cancellate in Agenda non compaiono: la cancellazione da Agenda elimina l'appuntamento senza lasciare traccia.
+          Qui restano quelle annullate dal cliente con il link dell'e-mail.
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1342,6 +1420,8 @@ document.addEventListener('DOMContentLoaded', function() {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Annullate dal cliente: stessa misura della riga sopra, puo' andare a capo */
+#tile-no-show #no-show-annullate { font-size: 0.8rem; line-height: 1.3; }
 /* Classifica NO-SHOW */
 #tile-no-show .noshow-pos {
   flex: 0 0 1.6em;
@@ -5209,10 +5289,142 @@ function caricaPrenotazioniOnline(dateStr) {
         div.appendChild(oraSpan);
         div.appendChild(clienteSpan);
         div.appendChild(servizioSpan);
+        // Giorno e ora del TRATTAMENTO, sotto: l'ora in grassetto e' quella
+        // in cui il cliente ha prenotato (created_at), non va confusa.
+        if (a.appuntamento_data) {
+          const appt = document.createElement('div');
+          appt.className = 'small text-muted';
+          appt.textContent = 'appuntamento: ' + a.appuntamento_data + ' alle ' + (a.appuntamento_ora || '');
+          div.appendChild(appt);
+        }
         list.appendChild(div);
       });
     });
 }
+
+// ---------------------------------------------------------------------------
+// INFO COMPLETE: storico delle prenotazioni online, anche annullate, con filtri
+// (/api/booking_online_storico). Una riga = una prenotazione del sito.
+// ---------------------------------------------------------------------------
+// Parte al DOMContentLoaded: bootstrap.bundle si carica in base.html DOPO il
+// contenuto della pagina, qui sopra non c'e' ancora.
+document.addEventListener('DOMContentLoaded', function () {
+  const modalEl = document.getElementById('modalBookingOnlineStorico');
+  const btn = document.getElementById('btnBookingOnlineInfo');
+  if (!modalEl || !btn || !window.bootstrap) return;
+  // Il markup sta accanto al tile; il modal va sotto <body>, fuori dalla
+  // griglia dei tile (un contenitore con transform o overflow lo taglierebbe).
+  document.body.appendChild(modalEl);
+  const $ = id => document.getElementById(id);
+  let richiesta = 0;
+  let attesaRicerca = null;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function isoGiorno(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function ultimi30() {
+    const oggi = new Date();
+    const inizio = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() - 29);
+    $('bosDal').value = isoGiorno(inizio);
+    $('bosAl').value = isoGiorno(oggi);
+  }
+  function oreTesto(ore) {
+    if (ore === null || ore === undefined) return '';
+    if (ore < 0) return "dopo l'inizio";
+    if (ore < 48) return Math.round(ore) + ' h prima';
+    return Math.round(ore / 24) + ' giorni prima';
+  }
+
+  const STATI = {
+    in_programma: ['In programma', 'bg-primary'],
+    passata: ['Passata', 'bg-secondary'],
+    pagata: ['Pagata', 'bg-success'],
+    non_arrivata: ['Non arrivata', 'bg-warning text-dark'],
+    annullata: ['Annullata', 'bg-danger']
+  };
+
+  function rigaHtml(r, oreTardivo) {
+    const st = STATI[r.stato] || [r.stato, 'bg-secondary'];
+    let stato = '<span class="badge ' + st[1] + '">' + st[0] + '</span>';
+    if (r.stato === 'annullata') {
+      if (r.annullata_il) {
+        stato += '<div class="small">il ' + esc(r.annullata_il) + ' alle ' + esc(r.annullata_ora)
+          + (r.ore_prima !== null ? ' · ' + esc(oreTesto(r.ore_prima)) : '') + '</div>';
+      } else {
+        stato += '<div class="small text-muted">ora non registrata</div>';
+      }
+      if (r.all_ultimo) stato += '<span class="badge bg-light text-danger border border-danger">all\'ultimo (meno di ' + oreTardivo + ' h)</span>';
+    }
+    if (r.annullati_in_parte) stato += '<div class="small text-muted">alcuni servizi annullati</div>';
+    const contatti = [r.telefono, r.email].filter(Boolean).map(esc).join(' · ');
+    return '<tr>'
+      + '<td class="text-nowrap"><b>' + esc(r.prenotata_il) + '</b><div class="small">alle ' + esc(r.prenotata_ora) + '</div></td>'
+      + '<td>' + esc(r.cliente) + (contatti ? '<div class="small text-muted">' + contatti + '</div>' : '') + '</td>'
+      + '<td>' + esc(r.servizi) + '</td>'
+      + '<td class="text-nowrap">' + esc(r.appuntamento) + '<div class="small">alle ' + esc(r.appuntamento_ora) + '</div></td>'
+      + '<td>' + stato + '</td>'
+      + '</tr>';
+  }
+
+  function carica() {
+    const tbody = $('bosRighe');
+    const params = new URLSearchParams({
+      dal: $('bosDal').value || '',
+      al: $('bosAl').value || '',
+      riferimento: $('bosRiferimento').value,
+      stato: $('bosStato').value,
+      q: $('bosCerca').value.trim()
+    });
+    const questa = ++richiesta;
+    tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Caricamento...</td></tr>';
+    fetch('/api/booking_online_storico?' + params.toString())
+      .then(r => r.json())
+      .then(d => {
+        if (questa !== richiesta) return;
+        if (d.error) {
+          tbody.innerHTML = '<tr><td colspan="5" class="text-danger">' + esc(d.error) + '</td></tr>';
+          $('bosConteggi').textContent = '';
+          return;
+        }
+        const c = d.conteggi || {};
+        const quando = d.riferimento === 'appuntamento' ? 'con appuntamento' : 'ricevute';
+        let testo = '<b>' + (c.totale || 0) + '</b> prenotazioni ' + quando + ' nel periodo ' + esc(d.periodo || '')
+          + ' · ' + (c.in_programma || 0) + ' in programma · ' + (c.passate || 0) + ' passate · '
+          + (c.non_arrivate || 0) + ' non arrivate · <b>' + (c.annullate || 0) + ' annullate</b>';
+        if (c.annullate) testo += " (" + (c.annullate_ultimo || 0) + " all'ultimo, meno di " + d.ore_tardivo + ' h prima)';
+        const righe = d.righe || [];
+        if (righe.length !== (c.totale || 0)) testo += ' · mostrate ' + righe.length;
+        if (d.troncato) testo += ' · <span class="text-danger">periodo troppo lungo: restringi le date per vederle tutte</span>';
+        $('bosConteggi').innerHTML = testo;
+        if (!righe.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="text-muted">Nessuna prenotazione con questi filtri.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = righe.map(r => rigaHtml(r, d.ore_tardivo)).join('');
+      })
+      .catch(() => {
+        if (questa !== richiesta) return;
+        tbody.innerHTML = '<tr><td colspan="5" class="text-danger">Errore nel caricamento.</td></tr>';
+      });
+  }
+
+  btn.addEventListener('click', function () {
+    const tip = bootstrap.Tooltip.getInstance(btn);
+    if (tip) tip.hide();
+    if (!$('bosDal').value || !$('bosAl').value) ultimi30();
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    carica();
+  });
+  ['bosRiferimento', 'bosDal', 'bosAl', 'bosStato'].forEach(id => $(id).addEventListener('change', carica));
+  $('bosCerca').addEventListener('input', function () {
+    clearTimeout(attesaRicerca);
+    attesaRicerca = setTimeout(carica, 350);
+  });
+  $('bosUltimi30').addEventListener('click', function () { ultimi30(); carica(); });
+});
 
 // Richiama la funzione ogni volta che cambia la data
 document.addEventListener('DOMContentLoaded', function() {
@@ -5724,6 +5936,9 @@ document.addEventListener('DOMContentLoaded', function() {
     var periodi = document.querySelector('#tile-no-show .no-show-periodi');
     // Nascosti ma al loro posto: l'altezza del tile non cambia.
     if (periodi) periodi.style.visibility = noShowVista === 'classifica' ? '' : 'hidden';
+    // Anche gli annullati: dipendono dal periodo, che c'e' solo nella Classifica.
+    var annullate = document.getElementById('no-show-annullate');
+    if (annullate) annullate.style.visibility = noShowVista === 'classifica' ? '' : 'hidden';
     var reset = document.getElementById('noShowRecenti');
     if (reset) {
       var testo = noShowVista === 'classifica' ? 'Togli le date' : 'Torna agli ultimi 10';
@@ -5733,6 +5948,29 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     if (noShowVista === 'classifica') caricaNoShowClassifica();
     else caricaNoShowUltimi();
+  }
+
+  // Prenotazioni annullate dal cliente col link dell'e-mail nel periodo (data
+  // dell'annullamento): totale, in tempo e all'ultimo (meno delle ore di
+  // Tools > Booking Web). Le cancellazioni fatte in Agenda non lasciano traccia:
+  // lo dice la nota nel suggerimento.
+  function mostraAnnullateOnline(a) {
+    var riga = document.getElementById('no-show-annullate');
+    if (!riga) return;
+    var tipVecchio = window.bootstrap && bootstrap.Tooltip.getInstance(riga);
+    if (tipVecchio) tipVecchio.dispose();
+    if (!a) { riga.innerHTML = '&nbsp;'; return; }
+    var testo = 'Annullate dal cliente: <b>' + a.totale + '</b> su ' + Number(a.ricevute || 0).toLocaleString('it-IT') +
+      ' prenotazioni online';
+    if (a.totale) {
+      testo += ' (' + a.clienti + (a.clienti === 1 ? ' cliente' : ' clienti') + ') · ' + a.in_tempo + ' in tempo, ' +
+        a.all_ultimo + " all'ultimo (meno di " + a.ore_tardivo + ' h prima)';
+    }
+    riga.innerHTML = testo + ' <i class="bi bi-info-circle" aria-hidden="true"></i>';
+    bsTip(riga, "Contano solo gli annullamenti fatti dal cliente con il link dell'e-mail di conferma, " +
+      "nel periodo scelto. Un appuntamento cancellato in Agenda (es. il cliente telefona) non lascia traccia " +
+      "e qui non compare. \"All'ultimo\" = meno ore prima di quelle impostate in Tools › Booking Web.",
+      { placement: 'bottom' });
   }
 
   function caricaNoShowClassifica() {
@@ -5771,6 +6009,7 @@ document.addEventListener('DOMContentLoaded', function() {
           }
           intestazione.textContent = testo;
         }
+        mostraAnnullateOnline(d.annullate);
 
         if (!d.rows || !d.rows.length) {
           lista.innerHTML = '<span class="text-muted">Nessun appuntamento saltato in questo periodo.</span>';

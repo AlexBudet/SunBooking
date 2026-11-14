@@ -7,6 +7,7 @@ from xml.sax.saxutils import escape as _xml_escape
 from flask import Blueprint, app, render_template, jsonify, request, session, abort, current_app
 from appl.models import Appointment, AppointmentStatus, BusinessInfo, Operator, PrinterModel, Service, ServiceCategory, Client, Receipt, Subcategory, User, Pacchetto, PacchettoRata, PacchettoStatus, db
 from appl.services.error_log import log_crm_error
+from appl.services import promo as promo_mod
 from appl.formati import nome_proprio
 from datetime import datetime, date, timedelta
 import requests
@@ -656,6 +657,25 @@ def _cassa_errore_non_gestito(exc):
     }), 500
 
 
+def _prezzo_riga_appuntamento(servizio, appuntamento):
+    """Prezzo con cui la riga di un appuntamento entra in cassa: (prezzo, in_promo).
+
+    PROMO (appl/services/promo.py): se il servizio e' spuntato PROMO, ha uno
+    sconto e l'orario dell'appuntamento rientra nelle condizioni, la riga
+    arriva gia' col prezzo promo, modificabile come sempre. Lo scontrino non
+    cambia: la riga "Scontato del X%" la stampa gia' da sola quando il prezzo
+    e' sotto il listino. In tutti gli altri casi (e se qualcosa va storto)
+    resta il listino: la cassa non si ferma per una promo."""
+    listino = servizio.servizio_prezzo if servizio else 0
+    if not servizio or not appuntamento:
+        return listino, False
+    scontato = promo_mod.prezzo_scontato_servizio(servizio, appuntamento.start_time,
+                                                  appuntamento._duration)
+    if scontato is None:
+        return listino, False
+    return scontato, True
+
+
 @cassa_bp.route('/cassa')
 def cassa():
     current_app.logger.debug("GET args in cassa: %s", request.args)
@@ -831,6 +851,18 @@ def cassa():
             if _srv_ids:
                 for _sv in Service.query.filter(Service.id.in_(_srv_ids)).all():
                     _servizi_db[_sv.id] = _sv
+            # Appuntamenti delle righe (una query): servono a giudicare la PROMO,
+            # che dipende da giorno e orario (vedi _prezzo_riga_appuntamento).
+            _appt_ids = set()
+            for s in servizi_raw:
+                try:
+                    _appt_ids.add(int(s.get("appointment_id")))
+                except (TypeError, ValueError):
+                    pass
+            _appts_db = {}
+            if _appt_ids and any(getattr(sv, 'is_promo', False) for sv in _servizi_db.values()):
+                for _a in Appointment.query.filter(Appointment.id.in_(_appt_ids)).all():
+                    _appts_db[_a.id] = _a
             # Assicurati che ogni servizio abbia operator_id e operator_nome
             servizi = []
             for s in servizi_raw:
@@ -864,6 +896,27 @@ def cassa():
                     "operator_id": op_id,
                     "operator_nome": op_nome
                 }
+                # PROMO: solo se l'appuntamento rientra, la riga arriva col prezzo
+                # promo e con i dati del servizio gia' pronti (cosi' la pagina
+                # non li richiede al listino, che riporterebbe il prezzo pieno).
+                try:
+                    _sv_promo = _servizi_db.get(int(s.get("id")))
+                    _appt_promo = _appts_db.get(int(appt_id)) if appt_id else None
+                except (TypeError, ValueError):
+                    _sv_promo = _appt_promo = None
+                if _sv_promo is not None and _appt_promo is not None:
+                    _prezzo, _in_promo = _prezzo_riga_appuntamento(_sv_promo, _appt_promo)
+                    if _in_promo:
+                        srv["prezzo"] = _prezzo
+                        srv["promo"] = True
+                        srv["nome"] = srv["nome"] or clean_str(_sv_promo.servizio_nome or "")
+                        srv["tag"] = srv["tag"] or clean_str(_sv_promo.servizio_tag or "")
+                        if not srv["sottocategoria"] and _sv_promo.servizio_sottocategoria:
+                            srv["sottocategoria"] = clean_str(_sv_promo.servizio_sottocategoria.nome)
+                        if srv["categoria"] is None and _sv_promo.servizio_categoria:
+                            srv["categoria"] = _sv_promo.servizio_categoria.value
+                        if srv["sottocategoria_id"] is None:
+                            srv["sottocategoria_id"] = _sv_promo.servizio_sottocategoria_id
                 servizi.append(srv)
         except Exception as e:
             current_app.logger.error(f"Errore parsing servizi_json: {e}")
@@ -881,7 +934,8 @@ def cassa():
                 servizi.append({
                     "id": appt.service.id,
                     "nome": clean_str(appt.service.servizio_nome),
-                    "prezzo": appt.service.servizio_prezzo,
+                    # Listino, o prezzo promo se l'appuntamento rientra nella promo
+                    "prezzo": _prezzo_riga_appuntamento(appt.service, appt)[0],
                     "tag": clean_str(appt.service.servizio_tag),
                     "sottocategoria": clean_str(appt.service.servizio_sottocategoria.nome) if appt.service.servizio_sottocategoria else "",
                     "appointment_id": appt.id,
@@ -3377,7 +3431,7 @@ def api_myspia():
                     {
                         "servizio_nome": a.service.servizio_nome if a.service else "",
                         "durata": a._duration,
-                        "prezzo": a.service.servizio_prezzo if a.service else 0,
+                        "prezzo": _prezzo_riga_appuntamento(a.service, a)[0] if a.service else 0,
                         "bg_color": a.colore or "#fff",
                         "font_color": a.colore_font or "#000",
                         "data": a.start_time.strftime("%Y-%m-%d") if a.start_time else "",
@@ -3470,7 +3524,8 @@ def myspia_dettagli():
             result["appuntamenti"].append({
                 "id": s.id if s else None,
                 "nome": s.servizio_nome if s else "",
-                "prezzo": s.servizio_prezzo if s else 0,
+                # Listino, o prezzo promo se l'appuntamento rientra nella promo
+                "prezzo": _prezzo_riga_appuntamento(s, a)[0] if s else 0,
                 "tag": s.servizio_tag if s else "",
                 "sottocategoria": s.servizio_sottocategoria.nome if (s and s.servizio_sottocategoria) else "",
                 # Servono per verificare se una prepagata con vincolo "categoria"/"sottocategoria"

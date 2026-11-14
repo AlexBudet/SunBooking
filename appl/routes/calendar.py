@@ -10,6 +10,7 @@ from ..models import OperatorShift, PacchettoSeduta, db, Appointment, Appointmen
 from appl import app
 from appl.services.error_log import log_crm_error
 from appl.services import risorse as risorse_mod
+from appl.services import promo as promo_mod
 from appl.services import no_show as no_show_mod
 from appl.formati import nome_proprio, data_it
 import random
@@ -410,6 +411,10 @@ def calendar_home():
         appt.pacchetto_tooltip_created_on = tooltip_data["created_on"]
         appt.pacchetto_tooltip_seduta_progressivo = tooltip_data["seduta_progressivo"]
         appt.pacchetto_tooltip_sedute_totali = tooltip_data["sedute_totali"]
+        # PROMO: prezzo scontato se l'appuntamento rientra (None = listino).
+        # Lo legge il preventivo del tooltip "Porta in cassa" (data-promo-prezzo).
+        appt.promo_prezzo = promo_mod.prezzo_scontato_servizio(
+            appt.service, appt.start_time, appt.duration) if appt.service else None
 
     # Prepara i dati degli appuntamenti per il rendering
     appointment_data = []
@@ -2287,6 +2292,10 @@ def calendar_appointments_by_date():
             # compresso per riconoscere la persona di una prenotazione online
             # non ancora associata (no_show.intervalli_occupati).
             "booking_session_id": appt.booking_session_id or "",
+            # PROMO: prezzo scontato se l'appuntamento rientra, None = listino
+            # (come data-promo-prezzo del template).
+            "promo_prezzo": promo_mod.prezzo_scontato_servizio(
+                appt.service, appt.start_time, appt.duration) if appt.service else None,
             "pacchetto_seduta_id": appt.pacchetto_seduta_id,
             "pacchetto_id": appt.pacchetto_seduta.pacchetto_id if appt.pacchetto_seduta else None,
             "pacchetto_nome": appt.pacchetto_seduta.pacchetto.nome if appt.pacchetto_seduta and appt.pacchetto_seduta.pacchetto else None,
@@ -3809,37 +3818,36 @@ def check_risorse():
               blocchi: [{service_id, start_time: 'HH:MM', duration}],
               ignora_appointment_ids: [...]}   (quelli che si stanno spostando)
     Risposta: {ok, conflitti: [{servizio, risorsa, tipo, limite, orario,
-               messaggio, occupanti: [{orario, servizio, cliente, operatore}]}]}
-    Senza risorse configurate (o senza tabelle) risponde sempre ok.
+               messaggio, occupanti: [{orario, servizio, cliente, operatore}]}],
+               promo: [{servizio, orario, messaggio}]}
+    Senza risorse configurate (o senza tabelle) i conflitti sono sempre vuoti.
+
+    PROMO (appl/services/promo.py): nella stessa risposta, `promo` elenca i
+    blocchi di servizi "non prenotabili online fuori promo" piazzati fuori dalle
+    condizioni. Stesso avviso con "Procedi comunque", stessi punti dell'Agenda.
     """
     if 'user_id' not in session:
         return jsonify({'error': 'session_expired'}), 401
 
     data = request.get_json(silent=True) or {}
-    config = risorse_mod.carica_config(db.session)
-    if not config:
-        return jsonify({'ok': True, 'conflitti': []})
     try:
         giorno = datetime.strptime((data.get('date') or '').strip(), '%Y-%m-%d').date()
     except (TypeError, ValueError):
-        return jsonify({'ok': True, 'conflitti': []})
+        return jsonify({'ok': True, 'conflitti': [], 'promo': []})
+    blocchi_promo = _blocchi_da_payload(giorno, data.get('blocchi'))
+    try:
+        avvisi_promo = _avvisi_fuori_promo(blocchi_promo)
+    except Exception as e:
+        app.logger.warning("Controllo promo in Agenda non riuscito: %s", e)
+        avvisi_promo = []
 
-    blocchi = []
-    for blk in (data.get('blocchi') or []):
-        if not isinstance(blk, dict):
-            continue
-        try:
-            sid = int(blk.get('service_id') or 0)
-            durata = int(blk.get('duration') or 0)
-            ora = datetime.strptime((blk.get('start_time') or '').strip(), '%H:%M').time()
-        except (TypeError, ValueError):
-            continue
-        if not sid or durata <= 0:
-            continue
-        ini = datetime.combine(giorno, ora)
-        blocchi.append({'service_id': sid, 'inizio': ini, 'fine': ini + timedelta(minutes=durata)})
+    config = risorse_mod.carica_config(db.session)
+    if not config:
+        return jsonify({'ok': not avvisi_promo, 'conflitti': [], 'promo': avvisi_promo})
+
+    blocchi = blocchi_promo
     if not any(b['service_id'] in config['per_servizio'] for b in blocchi):
-        return jsonify({'ok': True, 'conflitti': []})
+        return jsonify({'ok': not avvisi_promo, 'conflitti': [], 'promo': avvisi_promo})
 
     appts = (Appointment.query
              .filter(Appointment.start_time >= datetime.combine(giorno, time.min),
@@ -3851,7 +3859,7 @@ def check_risorse():
     occupati = risorse_mod.occupati_del_giorno(appts, data.get('ignora_appointment_ids') or [])
     trovati = risorse_mod.conflitti(config, blocchi, occupati)
     if not trovati:
-        return jsonify({'ok': True, 'conflitti': []})
+        return jsonify({'ok': not avvisi_promo, 'conflitti': [], 'promo': avvisi_promo})
 
     nomi_servizi = {s.id: (s.servizio_nome or '') for s in
                     Service.query.filter(Service.id.in_({c['service_id'] for c in trovati})).all()}
@@ -3892,7 +3900,59 @@ def check_risorse():
         risposta.append({'servizio': servizio, 'risorsa': c['risorsa'], 'tipo': c['tipo'],
                          'limite': c['limite'], 'orario': orario, 'messaggio': messaggio,
                          'occupanti': occupanti})
-    return jsonify({'ok': False, 'conflitti': risposta})
+    return jsonify({'ok': False, 'conflitti': risposta, 'promo': avvisi_promo})
+
+
+def _blocchi_da_payload(giorno, grezzi):
+    """[{service_id, start_time 'HH:MM', duration}] -> [{service_id, inizio, fine}].
+    Le voci illeggibili si scartano: l'Agenda non si ferma per un controllo."""
+    blocchi = []
+    for blk in (grezzi or []):
+        if not isinstance(blk, dict):
+            continue
+        try:
+            sid = int(blk.get('service_id') or 0)
+            durata = int(blk.get('duration') or 0)
+            ora = datetime.strptime((blk.get('start_time') or '').strip(), '%H:%M').time()
+        except (TypeError, ValueError):
+            continue
+        if not sid or durata <= 0:
+            continue
+        ini = datetime.combine(giorno, ora)
+        blocchi.append({'service_id': sid, 'inizio': ini, 'fine': ini + timedelta(minutes=durata)})
+    return blocchi
+
+
+def _avvisi_fuori_promo(blocchi):
+    """Blocchi di servizi in promo "non prenotabili online fuori promo" che si
+    stanno piazzando FUORI dalle condizioni (appl/services/promo.py). In Agenda
+    si prenota comunque: e' solo un avviso. Le promo "a prezzo pieno fuori
+    promo" non avvisano mai (sono servizi di listino, si prenotano sempre)."""
+    ids = {b['service_id'] for b in blocchi}
+    if not ids:
+        return []
+    servizi = {s.id: s for s in Service.query.filter(Service.id.in_(ids),
+                                                      Service.is_promo == True).all()}
+    avvisi = []
+    for b in blocchi:
+        s = servizi.get(b['service_id'])
+        if not s:
+            continue
+        regole = promo_mod.leggi(s.promo_regole)
+        durata = int((b['fine'] - b['inizio']).total_seconds() // 60)
+        if not promo_mod.vincola_online(True, regole) or promo_mod.dentro(regole, b['inizio'], durata):
+            continue
+        nome = s.servizio_nome or 'Servizio'
+        condizioni = promo_mod.testo_condizioni(regole)
+        avvisi.append({
+            'servizio': nome,
+            'orario': f"{b['inizio'].strftime('%H:%M')}–{b['fine'].strftime('%H:%M')}",
+            'messaggio': (f"{nome} alle {b['inizio'].strftime('%H:%M')} è fuori dalla promo"
+                          + (f" ({condizioni})" if condizioni else "")
+                          + f": online non sarebbe prenotabile e in cassa arriva a prezzo di "
+                            f"listino ({promo_mod.euro(s.servizio_prezzo)})."),
+        })
+    return avvisi
 
 
 @calendar_bp.route('/api/check-abilitazioni', methods=['POST'])

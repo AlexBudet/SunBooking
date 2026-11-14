@@ -5752,9 +5752,21 @@ function risorseElencoHtml(conflitti) {
   }).join('');
 }
 
-// Risolve true = procedi, false = annulla.
-function risorseMostraAvviso(conflitti, opzioni) {
-  const testo = conflitti.map(c => c.messaggio).join('\n');
+function promoElencoHtml(promo) {
+  if (!promo || !promo.length) return '';
+  return '<div class="mb-2"><b>Fuori promo</b><ul class="mb-0 small">'
+    + promo.map(p => '<li>' + abilEsc(p.messaggio) + '</li>').join('')
+    + '</ul></div>';
+}
+
+// Risolve true = procedi, false = annulla. `promo` (facoltativo): avvisi
+// "fuori promo" da mostrare nella stessa finestra.
+function risorseMostraAvviso(conflitti, opzioni, promo) {
+  conflitti = conflitti || [];
+  promo = promo || [];
+  const titolo = conflitti.length ? 'Risorsa occupata' : 'Fuori promo';
+  const corpo = risorseElencoHtml(conflitti) + promoElencoHtml(promo);
+  const testo = conflitti.map(c => c.messaggio).concat(promo.map(p => p.messaggio)).join('\n');
 
   // Creazione da click su cella: la domanda sta DENTRO il modal gia' aperto,
   // come per le abilitazioni.
@@ -5766,13 +5778,13 @@ function risorseMostraAvviso(conflitti, opzioni) {
       const panel = document.createElement('div');
       panel.id = 'risorseInlineConfirm';
       panel.setAttribute('role', 'region');
-      panel.setAttribute('aria-label', 'Risorsa occupata');
+      panel.setAttribute('aria-label', titolo);
       panel.style.cssText = 'width:100%;box-sizing:border-box;margin-top:12px;padding:12px;'
         + 'border:1px solid rgba(0,0,0,0.08);border-radius:6px;background:#fff;'
         + 'box-shadow:0 6px 18px rgba(0,0,0,0.06);font-size:14px;color:#222';
       panel.innerHTML =
-        '<div style="margin-bottom:8px">&#9888;&#65039; <b>Risorsa occupata</b></div>'
-        + risorseElencoHtml(conflitti)
+        '<div style="margin-bottom:8px">&#9888;&#65039; <b>' + titolo + '</b></div>'
+        + corpo
         + '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px">'
           + '<button type="button" class="btn btn-link" id="risorseInlineIndietro" style="margin-right:auto;color:#666">INDIETRO</button>'
           + '<button type="button" class="btn btn-outline-warning" id="risorseInlineComunque">Procedi comunque</button>'
@@ -5802,7 +5814,7 @@ function risorseMostraAvviso(conflitti, opzioni) {
   }
 
   if (typeof bootstrap === 'undefined' || !bootstrap.Modal) {
-    return Promise.resolve(confirm('ATTENZIONE! Risorsa occupata.\n\n' + testo
+    return Promise.resolve(confirm('ATTENZIONE! ' + titolo + '.\n\n' + testo
       + '\n\nOK = procedi comunque\nAnnulla = non fare niente'));
   }
 
@@ -5826,10 +5838,10 @@ function risorseMostraAvviso(conflitti, opzioni) {
       '<div class="modal-dialog modal-dialog-centered">' +
         '<div class="modal-content">' +
           '<div class="modal-header bg-warning">' +
-            '<h5 class="modal-title">&#9888;&#65039; Risorsa occupata</h5>' +
+            '<h5 class="modal-title">&#9888;&#65039; ' + titolo + '</h5>' +
             '<button type="button" class="btn-close" id="risorseBtnX" aria-label="Chiudi"></button>' +
           '</div>' +
-          '<div class="modal-body">' + risorseElencoHtml(conflitti) + '</div>' +
+          '<div class="modal-body">' + corpo + '</div>' +
           '<div class="modal-footer d-flex flex-column align-items-stretch gap-2">' +
             '<button type="button" class="btn btn-outline-warning" id="risorseBtnComunque">Procedi comunque</button>' +
             '<button type="button" class="btn btn-secondary" id="risorseBtnAnnulla">Annulla</button>' +
@@ -5892,8 +5904,13 @@ async function _verificaRisorse(blocchi, dataISO, startHHMM, ignoraAppointmentId
   } finally {
     clearTimeout(timer);
   }
-  if (!esito || esito.ok || !Array.isArray(esito.conflitti) || !esito.conflitti.length) return true;
-  return await risorseMostraAvviso(esito.conflitti, opzioni);
+  if (!esito || esito.ok) return true;
+  const conflitti = Array.isArray(esito.conflitti) ? esito.conflitti : [];
+  // PROMO: servizi "non prenotabili online fuori promo" piazzati fuori dalle
+  // condizioni (appl/services/promo.py). Stesso avviso, stessi punti.
+  const promo = Array.isArray(esito.promo) ? esito.promo : [];
+  if (!conflitti.length && !promo.length) return true;
+  return await risorseMostraAvviso(conflitti, opzioni, promo);
 }
 window.verificaRisorse = verificaRisorse;
 
@@ -10636,6 +10653,11 @@ function createAppointmentBlockElement(appointment, operatorId, hour, minute) {
   block.setAttribute('data-source', appointment.source || 'gestionale');
   // Come il template (calendar.html): lo usa anche il no-show compresso.
   block.setAttribute('data-booking_session_id', appointment.booking_session_id || '');
+  // PROMO: prezzo scontato se l'appuntamento rientra nella promo (server,
+  // appl/services/promo.py). Lo usa il preventivo del tooltip "Porta in cassa".
+  if (appointment.promo_prezzo !== null && appointment.promo_prezzo !== undefined) {
+    block.setAttribute('data-promo-prezzo', String(appointment.promo_prezzo));
+  }
   if (appointment.note) block.setAttribute('data-note', appointment.note);
   if (pacchettoSedutaId) block.setAttribute('data-pacchetto-seduta-id', pacchettoSedutaId);
   if (pacchettoId) block.setAttribute('data-pacchetto-id', pacchettoId);
@@ -21382,13 +21404,18 @@ window.getBlocchiDaPortareInCassa = getBlocchiDaPortareInCassa;
       const sv = listino.get(String(b.getAttribute('data-service-id') || ''));
       if (!sv) return { nome, tipo: 'ignoto' };
 
-      const prezzo = cent(sv.prezzo);
+      // PROMO: se l'appuntamento rientra nella promo il server ha messo sul
+      // blocco il prezzo scontato (data-promo-prezzo), lo stesso che arrivera'
+      // in Cassa (appl/services/promo.py).
+      const promoAttr = b.getAttribute('data-promo-prezzo');
+      const promo = promoAttr !== null && promoAttr !== '' && !isNaN(parseFloat(promoAttr));
+      const prezzo = promo ? cent(parseFloat(promoAttr)) : cent(sv.prezzo);
       let quotaCarta = 0;
       if (carta && credito > 0 && servizioAmmessoDaVincoli(vincoli, sv)) {
         quotaCarta = cent(Math.min(credito, prezzo));
         credito = cent(credito - quotaCarta);
       }
-      return { nome, tipo: 'servizio', prezzo, quotaCarta, daPagare: cent(prezzo - quotaCarta) };
+      return { nome, tipo: 'servizio', prezzo, promo, quotaCarta, daPagare: cent(prezzo - quotaCarta) };
     });
 
     const servizi = voci.filter(v => v.tipo === 'servizio');
@@ -21439,13 +21466,14 @@ window.getBlocchiDaPortareInCassa = getBlocchiDaPortareInCassa;
     const righe = prev.voci.map(v => {
       if (v.tipo === 'pacchetto') return riga(v.nome, '<em>pacchetto</em>');
       if (v.tipo === 'ignoto')    return riga(v.nome, '<em>n.d.</em>');
+      const badgePromo = v.promo ? '<i class="tt-badge">promo</i>' : '';
       if (v.quotaCarta > 0) {
         return riga(v.nome, alterna(
-          euro(v.prezzo),
+          euro(v.prezzo) + badgePromo,
           euro(v.daPagare) + '<i class="tt-badge">tessera</i>'
         ));
       }
-      return riga(v.nome, '<b>' + euro(v.prezzo) + '</b>');
+      return riga(v.nome, '<b>' + euro(v.prezzo) + badgePromo + '</b>');
     });
 
     const etichettaTot = 'TOT' + (prev.mancanti ? ' (parziale)' : '');
