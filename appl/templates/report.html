@@ -558,18 +558,27 @@ document.addEventListener('DOMContentLoaded', function() {
   <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
   <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
     <span data-bs-toggle="tooltip" data-bs-placement="bottom"
-          title="Incasso mese per mese: anno in corso a confronto con l'anno precedente">ANDAMENTO ANNO SU ANNO</span>
+          title="Incasso mese per mese, anno in corso a confronto con l'anno precedente. Il numero grande è l'incasso dal 1 gennaio a oggi; la percentuale confronta le STESSE date nei due anni, e solo i mesi di cui l'anno prima ci sono già i dati">ANDAMENTO ANNO SU ANNO</span>
     <div class="btn-group btn-group-sm" role="group" id="andamento-tipo-dati" style="display:none;">
       <button type="button" class="btn btn-outline-secondary btn-andamento-dati active" data-test="0">Fiscali</button>
       <button type="button" class="btn btn-outline-secondary btn-andamento-dati" data-test="1">Fiscali + test</button>
     </div>
   </div>
-  <div class="d-flex align-items-baseline justify-content-center" style="gap:10px; flex-wrap:wrap;">
+  {# Il totale e la percentuale riguardano periodi diversi (dal 1 gennaio a oggi
+     il primo, le date confrontabili la seconda): ognuno ha la sua riga che dice
+     di cosa parla. Prima la percentuale stava accanto al totale e sembrava sua. #}
+  <div class="text-center" style="line-height:1.2;">
     <span class="stat-euro fs-3" id="andamento-totale">-</span>
-    <span class="delta-badge" id="andamento-delta"></span>
+    <div class="stat-voce" id="andamento-periodo" style="font-size:0.8rem;">&nbsp;</div>
   </div>
-  <div class="stat-voce mb-1" id="andamento-confronto">-</div>
-  <div style="width:100%; height:230px; position:relative;">
+  <div class="stat-voce mt-1 text-center" style="font-size:0.8rem; line-height:1.3;">
+    <span class="delta-badge" id="andamento-delta"></span>
+    <span id="andamento-confronto">-</span>
+  </div>
+  <div class="stat-voce text-center text-muted" id="andamento-nota" style="font-size:0.72rem; line-height:1.25; display:none;"></div>
+  {# Il grafico prende l'altezza che resta nel riquadro (prima 230px fissi): le
+     righe sopra possono andare a capo e sul telefono lo tagliavano in fondo. #}
+  <div style="width:100%; flex:1 1 auto; min-height:0; position:relative; margin-top:4px;">
     <canvas id="graficoAndamentoAnnuale"></canvas>
   </div>
 </div>
@@ -767,6 +776,28 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 
+{# RISULTATI MARKETING (15/11/2026): per ogni campagna WhatsApp, quanti clienti
+   raggiunti hanno prenotato dopo il messaggio. /api/report_marketing_conversioni,
+   regole in report.py. Solo admin e owner, come la Saturazione. #}
+{% if current_user and current_user.ruolo and current_user.ruolo.value in ['admin', 'owner'] %}
+<div class="tile-neumorphic tile-large" id="tile-marketing-conversioni">
+  <button class="btn-close btn-close-tile" type="button" aria-label="Chiudi" style="position:absolute; top:10px; left:10px; z-index:2;"></button>
+  <div class="tile-title d-flex align-items-center justify-content-between" style="padding-right:15px;">
+    <span data-bs-toggle="tooltip" data-bs-placement="bottom" tabindex="0" class="mkconv-titolo"
+          title="Per ogni campagna WhatsApp degli ultimi 12 mesi: quanti clienti raggiunti hanno prenotato nei giorni dopo il messaggio. «La promo» sono i servizi scritti nel messaggio. «Prima dell'invio» sono gli stessi clienti nello stesso numero di giorni PRIMA del messaggio: se dopo la percentuale è più alta, il messaggio ha portato prenotazioni in più. Le prenotazioni annullate dal cliente non contano">RISULTATI MARKETING</span>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Giorni dopo il messaggio">
+      <button type="button" class="btn btn-outline-secondary btn-mkconv-finestra" data-giorni="7">7 gg</button>
+      <button type="button" class="btn btn-outline-secondary btn-mkconv-finestra active" data-giorni="14">14 gg</button>
+      <button type="button" class="btn btn-outline-secondary btn-mkconv-finestra" data-giorni="30">30 gg</button>
+    </div>
+  </div>
+  <div class="stat-voce mb-1" id="mkconv-intro">&nbsp;</div>
+  <div class="tile-lista-scroll" id="mkconv-list">
+    <span class="text-muted">Caricamento...</span>
+  </div>
+</div>
+{% endif %}
+
 <!-- ===================================================================== -->
 <!-- TILE AGGIUNTIVI: andamento anno su anno, valore medio, produttivita'  -->
 <!-- ===================================================================== -->
@@ -906,6 +937,44 @@ document.addEventListener('DOMContentLoaded', function() {
 @media (prefers-color-scheme: dark) {
   .tile-lista-scroll .riga-lista { border-bottom-color: #3a3f47; }
   .news-beauty-item { border-bottom-color: #3a3f47; }
+}
+
+/* --- Risultati marketing ------------------------------------------------- */
+#tile-marketing-conversioni .mkconv-titolo { cursor: help; }
+#tile-marketing-conversioni .mkconv-titolo:focus { outline: none; }
+/* Sul telefono "7 gg" non deve andare a capo dentro il pulsante */
+#tile-marketing-conversioni .btn-mkconv-finestra { white-space: nowrap; }
+#tile-marketing-conversioni #mkconv-intro { font-size: 0.8rem; }
+#tile-marketing-conversioni .tile-lista-scroll { max-height: 262px; }
+.mkconv-campagna { padding: 6px 4px 9px; border-bottom: 1px solid #e9ecef; }
+.mkconv-campagna:last-child { border-bottom: none; }
+.mkconv-intesta { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.mkconv-nome { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mkconv-stato {
+  flex: 0 0 auto;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #eef0f4;
+  color: #666;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+.mkconv-stato.aperta { background: #fff3d6; color: #96700f; }
+.mkconv-metrica { margin-top: 6px; }
+.mkconv-testa { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 0.86rem; }
+.mkconv-valore { white-space: nowrap; }
+.mkconv-barra { position: relative; height: 6px; margin-top: 3px; border-radius: 3px; background: #f1f3f6; }
+.mkconv-barra .dopo { display: block; height: 100%; min-width: 2px; border-radius: 3px; background: #2f9e44; }
+.mkconv-metrica.secondaria .mkconv-barra .dopo { background: #74a7d8; }
+/* Trattino scuro = dove stava la stessa percentuale PRIMA del messaggio */
+.mkconv-barra .prima { position: absolute; top: -2px; width: 2px; height: 10px; margin-left: -1px; background: #495057; }
+.mkconv-campagna .riga-dettaglio { line-height: 1.35; margin-top: 2px; }
+.mkconv-campagna .riga-dettaglio [data-bs-toggle="tooltip"] { cursor: help; }
+.mkconv-campagna .delta-badge { margin-left: 4px; }
+@media (prefers-color-scheme: dark) {
+  .mkconv-campagna { border-bottom-color: #3a3f47; }
+  .mkconv-barra { background: #2b3038; }
+  .mkconv-barra .prima { background: #ced4da; }
 }
 </style>
 
@@ -5754,10 +5823,29 @@ document.addEventListener('DOMContentLoaded', function() {
         if (selettore) selettore.style.display = d.puo_vedere_test ? '' : 'none';
 
         document.getElementById('andamento-totale').textContent = euro(d.totale_corrente);
-        scriviDelta(document.getElementById('andamento-delta'), d.delta);
-        document.getElementById('andamento-confronto').textContent =
-          d.anno + ' a oggi · stesso periodo ' + d.anno_precedente + ': ' +
-          euro(d.totale_precedente_periodo);
+        document.getElementById('andamento-periodo').textContent =
+          'incassato dal ' + d.periodo_dal + ' al ' + d.periodo_al +
+          (d.includi_test ? ' · fiscali + test' : ' · solo fiscali');
+
+        /* La percentuale e' sempre spiegata: quali date, quanto in ciascun anno. */
+        var c = d.confronto;
+        var nota = document.getElementById('andamento-nota');
+        scriviDelta(document.getElementById('andamento-delta'), c ? c.delta : null);
+        if (c) {
+          document.getElementById('andamento-confronto').textContent =
+            euro(c.corrente) + ' nel ' + d.anno + ' contro ' +
+            euro(c.precedente) + ' nel ' + d.anno_precedente +
+            ', dal ' + c.dal + ' al ' + c.al;
+          nota.textContent = c.ridotto
+            ? 'Il confronto parte dal ' + c.dal + ': i dati di Tosca iniziano il ' + d.dati_dal + '.'
+            : '';
+        } else {
+          document.getElementById('andamento-confronto').textContent =
+            'confronto con il ' + d.anno_precedente + ' non ancora possibile';
+          nota.textContent = 'I dati di Tosca iniziano il ' + d.dati_dal + ': servono le stesse date nell\'anno prima.';
+        }
+        nota.style.display = nota.textContent ? '' : 'none';
+        var parziale = d.mese_parziale;
 
         if (graficoAndamento) graficoAndamento.destroy();
         graficoAndamento = new Chart(canvas.getContext('2d'), {
@@ -5798,7 +5886,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 callbacks: {
                   label: function (ctx) {
                     if (ctx.parsed.y === null) return null;
+                    /* Mese in corso: la barra di quest'anno e' a meta', lo si dice. */
+                    if (parziale && ctx.dataIndex === parziale.indice && ctx.datasetIndex === 1) {
+                      return ctx.dataset.label + ' fino al ' + parziale.giorno + ': ' + euro(ctx.parsed.y);
+                    }
                     return ctx.dataset.label + ': ' + euro(ctx.parsed.y);
+                  },
+                  footer: function (items) {
+                    if (!parziale || !items.length || items[0].dataIndex !== parziale.indice) return '';
+                    return d.anno_precedente + ' fino al ' + parziale.giorno + ': ' + euro(parziale.precedente);
                   }
                 }
               }
@@ -6248,8 +6344,169 @@ document.addEventListener('DOMContentLoaded', function() {
       });
   }
 
+  // ------------------------------------------------- RISULTATI MARKETING
+  function percIt(v) {
+    return (Number(v) || 0).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + '%';
+  }
+
+  /* Tempo fra messaggio e prenotazione (mediana, in giorni). */
+  function testoTempo(giorni, persone) {
+    if (giorni === null || giorni === undefined) return '';
+    var quando = giorni < 1 ? 'entro 24 ore'
+      : 'entro ' + Math.ceil(giorni) + (Math.ceil(giorni) === 1 ? ' giorno' : ' giorni');
+    return persone > 1 ? 'metà ' + quando : quando;
+  }
+
+  /* Una metrica: etichetta, "X su N · %", barra; il trattino scuro sulla
+     barra e' la stessa percentuale prima del messaggio. */
+  function mkMetrica(etichetta, dati, raggiunti, secondaria) {
+    var box = document.createElement('div');
+    box.className = 'mkconv-metrica' + (secondaria ? ' secondaria' : '');
+    var larghezza = Math.min(100, Math.max(0, Number(dati.perc) || 0));
+    var prima = dati.prima ? Math.min(100, Math.max(0, Number(dati.prima_perc) || 0)) : null;
+    box.innerHTML =
+      '<div class="mkconv-testa">' +
+        '<span>' + esc(etichetta) + '</span>' +
+        '<span class="mkconv-valore"><b>' + dati.clienti + '</b> su ' + raggiunti +
+          ' · <b>' + percIt(dati.perc) + '</b></span>' +
+      '</div>' +
+      '<div class="mkconv-barra"><span class="dopo" style="width:' + larghezza + '%"></span>' +
+        (prima !== null ? '<i class="prima" style="left:' + prima + '%"></i>' : '') +
+      '</div>';
+    return box;
+  }
+
+  function mkDettaglio(pezzi) {
+    var riga = document.createElement('div');
+    riga.className = 'riga-dettaglio';
+    pezzi.filter(Boolean).forEach(function (p, i) {
+      if (i) riga.appendChild(document.createTextNode(' · '));
+      var s = document.createElement('span');
+      s.textContent = p.testo;
+      if (p.tip) bsTip(s, p.tip);
+      riga.appendChild(s);
+    });
+    return riga;
+  }
+
+  /* "prima dell'invio" con lo scarto in punti, colorato come gli altri delta. */
+  function mkPrima(dati) {
+    var riga = document.createElement('div');
+    riga.className = 'riga-dettaglio';
+    var s = document.createElement('span');
+    s.textContent = 'prima dell\'invio: ' + dati.prima + ' (' + percIt(dati.prima_perc) + ')';
+    bsTip(s, 'Gli stessi clienti, nello stesso numero di giorni PRIMA del messaggio. La differenza fra dopo e prima è quello che il messaggio ha aggiunto: chi prenota spesso avrebbe prenotato comunque');
+    riga.appendChild(s);
+    var scarto = Math.round(((Number(dati.perc) || 0) - (Number(dati.prima_perc) || 0)) * 10) / 10;
+    var b = document.createElement('span');
+    b.className = 'delta-badge ' + (scarto > 0.05 ? 'su' : (scarto < -0.05 ? 'giu' : 'pari'));
+    b.textContent = (scarto > 0 ? '+' : '') + scarto.toLocaleString('it-IT') + ' punti';
+    riga.appendChild(b);
+    return riga;
+  }
+
+  function mkCampagna(c) {
+    var el = document.createElement('div');
+    el.className = 'mkconv-campagna';
+
+    var testa = document.createElement('div');
+    testa.className = 'mkconv-intesta';
+    var nome = document.createElement('span');
+    nome.className = 'mkconv-nome';
+    nome.textContent = c.nome;
+    testa.appendChild(nome);
+    if (c.aperta_fino || c.chiusa_il) {
+      var stato = document.createElement('span');
+      stato.className = 'mkconv-stato' + (c.aperta_fino ? ' aperta' : '');
+      stato.textContent = c.aperta_fino ? 'conteggio aperto fino al ' + c.aperta_fino
+                                        : 'edizione chiusa il ' + c.chiusa_il;
+      if (c.aperta_fino) bsTip(stato, 'Ai clienti raggiunti per ultimi non sono ancora passati tutti i giorni scelti: i numeri possono ancora crescere');
+      testa.appendChild(stato);
+    }
+    el.appendChild(testa);
+
+    el.appendChild(mkDettaglio([
+      { testo: 'inviata ' + c.periodo },
+      { testo: c.raggiunti + (c.raggiunti === 1 ? ' cliente raggiunto' : ' clienti raggiunti') },
+      c.errori ? { testo: c.errori + (c.errori === 1 ? ' messaggio non partito' : ' messaggi non partiti') + ' su ' + c.tentati,
+                   tip: 'Messaggi che WhatsApp non ha accettato: il cliente non li ha ricevuti e non è contato fra i raggiunti' } : null
+    ]));
+
+    var p = c.promo;
+    if (p) {
+      el.appendChild(mkMetrica('Hanno prenotato la promo', p, c.raggiunti, false));
+      el.appendChild(mkDettaglio([
+        { testo: c.servizi_promo.join(', '),
+          tip: 'I servizi scritti nel messaggio: sono questi a contare come «la promo»' }
+      ]));
+      var esito = p.prenotazioni + (p.prenotazioni === 1 ? ' prenotazione: ' : ' prenotazioni: ') +
+        p.fatte + (p.fatte === 1 ? ' fatta, ' : ' fatte, ') + p.in_agenda + ' in agenda, ' + p.no_show + ' no-show' +
+        (p.annullate ? ', ' + p.annullate + ' annullate' : '');
+      el.appendChild(mkDettaglio([
+        p.prenotazioni ? { testo: esito } : null,
+        p.prenotazioni ? { testo: euro(p.valore),
+          tip: 'Prezzo delle prenotazioni della promo, scontato se la promo ha uno sconto; no-show e annullate esclusi. È il valore in agenda, non l\'incassato' } : null,
+        p.clienti ? { testo: testoTempo(p.giorni_mediana, p.clienti),
+          tip: 'Tempo fra il messaggio e la prenotazione: metà di chi ha prenotato l\'ha fatto entro questo tempo' } : null,
+        p.clienti ? { testo: p.online + ' dal sito' } : null
+      ]));
+      if (p.totale_periodo) {
+        el.appendChild(mkDettaglio([{
+          testo: p.prenotazioni + ' delle ' + p.totale_periodo + ' prenotazioni della promo nel periodo vengono da questi clienti',
+          tip: 'Tutte le prenotazioni dei servizi della promo fatte da chiunque, dal primo messaggio alla fine del conteggio: quante arrivano dai clienti raggiunti'
+        }]));
+      }
+      if (p.prima) el.appendChild(mkPrima(p));
+    } else {
+      el.appendChild(mkDettaglio([{
+        testo: 'Nel messaggio non c\'è il nome di un servizio: si conta qualunque prenotazione'
+      }]));
+    }
+
+    var q = c.qualunque;
+    el.appendChild(mkMetrica('Hanno prenotato qualunque servizio', q, c.raggiunti, !!p));
+    el.appendChild(mkPrima(q));
+    if (!p && q.clienti) {
+      el.appendChild(mkDettaglio([
+        { testo: testoTempo(q.giorni_mediana, q.clienti),
+          tip: 'Tempo fra il messaggio e la prenotazione: metà di chi ha prenotato l\'ha fatto entro questo tempo' },
+        { testo: q.online + ' dal sito' }
+      ]));
+    }
+    return el;
+  }
+
+  function caricaMarketingConversioni(giorni) {
+    var lista = document.getElementById('mkconv-list');
+    if (!lista) return;   // tile non generato (ruolo user)
+    giorni = giorni || giorniAttivi('#tile-marketing-conversioni .btn-mkconv-finestra', 14);
+    document.getElementById('mkconv-intro').textContent =
+      'Prenotazioni fatte entro ' + giorni + ' giorni dal messaggio';
+
+    fetch('/api/report_marketing_conversioni?finestra=' + giorni)
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (d) {
+        ripulisciTooltipIn(lista);
+        lista.innerHTML = '';
+        if (!d.campagne || !d.campagne.length) {
+          lista.innerHTML = '<span class="text-muted">Nessuna campagna WhatsApp inviata negli ultimi 12 mesi. ' +
+            'Le campagne si mandano da Tools › Marketing.</span>';
+          return;
+        }
+        d.campagne.forEach(function (c) { lista.appendChild(mkCampagna(c)); });
+      })
+      .catch(function () {
+        ripulisciTooltipIn(lista);
+        lista.innerHTML = '<span class="text-danger">Errore nel caricamento.</span>';
+      });
+  }
+
   // ---------------------------------------------------------------- avvio
   document.addEventListener('DOMContentLoaded', function () {
+    collegaPeriodo('#tile-marketing-conversioni .btn-mkconv-finestra', caricaMarketingConversioni);
     collegaPeriodo('#tile-scontrino-medio .btn-scontrino-periodo', caricaScontrinoMedio);
     collegaPeriodo('#tile-saturazione-agenda .btn-saturazione-periodo', caricaSaturazioneAgenda);
 
@@ -6269,10 +6526,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Elenchi che scorrono: allo scroll i tooltip vanno chiusi, altrimenti
     // restano sospesi perche' il puntatore non lascia mai la riga.
-    ['no-show-list', 'saturazione-list'].forEach(function (id) {
+    ['no-show-list', 'saturazione-list', 'mkconv-list'].forEach(function (id) {
       chiudiTooltipAlloScroll(document.getElementById(id));
     });
 
+    caricaMarketingConversioni();
     caricaAndamentoAnnuale();
     caricaScontrinoMedio();
     caricaSaturazioneAgenda();

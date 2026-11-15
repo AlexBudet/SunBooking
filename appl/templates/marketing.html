@@ -334,7 +334,8 @@
                                 <div class="small text-muted">JPG o PNG fino a 10 MB: la ridimensioniamo noi</div>
                             </div>
                             <div id="fotoPiena" class="d-none align-items-center gap-3 rounded border p-2">
-                                <img id="fotoThumb" alt="" class="rounded" style="width:72px;height:72px;object-fit:cover;">
+                                <img id="fotoThumb" alt="Foto del messaggio" class="rounded foto-ingrandibile" role="button" tabindex="0" style="width:72px;height:72px;object-fit:cover;"
+                                     data-bs-toggle="tooltip" data-bs-title="Clicca per vederla grande">
                                 <div class="flex-grow-1 small text-truncate" id="fotoNome"></div>
                                 <div class="btn-group btn-group-sm">
                                     <button type="button" class="btn btn-outline-secondary" id="btnFotoCambia">Cambia</button>
@@ -346,17 +347,19 @@
                             </div>
                         </div>
 
-                        <!-- Anteprima messaggio -->
-                        <div class="mb-3">
-                            <label class="form-label" id="previewLabel">Anteprima</label>
-<div id="messagePreview" class="p-3 bg-success bg-opacity-10 rounded border" style="min-height: 100px;"><img id="previewFoto" alt="" class="rounded mb-2" style="display:none;max-width:100%;max-height:260px;"><div id="previewTesto" style="white-space: pre-wrap;"></div></div>
-                        </div>
-
-                        <!-- Pulsanti azioni -->
-                        <div class="d-grid gap-2">
+                        {# Invio PRIMA dell'anteprima (richiesta del 15/11/2026): con la
+                           foto e un testo lungo l'anteprima e' alta, e il pulsante
+                           finiva fuori dallo schermo. #}
+                        <div class="d-grid gap-2 mb-3">
                             <button type="button" class="btn btn-success btn-lg" id="btnSendMarketing" disabled>
                                 <i class="bi bi-whatsapp me-2"></i>Invia a <span id="sendCount">0</span> clienti
                             </button>
+                        </div>
+
+                        <!-- Anteprima messaggio -->
+                        <div class="mb-3">
+                            <label class="form-label" id="previewLabel">Anteprima</label>
+<div id="messagePreview" class="p-3 bg-success bg-opacity-10 rounded border" style="min-height: 100px;"><img id="previewFoto" alt="Foto del messaggio" class="rounded mb-2 foto-ingrandibile" role="button" tabindex="0" style="display:none;max-width:100%;max-height:260px;" data-bs-toggle="tooltip" data-bs-title="Clicca per vederla grande"><div id="previewTesto" style="white-space: pre-wrap;"></div></div>
                         </div>
                     </form>
                 </div>
@@ -428,6 +431,11 @@
     </div>
 </div>
 
+                        {# Salva PRIMA dell'anteprima, come l'Invia delle campagne. #}
+                        <button type="button" class="btn btn-success mb-3" id="btnSaveNewClientMessage">
+                            <i class="bi bi-save me-2"></i>Salva Template Benvenuto
+                        </button>
+
                         <!-- Anteprima -->
                         <div class="mb-3">
                             <label class="form-label">Anteprima messaggio</label>
@@ -438,10 +446,6 @@
                                 in Info Azienda: finché manca, il messaggio di benvenuto non compare in Cassa.
                             </div>
                         </div>
-
-                        <button type="button" class="btn btn-success" id="btnSaveNewClientMessage">
-                            <i class="bi bi-save me-2"></i>Salva Template Benvenuto
-                        </button>
                     </form>
                 </div>
             </div>
@@ -589,6 +593,28 @@
   </div>
 </div>
 
+{# Foto del messaggio a grandezza piena (clic sulla miniatura o sull'anteprima).
+   Si apre adattata alla finestra; il clic sull'immagine passa alla grandezza
+   reale (si scorre dentro la finestra) e un altro clic torna ad adattarla. #}
+<div class="modal fade" id="modalFotoGrande" tabindex="-1" aria-labelledby="modalFotoGrandeTitolo" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="modalFotoGrandeTitolo"><i class="bi bi-image me-2"></i>Foto del messaggio <small class="text-muted fw-normal ms-1" id="fotoGrandeMisure"></small></h6>
+        <div class="d-flex align-items-center gap-2 ms-auto">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="btnFotoGrandeZoom">
+            <i class="bi bi-zoom-in me-1"></i><span>Grandezza reale</span>
+          </button>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+        </div>
+      </div>
+      <div class="modal-body p-2" id="fotoGrandeCorpo">
+        <img id="fotoGrandeImg" alt="Foto del messaggio a grandezza piena">
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- CSS aggiuntivo -->
 <style>
 /* Override locale: nei card-header i titoli devono restare bianchi e senza ombra */
@@ -653,6 +679,34 @@
     background-color: #e7f1ff;
     border-color: #0d6efd !important;
     outline: none;
+}
+.foto-ingrandibile {
+    cursor: zoom-in;
+}
+/* Finestra della foto grande. styles.css fissa .modal-dialog a 700px e mette
+   overflow:visible !important a ogni .modal-body: qui serve quasi tutta la
+   finestra e lo scorrimento dentro il corpo quando la foto e' a grandezza reale. */
+#modalFotoGrande .modal-dialog {
+    max-width: min(1400px, calc(100vw - 24px)) !important;
+    width: auto;
+}
+#modalFotoGrande .modal-body {
+    max-height: calc(100vh - 110px);
+    overflow: auto !important;
+    text-align: center;
+    background: #f1f3f5;
+}
+#fotoGrandeImg {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    max-height: calc(100vh - 130px);
+    cursor: zoom-in;
+}
+#fotoGrandeCorpo.reale #fotoGrandeImg {
+    max-width: none;
+    max-height: none;
+    cursor: zoom-out;
 }
 .tooltip code {
     color: #ffacdf !important;
@@ -1072,6 +1126,59 @@ Ti aspettiamo 💆‍♀️`
             e.preventDefault();
             el.classList.remove('trascina');
             caricaFileFoto(e.dataTransfer.files && e.dataTransfer.files[0]);
+        });
+    });
+
+    // Foto a grandezza piena: clic (o Invio) sulla miniatura o sull'anteprima.
+    const modalFoto = document.getElementById('modalFotoGrande');
+    const fotoGrandeCorpo = document.getElementById('fotoGrandeCorpo');
+    const fotoGrandeImg = document.getElementById('fotoGrandeImg');
+    const btnFotoZoom = document.getElementById('btnFotoGrandeZoom');
+
+    function impostaZoomFoto(reale) {
+        fotoGrandeCorpo.classList.toggle('reale', reale);
+        btnFotoZoom.querySelector('i').className = reale ? 'bi bi-arrows-angle-contract me-1' : 'bi bi-zoom-in me-1';
+        btnFotoZoom.querySelector('span').textContent = reale ? 'Adatta alla finestra' : 'Grandezza reale';
+    }
+
+    // Se la foto ci sta gia' tutta a grandezza reale, ingrandire non cambia
+    // niente: il pulsante e il cursore a lente spariscono.
+    function aggiornaZoomDisponibile() {
+        if (!fotoGrandeImg.naturalWidth || fotoGrandeCorpo.classList.contains('reale')) return;
+        const ridotta = fotoGrandeImg.naturalWidth > fotoGrandeImg.clientWidth + 1
+            || fotoGrandeImg.naturalHeight > fotoGrandeImg.clientHeight + 1;
+        btnFotoZoom.style.display = ridotta ? '' : 'none';
+        fotoGrandeImg.style.cursor = ridotta ? '' : 'default';
+    }
+
+    function apriFotoGrande(el) {
+        if (!foto || !window.bootstrap) return;
+        nascondiTooltip(el);
+        impostaZoomFoto(false);
+        const misure = document.getElementById('fotoGrandeMisure');
+        misure.textContent = '';
+        fotoGrandeImg.onload = () => {
+            misure.textContent = `${fotoGrandeImg.naturalWidth} × ${fotoGrandeImg.naturalHeight} px`;
+            aggiornaZoomDisponibile();
+        };
+        if (fotoGrandeImg.getAttribute('src') !== foto.url) fotoGrandeImg.src = foto.url;
+        else fotoGrandeImg.onload();
+        bootstrap.Modal.getOrCreateInstance(modalFoto).show();
+    }
+
+    function cambiaZoomFoto() {
+        if (btnFotoZoom.style.display === 'none') return;
+        impostaZoomFoto(!fotoGrandeCorpo.classList.contains('reale'));
+    }
+
+    modalFoto.addEventListener('shown.bs.modal', aggiornaZoomDisponibile);
+    fotoGrandeImg.addEventListener('click', cambiaZoomFoto);
+    btnFotoZoom.addEventListener('click', cambiaZoomFoto);
+    ['fotoThumb', 'previewFoto'].forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener('click', () => apriFotoGrande(el));
+        el.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apriFotoGrande(el); }
         });
     });
 

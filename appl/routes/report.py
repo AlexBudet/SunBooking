@@ -3,16 +3,20 @@ from flask import Blueprint, current_app, request, jsonify, render_template, sen
 from sqlalchemy.orm import joinedload
 import requests
 from sqlalchemy import func, cast, Date, DateTime, text
-from appl.models import Appointment, AppointmentStatus, Operator, OperatorShift, Client, AppointmentSource, BusinessInfo, Receipt, Service, ServiceCategory, Subcategory, User
+from appl.models import Appointment, AppointmentStatus, Operator, OperatorShift, Client, AppointmentSource, BusinessInfo, Receipt, Service, ServiceCategory, Subcategory, User, MarketingInvio, MarketingTemplate
 from appl import db
 from appl.formati import nome_proprio, data_it
 from appl.services import no_show as no_show_mod
+from appl.services import promo as promo_mod
 import pandas as pd
+import math
 import os
 import re
+import statistics
+import unicodedata
 from pytz import timezone as pytz_timezone
 import random
-from datetime import date, datetime, timedelta, time
+from datetime import date, datetime, timedelta, time, timezone as dt_timezone
 from itertools import groupby
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -2015,6 +2019,17 @@ def _filtri_visita():
 
 MESI_BREVI = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu',
               'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
+# Le date a video si scrivono "06 NOV 2025" (formati.data_it)
+MESI_IT = ('GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU',
+           'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC')
+
+
+def _stesso_giorno_anno(giorno, anno):
+    """La stessa data in un altro anno; il 29 febbraio diventa il 28."""
+    try:
+        return giorno.replace(year=anno)
+    except ValueError:
+        return giorno.replace(year=anno, day=28)
 
 
 @report_bp.route('/api/report_andamento_annuale')
@@ -2102,10 +2117,72 @@ def report_andamento_annuale():
         elif i >= ultimo_mese:
             corrente[i] = None
 
+    # Mesi prima del primo scontrino: non c'erano dati, non "zero incasso".
+    # Restano vuoti anche nel suggerimento del grafico (prima diceva "€ 0,00").
+    dati_dal = primo.date()
+    for i in range(12):
+        if (anno_prec, i + 1) < (dati_dal.year, dati_dal.month):
+            precedente[i] = None
+        if (anno, i + 1) < (dati_dal.year, dati_dal.month):
+            corrente[i] = None
+
     tot_corrente = sum(v for v in corrente if v)
-    tot_precedente = sum(precedente)
-    # Confronto onesto: l'anno precedente limitato agli stessi mesi.
-    tot_precedente_periodo = sum(precedente[:ultimo_mese])
+    tot_precedente = sum(v for v in precedente if v)
+    tot_precedente_periodo = sum(v for v in precedente[:ultimo_mese] if v)
+
+    # --- Confronto: stesse date nei due anni ------------------------------
+    # Prima la percentuale metteva l'anno in corso fino a oggi contro i MESI
+    # INTERI dell'anno prima (1-15 novembre contro tutto novembre) e contava
+    # anche i mesi in cui Tosca non aveva ancora dati: con lo storico partito
+    # a settembre 2025, gennaio-novembre 2026 finiva contro settembre-novembre
+    # 2025 e il tile segnava +258% su due negozi che, a parita' di date,
+    # stavano calando del 15-19% (misurato il 15/11/2026).
+    # Ora: stesso giorno di fine nei due anni, e l'inizio e' il primo mese che
+    # l'anno prima ha dati dal giorno 1.
+    ultimo_giorno = oggi if anno == oggi.year else date(anno, 12, 31)
+    ultimo_giorno_prec = _stesso_giorno_anno(ultimo_giorno, anno_prec)
+    inizio_prec = date(anno_prec, 1, 1)
+    if dati_dal > inizio_prec:
+        inizio_prec = date(dati_dal.year, dati_dal.month, 1)
+        if dati_dal.day > 1:
+            inizio_prec = (inizio_prec + timedelta(days=32)).replace(day=1)
+
+    def _incasso(dal, al_incluso):
+        q = db.session.query(func.coalesce(func.sum(Receipt.total_amount), 0)).filter(
+            Receipt.created_at >= datetime.combine(dal, time.min),
+            Receipt.created_at < datetime.combine(al_incluso + timedelta(days=1), time.min),
+        )
+        if not includi_test:
+            q = q.filter(Receipt.is_fiscale.is_(True))
+        return round(float(q.scalar() or 0), 2)
+
+    def _giorno_mese(d):
+        return f"{d.day:02d} {MESI_IT[d.month - 1]}"
+
+    confronto = None
+    if inizio_prec <= ultimo_giorno_prec and inizio_prec.year == anno_prec:
+        inizio_corr = _stesso_giorno_anno(inizio_prec, anno)
+        inc_corr = _incasso(inizio_corr, ultimo_giorno)
+        inc_prec = _incasso(inizio_prec, ultimo_giorno_prec)
+        confronto = {
+            'dal': _giorno_mese(inizio_corr),
+            'al': _giorno_mese(ultimo_giorno),
+            'corrente': inc_corr,
+            'precedente': inc_prec,
+            'delta': _variazione_perc(inc_corr, inc_prec),
+            # True quando il confronto non parte dal 1 gennaio: lo si dice a video
+            'ridotto': inizio_prec != date(anno_prec, 1, 1),
+        }
+
+    # Mese in corso: il suggerimento del grafico mostra anche l'anno prima
+    # fino allo stesso giorno, perche' la barra di quest'anno e' a meta'.
+    mese_parziale = None
+    if anno == oggi.year and precedente[oggi.month - 1] is not None:
+        mese_parziale = {
+            'indice': oggi.month - 1,
+            'giorno': oggi.day,
+            'precedente': _incasso(date(anno_prec, oggi.month, 1), ultimo_giorno_prec),
+        }
 
     return jsonify({
         'storico_sufficiente': True,
@@ -2119,7 +2196,13 @@ def report_andamento_annuale():
         'totale_corrente': round(tot_corrente, 2),
         'totale_precedente': round(tot_precedente, 2),
         'totale_precedente_periodo': round(tot_precedente_periodo, 2),
-        'delta': _variazione_perc(tot_corrente, tot_precedente_periodo),
+        # Il totale grande: dal 1 gennaio (o dal primo scontrino) a oggi.
+        'periodo_dal': data_it(max(date(anno, 1, 1), dati_dal)),
+        'periodo_al': data_it(ultimo_giorno),
+        'dati_dal': data_it(dati_dal),
+        'confronto': confronto,
+        'delta': confronto['delta'] if confronto else None,
+        'mese_parziale': mese_parziale,
         'includi_test': includi_test,
         'puo_vedere_test': not e_user,
     })
@@ -2591,6 +2674,343 @@ def report_no_show_classifica():
         # Prenotazioni annullate dal link nel periodo (data dell'annullamento)
         'annullate': _annullamenti_online(dal, al, regole['ore_tardivo']),
     })
+
+
+# =============================================================================
+# RISULTATI MARKETING: chi ha prenotato dopo una promo WhatsApp
+# =============================================================================
+# Una "campagna" e' un'edizione di una promo: stessa chiave di marketing_invii
+# (tpl:<id>, preset:<nome>, NULL per il testo libero) e stesso azzerato_il
+# ("Azzera storico" chiude l'edizione e la successiva riparte da capo).
+#
+# Regole (15/11/2026):
+# - "ha prenotato" = un appuntamento CREATO dopo il messaggio, entro N giorni
+#   (7/14/30), non annullato dal cliente; i blocchi OFF non contano;
+# - "la promo" = i servizi scritti nel messaggio (_mk_servizi_citati): il
+#   template non ha un elenco di servizi, il testo si';
+# - "prima dell'invio" = gli stessi clienti, nello stesso numero di giorni
+#   PRIMA del messaggio. Senza questo confronto il tasso non dice niente: chi
+#   prenota spesso prenota comunque (misurato: Respiro di Foglia a suncity, 25
+#   prenotazioni nei 14 gg dopo e 22 nei 14 gg prima, sugli stessi 53 clienti);
+# - le prenotazioni online non ancora associate stanno sulla scheda segnaposto:
+#   si riconoscono dal cellulare scritto nella nota.
+
+# Etichette dei messaggi predefiniti: copia di PRESET_ETICHETTE in marketing.html.
+_MK_PREDEFINITI = {
+    'riattivazione': 'Riattivazione cliente inattivo',
+    'promo': 'Promozione speciale',
+    'fidelity': 'Programma fedeltà',
+    'novita': 'Novità servizi',
+    'stagionale': 'Promo stagionale',
+}
+_MK_FINESTRE = (7, 14, 30)
+# Un servizio e' "della promo" se e' scritto in almeno l'80% dei messaggi
+# partiti: le variabili {{servizio_preferito}} e {{ultimo_servizio}} mettono un
+# servizio diverso a ogni cliente e non devono passare per la promo.
+_MK_SOGLIA_CITATO = 0.8
+_MK_MAX_CAMPAGNE = 12
+
+
+def _mk_norm(testo):
+    """Minuscolo, senza accenti, solo lettere e cifre separate da uno spazio:
+    "*CERVI-COCCOLE* 💗" e "Cervi-coccole" diventano entrambi "cervi coccole"."""
+    t = unicodedata.normalize('NFKD', str(testo or '').lower())
+    t = ''.join(ch for ch in t if not unicodedata.combining(ch))
+    return ' '.join(re.sub(r'[^a-z0-9]+', ' ', t).split())
+
+
+def _mk_etichette(nome):
+    """Come un servizio puo' comparire nel messaggio: col nome intero oppure con
+    la parte prima di " - ", ": " o " (" (il servizio "RESPIRO DI FOGLIA -
+    Pressoterapia e rituale autunnale" nel messaggio e' "RESPIRO DI FOGLIA").
+    Sotto i 5 caratteri niente: una parola corta comparirebbe per caso."""
+    nome = str(nome or '')
+    pezzi = [nome] + [nome.split(sep)[0] for sep in (' - ', ' – ', ': ', ' (') if sep in nome]
+    return {n for n in (_mk_norm(p) for p in pezzi) if len(n) >= 5}
+
+
+def _mk_servizi_citati(testi, servizi):
+    """Gli id dei servizi scritti nei messaggi. testi: i messaggi DAVVERO
+    partiti (il testo si puo' ritoccare prima dell'invio e il template dopo);
+    servizi: [(id, nome)]."""
+    testi = [' ' + _mk_norm(t) + ' ' for t in testi if t]
+    if not testi:
+        return set()
+    soglia = max(1, math.ceil(len(testi) * _MK_SOGLIA_CITATO))
+    trovati = set()
+    for sid, nome in servizi:
+        etichette = _mk_etichette(nome)
+        if etichette and sum(1 for t in testi
+                             if any(' ' + e + ' ' in t for e in etichette)) >= soglia:
+            trovati.add(sid)
+    return trovati
+
+
+def _mk_utc(dt):
+    """Istante UTC senza fuso. data_invio nasce da now() del database (UTC) e si
+    salva senza fuso; appuntamenti.created_at ha il fuso: tolto, si confrontano."""
+    if dt is not None and getattr(dt, 'tzinfo', None) is not None:
+        return dt.astimezone(dt_timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def _mk_giorno_roma(dt_utc):
+    """Il giorno italiano di un istante UTC senza fuso."""
+    return dt_utc.replace(tzinfo=dt_timezone.utc).astimezone(pytz_timezone('Europe/Rome')).date()
+
+
+def _mk_periodo(dal, al):
+    if dal == al:
+        return f"il {data_it(dal)}"
+    if dal.year == al.year:
+        return f"dal {dal.day:02d} {MESI_IT[dal.month - 1]} al {data_it(al)}"
+    return f"dal {data_it(dal)} al {data_it(al)}"
+
+
+def _mk_perc(parte, totale):
+    return round(parte * 100.0 / totale, 1) if totale else None
+
+
+@report_bp.route('/api/report_marketing_conversioni')
+def report_marketing_conversioni():
+    """Per ogni campagna WhatsApp degli ultimi 12 mesi: clienti raggiunti, quanti
+    hanno prenotato la promo (e qualunque servizio) entro N giorni dal
+    messaggio, contro gli stessi clienti nei N giorni prima. Solo admin/owner,
+    come la pagina dei risultati delle persone."""
+    user = db.session.get(User, session.get('user_id'))
+    if not user or getattr(user.ruolo, 'value', None) not in ('admin', 'owner'):
+        return jsonify({'error': 'Non autorizzato'}), 403
+    try:
+        finestra = int(request.args.get('finestra', 14))
+    except (TypeError, ValueError):
+        finestra = 14
+    if finestra not in _MK_FINESTRE:
+        finestra = 14
+    durata_max = timedelta(days=finestra)
+    adesso = datetime.now(dt_timezone.utc).replace(tzinfo=None)                # come data_invio
+    adesso_roma = datetime.now(pytz_timezone('Europe/Rome')).replace(tzinfo=None)  # come start_time
+
+    # --- Edizioni ---------------------------------------------------------
+    edizioni = {}
+    for r in db.session.query(MarketingInvio.campagna, MarketingInvio.azzerato_il,
+                              MarketingInvio.client_id, MarketingInvio.data_invio,
+                              MarketingInvio.stato).all():
+        if r.stato not in ('inviato', 'errore') or r.data_invio is None:
+            continue    # 'pending': non e' ancora partito niente
+        e = edizioni.setdefault((r.campagna, r.azzerato_il), {
+            'tentati': 0, 'errori': 0, 'clienti': {}, 'primo': None, 'ultimo': None})
+        e['tentati'] += 1
+        if r.stato == 'errore':
+            e['errori'] += 1
+            continue
+        t0 = r.data_invio
+        if r.client_id not in e['clienti'] or t0 < e['clienti'][r.client_id]:
+            e['clienti'][r.client_id] = t0     # il primo messaggio ricevuto
+        e['primo'] = t0 if e['primo'] is None else min(e['primo'], t0)
+        e['ultimo'] = t0 if e['ultimo'] is None else max(e['ultimo'], t0)
+
+    limite = adesso - timedelta(days=365)
+    scelte = sorted(((k, e) for k, e in edizioni.items() if e['ultimo'] and e['ultimo'] >= limite),
+                    key=lambda ke: ke[1]['ultimo'], reverse=True)[:_MK_MAX_CAMPAGNE]
+    if not scelte:
+        return jsonify({'finestra': finestra, 'campagne': []})
+
+    # --- Servizi e template -----------------------------------------------
+    servizi = {s.id: s for s in db.session.query(
+        Service.id, Service.servizio_nome, Service.servizio_prezzo,
+        Service.is_promo, Service.promo_regole,
+    ).filter(func.lower(Service.servizio_nome) != 'dummy').all()}
+    servizi_nomi = [(s.id, s.servizio_nome) for s in servizi.values()]
+    template = {t.id: t for t in db.session.query(
+        MarketingTemplate.id, MarketingTemplate.nome, MarketingTemplate.testo).all()}
+
+    # --- Prenotazioni dei clienti raggiunti --------------------------------
+    raggiunti = set()
+    for _, e in scelte:
+        raggiunti.update(e['clienti'])
+    t_min = min(e['primo'] for _, e in scelte) - durata_max
+    t_max = max(e['ultimo'] for _, e in scelte) + durata_max
+    colonne = (Appointment.id, Appointment.client_id, Appointment.service_id,
+               Appointment.created_at, Appointment.start_time, Appointment._duration,
+               Appointment.source, Appointment.stato, Appointment.is_cancelled_by_client)
+
+    def _voce(a):
+        inizio = a.start_time
+        if inizio is not None and getattr(inizio, 'tzinfo', None) is not None:
+            inizio = inizio.replace(tzinfo=None)    # ora italiana registrata come +00
+        return {
+            'id': a.id, 'service_id': a.service_id, 'creato': _mk_utc(a.created_at),
+            'inizio': inizio, 'durata': a._duration or 0,
+            'web': a.source == AppointmentSource.web,
+            'no_show': a.stato == AppointmentStatus.NON_ARRIVATO,
+            'annullato': bool(a.is_cancelled_by_client),
+        }
+
+    per_cliente = defaultdict(list)
+    for a in (db.session.query(*colonne)
+              .join(Service, Service.id == Appointment.service_id)
+              .filter(Appointment.client_id.in_(sorted(raggiunti)),
+                      Appointment.created_at > t_min,
+                      Appointment.created_at <= t_max,
+                      func.lower(Service.servizio_nome) != 'dummy')
+              .all()):
+        if a.created_at is not None and a.start_time is not None:
+            per_cliente[a.client_id].append(_voce(a))
+
+    # Online non ancora associate: scheda segnaposto, cellulare nella nota.
+    per_cellulare = defaultdict(set)
+    for cid, cel in db.session.query(Client.id, Client.cliente_cellulare).filter(
+            Client.id.in_(sorted(raggiunti))).all():
+        n = no_show_mod.normalizza_cellulare(cel)
+        if n:
+            per_cellulare[n].add(cid)
+    if per_cellulare:
+        for a in (db.session.query(*colonne, Appointment.note,
+                                   Client.cliente_nome, Client.cliente_cognome)
+                  .join(Client, Client.id == Appointment.client_id)
+                  .join(Service, Service.id == Appointment.service_id)
+                  .filter(func.lower(func.trim(Client.cliente_nome)).in_(['booking', 'cliente']),
+                          Appointment.created_at > t_min,
+                          Appointment.created_at <= t_max,
+                          func.lower(Service.servizio_nome) != 'dummy')
+                  .all()):
+            if not no_show_mod.scheda_segnaposto(a.cliente_nome, a.cliente_cognome):
+                continue
+            if a.created_at is None or a.start_time is None:
+                continue
+            tel = no_show_mod.recapiti_dalla_nota(a.note)[0]
+            for cid in per_cellulare.get(tel, ()):
+                per_cliente[cid].append(_voce(a))
+
+    # --- Una campagna alla volta -------------------------------------------
+    campagne = []
+    for (campagna, azzerato_il), e in scelte:
+        if campagna and campagna.startswith('tpl:'):
+            tpl = template.get(int(campagna[4:])) if campagna[4:].isdigit() else None
+            nome, tipo = (tpl.nome if tpl else 'Template eliminato'), 'template'
+        elif campagna and campagna.startswith('preset:'):
+            tpl = None
+            nome, tipo = _MK_PREDEFINITI.get(campagna[7:], campagna[7:]), 'predefinito'
+        else:
+            tpl = None
+            nome, tipo = 'Messaggi senza template', 'libero'
+
+        q = db.session.query(MarketingInvio.messaggio).filter(
+            MarketingInvio.stato == 'inviato', MarketingInvio.messaggio.isnot(None),
+            (MarketingInvio.campagna == campagna) if campagna is not None else MarketingInvio.campagna.is_(None),
+            (MarketingInvio.azzerato_il == azzerato_il) if azzerato_il is not None else MarketingInvio.azzerato_il.is_(None),
+        )
+        testi = [m for (m,) in q.order_by(MarketingInvio.id).limit(60).all()]
+        if not testi and tpl is not None:
+            testi = [tpl.testo]
+        promo_ids = _mk_servizi_citati(testi, servizi_nomi)
+
+        n = len(e['clienti'])
+        conv_promo, conv_tutto = {}, {}       # cliente -> prima prenotazione dopo il messaggio
+        prima_promo, prima_tutto = set(), set()
+        visite_promo = {}                     # (cliente, giorno) -> prenotazioni promo
+        annullate = set()
+        for cid, t0 in e['clienti'].items():
+            fine = min(t0 + durata_max, adesso)
+            # Prima dell'invio si guarda lo stesso numero di giorni gia' passati
+            # dopo: a conteggio aperto i due periodi restano lunghi uguali.
+            inizio_prima = t0 - (fine - t0)
+            for a in per_cliente.get(cid, ()):
+                c = a['creato']
+                promo = a['service_id'] in promo_ids
+                if t0 < c <= fine:
+                    if a['annullato']:
+                        if promo:
+                            annullate.add((cid, a['inizio'].date()))
+                        continue
+                    if cid not in conv_tutto or c < conv_tutto[cid]['creato']:
+                        conv_tutto[cid] = a
+                    if promo:
+                        if cid not in conv_promo or c < conv_promo[cid]['creato']:
+                            conv_promo[cid] = a
+                        visite_promo.setdefault((cid, a['inizio'].date()), []).append(a)
+                elif inizio_prima < c <= t0 and not a['annullato']:
+                    prima_tutto.add(cid)
+                    if promo:
+                        prima_promo.add(cid)
+
+        def _riassunto(conv):
+            giorni = [(a['creato'] - e['clienti'][cid]).total_seconds() / 86400 for cid, a in conv.items()]
+            return {
+                'online': sum(1 for a in conv.values() if a['web']),
+                'giorni_mediana': round(statistics.median(giorni), 1) if giorni else None,
+            }
+
+        tutto = {'clienti': len(conv_tutto), 'perc': _mk_perc(len(conv_tutto), n),
+                 'prima': len(prima_tutto), 'prima_perc': _mk_perc(len(prima_tutto), n)}
+        tutto.update(_riassunto(conv_tutto))
+
+        promo_out = None
+        if promo_ids:
+            fatte = in_agenda = no_show = 0
+            valore = 0.0
+            for voci in visite_promo.values():
+                if all(a['no_show'] for a in voci):
+                    no_show += 1
+                    continue
+                if min(a['inizio'] for a in voci) >= adesso_roma:
+                    in_agenda += 1
+                else:
+                    fatte += 1
+                for a in voci:
+                    if a['no_show']:
+                        continue
+                    s = servizi.get(a['service_id'])
+                    p = promo_mod.prezzo_scontato_servizio(s, a['inizio'], a['durata']) if s else None
+                    valore += p if p is not None else float((s.servizio_prezzo if s else 0) or 0)
+
+            # Tutte le prenotazioni della promo nel periodo, di chiunque: quante
+            # vengono dai clienti raggiunti dal messaggio.
+            fine_periodo = min(e['ultimo'] + durata_max, adesso)
+            tutte = set()
+            for a in (db.session.query(Appointment.id, Appointment.client_id, Appointment.start_time,
+                                       Appointment.booking_session_id,
+                                       Client.cliente_nome, Client.cliente_cognome)
+                      .join(Client, Client.id == Appointment.client_id)
+                      .filter(Appointment.service_id.in_(promo_ids),
+                              Appointment.created_at > e['primo'],
+                              Appointment.created_at <= fine_periodo,
+                              Appointment.is_cancelled_by_client.isnot(True))
+                      .all()):
+                if a.start_time is None:
+                    continue
+                if no_show_mod.scheda_segnaposto(a.cliente_nome, a.cliente_cognome):
+                    tutte.add(('sessione', a.booking_session_id or a.id, a.start_time.date()))
+                else:
+                    tutte.add(('cliente', a.client_id, a.start_time.date()))
+
+            promo_out = {
+                'clienti': len(conv_promo), 'perc': _mk_perc(len(conv_promo), n),
+                'prima': len(prima_promo), 'prima_perc': _mk_perc(len(prima_promo), n),
+                'fatte': fatte, 'in_agenda': in_agenda, 'no_show': no_show,
+                'annullate': len(annullate - set(visite_promo)),
+                'valore': round(valore, 2),
+                'prenotazioni': len(visite_promo),
+                'totale_periodo': max(len(tutte), len(visite_promo)),
+            }
+            promo_out.update(_riassunto(conv_promo))
+
+        chiusura = e['ultimo'] + durata_max
+        campagne.append({
+            'nome': nome,
+            'tipo': tipo,
+            'chiusa_il': data_it(_mk_giorno_roma(azzerato_il)) if azzerato_il else None,
+            'periodo': _mk_periodo(_mk_giorno_roma(e['primo']), _mk_giorno_roma(e['ultimo'])),
+            'tentati': e['tentati'],
+            'errori': e['errori'],
+            'raggiunti': n,
+            'servizi_promo': sorted((servizi[i].servizio_nome for i in promo_ids), key=str.lower),
+            'promo': promo_out,
+            'qualunque': tutto,
+            'aperta_fino': data_it(_mk_giorno_roma(chiusura)) if chiusura > adesso else None,
+        })
+
+    return jsonify({'finestra': finestra, 'campagne': campagne})
 
 
 @report_bp.route('/api/apri_link_esterno', methods=['POST'])

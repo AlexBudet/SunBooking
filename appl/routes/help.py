@@ -1289,6 +1289,10 @@ Flusso corretto:
 5️⃣ verifica l'anteprima
 6️⃣ invia
 
+Il pulsante <span class="help-strong-dark">"Invia a N clienti"</span> sta <span class="help-strong-dark">sopra l'anteprima</span>, subito sotto la foto: con una foto e un testo lunghi l'anteprima è alta, e così il pulsante resta a portata. Se hai aggiunto una foto, un clic sulla miniatura o sulla foto dell'anteprima la apre <span class="help-strong-dark">grande</span>; un altro clic sulla foto (o "Grandezza reale") la mostra alla sua misura vera, e la scorri dentro la finestra.
+
+Come sono andate le campagne (chi ha prenotato dopo il messaggio) lo trovi in Report: <span class="help-strong-dark">[[REPORT: RISULTATI MARKETING|report_marketing_conversioni]]</span>.
+
 <span class="help-strong-dark help-subtitle-pill">▸ COSA SUCCEDE DOPO "INVIA"</span>
 I messaggi <span class="help-strong-dark">non partono tutti insieme</span>: vengono messi in coda e spediti uno ogni 12-20 secondi, perché una raffica di invii ravvicinati porta WhatsApp a sospendere il numero del negozio.
 
@@ -2151,8 +2155,15 @@ Così il confronto si legge a colpo d'occhio: dove l'azzurro <span class="help-s
 
 I mesi non ancora arrivati restano vuoti: una barra a zero farebbe sembrare un crollo dove semplicemente il mese non c'è ancora.
 
-<span class="help-strong-dark help-subtitle-pill">▸ IL NUMERO E IL BADGE IN ALTO</span>
-Il numero grande è il totale dell'anno in corso <span class="help-strong-dark">fino a oggi</span>. Il badge colorato lo confronta con l'anno precedente <span class="help-strong-dark">limitato agli stessi mesi</span>, non con l'anno intero: a marzo si confrontano tre mesi con tre mesi, altrimenti risulteresti sempre in perdita fino a dicembre.
+<span class="help-strong-dark help-subtitle-pill">▸ IL NUMERO GRANDE</span>
+È l'incassato dell'anno in corso <span class="help-strong-dark">dal 1 gennaio a oggi</span>: la riga sotto dice le date e se conta solo i fiscali o anche i test.
+
+<span class="help-strong-dark help-subtitle-pill">▸ LA PERCENTUALE</span>
+La percentuale confronta <span class="help-strong-dark">le stesse date nei due anni</span>: al 15 novembre, dal 1 gennaio al 15 novembre di quest'anno contro dal 1 gennaio al 15 novembre dell'anno scorso. La riga accanto scrive i due importi e le date usate, così si vede da dove viene il numero.
+
+Se l'anno scorso Tosca non aveva ancora dati per tutto il periodo, il confronto parte dal <span class="help-strong-dark">primo mese di cui ci sono i dati dal giorno 1</span>, e una riga più piccola lo dice (per esempio "Il confronto parte dal 01 SET"). Prima di questa regola si confrontava tutto l'anno in corso con i soli mesi registrati dell'anno prima, e uscivano aumenti del 250% che non c'erano.
+
+Nel grafico, il mese in corso è a metà: passando il mouse sulla sua barra vedi anche l'anno scorso <span class="help-strong-dark">fino allo stesso giorno</span>. I mesi dell'anno scorso senza dati non hanno la barra grigia.
 
 <span class="help-strong-dark help-subtitle-pill">▸ FISCALI O FISCALI + TEST</span>
 Se sei <span class="help-strong-dark">admin o owner</span> trovi in alto il selettore fra <span class="help-strong-dark">Fiscali</span> e <span class="help-strong-dark">Fiscali + test</span>: serve quando vuoi vedere il volume di lavoro reale, prove comprese, invece del solo incassato ufficiale.
@@ -2161,6 +2172,34 @@ Il ruolo <span class="help-strong-dark">user</span> non vede il selettore e rice
 
 <span class="help-strong-dark help-subtitle-pill">▸ SE IL PANNELLO NON C'È</span>
 Il grafico compare solo quando c'è <span class="help-strong-dark">più di 6 mesi di storico</span> di scontrini. Sotto quella soglia il confronto anno su anno metterebbe mesi pieni contro mesi vuoti, dando un quadro falso: perciò il pannello non viene proprio caricato, e ricompare da solo quando lo storico è abbastanza lungo.""",
+    },
+
+    "report_marketing_conversioni": {
+        "title": "📣 Report: Risultati marketing",
+        "content": """Il pannello <span class="help-strong-dark">RISULTATI MARKETING</span> dice, per ogni campagna WhatsApp degli ultimi 12 mesi, <span class="help-strong-dark">quanti clienti raggiunti hanno prenotato</span> nei giorni dopo il messaggio. Lo vedono solo admin e owner.
+
+<span class="help-strong-dark help-subtitle-pill">▸ 7, 14 O 30 GIORNI</span>
+I pulsanti in alto scelgono quanti giorni dopo il messaggio si contano le prenotazioni. Conta il giorno in cui il cliente <span class="help-strong-dark">ha prenotato</span>, non quello dell'appuntamento. Finché ai clienti raggiunti per ultimi non sono passati tutti i giorni scelti, la campagna ha l'etichetta gialla <span class="help-strong-dark">"conteggio aperto fino al…"</span>: i numeri possono ancora crescere.
+
+<span class="help-strong-dark help-subtitle-pill">▸ HANNO PRENOTATO LA PROMO</span>
+«La promo» sono i <span class="help-strong-dark">servizi scritti nel messaggio</span>, e sotto la barra trovi quali sono. Per essere riconosciuto il servizio deve comparire col suo nome, o con la parte prima del trattino (il servizio "RESPIRO DI FOGLIA - Pressoterapia" basta scriverlo "RESPIRO DI FOGLIA"). Se il messaggio non nomina nessun servizio, si conta qualunque prenotazione.
+
+Il numero è "4 su 118": clienti che hanno prenotato la promo su clienti raggiunti, con la percentuale (il <span class="help-strong-dark">tasso di conversione</span>). Sotto:
+• le prenotazioni: quante già fatte, quante in agenda, quanti no-show e annullamenti
+• il loro valore al prezzo della promo (non è l'incassato)
+• quanto ci hanno messo: "metà entro 2 giorni" vuol dire che metà di chi ha prenotato l'ha fatto entro 2 giorni dal messaggio
+• quante sono arrivate dal sito
+• quante, di tutte le prenotazioni della promo nello stesso periodo, vengono dai clienti raggiunti
+
+<span class="help-strong-dark help-subtitle-pill">▸ PRIMA DELL'INVIO</span>
+Sotto "Hanno prenotato qualunque servizio" c'è lo stesso conto fatto sugli stessi clienti nello stesso numero di giorni <span class="help-strong-dark">prima</span> del messaggio, e la differenza in punti. Serve perché chi viene spesso prenota comunque: se dopo il messaggio la percentuale non sale, la campagna non ha portato prenotazioni in più, anche se il numero sembra alto. Sulla barra il trattino scuro segna dove stava la percentuale prima.
+
+<span class="help-strong-dark help-subtitle-pill">▸ COSA NON CONTA</span>
+• le prenotazioni <span class="help-strong-dark">annullate dal cliente</span>
+• i messaggi non partiti: sono scritti a parte ("4 messaggi non partiti su 122") e quei clienti non sono fra i raggiunti
+• le campagne mandate col testo scritto a mano senza scegliere un template finiscono tutte insieme in "Messaggi senza template"
+
+Se usi <span class="help-strong-dark">Azzera storico</span> e rimandi la stessa promo, le due edizioni compaiono separate.""",
     },
 
     "report_scontrino_medio": {
@@ -3275,6 +3314,7 @@ def get_topics_by_category():
             "report_pulsanti_operativi",
             "report_andamento_annuale",
             "report_no_show",
+            "report_marketing_conversioni",
             "report_heatmap",
             "report_scontrino_medio",
             "report_saturazione_agenda",
