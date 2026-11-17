@@ -428,7 +428,7 @@ class BusinessInfo(db.Model):
     google_review_link = db.Column(db.String(500), nullable=True)
     new_client_delay_send = db.Column(db.Boolean, default=False)
     new_client_delay_hours = db.Column(db.Integer, default=2)
-    marketing_max_daily_sends = db.Column(db.Integer, default=30)
+    marketing_max_daily_sends = db.Column(db.Integer, default=50)
 
     # Unipile WhatsApp Account ID (salvato dopo connessione)
     unipile_account_id = db.Column(db.String(100), nullable=True)
@@ -835,6 +835,68 @@ class MarketingInvio(db.Model):
 
     # Relazioni
     client = db.relationship('Client', backref='marketing_invii')
+
+
+def _adesso_utc_naive():
+    """UTC senza fuso, come marketing_invii.data_invio. Lato Python e non now()
+    del database: now() e' l'inizio della TRANSAZIONE, e queste colonne servono
+    a misurare distanze (vedi UsageEvent.created_at)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+class MarketingPiano(db.Model):
+    """Un invio di marketing pianificato su piu' giorni (17/11/2026).
+
+    Si scelgono anche centinaia di clienti in una volta; ogni giorno, all'ora
+    `ora_invio`, ne partono al massimo `per_giorno` (e mai oltre il limite
+    giornaliero del negozio), finche' non li ha raggiunti tutti. A mandare e'
+    SOLO il processo cloud (services/marketing_piani.py): l'exe del negozio e
+    un avvio fatto a mano non spediscono mai niente da qui.
+
+    Testo e foto sono una COPIA presa alla creazione: cambiare il template dopo
+    non cambia un piano gia' partito.
+    Tabella nuova: migrations/manual_marketing_piani.sql
+    """
+    __tablename__ = 'marketing_piani'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    nome = db.Column(db.String(120), nullable=False)
+    # stessa chiave di marketing_invii.campagna ('tpl:<id>' o 'preset:<nome>')
+    campagna = db.Column(db.String(60), nullable=False, index=True)
+    testo = db.Column(db.Text, nullable=False)
+    immagine = db.deferred(db.Column(db.LargeBinary, nullable=True))
+    immagine_mime = db.Column(db.String(50), nullable=True)
+    per_giorno = db.Column(db.Integer, nullable=False)
+    ora_invio = db.Column(db.Time, nullable=False)
+    # attivo, in_pausa, annullato, completato
+    stato = db.Column(db.String(20), nullable=False, default='attivo', index=True)
+    creato_il = db.Column(db.DateTime, nullable=False, default=_adesso_utc_naive)   # UTC
+    creato_da = db.Column(db.String(100), nullable=True)
+    chiuso_il = db.Column(db.DateTime, nullable=True)                                # UTC
+
+
+class MarketingPianoDestinatario(db.Model):
+    """Un cliente di un piano di invio, con il suo stato.
+
+    da_inviare -> in_coda (preso nel giro di oggi) -> in_invio (la chiamata a
+    WhatsApp sta partendo) -> inviato | errore. Poi: saltato (al momento
+    dell'invio non era piu' raggiungibile, o aveva gia' ricevuto la promo),
+    annullato (piano annullato), non_confermato (il server si e' riavviato
+    proprio durante la chiamata: non si sa se e' arrivato e NON si rimanda).
+    Tutti gli orari in UTC senza fuso.
+    """
+    __tablename__ = 'marketing_piano_destinatari'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    piano_id = db.Column(db.Integer, db.ForeignKey('marketing_piani.id', ondelete='CASCADE'),
+                         nullable=False, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('clienti.id'), nullable=False, index=True)
+    ordine = db.Column(db.Integer, nullable=False)
+    stato = db.Column(db.String(20), nullable=False, default='da_inviare')
+    motivo = db.Column(db.String(300), nullable=True)
+    tentativi = db.Column(db.Integer, nullable=False, default=0)
+    in_coda_il = db.Column(db.DateTime, nullable=True)
+    ultimo_tentativo_il = db.Column(db.DateTime, nullable=True)
+    inviato_il = db.Column(db.DateTime, nullable=True)
+
 
 class AIAssistantSession(db.Model):
     """

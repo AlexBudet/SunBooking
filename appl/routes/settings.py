@@ -4311,6 +4311,10 @@ A presto! 💆‍♀️"""
 _MARKETING_CAMPAGNA_RE = re.compile(r'^(tpl:\d{1,9}|preset:[a-z_]{1,40})$')
 # Quanti clienti "gia' raggiunti" mostrare in grigio sotto i risultati.
 MARKETING_MAX_GIA_INVIATI = 100
+# Quanti clienti selezionabili restituisce una ricerca. Era 30, quanti se ne
+# potevano mandare in un giorno; dal 17/11/2026 oltre il limite di oggi si
+# pianifica l'invio su piu' giorni (services/marketing_piani.py), fino a 500.
+MARKETING_MAX_RISULTATI = 500
 
 
 # Ricerca di un cliente senza badare a maiuscole e accenti. `translate` di
@@ -4361,6 +4365,13 @@ def _marketing_storico(campagna, chiave):
     for cid in marketing_queue.in_coda_campagna(chiave, campagna):
         voce = storico.setdefault(cid, {'ultimo': None, 'volte': 0, 'in_coda': True})
         voce['in_coda'] = True
+    # In un piano di invio ancora aperto: il messaggio partira' nei prossimi
+    # giorni, e nel frattempo il cliente non si deve poter scegliere di nuovo.
+    from ..services import marketing_piani
+    for cid, piano_id in marketing_piani.pianificati_campagna(campagna).items():
+        voce = storico.setdefault(cid, {'ultimo': None, 'volte': 0, 'in_coda': False})
+        if not voce['volte']:
+            voce['piano'] = piano_id
     return storico
 
 
@@ -4376,7 +4387,123 @@ def _marketing_storico_json(voce):
         'ultimo': _marketing_iso_utc(voce['ultimo']),
         'volte': voce['volte'],
         'in_coda': voce['in_coda'],
+        'piano': voce.get('piano'),
     }
+
+
+def _marketing_dati_clienti(clients):
+    """Per ogni cliente i dati che servono alla pagina e alle variabili del
+    messaggio ({{giorni_assenza}}, {{ultimo_servizio}}...). Query a gruppi,
+    una per tipo di dato. Usata dalla ricerca e dal giro giornaliero dei piani,
+    che calcola i dati il giorno dell'invio e non quello della scelta."""
+    if not clients:
+        return []
+    now = datetime.now()
+    client_ids = [c.id for c in clients]
+
+    last_appt_dict = dict(db.session.query(
+        Appointment.client_id, func.max(Appointment.start_time)
+    ).filter(
+        Appointment.client_id.in_(client_ids),
+        Appointment.is_cancelled_by_client == False,
+        Appointment.stato != AppointmentStatus.NON_ARRIVATO
+    ).group_by(Appointment.client_id).all())
+
+    visits_dict = dict(db.session.query(
+        Appointment.client_id, func.count(Appointment.id)
+    ).filter(
+        Appointment.client_id.in_(client_ids),
+        Appointment.is_cancelled_by_client == False,
+        Appointment.stato != AppointmentStatus.NON_ARRIVATO
+    ).group_by(Appointment.client_id).all())
+
+    spent_dict = {cid: float(tot or 0) for cid, tot in db.session.query(
+        Receipt.cliente_id, func.sum(Receipt.total_amount)
+    ).filter(Receipt.cliente_id.in_(client_ids)).group_by(Receipt.cliente_id).all()}
+
+    # Ultimo servizio fatto e servizio preferito (il piu' frequente, a parita'
+    # il piu' recente). Solo appuntamenti gia' avvenuti: una prenotazione di
+    # domani non e' "l'ultimo servizio" del cliente.
+    filtri_servizi = (
+        Appointment.client_id.in_(client_ids),
+        Appointment.is_cancelled_by_client == False,
+        Appointment.stato != AppointmentStatus.NON_ARRIVATO,
+        Appointment.start_time <= now,
+        Service.servizio_nome != 'dummy',
+    )
+    ultimi_q = db.session.query(
+        Appointment.client_id.label('cid'),
+        Service.servizio_nome.label('nome'),
+        func.row_number().over(
+            partition_by=Appointment.client_id,
+            order_by=Appointment.start_time.desc()).label('rn')
+    ).join(Service, Service.id == Appointment.service_id).filter(*filtri_servizi).subquery()
+    ultimo_servizio_dict = {
+        r.cid: r.nome for r in
+        db.session.query(ultimi_q.c.cid, ultimi_q.c.nome).filter(ultimi_q.c.rn == 1)}
+
+    conteggi_q = db.session.query(
+        Appointment.client_id.label('cid'),
+        Service.servizio_nome.label('nome'),
+        func.count(Appointment.id).label('n'),
+        func.max(Appointment.start_time).label('recente')
+    ).join(Service, Service.id == Appointment.service_id).filter(
+        *filtri_servizi).group_by(Appointment.client_id, Service.servizio_nome).subquery()
+    preferiti_q = db.session.query(
+        conteggi_q.c.cid, conteggi_q.c.nome,
+        func.row_number().over(
+            partition_by=conteggi_q.c.cid,
+            order_by=(conteggi_q.c.n.desc(), conteggi_q.c.recente.desc())).label('rn')
+    ).subquery()
+    preferito_dict = {
+        r.cid: r.nome for r in
+        db.session.query(preferiti_q.c.cid, preferiti_q.c.nome).filter(preferiti_q.c.rn == 1)}
+
+    dati = []
+    for client in clients:
+        last_time = last_appt_dict.get(client.id)
+        giorni_assenza = None
+        if last_time:
+            if last_time.tzinfo is not None:
+                last_time = last_time.replace(tzinfo=None)
+            # Confronto tra sole date (non ore trascorse): un appuntamento di ieri sera
+            # deve risultare "1 giorno fa" anche se sono passate poche ore.
+            giorni_assenza = (now.date() - last_time.date()).days
+        dati.append({
+            'id': client.id,
+            'nome': client.cliente_nome,
+            'cognome': client.cliente_cognome,
+            'cellulare': client.cliente_cellulare,
+            'email': client.cliente_email,
+            'giorni_assenza': giorni_assenza,
+            'totale_visite': visits_dict.get(client.id, 0),
+            'totale_speso': round(spent_dict.get(client.id, 0), 2),
+            'ultimo_servizio': ultimo_servizio_dict.get(client.id, ''),
+            'servizio_preferito': preferito_dict.get(client.id, ''),
+        })
+    return dati
+
+
+def _marketing_componi(template, client_data, centro_nome):
+    """Il testo del messaggio per un cliente: le variabili sostituite. Unica
+    regola per l'invio di oggi e per quello dei piani."""
+    messaggio = template
+    for segnaposto, valore in (
+            ('{{nome}}', nome_proprio(client_data.get('nome', '') or '')),
+            # Il cognome NON esce su WhatsApp (vedi calendar.py, send-whatsapp-auto):
+            # il segnaposto non e' piu' offerto dalla pagina, e se resta scritto a
+            # mano in un vecchio template sparisce invece di stampare il cognome.
+            ('{{cognome}}', ''),
+            # `or 0` come nell'anteprima: un cliente mai venuto ha
+            # giorni_assenza null, e str(None) finiva nel messaggio.
+            ('{{giorni_assenza}}', str(client_data.get('giorni_assenza') or 0)),
+            ('{{ultimo_servizio}}', client_data.get('ultimo_servizio', '') or ''),
+            ('{{totale_visite}}', str(client_data.get('totale_visite', '0'))),
+            ('{{totale_speso}}', str(client_data.get('totale_speso', '0'))),
+            ('{{servizio_preferito}}', client_data.get('servizio_preferito', '') or ''),
+            ('{{centro}}', centro_nome)):
+        messaggio = messaggio.replace(segnaposto, valore or '')
+    return messaggio
 
 
 @settings_bp.route('/marketing', methods=['GET'])
@@ -4423,7 +4550,6 @@ def marketing_search_clients():
         )
         
         today = datetime.now().date()
-        now = datetime.now()
         
         # Ricerca di una persona per nome, cognome o cellulare (invio singolo).
         # Sotto i 2 caratteri non conta come filtro: una lettera sola
@@ -4622,8 +4748,9 @@ def marketing_search_clients():
             gia_altri = max(0, gia_totale - len(gia_clients))
             query = query.filter(~Client.id.in_(ids_storico))
 
-        # LIMITE 30 risultati per velocità, in ordine stabile (per id)
-        clients = query.distinct().order_by(Client.id).limit(30).all()
+        # Fino a MARKETING_MAX_RISULTATI, in ordine stabile (per id). Oltre il
+        # limite di oggi la pagina propone di pianificare l'invio su piu' giorni.
+        clients = query.distinct().order_by(Client.id).limit(MARKETING_MAX_RISULTATI).all()
         nuovi_totale = len(clients)
 
         if not clients and not gia_clients:
@@ -4633,106 +4760,14 @@ def marketing_search_clients():
         gia_clients.sort(key=lambda c: (storico[c.id]['ultimo'] or datetime.max), reverse=True)
         clients = clients + gia_clients
 
-        # Ottimizzazione: query batch per tutti i clienti
-        client_ids = [c.id for c in clients]
-        
-        # Batch: ultimo appuntamento per cliente
-        last_appts = db.session.query(
-            Appointment.client_id,
-            func.max(Appointment.start_time).label('last_time')
-        ).filter(
-            Appointment.client_id.in_(client_ids),
-            Appointment.is_cancelled_by_client == False,
-            Appointment.stato != AppointmentStatus.NON_ARRIVATO
-        ).group_by(Appointment.client_id).all()
-        last_appt_dict = {r.client_id: r.last_time for r in last_appts}
-        
-        # Batch: totale visite per cliente
-        visit_counts = db.session.query(
-            Appointment.client_id,
-            func.count(Appointment.id).label('cnt')
-        ).filter(
-            Appointment.client_id.in_(client_ids),
-            Appointment.is_cancelled_by_client == False,
-            Appointment.stato != AppointmentStatus.NON_ARRIVATO
-        ).group_by(Appointment.client_id).all()
-        visits_dict = {r.client_id: r.cnt for r in visit_counts}
-        
-        # Batch: totale speso per cliente
-        spent_totals = db.session.query(
-            Receipt.cliente_id,
-            func.sum(Receipt.total_amount).label('total')
-        ).filter(Receipt.cliente_id.in_(client_ids)).group_by(Receipt.cliente_id).all()
-        spent_dict = {r.cliente_id: float(r.total or 0) for r in spent_totals}
-
-        # Batch: ultimo servizio fatto e servizio preferito (il piu' frequente,
-        # a parita' il piu' recente). Solo appuntamenti gia' avvenuti: una
-        # prenotazione di domani non e' "l'ultimo servizio" del cliente.
-        filtri_servizi = (
-            Appointment.client_id.in_(client_ids),
-            Appointment.is_cancelled_by_client == False,
-            Appointment.stato != AppointmentStatus.NON_ARRIVATO,
-            Appointment.start_time <= now,
-            Service.servizio_nome != 'dummy',
-        )
-        ultimi_q = db.session.query(
-            Appointment.client_id.label('cid'),
-            Service.servizio_nome.label('nome'),
-            func.row_number().over(
-                partition_by=Appointment.client_id,
-                order_by=Appointment.start_time.desc()).label('rn')
-        ).join(Service, Service.id == Appointment.service_id).filter(*filtri_servizi).subquery()
-        ultimo_servizio_dict = {
-            r.cid: r.nome for r in
-            db.session.query(ultimi_q.c.cid, ultimi_q.c.nome).filter(ultimi_q.c.rn == 1)}
-
-        conteggi_q = db.session.query(
-            Appointment.client_id.label('cid'),
-            Service.servizio_nome.label('nome'),
-            func.count(Appointment.id).label('n'),
-            func.max(Appointment.start_time).label('recente')
-        ).join(Service, Service.id == Appointment.service_id).filter(
-            *filtri_servizi).group_by(Appointment.client_id, Service.servizio_nome).subquery()
-        preferiti_q = db.session.query(
-            conteggi_q.c.cid, conteggi_q.c.nome,
-            func.row_number().over(
-                partition_by=conteggi_q.c.cid,
-                order_by=(conteggi_q.c.n.desc(), conteggi_q.c.recente.desc())).label('rn')
-        ).subquery()
-        preferito_dict = {
-            r.cid: r.nome for r in
-            db.session.query(preferiti_q.c.cid, preferiti_q.c.nome).filter(preferiti_q.c.rn == 1)}
-
-        # Costruisci risposta
-        clients_data = []
-        for client in clients:
-            last_time = last_appt_dict.get(client.id)
-            giorni_assenza = None
-            if last_time:
-                if last_time.tzinfo is not None:
-                    last_time = last_time.replace(tzinfo=None)
-                # Confronto tra sole date (non ore trascorse): un appuntamento di ieri sera
-                # deve risultare "1 giorno fa" anche se sono passate poche ore.
-                giorni_assenza = (now.date() - last_time.date()).days
-            
-            dati_cliente = {
-                'id': client.id,
-                'nome': client.cliente_nome,
-                'cognome': client.cliente_cognome,
-                'cellulare': client.cliente_cellulare,
-                'email': client.cliente_email,
-                'giorni_assenza': giorni_assenza,
-                'totale_visite': visits_dict.get(client.id, 0),
-                'totale_speso': round(spent_dict.get(client.id, 0), 2),
-                'ultimo_servizio': ultimo_servizio_dict.get(client.id, ''),
-                'servizio_preferito': preferito_dict.get(client.id, ''),
-            }
-            if client.id in storico:
-                dati_cliente['gia_inviato'] = _marketing_storico_json(storico[client.id])
-            clients_data.append(dati_cliente)
+        clients_data = _marketing_dati_clienti(clients)
+        for dati_cliente in clients_data:
+            if dati_cliente['id'] in storico:
+                dati_cliente['gia_inviato'] = _marketing_storico_json(storico[dati_cliente['id']])
 
         return jsonify({'success': True, 'clients': clients_data,
-                        'limited': nuovi_totale == 30,
+                        'limited': nuovi_totale == MARKETING_MAX_RISULTATI,
+                        'max_risultati': MARKETING_MAX_RISULTATI,
                         'gia_inviati_altri': gia_altri})
         
     except Exception as e:
@@ -5053,6 +5088,11 @@ def marketing_template_immagine(template_id):
 def marketing_delete_template(template_id):
     """Elimina un template"""
     template = MarketingTemplate.query.get_or_404(template_id)
+    from ..services import marketing_piani
+    if marketing_piani.piani_aperti_campagna(f'tpl:{template.id}'):
+        return jsonify({'success': False,
+                        'error': "C'è un invio pianificato in corso con questo template: "
+                                 'annullalo o aspetta che finisca, poi eliminalo.'}), 409
     # La promo finisce con lui: si chiude la sua edizione (le righe restano,
     # contano per il limite giornaliero) cosi' un id riusato in futuro non
     # erediterebbe un elenco di "gia' inviati" che non gli appartiene.
@@ -5082,7 +5122,6 @@ def marketing_send_whatsapp():
     `marketing_invii` nascera' solo quando parte davvero.
     """
     import json
-    from datetime import date
     from ..services import marketing_queue, marketing_images, usage_monitor
 
     # Con la foto la richiesta e' multipart: i dati viaggiano nel campo
@@ -5157,18 +5196,17 @@ def marketing_send_whatsapp():
 
     chiave = usage_monitor.chiave_tenant()
 
-    oggi = date.today()
-    invii_oggi = MarketingInvio.query.filter(
-        func.date(MarketingInvio.data_invio) == oggi,
-        MarketingInvio.stato == 'inviato'
-    ).count()
-    max_giornalieri = business_info.marketing_max_daily_sends or 30
-    disponibili = max_giornalieri - invii_oggi - marketing_queue.in_coda(chiave)
+    from ..services import marketing_piani
+    max_giornalieri = marketing_piani.limite_giornaliero(business_info)
+    # Conta anche i messaggi dei piani di invio gia' presi per oggi, che
+    # partono dal processo cloud e qui non si vedrebbero.
+    disponibili = marketing_piani.posti_liberi_oggi(chiave, business_info)
 
     if disponibili <= 0:
         return jsonify({
             'success': False,
-            'error': f'Limite giornaliero raggiunto ({max_giornalieri} invii). Riprova domani.'
+            'error': f'Limite giornaliero raggiunto ({max_giornalieri} invii). '
+                     f'Riprova domani, oppure pianifica l\'invio sui prossimi giorni.'
         }), 400
 
     centro_nome = business_info.business_name or 'Centro'
@@ -5207,22 +5245,7 @@ def marketing_send_whatsapp():
             scartati.append(f"{etichetta}: numero non valido")
             continue
 
-        messaggio = template
-        for segnaposto, valore in (
-                ('{{nome}}', nome_proprio(client_data.get('nome', ''))),
-                # Il cognome NON esce su WhatsApp (vedi calendar.py, send-whatsapp-auto):
-                # il segnaposto non e' piu' offerto dalla pagina, e se resta scritto a
-                # mano in un vecchio template sparisce invece di stampare il cognome.
-                ('{{cognome}}', ''),
-                # `or 0` come nell'anteprima: un cliente mai venuto ha
-                # giorni_assenza null, e str(None) finiva nel messaggio.
-                ('{{giorni_assenza}}', str(client_data.get('giorni_assenza') or 0)),
-                ('{{ultimo_servizio}}', client_data.get('ultimo_servizio', '')),
-                ('{{totale_visite}}', str(client_data.get('totale_visite', '0'))),
-                ('{{totale_speso}}', str(client_data.get('totale_speso', '0'))),
-                ('{{servizio_preferito}}', client_data.get('servizio_preferito', '')),
-                ('{{centro}}', centro_nome)):
-            messaggio = messaggio.replace(segnaposto, valore or '')
+        messaggio = _marketing_componi(template, client_data, centro_nome)
 
         messaggi.append({
             'client_id': client_data.get('id'),
@@ -5283,6 +5306,186 @@ def marketing_stato_coda():
     return jsonify(marketing_queue.stato(usage_monitor.chiave_tenant()))
 
 
+# ================= PIANI DI INVIO (piu' giorni) ====================
+# Regole e giro giornaliero in services/marketing_piani.py.
+
+def _marketing_nome_promo(campagna):
+    if campagna.startswith('tpl:'):
+        t = db.session.get(MarketingTemplate, int(campagna[4:]))
+        return t.nome if t else None
+    from .report import _MK_PREDEFINITI
+    return _MK_PREDEFINITI.get(campagna[7:], campagna[7:])
+
+
+@settings_bp.route('/api/marketing/piani', methods=['POST'])
+def marketing_crea_piano():
+    """Pianifica l'invio di una promo a molti clienti, N al giorno.
+
+    Stessi dati dell'invio immediato (JSON, o multipart con la foto e i dati
+    nel campo `dati`), piu' `per_giorno` e `ora_invio` ("HH:MM"). Serve un
+    template scelto: senza, la promo non ha uno storico e lo stesso cliente
+    potrebbe finire in due piani.
+    """
+    import json
+    from ..services import marketing_piani, marketing_images, usage_monitor
+
+    if request.is_json:
+        data = request.get_json(silent=True)
+    else:
+        try:
+            data = json.loads(request.form.get('dati') or 'null')
+        except ValueError:
+            data = None
+    if not data:
+        return jsonify({'success': False, 'error': 'Dati mancanti'}), 400
+
+    if not marketing_piani.tabelle_pronte():
+        return jsonify({'success': False,
+                        'error': 'La pianificazione non è ancora attiva su questo negozio '
+                                 '(manca l\'aggiornamento del database). Contatta l\'assistenza.'}), 503
+
+    campagna = _marketing_campagna(data.get('campagna'))
+    if not campagna:
+        return jsonify({'success': False,
+                        'error': 'Per pianificare un invio su più giorni scegli o salva un template: '
+                                 'serve a sapere a chi è già arrivata la promo.'}), 400
+    testo = (data.get('template') or '').strip()
+    if not testo:
+        return jsonify({'success': False, 'error': 'Messaggio vuoto'}), 400
+    nome_promo = _marketing_nome_promo(campagna)
+    if not nome_promo:
+        return jsonify({'success': False, 'error': 'Il template non esiste più: ricarica la pagina'}), 400
+
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    if not business_info:
+        return jsonify({'success': False, 'error': 'BusinessInfo non configurato'}), 400
+    if not (business_info.unipile_account_id or '').strip():
+        return jsonify({'success': False, 'error': 'WhatsApp non connesso. Vai in Impostazioni > WhatsApp per collegare.'}), 400
+
+    limite = marketing_piani.limite_giornaliero(business_info)
+    try:
+        per_giorno = int(data.get('per_giorno') or limite)
+    except (TypeError, ValueError):
+        per_giorno = limite
+    if per_giorno < 1 or per_giorno > limite:
+        return jsonify({'success': False,
+                        'error': f'Messaggi al giorno: da 1 a {limite} (il limite giornaliero del negozio)'}), 400
+    try:
+        ora_invio = datetime.strptime(str(data.get('ora_invio') or '10:00'), '%H:%M').time()
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Ora di invio non valida'}), 400
+    if not (marketing_piani.ORA_MIN <= ora_invio <= marketing_piani.ORA_MAX):
+        return jsonify({'success': False, 'error': 'Ora di invio: fra le 08:00 e le 19:00'}), 400
+
+    # La foto: caricata adesso o quella del template. Il piano ne tiene una
+    # copia sua: cambiare il template dopo non cambia un piano gia' partito.
+    immagine = None
+    file = request.files.get('immagine')
+    try:
+        if file and file.filename:
+            immagine = marketing_images.elabora(file)
+        elif data.get('immagine_template_id'):
+            tpl = db.session.get(MarketingTemplate, int(data.get('immagine_template_id')))
+            if not tpl or not tpl.immagine_mime:
+                return jsonify({'success': False, 'error': 'La foto del template non esiste più: ricarica la pagina'}), 400
+            immagine = bytes(tpl.immagine)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+    ids, visti = [], set()
+    for v in (data.get('clients') or []):
+        try:
+            cid = int(v.get('id') if isinstance(v, dict) else v)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if cid not in visti:
+            visti.add(cid)
+            ids.append(cid)
+    if not ids:
+        return jsonify({'success': False, 'error': 'Nessun cliente selezionato'}), 400
+    if len(ids) > marketing_piani.MAX_DESTINATARI:
+        return jsonify({'success': False,
+                        'error': f'Al massimo {marketing_piani.MAX_DESTINATARI} clienti per piano'}), 400
+
+    # Fuori chi ha gia' ricevuto la promo, chi e' in coda o in un altro piano
+    # aperto della stessa promo, e chi non ha un cellulare utilizzabile.
+    storico = _marketing_storico(campagna, usage_monitor.chiave_tenant())
+    clienti = {c.id: c for c in Client.query.filter(Client.id.in_(ids), Client.is_deleted == False).all()}
+    scelti, gia, numeri = [], 0, 0
+    for cid in ids:
+        c = clienti.get(cid)
+        if c is None:
+            continue
+        if cid in storico:
+            gia += 1
+            continue
+        if not _normalize_phone_for_whatsapp(c.cliente_cellulare):
+            numeri += 1
+            continue
+        scelti.append(cid)
+    if not scelti:
+        return jsonify({'success': False,
+                        'error': 'Nessuno dei clienti scelti si può includere: hanno già ricevuto la promo, '
+                                 'sono già in un piano o non hanno un cellulare valido.'}), 400
+
+    user = db.session.get(User, session.get('user_id')) if session.get('user_id') else None
+    piano = marketing_piani.crea_piano(
+        nome=nome_promo, campagna=campagna, testo=testo,
+        immagine=immagine, immagine_mime=marketing_images.MIME if immagine else None,
+        per_giorno=per_giorno, ora_invio=ora_invio, client_ids=scelti,
+        creato_da=getattr(user, 'username', None))
+
+    primo, ultimo = marketing_piani.prossimo_giro(
+        piano, business_info, len(scelti), 0,
+        marketing_piani.posti_liberi_oggi(usage_monitor.chiave_tenant(), business_info))
+    from ..formati import data_it
+    return jsonify({
+        'success': True,
+        'piano_id': piano.id,
+        'inclusi': len(scelti),
+        'gia_ricevuto': gia,
+        'numeri_non_validi': numeri,
+        'per_giorno': per_giorno,
+        'ora_invio': ora_invio.strftime('%H:%M'),
+        'primo_giorno': data_it(primo) if primo else None,
+        'primo_oggi': bool(primo and primo == marketing_piani.adesso_roma().date()),
+        'ultimo_giorno': data_it(ultimo) if ultimo else None,
+    })
+
+
+@settings_bp.route('/api/marketing/piani', methods=['GET'])
+def marketing_elenco_piani():
+    from ..services import marketing_piani
+    business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
+    piani = marketing_piani.riepilogo_piani(business_info)
+    return jsonify({'success': True, 'pronti': piani is not None, 'piani': piani or []})
+
+
+@settings_bp.route('/api/marketing/piani/<int:piano_id>/<azione>', methods=['POST'])
+def marketing_comando_piano(piano_id, azione):
+    """pausa | riprendi | annulla. Funziona da qualunque PC: il processo che
+    manda ricontrolla lo stato sul database prima di ogni messaggio."""
+    from ..services import marketing_piani
+    if not marketing_piani.tabelle_pronte():
+        return jsonify({'success': False, 'error': 'Pianificazione non attiva'}), 503
+    ok, errore = marketing_piani.cambia_stato(piano_id, azione)
+    if not ok:
+        return jsonify({'success': False, 'error': errore}), 400
+    return jsonify({'success': True})
+
+
+@settings_bp.route('/api/marketing/piani/<int:piano_id>/problemi', methods=['GET'])
+def marketing_problemi_piano(piano_id):
+    """Chi del piano non ha ricevuto il messaggio, e perche'."""
+    from ..services import marketing_piani
+    if not marketing_piani.tabelle_pronte():
+        return jsonify({'success': False, 'error': 'Pianificazione non attiva'}), 503
+    righe = marketing_piani.dettaglio_problemi(piano_id)
+    for r in righe:
+        r['nome'] = nome_proprio(r['nome'])
+    return jsonify({'success': True, 'righe': righe})
+
+
 @settings_bp.route('/api/marketing/storico-promo', methods=['POST'])
 def marketing_storico_promo():
     """A chi e' gia' stata inviata una promo (edizione in corso).
@@ -5317,10 +5520,13 @@ def marketing_storico_promo():
         MarketingInvio.azzerato_il.isnot(None),
     ).scalar() or 0
 
+    pianificati = sum(1 for v in storico.values()
+                      if v.get('piano') and not v['volte'] and not v['in_coda'])
     return jsonify({
         'success': True,
         'campagna': campagna,
-        'totale': len(storico),
+        'totale': len(storico) - pianificati,
+        'pianificati': pianificati,
         'in_coda': sum(1 for v in storico.values() if v['in_coda']),
         'ultimo_invio': _marketing_iso_utc(max(ultimi)) if ultimi else None,
         'archiviati': archiviati,
@@ -5345,6 +5551,13 @@ def marketing_azzera_storico_promo():
         return jsonify({'success': False, 'error': 'Promo non valida'}), 400
 
     chiave = usage_monitor.chiave_tenant()
+    # Un piano di invio aperto con questa promo: dopo l'azzeramento i suoi
+    # messaggi aprirebbero l'edizione nuova con clienti a cui era gia' arrivata.
+    from ..services import marketing_piani
+    if marketing_piani.piani_aperti_campagna(campagna):
+        return jsonify({'success': False,
+                        'error': "C'è un invio pianificato in corso con questa promo: "
+                                 'annullalo o aspetta che finisca, poi azzera lo storico.'}), 409
     # Con messaggi ancora in coda si aspetta: partirebbero DOPO l'azzeramento
     # e ricomincerebbero lo storico da dove non deve.
     if marketing_queue.in_coda_campagna(chiave, campagna):
@@ -5398,7 +5611,8 @@ def marketing_daily_stats():
     from datetime import date
     
     business_info = BusinessInfo.query.filter_by(is_deleted=False).first()
-    max_giornalieri = business_info.marketing_max_daily_sends if business_info else 30
+    from ..services import marketing_piani, usage_monitor
+    max_giornalieri = marketing_piani.limite_giornaliero(business_info)
     
     oggi = date.today()
     invii_oggi = MarketingInvio.query.filter(
@@ -5415,7 +5629,10 @@ def marketing_daily_stats():
         'inviati_oggi': invii_oggi,
         'errori_oggi': errori_oggi,
         'limite': max_giornalieri,
-        'disponibili': max(0, max_giornalieri - invii_oggi)
+        # come all'invio: tolti anche i messaggi gia' in coda o presi dai piani
+        'disponibili': max(0, marketing_piani.posti_liberi_oggi(
+            usage_monitor.chiave_tenant(), business_info)),
+        'piani_pronti': marketing_piani.tabelle_pronte(),
     })
 
 # ===================== AUTO-UPDATE ROUTES =====================

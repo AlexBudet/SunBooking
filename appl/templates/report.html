@@ -945,7 +945,7 @@ document.addEventListener('DOMContentLoaded', function() {
 /* Sul telefono "7 gg" non deve andare a capo dentro il pulsante */
 #tile-marketing-conversioni .btn-mkconv-finestra { white-space: nowrap; }
 #tile-marketing-conversioni #mkconv-intro { font-size: 0.8rem; }
-#tile-marketing-conversioni .tile-lista-scroll { max-height: 262px; }
+#tile-marketing-conversioni .tile-lista-scroll { max-height: 330px; }
 .mkconv-campagna { padding: 6px 4px 9px; border-bottom: 1px solid #e9ecef; }
 .mkconv-campagna:last-child { border-bottom: none; }
 .mkconv-intesta { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
@@ -960,21 +960,34 @@ document.addEventListener('DOMContentLoaded', function() {
   white-space: nowrap;
 }
 .mkconv-stato.aperta { background: #fff3d6; color: #96700f; }
-.mkconv-metrica { margin-top: 6px; }
-.mkconv-testa { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 0.86rem; }
-.mkconv-valore { white-space: nowrap; }
-.mkconv-barra { position: relative; height: 6px; margin-top: 3px; border-radius: 3px; background: #f1f3f6; }
-.mkconv-barra .dopo { display: block; height: 100%; min-width: 2px; border-radius: 3px; background: #2f9e44; }
-.mkconv-metrica.secondaria .mkconv-barra .dopo { background: #74a7d8; }
-/* Trattino scuro = dove stava la stessa percentuale PRIMA del messaggio */
-.mkconv-barra .prima { position: absolute; top: -2px; width: 2px; height: 10px; margin-left: -1px; background: #495057; }
+/* Tre riquadri affiancati: dopo, prima, effetto (17/11/2026) */
+.mkconv-kpi { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 7px 0 5px; }
+.mkconv-box { padding: 5px 8px 6px; border-radius: 8px; background: #f4f6f9; min-width: 0; }
+.mkconv-box.principale { background: #e9f6ee; }
+.mkconv-box.effetto.su   { background: #e3f5e8; color: #1e7d3a; }
+.mkconv-box.effetto.giu  { background: #fdeaea; color: #b02a2a; }
+.mkconv-box.effetto.pari { background: #eef0f4; color: #666; }
+.mkconv-box-etichetta { font-size: 0.7rem; line-height: 1.2; text-transform: uppercase; letter-spacing: .02em; opacity: .75; cursor: help; }
+.mkconv-box-valore { font-size: 1.25rem; font-weight: 700; line-height: 1.25; white-space: nowrap; }
+.mkconv-box-valore small { font-size: 0.78rem; font-weight: 600; margin-left: 4px; opacity: .8; }
 .mkconv-campagna .riga-dettaglio { line-height: 1.35; margin-top: 2px; }
 .mkconv-campagna .riga-dettaglio [data-bs-toggle="tooltip"] { cursor: help; }
-.mkconv-campagna .delta-badge { margin-left: 4px; }
+.mkconv-campagna .delta-badge { margin-left: 6px; }
+.mkconv-valore-euro { font-weight: 600; color: #333; }
+.mkconv-dettagli { margin-top: 3px; font-size: 0.82rem; }
+.mkconv-dettagli summary { cursor: pointer; color: #777; width: max-content; }
+.mkconv-dettagli[open] summary { margin-bottom: 2px; }
+@media (max-width: 420px) {
+  .mkconv-box-valore { font-size: 1.05rem; }
+}
 @media (prefers-color-scheme: dark) {
   .mkconv-campagna { border-bottom-color: #3a3f47; }
-  .mkconv-barra { background: #2b3038; }
-  .mkconv-barra .prima { background: #ced4da; }
+  .mkconv-box { background: #2b3038; }
+  .mkconv-box.principale { background: #1f3a2a; }
+  .mkconv-box.effetto.su   { background: #1f3a2a; color: #7ad19a; }
+  .mkconv-box.effetto.giu  { background: #43262a; color: #f1a0a0; }
+  .mkconv-box.effetto.pari { background: #2b3038; color: #aab; }
+  .mkconv-valore-euro { color: #ddd; }
 }
 </style>
 
@@ -6357,23 +6370,54 @@ document.addEventListener('DOMContentLoaded', function() {
     return persone > 1 ? 'metà ' + quando : quando;
   }
 
-  /* Una metrica: etichetta, "X su N · %", barra; il trattino scuro sulla
-     barra e' la stessa percentuale prima del messaggio. */
-  function mkMetrica(etichetta, dati, raggiunti, secondaria) {
+  /* Scarto in punti fra "dopo" e "prima" (percentuali sugli stessi clienti). */
+  function mkScarto(dati) {
+    return Math.round(((Number(dati.perc) || 0) - (Number(dati.prima_perc) || 0)) * 10) / 10;
+  }
+
+  function mkClasseScarto(scarto) {
+    return scarto > 0.05 ? 'su' : (scarto < -0.05 ? 'giu' : 'pari');
+  }
+
+  function mkNumeroPunti(scarto) {
+    return (scarto > 0 ? '+' : (scarto < 0 ? '−' : '')) +
+      Math.abs(scarto).toLocaleString('it-IT', { maximumFractionDigits: 1 });
+  }
+
+  /* Un riquadro dei tre: etichetta, numero grande, percentuale piccola. */
+  function mkBox(etichetta, numero, sotto, classe, tip) {
     var box = document.createElement('div');
-    box.className = 'mkconv-metrica' + (secondaria ? ' secondaria' : '');
-    var larghezza = Math.min(100, Math.max(0, Number(dati.perc) || 0));
-    var prima = dati.prima ? Math.min(100, Math.max(0, Number(dati.prima_perc) || 0)) : null;
-    box.innerHTML =
-      '<div class="mkconv-testa">' +
-        '<span>' + esc(etichetta) + '</span>' +
-        '<span class="mkconv-valore"><b>' + dati.clienti + '</b> su ' + raggiunti +
-          ' · <b>' + percIt(dati.perc) + '</b></span>' +
-      '</div>' +
-      '<div class="mkconv-barra"><span class="dopo" style="width:' + larghezza + '%"></span>' +
-        (prima !== null ? '<i class="prima" style="left:' + prima + '%"></i>' : '') +
-      '</div>';
+    box.className = 'mkconv-box' + (classe ? ' ' + classe : '');
+    var e = document.createElement('div');
+    e.className = 'mkconv-box-etichetta';
+    e.textContent = etichetta;
+    if (tip) bsTip(e, tip);
+    var v = document.createElement('div');
+    v.className = 'mkconv-box-valore';
+    v.textContent = numero;
+    if (sotto) {
+      var s = document.createElement('small');
+      s.textContent = sotto;
+      v.appendChild(s);
+    }
+    box.append(e, v);
     return box;
+  }
+
+  /* I tre riquadri: dopo il messaggio, prima, effetto. */
+  function mkTreBox(etichettaDopo, dati) {
+    var scarto = mkScarto(dati);
+    var riga = document.createElement('div');
+    riga.className = 'mkconv-kpi';
+    riga.append(
+      mkBox(etichettaDopo, String(dati.clienti), percIt(dati.perc), 'principale',
+            'Clienti raggiunti che hanno prenotato nei giorni scelti dopo il messaggio, sul totale dei raggiunti'),
+      mkBox('Prima del messaggio', String(dati.prima), percIt(dati.prima_perc), '',
+            'Gli stessi clienti, nello stesso numero di giorni PRIMA del messaggio: quanto avrebbero prenotato comunque'),
+      mkBox('Effetto del messaggio', mkNumeroPunti(scarto), 'punti', 'effetto ' + mkClasseScarto(scarto),
+            'Differenza fra dopo e prima, in punti percentuali: è quello che il messaggio ha aggiunto. Sotto zero vuol dire che dopo il messaggio hanno prenotato meno di prima')
+    );
+    return riga;
   }
 
   function mkDettaglio(pezzi) {
@@ -6384,24 +6428,9 @@ document.addEventListener('DOMContentLoaded', function() {
       var s = document.createElement('span');
       s.textContent = p.testo;
       if (p.tip) bsTip(s, p.tip);
+      if (p.classe) s.className = p.classe;
       riga.appendChild(s);
     });
-    return riga;
-  }
-
-  /* "prima dell'invio" con lo scarto in punti, colorato come gli altri delta. */
-  function mkPrima(dati) {
-    var riga = document.createElement('div');
-    riga.className = 'riga-dettaglio';
-    var s = document.createElement('span');
-    s.textContent = 'prima dell\'invio: ' + dati.prima + ' (' + percIt(dati.prima_perc) + ')';
-    bsTip(s, 'Gli stessi clienti, nello stesso numero di giorni PRIMA del messaggio. La differenza fra dopo e prima è quello che il messaggio ha aggiunto: chi prenota spesso avrebbe prenotato comunque');
-    riga.appendChild(s);
-    var scarto = Math.round(((Number(dati.perc) || 0) - (Number(dati.prima_perc) || 0)) * 10) / 10;
-    var b = document.createElement('span');
-    b.className = 'delta-badge ' + (scarto > 0.05 ? 'su' : (scarto < -0.05 ? 'giu' : 'pari'));
-    b.textContent = (scarto > 0 ? '+' : '') + scarto.toLocaleString('it-IT') + ' punti';
-    riga.appendChild(b);
     return riga;
   }
 
@@ -6409,6 +6438,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var el = document.createElement('div');
     el.className = 'mkconv-campagna';
 
+    // 1. Nome e stato del conteggio
     var testa = document.createElement('div');
     testa.className = 'mkconv-intesta';
     var nome = document.createElement('span');
@@ -6425,63 +6455,104 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     el.appendChild(testa);
 
+    // 2. Quando e a quanti
     el.appendChild(mkDettaglio([
       { testo: 'inviata ' + c.periodo },
       { testo: c.raggiunti + (c.raggiunti === 1 ? ' cliente raggiunto' : ' clienti raggiunti') },
-      c.errori ? { testo: c.errori + (c.errori === 1 ? ' messaggio non partito' : ' messaggi non partiti') + ' su ' + c.tentati,
-                   tip: 'Messaggi che WhatsApp non ha accettato: il cliente non li ha ricevuti e non è contato fra i raggiunti' } : null
+      c.da_mandare ? { testo: 'invio pianificato: ' + c.da_mandare + ' ancora da mandare',
+                       tip: 'L\'invio diviso su più giorni non è finito: i clienti raggiunti aumentano ogni giorno' } : null,
+      c.errori ? { testo: c.errori + (c.errori === 1 ? ' non partito' : ' non partiti'),
+                   tip: 'Messaggi che WhatsApp non ha accettato (su ' + c.tentati + ' tentati): il cliente non li ha ricevuti e non è contato fra i raggiunti' } : null
     ]));
 
     var p = c.promo;
+    var q = c.qualunque;
+
+    // 3. I tre numeri: la promo se il messaggio la nomina, altrimenti qualunque servizio
+    el.appendChild(mkTreBox(p ? 'Hanno prenotato la promo' : 'Hanno prenotato', p || q));
+
+    // 4. Cosa e' successo alle prenotazioni della promo
     if (p) {
-      el.appendChild(mkMetrica('Hanno prenotato la promo', p, c.raggiunti, false));
-      el.appendChild(mkDettaglio([
-        { testo: c.servizi_promo.join(', '),
-          tip: 'I servizi scritti nel messaggio: sono questi a contare come «la promo»' }
-      ]));
-      var esito = p.prenotazioni + (p.prenotazioni === 1 ? ' prenotazione: ' : ' prenotazioni: ') +
-        p.fatte + (p.fatte === 1 ? ' fatta, ' : ' fatte, ') + p.in_agenda + ' in agenda, ' + p.no_show + ' no-show' +
-        (p.annullate ? ', ' + p.annullate + ' annullate' : '');
-      el.appendChild(mkDettaglio([
-        p.prenotazioni ? { testo: esito } : null,
-        p.prenotazioni ? { testo: euro(p.valore),
-          tip: 'Prezzo delle prenotazioni della promo, scontato se la promo ha uno sconto; no-show e annullate esclusi. È il valore in agenda, non l\'incassato' } : null,
-        p.clienti ? { testo: testoTempo(p.giorni_mediana, p.clienti),
-          tip: 'Tempo fra il messaggio e la prenotazione: metà di chi ha prenotato l\'ha fatto entro questo tempo' } : null,
-        p.clienti ? { testo: p.online + ' dal sito' } : null
-      ]));
-      if (p.totale_periodo) {
-        el.appendChild(mkDettaglio([{
-          testo: p.prenotazioni + ' delle ' + p.totale_periodo + ' prenotazioni della promo nel periodo vengono da questi clienti',
-          tip: 'Tutte le prenotazioni dei servizi della promo fatte da chiunque, dal primo messaggio alla fine del conteggio: quante arrivano dai clienti raggiunti'
-        }]));
+      if (p.prenotazioni) {
+        el.appendChild(mkDettaglio([
+          { testo: p.prenotazioni + (p.prenotazioni === 1 ? ' prenotazione' : ' prenotazioni') },
+          p.fatte ? { testo: p.fatte + (p.fatte === 1 ? ' fatta' : ' fatte') } : null,
+          p.in_agenda ? { testo: p.in_agenda + ' in agenda' } : null,
+          p.no_show ? { testo: p.no_show + ' no-show' } : null,
+          p.annullate ? { testo: p.annullate + (p.annullate === 1 ? ' annullata' : ' annullate') } : null,
+          { testo: 'valore ' + euro(p.valore).replace(' ', ' '), classe: 'mkconv-valore-euro',
+            tip: 'Prezzo delle prenotazioni della promo, scontato se la promo ha uno sconto; no-show e annullate esclusi. È il valore in agenda, non l\'incassato' }
+        ]));
       }
-      if (p.prima) el.appendChild(mkPrima(p));
+      // 5. Qualunque servizio, su una riga sola
+      var scartoQ = mkScarto(q);
+      var rigaQ = mkDettaglio([
+        { testo: 'Qualunque servizio: ' + q.clienti + ' (' + percIt(q.perc) + ')',
+          tip: 'Clienti raggiunti che hanno prenotato qualunque servizio, non solo la promo' },
+        { testo: 'prima ' + q.prima + ' (' + percIt(q.prima_perc) + ')' }
+      ]);
+      var b = document.createElement('span');
+      b.className = 'delta-badge ' + mkClasseScarto(scartoQ);
+      b.textContent = mkNumeroPunti(scartoQ) + ' punti';
+      rigaQ.appendChild(b);
+      el.appendChild(rigaQ);
     } else {
       el.appendChild(mkDettaglio([{
         testo: 'Nel messaggio non c\'è il nome di un servizio: si conta qualunque prenotazione'
       }]));
     }
 
-    var q = c.qualunque;
-    el.appendChild(mkMetrica('Hanno prenotato qualunque servizio', q, c.raggiunti, !!p));
-    el.appendChild(mkPrima(q));
-    if (!p && q.clienti) {
-      el.appendChild(mkDettaglio([
-        { testo: testoTempo(q.giorni_mediana, q.clienti),
-          tip: 'Tempo fra il messaggio e la prenotazione: metà di chi ha prenotato l\'ha fatto entro questo tempo' },
-        { testo: q.online + ' dal sito' }
-      ]));
+    // 6. Il resto, a richiesta
+    var dati = p || q;
+    var pezzi = [];
+    if (p) pezzi.push({ testo: 'Servizi della promo: ' + c.servizi_promo.join(', '),
+                        tip: 'I servizi scritti nel messaggio: sono questi a contare come «la promo»' });
+    if (dati.clienti) {
+      pezzi.push({ testo: 'Tempo per prenotare: ' + testoTempo(dati.giorni_mediana, dati.clienti),
+                   tip: 'Tempo fra il messaggio e la prenotazione: metà di chi ha prenotato l\'ha fatto entro questo tempo' });
+      pezzi.push({ testo: 'Dal sito: ' + dati.online + ' su ' + dati.clienti });
+    }
+    if (p && p.totale_periodo) {
+      pezzi.push({ testo: p.prenotazioni + ' delle ' + p.totale_periodo + ' prenotazioni della promo nel periodo vengono da questi clienti',
+                   tip: 'Tutte le prenotazioni dei servizi della promo fatte da chiunque, dal primo messaggio alla fine del conteggio: quante arrivano dai clienti raggiunti' });
+    }
+    if (pezzi.length) {
+      var det = document.createElement('details');
+      det.className = 'mkconv-dettagli';
+      var sum = document.createElement('summary');
+      sum.textContent = 'Dettagli';
+      det.appendChild(sum);
+      pezzi.forEach(function (pz) { det.appendChild(mkDettaglio([pz])); });
+      el.appendChild(det);
     }
     return el;
+  }
+
+  /* Riga in alto: il totale delle campagne mostrate. */
+  function mkRiepilogo(campagne, giorni) {
+    var raggiunti = 0, prenotazioni = 0, valore = 0, conPromo = 0;
+    campagne.forEach(function (c) {
+      raggiunti += c.raggiunti || 0;
+      if (c.promo) {
+        conPromo += 1;
+        prenotazioni += c.promo.prenotazioni || 0;
+        valore += Number(c.promo.valore) || 0;
+      }
+    });
+    var t = 'Entro ' + giorni + ' giorni dal messaggio · ' +
+      campagne.length + (campagne.length === 1 ? ' campagna' : ' campagne') + ' · ' +
+      raggiunti + ' clienti raggiunti';
+    if (conPromo) t += ' · ' + prenotazioni + (prenotazioni === 1 ? ' prenotazione' : ' prenotazioni') +
+      ' della promo, ' + euro(valore).replace(' ', ' ');
+    return t;
   }
 
   function caricaMarketingConversioni(giorni) {
     var lista = document.getElementById('mkconv-list');
     if (!lista) return;   // tile non generato (ruolo user)
     giorni = giorni || giorniAttivi('#tile-marketing-conversioni .btn-mkconv-finestra', 14);
-    document.getElementById('mkconv-intro').textContent =
-      'Prenotazioni fatte entro ' + giorni + ' giorni dal messaggio';
+    var intro = document.getElementById('mkconv-intro');
+    intro.textContent = 'Prenotazioni fatte entro ' + giorni + ' giorni dal messaggio';
 
     fetch('/api/report_marketing_conversioni?finestra=' + giorni)
       .then(function (r) {
@@ -6496,6 +6567,7 @@ document.addEventListener('DOMContentLoaded', function() {
             'Le campagne si mandano da Tools › Marketing.</span>';
           return;
         }
+        intro.textContent = mkRiepilogo(d.campagne, d.finestra || giorni);
         d.campagne.forEach(function (c) { lista.appendChild(mkCampagna(c)); });
       })
       .catch(function () {

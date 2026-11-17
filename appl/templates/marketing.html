@@ -210,6 +210,7 @@
                     
                     {# Quanti sono selezionabili e quanti hanno gia' ricevuto la promo scelta. #}
                     <div id="promoRiepilogoRisultati" class="small text-muted mb-2" style="display:none;"></div>
+                    <div id="risultatiLimitati" class="small text-warning-emphasis mb-2" style="display:none;"></div>
 
                     <div id="clientResults" class="overflow-auto" style="max-height: 600px;">
                         <div class="text-muted text-center py-5">
@@ -231,7 +232,7 @@
                        colonna: cosi' si vedono appena si apre la pagina, senza scorrere
                        fin sotto l'anteprima. #}
                     <div class="small text-muted mb-2">
-                        <i class="bi bi-speedometer2 me-1"></i><span id="dailyStatsInfo">Limite giornaliero: {{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 30 }} invii</span>
+                        <i class="bi bi-speedometer2 me-1"></i><span id="dailyStatsInfo">Limite giornaliero: {{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 50 }} invii</span>
                     </div>
 
                     {# Avanzamento della coda. L'invio non finisce piu' insieme
@@ -350,9 +351,26 @@
                         {# Invio PRIMA dell'anteprima (richiesta del 15/11/2026): con la
                            foto e un testo lungo l'anteprima e' alta, e il pulsante
                            finiva fuori dallo schermo. #}
+                        {# Piu' clienti scelti dei posti rimasti oggi: l'invio si
+                           divide sui giorni successivi (piano di invio). Il
+                           riquadro compare da solo quando serve. #}
+                        <div id="pianoOpzioni" class="piano-opzioni rounded border p-2 mb-2 small" style="display:none;">
+                            <div class="fw-semibold mb-1"><i class="bi bi-calendar-week me-1"></i>Invio diviso su più giorni</div>
+                            <div class="d-flex flex-wrap align-items-center column-gap-3 row-gap-2">
+                                <span class="d-inline-flex align-items-center gap-2">
+                                    <label for="pianoPerGiorno" class="mb-0">Messaggi al giorno</label>
+                                    <input type="number" id="pianoPerGiorno" class="form-control form-control-sm" style="width:5rem;" min="1">
+                                </span>
+                                <span class="d-inline-flex align-items-center gap-2">
+                                    <label for="pianoOra" class="mb-0">dalle ore</label>
+                                    <input type="time" id="pianoOra" class="form-control form-control-sm" style="width:7rem;" value="10:00" min="08:00" max="19:00" step="900">
+                                </span>
+                            </div>
+                            <div id="pianoStima" class="mt-1 text-muted"></div>
+                        </div>
                         <div class="d-grid gap-2 mb-3">
                             <button type="button" class="btn btn-success btn-lg" id="btnSendMarketing" disabled>
-                                <i class="bi bi-whatsapp me-2"></i>Invia a <span id="sendCount">0</span> clienti
+                                <i class="bi bi-whatsapp me-2" id="sendIcona"></i><span id="sendVerbo">Invia a</span> <span id="sendCount">0</span> clienti
                             </button>
                         </div>
 
@@ -364,6 +382,19 @@
                     </form>
                 </div>
             </div>
+        </div>
+    </div>
+
+    {# INVII PIANIFICATI (17/11/2026): i piani aperti e quelli chiusi negli
+       ultimi 30 giorni. Li manda il server cloud, uno ogni 12-20 secondi, dalla
+       loro ora, fino al numero di messaggi al giorno scelto. Il riquadro resta
+       nascosto finche' non c'e' un piano. #}
+    <div class="card mb-4" id="cardPiani" style="display:none;">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-calendar-week"></i> Invii pianificati</h5>
+        </div>
+        <div class="card-body">
+            <div id="pianiLista"></div>
         </div>
     </div>
 
@@ -464,7 +495,7 @@
                     <label class="form-label fw-bold">Limite massimo invii giornalieri</label>
                     <div class="input-group">
                         <input type="number" class="form-control" id="max_daily_sends"
-                               value="{{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 30 }}"
+                               value="{{ business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 50 }}"
                                min="1" max="100">
                         <button class="btn btn-primary" type="button" id="btnSaveMaxSends">
                             <i class="bi bi-save"></i> Salva
@@ -593,6 +624,19 @@
   </div>
 </div>
 
+{# Chi di un invio pianificato non ha ricevuto il messaggio, e perche'. #}
+<div class="modal fade" id="modalProblemiPiano" tabindex="-1" aria-labelledby="problemiPianoTitolo" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title"><i class="bi bi-exclamation-circle me-2"></i>Non ricevuto: <span id="problemiPianoTitolo"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Chiudi"></button>
+      </div>
+      <div class="modal-body" id="problemiPianoCorpo"></div>
+    </div>
+  </div>
+</div>
+
 {# Foto del messaggio a grandezza piena (clic sulla miniatura o sull'anteprima).
    Si apre adattata alla finestra; il clic sull'immagine passa alla grandezza
    reale (si scorre dentro la finestra) e un altro clic torna ad adattarla. #}
@@ -712,6 +756,27 @@
     color: #ffacdf !important;
     background: transparent;
 }
+/* Invio diviso su piu' giorni */
+.piano-opzioni {
+    background-color: #e7f1ff;
+    border-color: #9ec5fe !important;
+}
+.piano-riga {
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+}
+.piano-riga:last-child {
+    border-bottom: none;
+}
+.piano-barra {
+    height: 8px;
+}
+/* styles.css mette overflow:visible !important a ogni .modal-body: qui
+   l'elenco puo' essere lungo e deve scorrere dentro la finestra. */
+#modalProblemiPiano .modal-body {
+    max-height: 70vh;
+    overflow-y: auto !important;
+}
 
 /* ripristina selezione e caret leggibile negli input/textarea */
 .form-control, input, textarea {
@@ -816,24 +881,10 @@ function testoWhatsAppHtml(testo) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    
-    // Carica statistiche invii giornalieri.
-    // url_for e non il percorso assoluto: con wsgi.py l'applicazione e'
-    // montata su /s/<idx> e un '/settings/...' scritto a mano e' un 404 muto.
-    fetch("{{ url_for('settings.marketing_daily_stats') }}")
-        .then(r => r.json())
-        .then(data => {
-            const info = document.getElementById('dailyStatsInfo');
-            if (info && data) {
-                info.innerHTML = `Oggi: <strong>${data.inviati_oggi}</strong>/${data.limite} invii | Disponibili: <strong>${data.disponibili}</strong>`;
-                if (data.disponibili === 0) {
-                    info.classList.add('text-danger');
-                    info.innerHTML += ' ⚠️';
-                }
-            }
-        })
-        .catch(err => console.log('Stats non disponibili'));
-    
+
+    // Le statistiche del giorno le carica aggiornaLimiteGiornaliero(), in fondo:
+    // servono anche a decidere se l'invio va diviso su piu' giorni.
+
     // Inizializza tooltip Bootstrap
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(function (el) {
@@ -866,6 +917,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (options) options.style.display = 'none';
         });
         document.getElementById('search_text').value = '';
+        document.getElementById('risultatiLimitati').style.display = 'none';
         document.getElementById('clientResults').innerHTML = `
             <div class="text-muted text-center py-5">
                 <i class="bi bi-search fs-1 d-block mb-2"></i>
@@ -1277,6 +1329,13 @@ Ti aspettiamo 💆‍♀️`
             slot.append(badge);
             return;
         }
+        if (info.piano && !info.volte) {
+            // Partira' nei prossimi giorni col suo piano: niente "Reinvia".
+            badge.className = 'badge text-bg-info fw-normal';
+            badge.textContent = 'Nell\'invio pianificato';
+            slot.append(badge);
+            return;
+        }
         badge.textContent = 'Già inviata' + (info.ultimo ? ' il ' + dataBreve(info.ultimo) : '') +
             (info.volte > 1 ? ' (×' + info.volte + ')' : '');
         const btn = document.createElement('button');
@@ -1330,7 +1389,7 @@ Ti aspettiamo 💆‍♀️`
         if (!grigi && !giaInviatiAltri) { box.style.display = 'none'; return; }
 
         const totaleGrigi = grigi + giaInviatiAltri;
-        let testo = `${scelti} selezionabili · ${totaleGrigi} hanno già ricevuto questa promo (in grigio)`;
+        let testo = `${scelti} selezionabili · ${totaleGrigi} hanno già ricevuto questa promo o la riceveranno con un invio pianificato (in grigio)`;
         if (giaInviatiAltri) testo += `, ne sono mostrati ${grigi}`;
         testo += '.';
         if (!scelti) testo += ' Premi «Cerca Clienti» per vedere i successivi.';
@@ -1372,8 +1431,10 @@ Ti aspettiamo 💆‍♀️`
             btn.style.display = 'none';
             return;
         }
+        const pianificati = dati.pianificati
+            ? ` · ${dati.pianificati} ${dati.pianificati === 1 ? 'la riceverà' : 'la riceveranno'} con l'invio pianificato` : '';
         if (!dati.totale) {
-            testo.textContent = 'Questa promo non è stata ancora inviata a nessuno.';
+            testo.textContent = 'Questa promo non è stata ancora inviata a nessuno' + pianificati + '.';
             if (dati.archiviati) testo.textContent += ` (${dati.archiviati} invii di edizioni precedenti in archivio)`;
             btn.style.display = 'none';
             return;
@@ -1383,9 +1444,11 @@ Ti aspettiamo 💆‍♀️`
         testo.append('Già inviata a ', forte);
         if (dati.ultimo_invio) testo.append(' · ultimo invio ' + dataBreve(dati.ultimo_invio));
         if (dati.in_coda) testo.append(` · ${dati.in_coda} ancora in coda`);
+        if (pianificati) testo.append(pianificati);
         if (dati.archiviati) testo.append(` · ${dati.archiviati} invii di edizioni precedenti in archivio`);
-        // Con messaggi ancora in coda l'azzeramento e' rifiutato dal server: non si offre.
-        btn.style.display = dati.in_coda ? 'none' : '';
+        // Con messaggi in coda o un invio pianificato aperto l'azzeramento e'
+        // rifiutato dal server: non si offre.
+        btn.style.display = (dati.in_coda || dati.pianificati) ? 'none' : '';
     }
 
     function aggiornaStoricoPromo() {
@@ -1686,6 +1749,10 @@ Ti aspettiamo 💆‍♀️`
                 });
                 resultsDiv.innerHTML = html;
                 giaInviatiAltri = data.gia_inviati_altri || 0;
+                const avvisoLimite = document.getElementById('risultatiLimitati');
+                avvisoLimite.textContent = data.limited
+                    ? `Mostrati i primi ${data.max_risultati}: restringi i filtri per vedere gli altri.` : '';
+                avvisoLimite.style.display = data.limited ? '' : 'none';
 
                 // Aggiungi eventi click
                 document.querySelectorAll('.client-checkbox').forEach(cb => {
@@ -1729,13 +1796,68 @@ Ti aspettiamo 💆‍♀️`
         });
     }
 
+    // ---------------------------------------------------------------------
+    // Invio diviso su piu' giorni.
+    // Con piu' clienti scelti dei posti rimasti oggi, "Invia" diventa
+    // "Pianifica invio": il server cloud ne manda N al giorno dall'ora scelta
+    // finche' non li ha raggiunti tutti (services/marketing_piani.py).
+    // ---------------------------------------------------------------------
+    const LIMITE_GIORNALIERO = {{ (business_info.marketing_max_daily_sends if business_info and business_info.marketing_max_daily_sends else 50)|int }};
+    const URL_PIANI = "{{ url_for('settings.marketing_elenco_piani') }}";
+    let disponibiliOggi = null;    // posti rimasti oggi, da daily-stats
+    let pianiPronti = true;        // tabelle presenti sul database del negozio
+
+    function modoPiano(selezionati) {
+        return selezionati > 0 && disponibiliOggi !== null && selezionati > disponibiliOggi;
+    }
+
+    function perGiornoScelto() {
+        const campo = document.getElementById('pianoPerGiorno');
+        let n = parseInt(campo.value, 10);
+        if (!n || n < 1) n = LIMITE_GIORNALIERO;
+        return Math.min(n, LIMITE_GIORNALIERO);
+    }
+
+    function aggiornaStimaPiano(selezionati) {
+        const stima = document.getElementById('pianoStima');
+        const campo = document.getElementById('pianoPerGiorno');
+        campo.max = LIMITE_GIORNALIERO;
+        if (!campo.value) campo.value = LIMITE_GIORNALIERO;
+        stima.className = 'mt-1 text-muted';
+        if (!pianiPronti) {
+            stima.className = 'mt-1 text-danger';
+            stima.textContent = 'La divisione su più giorni non è ancora attiva su questo negozio: oggi puoi mandarne al massimo ' + (disponibiliOggi || 0) + '.';
+            return false;
+        }
+        if (!campagnaCorrente()) {
+            stima.className = 'mt-1 text-danger';
+            stima.textContent = 'Per dividere l\'invio su più giorni scegli o salva un template: serve a sapere a chi è già arrivata la promo.';
+            return false;
+        }
+        const pg = perGiornoScelto();
+        const giorni = Math.ceil(selezionati / pg);
+        const ora = document.getElementById('pianoOra').value || '10:00';
+        stima.textContent = `Oggi restano ${disponibiliOggi} posti. ${selezionati} clienti a ${pg} al giorno: ` +
+            `${giorni === 1 ? 'un giorno' : 'circa ' + giorni + ' giorni'} di invio, dalle ${ora} (i giorni di chiusura si saltano). ` +
+            'Li manda il server anche a gestionale chiuso.';
+        return true;
+    }
+
     function updateCounts() {
         const selected = document.querySelectorAll('.client-checkbox:checked').length;
         document.getElementById('selectedCount').textContent = selected;
         document.getElementById('sendCount').textContent = selected;
-        document.getElementById('btnSendMarketing').disabled = selected === 0;
+        const piano = modoPiano(selected);
+        document.getElementById('sendVerbo').textContent = piano ? 'Pianifica invio a' : 'Invia a';
+        document.getElementById('sendIcona').className = 'bi me-2 ' + (piano ? 'bi-calendar-week' : 'bi-whatsapp');
+        document.getElementById('pianoOpzioni').style.display = piano ? '' : 'none';
+        const pianoPossibile = piano ? aggiornaStimaPiano(selected) : true;
+        document.getElementById('btnSendMarketing').disabled = selected === 0 || !pianoPossibile;
         aggiornaRiepilogoRisultati();
     }
+
+    ['pianoPerGiorno', 'pianoOra'].forEach(id =>
+        document.getElementById(id).addEventListener('input', updateCounts));
 
     function updatePreview() {
         const message = document.getElementById('marketing_message').value;
@@ -1866,7 +1988,12 @@ Ti aspettiamo 💆‍♀️`
             alert('Inserisci un messaggio');
             return;
         }
-        
+
+        if (modoPiano(selectedClients.length)) {
+            pianificaInvio(selectedClients, message);
+            return;
+        }
+
         // Chi ha gia' ricevuto la promo e l'operatore ha scelto di ricontattare:
         // il server li lascia passare solo se qui li dichiariamo.
         const campagna = campagnaCorrente();
@@ -1887,19 +2014,7 @@ Ti aspettiamo 💆‍♀️`
                 reinvii.slice(0, 5).map(r => '• ' + r.etichetta).join('\n') +
                 (reinvii.length > 5 ? `\n… e altri ${reinvii.length - 5}` : '');
         }
-        // Cellulari italiani di 9 cifre (es. 335 123456): esistono e partono,
-        // ma spesso e' un numero a cui manca una cifra. Si avvisa, non si blocca.
-        const noveCifre = selectedClients.filter(c => {
-            const grezzo = String(c.cellulare || '').trim();
-            let cifre = grezzo.replace(/\D/g, '');
-            // con prefisso: +39 / 0039, oppure 39 scritto senza + (11 cifre)
-            if (grezzo.startsWith('+') || cifre.startsWith('00') || (cifre.length === 11 && cifre.startsWith('39'))) {
-                cifre = cifre.replace(/^00/, '');
-                if (!cifre.startsWith('39')) return false;
-                cifre = cifre.slice(2);
-            }
-            return cifre.length === 9 && cifre.startsWith('3');
-        });
+        const noveCifre = clientiNoveCifre(selectedClients);
         if (noveCifre.length) {
             conferma += `\n\n⚠️ ${noveCifre.length === 1 ? '1 cliente ha' : noveCifre.length + ' clienti hanno'} un cellulare di 9 cifre invece di 10. Il messaggio parte lo stesso: controlla che non manchi una cifra.\n` +
                 noveCifre.slice(0, 5).map(c => '• ' + ((c.nome || '') + ' ' + (c.cognome || '')).trim() + ' — ' + c.cellulare).join('\n') +
@@ -1989,16 +2104,301 @@ Ti aspettiamo 💆‍♀️`
 
     // Il contatore "Oggi: N/M invii" va rinfrescato quando la coda finisce:
     // le righe in marketing_invii nascono a invio avvenuto, non all'accodamento.
+    // Da qui passa anche "quanti posti restano oggi", che decide se l'invio
+    // parte subito o si divide su piu' giorni.
+    // url_for e non il percorso assoluto: con wsgi.py l'applicazione e'
+    // montata su /s/<idx> e un '/settings/...' scritto a mano e' un 404 muto.
     function aggiornaLimiteGiornaliero() {
         fetch("{{ url_for('settings.marketing_daily_stats') }}")
             .then(r => r.json())
             .then(data => {
                 const info = document.getElementById('dailyStatsInfo');
-                if (info && data) {
+                if (!data) return;
+                disponibiliOggi = Number(data.disponibili) || 0;
+                pianiPronti = data.piani_pronti !== false;
+                if (info) {
                     info.innerHTML = `Oggi: <strong>${data.inviati_oggi}</strong>/${data.limite} invii | Disponibili: <strong>${data.disponibili}</strong>`;
+                    info.classList.toggle('text-danger', disponibiliOggi === 0);
                 }
+                updateCounts();
             })
             .catch(() => {});
+    }
+
+    // Cellulari italiani di 9 cifre (es. 335 123456): esistono e partono, ma
+    // spesso e' un numero a cui manca una cifra. Si avvisa, non si blocca.
+    function clientiNoveCifre(clienti) {
+        return clienti.filter(c => {
+            const grezzo = String(c.cellulare || '').trim();
+            let cifre = grezzo.replace(/\D/g, '');
+            if (grezzo.startsWith('+') || cifre.startsWith('00') || (cifre.length === 11 && cifre.startsWith('39'))) {
+                cifre = cifre.replace(/^00/, '');
+                if (!cifre.startsWith('39')) return false;
+                cifre = cifre.slice(2);
+            }
+            return cifre.length === 9 && cifre.startsWith('3');
+        });
+    }
+
+    function pianificaInvio(selectedClients, message) {
+        const campagna = campagnaCorrente();
+        if (!campagna) {
+            alert('Per dividere l\'invio su più giorni scegli o salva un template.');
+            return;
+        }
+        if (document.querySelector('.client-item.reinvio .client-checkbox:checked')) {
+            alert('Nell\'invio su più giorni non si possono rimandare promo già ricevute: ' +
+                  'togli i clienti in giallo («Reinvia») e mandali a parte.');
+            return;
+        }
+        const pg = perGiornoScelto();
+        const ora = document.getElementById('pianoOra').value || '10:00';
+        const giorni = Math.ceil(selectedClients.length / pg);
+        const nome = nomePromoCorrente();
+        let conferma = `Pianifichi l'invio di "${nome}"${foto ? ' con foto' : ''} a ${selectedClients.length} clienti?\n\n` +
+            `• ${pg} messaggi al giorno, dalle ${ora}, uno ogni 12-20 secondi\n` +
+            `• ${giorni === 1 ? 'un giorno' : 'circa ' + giorni + ' giorni'} di invio; i giorni di chiusura si saltano\n` +
+            `• oggi restano ${disponibiliOggi} posti: se è già passata l'ora scelta, il primo gruppo parte entro qualche minuto\n\n` +
+            'Li manda il server, anche con il gestionale chiuso. Il piano si può mettere in pausa o annullare nel riquadro «Invii pianificati».';
+        const nove = clientiNoveCifre(selectedClients);
+        if (nove.length) {
+            conferma += `\n\n⚠️ ${nove.length === 1 ? '1 cliente ha' : nove.length + ' clienti hanno'} un cellulare di 9 cifre invece di 10. Il messaggio parte lo stesso: controlla che non manchi una cifra.\n` +
+                nove.slice(0, 5).map(c => '• ' + ((c.nome || '') + ' ' + (c.cognome || '')).trim() + ' — ' + c.cellulare).join('\n') +
+                (nove.length > 5 ? `\n… e altri ${nove.length - 5}` : '');
+        }
+        if (!confirm(conferma)) return;
+
+        const token = document.querySelector('#marketingMessageForm input[name="csrf_token"]').value;
+        const btn = document.getElementById('btnSendMarketing');
+        const originale = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Pianificazione...';
+
+        const dati = { clients: selectedClients.map(c => c.id), template: message, campagna: campagna,
+                       per_giorno: pg, ora_invio: ora };
+        const headers = { 'X-CSRFToken': token };
+        let body;
+        if (foto && foto.tipo === 'template') dati.immagine_template_id = foto.id;
+        if (foto && foto.tipo === 'file') {
+            body = new FormData();
+            body.append('dati', JSON.stringify(dati));
+            body.append('immagine', foto.file);
+        } else {
+            headers['Content-Type'] = 'application/json';
+            body = JSON.stringify(dati);
+        }
+
+        fetch(URL_PIANI, { method: 'POST', headers: headers, body: body })
+            .then(r => r.json().catch(() => ({ success: false, error: `Errore del server (${r.status})` })))
+            .then(data => {
+                btn.innerHTML = originale;
+                if (!data.success) {
+                    btn.disabled = false;
+                    alert('❌ ' + (data.error || 'Piano non creato'));
+                    return;
+                }
+                let msg = `✅ Invio pianificato: ${data.inclusi} clienti, ${data.per_giorno} al giorno dalle ${data.ora_invio}.\n` +
+                    (data.primo_giorno ? `Primo gruppo: ${data.primo_oggi ? 'oggi' : data.primo_giorno}` : '') +
+                    (data.ultimo_giorno ? ` · ultimo previsto: ${data.ultimo_giorno}.` : '');
+                if (data.gia_ricevuto) msg += `\n${data.gia_ricevuto} non inclusi: hanno già ricevuto la promo o sono già in un invio pianificato.`;
+                if (data.numeri_non_validi) msg += `\n${data.numeri_non_validi} non inclusi: cellulare mancante o non valido.`;
+                alert(msg);
+                document.querySelectorAll('.client-checkbox:checked').forEach(cb => {
+                    cb.checked = false;
+                    cb.closest('.client-item')?.classList.remove('selected');
+                });
+                updateCounts();
+                // I clienti del piano diventano grigi ("Nell'invio pianificato").
+                aggiornaStoricoPromo();
+                caricaPiani();
+                aggiornaLimiteGiornaliero();
+            })
+            .catch(() => {
+                btn.disabled = false;
+                btn.innerHTML = originale;
+                alert('❌ Errore di connessione: piano non creato');
+            });
+    }
+
+    // --- Riquadro "Invii pianificati" ---
+    const MESI_BREVI = ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'];
+    function dataIt(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (isNaN(d)) return '';
+        return String(d.getDate()).padStart(2, '0') + ' ' + MESI_BREVI[d.getMonth()] + ' ' + d.getFullYear();
+    }
+    let timerPiani = null;
+
+    function disegnaPiano(p) {
+        const el = document.createElement('div');
+        el.className = 'piano-riga';
+        const aperto = p.stato === 'attivo' || p.stato === 'in_pausa';
+        const etichette = { attivo: ['In corso', 'text-bg-success'], in_pausa: ['In pausa', 'text-bg-warning'],
+                            completato: ['Completato', 'text-bg-secondary'], annullato: ['Annullato', 'text-bg-secondary'] };
+        const [testoStato, classeStato] = etichette[p.stato] || [p.stato, 'text-bg-secondary'];
+        const problemi = (p.errori || 0) + (p.saltati || 0) + (p.non_confermati || 0);
+        const perc = v => p.totale ? Math.round(1000 * v / p.totale) / 10 : 0;
+
+        const testa = document.createElement('div');
+        testa.className = 'd-flex flex-wrap justify-content-between align-items-baseline gap-2';
+        const titolo = document.createElement('div');
+        const nome = document.createElement('strong');
+        nome.textContent = p.nome;
+        const badge = document.createElement('span');
+        badge.className = 'badge fw-normal ms-2 ' + classeStato;
+        badge.textContent = testoStato;
+        titolo.append(nome, badge);
+        const creato = document.createElement('small');
+        creato.className = 'text-muted';
+        creato.textContent = 'creato il ' + dataIt(p.creato_il) + (p.creato_da ? ' da ' + p.creato_da : '');
+        testa.append(titolo, creato);
+
+        const barra = document.createElement('div');
+        barra.className = 'progress piano-barra my-2';
+        barra.setAttribute('role', 'progressbar');
+        barra.setAttribute('aria-label', 'Avanzamento del piano');
+        barra.innerHTML = `<div class="progress-bar bg-success" style="width:${perc(p.inviati)}%"></div>` +
+                          `<div class="progress-bar bg-warning" style="width:${perc(problemi)}%"></div>`;
+
+        const riga1 = document.createElement('div');
+        riga1.className = 'small';
+        riga1.innerHTML = `<strong>${p.inviati}</strong> su ${p.totale} inviati · ${p.per_giorno} al giorno dalle ${p.ora_invio}` +
+                          (p.ha_foto ? ' · con foto' : '');
+
+        const riga2 = document.createElement('div');
+        riga2.className = 'small text-muted';
+        if (p.stato === 'attivo') {
+            let t = `Oggi: ${p.inviati_oggi} inviati` + (p.in_corso ? `, ${p.in_corso} in partenza` : '');
+            if (p.da_inviare) {
+                t += p.prossimo_giorno ? ` · prossimo gruppo ${p.prossimo_oggi ? 'oggi' : 'il ' + p.prossimo_giorno}` : '';
+                t += p.ultimo_giorno ? ` · ultimo previsto il ${p.ultimo_giorno}` : '';
+            }
+            riga2.textContent = t;
+        } else if (p.stato === 'in_pausa') {
+            riga2.textContent = `${p.da_inviare + p.in_corso} ancora da mandare: premi «Riprendi» per continuare.`;
+        } else {
+            riga2.textContent = (p.stato === 'annullato' ? 'Annullato il ' : 'Finito il ') + dataIt(p.chiuso_il) +
+                (p.annullati ? ` · ${p.annullati} non mandati per l'annullamento` : '');
+        }
+
+        el.append(testa, barra, riga1, riga2);
+
+        if (problemi) {
+            const riga3 = document.createElement('div');
+            riga3.className = 'small mt-1';
+            const pezzi = [];
+            if (p.errori) pezzi.push(`${p.errori} non arrivati`);
+            if (p.saltati) pezzi.push(`${p.saltati} saltati`);
+            if (p.non_confermati) pezzi.push(`${p.non_confermati} da verificare`);
+            riga3.append(document.createTextNode(pezzi.join(' · ') + ' '));
+            const link = document.createElement('button');
+            link.type = 'button';
+            link.className = 'btn btn-link btn-sm p-0 align-baseline';
+            link.textContent = 'Vedi chi e perché';
+            link.addEventListener('click', () => apriProblemiPiano(p));
+            riga3.append(link);
+            el.append(riga3);
+        }
+
+        if (aperto) {
+            const comandi = document.createElement('div');
+            comandi.className = 'd-flex gap-2 mt-2';
+            const bottone = (testo, classe, azione) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'btn btn-sm ' + classe;
+                b.textContent = testo;
+                b.addEventListener('click', () => comandoPiano(p, azione, b));
+                return b;
+            };
+            if (p.stato === 'attivo') comandi.append(bottone('Metti in pausa', 'btn-outline-secondary', 'pausa'));
+            else comandi.append(bottone('Riprendi', 'btn-outline-success', 'riprendi'));
+            comandi.append(bottone('Annulla il piano', 'btn-outline-danger', 'annulla'));
+            el.append(comandi);
+        }
+        return el;
+    }
+
+    function caricaPiani() {
+        fetch(URL_PIANI)
+            .then(r => r.json())
+            .then(data => {
+                const card = document.getElementById('cardPiani');
+                const lista = document.getElementById('pianiLista');
+                const piani = (data && data.piani) || [];
+                card.style.display = piani.length ? '' : 'none';
+                lista.textContent = '';
+                piani.forEach(p => lista.appendChild(disegnaPiano(p)));
+                // Con un piano in corso si rinfresca da solo ogni minuto.
+                const attivi = piani.some(p => p.stato === 'attivo');
+                if (attivi && !timerPiani) timerPiani = setInterval(caricaPiani, 60000);
+                if (!attivi && timerPiani) { clearInterval(timerPiani); timerPiani = null; }
+            })
+            .catch(() => {});
+    }
+
+    function comandoPiano(p, azione, bottone) {
+        if (azione === 'annulla') {
+            const restano = (p.da_inviare || 0) + (p.in_corso || 0);
+            if (!confirm(`Annullare l'invio pianificato di "${p.nome}"?\n\n` +
+                         `${restano} ${restano === 1 ? 'cliente non ha' : 'clienti non hanno'} ancora ricevuto il messaggio e non lo ${restano === 1 ? 'riceverà' : 'riceveranno'}. ` +
+                         'Chi l\'ha già ricevuto resta nello storico della promo.')) return;
+        }
+        bottone.disabled = true;
+        fetch(`${URL_PIANI}/${p.id}/${azione}`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken() }
+        })
+            .then(r => r.json().catch(() => ({ success: false, error: `Errore del server (${r.status})` })))
+            .then(data => {
+                if (!data.success) alert('❌ ' + (data.error || 'Operazione non riuscita'));
+                caricaPiani();
+                aggiornaStoricoPromo();
+                aggiornaLimiteGiornaliero();
+            })
+            .catch(() => alert('❌ Errore di connessione'))
+            .finally(() => { bottone.disabled = false; });
+    }
+
+    function apriProblemiPiano(p) {
+        const modalEl = document.getElementById('modalProblemiPiano');
+        document.getElementById('problemiPianoTitolo').textContent = p.nome;
+        const corpo = document.getElementById('problemiPianoCorpo');
+        corpo.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        const STATI = { errore: 'Non arrivato', saltato: 'Saltato', non_confermato: 'Da verificare' };
+        fetch(`${URL_PIANI}/${p.id}/problemi`)
+            .then(r => r.json())
+            .then(data => {
+                corpo.textContent = '';
+                if (!data.success || !data.righe.length) {
+                    corpo.textContent = 'Nessun problema registrato.';
+                    return;
+                }
+                const tabella = document.createElement('table');
+                tabella.className = 'table table-sm align-middle mb-0';
+                tabella.innerHTML = '<thead><tr><th>Cliente</th><th>Esito</th><th>Motivo</th><th>Quando</th></tr></thead>';
+                const tb = document.createElement('tbody');
+                data.righe.forEach(r => {
+                    const tr = document.createElement('tr');
+                    [r.nome + (r.cellulare ? ' · ' + r.cellulare : ''), STATI[r.stato] || r.stato,
+                     r.motivo || '', dataIt(r.quando)].forEach(v => {
+                        const td = document.createElement('td');
+                        td.textContent = v;
+                        tr.appendChild(td);
+                    });
+                    tb.appendChild(tr);
+                });
+                tabella.appendChild(tb);
+                corpo.appendChild(tabella);
+                const nota = document.createElement('div');
+                nota.className = 'small text-muted mt-2';
+                nota.textContent = '«Da verificare»: il server si è riavviato proprio mentre partiva il messaggio, quindi non si sa se è arrivato. ' +
+                    'Non viene rimandato da solo, per non mandarlo due volte: se serve, mandalo a mano cercando il cliente.';
+                corpo.appendChild(nota);
+            })
+            .catch(() => { corpo.textContent = 'Errore nel caricamento.'; });
     }
 
     function mostraCodaMarketing(stato) {
@@ -2069,6 +2469,8 @@ Ti aspettiamo 💆‍♀️`
     // Per ultimo: usa timerCodaMarketing, dichiarato qui sopra. Senza template
     // scelto mostra solo il suggerimento a salvarne uno.
     aggiornaStoricoPromo();
+    aggiornaLimiteGiornaliero();
+    caricaPiani();
 });
 
     // Salva limite invii giornalieri (solo owner)

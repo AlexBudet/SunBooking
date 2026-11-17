@@ -54,13 +54,34 @@ class _Coda(object):
         self.corrente = None
 
 
-def in_coda(chiave):
+def in_coda(chiave, solo_manuali=False):
     """Quanti messaggi aspettano ancora di partire. Serve a chi calcola il
     limite giornaliero: un messaggio accodato e' un messaggio gia' impegnato,
-    anche se la riga in `marketing_invii` non c'e' ancora."""
+    anche se la riga in `marketing_invii` non c'e' ancora.
+
+    solo_manuali=True lascia fuori quelli dei piani di invio: quelli si
+    contano dal database (marketing_piani.in_volo_piani), che li vede anche
+    da un processo diverso da quello che li manda."""
     with _lock:
         coda = _code.get(chiave)
-        return len(coda.messaggi) if coda else 0
+        if not coda:
+            return 0
+        if not solo_manuali:
+            return len(coda.messaggi)
+        return sum(1 for m in coda.messaggi if not m.get('piano_dest_id'))
+
+
+def ids_piano(chiave):
+    """Le righe dei piani che QUESTO processo ha in coda o sta mandando: la
+    pulizia dopo un riavvio non le deve toccare."""
+    with _lock:
+        coda = _code.get(chiave)
+        if coda is None:
+            return set()
+        pendenti = list(coda.messaggi)
+        if coda.corrente is not None:
+            pendenti.append(coda.corrente)
+        return {m['piano_dest_id'] for m in pendenti if m.get('piano_dest_id')}
 
 
 def in_coda_campagna(chiave, campagna):
@@ -167,6 +188,10 @@ def _invia(messaggio, config):
     return False, 'HTTP %s: %s' % (resp.status_code, (resp.text or '')[:180])
 
 
+class _Saltato(Exception):
+    """Messaggio di un piano che al momento di partire non era piu' da mandare."""
+
+
 def _lavora(app, chiave):
     """Il thread che svuota la coda, un messaggio alla volta e col ritmo giusto."""
     from appl import db
@@ -189,6 +214,24 @@ def _lavora(app, chiave):
             coda.corrente = messaggio
             config = coda.config
 
+        from appl.services import marketing_piani
+
+        # Messaggio di un piano messo in pausa o annullato nel frattempo (anche
+        # da un altro operatore, da un altro PC): si salta, senza aspettare.
+        if messaggio.get('piano_dest_id'):
+            try:
+                with app.app_context():
+                    ancora = marketing_piani.ancora_da_mandare(messaggio)
+            except Exception:
+                ancora = True     # il controllo vero e' prima_dell_invio, qui sotto
+            if not ancora:
+                with _lock:
+                    coda = _code.get(chiave)
+                    if coda is not None:
+                        coda.corrente = None
+                        coda.totale = max(0, coda.totale - 1)
+                continue
+
         # L'attesa sta FUORI dal lucchetto degli invii. Se un operatore manda
         # una conferma dall'Agenda mentre la coda sta aspettando, non deve
         # mettersi in fila dietro a trenta messaggi di marketing: al massimo
@@ -205,6 +248,7 @@ def _lavora(app, chiave):
             _time.sleep(attesa)
 
         riuscito, errore = False, None
+        saltato = False
         try:
             with app.app_context():
                 with usage_monitor.lock_invio():
@@ -212,7 +256,15 @@ def _lavora(app, chiave):
                     # sopra. Serve per il caso in cui un invio manuale sia
                     # partito proprio mentre dormivamo.
                     usage_monitor.attendi_il_turno('whatsapp')
-                    riuscito, errore = _invia(messaggio, config)
+                    # Piani di invio: la riga passa a `in_invio` (con commit)
+                    # PRIMA della chiamata. Se non e' piu' `in_coda` non si manda.
+                    if not marketing_piani.prima_dell_invio(messaggio):
+                        saltato = True
+                    else:
+                        riuscito, errore = _invia(messaggio, config)
+
+                if saltato:
+                    raise _Saltato()
 
                 db.session.add(MarketingInvio(
                     client_id=messaggio['client_id'],
@@ -227,12 +279,22 @@ def _lavora(app, chiave):
                     esito='ok' if riuscito else 'errore',
                     errore=(errore[:300] if errore else None),
                 ))
+                # Stessa transazione: storico e stato della riga del piano
+                # sono veri insieme o per niente.
+                marketing_piani.dopo_l_invio(messaggio, riuscito, errore)
                 # Un commit per messaggio, non uno alla fine: e' `created_at`
                 # di questa riga l'orologio che fa aspettare il messaggio dopo.
                 # Con un commit solo in fondo tutte le righe prendono l'ora
                 # d'inizio della transazione, e il ritmo non lo vede piu'
                 # nessuno.
                 db.session.commit()
+        except _Saltato:
+            with _lock:
+                coda = _code.get(chiave)
+                if coda is not None:
+                    coda.corrente = None
+                    coda.totale = max(0, coda.totale - 1)
+            continue
         except Exception as e:
             riuscito, errore = False, str(e)[:300]
             try:
@@ -240,6 +302,7 @@ def _lavora(app, chiave):
                     db.session.rollback()
             except Exception:
                 pass
+            marketing_piani.dopo_eccezione(app, messaggio, errore)
             try:
                 app.logger.warning("[marketing] invio a %s non riuscito: %s",
                                    messaggio.get('nome') or messaggio['client_id'],

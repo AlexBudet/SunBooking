@@ -15903,6 +15903,14 @@ document.addEventListener('click', function(e) {
       btnDeleteSingle.textContent = contiguousIds.length > 0 ? 'Elimina solo questo servizio' : 'Elimina il blocco';
     }
 
+    // Blocco gia' in no-show: lo stesso pulsante lo toglie (setNoShow fa
+    // 3 -> 0 su tutto il gruppo), quindi deve dirlo.
+    var btnNoShowModal = modalEl.querySelector('#deleteOrNoShowBtn-noshow');
+    if (btnNoShowModal) {
+      var giaNoShow = !!block && String(block.getAttribute('data-status')) === '3';
+      btnNoShowModal.textContent = giaNoShow ? 'Annulla no-show' : 'Indica come NON ARRIVATO (No-Show)';
+    }
+
     window.__DeleteOrNoShow_modal_instance = window.__DeleteOrNoShow_modal_instance || new bootstrap.Modal(modalEl, { backdrop: 'static' });
     try { window.__DeleteOrNoShow_modal_instance.show(); } catch (e) { console.warn('DeleteOrNoShowModal show error', e); }
   } else {

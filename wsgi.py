@@ -353,6 +353,17 @@ for idx, uri in {**pool, **demo_pool}.items():
 
 application = DispatcherMiddleware(root_app, mounts)
 app = application
+
+# Invii di marketing pianificati su piu' giorni: un thread che ogni minuto
+# guarda i piani di ogni negozio. Parte SOLO su Azure (WEBSITE_SITE_NAME):
+# un wsgi.py avviato su un PC monta i negozi veri e non deve mandare promo.
+# `children` e' il dizionario vivo: un negozio aggiunto dopo entra da solo.
+try:
+    from appl.services import marketing_piani as _marketing_piani
+    if _marketing_piani.avvia_scheduler(children, escludi=DEMO_IDX):
+        root_app.logger.info("[marketing-piano] giro giornaliero avviato")
+except Exception:
+    root_app.logger.exception("[marketing-piano] avvio del giro giornaliero non riuscito")
 # Le pagine dei negozi usano molti indirizzi assoluti ('/calendar/...'): giusti
 # sul .exe, nel cloud arrivavano qui senza /s/<idx> e davano 404. Ora la root
 # li rimanda al negozio da cui parte la richiesta (vedi instradamento_cloud).

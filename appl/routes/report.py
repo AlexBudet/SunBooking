@@ -2995,8 +2995,18 @@ def report_marketing_conversioni():
             }
             promo_out.update(_riassunto(conv_promo))
 
+        # Invio pianificato su piu' giorni ancora aperto: i raggiunti crescono.
+        da_mandare = 0
+        if campagna and azzerato_il is None:
+            try:
+                from appl.services import marketing_piani
+                da_mandare = len(marketing_piani.pianificati_campagna(campagna))
+            except Exception:
+                da_mandare = 0
+
         chiusura = e['ultimo'] + durata_max
         campagne.append({
+            'da_mandare': da_mandare,
             'nome': nome,
             'tipo': tipo,
             'chiusa_il': data_it(_mk_giorno_roma(azzerato_il)) if azzerato_il else None,
