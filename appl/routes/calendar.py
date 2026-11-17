@@ -2373,7 +2373,11 @@ def online_appointments_by_booking_date():
 
                 # 2) estrai nome/cognome dalla nota strutturata e controlla
                 if not matched:
-                    nome, cognome, _ = estrai_nome_cognome_cellulare(appt.note)
+                    # restituisce 4 valori (nome, cognome, cellulare, email):
+                    # spacchettarne 3 alzava ValueError, inghiottito dall'except
+                    # qui sotto, e la prenotazione non ancora abbinata spariva
+                    # dalla ricerca per nome.
+                    nome, cognome, _cell, _email = estrai_nome_cognome_cellulare(appt.note)
                     if nome and s in nome.strip().lower():
                         matched = True
                     elif cognome and s in cognome.strip().lower():
@@ -2433,6 +2437,7 @@ def online_appointments_by_booking_date():
                 "client_id": appt.client_id,
                 "note": appt.note,
                 "services": [],
+                "servizi": [],
                 "match_cliente": "",
                 "match_cliente_id": None,
                 "match_type": "none",
@@ -2497,6 +2502,15 @@ def online_appointments_by_booking_date():
                 grouped[session_id]["match_type"] = "none"
 
         grouped[session_id]["services"].append(appt.service.servizio_tag if appt.service else "")
+        # Colonna SERVIZI PRENOTATI: un badge per servizio con l'orario di
+        # inizio richiesto. Tag vuoto -> nome del servizio, cosi' il badge
+        # non resta mai senza scritta.
+        servizio_tag = ((appt.service.servizio_tag or "").strip() or (appt.service.servizio_nome or "").strip()) if appt.service else ""
+        grouped[session_id]["servizi"].append({
+            "tag": servizio_tag,
+            "nome": (appt.service.servizio_nome or "").strip() if appt.service else "",
+            "inizio": appt.start_time.strftime("%Y-%m-%d %H:%M") if appt.start_time else "",
+        })
         grouped[session_id]["data_appuntamento"].append(appt.start_time.strftime("%Y-%m-%d %H:%M") if appt.start_time else "")
         grouped[session_id]["ids"].append(appt.id)
 
@@ -2522,6 +2536,9 @@ def online_appointments_by_booking_date():
             "client_id": session["client_id"],
             "note": session["note"],
             "services": session["services"],
+            # ordine di agenda: orario di inizio, poi tag (le righe arrivano
+            # ordinate per created_at, non per orario)
+            "servizi": sorted(session["servizi"], key=lambda s: (s["inizio"] or "9999", s["tag"])),
             "match_cliente": session["match_cliente"],
             "match_cliente_id": session.get("match_cliente_id", None),
             "match_type": session.get("match_type", "none"),

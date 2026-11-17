@@ -2979,6 +2979,8 @@ body.pseudo-active .appointment-block.active-popup .btn-popup.whatsapp-btn {
   height: 20px !important;
   padding-top: 1px;
   padding-bottom: 1px;
+  padding-left: 6px;
+  padding-right: 6px;
   vertical-align: middle;
   font-size: 0.95em;
 }
@@ -3066,8 +3068,65 @@ body.pseudo-active .appointment-block.active-popup .btn-popup.whatsapp-btn {
     animation: none;
 }
 
-#webApptTable th:nth-child(3) {
-    text-align: center;
+/* MATCH CLIENTE e ASSOCIA contengono un'icona o una parola sola: con
+   width:1% + nowrap la colonna si stringe alla sua intestazione e lo spazio
+   che avanza va a CLIENTE PRENOTATO e SERVIZI PRENOTATI. */
+#webApptTable .wa-col-match,
+#webApptTable .wa-col-associa {
+  width: 1%;
+  white-space: nowrap;
+  text-align: center;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+/* Date e "Nome Cognome - cellulare" non si spezzano: quando lo spazio manca
+   sono i badge dei servizi ad andare a capo. */
+#webApptTable .wa-col-data,
+#webApptTable .wa-col-cliente {
+  white-space: nowrap;
+}
+
+/* SERVIZI PRENOTATI: un badge per servizio, tag a sinistra e orario di
+   inizio a destra; i badge vanno a capo se non stanno su una riga. */
+#webApptTable th.wa-col-servizi {
+  padding-left: 8px;
+}
+
+#webApptTable td.wa-col-servizi {
+  padding: 3px 8px;
+}
+
+#webApptTable .wa-servizi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+#webApptTable .wa-servizio {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid #222;
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 0.82em;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+#webApptTable .wa-servizio-tag {
+  background: #222;
+  color: #fff;
+  font-weight: 600;
+  padding: 1px 6px;
+}
+
+#webApptTable .wa-servizio-ora {
+  background: #fff;
+  color: #222;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
 }
 
 @keyframes blink-question {

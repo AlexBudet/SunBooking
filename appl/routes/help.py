@@ -3129,6 +3129,8 @@ La colonna <span class="help-strong-dark">MATCH CLIENTE</span> dice cosa ha trov
 
 Nella colonna <span class="help-strong-dark">ASSOCIA</span>: ❓ vuol dire da abbinare (un click apre la finestra), 🟢 vuol dire già abbinata. Le schede cancellate non vengono mai proposte.
 
+La colonna <span class="help-strong-dark">SERVIZI PRENOTATI</span> mostra un riquadro per ogni servizio della prenotazione, con la sigla del servizio e l'orario di inizio richiesto, in ordine di orario. Passando il mouse sul riquadro si legge il nome completo del servizio.
+
 Con il match <span class="help-strong-dark">No</span> la finestra affianca i dati della prenotazione e l'eventuale <span class="help-strong-dark">cliente simile</span> trovato in rubrica, con un punteggio di somiglianza (👍 sopra 80, 😐 fra 60 e 80, 👎 sotto): puoi <span class="help-strong-dark">Associa a Cliente</span> se è lui, oppure <span class="help-strong-dark">Crea Nuovo Cliente</span> con i dati già compilati.
 
 Con il match 📱 <span class="help-strong-dark">solo cellulare</span> la finestra mette a confronto i dati arrivati dal sito e la scheda trovata, e sei tu a confermare. Se in rubrica <span class="help-strong-dark">quello stesso numero sta su più schede</span> compare un avviso rosso con quante sono: la finestra te ne mostra una sola, quindi controlla in anagrafica prima di confermare (numero di famiglia, vecchia scheda doppia, cambio di cognome).

@@ -1887,11 +1887,12 @@ body.asp-docked-modal-open {
         <table id="webApptTable">
           <thead>
             <tr>
-              <th style="text-align:center">DATA RICHIESTA</th>
-              <th>CLIENTE PRENOTATO</th>
-              <th>MATCH CLIENTE</th>
-              <th style="text-align:center">ASSOCIA</th>
-              <th style="text-align:center">DATA APPUNTAMENTO</th>
+              <th class="wa-col-data" style="text-align:center">DATA RICHIESTA</th>
+              <th class="wa-col-cliente">CLIENTE PRENOTATO</th>
+              <th class="wa-col-match">MATCH CLIENTE</th>
+              <th class="wa-col-associa" style="text-align:center">ASSOCIA</th>
+              <th class="wa-col-data" style="text-align:center">DATA APPUNTAMENTO</th>
+              <th class="wa-col-servizi">SERVIZI PRENOTATI</th>
             </tr>
           </thead>
           <tbody>
@@ -1942,6 +1943,11 @@ body.asp-docked-modal-open {
             <td>Prenotazione già associata correttamente a un cliente.</td>
           </tr>
         </table>
+
+        <hr>
+
+        <h6><strong>Colonna "Servizi Prenotati"</strong></h6>
+        <p class="mb-0">Un riquadro per ogni servizio prenotato, con l'orario di inizio richiesto, in ordine di orario. Passando il mouse sul riquadro si legge il nome completo del servizio.</p>
         
         <hr>
 

@@ -15031,6 +15031,74 @@ document.addEventListener('DOMContentLoaded', function() {
 // =============================================================
 //   FUNZIONE PRINCIPALE: CARICA E MOSTRA GLI APPUNTAMENTI ONLINE
 // =============================================================
+// Numero di colonne della tabella, letto dall'intestazione: le righe
+// "Nessun risultato" / "Errore" restano larghe quanto la tabella anche se
+// le colonne cambiano.
+function webApptColCount() {
+  return document.querySelectorAll('#webApptTable thead th').length || 1;
+}
+
+// Tooltip dentro il modal: il modal sta a z-index 25000, il .tooltip globale
+// a 23050. Agganciato al <body> il fumetto finirebbe dietro al modal, quindi
+// si aggancia al modal stesso (resta nel suo stacking context).
+function webApptTipOpts() {
+  const modalEl = document.getElementById('WebAppointmentsModal');
+  return modalEl ? { container: modalEl } : {};
+}
+
+// Colonna SERVIZI PRENOTATI: un badge per servizio, tag + orario di inizio,
+// in ordine di orario (l'ordine lo da' gia' il server). Se un servizio cade
+// in un giorno diverso dalla DATA APPUNTAMENTO della riga, l'orario porta
+// anche il giorno, altrimenti il badge sarebbe ambiguo.
+function buildWebApptServiziCell(session, apptDateStr) {
+  const td = document.createElement('td');
+  td.className = 'wa-col-servizi';
+
+  let servizi = Array.isArray(session?.servizi) ? session.servizi : null;
+  if (!servizi) {
+    // risposta di un server non ancora aggiornato: solo i tag, senza orario
+    servizi = (Array.isArray(session?.services) ? session.services : [])
+      .map(tag => ({ tag: tag, nome: '', inizio: '' }));
+  }
+  if (!servizi.length) return td;
+
+  const list = document.createElement('div');
+  list.className = 'wa-servizi';
+
+  servizi.forEach(s => {
+    const tag = String(s?.tag ?? '').trim();
+    const nome = String(s?.nome ?? '').trim();
+    const inizio = String(s?.inizio ?? '');
+    const [giorno, orario] = inizio.split(' ');
+    const hhmm = (orario || '').slice(0, 5);
+
+    const badge = document.createElement('span');
+    badge.className = 'wa-servizio';
+
+    const tagEl = document.createElement('span');
+    tagEl.className = 'wa-servizio-tag';
+    tagEl.textContent = tag || '—';
+    badge.appendChild(tagEl);
+
+    if (hhmm) {
+      const oraEl = document.createElement('span');
+      oraEl.className = 'wa-servizio-ora';
+      const altroGiorno = giorno && apptDateStr && giorno !== apptDateStr;
+      oraEl.textContent = altroGiorno ? `${formatDateItalian(giorno)} ${hhmm}` : hhmm;
+      badge.appendChild(oraEl);
+    }
+
+    // Nome completo solo se dice qualcosa in piu' del tag
+    if (nome && nome.toLowerCase() !== tag.toLowerCase()) {
+      applyBsTooltip(badge, nome, webApptTipOpts());
+    }
+    list.appendChild(badge);
+  });
+
+  td.appendChild(list);
+  return td;
+}
+
 // Questa funzione gestisce il caricamento dei dati dal backend, il rendering della tabella nel modal,
 // e la gestione degli errori. Viene chiamata quando si apre il modal o si cambia data/ricerca.
 function loadWebAppointments(date, search) {
@@ -15081,7 +15149,7 @@ function loadWebAppointments(date, search) {
       if (arr.length === 0) {
         const tr = document.createElement('tr');
         const td = document.createElement('td');
-        td.colSpan = 5; // Spazia su tutte le colonne
+        td.colSpan = webApptColCount(); // Spazia su tutte le colonne
         td.textContent = 'Nessun risultato';
         tr.appendChild(td);
         tbody.appendChild(tr);
@@ -15092,6 +15160,7 @@ function loadWebAppointments(date, search) {
 
           // Colonna 1: Data di booking (centrata)
           const tdBooking = document.createElement('td');
+          tdBooking.className = 'wa-col-data';
           tdBooking.style.textAlign = 'center';
           const bookingDateStr = (session?.data_booking ?? '').toString().split(' ')[0];
           tdBooking.textContent = formatDateItalian(bookingDateStr);
@@ -15099,6 +15168,7 @@ function loadWebAppointments(date, search) {
 
           // Colonna 2: Cliente (nome cognome - cellulare)
           const tdCliente = document.createElement('td');
+          tdCliente.className = 'wa-col-cliente';
           const nome = capitalizeName((session?.nome ?? '').toString());
           const cognome = capitalizeName((session?.cognome ?? '').toString());
           const cell = (session?.cellulare ?? '').toString();
@@ -15107,7 +15177,7 @@ function loadWebAppointments(date, search) {
 
           // Colonna 3: Match cliente (mostra se c'è un match con clienti esistenti)
           const tdMatch = document.createElement('td');
-          tdMatch.style.textAlign = 'center';
+          tdMatch.className = 'wa-col-match';
           const matchCliente = !!session?.match_cliente;
           const matchType = session?.match_type || 'none';
 
@@ -15118,7 +15188,7 @@ function loadWebAppointments(date, search) {
             const phoneIcon = document.createElement('span');
             phoneIcon.textContent = '📱';
             phoneIcon.style.fontSize = '1.4em';
-            applyBsTooltip(phoneIcon, 'Match solo cellulare');
+            applyBsTooltip(phoneIcon, 'Match solo cellulare', webApptTipOpts());
             tdMatch.appendChild(phoneIcon);
           } else {
             tdMatch.textContent = 'No';
@@ -15127,10 +15197,7 @@ function loadWebAppointments(date, search) {
 
           // Colonna 4: Bottone associa / stato (logica per mostrare ❓, 🟢 o niente)
           const tdBtn = document.createElement('td');
-          tdBtn.style.textAlign = 'center';
-          tdBtn.style.verticalAlign = 'middle';
-          tdBtn.style.minWidth = '40px';
-          tdBtn.style.height = '20px';
+          tdBtn.className = 'wa-col-associa';
 
           const matchClienteId = session?.match_cliente_id ?? null;
           const clientId = session?.client_id ?? null;
@@ -15148,7 +15215,7 @@ function loadWebAppointments(date, search) {
           if (isPlaceholder) {
             const btn = document.createElement('button');
             btn.type = 'button';
-            applyBsTooltip(btn, 'Associa');
+            applyBsTooltip(btn, 'Associa', webApptTipOpts());
             
             // Determina classe e tipo in base al match
             if (matchType === 'phone_only') {
@@ -15218,6 +15285,7 @@ function loadWebAppointments(date, search) {
 
 // Colonna 5: Data appuntamento (centrata) - Estrai solo la data (senza orario)
 const tdAppt = document.createElement('td');
+tdAppt.className = 'wa-col-data';
 tdAppt.style.textAlign = 'center';
 const apptDateStr = (session?.data_appuntamento ?? '').toString().split(' ')[0];  // Prendi solo la parte data
 const apptTimeStr = (session?.data_appuntamento ?? '').toString().split(' ')[1] || '';  // Prendi l'orario
@@ -15235,7 +15303,7 @@ tr.appendChild(tdAppt);
 if (tdAppt.textContent.trim()) {
   // Rende cliccabile e aggiunge tooltip
   tdAppt.style.cursor = 'pointer';
-  applyBsTooltip(tdAppt, "Vai all'appuntamento");
+  applyBsTooltip(tdAppt, "Vai all'appuntamento", webApptTipOpts());
   tdAppt.addEventListener('click', function () {
     // Usa gli attributi data-* invece di parsare il testo
     const dateStr = tdAppt.dataset.date;
@@ -15260,7 +15328,9 @@ if (tdAppt.textContent.trim()) {
   });
 }
 
-          tr.appendChild(tdAppt);
+          // Colonna 6: Servizi prenotati (un badge per servizio con l'orario)
+          tr.appendChild(buildWebApptServiziCell(session, apptDateStr));
+
           tbody.appendChild(tr);
         });
       }
@@ -15290,17 +15360,13 @@ if (tdAppt.textContent.trim()) {
   };
 
   tbody.querySelectorAll('tr').forEach(tr => {
-    // Colonna 2 = CLIENTE PRENOTATO
+    // Colonna 2 = CLIENTE PRENOTATO. La colonna 3 (MATCH CLIENTE) contiene
+    // solo Sì / No / 📱: riscriverne il textContent cancellerebbe lo span
+    // dell'icona insieme al suo tooltip.
     const cellClient = tr.children[1];
     if (cellClient) {
       const raw = cellClient.textContent;
       cellClient.textContent = capAll(decodeHtml(raw));
-    }
-    // Colonna 3 = MATCH CLIENTE
-    const cellMatch = tr.children[2];
-    if (cellMatch) {
-      const raw = cellMatch.textContent;
-      cellMatch.textContent = capAll(decodeHtml(raw));
     }
   });
 })();
@@ -15545,7 +15611,7 @@ if (typeof checkPendingWebAppointments === 'function') {
       tbody.innerHTML = '';
       const tr = document.createElement('tr');
       const td = document.createElement('td');
-      td.colSpan = 5;
+      td.colSpan = webApptColCount();
       td.textContent = `Errore caricamento: ${err.message}`;
       tr.appendChild(td);
       tbody.appendChild(tr);
