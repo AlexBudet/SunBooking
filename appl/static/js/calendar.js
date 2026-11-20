@@ -493,6 +493,28 @@ function capitalizeName(name) {
 }
 window.capitalizeName = capitalizeName;
 
+// Etichetta "📦 Seduta 3 di 5 · Nome pacchetto" sui blocchi in preparazione
+// (Navigator e finestra Crea appuntamento): al momento della prenotazione si
+// deve VEDERE che il trattamento sara' una seduta del pacchetto, non solo
+// un'iconcina con il tooltip. Su window perche' la usano parti di calendar.js
+// dentro e fuori dalla IIFE.
+window.cdEtichettaSedutaPacchetto = function (ordine, totali, nome) {
+  const el = document.createElement('span');
+  el.className = 'pseudo-pacchetto-badge';
+  el.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:1px 8px;' +
+    'border-radius:999px;background:#e8f5ec;border:1px solid #9fd3b1;color:#1d6b3a;font-size:0.78em;' +
+    'font-weight:600;white-space:nowrap;vertical-align:middle;';
+  const n = parseInt(ordine, 10);
+  const t = parseInt(totali, 10);
+  let testo = '📦 Seduta';
+  if (n) testo += ' ' + n + (t ? ' di ' + t : '');
+  if (nome) testo += ' · ' + String(nome);
+  // Dalla pagina del pacchetto arrivano solo gli id, non numero e nome
+  if (!n && !nome) testo = '📦 Seduta del pacchetto';
+  el.textContent = testo;
+  return el;
+};
+
 // DICHIARAZIONE csrfToken SPOSTATA QUI (prima era dopo la funzione checkPendingSedutaFromPacchetto)
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
@@ -3546,11 +3568,8 @@ function selectService(serviceId, serviceName, serviceDuration) {
     blockEl.setAttribute('data-pacchetto-id', String(pacchettoId || ''));
     blockEl.setAttribute('data-pacchetto-nome', String(pacchettoNome));
 
-    const badge = document.createElement('i');
-    badge.className = 'bi bi-box-seam pseudo-pacchetto-badge';
-    badge.style.cssText = 'margin-left:8px;font-size:0.9em;opacity:0.75;cursor:help;';
-    applyBsTooltip(badge, `📦 ${pacchettoNome} - seduta collegata`);
-    blockEl.appendChild(badge);
+    blockEl.appendChild(window.cdEtichettaSedutaPacchetto(
+      sedutaMatch.ordine, pacchettoSelezionato.sedute_totali, pacchettoNome));
   }
 
   document.getElementById('serviceSearchInput').value = serviceName;
@@ -8511,12 +8530,19 @@ function selectServiceNav(serviceId, serviceName, serviceDuration, serviceTag) {
                               if (sedutaMatch) {
                                   blk.pacchettoSedutaId = sedutaMatch.seduta_id;
                                   blk.pacchettoId = pacchettoSelezionato.pacchetto_id;
+                                  // Per l'etichetta "📦 Seduta 3 di 5 · nome" nel Navigator
+                                  blk.pacchettoNome = pacchettoSelezionato.pacchetto_nome || 'Pacchetto';
+                                  blk.pacchettoSedutaOrdine = sedutaMatch.ordine;
+                                  blk.pacchettoSeduteTotali = pacchettoSelezionato.sedute_totali;
                                   console.log(`✅ Assegnato pacchettoSedutaId=${sedutaMatch.seduta_id} al blocco ${blk.serviceName}`);
                               }
                           });
                           if (typeof saveNavigatorState === 'function') {
                               saveNavigatorState();
                           }
+                          // Ridisegna subito: senza, il collegamento c'era ma non
+                          // si vedeva fino al ridisegno successivo del Navigator.
+                          renderPseudoBlocksList();
                       }
                   });
               } else {
@@ -9402,18 +9428,16 @@ function renderPseudoBlocksList() {
       left.appendChild(strong);
       left.appendChild(document.createTextNode(' - '));
       
-      // *** NUOVO: Aggiungi icona pacchetto se collegato a seduta ***
-      if (isPacchettiModuleEnabled() && block.pacchettoSedutaId) {
-        const pacchettoIcon = document.createElement('i');
-        pacchettoIcon.className = 'bi bi-box-seam';
-        pacchettoIcon.style.cssText = 'margin-right:4px;font-size:0.85em;opacity:0.7;';
-        applyBsTooltip(pacchettoIcon, `📦 Collegato a: ${block.pacchettoNome || 'Pacchetto'}`);
-        left.appendChild(pacchettoIcon);
-      }
-      
       const tagSpan = document.createElement('span');
       tagSpan.textContent = String(block.tag || '');
       left.appendChild(tagSpan);
+
+      // Seduta di un pacchetto: si vede SUBITO, in chiaro, prima di piazzare
+      // il blocco in agenda (prima era un'iconcina con il solo tooltip).
+      if (isPacchettiModuleEnabled() && block.pacchettoSedutaId) {
+        left.appendChild(window.cdEtichettaSedutaPacchetto(
+          block.pacchettoSedutaOrdine, block.pacchettoSeduteTotali, block.pacchettoNome));
+      }
     }
 
     const dur = document.createElement('span');

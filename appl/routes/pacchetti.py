@@ -1504,8 +1504,18 @@ def check_pacchetti_disponibili():
                 # Escludi sedute già Effettuate
                 if seduta.stato == SedutaStatus.Effettuata.value:
                     continue
-                # Escludi sedute già collegate a un appuntamento in calendario
-                if seduta.appointment is not None:
+                # Escludi sedute già collegate a un appuntamento in calendario.
+                # ATTENZIONE: seduta.appointment e' una LISTA, non un oggetto. Il
+                # backref nasce da Appointment.pacchetto_seduta (models.py), e il
+                # suo uselist=False vale solo per quel lato. Prima qui c'era
+                # "is not None", sempre vero anche su una seduta libera ([] non e'
+                # None): tutte le sedute venivano scartate, l'agenda non proponeva
+                # mai il pacchetto e gli appuntamenti presi dall'agenda nascevano
+                # scollegati (dal 18/04/2026, v1.6.3; trovato il 20/11/2026 sul
+                # pacchetto 427 di suncity). Dalla pagina del pacchetto invece
+                # funzionava, perche' quella strada passa l'id della seduta e non
+                # passa di qui.
+                if seduta.appointment:
                     continue
                 sedute_disponibili.append({
                     'seduta_id': seduta.id,
