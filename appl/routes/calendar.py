@@ -12,7 +12,7 @@ from appl.services.error_log import log_crm_error
 from appl.services import risorse as risorse_mod
 from appl.services import promo as promo_mod
 from appl.services import no_show as no_show_mod
-from appl.formati import nome_proprio, data_it
+from appl.formati import nome_proprio, nome_operatore, data_it
 import random
 import json
 import re
@@ -2879,9 +2879,9 @@ def calendar_next_appointments():
         op_id = getattr(appt, "operator_id", None)
         try:
             if appt.operator:
-                nome = getattr(appt.operator, "user_nome", "") or ""
-                cognome = getattr(appt.operator, "user_cognome", "") or ""
-                operator_name = f"{nome} {cognome}".strip()
+                # Solo il nome, mai il cognome (formati.nome_operatore): finisce
+                # nell'agenda scaricabile (PDF/XLSX di base.html) e nei turni.
+                operator_name = nome_operatore(appt.operator)
                 if op_id is None:
                     op_id = getattr(appt.operator, "id", None)
         except Exception:
@@ -4348,6 +4348,58 @@ def api_info_client_detail(client_id):
     return jsonify(info)
 
 
+def _info_utente_privilegiato():
+    """Admin o owner. Le statistiche dell'INFO BOX (incassi, numeri di servizi e
+    operatori) sono solo per loro: il ruolo user vede le schede, non i numeri.
+    Il pulsante e' nascosto anche nella pagina, ma nascondere non e' proteggere."""
+    from appl.models import User, RuoloUtente
+    uid = session.get('user_id')
+    u = db.session.get(User, uid) if uid else None
+    return bool(u and u.ruolo in (RuoloUtente.owner, RuoloUtente.admin))
+
+
+@calendar_bp.route('/api/info/performance', methods=['GET'])
+def api_info_performance():
+    """Pannello Performance dell'INFO BOX: negozio, servizi e operatori su un
+    periodo a scelta, con un secondo periodo facoltativo per il confronto.
+    Parametri: dal, al, [cmp_dal, cmp_al] in YYYY-MM-DD. I conti stanno in
+    appl/services/performance.py."""
+    if 'user_id' not in session:
+        return jsonify({'error': 'session_expired'}), 401
+    if not _info_utente_privilegiato():
+        return jsonify({'error': 'Riservato ad amministratori e titolare'}), 403
+
+    from appl.services import performance as perf_mod
+
+    def _data(nome):
+        v = (request.args.get(nome) or '').strip()
+        if not v:
+            return None
+        try:
+            return datetime.strptime(v, '%Y-%m-%d').date()
+        except ValueError:
+            raise ValueError(nome)
+
+    try:
+        dal, al = _data('dal'), _data('al')
+        cmp_dal, cmp_al = _data('cmp_dal'), _data('cmp_al')
+    except ValueError as e:
+        return jsonify({'error': f'Data non valida: {e}'}), 400
+    if not dal or not al or al < dal:
+        return jsonify({'error': 'Periodo non valido'}), 400
+    if bool(cmp_dal) != bool(cmp_al) or (cmp_dal and cmp_al < cmp_dal):
+        return jsonify({'error': 'Periodo di confronto non valido'}), 400
+    for a, b in ((dal, al), (cmp_dal, cmp_al)):
+        if a and (b - a).days + 1 > perf_mod.MAX_GIORNI:
+            return jsonify({'error': f'Periodo troppo lungo: massimo {perf_mod.MAX_GIORNI} giorni'}), 400
+
+    try:
+        return jsonify(perf_mod.calcola(dal, al, cmp_dal, cmp_al))
+    except Exception as e:
+        app.logger.exception(f"api_info_performance error: {e}")
+        return jsonify({'error': 'Errore nel calcolo delle performance'}), 500
+
+
 @calendar_bp.route('/api/info/service/search', methods=['GET'])
 def api_info_service_search():
     """Ricerca servizi (per autocomplete pannello info → Servizi)."""
@@ -4411,7 +4463,6 @@ def api_info_service_detail(service_id):
 
     avg_monthly = round(last_6mo / 6.0, 1) if last_6mo > 0 else 0
     price       = float(s.servizio_prezzo or 0)
-    avg_revenue = round(price * avg_monthly, 2)
 
     raw_cat = getattr(s, 'servizio_categoria', None)
     if raw_cat is None:
@@ -4430,20 +4481,26 @@ def api_info_service_detail(service_id):
     except Exception:
         sub = ''
 
-    return jsonify({
+    scheda = {
         'id':                    s.id,
         'nome':                  s.servizio_nome or '',
         'categoria':             cat,
         'sottocategoria':        sub,
         'durata':                int(s.servizio_durata or 0),
         'prezzo':                price,
-        'totale_appuntamenti':   total,
-        'ultimi_30_giorni':      last_30,
-        'ultimi_6_mesi':         last_6mo,
-        'media_mensile':         avg_monthly,
-        'incasso_medio_mensile': avg_revenue,
-        'ultimo_appuntamento':   last_date,
-    })
+    }
+    # I numeri del servizio solo ad admin e owner; il ruolo user vede la scheda.
+    # L'"incasso medio mensile" (prezzo di listino x appuntamenti) non c'e' piu':
+    # era una stima, l'incasso vero per servizio e' nel pannello Performance.
+    if _info_utente_privilegiato():
+        scheda.update({
+            'totale_appuntamenti':   total,
+            'ultimi_30_giorni':      last_30,
+            'ultimi_6_mesi':         last_6mo,
+            'media_mensile':         avg_monthly,
+            'ultimo_appuntamento':   last_date,
+        })
+    return jsonify(scheda)
 
 
 @calendar_bp.route('/api/info/operator/search', methods=['GET'])
@@ -4451,6 +4508,8 @@ def api_info_operator_search():
     """Ricerca operatori per autocomplete pannello info → Operatore."""
     if 'user_id' not in session:
         return jsonify({'error': 'session_expired'}), 401
+    if not _info_utente_privilegiato():
+        return jsonify([]), 403
     q = (request.args.get('q') or '').strip().lower()
     if len(q) < 2:
         return jsonify([])
@@ -5111,6 +5170,8 @@ def api_info_operator_detail(operator_id):
     ultimo appuntamento gestito."""
     if 'user_id' not in session:
         return jsonify({'error': 'session_expired'}), 401
+    if not _info_utente_privilegiato():
+        return jsonify({'error': 'Riservato ad amministratori e titolare'}), 403
 
     op = db.session.get(Operator, operator_id)
     if not op or op.is_deleted:
@@ -5192,27 +5253,20 @@ def api_info_operator_detail(operator_id):
         if svc:
             top_svc_name = svc.servizio_nome or ''
 
-    # Dati sensibili (incasso, cellulare, notifiche serali) visibili SOLO
-    # per admin/owner. Per altri ruoli (estetista, ecc.) i campi sono null
-    # e il frontend non li mostra.
-    from appl.models import User, RuoloUtente
-    _u = db.session.get(User, session.get('user_id')) if session.get('user_id') else None
-    _is_privileged = bool(_u and _u.ruolo in (RuoloUtente.owner, RuoloUtente.admin))
-
+    # Tutta la scheda operatore e' solo per admin/owner (controllo in testa alla
+    # funzione). Niente piu' "incasso medio mensile": era prezzo di listino x
+    # appuntamenti, una stima; l'incasso vero e' nel pannello Performance.
     return jsonify({
         'id':                          op.id,
-        'nome':                        op.user_nome or '',
-        'cognome':                     op.user_cognome or '',
+        # Solo il nome, mai il cognome (formati.nome_operatore).
+        'nome':                        nome_operatore(op),
         'tipo':                        op.user_tipo or '',
         'totale_appuntamenti':         total,
         'ultimi_30_giorni':            last_30,
         'media_mensile':               avg_monthly,
-        'incasso_medio_mensile':       (avg_revenue if _is_privileged else None),
         'servizio_piu_frequente':      top_svc_name,
         'servizio_piu_frequente_count': top_svc_cnt,
         'ultimo_appuntamento':         last_date,
-        # Campi privilegiati: solo admin/owner. Per estetisti, null/None
-        # → il frontend salta la riga.
-        'cellulare':                   ((op.user_cellulare or '') if _is_privileged else None),
-        'notify_turni_via_whatsapp':   (bool(op.notify_turni_via_whatsapp) if _is_privileged else None),
+        'cellulare':                   op.user_cellulare or '',
+        'notify_turni_via_whatsapp':   bool(op.notify_turni_via_whatsapp),
     })

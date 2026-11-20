@@ -9392,7 +9392,11 @@ function renderPseudoBlocksList() {
     } else {
       // Dividi il nome per nascondere il telefono visivamente, ma preserva i dati completi
       const nameParts = String(block.clientName || '').split(' - ');
-      const displayName = nameParts[0] || '';  // Mostra solo il nome (prima parte)
+      // Solo il nome (prima parte), sempre con la regola di capitalizeName: il
+      // nome arriva da piu' strade (blocco copiato o tagliato dall'agenda,
+      // seduta di un pacchetto, Navigator) e alcune lo portano scritto com'e'
+      // in anagrafica. Si formatta qui, a video, e non nei dati del blocco.
+      const displayName = capitalizeName(String(nameParts[0] || '').replace(/\s+/g, ' ').trim());
       const strong = document.createElement('strong');
       strong.textContent = displayName;
       left.appendChild(strong);
@@ -20209,13 +20213,22 @@ if (a.date) {
 
   // ── INFO VIEWS: 5 categorie navigabili. Il view corrente NON appare nei
   // bottoni; gli altri 4 sì. Cliccare un bottone "scambia" la view.
+  // soloAdmin: statistiche e incassi solo per admin e owner (il server rifiuta
+  // comunque il ruolo user). 'performance' non e' una view della chat: apre il
+  // pannello grande di static/js/performance.js.
   var CD_INFO_VIEWS = [
     { id: 'clienti',     icon: '👤', label: 'Clienti'     },
     { id: 'servizi',     icon: '💅', label: 'Servizi'     },
-    { id: 'operatore',   icon: '👩', label: 'Operatore'   },
+    { id: 'operatore',   icon: '👩', label: 'Operatore',   soloAdmin: true },
+    { id: 'performance', icon: '📊', label: 'Performance', soloAdmin: true },
     { id: 'negozio',     icon: '🏪', label: 'Negozio'     },
     { id: 'booking_web', icon: '🌐', label: 'Web' },
   ];
+  function _infoPrivilegiato() { return window.CD_IS_PRIVILEGED === true; }
+  function _infoViewVisibile(v) { return !v.soloAdmin || _infoPrivilegiato(); }
+  function _apriPerformance(opts) {
+    if (_infoPrivilegiato() && typeof window.cdApriPerformance === 'function') window.cdApriPerformance(opts || {});
+  }
 
   function _setChatTitle(text) {
     var t = document.getElementById('aiChatTitle');
@@ -20264,7 +20277,7 @@ if (a.date) {
   // Switcher unico per le 5 view. Cambia titolo, contenuto e ricostruisce
   // la barra dei bottoni escludendo la view corrente.
   function _switchInfoView(viewId) {
-    var view = CD_INFO_VIEWS.find(function(v) { return v.id === viewId; });
+    var view = CD_INFO_VIEWS.find(function(v) { return v.id === viewId && _infoViewVisibile(v) && v.id !== 'performance'; });
     if (!view) view = CD_INFO_VIEWS[0]; // safety: 'clienti'
 
     AI.chatHistory = [];
@@ -20321,7 +20334,7 @@ if (a.date) {
   }
 
   function _buildInfoActionButtonsExcept(currentViewId) {
-    var actions = CD_INFO_VIEWS.filter(function(v) { return v.id !== currentViewId; });
+    var actions = CD_INFO_VIEWS.filter(function(v) { return v.id !== currentViewId && _infoViewVisibile(v); });
 
     var wrap = document.createElement('div');
     wrap.id = 'aiInfoActionButtons';
@@ -20362,6 +20375,7 @@ if (a.date) {
       // detached → chiuderebbe la chat.
       btn.addEventListener('click', function(e) {
         e.stopPropagation();
+        if (action.id === 'performance') { _apriPerformance({ tab: 'negozio' }); return; }
         _switchInfoView(action.id);
       });
       wrap.appendChild(btn);
@@ -20898,15 +20912,41 @@ if (a.date) {
     html += '<div><strong>Categoria:</strong> ' + cat + '</div>';
     html += '<div><strong>Durata:</strong> ' + (s.durata || 0) + ' min</div>';
     html += '<div><strong>Prezzo:</strong> €' + (s.prezzo || 0).toFixed(2) + '</div>';
-    html += '<hr style="border:none; border-top:1px dashed #d0d0d0; margin:6px 0;">';
-    html += '<div><strong>Totale appuntamenti:</strong> ' + (s.totale_appuntamenti || 0) + '</div>';
-    html += '<div><strong>Ultimi 30 giorni:</strong> ' + (s.ultimi_30_giorni || 0) + '</div>';
-    html += '<div><strong>Media mensile (6 mesi):</strong> ' + (s.media_mensile || 0) + '</div>';
-    html += '<div><strong>Incasso medio mensile:</strong> €' + (s.incasso_medio_mensile || 0).toFixed(2) + '</div>';
-    if (s.ultimo_appuntamento)
-      html += '<div><strong>Ultimo appuntamento:</strong> ' + esc(fmtDateIT(s.ultimo_appuntamento)) + '</div>';
+    // I numeri del servizio arrivano solo ad admin e owner (il server non li
+    // manda al ruolo user): senza, la scheda resta anagrafica.
+    var conNumeri = (s.totale_appuntamenti !== undefined && s.totale_appuntamenti !== null);
+    if (conNumeri) {
+      html += '<hr style="border:none; border-top:1px dashed #d0d0d0; margin:6px 0;">';
+      html += '<div><strong>Totale appuntamenti:</strong> ' + (s.totale_appuntamenti || 0) + '</div>';
+      html += '<div><strong>Ultimi 30 giorni:</strong> ' + (s.ultimi_30_giorni || 0) + '</div>';
+      html += '<div><strong>Media mensile (6 mesi):</strong> ' + (s.media_mensile || 0) + '</div>';
+      if (s.ultimo_appuntamento)
+        html += '<div><strong>Ultimo appuntamento:</strong> ' + esc(fmtDateIT(s.ultimo_appuntamento)) + '</div>';
+    }
+    if (conNumeri && _infoPrivilegiato()) {
+      html += '<button type="button" class="ai-info-btn cd-perf-link" data-perf-servizio="' + esc(s.nome || '') + '" ' +
+              'style="margin-top:8px; display:inline-flex; align-items:center; gap:6px; padding:6px 12px; ' +
+              'border:1px solid rgba(122,166,200,0.40); border-radius:20px; background:#eaf2f9; color:#456a85; ' +
+              'font-size:0.8rem; font-weight:600; cursor:pointer;">📊 Incasso e confronti</button>';
+    }
     html += '</div>';
     appendMessage('assistant', html);
+    _wirePerfLinks();
+  }
+
+  // Pulsanti "📊" dentro le schede: aprono il pannello Performance gia' sulla
+  // scheda giusta. stopPropagation per lo stesso motivo dei bottoni delle view.
+  function _wirePerfLinks() {
+    elMessages.querySelectorAll('.cd-perf-link:not([data-bound])').forEach(function(btn) {
+      btn.setAttribute('data-bound', '1');
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var sv = btn.getAttribute('data-perf-servizio');
+        var op = btn.getAttribute('data-perf-operatore');
+        if (sv !== null) _apriPerformance({ cerca: sv });
+        else if (op !== null) _apriPerformance({ operatore: parseInt(op, 10) });
+      });
+    });
   }
 
   // ── RICERCA OPERATORE in modo info → 'operator-search' ────────
@@ -20991,18 +21031,22 @@ if (a.date) {
     html += '<div><strong>Totale appuntamenti gestiti:</strong> ' + (o.totale_appuntamenti || 0) + '</div>';
     html += '<div><strong>Ultimi 30 giorni:</strong> ' + (o.ultimi_30_giorni || 0) + '</div>';
     html += '<div><strong>Media mensile (6 mesi):</strong> ' + (o.media_mensile || 0) + '</div>';
-    // Incasso visibile solo per admin/owner (backend ritorna null per altri ruoli)
-    if (o.incasso_medio_mensile !== null && o.incasso_medio_mensile !== undefined) {
-      html += '<div><strong>Incasso medio mensile:</strong> €' +
-              Number(o.incasso_medio_mensile).toFixed(2) + '</div>';
-    }
+    // Niente piu' "incasso medio mensile" stimato da listino: l'incasso vero
+    // dell'operatore sta nel pannello Performance (pulsante qui sotto).
     if (o.servizio_piu_frequente)
       html += '<div><strong>Servizio più frequente:</strong> ' + esc(o.servizio_piu_frequente) +
               ' <span style="color:#888;">(' + (o.servizio_piu_frequente_count || 0) + ')</span></div>';
     if (o.ultimo_appuntamento)
       html += '<div><strong>Ultimo appuntamento:</strong> ' + esc(fmtDateIT(o.ultimo_appuntamento)) + '</div>';
+    if (_infoPrivilegiato()) {
+      html += '<button type="button" class="ai-info-btn cd-perf-link" data-perf-operatore="' + esc(String(o.id)) + '" ' +
+              'style="margin-top:8px; display:inline-flex; align-items:center; gap:6px; padding:6px 12px; ' +
+              'border:1px solid rgba(122,166,200,0.40); border-radius:20px; background:#eaf2f9; color:#456a85; ' +
+              'font-size:0.8rem; font-weight:600; cursor:pointer;">📊 Incasso e confronti</button>';
+    }
     html += '</div>';
     appendMessage('assistant', html);
+    _wirePerfLinks();
   }
 
   // Expose openInfoChat all'esterno per il badge "info" in calendar.html
@@ -21263,14 +21307,18 @@ document.head.appendChild(aiStyleOverride);
     document.addEventListener('click', function (e) {
       // Non chiudere se appena terminato un resize
       if (AI._justResized) return;
+      // Il pannello Performance si apre SOPRA l'INFO BOX: lavorarci dentro non
+      // e' un "clic fuori", alla chiusura l'INFO BOX deve essere ancora li'.
+      if (document.body.classList.contains('perf-aperto') ||
+          (e.target && e.target.closest && e.target.closest('#perfModal'))) return;
       if (AI.isOpen && !elModal.contains(e.target) && (!elBadge || !elBadge.contains(e.target))) {
         toggleChat();
       }
     });
 
-    // ESC chiude
+    // ESC chiude (ma con il pannello Performance aperto chiude solo quello)
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && AI.isOpen) toggleChat();
+      if (e.key === 'Escape' && AI.isOpen && !document.body.classList.contains('perf-aperto')) toggleChat();
     });
 
   });

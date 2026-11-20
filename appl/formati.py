@@ -47,6 +47,21 @@ def nome_servizio(testo):
     return s[:1].upper() + s[1:]
 
 
+def nome_operatore(op):
+    """Nome di un operatore a video: SEMPRE E SOLO IL NOME, mai il cognome
+    (regola del titolare, 20/11/2026: in istituto ci si chiama per nome).
+
+    La persona passa da nome_proprio(); il macchinario (lampada, cabina) non e'
+    un nome proprio e resta scritto com'e' in anagrafica. None -> ''.
+    """
+    if op is None:
+        return ''
+    nome = getattr(op, 'user_nome', '') or ''
+    if (getattr(op, 'user_tipo', '') or '').strip().lower() == 'macchinario':
+        return ' '.join(str(nome).split())
+    return nome_proprio(nome)
+
+
 def data_it(valore):
     """Data a video nel formato dell'app: "06 NOV 2025".
 

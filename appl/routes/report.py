@@ -5,7 +5,7 @@ import requests
 from sqlalchemy import func, cast, Date, DateTime, text
 from appl.models import Appointment, AppointmentStatus, Operator, OperatorShift, Client, AppointmentSource, BusinessInfo, Receipt, Service, ServiceCategory, Subcategory, User, MarketingInvio, MarketingTemplate
 from appl import db
-from appl.formati import nome_proprio, data_it
+from appl.formati import nome_proprio, nome_operatore, data_it
 from appl.services import no_show as no_show_mod
 from appl.services import promo as promo_mod
 import pandas as pd
@@ -1172,10 +1172,8 @@ def next_appointments():
             visite[chiave] = []
         visite[chiave].append(a)
 
-    def _nome_operatore(op):
-        if not op:
-            return ""
-        return f"{op.user_nome or ''} {op.user_cognome or ''}".strip()
+    # Operatori: solo il nome, mai il cognome (formati.nome_operatore).
+    _nome_operatore = nome_operatore
 
     result = []
     for gruppo in visite.values():
@@ -1218,11 +1216,8 @@ def agenda_data():
 
     result = []
     for appt in appointments:
-        operator_name = ""
-        try:
-            operator_name = f"{appt.operator.user_nome} {appt.operator.user_cognome}".strip() if appt.operator else ""
-        except Exception:
-            operator_name = appt.operator.user_nome if getattr(appt, "operator", None) else ""
+        # Operatori: solo il nome, mai il cognome (formati.nome_operatore).
+        operator_name = nome_operatore(getattr(appt, "operator", None))
 
         result.append({
             "id": appt.id,
@@ -1633,7 +1628,7 @@ def report_operatori():
     # Recupera operatori visibili
     operatori = Operator.query.filter_by(is_visible=True, is_deleted=False).order_by(Operator.order.asc()).all()
     operatori_ids = [op.id for op in operatori]
-    operatori_nomi = [f"{op.user_nome} {op.user_cognome}" for op in operatori]
+    operatori_nomi = [nome_operatore(op) for op in operatori]
 
     # Query aggregata: somma per operatore e giorno
     results = (
@@ -1685,7 +1680,7 @@ def report_operatori():
     totale_periodo = sum(r['totale'] for r in stats)
 
     return jsonify({
-        'operatori': [{'id': op.id, 'nome': f"{op.user_nome} {op.user_cognome}"} for op in operatori],
+        'operatori': [{'id': op.id, 'nome': nome_operatore(op)} for op in operatori],
         'rows': stats,
         'totali_operatori': totali_operatori,
         'totale_periodo': totale_periodo
