@@ -487,6 +487,80 @@
     </div>
   </div>
 
+  <!-- ===== BACKUP IMMEDIATO ===== -->
+  <!-- Il dump lo fa il server in background (appl/services/backup_dump.py); la
+       pagina lo scarica e lo scrive nella cartella scelta, gia' decompresso. -->
+  <style>
+    #backupNowModal .bk-label { display:block; font-size:.82em; font-weight:600; color:#2f3b4b; margin:14px 0 6px; }
+    #backupNowModal .bk-select { width:100%; padding:8px 10px; border:1px solid #d6d9de; border-radius:8px; font-size:.92em; background:#fff; }
+    #backupNowModal .bk-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    #backupNowModal .bk-btn-sec { background:#f0f2f5; border:1px solid #d6d9de; border-radius:8px; padding:7px 12px; font-size:.88em; cursor:pointer; }
+    #backupNowModal .bk-btn-sec:hover { background:#e6e9ee; }
+    #backupNowModal .bk-cartella { font-size:.88em; color:#2f3b4b; word-break:break-all; }
+    #backupNowModal .bk-nota { font-size:.8em; color:#6b6a65; margin-top:6px; line-height:1.45; }
+    #backupNowModal .bk-check { display:flex; align-items:center; gap:8px; font-size:.86em; margin-top:12px; cursor:pointer; }
+    #backupNowModal .bk-actions { display:flex; gap:10px; margin-top:20px; flex-wrap:wrap; }
+    #backupNowModal .bk-prog { margin-top:16px; }
+    #backupNowModal .bk-bar { height:8px; background:#e8eef6; border-radius:4px; overflow:hidden; margin-top:6px; }
+    #backupNowModal .bk-bar b { display:block; height:100%; width:0; background:#2a78d6; border-radius:0 4px 4px 0; transition:width .25s; }
+    #backupNowModal .bk-esiti { margin-top:14px; display:flex; flex-direction:column; gap:8px; }
+    #backupNowModal .bk-esito { border:1px solid #e6e8ec; border-radius:8px; padding:9px 12px; font-size:.85em; line-height:1.5; }
+    #backupNowModal .bk-esito.ok { border-color:#bfe3c9; background:#f4fbf6; }
+    #backupNowModal .bk-esito.ko { border-color:#f1c4bd; background:#fff7f5; color:#7a271a; }
+    #backupNowModal .bk-esito.warn { border-color:#ffe08a; background:#fffbea; }
+    #backupNowModal details { margin-top:18px; font-size:.84em; color:#2f3b4b; }
+    #backupNowModal details code { background:#f6f4f7; padding:1px 5px; border-radius:4px; }
+  </style>
+  <div class="modal-overlay" id="backupNowModal" onclick="if(event.target===this)closeBackupNow()">
+    <div class="modal-card" style="max-width:640px;">
+      <div class="modal-header">
+        <h2>💾 Backup immediato</h2>
+        <button class="modal-close" onclick="closeBackupNow()" aria-label="Chiudi">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin:0; line-height:1.5;">
+          Copia completa di un database, fatta adesso e salvata su <strong>questo computer</strong>.
+          Il database viene solo letto, mai modificato, e la copia è la fotografia di un istante
+          anche se il negozio sta lavorando.
+        </p>
+
+        <label class="bk-label" for="bkDb">Database</label>
+        <select id="bkDb" class="bk-select"><option>Caricamento…</option></select>
+
+        <span class="bk-label">Cartella</span>
+        <div class="bk-row">
+          <button type="button" class="bk-btn-sec" id="bkCartellaBtn" onclick="bkScegliCartella()">📁 Scegli cartella</button>
+          <span class="bk-cartella" id="bkCartella">nessuna scelta</span>
+        </div>
+        <div class="bk-nota" id="bkCartellaNota"></div>
+
+        <label class="bk-check"><input type="checkbox" id="bkGz"> Salva compresso (.sql.gz, circa 5 volte più piccolo)</label>
+
+        <div class="bk-prog" id="bkProg" hidden>
+          <div id="bkProgTesto" style="font-size:.86em;"></div>
+          <div class="bk-bar" aria-hidden="true"><b id="bkProgBar"></b></div>
+        </div>
+        <div class="bk-esiti" id="bkEsiti" aria-live="polite"></div>
+
+        <div class="bk-actions">
+          <button class="btn-submit-add" id="bkVai" onclick="bkEsegui()">Fai il backup adesso</button>
+          <button class="btn-cancel-add" onclick="closeBackupNow()">Chiudi</button>
+        </div>
+
+        <details>
+          <summary>Come si ripristina</summary>
+          <p style="margin:8px 0 4px;">Su un database <strong>vuoto</strong> già creato, con il psql di PostgreSQL:</p>
+          <p style="margin:0 0 6px;"><code>psql -d nuovo_database -f nomefile.sql</code></p>
+          <p style="margin:0 0 6px;">È tutto o niente: al primo errore psql si ferma e non lascia nulla a metà.
+            Il file non contiene proprietari né permessi (come <code>pg_dump --no-owner --no-privileges</code>).</p>
+          <p style="margin:0;">Accanto al file viene scritto <code>.sha256</code> con l'impronta, per controllare
+            che sia integro: <code>certutil -hashfile nomefile.sql SHA256</code>.
+            ⚠️ Contiene dati personali dei clienti: mai su GitHub né in cartelle condivise.</p>
+        </details>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="billingModal" onclick="if(event.target===this)closeBilling()">
     <div class="modal-card">
       <div class="modal-header">
@@ -691,6 +765,7 @@
   <button class="btn-show-add" onclick="toggleAddForm()">➕ Aggiungi nuovo cliente</button>
   <button class="btn-show-add" onclick="toggleInviteForm()">✉️ Invita un cliente (contratto da firmare)</button>
   <button class="btn-show-add" onclick="openBackupInfo()">🛟 Info backup</button>
+  <button class="btn-show-add" onclick="openBackupNow()">💾 Backup</button>
 
   <!-- Invito: crea la pratica nel registro e restituisce il link da mandare al
        cliente. NON crea nessun database: il negozio nasce solo dopo la firma. -->
@@ -1133,6 +1208,232 @@
     function closeBackupInfo() {
       document.getElementById('backupModal').classList.remove('open');
     }
+
+    // ─── BACKUP IMMEDIATO ──────────────────────────────────────────────
+    // Il server fa il dump in background (un worker solo: niente richieste
+    // lunghe), la pagina chiede a che punto e', poi scarica il gzip e lo
+    // scrive nella cartella scelta. La cartella si sceglie con la File System
+    // Access API (Chrome/Edge) e si ricorda in IndexedDB; dove l'API non c'e'
+    // il file va nei Download del browser.
+    var _bkCartella = null;      // FileSystemDirectoryHandle
+    var _bkInCorso = false;
+    var _BK_IDB = 'tosca-backup', _BK_STORE = 'cartelle';
+
+    function _bkIdb() {
+      return new Promise(function (ok, ko) {
+        try {
+          var r = indexedDB.open(_BK_IDB, 1);
+          r.onupgradeneeded = function () { r.result.createObjectStore(_BK_STORE); };
+          r.onsuccess = function () { ok(r.result); };
+          r.onerror = function () { ko(r.error); };
+        } catch (e) { ko(e); }
+      });
+    }
+    async function _bkSalvaCartella(h) {
+      try { var db = await _bkIdb(); db.transaction(_BK_STORE, 'readwrite').objectStore(_BK_STORE).put(h, 'cartella'); } catch (_) {}
+    }
+    async function _bkLeggiCartella() {
+      try {
+        var db = await _bkIdb();
+        return await new Promise(function (ok) {
+          var q = db.transaction(_BK_STORE).objectStore(_BK_STORE).get('cartella');
+          q.onsuccess = function () { ok(q.result || null); };
+          q.onerror = function () { ok(null); };
+        });
+      } catch (_) { return null; }
+    }
+    function _bkEsc(s) { var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+    function _bkMB(n) {
+      if (n < 1048576) return Math.max(1, Math.round(n / 1024)).toLocaleString('it-IT') + ' KB';
+      return (n / 1048576).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' MB';
+    }
+    function _bkNum(n) { return Number(n || 0).toLocaleString('it-IT'); }
+
+    async function openBackupNow() {
+      document.getElementById('backupNowModal').classList.add('open');
+      var nota = document.getElementById('bkCartellaNota');
+      if (!('showDirectoryPicker' in window)) {
+        document.getElementById('bkCartellaBtn').hidden = true;
+        document.getElementById('bkCartella').textContent = 'cartella Download del browser';
+        nota.textContent = 'Questo browser non permette di scegliere la cartella: il file finisce nei Download. Con Chrome o Edge si può scegliere.';
+      } else {
+        if (!_bkCartella) _bkCartella = await _bkLeggiCartella();
+        document.getElementById('bkCartella').textContent = _bkCartella ? _bkCartella.name : 'nessuna scelta (andrà nei Download)';
+        nota.textContent = 'La cartella viene ricordata; al primo backup il browser può chiedere di nuovo il permesso di scriverci.';
+      }
+      var sel = document.getElementById('bkDb');
+      try {
+        var r = await fetch('/owner-setup/backup/elenco');
+        var j = await r.json();
+        if (!r.ok) throw new Error(j.error || r.status);
+        var prima = sel.value;
+        sel.innerHTML = '';
+        j.database.forEach(function (d) {
+          var o = document.createElement('option');
+          o.value = d.chiave; o.textContent = d.etichetta + (d.database ? '  (' + d.database + ')' : '');
+          sel.appendChild(o);
+        });
+        var negozi = j.database.filter(function (d) { return d.tipo === 'negozio'; });
+        if (negozi.length > 1) {
+          var t = document.createElement('option');
+          t.value = '__negozi__'; t.textContent = 'Tutti i negozi, uno dopo l\'altro (' + negozi.length + ')';
+          sel.appendChild(t);
+        }
+        if (j.database.length > 1) {
+          var tt = document.createElement('option');
+          tt.value = '__tutti__'; tt.textContent = 'Tutto: negozi, registro e prove (' + j.database.length + ')';
+          sel.appendChild(tt);
+        }
+        if (prima && sel.querySelector('option[value="' + prima + '"]')) sel.value = prima;
+        sel._elenco = j.database;
+        if (j.in_corso && !_bkInCorso) {
+          _bkProgresso('Un backup è già in corso: ' + j.in_corso.etichetta, 0);
+        }
+      } catch (e) {
+        sel.innerHTML = '<option>Elenco non disponibile</option>';
+        showToast('Elenco database non disponibile: ' + e.message, true);
+      }
+    }
+    function closeBackupNow() {
+      document.getElementById('backupNowModal').classList.remove('open');
+    }
+
+    async function bkScegliCartella() {
+      try {
+        var h = await window.showDirectoryPicker({ id: 'tosca-backup', mode: 'readwrite', startIn: 'documents' });
+        _bkCartella = h;
+        await _bkSalvaCartella(h);
+        document.getElementById('bkCartella').textContent = h.name;
+      } catch (e) {
+        if (e && e.name !== 'AbortError') showToast('Cartella non scelta: ' + e.message, true);
+      }
+    }
+
+    function _bkProgresso(testo, perc) {
+      document.getElementById('bkProg').hidden = false;
+      document.getElementById('bkProgTesto').textContent = testo;
+      document.getElementById('bkProgBar').style.width = Math.max(0, Math.min(100, perc)) + '%';
+    }
+    function _bkEsito(cls, html) {
+      var d = document.createElement('div');
+      d.className = 'bk-esito ' + cls;
+      d.innerHTML = html;
+      document.getElementById('bkEsiti').appendChild(d);
+    }
+    function _bkAttendi(ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); }
+
+    // Permesso di scrittura sulla cartella: va chiesto durante il clic.
+    async function _bkPermesso() {
+      if (!_bkCartella) return false;
+      try {
+        var opz = { mode: 'readwrite' };
+        if ((await _bkCartella.queryPermission(opz)) === 'granted') return true;
+        return (await _bkCartella.requestPermission(opz)) === 'granted';
+      } catch (_) { return false; }
+    }
+
+    async function _bkUno(chiave, etichetta, comprimi, inCartella, n, tot) {
+      var pre = tot > 1 ? '[' + n + ' di ' + tot + '] ' : '';
+      _bkProgresso(pre + etichetta + ': avvio…', 2);
+      var r = await fetch('/owner-setup/backup/avvia', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ database: chiave })
+      });
+      var j = await r.json().catch(function () { return {}; });
+      if (!r.ok) throw new Error(j.error || ('errore ' + r.status));
+      var id = j.id, s = null;
+      for (;;) {
+        await _bkAttendi(700);
+        var rs = await fetch('/owner-setup/backup/stato/' + id);
+        s = await rs.json().catch(function () { return {}; });
+        if (!rs.ok) throw new Error(s.error || ('errore ' + rs.status));
+        if (s.stato === 'errore') throw new Error(s.errore || 'errore sconosciuto');
+        if (s.stato === 'pronto') break;
+        if (s.fase === 'dati' && s.totale) {
+          _bkProgresso(pre + etichetta + ': tabella ' + s.indice + ' di ' + s.totale + ' (' + s.tabella + ')',
+                       5 + 85 * s.indice / s.totale);
+        } else {
+          _bkProgresso(pre + etichetta + ': ' + (s.fase === 'catalogo' ? 'lettura della struttura…' : 'connessione…'), 4);
+        }
+      }
+      var e = s.esito;
+      _bkProgresso(pre + etichetta + ': scaricamento (' + _bkMB(e.byte_gz) + ')…', 92);
+      var rd = await fetch('/owner-setup/backup/scarica/' + id);
+      if (!rd.ok) {
+        var je = await rd.json().catch(function () { return {}; });
+        throw new Error(je.error || ('errore ' + rd.status));
+      }
+      var nome = s.nome_file + (comprimi ? '.gz' : '');
+      var flusso = rd.body;
+      if (!comprimi) flusso = flusso.pipeThrough(new DecompressionStream('gzip'));
+      var scritti = 0;
+      flusso = flusso.pipeThrough(new TransformStream({
+        transform: function (pezzo, ctl) { scritti += pezzo.byteLength; ctl.enqueue(pezzo); }
+      }));
+      var dove;
+      if (inCartella) {
+        var fh = await _bkCartella.getFileHandle(nome, { create: true });
+        await flusso.pipeTo(await fh.createWritable());
+        var fs = await _bkCartella.getFileHandle(s.nome_file + '.sha256', { create: true });
+        var ws = await fs.createWritable();
+        await ws.write(e.sha256 + ' *' + s.nome_file + '\n');
+        await ws.close();
+        dove = _bkCartella.name + '\\' + nome;
+      } else {
+        var blob = await new Response(flusso).blob();
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = nome;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+        dove = 'Download\\' + nome;
+      }
+      // Controllo d'integrita': i byte salvati devono essere quelli scritti dal server
+      var attesi = comprimi ? e.byte_gz : e.byte_sql;
+      if (scritti !== attesi) {
+        throw new Error('file incompleto: salvati ' + _bkNum(scritti) + ' byte su ' + _bkNum(attesi) + '. Ripetere il backup.');
+      }
+      var avviso = (e.non_inclusi && e.non_inclusi.length)
+        ? '<br>⚠️ Non inclusi (da ricreare a mano): ' + _bkEsc(e.non_inclusi.join('; ')) : '';
+      _bkEsito(avviso ? 'warn' : 'ok',
+        '✅ <strong>' + _bkEsc(etichetta) + '</strong><br>' +
+        _bkEsc(dove) + ' · ' + _bkMB(scritti) + '<br>' +
+        _bkNum(e.tabelle) + ' tabelle, ' + _bkNum(e.righe) + ' righe · PostgreSQL ' + _bkEsc(e.server) +
+        ' · ' + String(e.secondi).replace('.', ',') + ' s sul server<br>' +
+        '<span style="color:#6b6a65;">SHA-256 ' + _bkEsc(e.sha256.slice(0, 16)) + '… (file .sql)</span>' + avviso);
+    }
+
+    async function bkEsegui() {
+      if (_bkInCorso) return;
+      var sel = document.getElementById('bkDb');
+      var elenco = sel._elenco || [];
+      var scelte;
+      if (sel.value === '__tutti__') scelte = elenco;
+      else if (sel.value === '__negozi__') scelte = elenco.filter(function (d) { return d.tipo === 'negozio'; });
+      else scelte = elenco.filter(function (d) { return d.chiave === sel.value; });
+      if (!scelte.length) { showToast('Scegli un database', true); return; }
+      var comprimi = document.getElementById('bkGz').checked;
+      var inCartella = ('showDirectoryPicker' in window) && _bkCartella ? await _bkPermesso() : false;
+      if (_bkCartella && !inCartella && ('showDirectoryPicker' in window)) {
+        showToast('Permesso sulla cartella negato: il file va nei Download', true);
+      }
+      var btn = document.getElementById('bkVai');
+      _bkInCorso = true; btn.disabled = true;
+      document.getElementById('bkEsiti').innerHTML = '';
+      var riusciti = 0;
+      for (var i = 0; i < scelte.length; i++) {
+        try {
+          await _bkUno(scelte[i].chiave, scelte[i].etichetta, comprimi, inCartella, i + 1, scelte.length);
+          riusciti++;
+        } catch (e) {
+          _bkEsito('ko', '❌ <strong>' + _bkEsc(scelte[i].etichetta) + '</strong><br>Motivo: ' + _bkEsc(e.message || e));
+        }
+      }
+      _bkProgresso('Fatto: ' + riusciti + ' di ' + scelte.length + (scelte.length === 1 ? ' backup' : ' backup') + ' salvati.', 100);
+      _bkInCorso = false; btn.disabled = false;
+    }
+    window.addEventListener('beforeunload', function (e) {
+      if (_bkInCorso) { e.preventDefault(); e.returnValue = ''; }
+    });
 
     // ─── CANCELLAZIONE DATI DOPO LA CESSAZIONE ─────────────────────────
     // Non cancella nulla: registra nel registro CHE e QUANDO hai cancellato

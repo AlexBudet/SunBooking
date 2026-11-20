@@ -1661,6 +1661,112 @@ def owner_setup():
                            da_cancellare=_tenant_da_cancellare(),
                            giorni_conservazione=GIORNI_CONSERVAZIONE)
 
+# =============================================================
+#   BACKUP IMMEDIATO (pulsante "💾 Backup" del pannello owner)
+# =============================================================
+# Il dump lo fa appl/services/backup_dump.py in un thread (gunicorn qui ha un
+# solo worker sincrono con timeout 30 s: una richiesta lunga bloccherebbe tutti
+# i negozi). La pagina avvia, chiede a che punto e', poi scarica il file gzip e
+# lo salva nella cartella scelta dall'owner, gia' decompresso in .sql.
+
+def _backup_scelte():
+    """Database che si possono salvare: chiave -> (etichetta, uri). La chiave e'
+    quello che passa dalla pagina; l'URI resta sul server."""
+    scelte = {}
+    for idx, uri in pool.items():
+        scelte[f'negozio:{idx}'] = (f'/s/{idx} · {db_label(uri)}', uri)
+    reg = os.getenv('REGISTRY_DATABASE_URI')
+    if reg:
+        scelte['registro'] = (f'Registro centrale · {db_label(reg)}', reg)
+    for idx, uri in demo_pool.items():
+        scelte[f'demo:{idx}'] = (f'Prova gratuita /s/{idx} · {db_label(uri)}', uri)
+    return scelte
+
+
+def _backup_nomi_negozi():
+    """Nome del centro per ogni negozio, da BusinessInfo attraverso l'app del
+    negozio gia' montata (il suo pool di connessioni), come fa owner_setup.
+    Gli slot demo non si interrogano: a riposo non devono aprire connessioni."""
+    nomi = {}
+    for idx in pool:
+        child = children.get(idx)
+        if not child:
+            continue
+        try:
+            with child.app_context():
+                bi = BusinessInfo.query.first()
+                if bi and bi.business_name:
+                    nomi[idx] = bi.business_name
+        except Exception:
+            pass
+    return nomi
+
+
+@root_app.route('/owner-setup/backup/elenco')
+def owner_backup_elenco():
+    if not _require_owner_auth():
+        return jsonify({'error': 'Non autorizzato'}), 403
+    from appl.services import backup_dump
+    nomi = _backup_nomi_negozi()
+    elenco = []
+    for chiave, (etichetta, uri) in _backup_scelte().items():
+        tipo, _, idx = chiave.partition(':')
+        nome = nomi.get(int(idx)) if tipo == 'negozio' and idx.isdigit() else None
+        elenco.append({
+            'chiave': chiave, 'tipo': tipo,
+            'etichetta': f'{nome} — {etichetta}' if nome else etichetta,
+            'database': backup_dump.nome_database(uri),
+        })
+    return jsonify({'database': elenco, 'in_corso': backup_dump.in_corso()})
+
+
+@root_app.route('/owner-setup/backup/avvia', methods=['POST'])
+def owner_backup_avvia():
+    if not _require_owner_auth():
+        return jsonify({'error': 'Non autorizzato'}), 403
+    from appl.services import backup_dump
+    chiave = ((request.get_json(silent=True) or {}).get('database') or '').strip()
+    scelta = _backup_scelte().get(chiave)
+    if not scelta:
+        return jsonify({'error': 'Database sconosciuto'}), 400
+    etichetta, uri = scelta
+    lavoro, motivo = backup_dump.avvia(uri, etichetta, logger=root_app.logger)
+    if not lavoro:
+        return jsonify({'error': motivo}), 409
+    root_app.logger.info("[backup] avviato %s (%s) da %s", lavoro['database'], chiave,
+                         request.remote_addr)
+    return jsonify({'id': lavoro['id'], 'nome_file': lavoro['nome_file']})
+
+
+@root_app.route('/owner-setup/backup/stato/<jid>')
+def owner_backup_stato(jid):
+    if not _require_owner_auth():
+        return jsonify({'error': 'Non autorizzato'}), 403
+    from appl.services import backup_dump
+    s = backup_dump.stato(jid)
+    if not s:
+        return jsonify({'error': 'Backup non trovato (scaduto o server riavviato)'}), 404
+    return jsonify(s)
+
+
+@root_app.route('/owner-setup/backup/scarica/<jid>')
+def owner_backup_scarica(jid):
+    if not _require_owner_auth():
+        return jsonify({'error': 'Non autorizzato'}), 403
+    from flask import send_file
+    from appl.services import backup_dump
+    pronto = backup_dump.file_pronto(jid)
+    if not pronto:
+        return jsonify({'error': 'File non disponibile (scaduto dopo 30 minuti o non ancora pronto)'}), 404
+    percorso, nome_file = pronto
+    # gzip come CONTENUTO, non come Content-Encoding: il browser non deve
+    # decomprimerlo da solo, lo fa la pagina mentre salva nella cartella.
+    resp = send_file(percorso, mimetype='application/gzip', as_attachment=True,
+                     download_name=nome_file + '.gz', max_age=0)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
 def _nome_slot_demo(idx):
     """Nome di uno slot della prova nel pannello consumi: demo1, demo2, demo3,
     cioe' il nome del suo database. Se lo slot e' attivato, il ciclo che lo
